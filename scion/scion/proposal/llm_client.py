@@ -1,0 +1,284 @@
+"""LLMClient — wraps LLM API calls with timeout + format-error retry logic.
+
+Supports Claude models via aihubmix Anthropic-compatible endpoint.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+# Exponential backoff delays (seconds) between retries
+_BACKOFF_DELAYS = (5.0, 15.0)
+
+# Default config — aihubmix Anthropic endpoint
+_DEFAULT_BASE_URL = "https://aihubmix.com"
+_DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+class LLMError(Exception):
+    """Base class for LLM-related errors."""
+
+
+class LLMTimeoutError(LLMError):
+    """API call timed out."""
+
+
+class LLMFormatError(LLMError):
+    """LLM response does not conform to the expected JSON schema."""
+
+
+class LLMRateLimitError(LLMError):
+    """HTTP 429 — Too Many Requests."""
+
+    def __init__(self, message: str, retry_after: float = 60.0) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class LLMRetryExhaustedError(LLMError):
+    """All retry attempts exhausted."""
+
+
+# ---------------------------------------------------------------------------
+# Client
+# ---------------------------------------------------------------------------
+
+class LLMClient:
+    """LLM API client with retry on timeout and format errors.
+
+    Uses Anthropic SDK with configurable base_url for aihubmix proxy.
+
+    Retry policy:
+    - Timeout: exponential backoff (5 s, 15 s), max ``max_retries`` additional attempts.
+    - Format error: append the error to the prompt, same retry budget.
+    - 429 (rate limit): sleep for ``Retry-After`` seconds then try again
+      (does *not* count against ``max_retries``).
+
+    Config resolution (in order):
+    1. Constructor arguments
+    2. Environment variables: SCION_API_KEY, SCION_BASE_URL, SCION_MODEL
+    3. Fallback env vars: ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL
+    4. Defaults: aihubmix endpoint, claude-sonnet-4-6
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        timeout_sec: float = 60.0,
+        max_retries: int = 2,
+        max_tokens: int = 4096,
+    ) -> None:
+        self.model = (
+            model
+            or os.environ.get("SCION_MODEL")
+            or os.environ.get("ANTHROPIC_MODEL")
+            or _DEFAULT_MODEL
+        )
+        self.api_key = (
+            api_key
+            or os.environ.get("SCION_API_KEY")
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        self.base_url = (
+            base_url
+            or os.environ.get("SCION_BASE_URL")
+            or os.environ.get("ANTHROPIC_BASE_URL")
+            or _DEFAULT_BASE_URL
+        )
+        self.timeout_sec = timeout_sec
+        self.max_retries = max_retries
+        self.max_tokens = max_tokens
+        self._client: Any = None  # lazy-initialised
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def call(
+        self,
+        prompt: str,
+        response_schema: Dict[str, Any],
+        model: str | None = None,
+    ) -> Dict[str, Any]:
+        """Call the LLM and return a validated JSON dict.
+
+        Args:
+            prompt: The full prompt text.
+            response_schema: Minimal JSON-schema dict (used for required-field
+                             validation).
+            model: Optional model override; falls back to ``self.model``.
+
+        Returns:
+            Parsed response dict.
+
+        Raises:
+            LLMRetryExhaustedError: All attempts failed.
+        """
+        effective_model = model or self.model
+        current_prompt = prompt
+        last_error: Exception | None = None
+        attempt = 0
+
+        while attempt <= self.max_retries:
+            try:
+                raw = self._call_once(current_prompt, effective_model)
+                return self._parse_and_validate(raw, response_schema)
+
+            except LLMRateLimitError as exc:
+                last_error = exc
+                logger.warning(
+                    "LLM rate-limited (attempt %d); sleeping %.1fs", attempt, exc.retry_after
+                )
+                time.sleep(exc.retry_after)
+                # Do NOT increment attempt — rate limit is not a user-error retry.
+
+            except LLMFormatError as exc:
+                last_error = exc
+                if attempt < self.max_retries:
+                    delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
+                    logger.warning(
+                        "LLM format error (attempt %d/%d): %s; retrying in %.1fs",
+                        attempt + 1, self.max_retries, exc, delay,
+                    )
+                    current_prompt = (
+                        f"{current_prompt}\n\n"
+                        f"[ERROR: previous response had a format issue: {exc}. "
+                        f"Respond only with a valid JSON object matching the schema.]"
+                    )
+                    time.sleep(delay)
+                attempt += 1
+
+            except LLMTimeoutError as exc:
+                last_error = exc
+                if attempt < self.max_retries:
+                    delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
+                    logger.warning(
+                        "LLM timeout (attempt %d/%d); retrying in %.1fs",
+                        attempt + 1, self.max_retries, delay,
+                    )
+                    time.sleep(delay)
+                attempt += 1
+
+        raise LLMRetryExhaustedError(
+            f"LLM call failed after {self.max_retries + 1} attempt(s). "
+            f"Last error: {last_error}"
+        ) from last_error
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _call_once(self, prompt: str, model: str) -> str:
+        """Make one API call; return raw text."""
+        client = self._get_client()
+        try:
+            message = client.messages.create(
+                model=model,
+                max_tokens=self.max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=self.timeout_sec,
+            )
+            return message.content[0].text
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if "timeout" in err_str or "timed out" in err_str or "read timed out" in err_str:
+                raise LLMTimeoutError(f"Request timed out: {exc}") from exc
+            if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
+                retry_after = _parse_retry_after(exc)
+                raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
+            raise LLMError(f"API error: {exc}") from exc
+
+    def _get_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+        try:
+            import anthropic
+            self._client = anthropic.Anthropic(
+                api_key=self.api_key,
+                base_url=self.base_url,
+            )
+            logger.info("LLMClient initialized: model=%s base_url=%s", self.model, self.base_url)
+            return self._client
+        except ImportError as exc:
+            raise LLMError(
+                "The 'anthropic' package is not installed. "
+                "Use MockLLMClient for tests, or: pip install anthropic"
+            ) from exc
+
+    def _parse_and_validate(
+        self, raw: str, schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract JSON from raw text and check required fields."""
+        text = raw.strip()
+
+        # Strip markdown code fences if present
+        if "```json" in text:
+            try:
+                start = text.index("```json") + 7
+                end = text.index("```", start)
+                text = text[start:end].strip()
+            except ValueError:
+                pass
+        elif "```" in text:
+            try:
+                start = text.index("```") + 3
+                end = text.index("```", start)
+                text = text[start:end].strip()
+            except ValueError:
+                pass
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # LLM often puts raw newlines/tabs inside JSON string values
+            # (e.g. code_content with actual line breaks). Try strict=False.
+            try:
+                data = json.loads(text, strict=False)
+            except json.JSONDecodeError as exc:
+                raise LLMFormatError(
+                    f"Response is not valid JSON: {exc}. Preview: {raw[:300]!r}"
+                ) from exc
+
+        if not isinstance(data, dict):
+            raise LLMFormatError(
+                f"Expected a JSON object, got {type(data).__name__}: {raw[:200]!r}"
+            )
+
+        required = schema.get("required", [])
+        missing = [k for k in required if k not in data]
+        if missing:
+            raise LLMFormatError(
+                f"Response missing required fields {missing}. Got keys: {list(data.keys())}"
+            )
+
+        return data
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _parse_retry_after(exc: Exception) -> float:
+    """Try to extract a numeric Retry-After value from a rate-limit exception."""
+    try:
+        headers = getattr(exc, "response", None)
+        if headers is not None:
+            headers = getattr(headers, "headers", {})
+            ra = headers.get("Retry-After") or headers.get("retry-after")
+            if ra is not None:
+                return float(ra)
+    except Exception:
+        pass
+    return 60.0

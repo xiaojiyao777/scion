@@ -1,0 +1,9 @@
+# protocol.yaml — Warehouse Delivery experiment protocol
+# screening_n=6  (3 cases × 2 seeds)
+# validation_n=9 (3 cases × 3 seeds)
+screening_n: 6
+screening_win_rate_threshold: 0.66
+validation_n: 9
+validation_win_rate_threshold: 0.66
+frozen_n: 9
+min_practical_delta: 0.001

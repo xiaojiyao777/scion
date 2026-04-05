@@ -1,0 +1,19 @@
+# split_manifest.yaml — Warehouse Delivery case splits
+# 9 surrogate instances split into 3 disjoint sets
+# screening:  small_1, small_2, medium_1  (3 cases)
+# validation: medium_2, medium_3, large_1 (3 cases)
+# frozen:     small_3, large_2, large_3   (3 cases)
+version: "1.0"
+screening:
+  - data/instance_small_1.json
+  - data/instance_small_2.json
+  - data/instance_medium_1.json
+validation:
+  - data/instance_medium_2.json
+  - data/instance_medium_3.json
+  - data/instance_large_1.json
+frozen:
+  - data/instance_small_3.json
+  - data/instance_large_2.json
+  - data/instance_large_3.json
+canary: []

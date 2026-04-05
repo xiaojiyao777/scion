@@ -1,0 +1,116 @@
+from __future__ import annotations
+import os
+from typing import Dict
+import yaml
+
+from scion.core.models import OperatorConfig, HypothesisProposal, PatchProposal
+
+
+class PoolManager:
+    def __init__(self, initial_pool: Dict[str, OperatorConfig]) -> None:
+        self._pool = dict(initial_pool)
+
+    def build_candidate_pool(
+        self,
+        champion_pool: Dict[str, OperatorConfig],
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal,
+    ) -> Dict[str, OperatorConfig]:
+        """
+        Construct a candidate pool from the champion pool by applying the
+        hypothesis action (modify / create_new / remove).
+        """
+        pool = dict(champion_pool)
+        action = hypothesis.action
+
+        if action == "modify":
+            # Find operator whose file_path matches the target and update it
+            target = hypothesis.target_file
+            for name, op in list(pool.items()):
+                if op.file_path == target or name == _stem(target or ""):
+                    pool[name] = OperatorConfig(
+                        name=op.name,
+                        file_path=patch.file_path,
+                        category=op.category,
+                        weight=op.weight,
+                        class_name=op.class_name,
+                    )
+                    break
+
+        elif action == "create_new":
+            new_name = _stem(patch.file_path)
+            weight = hypothesis.suggested_weight if hypothesis.suggested_weight else 0.1
+            pool[new_name] = OperatorConfig(
+                name=new_name,
+                file_path=patch.file_path,
+                category=hypothesis.change_locus,
+                weight=weight,
+                class_name=_guess_class_name(new_name),
+            )
+            pool = _normalize_weights(pool)
+
+        elif action == "remove":
+            target = hypothesis.target_file
+            to_remove = None
+            for name, op in pool.items():
+                if op.file_path == target or name == _stem(target or ""):
+                    to_remove = name
+                    break
+            if to_remove:
+                del pool[to_remove]
+                if pool:
+                    pool = _normalize_weights(pool)
+
+        return pool
+
+    def export_registry(
+        self, pool: Dict[str, OperatorConfig], target_dir: str
+    ) -> str:
+        """Export pool to registry.yaml in target_dir. Returns the file path."""
+        os.makedirs(target_dir, exist_ok=True)
+        registry_path = os.path.join(target_dir, "registry.yaml")
+        operators_list = [
+            {
+                "name": op.name,
+                "file_path": op.file_path,
+                "category": op.category,
+                "weight": round(op.weight, 6),
+                "class_name": op.class_name,
+            }
+            for op in pool.values()
+        ]
+        with open(registry_path, "w") as f:
+            yaml.dump({"operators": operators_list}, f, default_flow_style=False)
+        return registry_path
+
+
+# --- helpers ---
+
+def _normalize_weights(pool: Dict[str, OperatorConfig]) -> Dict[str, OperatorConfig]:
+    if not pool:
+        return pool
+    total = sum(op.weight for op in pool.values())
+    if total <= 0:
+        equal = 1.0 / len(pool)
+        return {
+            name: OperatorConfig(
+                name=op.name, file_path=op.file_path,
+                category=op.category, weight=equal, class_name=op.class_name,
+            )
+            for name, op in pool.items()
+        }
+    return {
+        name: OperatorConfig(
+            name=op.name, file_path=op.file_path,
+            category=op.category, weight=op.weight / total, class_name=op.class_name,
+        )
+        for name, op in pool.items()
+    }
+
+
+def _stem(file_path: str) -> str:
+    return os.path.splitext(os.path.basename(file_path))[0]
+
+
+def _guess_class_name(stem: str) -> str:
+    return "".join(word.capitalize() for word in stem.split("_"))

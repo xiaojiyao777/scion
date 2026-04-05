@@ -1,0 +1,15 @@
+# seed_ledger.yaml — Warehouse Delivery fixed seeds per stage
+version: "1.0"
+screening:
+  - 42
+  - 137
+validation:
+  - 7
+  - 19
+  - 83
+frozen:
+  - 256
+  - 512
+  - 1024
+canary:
+  - 999

@@ -1,0 +1,40 @@
+# problem.yaml — Warehouse Delivery (surrogate solver integration)
+name: warehouse_delivery
+root_dir: /home/clawd/research/or-autoresearch-agent/surrogate
+operators_dir: operators
+data_dir: data
+oracle_path: oracle.py
+solver_path: solver.py
+operator_categories:
+  - order_level
+  - vehicle_level
+search_space:
+  # LLM may edit any .py file in operators/ except base.py and __init__.py
+  editable:
+    - "operators/*.py"
+  # Frozen files — never patched
+  frozen:
+    - "solver.py"
+    - "vns.py"
+    - "pool.py"
+    - "models.py"
+    - "config.py"
+    - "oracle.py"
+    - "greedy_init.py"
+    - "operators/base.py"
+    - "operators/__init__.py"
+  import_whitelist:
+    - math
+    - random
+    - copy
+    - typing
+    - dataclasses
+    - operators
+    - itertools
+    - functools
+    - collections
+    - enum
+    - abc
+solver:
+  time_limit_sec: 300
+  max_iter: 200

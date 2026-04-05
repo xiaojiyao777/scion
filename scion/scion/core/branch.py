@@ -1,0 +1,209 @@
+from __future__ import annotations
+import uuid
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from scion.core.models import (
+    Branch, BranchState, ChampionState, Decision, ExperimentStage,
+)
+
+
+class StateTransitionError(Exception):
+    pass
+
+
+_ACTIVE_STATES = frozenset({
+    BranchState.EXPLORE,
+    BranchState.EXPLORE_EXPAND,
+    BranchState.READY_VALIDATE,
+    BranchState.VALIDATING,
+    BranchState.VALIDATING_EXPAND,
+    BranchState.READY_FROZEN,
+    BranchState.FROZEN_TESTING,
+})
+
+# Maps (Decision, current_state) → new_state
+# ABANDON is allowed from any state
+_DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
+    Decision.CONTINUE_EXPLORE: {
+        BranchState.EXPLORE: BranchState.EXPLORE,
+    },
+    Decision.EXPAND_SCREENING: {
+        BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,
+    },
+    Decision.QUEUE_VALIDATE: {
+        BranchState.EXPLORE: BranchState.READY_VALIDATE,
+        BranchState.EXPLORE_EXPAND: BranchState.READY_VALIDATE,
+    },
+    Decision.EXPAND_VALIDATION: {
+        BranchState.VALIDATING: BranchState.VALIDATING_EXPAND,
+    },
+    Decision.QUEUE_FROZEN: {
+        BranchState.VALIDATING: BranchState.READY_FROZEN,
+        BranchState.VALIDATING_EXPAND: BranchState.READY_FROZEN,
+    },
+    Decision.PROMOTE: {
+        BranchState.FROZEN_TESTING: BranchState.PROMOTED,
+    },
+}
+
+
+class BranchController:
+    def __init__(self) -> None:
+        self._branches: Dict[str, Branch] = {}
+        # Stores previous state for BLOCKED_INFRA recovery
+        self._pre_infra_state: Dict[str, BranchState] = {}
+
+    def create_branch(self, champion: ChampionState) -> Branch:
+        branch_id = str(uuid.uuid4())
+        branch = Branch(
+            branch_id=branch_id,
+            state=BranchState.EXPLORE,
+            base_champion_id=champion.version,
+            base_champion_hash=champion.code_snapshot_hash,
+        )
+        self._branches[branch_id] = branch
+        return branch
+
+    def apply_decision(self, branch_id: str, decision: Decision) -> None:
+        """Apply a Decision to a branch, performing the appropriate state transition."""
+        branch = self._get(branch_id)
+
+        if decision == Decision.ABANDON:
+            branch.state = BranchState.ABANDONED
+            branch.updated_at = datetime.now()
+            return
+
+        transitions = _DECISION_TRANSITIONS.get(decision, {})
+        new_state = transitions.get(branch.state)
+        if new_state is None:
+            raise StateTransitionError(
+                f"Invalid transition: state={branch.state.value} + decision={decision.value}"
+            )
+        branch.state = new_state
+        branch.updated_at = datetime.now()
+
+    def schedule_branch(self, branch_id: str) -> None:
+        """
+        Advance a READY_* branch to its running state (called by the scheduler
+        when it selects a branch for execution).
+        Also handles EXPLORE_EXPAND → EXPLORE and VALIDATING_EXPAND → VALIDATING
+        when the expansion run completes.
+        """
+        branch = self._get(branch_id)
+        transitions = {
+            BranchState.READY_VALIDATE: BranchState.VALIDATING,
+            BranchState.READY_FROZEN: BranchState.FROZEN_TESTING,
+            BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
+            BranchState.VALIDATING_EXPAND: BranchState.VALIDATING,
+        }
+        new_state = transitions.get(branch.state)
+        if new_state is None:
+            raise StateTransitionError(
+                f"Cannot schedule branch in state {branch.state.value}"
+            )
+        branch.state = new_state
+        branch.updated_at = datetime.now()
+
+    def mark_all_stale(self, new_champion_id: int) -> List[str]:
+        """
+        Mark every active branch STALE after a champion change.
+        Returns the list of affected branch_ids.
+        """
+        affected: List[str] = []
+        for branch in self._branches.values():
+            if branch.state in _ACTIVE_STATES:
+                branch.state = BranchState.STALE
+                branch.updated_at = datetime.now()
+                affected.append(branch.branch_id)
+        return affected
+
+    def reconcile_stale(
+        self, branch_id: str, success: bool, new_champion: ChampionState
+    ) -> None:
+        """
+        Complete stale reconcile: if reconcile succeeded → EXPLORE (on new champion),
+        else → ABANDONED.
+        """
+        branch = self._get(branch_id)
+        if branch.state != BranchState.STALE:
+            raise StateTransitionError(
+                f"Branch {branch_id} is not STALE (state={branch.state.value})"
+            )
+        if success:
+            branch.state = BranchState.EXPLORE
+            branch.base_champion_id = new_champion.version
+            branch.base_champion_hash = new_champion.code_snapshot_hash
+        else:
+            branch.state = BranchState.ABANDONED
+        branch.updated_at = datetime.now()
+
+    def block_infra(self, branch_id: str) -> None:
+        """Transition an active branch to BLOCKED_INFRA, saving prior state."""
+        branch = self._get(branch_id)
+        if branch.state not in _ACTIVE_STATES:
+            raise StateTransitionError(
+                f"Cannot block_infra from state {branch.state.value}"
+            )
+        self._pre_infra_state[branch_id] = branch.state
+        branch.state = BranchState.BLOCKED_INFRA
+        branch.updated_at = datetime.now()
+
+    def unblock_infra(self, branch_id: str) -> None:
+        """Restore a BLOCKED_INFRA branch to its previous state."""
+        branch = self._get(branch_id)
+        if branch.state != BranchState.BLOCKED_INFRA:
+            raise StateTransitionError(
+                f"Branch {branch_id} is not BLOCKED_INFRA"
+            )
+        prev = self._pre_infra_state.pop(branch_id, BranchState.EXPLORE)
+        branch.state = prev
+        branch.updated_at = datetime.now()
+
+    def get_code_base(self, branch_id: str) -> str:
+        """
+        Return the code-base identifier for the branch:
+        - "champion"  if branch is STALE or has no verified clean hash
+        - last_clean_code_hash  if a clean verification exists
+        """
+        branch = self._get(branch_id)
+        if branch.state == BranchState.STALE or not branch.last_clean_code_hash:
+            return "champion"
+        return branch.last_clean_code_hash
+
+    def record_verification_result(
+        self, branch_id: str, passed: bool, code_hash: str
+    ) -> None:
+        """Record the outcome of a verification run, updating code hashes."""
+        branch = self._get(branch_id)
+        branch.current_code_hash = code_hash
+        if passed:
+            branch.last_clean_code_hash = code_hash
+        branch.updated_at = datetime.now()
+
+    def next_stage(self, branch_id: str) -> ExperimentStage:
+        """Determine the next experiment stage based on branch state."""
+        branch = self._get(branch_id)
+        if branch.state in (BranchState.EXPLORE, BranchState.EXPLORE_EXPAND):
+            return ExperimentStage.SCREENING
+        elif branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
+            return ExperimentStage.VALIDATION
+        elif branch.state == BranchState.FROZEN_TESTING:
+            return ExperimentStage.FROZEN
+        raise StateTransitionError(
+            f"Cannot determine next_stage for state {branch.state.value}"
+        )
+
+    def get_active_branches(self) -> List[Branch]:
+        """Return all branches that are not in terminal states."""
+        terminal = {BranchState.PROMOTED, BranchState.ABANDONED}
+        return [b for b in self._branches.values() if b.state not in terminal]
+
+    def get_branch(self, branch_id: str) -> Branch:
+        return self._get(branch_id)
+
+    def _get(self, branch_id: str) -> Branch:
+        b = self._branches.get(branch_id)
+        if b is None:
+            raise KeyError(f"Branch not found: {branch_id}")
+        return b

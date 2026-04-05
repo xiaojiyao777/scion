@@ -1,0 +1,212 @@
+from __future__ import annotations
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Optional, Literal, Union, Any, Dict, List, Tuple
+import uuid
+
+# --- Branch & Campaign Enums ---
+
+class BranchState(Enum):
+    NEW = "new"
+    EXPLORE = "explore"
+    EXPLORE_EXPAND = "explore_expand"
+    READY_VALIDATE = "ready_validate"
+    VALIDATING = "validating"
+    VALIDATING_EXPAND = "validating_expand"
+    READY_FROZEN = "ready_frozen"
+    FROZEN_TESTING = "frozen_testing"
+    PROMOTED = "promoted"
+    ABANDONED = "abandoned"
+    STALE = "stale"
+    BLOCKED_INFRA = "blocked_infra"
+
+class ExperimentState(Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED_INFRA = "failed_infra"
+    FAILED_VERIFICATION = "failed_verification"
+
+class ExperimentStage(Enum):
+    SCREENING = "screening"
+    VALIDATION = "validation"
+    FROZEN = "frozen"
+
+class Decision(Enum):
+    CONTINUE_EXPLORE = "continue_explore"
+    EXPAND_SCREENING = "expand_screening"
+    QUEUE_VALIDATE = "queue_validate"
+    EXPAND_VALIDATION = "expand_validation"
+    QUEUE_FROZEN = "queue_frozen"
+    PROMOTE = "promote"
+    ABANDON = "abandon"
+
+# --- Proposals (Tainted from LLM) ---
+
+@dataclass
+class HypothesisProposal:
+    hypothesis_text: str
+    change_locus: str
+    action: Literal["modify", "create_new", "remove"]
+    target_file: Optional[str] = None
+    predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
+    target_weakness: str = ""
+    expected_effect: str = ""
+    suggested_weight: Optional[float] = None
+
+@dataclass
+class PatchProposal:
+    file_path: str
+    action: Literal["modify", "create", "delete"]
+    code_content: str
+    test_hint: Optional[str] = None
+
+# --- Results & Stats ---
+
+@dataclass(frozen=True)
+class CheckResult:
+    name: str
+    passed: bool
+    severity: Literal["light", "heavy"]
+    detail: str
+    elapsed_ms: int
+
+@dataclass(frozen=True)
+class ContractResult:
+    passed: bool
+    checks: Tuple[CheckResult, ...]
+    failure_reason: Optional[str] = None
+
+@dataclass(frozen=True)
+class VerificationResult:
+    passed: bool
+    checks: Tuple[CheckResult, ...]
+    failure_severity: Optional[Literal["light", "heavy"]] = None
+    first_failure: Optional[str] = None
+
+@dataclass(frozen=True)
+class CanaryResult:
+    passed: bool
+    reason: Optional[str] = None
+
+@dataclass(frozen=True)
+class EvalStats:
+    n_cases: int
+    wins: int
+    losses: int
+    ties: int
+    win_rate: float
+    median_delta: float
+    ci_low: float
+    ci_high: float
+
+@dataclass(frozen=True)
+class ProtocolResult:
+    stage: ExperimentStage
+    stats: EvalStats
+    gate_outcome: Literal["pass", "fail", "unclear", "expand"]
+    reason_codes: Tuple[str, ...]
+    exposed_summary: str  # Filtered summary for LLM context
+    raw_metrics_ref: str  # Path to full JSON metrics
+
+# --- Decision Features (The "Safe" Boundary) ---
+
+@dataclass(frozen=True)
+class DecisionFeatures:
+    branch_id: str
+    hypothesis_action: Literal["modify", "create_new", "remove"]
+    stage: Literal["screening", "validation", "frozen"]
+    contract_passed: bool
+    verification_passed: bool
+    canary_passed: bool
+    n_cases: int
+    win_rate: Optional[float]
+    median_delta: Optional[float]
+    ci_low: Optional[float]
+    ci_high: Optional[float]
+    stale: bool
+    recent_retry_count: int
+    recent_failure_codes: Tuple[str, ...]
+    budget_remaining_ratio: float
+
+@dataclass(frozen=True)
+class DecisionOutcome:
+    decision: Decision
+    reason_codes: Tuple[str, ...]
+    features_snapshot: DecisionFeatures
+
+# --- Campaign & Branch State ---
+
+@dataclass
+class OperatorConfig:
+    name: str
+    file_path: str
+    category: str
+    weight: float
+    class_name: str
+
+@dataclass
+class ChampionState:
+    version: int
+    operator_pool: Dict[str, OperatorConfig]
+    solver_config_hash: str
+    code_snapshot_path: str
+    code_snapshot_hash: str
+    promotion_experiment_id: Optional[str] = None
+    promoted_at: Optional[str] = None
+
+@dataclass
+class Branch:
+    branch_id: str
+    state: BranchState
+    base_champion_id: int
+    base_champion_hash: str
+    current_code_hash: Optional[str] = None
+    last_clean_code_hash: Optional[str] = None
+    retry_count: int = 0
+    failure_codes: List[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+@dataclass
+class HypothesisRecord:
+    hypothesis_id: str
+    branch_id: str
+    change_locus: str
+    action: str
+    status: str
+    target_file: Optional[str] = None
+    parent_hypothesis_id: Optional[str] = None
+    suggested_weight: Optional[float] = None
+    created_at: datetime = field(default_factory=datetime.now)
+
+# --- Solver Output ---
+
+@dataclass(frozen=True)
+class SolverOutput:
+    """Parsed JSON output from a solver run."""
+    vehicles: Dict[str, Any]
+    assignment: Dict[str, str]
+    objective: Dict[str, Any]
+    feasible: bool
+
+# --- Infrastructure ---
+
+@dataclass(frozen=True)
+class RunResult:
+    success: bool
+    exit_code: int
+    stdout: str
+    stderr: str
+    elapsed_ms: int
+    output: Optional[SolverOutput] = None
+    output_path: Optional[str] = None
+    error_category: Optional[Literal["timeout", "oom", "crash"]] = None
+
+@dataclass(frozen=True)
+class FailureEvent:
+    category: Literal["proposal", "contract", "verification_light", "verification_heavy", "infra", "evaluation"]
+    detail: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    retryable: bool = True
