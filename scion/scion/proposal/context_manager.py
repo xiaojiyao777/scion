@@ -87,6 +87,13 @@ class ContextManager:
         problem_summary = _build_problem_summary(problem_spec)
         hypothesis_detail = _format_hypothesis(hypothesis)
         target_file_code = _read_target_file(champion, hypothesis.target_file)
+        champion_operators_code = _read_champion_operators(champion)
+        # For create_new with no target, provide same-category reference operators
+        reference_operators = ""
+        if hypothesis.action == "create_new" and not target_file_code.strip():
+            reference_operators = _read_reference_operators(
+                champion, hypothesis.change_locus, problem_spec
+            )
         operator_interface_spec = _build_operator_interface_spec(problem_spec)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
@@ -96,6 +103,8 @@ class ContextManager:
             "problem_summary": problem_summary,
             "hypothesis_detail": hypothesis_detail,
             "target_file_code": target_file_code,
+            "champion_operators_code": champion_operators_code,
+            "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,
             "import_whitelist": import_whitelist,
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
@@ -279,6 +288,36 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
     if hypothesis.suggested_weight is not None:
         lines.append(f"suggested_weight: {hypothesis.suggested_weight}")
     return "\n".join(lines)
+
+
+def _read_reference_operators(
+    champion: ChampionState, change_locus: str, problem_spec: ProblemSpec
+) -> str:
+    """Read same-category operators as reference for create_new actions."""
+    operators_dir = os.path.join(champion.code_snapshot_path, "operators")
+    if not os.path.isdir(operators_dir):
+        return ""
+
+    # Map operator files to categories via pool config, or fall back to reading all
+    sections: List[str] = []
+    filenames = sorted(
+        f for f in os.listdir(operators_dir)
+        if f.endswith(".py") and f not in ("__init__.py", "base.py")
+    )
+    # Read up to 2 reference operators
+    count = 0
+    for fname in filenames:
+        if count >= 2:
+            break
+        fpath = os.path.join(operators_dir, fname)
+        try:
+            with open(fpath, encoding="utf-8") as fh:
+                content = fh.read()
+            sections.append(f"### operators/{fname} (reference)\n```python\n{content}\n```")
+            count += 1
+        except OSError:
+            pass
+    return "\n\n".join(sections)
 
 
 def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> str:

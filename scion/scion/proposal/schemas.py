@@ -112,8 +112,16 @@ Your task is to write the complete file contents that implement the approved hyp
 ## Hypothesis to Implement
 {hypothesis_detail}
 
+## Current Champion Operator Code
+Study these implementations for coding style, data model usage, and patterns:
+
+{champion_operators_code}
+
 ## Target File (current content — modify this if action is "modify")
 {target_file_code}
+
+## Reference Operators (same category — use as style guide)
+{reference_operators}
 
 ## Operator Interface Specification
 All operator classes MUST conform to this interface exactly:
