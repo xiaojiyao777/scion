@@ -33,6 +33,7 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     },
     Decision.EXPAND_SCREENING: {
         BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,
+        BranchState.EXPLORE_EXPAND: BranchState.EXPLORE_EXPAND,  # self-loop: keep expanding
     },
     Decision.QUEUE_VALIDATE: {
         BranchState.EXPLORE: BranchState.READY_VALIDATE,
