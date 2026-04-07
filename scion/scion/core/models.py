@@ -179,6 +179,7 @@ class HypothesisRecord:
     target_file: Optional[str] = None
     parent_hypothesis_id: Optional[str] = None
     suggested_weight: Optional[float] = None
+    hypothesis_text: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
 
 # --- Solver Output ---

@@ -315,13 +315,26 @@ class ContractGate:
         blacklist: List[HypothesisRecord],
     ) -> CheckResult:
         t0 = time.monotonic_ns()
-        key = (h.change_locus, h.action, h.target_file)
+        # For create_new, target_file is typically None/empty so two different new
+        # operators in the same category would collide — add hypothesis prefix to distinguish.
+        if h.action == "create_new":
+            key = (h.change_locus, h.action, h.target_file, h.hypothesis_text[:50])
+        else:
+            key = (h.change_locus, h.action, h.target_file)
         for existing in active_hypotheses + blacklist:
-            existing_key = (
-                existing.change_locus,
-                existing.action,
-                existing.target_file,
-            )
+            if existing.action == "create_new":
+                existing_key = (
+                    existing.change_locus,
+                    existing.action,
+                    existing.target_file,
+                    existing.hypothesis_text[:50] if existing.hypothesis_text else "",
+                )
+            else:
+                existing_key = (
+                    existing.change_locus,
+                    existing.action,
+                    existing.target_file,
+                )
             if key == existing_key:
                 return _cr(
                     "C10_novelty",

@@ -1,0 +1,27 @@
+# registry.yaml — Default operator registry for warehouse_delivery
+# Generated for Scion integration. Lists all standard operators with equal weights.
+operators:
+  - name: move_order
+    file_path: operators/move_order.py
+    class_name: MoveOrder
+    weight: 0.20
+  - name: swap_orders
+    file_path: operators/swap_orders.py
+    class_name: SwapOrders
+    weight: 0.20
+  - name: change_vehicle_type
+    file_path: operators/change_vehicle_type.py
+    class_name: ChangeVehicleType
+    weight: 0.15
+  - name: merge_vehicles
+    file_path: operators/merge_vehicles.py
+    class_name: MergeVehicles
+    weight: 0.15
+  - name: split_vehicle
+    file_path: operators/split_vehicle.py
+    class_name: SplitVehicle
+    weight: 0.15
+  - name: destroy_rebuild
+    file_path: operators/destroy_rebuild.py
+    class_name: DestroyRebuild
+    weight: 0.15

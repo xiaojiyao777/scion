@@ -231,12 +231,13 @@ class CampaignManager:
         if branch.state == BranchState.STALE:
             return self._run_reconcile_step(branch)
 
-        # --- EXPLORE / EXPLORE_EXPAND: full proposal + eval ---
-        if branch.state in (BranchState.EXPLORE, BranchState.EXPLORE_EXPAND):
+        # --- EXPLORE: full proposal + eval ---
+        if branch.state == BranchState.EXPLORE:
             return self._run_explore_step(branch)
 
-        # --- VALIDATING / VALIDATING_EXPAND / FROZEN_TESTING: re-eval only ---
+        # --- EXPLORE_EXPAND / VALIDATING / VALIDATING_EXPAND / FROZEN_TESTING: re-eval only ---
         if branch.state in (
+            BranchState.EXPLORE_EXPAND,
             BranchState.VALIDATING,
             BranchState.VALIDATING_EXPAND,
             BranchState.FROZEN_TESTING,
@@ -475,7 +476,9 @@ class CampaignManager:
             vresult = VerificationResult(passed=True, checks=())  # already passed
 
         action_label: Literal["explore", "validate", "frozen", "create_branch", "reconcile", "skip", "stopped"]
-        if branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
+        if branch.state == BranchState.EXPLORE_EXPAND:
+            action_label = "explore"
+        elif branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
             action_label = "validate"
         else:
             action_label = "frozen"
@@ -491,6 +494,7 @@ class CampaignManager:
             status="active",
             target_file=hypothesis.target_file,
             suggested_weight=hypothesis.suggested_weight,
+            hypothesis_text=hypothesis.hypothesis_text,
         )
 
         return self._apply_decision_and_finalize(
@@ -569,6 +573,7 @@ class CampaignManager:
             status="active",
             target_file=hypothesis.target_file,
             suggested_weight=hypothesis.suggested_weight,
+            hypothesis_text=hypothesis.hypothesis_text,
         )
         return hypothesis, h_record
 
@@ -854,5 +859,6 @@ class CampaignManager:
                     action=hyp.action,
                     status="rejected",
                     target_file=hyp.target_file,
+                    hypothesis_text=hyp.hypothesis_text,
                 )
                 self._blacklist.append(record)
