@@ -293,6 +293,11 @@ class CampaignManager:
         hypothesis, h_record = self._round1_generate_hypothesis(branch)
         if hypothesis is None:
             return StepResult(action="explore", branch_id=bid, reason="hypothesis generation failed")
+        logger.info(
+            "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
+            bid, hypothesis.change_locus, hypothesis.action, hypothesis.target_file,
+            (hypothesis.hypothesis_text or "")[:200],
+        )
 
         # ---------- Contract gate: validate_hypothesis ----------
         c_result = self._contract_gate.validate_hypothesis(
@@ -318,6 +323,11 @@ class CampaignManager:
 
         # ---------- Round 2: generate code ----------
         patch = self._round2_generate_code(branch, hypothesis)
+        if patch is not None:
+            logger.info(
+                "Branch %s R2 code: file=%s action=%s code_len=%d",
+                bid, patch.file_path, patch.action, len(patch.code_content or ""),
+            )
         if patch is None:
             self._active_hypotheses.remove(h_record)
             self._step_history.append(StepRecord(
@@ -794,6 +804,10 @@ class CampaignManager:
             self._recent_abandoned_count += 1
             ws = self._branch_workspaces.pop(bid, None)
             if ws:
+                try:
+                    self._materializer.archive_workspace(ws, bid)
+                except Exception as exc:
+                    logger.debug("Branch %s: archive failed: %s", bid, exc)
                 try:
                     self._materializer.cleanup(ws)
                 except Exception:

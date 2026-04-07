@@ -55,6 +55,8 @@ class WorkspaceMaterializer:
 
         self._workspaces_dir.mkdir(parents=True, exist_ok=True)
         self._champions_dir.mkdir(parents=True, exist_ok=True)
+        self._archive_dir = self._campaign_dir / "archive"
+        self._archive_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # Public API
@@ -169,6 +171,37 @@ class WorkspaceMaterializer:
             # Ensure writable before removal
             _make_tree_writable(ws)
             shutil.rmtree(ws)
+
+    def archive_workspace(self, workspace: str, branch_id: str) -> None:
+        """Copy the operators/ directory from workspace into archive/<branch_id_short>/.
+
+        Called before cleanup on ABANDON so generated .py files are preserved
+        for post-campaign analysis.
+
+        Args:
+            workspace: Absolute path to the branch workspace.
+            branch_id: Branch ID used to name the archive sub-directory.
+        """
+        ws = Path(workspace)
+        ops_src = ws / "operators"
+        if not ops_src.exists():
+            return
+
+        # Use first 8 chars of branch_id for readability
+        short_id = str(branch_id)[:8]
+        archive_dest = self._archive_dir / short_id
+        # If a prior archive exists for the same short id, append suffix
+        if archive_dest.exists():
+            suffix = 1
+            while (self._archive_dir / f"{short_id}_{suffix}").exists():
+                suffix += 1
+            archive_dest = self._archive_dir / f"{short_id}_{suffix}"
+
+        shutil.copytree(ops_src, archive_dest, symlinks=False)
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "Archived operators from branch %s → %s", branch_id, archive_dest
+        )
 
     def compute_code_hash(self, workspace: str) -> str:
         """Compute SHA-256 of operators/ .py files (sorted by relative path).

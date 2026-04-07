@@ -1,8 +1,11 @@
 from __future__ import annotations
 import json
+import logging
 import os
 import uuid as _uuid_mod
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from scion.core.models import (
     ExperimentStage, CanaryResult, ProtocolResult, EvalStats,
@@ -181,6 +184,16 @@ class ExperimentProtocol:
                     objective_breakdown=breakdown,
                     case_features=case_features,
                 ))
+                logger.info(
+                    "Pair %s seed=%d: cmp=%s delta=%.4f decisive=%s "
+                    "cand(splits=%s cost=%s) champ(splits=%s cost=%s)",
+                    os.path.basename(case), seed, cmp, delta,
+                    breakdown.decisive_objective,
+                    breakdown.candidate_subcategory_splits,
+                    breakdown.candidate_total_cost,
+                    breakdown.champion_subcategory_splits,
+                    breakdown.champion_total_cost,
+                )
 
         if not comparisons:
             stats = EvalStats(
