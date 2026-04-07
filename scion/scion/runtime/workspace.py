@@ -119,6 +119,14 @@ class WorkspaceMaterializer:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(patch.code_content, encoding="utf-8")
 
+        # For new operator files, register them in registry.yaml so the solver picks them up
+        if (
+            patch.action == "create"
+            and file_rel.startswith("operators/")
+            and file_rel.endswith(".py")
+        ):
+            _update_registry(ws, file_rel, patch.code_content)
+
         return self.compute_code_hash(workspace)
 
     def create_champion_snapshot(
@@ -202,6 +210,49 @@ class WorkspaceMaterializer:
 # ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
+
+
+def _update_registry(ws: Path, file_rel: str, code_content: str) -> None:
+    """Append a new operator entry to registry.yaml in the workspace.
+
+    Called by apply_patch when a new operator file is created. Skips silently
+    if registry.yaml is absent, the class cannot be detected, or the operator
+    name is already registered.
+    """
+    import re
+
+    import yaml
+
+    registry_path = ws / "registry.yaml"
+    if not registry_path.exists():
+        return
+
+    # Extract the first class definition from the generated code
+    m = re.search(r"^class\s+(\w+)", code_content, re.MULTILINE)
+    if not m:
+        return
+    class_name = m.group(1)
+
+    op_name = Path(file_rel).stem  # e.g. "smart_move_order"
+
+    with open(registry_path, encoding="utf-8") as f:
+        registry = yaml.safe_load(f) or {}
+
+    existing = {entry["name"] for entry in registry.get("operators", [])}
+    if op_name in existing:
+        return
+
+    registry.setdefault("operators", []).append(
+        {
+            "name": op_name,
+            "file_path": file_rel,
+            "class_name": class_name,
+            "weight": 0.10,
+        }
+    )
+
+    with open(registry_path, "w", encoding="utf-8") as f:
+        yaml.dump(registry, f, default_flow_style=False, allow_unicode=True)
 
 
 def _make_tree_readonly(path: Path) -> None:

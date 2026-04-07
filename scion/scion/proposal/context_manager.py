@@ -86,14 +86,15 @@ class ContextManager:
         """
         problem_summary = _build_problem_summary(problem_spec)
         hypothesis_detail = _format_hypothesis(hypothesis)
-        target_file_code = _read_target_file(champion, hypothesis.target_file)
+        if hypothesis.action == "create_new":
+            target_file_code = "(new file — will be created)"
+        else:
+            target_file_code = _read_target_file(champion, hypothesis.target_file)
         champion_operators_code = _read_champion_operators(champion)
-        # For create_new with no target, provide same-category reference operators
-        reference_operators = ""
-        if hypothesis.action == "create_new" and not target_file_code.strip():
-            reference_operators = _read_reference_operators(
-                champion, hypothesis.change_locus, problem_spec
-            )
+        # Always provide reference operators as style/interface reference
+        reference_operators = _read_reference_operators(
+            champion, hypothesis.change_locus, problem_spec
+        )
         operator_interface_spec = _build_operator_interface_spec(problem_spec)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
