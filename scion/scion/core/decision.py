@@ -63,7 +63,7 @@ class DecisionEngine:
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND_DELTA"])
         elif wr >= 0.5 and wr < threshold:
             # Check if already expanded too many times (max 3 expands)
-            if features.recent_retry_count >= 3:
+            if features.expand_count >= 3:
                 if wr >= threshold - 0.05:  # Close enough, try validation
                     return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_EXPAND_EXHAUSTED_BORDERLINE"])
                 return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_EXPAND_EXHAUSTED"])

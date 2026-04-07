@@ -197,6 +197,7 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
+    expand_count: int = 0  # Number of screening expands on this branch
 
 @dataclass(frozen=True)
 class DecisionOutcome:
@@ -233,6 +234,7 @@ class Branch:
     current_code_hash: Optional[str] = None
     last_clean_code_hash: Optional[str] = None
     retry_count: int = 0
+    expand_count: int = 0  # Tracks screening expand rounds
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)

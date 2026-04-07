@@ -699,8 +699,8 @@ class CampaignManager:
                 BranchState.EXPLORE_EXPAND,
                 BranchState.VALIDATING_EXPAND,
             )
-            # Track expand rounds for progressive seed expansion
-            expand_round = branch.retry_count + 1 if expand else 1
+            if expand:
+                branch.expand_count += 1
             try:
                 protocol_result = self._experiment_protocol.run_experiment(
                     stage=stage,
@@ -708,7 +708,7 @@ class CampaignManager:
                     champion_ws=champ_ws,
                     hypothesis_action=hypothesis.action,
                     expand=expand,
-                    expand_round=expand_round,
+                    expand_round=branch.expand_count if expand else 1,
                 )
                 self._n_experiments += 1
                 self._budget.used += 1
