@@ -54,13 +54,16 @@ class DecisionEngine:
 
         if wr >= threshold and md is not None and md >= min_delta:
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS"])
+        elif wr >= threshold and (md is None or md < min_delta):
+            # High win_rate but delta too small — expand sample to get
+            # more data before discarding (small instances may all tie)
+            return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND_DELTA"])
         elif wr >= 0.5 and wr < threshold:
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND"])
         elif wr < 0.5:
             return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_FAIL_WIN_RATE"])
         else:
-            # win_rate >= threshold but delta too small
-            return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_DELTA_TOO_SMALL"])
+            return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_UNCLEAR"])
 
     def _decide_validation(self, features: DecisionFeatures) -> DecisionOutcome:
         wr = features.win_rate
