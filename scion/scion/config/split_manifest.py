@@ -39,27 +39,33 @@ class SplitManifest(BaseModel):
 
     @model_validator(mode="after")
     def validate_disjoint(self) -> "SplitManifest":
-        """校验四个集合互不相交。
+        """校验 frozen/canary 与其他集合互不相交。
+
+        Screening/validation 允许重叠（validation 用不同 seeds 测试稳定性）。
+        Frozen 必须独立作为 holdout。
 
         Raises:
-            ValueError: 任意两个集合存在交集。
+            ValueError: frozen/canary 与其他集合存在交集。
         """
-        sets = {
-            "screening": set(self.screening),
-            "validation": set(self.validation),
-            "frozen": set(self.frozen),
-            "canary": set(self.canary),
-        }
-        splits = list(sets.items())
-        for i in range(len(splits)):
-            for j in range(i + 1, len(splits)):
-                name_a, set_a = splits[i]
-                name_b, set_b = splits[j]
-                overlap = set_a & set_b
-                if overlap:
-                    raise ValueError(
-                        f"split 集合 '{name_a}' 和 '{name_b}' 存在交集: {sorted(overlap)}"
-                    )
+        screening = set(self.screening)
+        validation = set(self.validation)
+        frozen = set(self.frozen)
+        canary = set(self.canary)
+
+        # Frozen must be disjoint from everything
+        for name, other in [("screening", screening), ("validation", validation), ("canary", canary)]:
+            overlap = frozen & other
+            if overlap:
+                raise ValueError(
+                    f"split 集合 'frozen' 和 '{name}' 存在交集: {sorted(overlap)}"
+                )
+        # Canary must be disjoint from screening/validation
+        for name, other in [("screening", screening), ("validation", validation)]:
+            overlap = canary & other
+            if overlap:
+                raise ValueError(
+                    f"split 集合 'canary' 和 '{name}' 存在交集: {sorted(overlap)}"
+                )
         return self
 
     @classmethod

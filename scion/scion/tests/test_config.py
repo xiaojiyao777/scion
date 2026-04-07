@@ -37,11 +37,21 @@ def test_split_manifest_disjoint(tmp_path):
     manifest = SplitManifest.from_yaml(str(s_file))
     assert manifest.screening == ["case1", "case2"]
     
-    # 重叠的
+    # Screening/validation overlap is allowed (different seeds test stability)
+    overlap_content = {
+        "screening": ["case1", "case2"],
+        "validation": ["case1", "case2", "case4"],
+        "frozen": ["case5"]
+    }
+    s_file.write_text(yaml.dump(overlap_content))
+    manifest2 = SplitManifest.from_yaml(str(s_file))
+    assert manifest2.validation == ["case1", "case2", "case4"]
+
+    # Frozen overlap is NOT allowed
     invalid_content = {
         "screening": ["case1", "case2"],
-        "validation": ["case2", "case4"],
-        "frozen": ["case5"]
+        "validation": ["case3", "case4"],
+        "frozen": ["case2"]
     }
     s_file.write_text(yaml.dump(invalid_content))
     with pytest.raises(ValueError, match="overlap"):

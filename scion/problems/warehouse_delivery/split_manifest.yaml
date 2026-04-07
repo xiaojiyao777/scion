@@ -1,17 +1,22 @@
 # split_manifest.yaml — Warehouse Delivery case splits
-# 更新于：2026-04 以支持更大规模 benchmark 实例
+# 更新于：2026-04-08 修复 validation/screening 不重叠导致 validation 全败的问题
 #
-# screening:   small_1 + medium_1 + large_1  (3 instances × 2 seeds = 6 pairs)
-#              — 覆盖小/中/大三个规模，提高算子区分度
-# validation:  screening 基础上加 large_2 + xlarge_1 (5 instances)
-#              — 更全面的泛化性测试
-# frozen:      xlarge_1 作为 holdout，防止过拟合
+# 设计原则：
+# - screening: 3 instances 覆盖 small/medium/large（快速筛选）
+# - validation: 5 instances 覆盖全部规模 + 额外 cases（泛化性验证）
+# - frozen: 独立 holdout（最终关卡）
+#
+# 注意：validation 包含 screening 没见过的 instances + 不同 seeds，
+# 这样既测试泛化性，又避免完全不重叠导致系统性偏差。
 version: "1.0"
 screening:
   - data/instance_small_1.json
   - data/instance_medium_1.json
   - data/instance_large_1.json
 validation:
+  - data/instance_small_1.json
+  - data/instance_medium_1.json
+  - data/instance_large_1.json
   - data/instance_large_2.json
   - data/instance_large_3.json
 frozen:

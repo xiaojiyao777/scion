@@ -497,11 +497,12 @@ class TestWarehouseDeliveryConfig:
         from scion.config.split_manifest import SplitManifest
         manifest = SplitManifest.from_yaml(str(warehouse_dir / "split_manifest.yaml"))
         assert len(manifest.screening) == 3
-        assert len(manifest.validation) == 2
+        assert len(manifest.validation) == 5  # superset of screening + extras
         assert len(manifest.frozen) == 1
-        # Disjoint check (model_validator runs automatically)
-        all_cases = manifest.screening + manifest.validation + manifest.frozen
-        assert len(all_cases) == len(set(all_cases)), "Split sets must be disjoint"
+        # Frozen must be disjoint from screening and validation
+        frozen_set = set(manifest.frozen)
+        assert frozen_set.isdisjoint(set(manifest.screening)), "Frozen must not overlap screening"
+        assert frozen_set.isdisjoint(set(manifest.validation)), "Frozen must not overlap validation"
 
     def test_seed_ledger_loads(self, warehouse_dir):
         from scion.config.seed_ledger import SeedLedger

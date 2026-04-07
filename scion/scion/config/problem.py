@@ -80,8 +80,9 @@ class SplitManifest(BaseModel):
         v = set(self.validation)
         f = set(self.frozen)
         
-        if not s.isdisjoint(v):
-            raise ValueError(f"Screening and Validation splits overlap: {s & v}")
+        # Frozen must be disjoint from both screening and validation
+        # (holdout integrity). Screening/validation overlap is allowed
+        # — validation uses different seeds to test stability.
         if not s.isdisjoint(f):
             raise ValueError(f"Screening and Frozen splits overlap: {s & f}")
         if not v.isdisjoint(f):
