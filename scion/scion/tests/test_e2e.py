@@ -496,9 +496,9 @@ class TestWarehouseDeliveryConfig:
     def test_split_manifest_loads_and_is_disjoint(self, warehouse_dir):
         from scion.config.split_manifest import SplitManifest
         manifest = SplitManifest.from_yaml(str(warehouse_dir / "split_manifest.yaml"))
-        assert len(manifest.screening) == 3
-        assert len(manifest.validation) == 5  # superset of screening + extras
-        assert len(manifest.frozen) == 1
+        assert len(manifest.screening) == 5
+        assert len(manifest.validation) == 9  # superset of screening + extras
+        assert len(manifest.frozen) == 2
         # Frozen must be disjoint from screening and validation
         frozen_set = set(manifest.frozen)
         assert frozen_set.isdisjoint(set(manifest.screening)), "Frozen must not overlap screening"
