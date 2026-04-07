@@ -196,7 +196,7 @@ class TestLLMClientRetry:
 
         call_prompts = []
 
-        def mock_call(prompt, model):
+        def mock_call(prompt, model, system_blocks=None):
             call_prompts.append(prompt)
             if len(call_prompts) == 1:
                 return "not-json"  # will cause format error

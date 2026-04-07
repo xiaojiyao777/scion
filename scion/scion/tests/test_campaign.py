@@ -448,7 +448,7 @@ class TestContractFailure:
         )
 
         class SequencedLLM:
-            def call(self, prompt, schema, model=None):
+            def call(self, prompt, schema, model=None, system_blocks=None):
                 call_count[0] += 1
                 if "code_content" in schema.get("required", []):
                     # patch call
@@ -592,7 +592,7 @@ class TestVerificationGate:
         fix_call_count = [0]
 
         class FixSuccessClient:
-            def call(self, prompt, schema, model=None):
+            def call(self, prompt, schema, model=None, system_blocks=None):
                 if "code_content" in schema.get("required", []):
                     fix_call_count[0] += 1
                     return dict(_VALID_PATCH)

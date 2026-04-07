@@ -76,6 +76,7 @@ class MockLLMClient:
         prompt: str,
         response_schema: Dict[str, Any],
         model: Optional[str] = None,
+        system_blocks: "list[dict] | None" = None,
     ) -> Dict[str, Any]:
         """Return a canned response or raise a configured error."""
         current_mode = self._current_mode()

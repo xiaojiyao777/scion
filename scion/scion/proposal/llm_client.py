@@ -111,14 +111,17 @@ class LLMClient:
         prompt: str,
         response_schema: Dict[str, Any],
         model: str | None = None,
+        system_blocks: "list[dict] | None" = None,
     ) -> Dict[str, Any]:
         """Call the LLM and return a validated JSON dict.
 
         Args:
-            prompt: The full prompt text.
+            prompt: The user message text.
             response_schema: Minimal JSON-schema dict (used for required-field
                              validation).
             model: Optional model override; falls back to ``self.model``.
+            system_blocks: Optional structured system messages with
+                           cache_control for prompt caching.
 
         Returns:
             Parsed response dict.
@@ -133,7 +136,7 @@ class LLMClient:
 
         while attempt <= self.max_retries:
             try:
-                raw = self._call_once(current_prompt, effective_model)
+                raw = self._call_once(current_prompt, effective_model, system_blocks)
                 return self._parse_and_validate(raw, response_schema)
 
             except LLMRateLimitError as exc:
@@ -180,16 +183,44 @@ class LLMClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _call_once(self, prompt: str, model: str) -> str:
-        """Make one API call; return raw text."""
+    def _call_once(
+        self,
+        prompt: str,
+        model: str,
+        system_blocks: "list[dict] | None" = None,
+    ) -> str:
+        """Make one API call; return raw text.
+
+        If *system_blocks* is provided, they are sent as structured system
+        messages with cache_control for prompt caching.  The *prompt* is
+        sent as the user message.
+        """
         client = self._get_client()
         try:
-            message = client.messages.create(
-                model=model,
-                max_tokens=self.max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=self.timeout_sec,
-            )
+            kwargs: Dict[str, Any] = {
+                "model": model,
+                "max_tokens": self.max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+                "timeout": self.timeout_sec,
+            }
+            if system_blocks:
+                kwargs["system"] = system_blocks
+                # Enable 1h extended cache TTL via beta header
+                kwargs["extra_headers"] = {
+                    "anthropic-beta": "extended-cache-ttl-2025-04-11",
+                }
+            message = client.messages.create(**kwargs)
+            # Log cache performance
+            usage = getattr(message, "usage", None)
+            if usage:
+                cache_create = getattr(usage, "cache_creation_input_tokens", 0)
+                cache_read = getattr(usage, "cache_read_input_tokens", 0)
+                input_tokens = getattr(usage, "input_tokens", 0)
+                if cache_create or cache_read:
+                    logger.info(
+                        "Cache: created=%d read=%d uncached=%d",
+                        cache_create, cache_read, input_tokens,
+                    )
             return message.content[0].text
         except Exception as exc:
             err_str = str(exc).lower()
