@@ -17,7 +17,7 @@ _BACKOFF_DELAYS = (5.0, 15.0)
 
 # Default config — aihubmix Anthropic endpoint
 _DEFAULT_BASE_URL = "https://aihubmix.com"
-_DEFAULT_MODEL = "claude-sonnet-4-6"
+_DEFAULT_MODEL = "claude-opus-4-6"
 
 
 # ---------------------------------------------------------------------------
