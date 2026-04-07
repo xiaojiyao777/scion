@@ -123,7 +123,12 @@ class ExperimentProtocol:
     ) -> ProtocolResult:
         """Execute paired A/B evaluation for the given stage."""
         cases = self.split_manager.get_cases(stage)
-        seeds = self.seed_ledger.get_seeds(stage)
+        seeds = list(self.seed_ledger.get_seeds(stage))
+
+        # Expand: add extra seeds for more statistical power
+        if expand:
+            extra_seeds = [s + 1000 for s in seeds]  # deterministic extra seeds
+            seeds = seeds + extra_seeds
 
         comparisons: List[str] = []
         deltas: List[float] = []

@@ -724,6 +724,11 @@ class CampaignManager:
             budget=self._budget,
         )
         outcome = self._decision_engine.decide(features)
+        logger.info(
+            "Branch %s: features wr=%s md=%s stage=%s → decision=%s reasons=%s",
+            bid, features.win_rate, features.median_delta,
+            features.stage, outcome.decision.value, outcome.reason_codes,
+        )
         return outcome.decision, protocol_result, canary_result
 
     # ------------------------------------------------------------------
