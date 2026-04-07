@@ -127,15 +127,17 @@ class ExperimentProtocol:
         champion_ws: str,
         hypothesis_action: str,
         expand: bool = False,
+        expand_round: int = 1,
     ) -> ProtocolResult:
         """Execute paired A/B evaluation for the given stage."""
         cases = self.split_manager.get_cases(stage)
         seeds = list(self.seed_ledger.get_seeds(stage))
 
-        # Expand: add extra seeds for more statistical power
+        # Expand: add progressively more seeds based on expand_round
         if expand:
-            extra_seeds = [s + 1000 for s in seeds]  # deterministic extra seeds
-            seeds = seeds + extra_seeds
+            for r in range(1, expand_round + 1):
+                extra = [s + 1000 * r for s in seeds]
+                seeds = seeds + extra
 
         comparisons: List[str] = []
         deltas: List[float] = []

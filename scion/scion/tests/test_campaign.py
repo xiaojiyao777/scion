@@ -139,6 +139,7 @@ class MockExperimentProtocol:
         champion_ws: str,
         hypothesis_action: str,
         expand: bool = False,
+        expand_round: int = 1,
     ) -> ProtocolResult:
         self.experiment_call_count += 1
         if self._results:
