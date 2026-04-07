@@ -54,9 +54,12 @@ class DecisionEngine:
 
         if wr >= threshold and md is not None and md >= min_delta:
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS"])
-        elif wr >= threshold and (md is None or md < min_delta):
-            # High win_rate but delta too small — expand sample to get
-            # more data before discarding (small instances may all tie)
+        elif wr >= threshold and (md is None or md >= 0):
+            # High win_rate, non-negative delta (ties drag median to 0)
+            # → pass to validation which has more diverse instances
+            return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_MARGINAL_DELTA"])
+        elif wr >= threshold and md is not None and md < 0:
+            # High win_rate but negative median — expand to confirm
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND_DELTA"])
         elif wr >= 0.5 and wr < threshold:
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND"])
