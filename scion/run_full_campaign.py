@@ -89,3 +89,41 @@ print(f"  Active branches: {state['n_active_branches']}")
 for b in state.get("branches", []):
     print(f"    Branch {b['id'][:8]}… state={b['state']}")
 print(f"\nLLM model: {llm_client.model}")
+
+# --- Final diagnostic summary ---
+print("\n=== Step History Summary ===")
+step_history = mgr._step_history
+if not step_history:
+    print("  (no steps recorded)")
+for step in step_history:
+    hyp_text = ""
+    if step.hypothesis:
+        hyp_text = (step.hypothesis.hypothesis_text or "")[:80]
+    patch_info = ""
+    if step.patch:
+        patch_info = f" patch={step.patch.file_path}({len(step.patch.code_content or '')}B)"
+    print(
+        f"  Round {step.round_num:3d} branch={step.branch_id[:8]}… "
+        f"decision={step.decision.value if step.decision else '?'} "
+        f"contract={step.contract_passed} verify={step.verification_passed}"
+        f"{patch_info}"
+    )
+    if step.failure_stage:
+        print(f"           failure_stage={step.failure_stage}: {step.failure_detail}")
+    if hyp_text:
+        print(f"           hyp='{hyp_text}'")
+
+print("\n=== Hypotheses Generated ===")
+for step in step_history:
+    if step.hypothesis:
+        action = step.hypothesis.action
+        locus = step.hypothesis.change_locus
+        target = step.hypothesis.target_file or "-"
+        decision = step.decision.value if step.decision else "?"
+        print(f"  [{decision:7s}] locus={locus} action={action} target={target}")
+
+print("\n=== Final State ===")
+print(f"  Budget used       : {mgr._budget.used}")
+print(f"  Active hypotheses : {len(mgr._active_hypotheses)}")
+print(f"  Blacklisted       : {len(mgr._blacklist)}")
+print(f"  Archive dir       : {mgr._materializer._archive_dir}")
