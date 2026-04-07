@@ -15,7 +15,7 @@ from scion.core.features import SafeFeatureExtractor, BudgetState
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, ContractResult,
     Decision, FailureEvent, HypothesisProposal, HypothesisRecord,
-    PatchProposal, ProtocolResult, VerificationResult, CheckResult,
+    PatchProposal, ProtocolResult, StepRecord, VerificationResult, CheckResult,
 )
 from scion.core.scheduler import Scheduler
 from scion.core.termination import CampaignState, TerminationChecker, TerminationConfig
@@ -166,6 +166,10 @@ class CampaignManager:
         self._active_hypotheses: List[HypothesisRecord] = []
         self._blacklist: List[HypothesisRecord] = []
 
+        # Experiment history — full record of every completed explore step
+        self._step_history: List[StepRecord] = []
+        self._round_num: int = 0
+
         # Budget / termination
         self._term_checker = TerminationChecker(termination_config or TerminationConfig())
         self._budget = budget or BudgetState(total=1000, used=0)
@@ -278,6 +282,8 @@ class CampaignManager:
     def _run_explore_step(self, branch: Branch) -> StepResult:
         """Full 14-step flow for an EXPLORE/EXPLORE_EXPAND branch."""
         bid = branch.branch_id
+        self._round_num += 1
+        rnum = self._round_num
 
         # ---------- Round 1: generate hypothesis ----------
         hypothesis, h_record = self._round1_generate_hypothesis(branch)
@@ -292,6 +298,14 @@ class CampaignManager:
             logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
             failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
             self._handle_failure(branch, failure)
+            self._step_history.append(StepRecord(
+                round_num=rnum, branch_id=bid,
+                hypothesis=hypothesis, patch=None,
+                contract_passed=False, verification_passed=False,
+                protocol_result=None, decision=Decision.ABANDON,
+                failure_stage="hypothesis_contract",
+                failure_detail=c_result.failure_reason,
+            ))
             return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
 
         # Register hypothesis
@@ -302,6 +316,14 @@ class CampaignManager:
         patch = self._round2_generate_code(branch, hypothesis)
         if patch is None:
             self._active_hypotheses.remove(h_record)
+            self._step_history.append(StepRecord(
+                round_num=rnum, branch_id=bid,
+                hypothesis=hypothesis, patch=None,
+                contract_passed=True, verification_passed=False,
+                protocol_result=None, decision=Decision.ABANDON,
+                failure_stage="code_generation",
+                failure_detail="LLM code generation failed",
+            ))
             return StepResult(action="explore", branch_id=bid, reason="code generation failed")
 
         # ---------- Contract gate: validate_patch ----------
@@ -311,12 +333,28 @@ class CampaignManager:
             failure = FailureEvent(category="contract", detail=p_result.failure_reason or "")
             self._handle_failure(branch, failure)
             self._active_hypotheses.remove(h_record)
+            self._step_history.append(StepRecord(
+                round_num=rnum, branch_id=bid,
+                hypothesis=hypothesis, patch=patch,
+                contract_passed=False, verification_passed=False,
+                protocol_result=None, decision=Decision.ABANDON,
+                failure_stage="patch_contract",
+                failure_detail=p_result.failure_reason,
+            ))
             return StepResult(action="explore", branch_id=bid, reason="patch contract failed")
 
         # ---------- Apply patch ----------
         workspace = self._setup_workspace(branch)
         if workspace is None:
             self._active_hypotheses.remove(h_record)
+            self._step_history.append(StepRecord(
+                round_num=rnum, branch_id=bid,
+                hypothesis=hypothesis, patch=patch,
+                contract_passed=True, verification_passed=False,
+                protocol_result=None, decision=Decision.ABANDON,
+                failure_stage="workspace",
+                failure_detail="workspace setup failed",
+            ))
             return StepResult(action="explore", branch_id=bid, reason="workspace setup failed")
 
         try:
@@ -326,6 +364,14 @@ class CampaignManager:
             failure = FailureEvent(category="contract", detail=f"apply_patch: {exc}")
             self._handle_failure(branch, failure)
             self._active_hypotheses.remove(h_record)
+            self._step_history.append(StepRecord(
+                round_num=rnum, branch_id=bid,
+                hypothesis=hypothesis, patch=patch,
+                contract_passed=True, verification_passed=False,
+                protocol_result=None, decision=Decision.ABANDON,
+                failure_stage="workspace",
+                failure_detail=f"apply_patch: {exc}",
+            ))
             return StepResult(action="explore", branch_id=bid, reason="apply_patch failed")
 
         self._branch_patches[bid] = patch
@@ -351,11 +397,27 @@ class CampaignManager:
                 if not vresult.passed:
                     self._handle_failure(branch, failure)
                     self._active_hypotheses.remove(h_record)
+                    self._step_history.append(StepRecord(
+                        round_num=rnum, branch_id=bid,
+                        hypothesis=hypothesis, patch=patch,
+                        contract_passed=True, verification_passed=False,
+                        protocol_result=None, decision=Decision.ABANDON,
+                        failure_stage="verification",
+                        failure_detail=vresult.first_failure,
+                    ))
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
                 self._handle_failure(branch, failure)
                 self._blacklist.append(h_record)
                 self._active_hypotheses.remove(h_record)
+                self._step_history.append(StepRecord(
+                    round_num=rnum, branch_id=bid,
+                    hypothesis=hypothesis, patch=patch,
+                    contract_passed=True, verification_passed=False,
+                    protocol_result=None, decision=Decision.ABANDON,
+                    failure_stage="verification",
+                    failure_detail=vresult.first_failure,
+                ))
                 return StepResult(action="explore", branch_id=bid, reason="verification failed (heavy)")
 
         # ---------- Evaluate ----------
@@ -363,7 +425,7 @@ class CampaignManager:
         decision, protocol_result, canary_result = self._evaluate(branch, workspace, hypothesis)
 
         # ---------- Apply decision ----------
-        return self._apply_decision_and_finalize(
+        result = self._apply_decision_and_finalize(
             branch=branch,
             decision=decision,
             hypothesis=hypothesis,
@@ -374,6 +436,18 @@ class CampaignManager:
             verification_result=vresult,
             action_label="explore",
         )
+        # Record the completed step
+        self._step_history.append(StepRecord(
+            round_num=rnum, branch_id=bid,
+            hypothesis=hypothesis,
+            patch=self._branch_patches.get(bid, patch),
+            contract_passed=True, verification_passed=True,
+            protocol_result=protocol_result,
+            decision=result.decision or Decision.ABANDON,
+            failure_stage=None,
+            failure_detail=None,
+        ))
+        return result
 
     # ------------------------------------------------------------------
     # EVAL-ONLY step (re-use workspace from EXPLORE)
@@ -477,6 +551,7 @@ class CampaignManager:
             active_hypotheses=self._active_hypotheses,
             blacklist=self._blacklist,
             sibling_branches=siblings,
+            step_history=self._step_history,
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)

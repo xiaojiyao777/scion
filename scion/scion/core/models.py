@@ -210,3 +210,31 @@ class FailureEvent:
     detail: str
     timestamp: datetime = field(default_factory=datetime.now)
     retryable: bool = True
+
+
+@dataclass
+class StepRecord:
+    """Record of one completed proposal+evaluation cycle (explore step).
+
+    Stored in CampaignManager._step_history and passed to ContextManager
+    so the LLM receives a rich history of prior attempts on each branch.
+
+    failure_stage values:
+        'hypothesis_contract' — hypothesis failed ContractGate
+        'code_generation'     — LLM failed to produce a patch
+        'patch_contract'      — patch failed ContractGate
+        'workspace'           — workspace setup / apply_patch failed
+        'verification'        — VerificationGate failed (light or heavy)
+        'screening'           — experiment returned a non-promote result
+        None                  — no failure (reached _apply_decision_and_finalize)
+    """
+    round_num: int
+    branch_id: str
+    hypothesis: HypothesisProposal
+    patch: Optional[PatchProposal]
+    contract_passed: bool
+    verification_passed: bool
+    protocol_result: Optional[ProtocolResult]
+    decision: Decision
+    failure_stage: Optional[str]
+    failure_detail: Optional[str]

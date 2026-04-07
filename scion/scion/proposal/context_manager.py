@@ -1,6 +1,7 @@
 """ContextManager — builds LLM input contexts with exposure control (§5.3)."""
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
 from scion.core.models import (
@@ -9,6 +10,7 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
+    StepRecord,
     VerificationResult,
 )
 from scion.config.problem import ProblemSpec
@@ -22,8 +24,8 @@ class ContextManager:
     │ Context type            │ Excluded fields                         │
     ├─────────────────────────┼─────────────────────────────────────────┤
     │ hypothesis_context      │ validation/frozen results, raw metrics  │
-    │ code_context            │ screening/validation/frozen stats       │
-    │ fix_context             │ screening/validation/frozen stats       │
+    │ code_context            │ experiment stats, branch history        │
+    │ fix_context             │ experiment stats, branch history        │
     └─────────────────────────┴─────────────────────────────────────────┘
     """
 
@@ -39,21 +41,28 @@ class ContextManager:
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
         sibling_branches: Optional[List[Branch]] = None,
+        step_history: Optional[List[StepRecord]] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
-        Deliberately excludes validation / frozen experiment data.
+        Includes full problem summary, champion operator code, branch experiment
+        history, and blacklist. Deliberately excludes validation/frozen data.
         """
-        pool_summary = _summarise_pool(champion.operator_pool)
-        branch_history = _summarise_hypothesis_history(active_hypotheses, branch.branch_id)
+        problem_summary = _build_problem_summary(problem_spec)
+        champion_operators_code = _read_champion_operators(champion)
+        experiment_history = _build_experiment_history(
+            step_history or [], branch.branch_id
+        )
         blacklist_summary = _summarise_blacklist(blacklist)
         sibling_summary = _summarise_siblings(sibling_branches or [])
+        champion_stats = _build_champion_stats(champion)
 
         return {
-            "problem_name": problem_spec.name,
+            "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
-            "pool_summary": pool_summary,
-            "branch_history": branch_history,
+            "champion_operators_code": champion_operators_code,
+            "champion_stats": champion_stats,
+            "experiment_history": experiment_history,
             "blacklist_summary": blacklist_summary,
             "sibling_summary": sibling_summary,
         }
@@ -71,19 +80,26 @@ class ContextManager:
     ) -> Dict[str, Any]:
         """Context for generate_code (Round 2).
 
-        Contains hypothesis details and champion code reference.
-        Does NOT contain any experimental stats.
+        Contains problem summary, hypothesis details, target file content,
+        operator interface spec, and import whitelist.
+        Does NOT contain experiment stats or branch history.
         """
+        problem_summary = _build_problem_summary(problem_spec)
+        hypothesis_detail = _format_hypothesis(hypothesis)
+        target_file_code = _read_target_file(champion, hypothesis.target_file)
+        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        import_whitelist = "\n".join(
+            f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
+        )
+
         return {
-            "problem_name": problem_spec.name,
+            "problem_summary": problem_summary,
+            "hypothesis_detail": hypothesis_detail,
+            "target_file_code": target_file_code,
+            "operator_interface_spec": operator_interface_spec,
+            "import_whitelist": import_whitelist,
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
-            "import_whitelist": ", ".join(problem_spec.search_space.import_whitelist),
-            "hypothesis_text": hypothesis.hypothesis_text,
-            "change_locus": hypothesis.change_locus,
-            "action": hypothesis.action,
-            "target_file": hypothesis.target_file or "N/A",
-            "champion_code": _summarise_champion_code(champion, hypothesis),
         }
 
     # ------------------------------------------------------------------
@@ -99,25 +115,36 @@ class ContextManager:
     ) -> Dict[str, Any]:
         """Context for fix_code (after a light verification failure).
 
-        Contains the failed patch and detailed failure information.
-        Does NOT contain experimental stats.
+        Contains the failed patch, failure details, and operator interface spec.
+        Does NOT contain experiment stats.
         """
+        problem_summary = _build_problem_summary(problem_spec)
         failed_checks = [c for c in verification_result.checks if not c.passed]
-        failure_details = "\n".join(
-            f"  [{c.name}] ({c.severity}) {c.detail}" for c in failed_checks
+        failure_detail = (
+            f"Severity: {verification_result.failure_severity or 'unknown'}\n"
+            f"First failure: {verification_result.first_failure or 'N/A'}\n"
+            "Details:\n"
+            + "\n".join(
+                f"  [{c.name}] ({c.severity}) {c.detail}" for c in failed_checks
+            )
+        ) or "No detail available."
+
+        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        import_whitelist = "\n".join(
+            f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
         return {
-            "problem_name": problem_spec.name,
+            "problem_summary": problem_summary,
+            "original_code": (
+                f"File: {patch.file_path}\nAction: {patch.action}\n"
+                f"```python\n{patch.code_content}\n```"
+            ),
+            "failure_detail": failure_detail,
+            "operator_interface_spec": operator_interface_spec,
+            "import_whitelist": import_whitelist,
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
-            "import_whitelist": ", ".join(problem_spec.search_space.import_whitelist),
-            "file_path": patch.file_path,
-            "action": patch.action,
-            "code_content": patch.code_content,
-            "failure_severity": verification_result.failure_severity or "unknown",
-            "first_failure": verification_result.first_failure or "N/A",
-            "failure_details": failure_details or "No detail available.",
         }
 
 
@@ -125,30 +152,95 @@ class ContextManager:
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _summarise_pool(pool: Dict[str, Any]) -> str:
-    if not pool:
-        return "(empty pool)"
-    lines = []
-    for name, op in pool.items():
-        w = getattr(op, "weight", "?")
-        cat = getattr(op, "category", "?")
-        fp = getattr(op, "file_path", "?")
-        lines.append(f"  - {name} [{cat}] weight={w} file={fp}")
+def _build_problem_summary(spec: ProblemSpec) -> str:
+    """Build a structured summary of the problem specification."""
+    lines = [
+        f"Name: {spec.name}",
+    ]
+    if spec.description:
+        lines.append(f"Description: {spec.description}")
+    lines += [
+        f"Operator categories: {', '.join(spec.operator_categories)}",
+        f"Editable files: {', '.join(spec.search_space.editable)}",
+        f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
+    ]
     return "\n".join(lines)
 
 
-def _summarise_hypothesis_history(
-    hypotheses: List[HypothesisRecord], branch_id: str
-) -> str:
-    branch_hyps = [h for h in hypotheses if h.branch_id == branch_id]
-    if not branch_hyps:
-        return "(no prior hypotheses on this branch)"
-    lines = []
-    for h in branch_hyps[-5:]:  # Last 5
-        lines.append(
-            f"  - [{h.status}] {h.change_locus}/{h.action}"
-            + (f" → {h.target_file}" if h.target_file else "")
+def _read_champion_operators(champion: ChampionState) -> str:
+    """Read all operator .py files from the champion snapshot directory."""
+    operators_dir = os.path.join(champion.code_snapshot_path, "operators")
+    if not os.path.isdir(operators_dir):
+        return "(operators directory not found at champion snapshot path)"
+
+    sections: List[str] = []
+    try:
+        filenames = sorted(
+            f for f in os.listdir(operators_dir)
+            if f.endswith(".py") and f not in ("__init__.py", "base.py")
         )
+    except OSError as exc:
+        return f"(could not list operators directory: {exc})"
+
+    for fname in filenames:
+        fpath = os.path.join(operators_dir, fname)
+        try:
+            with open(fpath, encoding="utf-8") as fh:
+                content = fh.read()
+            sections.append(f"### operators/{fname}\n```python\n{content}\n```")
+        except OSError as exc:
+            sections.append(f"### operators/{fname}\n(unreadable: {exc})")
+
+    return "\n\n".join(sections) if sections else "(no operator files found)"
+
+
+def _build_champion_stats(champion: ChampionState) -> str:
+    """Return champion version and pool summary."""
+    lines = [f"Champion version: {champion.version}"]
+    if champion.operator_pool:
+        lines.append("Operator pool:")
+        for name, op in champion.operator_pool.items():
+            w = getattr(op, "weight", "?")
+            cat = getattr(op, "category", "?")
+            fp = getattr(op, "file_path", "?")
+            lines.append(f"  - {name} [{cat}] weight={w}  file={fp}")
+    else:
+        lines.append("Operator pool: (not yet loaded from registry)")
+    if champion.promoted_at:
+        lines.append(f"Last promoted: {champion.promoted_at}")
+    return "\n".join(lines)
+
+
+def _build_experiment_history(
+    step_history: List[StepRecord], branch_id: str
+) -> str:
+    """Build a structured summary of past explore steps on this branch."""
+    branch_steps = [s for s in step_history if s.branch_id == branch_id]
+    if not branch_steps:
+        return "(no prior experiment rounds on this branch)"
+
+    lines: List[str] = []
+    for s in branch_steps[-8:]:  # Last 8 rounds
+        status = "FAILED" if s.failure_stage else s.decision.value.upper()
+        line = f"  Round {s.round_num} [{status}]"
+        line += f"  hypothesis: {s.hypothesis.change_locus}/{s.hypothesis.action}"
+        if s.hypothesis.target_file:
+            line += f" → {s.hypothesis.target_file}"
+        line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text[:120]}"
+        if s.failure_stage:
+            line += f"\n    failed_at: {s.failure_stage}"
+            if s.failure_detail:
+                line += f" — {s.failure_detail[:120]}"
+        if s.protocol_result is not None:
+            pr = s.protocol_result
+            st = pr.stats
+            line += (
+                f"\n    screening: win_rate={st.win_rate:.2f}"
+                f"  median_delta={st.median_delta:.4f}"
+                f"  outcome={pr.gate_outcome}"
+            )
+        lines.append(line)
+
     return "\n".join(lines)
 
 
@@ -157,29 +249,85 @@ def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:
         return "(none)"
     lines = []
     for h in blacklist[:10]:  # Cap at 10
-        lines.append(f"  - {h.change_locus}/{h.action}" + (f" → {h.target_file}" if h.target_file else ""))
+        lines.append(
+            f"  - {h.change_locus}/{h.action}"
+            + (f" → {h.target_file}" if h.target_file else "")
+        )
     return "\n".join(lines)
 
 
 def _summarise_siblings(siblings: List[Branch]) -> str:
     if not siblings:
         return "(no active sibling branches)"
-    return f"  {len(siblings)} sibling branch(es) currently active."
+    lines = []
+    for b in siblings[:5]:
+        lines.append(f"  - branch {b.branch_id[:8]} state={b.state.value}")
+    return "\n".join(lines)
 
 
-def _summarise_champion_code(champion: ChampionState, hypothesis: HypothesisProposal) -> str:
-    """Return a brief summary of the relevant champion code."""
-    import os
-    target = hypothesis.target_file
-    if target and champion.code_snapshot_path:
-        candidate = os.path.join(champion.code_snapshot_path, target.lstrip("/"))
-        try:
-            with open(candidate) as f:
-                content = f.read()
-            # Truncate if too long
-            if len(content) > 3000:
-                content = content[:3000] + "\n... [truncated]"
-            return f"File: {target}\n```python\n{content}\n```"
-        except OSError:
-            pass
-    return f"(champion code for '{target}' not readable)"
+def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
+    """Format hypothesis fields for Round 2 prompt."""
+    lines = [
+        f"hypothesis_text: {hypothesis.hypothesis_text}",
+        f"change_locus: {hypothesis.change_locus}",
+        f"action: {hypothesis.action}",
+        f"target_file: {hypothesis.target_file or 'N/A'}",
+        f"predicted_direction: {hypothesis.predicted_direction}",
+        f"target_weakness: {hypothesis.target_weakness}",
+        f"expected_effect: {hypothesis.expected_effect}",
+    ]
+    if hypothesis.suggested_weight is not None:
+        lines.append(f"suggested_weight: {hypothesis.suggested_weight}")
+    return "\n".join(lines)
+
+
+def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> str:
+    """Read the target file from the champion snapshot."""
+    if not target_file or not champion.code_snapshot_path:
+        return "(no target file specified)"
+    candidate = os.path.join(champion.code_snapshot_path, target_file.lstrip("/"))
+    try:
+        with open(candidate, encoding="utf-8") as fh:
+            content = fh.read()
+        return f"File: {target_file}\n```python\n{content}\n```"
+    except OSError as exc:
+        return f"(could not read {target_file}: {exc})"
+
+
+def _build_operator_interface_spec(spec: ProblemSpec) -> str:
+    """Build the operator interface specification including base class and data models."""
+    # Try to read base.py from the problem's root_dir
+    base_py_path = os.path.join(spec.root_dir, "operators", "base.py")
+    base_class_src = ""
+    try:
+        with open(base_py_path, encoding="utf-8") as fh:
+            base_class_src = fh.read()
+    except OSError:
+        base_class_src = (
+            "class Operator(ABC):\n"
+            "    @abstractmethod\n"
+            "    def execute(self, solution: Solution, rng: Random) -> Solution:\n"
+            "        ..."
+        )
+
+    return f"""\
+### Operator Base Class (from operators/base.py)
+```python
+{base_class_src}
+```
+
+### Key Data Structures (from models.py)
+- `Solution`: contains `vehicles: dict[str, Vehicle]` and `assignment: dict[str, str]` (order_id → vehicle_id)
+  - Call `solution.deep_copy()` to get a deep copy before modifying
+  - `solution.remove_empty_vehicles()` to clean up empty vehicles in-place
+- `Vehicle`: `vehicle_id`, `vehicle_type` (HQ40_DG|HQ40|T10|T5|T3), `region`, `order_ids: list[str]`
+- `Order`: `order_id`, `locked_vehicle_id` (None = freely assignable), `hazard_flag`, `spu_list`, etc.
+- `Instance`: passed as a frozen context; accessed via `solution.vehicles` / `solution.assignment`
+
+### Critical Constraints
+1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
+2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
+3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
+4. **Return value**: return the modified solution (or the original if no valid move was found)
+5. **Imports**: only use modules from the import whitelist; no external packages\
+"""

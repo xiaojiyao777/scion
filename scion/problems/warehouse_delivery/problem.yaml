@@ -1,5 +1,14 @@
 # problem.yaml — Warehouse Delivery (surrogate solver integration)
 name: warehouse_delivery
+description: >-
+  Warehouse Delivery VRP: optimise vehicle routing for last-mile B2B logistics
+  from a warehouse to customer delivery points. Orders carry SPU (packing unit)
+  loads that determine pallet counts. A feasible solution assigns each order to
+  exactly one vehicle; vehicles must not exceed capacity. The objective is
+  lexicographic: minimise subcategory splits first, then total vehicle cost,
+  then solve time. Operators modify the solution (move, swap, merge, split,
+  destroy-rebuild) to improve the objective. Hazardous-goods orders require a
+  dedicated HQ40_DG vehicle type.
 root_dir: /home/clawd/research/or-autoresearch-agent/surrogate
 operators_dir: operators
 data_dir: data
@@ -24,6 +33,7 @@ search_space:
     - "operators/base.py"
     - "operators/__init__.py"
   import_whitelist:
+    - __future__
     - math
     - random
     - copy
@@ -35,6 +45,8 @@ search_space:
     - collections
     - enum
     - abc
+    - uuid
+    - models
 solver:
   time_limit_sec: 300
   max_iter: 200

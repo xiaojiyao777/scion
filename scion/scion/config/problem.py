@@ -16,6 +16,7 @@ class SearchSpace(BaseModel):
 class ProblemSpec(BaseModel):
     name: str
     root_dir: str
+    description: str = ""
     operators_dir: str = "operators"
     data_dir: str = "data"
     oracle_path: str = "oracle.py"
