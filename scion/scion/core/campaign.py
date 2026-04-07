@@ -210,11 +210,14 @@ class CampaignManager:
         branch = sched.branch
         assert branch is not None
 
-        # --- Advance READY_* / expand states to their running state ---
+        # --- Advance READY_* states to their running state ---
+        # NOTE: EXPLORE_EXPAND is intentionally excluded here — it must go directly to
+        # _run_eval_step (reusing the existing workspace+patch from the prior explore step).
+        # schedule_branch would convert EXPLORE_EXPAND → EXPLORE, which would trigger a
+        # brand-new _run_explore_step that destroys the preserved workspace.
         if branch.state in (
             BranchState.READY_VALIDATE,
             BranchState.READY_FROZEN,
-            BranchState.EXPLORE_EXPAND,
             BranchState.VALIDATING_EXPAND,
         ):
             try:
@@ -437,6 +440,10 @@ class CampaignManager:
             verification_result=vresult,
             action_label="explore",
         )
+        logger.debug(
+            "_run_explore_step done bid=%s decision=%s workspaces=%s",
+            bid, decision.value, list(self._branch_workspaces.keys()),
+        )
         # Record the completed step
         self._step_history.append(StepRecord(
             round_num=rnum, branch_id=bid,
@@ -457,6 +464,10 @@ class CampaignManager:
     def _run_eval_step(self, branch: Branch) -> StepResult:
         """Evaluation-only step for VALIDATING / FROZEN_TESTING branches."""
         bid = branch.branch_id
+        logger.debug(
+            "_run_eval_step start bid=%s state=%s workspaces=%s",
+            bid, branch.state.value, list(self._branch_workspaces.keys()),
+        )
         workspace = self._branch_workspaces.get(bid)
         if workspace is None:
             # Workspace lost — abandon
@@ -736,7 +747,8 @@ class CampaignManager:
 
         # CONTINUE_EXPLORE (P0 — discard current patch, re-propose next iteration)
         if decision == Decision.CONTINUE_EXPLORE:
-            # State remains EXPLORE — next iteration will do full Round 1 → Round 2
+            # State remains EXPLORE (or returns to EXPLORE from EXPLORE_EXPAND) —
+            # next iteration will do a full Round 1 → Round 2 with a new hypothesis.
             ws = self._branch_workspaces.get(bid)
             if ws:
                 try:
@@ -749,7 +761,17 @@ class CampaignManager:
             # Remove hypothesis from active (it's being discarded)
             if h_record in self._active_hypotheses:
                 self._active_hypotheses.remove(h_record)
-            # Do NOT call apply_decision — branch stays EXPLORE
+            # For EXPLORE_EXPAND the branch is not already in EXPLORE — call apply_decision
+            # so the transition map (EXPLORE_EXPAND → EXPLORE) fires correctly.
+            if branch.state != BranchState.EXPLORE:
+                try:
+                    self._branch_ctrl.apply_decision(bid, decision)
+                except StateTransitionError as exc:
+                    logger.error(
+                        "Branch %s: apply_decision(CONTINUE_EXPLORE) from %s failed: %s",
+                        bid, branch.state.value, exc,
+                    )
+            # Otherwise branch stays EXPLORE — no apply_decision needed.
             self._recent_abandoned_count = 0
             return StepResult(
                 action=action_label,  # type: ignore[arg-type]
