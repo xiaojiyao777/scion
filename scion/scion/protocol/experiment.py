@@ -6,10 +6,14 @@ from typing import List, Optional
 
 from scion.core.models import (
     ExperimentStage, CanaryResult, ProtocolResult, EvalStats,
+    ObjectiveBreakdown, PairwiseCaseFeedback, CaseAggregateFeedback,
+    ScreeningPatternSummary,
 )
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.runtime.runner import Runner
-from scion.protocol.evaluation import lexicographic_compare, compute_delta
+from scion.protocol.evaluation import (
+    lexicographic_compare, compute_delta, compare_with_breakdown,
+)
 from scion.protocol.stats import compute_eval_stats
 from scion.protocol.gates import (
     GateResult, screening_gate, validation_gate, frozen_gate,
@@ -133,8 +137,10 @@ class ExperimentProtocol:
         comparisons: List[str] = []
         deltas: List[float] = []
         raw_pairs: List[dict] = []
+        pair_feedback: List[PairwiseCaseFeedback] = []
 
         for case in cases:
+            case_features = _extract_case_features(case)
             for seed in seeds:
                 champ_r = self.runner.run_solver(
                     workdir=champion_ws,
@@ -157,7 +163,7 @@ class ExperimentProtocol:
                 if cand_r.output is None or champ_r.output is None:
                     continue
 
-                cmp = lexicographic_compare(
+                cmp, breakdown = compare_with_breakdown(
                     cand_r.output.objective,
                     champ_r.output.objective,
                 )
@@ -167,6 +173,14 @@ class ExperimentProtocol:
                 raw_pairs.append(
                     {"case": case, "seed": seed, "comparison": cmp, "delta": delta}
                 )
+                pair_feedback.append(PairwiseCaseFeedback(
+                    case_id=os.path.basename(case),
+                    seed=seed,
+                    comparison=cmp,
+                    delta=delta,
+                    objective_breakdown=breakdown,
+                    case_features=case_features,
+                ))
 
         if not comparisons:
             stats = EvalStats(
@@ -198,6 +212,13 @@ class ExperimentProtocol:
             # Validation / Frozen: aggregate summary only, no per-case data
             exposed = f"stage={stage.value} outcome={gate.outcome}"
 
+        # Build case-level feedback for screening
+        case_fb: tuple = ()
+        pattern: "ScreeningPatternSummary | None" = None
+        if stage == ExperimentStage.SCREENING and pair_feedback:
+            case_fb = tuple(_aggregate_case_feedback(pair_feedback))
+            pattern = _build_pattern_summary(case_fb)
+
         return ProtocolResult(
             stage=stage,
             stats=stats,
@@ -205,4 +226,151 @@ class ExperimentProtocol:
             reason_codes=gate.reason_codes,
             exposed_summary=exposed,
             raw_metrics_ref=raw_ref,
+            pair_feedback=tuple(pair_feedback) if stage == ExperimentStage.SCREENING else (),
+            case_feedback=case_fb,
+            pattern_summary=pattern,
         )
+
+
+# ---------------------------------------------------------------------------
+# Case feedback helpers
+# ---------------------------------------------------------------------------
+
+def _extract_case_features(case_path: str) -> dict:
+    """Extract lightweight features from instance path (MVP: path-level only)."""
+    stem = os.path.splitext(os.path.basename(case_path))[0]
+    size_bucket = "unknown"
+    for tag in ("xlarge", "large", "medium", "small"):
+        if tag in stem.lower():
+            size_bucket = tag
+            break
+    return {"path_stem": stem, "size_bucket": size_bucket}
+
+
+def _aggregate_case_feedback(
+    pairs: List[PairwiseCaseFeedback],
+) -> List[CaseAggregateFeedback]:
+    """Group pair feedback by case_id and compute per-case aggregates."""
+    import statistics
+    from collections import defaultdict
+
+    by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
+    for p in pairs:
+        by_case[p.case_id].append(p)
+
+    result = []
+    for case_id, case_pairs in by_case.items():
+        n = len(case_pairs)
+        wins = sum(1 for p in case_pairs if p.comparison == "win")
+        losses = sum(1 for p in case_pairs if p.comparison == "loss")
+        ties = n - wins - losses
+        wr = wins / n if n > 0 else 0.0
+
+        # Dominant result
+        mx = max(wins, losses, ties)
+        if wins == losses and wins > 0:
+            dominant = "mixed"
+        elif mx == wins:
+            dominant = "win"
+        elif mx == losses:
+            dominant = "loss"
+        else:
+            dominant = "tie"
+
+        # Dominant decisive objective
+        decisive_counts: dict[str, int] = defaultdict(int)
+        for p in case_pairs:
+            decisive_counts[p.objective_breakdown.decisive_objective] += 1
+        dominant_decisive = max(decisive_counts, key=decisive_counts.get)  # type: ignore
+        if len(set(decisive_counts.values())) == 1 and len(decisive_counts) > 1:
+            dominant_decisive = "mixed"
+
+        # Median deltas
+        cost_deltas = [p.objective_breakdown.delta_total_cost for p in case_pairs
+                       if p.objective_breakdown.delta_total_cost is not None]
+        splits_deltas = [p.objective_breakdown.delta_subcategory_splits for p in case_pairs
+                         if p.objective_breakdown.delta_subcategory_splits is not None]
+
+        result.append(CaseAggregateFeedback(
+            case_id=case_id,
+            n_pairs=n,
+            wins=wins,
+            losses=losses,
+            ties=ties,
+            win_rate=wr,
+            dominant_result=dominant,
+            dominant_decisive_objective=dominant_decisive,
+            median_delta_total_cost=statistics.median(cost_deltas) if cost_deltas else None,
+            median_delta_subcategory_splits=statistics.median(splits_deltas) if splits_deltas else None,
+            seed_consistency=mx / n if n > 0 else 0.0,
+            case_features=case_pairs[0].case_features if case_pairs else {},
+        ))
+    return result
+
+
+def _build_pattern_summary(
+    case_feedback: tuple[CaseAggregateFeedback, ...],
+) -> ScreeningPatternSummary:
+    """Build code-generated pattern summary from case-level feedback."""
+    from collections import defaultdict
+
+    winning = [c for c in case_feedback if c.dominant_result == "win"]
+    losing = [c for c in case_feedback if c.dominant_result == "loss"]
+    mixed = [c for c in case_feedback if c.dominant_result == "mixed"]
+
+    wins_by_obj: dict[str, int] = defaultdict(int)
+    losses_by_obj: dict[str, int] = defaultdict(int)
+    wins_by_size: dict[str, int] = defaultdict(int)
+    losses_by_size: dict[str, int] = defaultdict(int)
+
+    for c in winning:
+        wins_by_obj[c.dominant_decisive_objective] += 1
+        wins_by_size[c.case_features.get("size_bucket", "unknown")] += 1
+    for c in losing:
+        losses_by_obj[c.dominant_decisive_objective] += 1
+        losses_by_size[c.case_features.get("size_bucket", "unknown")] += 1
+
+    # Generate key observations (rule-based)
+    observations: list[str] = []
+    if losses_by_obj.get("business_aggregation", 0) >= 2:
+        observations.append(
+            "Most losses decided at business_aggregation: candidate often harmed split quality."
+        )
+    if losses_by_obj.get("cost", 0) >= 2:
+        observations.append(
+            "Most losses decided at cost: candidate preserved splits but increased cost."
+        )
+
+    # Size pattern
+    win_sizes = set(wins_by_size.keys())
+    loss_sizes = set(losses_by_size.keys())
+    if win_sizes and loss_sizes and not win_sizes.intersection(loss_sizes):
+        observations.append(
+            f"Candidate wins on {', '.join(sorted(win_sizes))} but loses on {', '.join(sorted(loss_sizes))}."
+        )
+
+    if mixed:
+        observations.append(
+            f"{len(mixed)} case(s) showed seed-sensitive behavior; treat gains there as unstable."
+        )
+
+    consistent_wins = tuple(c.case_id for c in winning if c.seed_consistency >= 0.99)
+    consistent_losses = tuple(c.case_id for c in losing if c.seed_consistency >= 0.99)
+    if consistent_wins:
+        observations.append(f"Consistent wins: {', '.join(consistent_wins)}.")
+    if consistent_losses:
+        observations.append(f"Consistent losses: {', '.join(consistent_losses)}.")
+
+    return ScreeningPatternSummary(
+        total_cases=len(case_feedback),
+        winning_cases=len(winning),
+        losing_cases=len(losing),
+        mixed_cases=len(mixed),
+        wins_by_decisive_objective=dict(wins_by_obj),
+        losses_by_decisive_objective=dict(losses_by_obj),
+        wins_by_size_bucket=dict(wins_by_size),
+        losses_by_size_bucket=dict(losses_by_size),
+        consistent_win_cases=consistent_wins,
+        consistent_loss_cases=consistent_losses,
+        key_observations=tuple(observations),
+    )

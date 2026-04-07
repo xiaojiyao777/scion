@@ -224,13 +224,21 @@ def _build_champion_stats(champion: ChampionState) -> str:
 def _build_experiment_history(
     step_history: List[StepRecord], branch_id: str
 ) -> str:
-    """Build a structured summary of past explore steps on this branch."""
+    """Build structured experiment history with case-level feedback.
+
+    Recent 3 rounds: aggregate + pattern + selected cases.
+    Older rounds (4-8): aggregate only.
+    """
     branch_steps = [s for s in step_history if s.branch_id == branch_id]
     if not branch_steps:
         return "(no prior experiment rounds on this branch)"
 
+    recent = branch_steps[-8:]  # Last 8 rounds
     lines: List[str] = []
-    for s in branch_steps[-8:]:  # Last 8 rounds
+    n_recent = len(recent)
+
+    for idx, s in enumerate(recent):
+        is_detailed = idx >= max(0, n_recent - 3)  # Last 3 get case detail
         status = "FAILED" if s.failure_stage else s.decision.value.upper()
         line = f"  Round {s.round_num} [{status}]"
         line += f"  hypothesis: {s.hypothesis.change_locus}/{s.hypothesis.action}"
@@ -249,9 +257,72 @@ def _build_experiment_history(
                 f"  median_delta={st.median_delta:.4f}"
                 f"  outcome={pr.gate_outcome}"
             )
+            # Case-level feedback for recent rounds
+            if is_detailed and pr.pattern_summary:
+                line += "\n" + _render_pattern_summary(pr.pattern_summary)
+            if is_detailed and pr.case_feedback:
+                selected = _select_cases_for_prompt(pr.case_feedback, max_cases=4)
+                for cf in selected:
+                    line += "\n" + _render_case_feedback(cf)
         lines.append(line)
 
     return "\n".join(lines)
+
+
+def _render_pattern_summary(pattern) -> str:
+    """Render ScreeningPatternSummary as compact prompt text."""
+    lines = [
+        f"    pattern: cases={pattern.total_cases}"
+        f" win={pattern.winning_cases} loss={pattern.losing_cases} mixed={pattern.mixed_cases}",
+    ]
+    if pattern.wins_by_decisive_objective:
+        lines.append(f"      wins by objective: {pattern.wins_by_decisive_objective}")
+    if pattern.losses_by_decisive_objective:
+        lines.append(f"      losses by objective: {pattern.losses_by_decisive_objective}")
+    if pattern.key_observations:
+        for obs in pattern.key_observations:
+            lines.append(f"      • {obs}")
+    return "\n".join(lines)
+
+
+def _render_case_feedback(cf) -> str:
+    """Render a single CaseAggregateFeedback as compact prompt text."""
+    splits_str = f"{cf.median_delta_subcategory_splits:+.1f}" if cf.median_delta_subcategory_splits is not None else "NA"
+    cost_str = f"{cf.median_delta_total_cost:+.1f}" if cf.median_delta_total_cost is not None else "NA"
+    size = cf.case_features.get("size_bucket", "?")
+    return (
+        f"      {cf.case_id}: {cf.dominant_result}"
+        f" (W/L/T={cf.wins}/{cf.losses}/{cf.ties}, consistency={cf.seed_consistency:.2f})"
+        f"\n        decisive={cf.dominant_decisive_objective}"
+        f"  deltas: splits={splits_str}, cost={cost_str}"
+        f"  size={size}"
+    )
+
+
+def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
+    """Select most informative cases for prompt inclusion."""
+    scored = []
+    seen_sizes: set = set()
+    for c in cases:
+        score = 0.0
+        if c.dominant_result == "loss":
+            score += 5
+        elif c.dominant_result == "win":
+            score += 4
+        elif c.dominant_result == "mixed":
+            score += 4
+        if c.seed_consistency >= 0.99:
+            score += 2
+        if c.dominant_decisive_objective == "business_aggregation":
+            score += 2
+        bucket = c.case_features.get("size_bucket", "unknown")
+        if bucket not in seen_sizes:
+            score += 2
+            seen_sizes.add(bucket)
+        score += min(abs(c.median_delta_total_cost or 0) / 100, 3)
+        scored.append((score, c))
+    scored.sort(key=lambda x: -x[0])
+    return [c for _, c in scored[:max_cases]]
 
 
 def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:

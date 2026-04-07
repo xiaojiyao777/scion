@@ -109,6 +109,74 @@ class ProtocolResult:
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
     raw_metrics_ref: str  # Path to full JSON metrics
+    # Case-level feedback (screening only; empty for validation/frozen)
+    pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
+    case_feedback: Tuple["CaseAggregateFeedback", ...] = ()
+    pattern_summary: Optional["ScreeningPatternSummary"] = None
+
+
+# --- Case-level Feedback (for screening) ---
+
+@dataclass(frozen=True)
+class ObjectiveBreakdown:
+    """Per-pair breakdown of objectives with 'positive = candidate better' convention."""
+    candidate_subcategory_splits: Optional[float] = None
+    champion_subcategory_splits: Optional[float] = None
+    candidate_total_cost: Optional[float] = None
+    champion_total_cost: Optional[float] = None
+    # Deltas: positive = candidate is better
+    delta_subcategory_splits: Optional[float] = None  # champ - cand
+    delta_total_cost: Optional[float] = None           # champ - cand
+    # Which objective level decided win/loss
+    decisive_objective: Literal[
+        "business_aggregation", "cost", "efficiency", "tie"
+    ] = "tie"
+
+
+@dataclass(frozen=True)
+class PairwiseCaseFeedback:
+    """Single instance × seed A/B comparison result."""
+    case_id: str
+    seed: int
+    comparison: Literal["win", "loss", "tie"]
+    delta: float  # cost delta, positive = candidate better
+    objective_breakdown: ObjectiveBreakdown
+    case_features: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CaseAggregateFeedback:
+    """Aggregated feedback for one instance across all seeds."""
+    case_id: str
+    n_pairs: int
+    wins: int
+    losses: int
+    ties: int
+    win_rate: float
+    dominant_result: Literal["win", "loss", "tie", "mixed"]
+    dominant_decisive_objective: Literal[
+        "business_aggregation", "cost", "efficiency", "mixed", "tie"
+    ]
+    median_delta_total_cost: Optional[float] = None
+    median_delta_subcategory_splits: Optional[float] = None
+    seed_consistency: float = 0.0  # max(win,loss,tie) / n_pairs
+    case_features: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ScreeningPatternSummary:
+    """Code-generated pattern summary across all cases in a screening round."""
+    total_cases: int
+    winning_cases: int
+    losing_cases: int
+    mixed_cases: int
+    wins_by_decisive_objective: Dict[str, int] = field(default_factory=dict)
+    losses_by_decisive_objective: Dict[str, int] = field(default_factory=dict)
+    wins_by_size_bucket: Dict[str, int] = field(default_factory=dict)
+    losses_by_size_bucket: Dict[str, int] = field(default_factory=dict)
+    consistent_win_cases: Tuple[str, ...] = ()
+    consistent_loss_cases: Tuple[str, ...] = ()
+    key_observations: Tuple[str, ...] = ()
 
 # --- Decision Features (The "Safe" Boundary) ---
 
