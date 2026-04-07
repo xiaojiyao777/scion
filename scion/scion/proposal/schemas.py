@@ -42,6 +42,19 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
     },
 }
 
+# Tool definitions for tool_use mode (avoids JSON escape issues)
+HYPOTHESIS_TOOL: Dict[str, Any] = {
+    "name": "generate_hypothesis",
+    "description": "Propose a single hypothesis for improving the solver operator pool",
+    "input_schema": HYPOTHESIS_PROPOSAL_SCHEMA,
+}
+
+PATCH_TOOL: Dict[str, Any] = {
+    "name": "generate_patch",
+    "description": "Generate a code patch implementing the approved hypothesis",
+    "input_schema": PATCH_PROPOSAL_SCHEMA,
+}
+
 # ---------------------------------------------------------------------------
 # Prompt templates
 # Input slots follow §5.2 of scion-engineering-arch-v1.md.

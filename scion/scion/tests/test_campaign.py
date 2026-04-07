@@ -457,6 +457,8 @@ class TestContractFailure:
                         return dict(bad_patch)
                     return dict(_VALID_PATCH)
                 return dict(_VALID_HYPOTHESIS)
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         cm = _campaign(
             tmp_path,
@@ -597,6 +599,8 @@ class TestVerificationGate:
                     fix_call_count[0] += 1
                     return dict(_VALID_PATCH)
                 return dict(_VALID_HYPOTHESIS)
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         # Gate fails on first run (bad code), passes on second (fixed code)
         run_count = [0]

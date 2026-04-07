@@ -93,6 +93,21 @@ class MockLLMClient:
         return self._pick_response(response_schema)
 
     # ------------------------------------------------------------------
+    # Tool-use variant (same behavior as call for mocks)
+    # ------------------------------------------------------------------
+
+    def call_with_tool(
+        self,
+        prompt: str,
+        tool: Dict[str, Any],
+        model: Optional[str] = None,
+        system_blocks: "list[dict] | None" = None,
+    ) -> Dict[str, Any]:
+        """Mock version: delegates to call() using tool's input_schema."""
+        schema = tool.get("input_schema", {})
+        return self.call(prompt, schema, model, system_blocks)
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 

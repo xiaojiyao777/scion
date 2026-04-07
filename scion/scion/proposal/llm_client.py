@@ -180,6 +180,131 @@ class LLMClient:
         ) from last_error
 
     # ------------------------------------------------------------------
+    # Tool-use based calling (avoids JSON escape issues for code)
+    # ------------------------------------------------------------------
+
+    def call_with_tool(
+        self,
+        prompt: str,
+        tool: Dict[str, Any],
+        model: str | None = None,
+        system_blocks: "list[dict] | None" = None,
+    ) -> Dict[str, Any]:
+        """Call LLM with tool_use and return the tool input dict directly.
+
+        Uses tool_choice={"type": "tool", "name": tool["name"]} to force
+        the model to call the specified tool.  The returned ``block.input``
+        is already a parsed dict — no JSON decode needed.
+
+        This is the same pattern Claude Code uses for FileWriteTool: the
+        API's constrained decoding handles all JSON escaping of code content.
+        """
+        effective_model = model or self.model
+        client = self._get_client()
+        attempt = 0
+        last_error: Exception | None = None
+
+        while attempt <= self.max_retries:
+            try:
+                kwargs: Dict[str, Any] = {
+                    "model": effective_model,
+                    "max_tokens": self.max_tokens,
+                    "tools": [tool],
+                    "tool_choice": {"type": "tool", "name": tool["name"]},
+                    "messages": [{"role": "user", "content": prompt}],
+                    "timeout": self.timeout_sec,
+                }
+                if system_blocks:
+                    kwargs["system"] = system_blocks
+                    kwargs["extra_headers"] = {
+                        "anthropic-beta": "extended-cache-ttl-2025-04-11",
+                    }
+
+                response = client.messages.create(**kwargs)
+
+                # Log cache performance
+                usage = getattr(response, "usage", None)
+                if usage:
+                    cache_create = getattr(usage, "cache_creation_input_tokens", 0)
+                    cache_read = getattr(usage, "cache_read_input_tokens", 0)
+                    input_tokens = getattr(usage, "input_tokens", 0)
+                    if cache_create or cache_read:
+                        logger.info(
+                            "Cache: created=%d read=%d uncached=%d",
+                            cache_create, cache_read, input_tokens,
+                        )
+
+                # Extract tool_use block
+                for block in response.content:
+                    if hasattr(block, "type") and block.type == "tool_use":
+                        if block.name == tool["name"]:
+                            # block.input is already a dict, parsed by the API
+                            result = block.input
+                            # Validate required fields
+                            required = tool.get("input_schema", {}).get("required", [])
+                            missing = [k for k in required if k not in result]
+                            if missing:
+                                raise LLMFormatError(
+                                    f"Tool input missing required fields: {missing}"
+                                )
+                            return result
+
+                raise LLMFormatError(
+                    f"LLM did not call tool '{tool['name']}'. "
+                    f"Stop reason: {getattr(response, 'stop_reason', 'unknown')}"
+                )
+
+            except LLMFormatError as exc:
+                last_error = exc
+                if attempt < self.max_retries:
+                    delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
+                    logger.warning(
+                        "Tool call format error (attempt %d/%d): %s",
+                        attempt + 1, self.max_retries, exc,
+                    )
+                    time.sleep(delay)
+                attempt += 1
+
+            except LLMRateLimitError as exc:
+                last_error = exc
+                retry_after = exc.retry_after
+                logger.warning("Rate limited; waiting %.1fs", retry_after)
+                time.sleep(retry_after)
+                # Don't consume retry count for rate limits
+
+            except LLMTimeoutError as exc:
+                last_error = exc
+                if attempt < self.max_retries:
+                    delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
+                    logger.warning(
+                        "Tool call timeout (attempt %d/%d); retrying in %.1fs",
+                        attempt + 1, self.max_retries, delay,
+                    )
+                    time.sleep(delay)
+                attempt += 1
+
+            except Exception as exc:
+                err_str = str(exc).lower()
+                if "timeout" in err_str or "timed out" in err_str:
+                    last_error = LLMTimeoutError(str(exc))
+                elif "429" in str(exc) or "rate_limit" in err_str:
+                    retry_after = _parse_retry_after(exc)
+                    last_error = LLMRateLimitError(str(exc), retry_after=retry_after)
+                    time.sleep(retry_after)
+                    continue  # Don't consume retry
+                else:
+                    last_error = LLMError(str(exc))
+                if attempt < self.max_retries:
+                    delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
+                    time.sleep(delay)
+                attempt += 1
+
+        raise LLMRetryExhaustedError(
+            f"Tool call failed after {self.max_retries + 1} attempt(s). "
+            f"Last error: {last_error}"
+        ) from last_error
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 

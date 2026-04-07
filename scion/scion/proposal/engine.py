@@ -7,6 +7,8 @@ from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.schemas import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
     PATCH_PROPOSAL_SCHEMA,
+    HYPOTHESIS_TOOL,
+    PATCH_TOOL,
     HYPOTHESIS_PROMPT_TEMPLATE,
     CODE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
@@ -33,10 +35,10 @@ class CreativeLayer:
     # ------------------------------------------------------------------
 
     def generate_hypothesis(self, context: Dict[str, Any]) -> HypothesisProposal:
-        """Generate a HypothesisProposal from the given context dict."""
+        """Generate a HypothesisProposal using tool_use."""
         system_blocks, user_prompt = _split_hypothesis_context(context)
-        raw = self._client.call(
-            user_prompt, HYPOTHESIS_PROPOSAL_SCHEMA, self._model,
+        raw = self._client.call_with_tool(
+            user_prompt, HYPOTHESIS_TOOL, self._model,
             system_blocks=system_blocks,
         )
         return _parse_hypothesis(raw)
@@ -46,10 +48,10 @@ class CreativeLayer:
     # ------------------------------------------------------------------
 
     def generate_code(self, context: Dict[str, Any]) -> PatchProposal:
-        """Generate a PatchProposal implementing the current hypothesis."""
+        """Generate a PatchProposal using tool_use (API handles JSON escape)."""
         system_blocks, user_prompt = _split_code_context(context)
-        raw = self._client.call(
-            user_prompt, PATCH_PROPOSAL_SCHEMA, self._model,
+        raw = self._client.call_with_tool(
+            user_prompt, PATCH_TOOL, self._model,
             system_blocks=system_blocks,
         )
         return _parse_patch(raw)
