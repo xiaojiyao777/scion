@@ -29,6 +29,9 @@ def _make_preexec_fn(limits: ResourceLimits):
     """Return a pre-exec callable that applies resource limits in the child process."""
 
     def _preexec():
+        # New session so killpg targets only the child tree
+        os.setsid()
+
         # CPU time hard + soft limit (seconds)
         cpu_limit = limits.timeout_sec + 10  # small grace period above wall-clock
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
