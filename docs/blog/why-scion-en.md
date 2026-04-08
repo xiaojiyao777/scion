@@ -106,6 +106,10 @@ This 10% survival rate tells us two things: LLMs are creative but unreliable (60
 - 60% V5_state_leak rate suggests prompt engineering has room to improve
 - No cross-campaign memory yet — each run starts fresh
 
+## Acknowledgment
+
+Scion is inspired by Andrej Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) vision — the idea that LLMs can autonomously conduct research within well-defined sandboxes. Scion takes this idea into the combinatorial optimization domain and adds formal governance to make it production-safe.
+
 ## Where This Is Going
 
 Scion v0.1 is a proof of concept that **hypothesis-driven search with governance** is viable. The roadmap:

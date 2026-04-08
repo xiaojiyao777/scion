@@ -249,6 +249,10 @@ python run_v3_campaign.py 15
 
 ---
 
+## Acknowledgment
+
+Scion is inspired by Andrej Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) — the vision that LLMs can autonomously conduct research within human-designed sandboxes. Scion brings this idea to combinatorial optimization with formal governance for production safety.
+
 ## Roadmap
 
 - [x] **v0.1** — MVP：核心循环、Contract Gate、三级实验协议、SQLite Registry

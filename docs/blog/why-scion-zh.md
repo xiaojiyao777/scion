@@ -106,6 +106,10 @@ Decision Layer（Oracle）    → 仅接收数值特征，不接收 LLM 文本
 - 60% 的 V5_state_leak 失败率说明 prompt 工程还有改进空间
 - 缺少跨 Campaign 记忆 —— 每次运行从零开始
 
+## 致谢
+
+Scion 的灵感来源于 Andrej Karpathy 的 [autoresearch](https://github.com/karpathy/autoresearch) 愿景 —— LLM 可以在人类定义好的沙盒内自主进行研究。Scion 将这个理念带入组合优化领域，并加入了形式化治理来保障生产安全性。
+
 ## 接下来
 
 Scion v0.1 证明了**假设驱动搜索 + 治理架构**这条路是可行的。路线图：
