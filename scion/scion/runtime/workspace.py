@@ -84,6 +84,8 @@ class WorkspaceMaterializer:
             shutil.rmtree(dest)
 
         shutil.copytree(src, dest, symlinks=False)
+        # Ensure workspace is writable even if copied from a read-only champion snapshot
+        _make_tree_writable(dest)
         return str(dest)
 
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
