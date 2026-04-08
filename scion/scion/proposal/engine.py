@@ -27,9 +27,10 @@ class CreativeLayer:
     propagate to the caller (CampaignManager → FailureRouter).
     """
 
-    def __init__(self, llm_client: Any, model: str = "claude-sonnet-4-6") -> None:
+    def __init__(self, llm_client: Any, model: str | None = None) -> None:
         self._client = llm_client
-        self._model = model
+        # Inherit model from LLMClient if not explicitly set
+        self._model = model or getattr(llm_client, 'model', None) or "claude-opus-4-6"
 
     # ------------------------------------------------------------------
     # Round 1 — hypothesis proposal
