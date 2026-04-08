@@ -87,6 +87,10 @@ class DecisionEngine:
         elif ci_high is not None and ci_high < 0:
             return self._out(features, Decision.ABANDON, ["VALIDATION_FAIL_CI_NEGATIVE"])
         elif wr >= threshold and ci_low < 0:
+            # Max 1 validation expand per spec §8.7
+            if features.expand_count >= 1:
+                # Enough evidence at wr >= threshold — promote to frozen anyway
+                return self._out(features, Decision.QUEUE_FROZEN, ["VALIDATION_EXPAND_EXHAUSTED_PASS"])
             return self._out(features, Decision.EXPAND_VALIDATION, ["VALIDATION_EXPAND"])
         else:
             return self._out(features, Decision.ABANDON, ["VALIDATION_FAIL_WIN_RATE"])
