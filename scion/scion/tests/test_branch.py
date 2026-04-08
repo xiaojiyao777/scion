@@ -142,7 +142,9 @@ def test_get_code_base_with_clean_hash():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
     ctrl.record_verification_result(b.branch_id, passed=True, code_hash="abc123")
-    assert ctrl.get_code_base(b.branch_id) == "abc123"
+    # Both current_code_hash and last_clean_code_hash are set → caller should
+    # reuse the existing branch workspace rather than copying from champion.
+    assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
 
 
 def test_get_code_base_stale_returns_champion():

@@ -42,11 +42,15 @@ class ContextManager:
         blacklist: List[HypothesisRecord],
         sibling_branches: Optional[List[Branch]] = None,
         step_history: Optional[List[StepRecord]] = None,
+        branch_workspace: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
         Includes full problem summary, champion operator code, branch experiment
         history, and blacklist. Deliberately excludes validation/frozen data.
+
+        If branch_workspace is provided and differs from the champion snapshot,
+        branch_code shows the modified operators so the LLM can build on them.
         """
         problem_summary = _build_problem_summary(problem_spec)
         champion_operators_code = _read_champion_operators(champion)
@@ -56,6 +60,11 @@ class ContextManager:
         blacklist_summary = _summarise_blacklist(blacklist)
         sibling_summary = _summarise_siblings(sibling_branches or [])
         champion_stats = _build_champion_stats(champion)
+        branch_code = (
+            _read_branch_code(branch_workspace, champion)
+            if branch_workspace
+            else None
+        )
 
         return {
             "problem_summary": problem_summary,
@@ -65,6 +74,7 @@ class ContextManager:
             "experiment_history": experiment_history,
             "blacklist_summary": blacklist_summary,
             "sibling_summary": sibling_summary,
+            "branch_code": branch_code,
         }
 
     # ------------------------------------------------------------------
@@ -403,6 +413,51 @@ def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> st
         return f"File: {target_file}\n```python\n{content}\n```"
     except OSError as exc:
         return f"(could not read {target_file}: {exc})"
+
+
+def _read_branch_code(branch_workspace: str, champion: ChampionState) -> Optional[str]:
+    """Read branch operators that differ from champion, for Round 1 context (§4.9).
+
+    Returns a formatted string showing the modified operator files, or None if
+    no differences are found or the workspace is unavailable.
+    """
+    branch_ops_dir = os.path.join(branch_workspace, "operators")
+    champ_ops_dir = os.path.join(champion.code_snapshot_path, "operators")
+
+    if not os.path.isdir(branch_ops_dir):
+        return None
+
+    try:
+        filenames = sorted(
+            f for f in os.listdir(branch_ops_dir)
+            if f.endswith(".py") and f not in ("__init__.py", "base.py")
+        )
+    except OSError:
+        return None
+
+    sections: List[str] = []
+    for fname in filenames:
+        branch_path = os.path.join(branch_ops_dir, fname)
+        champ_path = os.path.join(champ_ops_dir, fname)
+
+        try:
+            with open(branch_path, encoding="utf-8") as fh:
+                branch_content = fh.read()
+        except OSError:
+            continue
+
+        try:
+            with open(champ_path, encoding="utf-8") as fh:
+                champ_content = fh.read()
+        except OSError:
+            champ_content = None
+
+        if champ_content is None or branch_content != champ_content:
+            sections.append(
+                f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
+            )
+
+    return "\n\n".join(sections) if sections else None
 
 
 def _build_operator_interface_spec(spec: ProblemSpec) -> str:

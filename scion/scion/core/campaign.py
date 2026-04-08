@@ -199,6 +199,10 @@ class CampaignManager:
         active = self._branch_ctrl.get_active_branches()
         sched = self._scheduler.select_next(active)
 
+        # --- At capacity: max_active_branches limit reached ---
+        if sched.action == "at_capacity":
+            return StepResult(action="skip", reason="max_active_branches reached")
+
         # --- Create a new branch ---
         if sched.action == "create_new":
             branch = self._branch_ctrl.create_branch(self._champion)
@@ -569,6 +573,8 @@ class CampaignManager:
             b for b in self._branch_ctrl.get_active_branches()
             if b.branch_id != bid
         ]
+        # Pass the current branch workspace so the LLM sees branch-specific code (§4.9)
+        branch_workspace = self._branch_workspaces.get(bid)
         context = self._ctx_manager.build_hypothesis_context(
             branch=branch,
             champion=self._champion,
@@ -577,6 +583,7 @@ class CampaignManager:
             blacklist=self._blacklist,
             sibling_branches=siblings,
             step_history=self._step_history,
+            branch_workspace=branch_workspace,
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
@@ -645,6 +652,19 @@ class CampaignManager:
 
     def _setup_workspace(self, branch: Branch, force_champion: bool = False) -> Optional[str]:
         bid = branch.branch_id
+
+        # If the branch has a verified clean code base, reuse the existing workspace
+        # to enable iterative evolution within a branch (§11.2 / §4.5).
+        if not force_champion:
+            code_base = self._branch_ctrl.get_code_base(bid)
+            if code_base == "branch_workspace":
+                existing = self._branch_workspaces.get(bid)
+                if existing:
+                    import os as _os
+                    if _os.path.isdir(existing):
+                        return existing
+                # Workspace was lost — fall through to create from champion
+
         # Clean up existing workspace if any
         existing = self._branch_workspaces.get(bid)
         if existing:
@@ -653,14 +673,7 @@ class CampaignManager:
             except Exception:
                 pass
 
-        code_base = self._branch_ctrl.get_code_base(bid)
-        if code_base == "champion" or force_champion:
-            src = self._champion.code_snapshot_path
-        else:
-            import os as _os
-            # get_code_base() may return a SHA-256 hash (not a path); fall back to champion
-            src = code_base if _os.path.isdir(code_base) else self._champion.code_snapshot_path
-
+        src = self._champion.code_snapshot_path
         try:
             ws = self._materializer.create_branch_workspace(bid, src)
             self._branch_workspaces[bid] = ws
@@ -763,20 +776,31 @@ class CampaignManager:
         bid = branch.branch_id
         logger.info("Branch %s: decision=%s", bid, decision.value)
 
-        # CONTINUE_EXPLORE (P0 — discard current patch, re-propose next iteration)
+        # CONTINUE_EXPLORE — preserve workspace when screening shows positive signal (§11.2)
         if decision == Decision.CONTINUE_EXPLORE:
-            # State remains EXPLORE (or returns to EXPLORE from EXPLORE_EXPAND) —
-            # next iteration will do a full Round 1 → Round 2 with a new hypothesis.
-            ws = self._branch_workspaces.get(bid)
-            if ws:
-                try:
-                    self._materializer.cleanup(ws)
-                except Exception:
-                    pass
-                del self._branch_workspaces[bid]
+            # Preserve workspace + patch if verification passed and screening has positive signal.
+            # This enables iterative evolution: the next hypothesis builds on the current code.
+            verification_passed = verification_result.passed
+            has_positive_signal = (
+                protocol_result is not None
+                and protocol_result.stats is not None
+                and protocol_result.stats.win_rate > 0
+            )
+            preserve_workspace = verification_passed and has_positive_signal
+
+            if not preserve_workspace:
+                # Revert: discard workspace and patch for this round
+                ws = self._branch_workspaces.get(bid)
+                if ws:
+                    try:
+                        self._materializer.cleanup(ws)
+                    except Exception:
+                        pass
+                    del self._branch_workspaces[bid]
+                self._branch_patches.pop(bid, None)
+
+            # Always discard current hypothesis — a new one is generated next round
             self._branch_hypotheses.pop(bid, None)
-            self._branch_patches.pop(bid, None)
-            # Remove hypothesis from active (it's being discarded)
             if h_record in self._active_hypotheses:
                 self._active_hypotheses.remove(h_record)
             # For EXPLORE_EXPAND the branch is not already in EXPLORE — call apply_decision

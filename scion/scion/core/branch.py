@@ -166,14 +166,20 @@ class BranchController:
 
     def get_code_base(self, branch_id: str) -> str:
         """
-        Return the code-base identifier for the branch:
-        - "champion"  if branch is STALE or has no verified clean hash
-        - last_clean_code_hash  if a clean verification exists
+        Return the code-base identifier for the branch (§4.5):
+        - "champion"          if branch is STALE, or current_code_hash is None,
+                              or last_clean_code_hash is None (never passed verification)
+        - "branch_workspace"  if both hashes are set — caller should reuse the
+                              existing branch workspace rather than copying from champion
         """
         branch = self._get(branch_id)
-        if branch.state == BranchState.STALE or not branch.last_clean_code_hash:
+        if branch.state == BranchState.STALE:
             return "champion"
-        return branch.last_clean_code_hash
+        if branch.current_code_hash is None:
+            return "champion"
+        if branch.last_clean_code_hash is None:
+            return "champion"
+        return "branch_workspace"
 
     def record_verification_result(
         self, branch_id: str, passed: bool, code_hash: str
