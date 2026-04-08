@@ -26,7 +26,7 @@
 | 实例规模 | 54–675 orders（22 个 benchmark 实例） |
 | 实验协议 | Screening(20 pairs) → Validation(18) → Frozen(12) |
 | 总时间 | 59.4 分钟（15 rounds） |
-| LLM API 调用 | ~20 次 |
+| LLM API 调用 | 20 次 (10 × R1+R2) |
 
 ### 关键结果
 
@@ -34,11 +34,12 @@
 
 | Stage | Win Rate | Median Δ | Evaluations |
 |-------|----------|----------|-------------|
-| Screening | **95%** (19/20) | 750K | 20 pairs |
-| Validation | **100%** (18/18) | 2.2M | 18 pairs |
-| Frozen Holdout | **100%** (12/12) | **5.15M** | 12 pairs |
+| Screening | **95%** (19W/1L) | 750,000 | 20 pairs |
+| Validation | **100%** (18W/0L) | 2,200,000 | 18 pairs |
+| Frozen Holdout | **100%** (12W/0L) | **5,150,000** | 12 pairs |
 
-> Frozen Holdout 在 349–675 orders 的超大规模实例上全部 win，子品类拆分减少 **27–32%**。
+> Frozen Holdout 在 349–675 orders 的超大规模实例上全部 win，splits 减少 50–58 个（~27–32%），
+> delta 在 4.5M–6.1M 范围内。实例越大，改善越显著——这是结构性改进的标志。
 
 ### Gate 过滤效果
 
@@ -62,23 +63,17 @@ Scion 的多级 Gate 体系有效过滤了 LLM 幻觉：
 <details>
 <summary>📊 展开查看实验图表</summary>
 
-#### Campaign 时间线
+#### Campaign 分支时间线
 ![Campaign Timeline](docs/figures/fig1_campaign_timeline.png)
 
-#### 三级验证通过率
-![Promotion Gate](docs/figures/fig2_promotion_gate.png)
+#### 各分支累积胜率演化
+![Win Rate Progression](docs/figures/fig2_promotion_gate.png)
 
-#### Frozen Holdout 子品类拆分减少
-![Split Reduction](docs/figures/fig3_split_reduction.png)
+#### Branch 1 (Promoted) 逐实例表现
+![Instance Detail](docs/figures/fig3_split_reduction.png)
 
-#### 改善幅度分布
-![Delta Distribution](docs/figures/fig4_delta_distribution.png)
-
-#### Gate 过滤漏斗
+#### 从假设到 Champion 的漏斗
 ![Gate Funnel](docs/figures/fig5_gate_funnel.png)
-
-#### LLM 代码生成与验证结果
-![LLM Learning](docs/figures/fig6_llm_learning.png)
 
 </details>
 
@@ -202,6 +197,23 @@ Scion 的核心区别于传统 LLM+进化算法方法（FunSearch, EoH, ReEvo, A
 | 安全控制 | 无/弱 | Contract Gate + Verification Gate |
 | 评估方式 | 单轮 fitness | 三级实验（screening → validation → frozen） |
 | 决策机制 | LLM 参与 | 纯数值 Oracle（隔离 LLM 干扰） |
+
+## 当前状态
+
+**v0.1 MVP + 调优完成** (2026-04-08)
+
+- 59 个 Python 文件，9,272 行代码
+- 239/239 tests passed
+- 完整 15-round campaign 验证通过
+- 1 次 Champion 晋升（SubcatMergeSafe），3 个 branch 被正确拒绝
+- Campaign 数据：`docs/campaign_summary.json`、`docs/v3_campaign.log`
+
+### 已知局限（v0.2 待改进）
+
+- Verification Gate 仅检查 V5_state_leak，需增加深度业务逻辑校验
+- LLM 生成多样性不足（10 个假设全部是 `create_new`，没有 `modify` 已有算子）
+- V5_state_leak 失败率 60%，需在 prompt 中强化 deep copy 要求
+- 缺少跨 Campaign 的经验沉淀（RAG 记忆模块）
 
 ## 开源协议
 
