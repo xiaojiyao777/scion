@@ -244,6 +244,10 @@ class LLMClient:
                             required = tool.get("input_schema", {}).get("required", [])
                             missing = [k for k in required if k not in result]
                             if missing:
+                                logger.warning(
+                                    "Tool input keys present: %s; missing: %s",
+                                    list(result.keys()), missing,
+                                )
                                 raise LLMFormatError(
                                     f"Tool input missing required fields: {missing}"
                                 )
