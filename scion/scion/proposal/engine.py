@@ -9,6 +9,7 @@ from scion.proposal.schemas import (
     PATCH_PROPOSAL_SCHEMA,
     HYPOTHESIS_TOOL,
     PATCH_TOOL,
+    FIX_TOOL,
     HYPOTHESIS_PROMPT_TEMPLATE,
     CODE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
@@ -59,13 +60,14 @@ class CreativeLayer:
     def fix_code(self, context: Dict[str, Any]) -> PatchProposal:
         """Generate a corrected PatchProposal after a light verification failure.
 
-        Expected context keys (from ContextManager.build_fix_context):
-            problem_name, editable_patterns, frozen_patterns,
-            import_whitelist, file_path, action, code_content,
-            failure_severity, first_failure, failure_details.
+        Uses tool_use (same as generate_hypothesis/generate_code) to avoid
+        JSON escape issues when code_content contains complex Python.
         """
-        prompt = FIX_PROMPT_TEMPLATE.format_map(_DefaultDict(context))
-        raw = self._client.call(prompt, PATCH_PROPOSAL_SCHEMA, self._model)
+        system_blocks, user_prompt = _split_fix_context(context)
+        raw = self._client.call_with_tool(
+            user_prompt, FIX_TOOL, self._model,
+            system_blocks=system_blocks,
+        )
         return _parse_patch(raw)
 
 
@@ -226,6 +228,49 @@ def _split_code_context(
         f'  "code_content": "<complete file contents>",\n'
         f'  "test_hint": "<optional note, or null>"\n'
         f"}}\n"
+    )
+
+    return system_blocks, user_prompt
+
+
+def _split_fix_context(
+    context: Dict[str, Any],
+) -> "tuple[list[dict], str]":
+    """Split fix context into system blocks (cacheable) and user prompt.
+
+    System (1h cache): role + problem + operator interface + import whitelist
+    User (dynamic): original code + failure details + task
+    """
+    D = _DefaultDict(context)
+
+    system_text = (
+        "You are a software engineer fixing a VRP operator that failed verification.\n"
+        "Correct the code so it passes, while preserving the intended logic.\n\n"
+        f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"## Operator Interface Specification\n"
+        f"All operator classes MUST conform to this interface exactly:\n\n"
+        f"{D['operator_interface_spec']}\n\n"
+        f"## Allowed Imports\n"
+        f"Only use modules from this whitelist \u2014 any other import will be rejected:\n"
+        f"{D['import_whitelist']}"
+    )
+
+    system_blocks = [
+        {
+            "type": "text",
+            "text": system_text,
+            "cache_control": _CACHE_1H,
+        }
+    ]
+
+    user_prompt = (
+        f"## Original Code That Failed\n{D['original_code']}\n\n"
+        f"## Verification Failure Details\n{D['failure_detail']}\n\n"
+        f"## Constraints\n"
+        f"- Editable files: {D['editable_patterns']}\n"
+        f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
+        f"- Preserve the operator interface: `def execute(self, solution, rng) -> Solution`\n"
+        f"- Make only the minimal changes needed to fix the reported failure\n"
     )
 
     return system_blocks, user_prompt

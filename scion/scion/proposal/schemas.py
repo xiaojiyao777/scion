@@ -55,6 +55,12 @@ PATCH_TOOL: Dict[str, Any] = {
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
 
+FIX_TOOL: Dict[str, Any] = {
+    "name": "fix_patch",
+    "description": "Fix a code patch that failed verification, preserving intended logic",
+    "input_schema": PATCH_PROPOSAL_SCHEMA,
+}
+
 # ---------------------------------------------------------------------------
 # Prompt templates
 # Input slots follow §5.2 of scion-engineering-arch-v1.md.
