@@ -45,19 +45,66 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
 # Tool definitions for tool_use mode (avoids JSON escape issues)
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
-    "description": "Propose a single hypothesis for improving the solver operator pool",
+    "description": (
+        "Propose ONE novel hypothesis for improving the VNS solver's operator pool.\n\n"
+        "Usage:\n"
+        "- Study ALL existing champion operators before proposing \u2014 avoid duplicating existing logic.\n"
+        "- Check experiment history for approaches that already failed \u2014 do NOT repeat them.\n"
+        "- Check sibling branches to avoid redundant exploration.\n\n"
+        "Quality criteria:\n"
+        "- Target a specific, named weakness in the current pool (not vague 'improvements').\n"
+        "- The mechanism of improvement must be concrete and testable.\n"
+        "- Consider the solver's execution model: your operator runs ~1000 times per solve, "
+        "high variance is good, rare great outcomes beat frequent mediocre ones.\n"
+        "- Prefer operators that provide a CAPABILITY the pool currently LACKS.\n\n"
+        "Common mistakes to avoid:\n"
+        "- Proposing random order moves between arbitrary vehicles (unlikely to improve splits).\n"
+        "- Ignoring feasibility constraints (your operator MUST produce feasible solutions).\n"
+        "- Reinventing logic already present in an existing operator with different variable names."
+    ),
     "input_schema": HYPOTHESIS_PROPOSAL_SCHEMA,
 }
 
 PATCH_TOOL: Dict[str, Any] = {
     "name": "generate_patch",
-    "description": "Generate a code patch implementing the approved hypothesis",
+    "description": (
+        "Generate the complete file contents implementing an approved hypothesis.\n\n"
+        "Usage:\n"
+        "- Write the COMPLETE file \u2014 not a diff, not a snippet. The entire file content.\n"
+        "- Study the champion operator code for style, data model usage, and import patterns.\n"
+        "- Follow the operator interface EXACTLY: subclass Operator, implement execute(self, solution, rng) -> Solution.\n\n"
+        "Code quality requirements:\n"
+        "- Deep-copy the solution FIRST: `new_sol = solution.deep_copy()`.\n"
+        "- Skip locked orders: check `order.locked_vehicle_id is not None`.\n"
+        "- Use `rng` for ALL randomness \u2014 do NOT import random directly.\n"
+        "- NEVER use `list(set(...))` or iterate over set/dict in order-dependent ways \u2014 "
+        "use `sorted()` for determinism.\n"
+        "- Call `new_sol.remove_empty_vehicles()` before returning.\n"
+        "- Maintain assignment dict consistency: update BOTH vehicle.order_ids and solution.assignment.\n\n"
+        "Common rejection causes:\n"
+        "- Feasibility violation: dropping or duplicating orders.\n"
+        "- Non-determinism: iterating over sets without sorting.\n"
+        "- Import violation: using modules not in the whitelist.\n"
+        "- Interface mismatch: wrong method signature or missing deep copy."
+    ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
 
 FIX_TOOL: Dict[str, Any] = {
     "name": "fix_patch",
-    "description": "Fix a code patch that failed verification, preserving intended logic",
+    "description": (
+        "Fix a code patch that failed verification.\n\n"
+        "Usage:\n"
+        "- Read the failure details carefully \u2014 fix the SPECIFIC issue reported.\n"
+        "- Make MINIMAL changes to fix the failure. Do not refactor unrelated code.\n"
+        "- Preserve the intended algorithmic logic \u2014 only fix the mechanical error.\n"
+        "- Return the COMPLETE corrected file, not just changed lines.\n\n"
+        "Common patterns:\n"
+        "- V3_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
+        "- V5_state_leak: non-deterministic iteration (use sorted()).\n"
+        "- V1_syntax: indentation, parentheses, colons.\n"
+        "- V2_interface: missing Operator base class or wrong execute() signature."
+    ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
 
