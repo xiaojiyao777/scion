@@ -495,5 +495,12 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
 2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
 4. **Return value**: return the modified solution (or the original if no valid move was found)
-5. **Imports**: only use modules from the import whitelist; no external packages\
+5. **Imports**: only use modules from the import whitelist; no external packages
+
+### Feasibility Constraints (MUST NOT violate — will cause immediate rejection)
+6. **Every order assigned**: every order in the instance MUST appear in exactly one vehicle's order_ids AND in the assignment dict. Never drop or duplicate orders.
+7. **Consistency**: `solution.assignment[order_id] == vehicle_id` must match `order_id in vehicle.order_ids` for ALL orders. After any modification, update BOTH.
+8. **Vehicle capacity**: respect vehicle type constraints (use existing patterns from champion operators)
+9. **Hazardous goods**: orders with `hazard_flag=True` MUST be in a vehicle with `vehicle_type='HQ40_DG'`
+10. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up\
 """
