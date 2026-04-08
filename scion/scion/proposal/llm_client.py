@@ -77,7 +77,7 @@ class LLMClient:
         base_url: str | None = None,
         timeout_sec: float = 60.0,
         max_retries: int = 2,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> None:
         self.model = (
             model
@@ -235,6 +235,12 @@ class LLMClient:
                         )
 
                 # Extract tool_use block
+                logger.debug(
+                    "Response: stop_reason=%s blocks=%d types=%s",
+                    getattr(response, 'stop_reason', '?'),
+                    len(response.content),
+                    [getattr(b, 'type', '?') for b in response.content],
+                )
                 for block in response.content:
                     if hasattr(block, "type") and block.type == "tool_use":
                         if block.name == tool["name"]:
