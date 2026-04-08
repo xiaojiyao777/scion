@@ -258,6 +258,11 @@ python run_v3_campaign.py 15
 - [ ] **v0.3** — RAG 记忆模块（跨 Campaign 经验沉淀）
 - [ ] **v1.0** — 多问题泛化、论文实验
 
+## Blog
+
+- [Why Scion: Rethinking How LLMs Improve Optimization Algorithms](docs/blog/why-scion-en.md) (English)
+- [为什么做 Scion：重新思考 LLM 如何改进优化算法](docs/blog/why-scion-zh.md)（中文）
+
 ## License
 
 MIT
