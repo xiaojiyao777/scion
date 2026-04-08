@@ -78,9 +78,27 @@ def lexicographic_compare(
 
 def compute_delta(candidate_objective: dict, champion_objective: dict) -> float:
     """
-    Compute primary objective delta: champion_cost - candidate_cost.
-    Positive value means candidate improved over champion.
+    Compute lexicographic delta aligned with the objective function.
+
+    Since the objective is lexicographic (splits > cost > time),
+    the delta must reflect the PRIMARY decisive dimension:
+    - If splits differ: delta = (champ_splits - cand_splits) * SPLITS_WEIGHT
+    - If splits equal:  delta = champ_cost - cand_cost
+
+    SPLITS_WEIGHT is set large enough that any split improvement
+    dominates any cost change, matching the lexicographic semantics.
+    Positive value means candidate is better than champion.
     """
+    cand_splits = candidate_objective.get("subcategory_splits", 0)
+    champ_splits = champion_objective.get("subcategory_splits", 0)
     cand_cost = candidate_objective.get("total_cost", float("inf"))
     champ_cost = champion_objective.get("total_cost", float("inf"))
-    return champ_cost - cand_cost
+
+    if cand_splits != champ_splits:
+        # Splits are the decisive dimension.
+        # Use a large multiplier so split deltas dominate cost deltas in CI.
+        SPLITS_WEIGHT = 100_000  # larger than any realistic cost delta
+        return (champ_splits - cand_splits) * SPLITS_WEIGHT
+    else:
+        # Same splits — cost is decisive
+        return champ_cost - cand_cost
