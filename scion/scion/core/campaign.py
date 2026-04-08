@@ -887,9 +887,20 @@ class CampaignManager:
                 reason="CONTINUE_EXPLORE: re-propose next step",
             )
 
-        # PROMOTE — update champion, mark all stale
+        # PROMOTE — transition branch to PROMOTED first so mark_all_stale skips it,
+        # then update champion and mark remaining active branches stale.
         if decision == Decision.PROMOTE:
+            try:
+                self._branch_ctrl.apply_decision(bid, decision)
+            except StateTransitionError as exc:
+                logger.error("Branch %s: apply_decision(%s) failed: %s", bid, decision.value, exc)
             self._on_promote(branch)
+            return StepResult(
+                action=action_label,  # type: ignore[arg-type]
+                branch_id=bid,
+                decision=decision,
+                reason=f"decision={decision.value}",
+            )
 
         # ABANDON
         if decision == Decision.ABANDON:
