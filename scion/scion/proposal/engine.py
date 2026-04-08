@@ -120,7 +120,7 @@ class _DefaultDict(dict):
 # Cache-aware prompt splitting
 # ---------------------------------------------------------------------------
 
-_CACHE_1H = {"type": "ephemeral", "ttl": "1h"}
+_CACHE_5M = {"type": "ephemeral"}
 
 
 def _split_hypothesis_context(
@@ -161,7 +161,7 @@ def _split_hypothesis_context(
         {
             "type": "text",
             "text": system_text,
-            "cache_control": _CACHE_1H,
+            "cache_control": _CACHE_5M,
         }
     ]
 
@@ -220,7 +220,7 @@ def _split_code_context(
         {
             "type": "text",
             "text": system_text,
-            "cache_control": _CACHE_1H,
+            "cache_control": _CACHE_5M,
         }
     ]
 
@@ -273,7 +273,7 @@ def _split_fix_context(
         {
             "type": "text",
             "text": system_text,
-            "cache_control": _CACHE_1H,
+            "cache_control": _CACHE_5M,
         }
     ]
 

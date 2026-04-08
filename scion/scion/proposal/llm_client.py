@@ -77,7 +77,7 @@ class LLMClient:
         base_url: str | None = None,
         timeout_sec: float = 60.0,
         max_retries: int = 2,
-        max_tokens: int = 8192,
+        max_tokens: int = 16384,
     ) -> None:
         self.model = (
             model
@@ -216,9 +216,6 @@ class LLMClient:
                 }
                 if system_blocks:
                     kwargs["system"] = system_blocks
-                    kwargs["extra_headers"] = {
-                        "anthropic-beta": "extended-cache-ttl-2025-04-11",
-                    }
 
                 response = client.messages.create(**kwargs)
 
@@ -340,10 +337,6 @@ class LLMClient:
             }
             if system_blocks:
                 kwargs["system"] = system_blocks
-                # Enable 1h extended cache TTL via beta header
-                kwargs["extra_headers"] = {
-                    "anthropic-beta": "extended-cache-ttl-2025-04-11",
-                }
             message = client.messages.create(**kwargs)
             # Log cache performance
             usage = getattr(message, "usage", None)
