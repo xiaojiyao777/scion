@@ -196,6 +196,52 @@ def _build_problem_summary(spec: ProblemSpec) -> str:
     if spec.description:
         lines.append(f"Description: {spec.description}")
     lines += [
+        "",
+        "### Objective Function (lexicographic — minimize all three in order):",
+        "1. subcategory_splits: For each unique `vehicle_subcategory` value across all orders,",
+        "   count how many distinct vehicles contain orders of that subcategory, subtract 1,",
+        "   then sum. Formula: sum(len(vehicles_containing_subcat) - 1 for each subcategory)",
+        "2. total_cost: sum(VEHICLE_TYPES[v.vehicle_type].cost for all non-empty vehicles)",
+        "   Vehicle costs: T3=800, T5=1200, T10=1800, HQ40=3300, HQ40_DG=6600",
+        "3. solve_time_ms: wall-clock time (external, not operator-controlled)",
+        "",
+        "Key implication: ANY increase in subcategory_splits makes the solution strictly worse,",
+        "regardless of cost improvement. Cost only matters when splits are equal.",
+        "",
+        "### How the Initial Solution is Built (greedy_init)",
+        "Orders are grouped by (vehicle_category, vehicle_subcategory, pickup_city).",
+        "Within each group, orders are packed sequentially into vehicles using first-fit.",
+        "When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the same group.",
+        "Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.",
+        "Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.",
+        "",
+        "To reduce splits, an operator must consolidate orders so a subcategory fits in fewer vehicles.",
+        "This typically means: merging two partially-filled vehicles of the SAME vehicle_subcategory,",
+        "or moving orders between vehicles to free up space for same-subcategory consolidation.",
+        "Random order moves between arbitrary vehicles are unlikely to improve splits.",
+        "",
+        "### Worked Example (Small Instance)",
+        "Instance: 6 orders, 2 subcategories, all Shenzhen region",
+        "  Orders: A1(subcat=1,8plt), A2(subcat=1,6plt), A3(subcat=1,10plt),",
+        "          A4(subcat=1,12plt), B1(subcat=2,5plt), B2(subcat=2,4plt)",
+        "  Vehicle types: T10(cap=14,cost=1800), HQ40(cap=40,cost=3300)",
+        "",
+        "Greedy init (groups by subcategory, first-fit):",
+        "  V1[T10]: A1(8)+A2(6)=14plt -> full",
+        "  V2[T10]: A3(10) -> 10plt (A4 won't fit: 10+12=22 > 14)",
+        "  V3[T10]: A4(12) -> 12plt",
+        "  V4[T10]: B1(5)+B2(4)=9plt",
+        "  Objective: splits=2 (subcat 1 in V1,V2,V3 -> split=2; subcat 2 in V4 -> split=0)",
+        "             cost=4*1800=7200",
+        "",
+        "Improved (merge subcat-1 vehicles into HQ40):",
+        "  V1[HQ40]: A1+A2+A3+A4=36plt",
+        "  V4[T10]: B1+B2=9plt",
+        "  Objective: splits=0, cost=3300+1800=5100 -> BETTER on both objectives",
+        "",
+        "The key move: merging V2+V3 orders into V1 (upgrading to HQ40).",
+        "This is what a good subcategory-consolidation operator should do.",
+        "",
         f"Operator categories: {', '.join(spec.operator_categories)}",
         f"Editable files: {', '.join(spec.search_space.editable)}",
         f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
@@ -569,8 +615,24 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
   - Call `solution.deep_copy()` to get a deep copy before modifying
   - `solution.remove_empty_vehicles()` to clean up empty vehicles in-place
 - `Vehicle`: `vehicle_id`, `vehicle_type` (HQ40_DG|HQ40|T10|T5|T3), `region`, `order_ids: list[str]`
-- `Order`: `order_id`, `locked_vehicle_id` (None = freely assignable), `hazard_flag`, `spu_list`, etc.
-- `Instance`: passed as a frozen context; accessed via `solution.vehicles` / `solution.assignment`
+- `Order` (complete field list — use these EXACT attribute names):
+  - `order_id: str` — unique identifier
+  - `vehicle_category: int` — large category (feasibility H4: same vehicle must have same category)
+  - `vehicle_subcategory: int` — sub-category (**PRIMARY optimization target**: minimize splits of this across vehicles)
+  - `urgent: bool` — urgency flag
+  - `hazard_flag: bool` — True if order contains hazardous goods
+  - `hazard_quantity: int` — hazardous goods quantity in pcs (>1800 requires HQ40_DG)
+  - `pickup_name: str` — pickup point name (constraint H3: max pickups per vehicle per region)
+  - `pickup_city: str` — "Dongguan" or "Shenzhen" (constraint H2: same region per vehicle)
+  - `declaration_amount: float` — customs declaration amount (constraint H6)
+  - `lsp: str` — logistics service provider
+  - `ship_method: str` — shipping method (H6 grouping key with destination_country)
+  - `destination_country: str` — destination country (H6 grouping key with ship_method)
+  - `spu_list: list[SPU]` — packing units; use `calc_pallets(order.spu_list)` from models.py
+  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle
+- `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
+- Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
+- Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
 
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
@@ -582,7 +644,10 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
 ### Feasibility Constraints (MUST NOT violate — will cause immediate rejection)
 6. **Every order assigned**: every order in the instance MUST appear in exactly one vehicle's order_ids AND in the assignment dict. Never drop or duplicate orders.
 7. **Consistency**: `solution.assignment[order_id] == vehicle_id` must match `order_id in vehicle.order_ids` for ALL orders. After any modification, update BOTH.
-8. **Vehicle capacity**: respect vehicle type constraints (use existing patterns from champion operators)
-9. **Hazardous goods**: orders with `hazard_flag=True` MUST be in a vehicle with `vehicle_type='HQ40_DG'`
-10. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up\
+8. **Vehicle capacity**: total pallets in a vehicle must not exceed its type's capacity
+9. **Hazardous goods**: orders with `hazard_flag=True` and total hazard_quantity > 1800 MUST be in HQ40_DG
+10. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up
+11. **Same region**: all orders in a vehicle must have the same `pickup_city` region
+12. **Same category**: all orders in a vehicle must have the same `vehicle_category`
+13. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`\
 """

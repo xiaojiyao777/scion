@@ -57,7 +57,7 @@ def _phase1_init(instance: Instance) -> Solution:
         current_pallets = 0
         current_hazard = 0
         current_pickups: set[str] = set()
-        max_pickups = 2 if region == "东莞" else 3
+        max_pickups = 2 if region == "Dongguan" else 3
 
         for order in orders:
             # 锁定订单：必须放在指定车辆内，单独处理

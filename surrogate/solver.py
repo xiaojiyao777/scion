@@ -133,7 +133,7 @@ def _load_operators_from_registry(
 # 解序列化（用于 JSON 输出）
 # ---------------------------------------------------------------------------
 
-def solution_to_dict(solution: Solution) -> dict:
+def solution_to_dict(solution: Solution, instance: Instance | None = None, phase: int = 1) -> dict:
     """将 Solution 转为可序列化的字典。"""
     vehicles_out = {}
     for vid, v in solution.vehicles.items():
@@ -152,10 +152,16 @@ def solution_to_dict(solution: Solution) -> dict:
         "solve_time_ms": obj.solve_time_ms if obj else None,
     }
 
+    feasible = True
+    if instance is not None:
+        feas = check_feasibility(solution, instance, phase)
+        feasible = feas.is_feasible
+
     return {
         "vehicles": vehicles_out,
         "assignment": solution.assignment,
         "objective": objective_out,
+        "feasible": feasible,
     }
 
 
@@ -257,7 +263,7 @@ def main() -> None:
         best.objective.solve_time_ms = elapsed_ms
 
     # 输出
-    result = solution_to_dict(best)
+    result = solution_to_dict(best, instance, args.phase)
     out_json = json.dumps(result, ensure_ascii=False, indent=2)
 
     if args.output:

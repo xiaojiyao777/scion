@@ -44,26 +44,26 @@ VEHICLE_TYPES_BY_CAPACITY = [
 # 片区常量
 # ---------------------------------------------------------------------------
 
-# 片区 → 最大提货点数
+# Region → max pickup points
 REGION_MAX_PICKUPS: dict[str, int] = {
-    "东莞": 2,
-    "深圳": 3,
+    "Dongguan": 2,
+    "Shenzhen": 3,
 }
 
-# 城市名 → 片区（surrogate 简化：城市即片区）
+# City name → region (surrogate simplified: city = region)
 CITY_TO_REGION: dict[str, str] = {
-    "东莞": "东莞",
-    "深圳": "深圳",
+    "Dongguan": "Dongguan",
+    "Shenzhen": "Shenzhen",
 }
 
 
 def get_region(pickup_city: str) -> str:
-    """根据提货城市获取片区名称。"""
+    """Get region name from pickup city."""
     return CITY_TO_REGION.get(pickup_city, pickup_city)
 
 
 def get_max_pickups(region: str) -> int:
-    """获取该片区允许的最大提货点数。"""
+    """Get max pickup points allowed for a region."""
     return REGION_MAX_PICKUPS.get(region, 3)
 
 
@@ -71,15 +71,15 @@ def get_max_pickups(region: str) -> int:
 # SPU 与栈板计算
 # ---------------------------------------------------------------------------
 
-# 整板/尾板/木箱：每个 = 1 栈板；整箱/散箱：每 8 个 = 1 栈板
-PALLET_TYPE = {"整板", "尾板", "木箱"}
-BOX_TYPE    = {"整箱", "散箱"}
+# FULL_PLT/TAILGATE/WOOD_CASE: each unit = 1 pallet; FULL_CTN/LOOSE_CTN: every 8 = 1 pallet
+PALLET_TYPE = {"FULL_PLT", "TAILGATE", "WOOD_CASE"}
+BOX_TYPE    = {"FULL_CTN", "LOOSE_CTN"}
 
 
 @dataclass
 class SPU:
-    """最小货运单元（Stock Packing Unit）。"""
-    packing_type: str   # 整板 | 尾板 | 木箱 | 整箱 | 散箱
+    """Stock Packing Unit."""
+    packing_type: str   # FULL_PLT | TAILGATE | WOOD_CASE | FULL_CTN | LOOSE_CTN
     quantity: int
 
 
@@ -112,7 +112,7 @@ class Order:
     hazard_quantity: int         # 危险品数量（pcs）
     pickup_name: str             # 提货点名称
     pickup_province: str
-    pickup_city: str             # 提货点城市（东莞 / 深圳）
+    pickup_city: str             # Pickup city (Dongguan / Shenzhen)
     declaration_amount: float    # 报关金额
     lsp: str                     # 承运商
     ship_method: str             # 运输方式
@@ -130,7 +130,7 @@ class Vehicle:
     """逻辑车辆（spec §1.4）。"""
     vehicle_id: str
     vehicle_type: str   # HQ40_DG | HQ40 | T10 | T5 | T3
-    region: str         # 东莞 | 深圳
+    region: str         # Dongguan | Shenzhen
     order_ids: list[str] = field(default_factory=list)
 
 

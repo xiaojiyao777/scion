@@ -141,7 +141,20 @@ def _split_hypothesis_context(
         f"The following operators make up the current champion solution.\n"
         f"Study them carefully before proposing anything \u2014 avoid duplicating existing logic.\n\n"
         f"{D['champion_operators_code']}\n\n"
-        f"## Champion State\n{D['champion_stats']}"
+        f"## Champion State\n{D['champion_stats']}\n\n"
+        f"## How the VNS Solver Uses Operators\n"
+        f"- The solver maintains a pool of 40 candidate solutions, sorted by objective.\n"
+        f"- Each iteration: for EACH solution in the pool, ONE operator is randomly selected (weighted) and applied.\n"
+        f"- If the result is INFEASIBLE (violates any hard constraint), it is DISCARDED.\n"
+        f"- Pool update: new + old solutions merged, top 40 by lexicographic objective kept.\n"
+        f"- Runs 200 iterations or until 30 consecutive no-improvement iterations.\n"
+        f"- Total: ~8000 operator invocations per solve run.\n\n"
+        f"Design implications for new operators:\n"
+        f"- Your operator will be called ~1000 times. It MUST produce feasible solutions.\n"
+        f"- High variance is good: the pool filters bad outcomes and keeps rare great ones.\n"
+        f"- A large improvement on 5% of calls is more valuable than a tiny improvement on 50%.\n"
+        f"- Your operator competes with 6 existing operators for invocation share.\n"
+        f"- It must provide a capability the existing operators LACK, not duplicate them."
     )
 
     system_blocks = [

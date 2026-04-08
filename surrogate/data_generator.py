@@ -17,20 +17,20 @@ VEHICLE_TYPES = {
 }
 
 REGIONS = {
-    "东莞": {
-        "warehouses": ["成品央仓", "备件央仓", "SKD仓"],
+    "Dongguan": {
+        "warehouses": ["SKD_WH", "FG_CENTRAL_WH", "DG_NORTH_WH"],
         "max_pickups": 2
     },
-    "深圳": {
-        "warehouses": ["工厂直发仓A", "成品央仓"],
+    "Shenzhen": {
+        "warehouses": ["SZ_WH", "SZ_FG_WH"],
         "max_pickups": 3
     }
 }
 
-DESTINATION_COUNTRIES = ["德国", "英国", "法国", "印度", "巴西", "墨西哥", "日本", "韩国", "阿联酋", "南非"]
-LSPS = ["DHL", "Maersk", "中远海运", "顺丰国际", "DB Schenker"]
-SHIP_METHODS = ["海运", "空运", "铁路", "陆运"]
-PACKING_TYPES = ["整板", "尾板", "木箱", "整箱", "散箱"]
+DESTINATION_COUNTRIES = ["Germany", "UK", "France", "India", "Brazil", "Mexico", "Japan", "South Korea", "UAE", "South Africa"]
+LSPS = ["DHL", "Maersk", "COSCO", "SF_INTL", "DB Schenker"]
+SHIP_METHODS = ["SEA", "AIR", "RAIL", "ROAD"]
+PACKING_TYPES = ["FULL_PLT", "TAILGATE", "WOOD_CASE", "FULL_CTN", "LOOSE_CTN"]
 
 # --- Data Structures ---
 
@@ -116,7 +116,7 @@ class DataGenerator:
             order_pallets = 0
             boxes = 0
             for s in spu_list:
-                if s.packing_type in ('整板', '尾板', '木箱'):
+                if s.packing_type in ('FULL_PLT', 'TAILGATE', 'WOOD_CASE'):
                     order_pallets += s.quantity
                 else:
                     boxes += s.quantity

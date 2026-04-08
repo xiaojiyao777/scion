@@ -1,0 +1,28 @@
+[
+  {
+    "file": "instance_fro_x02.json",
+    "greedy_feasible": true,
+    "greedy_splits": 153,
+    "greedy_cost": 418800,
+    "greedy_violations": [],
+    "seed_results": {
+      "seed_42": {
+        "splits": 150,
+        "cost": 413500,
+        "time_sec": 1.57
+      },
+      "seed_137": {
+        "splits": 151,
+        "cost": 413200,
+        "time_sec": 1.61
+      },
+      "seed_1042": {
+        "splits": 150,
+        "cost": 415600,
+        "time_sec": 1.85
+      }
+    },
+    "is_discriminative": true,
+    "unique_results": 3
+  }
+]
