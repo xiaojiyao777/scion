@@ -59,8 +59,8 @@
 
 | 术语 | 一句话含义 |
 |------|-----------|
-| **Win Rate** | 候选赢 Champion 的比例（赢 = 字典序更优） |
-| **Median Delta** | 候选相对 Champion 的中位改善量 |
+| **Win Rate (wr)** | 候选赢 Champion 的比例（赢 = 字典序更优）。详见 [`docs/metrics-guide.md`](../docs/metrics-guide.md) |
+| **Median Delta (md)** | 候选相对 Champion 的中位改善量。详见 [`docs/metrics-guide.md`](../docs/metrics-guide.md) |
 | **Bootstrap CI** | 用 bootstrap 方法计算的置信区间，判断改善是否统计显著 |
 | **Lexicographic Compare** | 字典序比较——先比第一目标（业务聚合），相同再比第二目标（成本） |
 | **DecisionFeatures** | 送给决策引擎的"成绩单"——只含数字和枚举，**绝对不含**自由文本 |

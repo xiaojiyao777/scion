@@ -30,6 +30,8 @@
 
 ### 关键结果
 
+> 📊 指标详解：如何理解 Win Rate 和 Median Delta，参见 [`docs/metrics-guide.md`](docs/metrics-guide.md)
+
 🏆 **成功晋升 1 个新算子**（SubcatMergeSafe），通过完整三级验证：
 
 | Stage | Win Rate | Median Δ | Evaluations |
