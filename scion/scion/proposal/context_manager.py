@@ -638,16 +638,17 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
 2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
-4. **Return value**: return the modified solution (or the original if no valid move was found)
-5. **Imports**: only use modules from the import whitelist; no external packages
+4. **Determinism**: NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
+5. **Return value**: return the modified solution (or the original if no valid move was found)
+6. **Imports**: only use modules from the import whitelist; no external packages
 
 ### Feasibility Constraints (MUST NOT violate — will cause immediate rejection)
-6. **Every order assigned**: every order in the instance MUST appear in exactly one vehicle's order_ids AND in the assignment dict. Never drop or duplicate orders.
-7. **Consistency**: `solution.assignment[order_id] == vehicle_id` must match `order_id in vehicle.order_ids` for ALL orders. After any modification, update BOTH.
-8. **Vehicle capacity**: total pallets in a vehicle must not exceed its type's capacity
-9. **Hazardous goods**: orders with `hazard_flag=True` and total hazard_quantity > 1800 MUST be in HQ40_DG
-10. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up
-11. **Same region**: all orders in a vehicle must have the same `pickup_city` region
-12. **Same category**: all orders in a vehicle must have the same `vehicle_category`
-13. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`\
+7. **Every order assigned**: every order in the instance MUST appear in exactly one vehicle's order_ids AND in the assignment dict. Never drop or duplicate orders.
+8. **Consistency**: `solution.assignment[order_id] == vehicle_id` must match `order_id in vehicle.order_ids` for ALL orders. After any modification, update BOTH.
+9. **Vehicle capacity**: total pallets in a vehicle must not exceed its type's capacity
+10. **Hazardous goods**: orders with `hazard_flag=True` and total hazard_quantity > 1800 MUST be in HQ40_DG
+11. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up
+12. **Same region**: all orders in a vehicle must have the same `pickup_city` region
+13. **Same category**: all orders in a vehicle must have the same `vehicle_category`
+14. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`\
 """
