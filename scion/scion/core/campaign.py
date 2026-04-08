@@ -186,7 +186,6 @@ class CampaignManager:
         if branch.state in (
             BranchState.READY_VALIDATE,
             BranchState.READY_FROZEN,
-            BranchState.VALIDATING_EXPAND,
         ):
             try:
                 self._branch_ctrl.schedule_branch(branch.branch_id)
