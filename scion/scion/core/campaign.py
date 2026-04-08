@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from scion.config.problem import ProtocolConfig, ProblemSpec, SplitManifest, SeedLedgerConfig
+from scion.verification.gate import VerificationGate
 from scion.contract.gate import ContractGate
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.decision import DecisionEngine
@@ -26,53 +27,6 @@ from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LL
 from scion.runtime.workspace import WorkspaceMaterializer
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Verification Gate (minimal stub — Phase 5 MVP)
-# ---------------------------------------------------------------------------
-
-class VerificationGate:
-    """Runs static checks on a workspace after a patch is applied.
-
-    Phase 5 MVP: performs only a lightweight syntax re-check (the patch has
-    already passed ContractGate C6/C7/C8/C9).  A real implementation would
-    also run unit tests, regression tests, feasibility oracle, etc.
-
-    Inject a custom instance via CampaignManager(..., verification_gate=...)
-    to override in tests.
-    """
-
-    def run(self, workspace: str, patch: PatchProposal) -> VerificationResult:
-        """Return a VerificationResult for the patched workspace."""
-        import ast, time
-        t0 = time.monotonic_ns()
-
-        if patch.action == "delete":
-            check = CheckResult(
-                name="SYNTAX", passed=True, severity="light",
-                detail="delete — no syntax check", elapsed_ms=0,
-            )
-            return VerificationResult(passed=True, checks=(check,))
-
-        try:
-            ast.parse(patch.code_content)
-            elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
-            check = CheckResult(
-                name="SYNTAX", passed=True, severity="light",
-                detail="syntax ok", elapsed_ms=elapsed,
-            )
-            return VerificationResult(passed=True, checks=(check,))
-        except SyntaxError as exc:
-            elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
-            check = CheckResult(
-                name="SYNTAX", passed=False, severity="light",
-                detail=f"SyntaxError: {exc}", elapsed_ms=elapsed,
-            )
-            return VerificationResult(
-                passed=False, checks=(check,),
-                failure_severity="light", first_failure="SYNTAX",
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +108,7 @@ class CampaignManager:
                 problem_spec.search_space.frozen
             ) if problem_spec.search_space.frozen else None,
         )
-        self._vgate = verification_gate or VerificationGate()
+        self._vgate = verification_gate or VerificationGate(problem_spec)
         self._experiment_protocol = experiment_protocol  # may be None (no runner)
 
         # Per-branch transient state
@@ -396,7 +350,8 @@ class CampaignManager:
         self._branch_ctrl.record_verification_result(bid, True, code_hash)
 
         # ---------- Verification gate ----------
-        vresult = self._vgate.run(workspace, patch)
+        _champ_ws = self._champion.code_snapshot_path
+        vresult = self._vgate.run(workspace, _champ_ws, patch)
         if not vresult.passed:
             severity = vresult.failure_severity or "light"
             logger.info("Branch %s: verification failed (%s): %s", bid, severity, vresult.first_failure)
@@ -409,7 +364,7 @@ class CampaignManager:
                     try:
                         code_hash = self._materializer.apply_patch(workspace, fixed)
                         self._branch_patches[bid] = fixed
-                        vresult = self._vgate.run(workspace, fixed)
+                        vresult = self._vgate.run(workspace, _champ_ws, fixed)
                     except Exception:
                         pass
                 if not vresult.passed:

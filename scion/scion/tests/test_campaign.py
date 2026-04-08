@@ -151,7 +151,7 @@ class MockExperimentProtocol:
 class AlwaysPassVerificationGate:
     """Verification gate stub that always passes."""
 
-    def run(self, workspace: str, patch: Any) -> VerificationResult:
+    def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
             name="SYNTAX", passed=True, severity="light", detail="stub pass", elapsed_ms=0
         )
@@ -161,7 +161,7 @@ class AlwaysPassVerificationGate:
 class AlwaysFailVerificationGate:
     """Verification gate stub that always fails (light)."""
 
-    def run(self, workspace: str, patch: Any) -> VerificationResult:
+    def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
             name="SYNTAX", passed=False, severity="light",
             detail="stub fail", elapsed_ms=0,
@@ -564,7 +564,7 @@ class TestVerificationGate:
             action="modify",
             code_content=_VALID_CODE,
         )
-        result = gate.run("/tmp", patch)
+        result = gate.run("/tmp", "", patch)
         assert result.passed is True
 
     def test_default_gate_fails_syntax_error(self, tmp_path):
@@ -575,7 +575,7 @@ class TestVerificationGate:
             action="modify",
             code_content="def bad(:\n    pass",
         )
-        result = gate.run("/tmp", patch)
+        result = gate.run("/tmp", "", patch)
         assert result.passed is False
         assert result.failure_severity == "light"
 
@@ -587,7 +587,7 @@ class TestVerificationGate:
             action="delete",
             code_content="",
         )
-        result = gate.run("/tmp", patch)
+        result = gate.run("/tmp", "", patch)
         assert result.passed is True
 
     def test_verification_fail_light_triggers_fix(self, tmp_path):
@@ -607,7 +607,7 @@ class TestVerificationGate:
         run_count = [0]
 
         class ConditionalGate:
-            def run(self, workspace, patch):
+            def run(self, workspace, champion_workspace, patch):
                 run_count[0] += 1
                 if run_count[0] == 1:
                     # First call (original patch): fail

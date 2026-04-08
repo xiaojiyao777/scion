@@ -81,7 +81,7 @@ def _make_protocol_result(
 
 
 class _AlwaysPassVerificationGate:
-    def run(self, workspace: str, patch: Any) -> VerificationResult:
+    def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
             name="SYNTAX", passed=True, severity="light",
             detail="e2e stub pass", elapsed_ms=0,

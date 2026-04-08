@@ -21,6 +21,7 @@ class ProblemSpec(BaseModel):
     data_dir: str = "data"
     oracle_path: str = "oracle.py"
     solver_path: str = "solver.py"
+    canary_case_path: str = ""  # absolute path to a small instance for verification canary runs
     operator_categories: List[str]
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
