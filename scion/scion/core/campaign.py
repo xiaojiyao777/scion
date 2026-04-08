@@ -25,6 +25,7 @@ from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError
 from scion.runtime.workspace import WorkspaceMaterializer
+from scion.lineage.registry import LineageRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class CampaignManager:
         self._llm_client = llm_client
         self._champion = champion
         self._campaign_dir = campaign_dir
+        self._campaign_id = str(uuid.uuid4())
 
         # Sub-modules
         self._branch_ctrl = BranchController()
@@ -110,6 +112,13 @@ class CampaignManager:
         )
         self._vgate = verification_gate or VerificationGate(problem_spec)
         self._experiment_protocol = experiment_protocol  # may be None (no runner)
+
+        # Lineage registry (SQLite, WAL mode)
+        import os as _os
+        _os.makedirs(campaign_dir, exist_ok=True)
+        self._registry = LineageRegistry(
+            _os.path.join(campaign_dir, "scion.db")
+        )
 
         # Per-branch transient state
         self._branch_workspaces: Dict[str, str] = {}       # branch_id → workspace path
@@ -713,6 +722,74 @@ class CampaignManager:
         return outcome.decision, protocol_result, canary_result
 
     # ------------------------------------------------------------------
+    # Lineage recording
+    # ------------------------------------------------------------------
+
+    def _record_step_lineage(
+        self,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        patch: Optional[PatchProposal],
+        contract_result: ContractResult,
+        verification_result: VerificationResult,
+        canary_result: CanaryResult,
+        protocol_result: Optional[ProtocolResult],
+        decision: Decision,
+    ) -> None:
+        """Write one experiment_event + one decision row to the registry."""
+        import json as _json
+
+        bid = branch.branch_id
+        stats = protocol_result.stats if protocol_result else None
+        event: Dict[str, Any] = {
+            "campaign_id": self._campaign_id,
+            "branch_id": bid,
+            "timestamp": datetime.now().isoformat(),
+            "hypothesis_id": "",
+            "code_hash": branch.current_code_hash or "",
+            "patch_action": patch.action if patch else "",
+            "patch_file": patch.file_path if patch else "",
+            "hypothesis_text": (hypothesis.hypothesis_text or "")[:500],
+            "contract_passed": str(contract_result.passed),
+            "verification_passed": str(verification_result.passed),
+            "contract_result": "passed" if contract_result.passed else "failed",
+            "verification_result": "passed" if verification_result.passed else "failed",
+            "canary_result": "passed" if canary_result.passed else "failed",
+            "stage": protocol_result.stage.value if protocol_result else "",
+            "screening_n_cases": stats.n_cases if stats else 0,
+            "screening_win_rate": stats.win_rate if stats else None,
+            "screening_median_delta": stats.median_delta if stats else None,
+            "screening_ci_low": stats.ci_low if stats else None,
+            "screening_ci_high": stats.ci_high if stats else None,
+            "decision": decision.value,
+        }
+        try:
+            self._registry.record_event(event)
+        except Exception as exc:
+            logger.debug("registry.record_event failed: %s", exc)
+
+        features_json = _json.dumps({
+            "branch_id": bid,
+            "stage": event["stage"],
+            "contract_passed": contract_result.passed,
+            "verification_passed": verification_result.passed,
+            "canary_passed": canary_result.passed,
+            "win_rate": stats.win_rate if stats else None,
+            "median_delta": stats.median_delta if stats else None,
+            "retry_count": branch.retry_count,
+            "failure_codes": branch.failure_codes,
+        })
+        try:
+            self._registry.record_decision(
+                bid,
+                features_json,
+                decision.value,
+                "[]",
+            )
+        except Exception as exc:
+            logger.debug("registry.record_decision failed: %s", exc)
+
+    # ------------------------------------------------------------------
     # Apply decision and finalise
     # ------------------------------------------------------------------
 
@@ -730,6 +807,18 @@ class CampaignManager:
     ) -> StepResult:
         bid = branch.branch_id
         logger.info("Branch %s: decision=%s", bid, decision.value)
+
+        # Record event + decision in lineage registry
+        self._record_step_lineage(
+            branch=branch,
+            hypothesis=hypothesis,
+            patch=self._branch_patches.get(bid),
+            contract_result=contract_result,
+            verification_result=verification_result,
+            canary_result=canary_result,
+            protocol_result=protocol_result,
+            decision=decision,
+        )
 
         # CONTINUE_EXPLORE — preserve workspace when screening shows positive signal (§11.2)
         if decision == Decision.CONTINUE_EXPLORE:

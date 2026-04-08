@@ -1,98 +1,208 @@
-import sqlite3
+"""LineageRegistry — append-only experiment event storage.
+
+Uses SQLite with WAL mode. experiment_events is INSERT-only (no UPDATE/DELETE).
+record_decision writes decision info as a separate event row for the branch.
+"""
+
 import json
+import sqlite3
+import uuid
 from datetime import datetime
-from typing import List, Optional, Any, Dict
-from dataclasses import asdict
+from typing import Any, Dict, List, Optional
+
 from scion.core.models import DecisionFeatures, DecisionOutcome
 
+
 class LineageRegistry:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    # ------------------------------------------------------------------
+    # Schema init
+    # ------------------------------------------------------------------
+
+    def _init_db(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
-            # Create core tables
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS experiment_events (
-                    event_id TEXT PRIMARY KEY,
-                    campaign_id TEXT NOT NULL,
-                    branch_id TEXT NOT NULL,
-                    hypothesis_id TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    code_hash TEXT NOT NULL,
-                    patch_action TEXT NOT NULL,
-                    contract_result TEXT NOT NULL,
-                    verification_result TEXT NOT NULL,
-                    canary_result TEXT,
-                    stage TEXT,
-                    case_ids TEXT,
-                    seed_set TEXT,
-                    raw_metrics_ref TEXT,
+                    event_id               TEXT PRIMARY KEY,
+                    campaign_id            TEXT,
+                    branch_id              TEXT NOT NULL,
+                    hypothesis_id          TEXT,
+                    timestamp              TEXT NOT NULL,
+                    code_hash              TEXT,
+                    patch_action           TEXT,
+                    patch_file             TEXT,
+                    hypothesis_text        TEXT,
+                    contract_passed        TEXT,
+                    verification_passed    TEXT,
+                    contract_result        TEXT,
+                    verification_result    TEXT,
+                    canary_result          TEXT,
+                    stage                  TEXT,
+                    case_ids               TEXT,
+                    seed_set               TEXT,
+                    raw_metrics_ref        TEXT,
+                    screening_n_cases      INTEGER,
+                    screening_win_rate     REAL,
+                    screening_median_delta REAL,
+                    screening_ci_low       REAL,
+                    screening_ci_high      REAL,
                     decision_features_json TEXT,
-                    decision TEXT,
-                    decision_reason TEXT,
-                    created_at TEXT DEFAULT (datetime('now'))
+                    decision               TEXT,
+                    decision_reason        TEXT,
+                    created_at             TEXT DEFAULT (datetime('now'))
                 )
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
-                    branch_id TEXT PRIMARY KEY,
-                    state TEXT NOT NULL,
-                    base_champion_id INTEGER NOT NULL,
-                    base_champion_hash TEXT NOT NULL,
-                    current_code_hash TEXT,
+                    branch_id           TEXT PRIMARY KEY,
+                    state               TEXT NOT NULL,
+                    base_champion_id    INTEGER NOT NULL,
+                    base_champion_hash  TEXT NOT NULL,
+                    current_code_hash   TEXT,
                     last_clean_code_hash TEXT,
-                    retry_count INTEGER DEFAULT 0,
-                    failure_codes TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    retry_count         INTEGER DEFAULT 0,
+                    failure_codes       TEXT,
+                    created_at          TEXT NOT NULL,
+                    updated_at          TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS hypotheses (
+                    hypothesis_id        TEXT PRIMARY KEY,
+                    branch_id            TEXT,
+                    change_locus         TEXT,
+                    action               TEXT,
+                    status               TEXT,
+                    target_file          TEXT,
+                    parent_hypothesis_id TEXT,
+                    suggested_weight     REAL,
+                    created_at           TEXT
                 )
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS champions (
-                    version INTEGER PRIMARY KEY,
-                    operator_pool_json TEXT NOT NULL,
-                    solver_config_hash TEXT NOT NULL,
-                    code_snapshot_path TEXT NOT NULL,
-                    code_snapshot_hash TEXT NOT NULL,
-                    promotion_experiment_id TEXT,
-                    promoted_at TEXT
+                    version                  INTEGER PRIMARY KEY,
+                    operator_pool_json       TEXT NOT NULL,
+                    solver_config_hash       TEXT NOT NULL,
+                    code_snapshot_path       TEXT NOT NULL,
+                    code_snapshot_hash       TEXT NOT NULL,
+                    promotion_experiment_id  TEXT,
+                    promoted_at              TEXT
                 )
             """)
 
-    def record_event(self, event: Dict[str, Any]):
-        """
-        Record an experiment event.
-        We use a dictionary for now to be flexible before all components are stable.
-        """
+    # ------------------------------------------------------------------
+    # Write: experiment events (INSERT only)
+    # ------------------------------------------------------------------
+
+    def record_event(self, event: Dict[str, Any]) -> str:
+        """Insert one row into experiment_events. Returns event_id."""
+        if "event_id" not in event:
+            event = dict(event, event_id=str(uuid.uuid4()))
+        if "timestamp" not in event:
+            event = dict(event, timestamp=datetime.now().isoformat())
+        cols = ", ".join(event.keys())
+        placeholders = ", ".join(["?"] * len(event))
+        sql = f"INSERT INTO experiment_events ({cols}) VALUES ({placeholders})"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(sql, list(event.values()))
+        return event["event_id"]
+
+    def record_decision(
+        self,
+        branch_id: str,
+        features_json: str,
+        decision: str,
+        reason: str,
+    ) -> None:
+        """Append a decision event row (INSERT only — never UPDATE)."""
+        event = {
+            "event_id": str(uuid.uuid4()),
+            "branch_id": branch_id,
+            "timestamp": datetime.now().isoformat(),
+            "decision_features_json": features_json,
+            "decision": decision,
+            "decision_reason": reason,
+        }
         cols = ", ".join(event.keys())
         placeholders = ", ".join(["?"] * len(event))
         sql = f"INSERT INTO experiment_events ({cols}) VALUES ({placeholders})"
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(sql, list(event.values()))
 
-    def record_decision(self, branch_id: str, features: DecisionFeatures, 
-                        outcome: DecisionOutcome):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                UPDATE experiment_events 
-                SET decision_features_json = ?, 
-                    decision = ?, 
-                    decision_reason = ?
-                WHERE branch_id = ? 
-                AND event_id = (SELECT MAX(event_id) FROM experiment_events WHERE branch_id = ?)
-            """, (
-                json.dumps(asdict(features)),
-                outcome.decision.value,
-                json.dumps(outcome.reason_codes),
-                branch_id,
-                branch_id
-            ))
+    # ------------------------------------------------------------------
+    # Query
+    # ------------------------------------------------------------------
 
     def query_by_branch(self, branch_id: str) -> List[Dict[str, Any]]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT * FROM experiment_events WHERE branch_id = ? ORDER BY timestamp DESC", (branch_id,))
+            cursor = conn.execute(
+                "SELECT * FROM experiment_events WHERE branch_id = ? ORDER BY timestamp DESC",
+                (branch_id,),
+            )
             return [dict(row) for row in cursor.fetchall()]
+
+    def query_failures(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return events where contract_result or verification_result = 'failed'.
+
+        If category is given, filter by that specific result field value.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if category is not None:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM experiment_events
+                    WHERE contract_result = ?
+                       OR verification_result = ?
+                    ORDER BY timestamp DESC
+                    """,
+                    (category, category),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT * FROM experiment_events
+                    WHERE contract_result = 'failed'
+                       OR verification_result = 'failed'
+                    ORDER BY timestamp DESC
+                    """
+                )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_campaign_summary(self) -> Dict[str, Any]:
+        """Return aggregate stats across all recorded events."""
+        with sqlite3.connect(self.db_path) as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events"
+            ).fetchone()[0]
+            by_decision = {}
+            for row in conn.execute(
+                "SELECT decision, COUNT(*) FROM experiment_events WHERE decision IS NOT NULL GROUP BY decision"
+            ).fetchall():
+                by_decision[row[0]] = row[1]
+            n_branches = conn.execute(
+                "SELECT COUNT(DISTINCT branch_id) FROM experiment_events"
+            ).fetchone()[0]
+            n_champions = conn.execute(
+                "SELECT COUNT(*) FROM champions"
+            ).fetchone()[0]
+            contract_failures = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events WHERE contract_result = 'failed'"
+            ).fetchone()[0]
+            verification_failures = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events WHERE verification_result = 'failed'"
+            ).fetchone()[0]
+        return {
+            "total_events": total,
+            "by_decision": by_decision,
+            "n_branches": n_branches,
+            "n_champions": n_champions,
+            "contract_failures": contract_failures,
+            "verification_failures": verification_failures,
+        }
