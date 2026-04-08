@@ -100,6 +100,7 @@ class LLMClient:
         self.timeout_sec = timeout_sec
         self.max_retries = max_retries
         self.max_tokens = max_tokens
+        self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._client: Any = None  # lazy-initialised
 
     # ------------------------------------------------------------------
@@ -230,6 +231,10 @@ class LLMClient:
                             "Cache: created=%d read=%d uncached=%d",
                             cache_create, cache_read, input_tokens,
                         )
+                    self._cache_stats["calls"] += 1
+                    self._cache_stats["cache_read_tokens"] += cache_read
+                    self._cache_stats["cache_create_tokens"] += cache_create
+                    self._cache_stats["uncached_tokens"] += input_tokens
 
                 # Extract tool_use block
                 logger.debug(
@@ -358,6 +363,13 @@ class LLMClient:
                 retry_after = _parse_retry_after(exc)
                 raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
             raise LLMError(f"API error: {exc}") from exc
+
+    def get_cache_stats(self) -> dict:
+        """Return cache hit statistics."""
+        s = self._cache_stats
+        total_in = s["cache_read_tokens"] + s["cache_create_tokens"] + s["uncached_tokens"]
+        hit_rate = s["cache_read_tokens"] / total_in if total_in > 0 else 0
+        return {"hit_rate": f"{hit_rate:.1%}", **s}
 
     def _get_client(self) -> Any:
         if self._client is not None:

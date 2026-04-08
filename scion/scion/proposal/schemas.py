@@ -11,20 +11,39 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "required": ["hypothesis_text", "change_locus", "action"],
     "properties": {
-        "hypothesis_text": {"type": "string"},
-        "change_locus": {"type": "string"},
+        "hypothesis_text": {
+            "type": "string",
+            "description": "3-5 sentences. What the operator does, why it differs from existing ones, expected mechanism of improvement. No generic filler.",
+        },
+        "change_locus": {
+            "type": "string",
+            "description": "Which operator category: order_level or vehicle_level.",
+        },
         "action": {
             "type": "string",
             "enum": ["modify", "create_new", "remove"],
+            "description": "modify: improve existing operator. create_new: add a new one. remove: drop a weak one.",
         },
-        "target_file": {"type": ["string", "null"]},
+        "target_file": {
+            "type": ["string", "null"],
+            "description": "For modify/remove: the operator file path (e.g. operators/move_order.py). For create_new: the new file path.",
+        },
         "predicted_direction": {
             "type": "string",
             "enum": ["improve", "tradeoff", "exploratory"],
         },
-        "target_weakness": {"type": "string"},
-        "expected_effect": {"type": "string"},
-        "suggested_weight": {"type": ["number", "null"]},
+        "target_weakness": {
+            "type": "string",
+            "description": "The specific gap or weakness in the current pool this hypothesis addresses.",
+        },
+        "expected_effect": {
+            "type": "string",
+            "description": "Concrete expected outcome: e.g. 'reduce splits by consolidating same-subcategory vehicles'.",
+        },
+        "suggested_weight": {
+            "type": ["number", "null"],
+            "description": "Operator weight (0.1-3.0). Use 0.5-1.0 for unproven new operators.",
+        },
     },
 }
 

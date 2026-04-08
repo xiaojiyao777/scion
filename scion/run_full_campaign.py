@@ -93,6 +93,7 @@ print(f"  Active branches: {state['n_active_branches']}")
 for b in state.get("branches", []):
     print(f"    Branch {b['id'][:8]}… state={b['state']}")
 print(f"\nLLM model: {llm_client.model}")
+print(f"Cache stats: {llm_client.get_cache_stats()}")
 
 # --- Final diagnostic summary ---
 print("\n=== Step History Summary ===")
@@ -129,5 +130,5 @@ for step in step_history:
 print("\n=== Final State ===")
 print(f"  Budget used       : {mgr._budget.used}")
 print(f"  Active hypotheses : {len(mgr._branch_hypotheses)}")
-print(f"  Blacklisted       : {len(mgr._blacklist)}")
+print(f"  Blacklisted       : {len(mgr._hyp_store.get_by_status('blacklisted'))}")
 print(f"  Archive dir       : {mgr._materializer._archive_dir}")

@@ -128,20 +128,16 @@ def _split_hypothesis_context(
 ) -> "tuple[list[dict], str]":
     """Split hypothesis context into system blocks (cacheable) and user prompt.
 
-    System (1h cache): role + problem + champion code + champion stats
-    User (dynamic): experiment history + blacklist + siblings + task + schema
+    System: Block 1 (static, high cache hit) + Block 2 (champion, changes on promote)
+    User (dynamic): experiment history + blacklist + siblings + analysis steps + task
     """
     D = _DefaultDict(context)
 
-    system_text = (
+    # Block 1: Static role + problem spec + solver mechanics (never changes)
+    static_text = (
         "You are a research agent optimising a combinatorial optimisation solver's operator pool.\n"
         "Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
-        f"## Current Champion Operator Code\n"
-        f"The following operators make up the current champion solution.\n"
-        f"Study them carefully before proposing anything \u2014 avoid duplicating existing logic.\n\n"
-        f"{D['champion_operators_code']}\n\n"
-        f"## Champion State\n{D['champion_stats']}\n\n"
         f"## How the VNS Solver Uses Operators\n"
         f"- The solver maintains a pool of 40 candidate solutions, sorted by objective.\n"
         f"- Each iteration: for EACH solution in the pool, ONE operator is randomly selected (weighted) and applied.\n"
@@ -153,39 +149,46 @@ def _split_hypothesis_context(
         f"- Your operator will be called ~1000 times. It MUST produce feasible solutions.\n"
         f"- High variance is good: the pool filters bad outcomes and keeps rare great ones.\n"
         f"- A large improvement on 5% of calls is more valuable than a tiny improvement on 50%.\n"
-        f"- Your operator competes with 6 existing operators for invocation share.\n"
+        f"- Your operator competes with existing operators for invocation share.\n"
         f"- It must provide a capability the existing operators LACK, not duplicate them."
+    )
+
+    # Block 2: Champion code + stats (changes only on champion promotion)
+    champion_text = (
+        f"## Current Champion Operator Code\n"
+        f"Study these carefully before proposing anything \u2014 avoid duplicating existing logic.\n\n"
+        f"{D['champion_operators_code']}\n\n"
+        f"## Champion State\n{D['champion_stats']}"
     )
 
     system_blocks = [
         {
             "type": "text",
-            "text": system_text,
+            "text": static_text,
             "cache_control": _CACHE_5M,
-        }
+        },
+        {
+            "type": "text",
+            "text": champion_text,
+            "cache_control": _CACHE_5M,
+        },
     ]
 
     user_prompt = (
         f"## Experiment History \u2014 This Branch\n{D['experiment_history']}\n\n"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
+        f"## Analysis Steps (follow in order)\n"
+        f"1. Read EVERY champion operator. For each, note: what move type, what objective it targets, what it cannot improve.\n"
+        f"2. Identify specific GAPS \u2014 what improvements are IMPOSSIBLE with the current pool?\n"
+        f"3. Check experiment history \u2014 which attempts at filling gaps failed, and WHY?\n"
+        f"4. Only then propose a hypothesis targeting an identified gap.\n\n"
+        f"If your hypothesis duplicates an existing operator's capability (even partially), it will be REJECTED.\n\n"
         f"## Task\n"
         f"Propose ONE new hypothesis for improving the solver.\n"
         f"Choose a category from {D['operator_categories']} as `change_locus`.\n"
         f"Set `action` to one of: \"modify\", \"create_new\", \"remove\".\n"
         f"If action is \"modify\" or \"remove\", provide `target_file`.\n"
-        f"Explain your reasoning in `hypothesis_text`.\n\n"
-        f"Respond with a single JSON object (no markdown fences, no extra text):\n"
-        f"{{\n"
-        f'  "hypothesis_text": "<string>",\n'
-        f'  "change_locus": "<string>",\n'
-        f'  "action": "modify" | "create_new" | "remove",\n'
-        f'  "target_file": "<string or null>",\n'
-        f'  "predicted_direction": "improve" | "tradeoff" | "exploratory",\n'
-        f'  "target_weakness": "<string>",\n'
-        f'  "expected_effect": "<string>",\n'
-        f'  "suggested_weight": <number or null>\n'
-        f"}}\n"
     )
 
     return system_blocks, user_prompt
@@ -196,12 +199,13 @@ def _split_code_context(
 ) -> "tuple[list[dict], str]":
     """Split code context into system blocks (cacheable) and user prompt.
 
-    System (1h cache): role + problem + champion code + interface spec
-    User (dynamic): hypothesis + target file + task + schema
+    System: Block 1 (static role + rules + interface) + Block 2 (champion code)
+    User (dynamic): hypothesis + target file + constraints
     """
     D = _DefaultDict(context)
 
-    system_text = (
+    # Block 1: Static role + quality rules + problem + interface (never changes)
+    static_text = (
         "You are a software engineer implementing a VRP operator for a solver optimisation framework.\n"
         "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
@@ -220,9 +224,6 @@ def _split_code_context(
         "4. Hazardous goods constraints satisfied\n"
         "5. Region and category constraints hold\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
-        f"## Current Champion Operator Code\n"
-        f"Study these implementations for coding style, data model usage, and patterns:\n\n"
-        f"{D['champion_operators_code']}\n\n"
         f"## Operator Interface Specification\n"
         f"All operator classes MUST conform to this interface exactly:\n\n"
         f"{D['operator_interface_spec']}\n\n"
@@ -231,12 +232,24 @@ def _split_code_context(
         f"{D['import_whitelist']}"
     )
 
+    # Block 2: Champion code (changes only on champion promotion)
+    champion_text = (
+        f"## Current Champion Operator Code\n"
+        f"Study these implementations for coding style, data model usage, and patterns:\n\n"
+        f"{D['champion_operators_code']}"
+    )
+
     system_blocks = [
         {
             "type": "text",
-            "text": system_text,
+            "text": static_text,
             "cache_control": _CACHE_5M,
-        }
+        },
+        {
+            "type": "text",
+            "text": champion_text,
+            "cache_control": _CACHE_5M,
+        },
     ]
 
     user_prompt = (
