@@ -26,6 +26,7 @@ from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.lineage.registry import LineageRegistry
+from scion.lineage.branch_store import HypothesisStore
 
 logger = logging.getLogger(__name__)
 
@@ -119,15 +120,15 @@ class CampaignManager:
         self._registry = LineageRegistry(
             _os.path.join(campaign_dir, "scion.db")
         )
+        self._hyp_store = HypothesisStore(self._registry)
 
         # Per-branch transient state
         self._branch_workspaces: Dict[str, str] = {}       # branch_id → workspace path
         self._branch_hypotheses: Dict[str, HypothesisProposal] = {}
         self._branch_patches: Dict[str, PatchProposal] = {}
 
-        # Hypothesis memory (in-memory list for novelty / context; no SQLite in MVP)
-        self._active_hypotheses: List[HypothesisRecord] = []
-        self._blacklist: List[HypothesisRecord] = []
+        # Hypothesis memory persisted to SQLite via HypothesisStore
+        # (replaces in-memory _active_hypotheses and _blacklist lists)
 
         # Experiment history — full record of every completed explore step
         self._step_history: List[StepRecord] = []
@@ -268,7 +269,9 @@ class CampaignManager:
 
         # ---------- Contract gate: validate_hypothesis ----------
         c_result = self._contract_gate.validate_hypothesis(
-            hypothesis, self._active_hypotheses, self._blacklist
+            hypothesis,
+            self._hyp_store.get_by_status("active"),
+            self._hyp_store.get_by_status("blacklisted"),
         )
         if not c_result.passed:
             logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
@@ -284,8 +287,8 @@ class CampaignManager:
             ))
             return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
 
-        # Register hypothesis
-        self._active_hypotheses.append(h_record)
+        # Register hypothesis in SQLite store
+        self._hyp_store.save(h_record)
         self._branch_hypotheses[bid] = hypothesis
 
         # ---------- Round 2: generate code ----------
@@ -296,7 +299,7 @@ class CampaignManager:
                 bid, patch.file_path, patch.action, len(patch.code_content or ""),
             )
         if patch is None:
-            self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=None,
@@ -313,7 +316,7 @@ class CampaignManager:
             logger.info("Branch %s: patch contract failed: %s", bid, p_result.failure_reason)
             failure = FailureEvent(category="contract", detail=p_result.failure_reason or "")
             self._handle_failure(branch, failure)
-            self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
@@ -327,7 +330,7 @@ class CampaignManager:
         # ---------- Apply patch ----------
         workspace = self._setup_workspace(branch)
         if workspace is None:
-            self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
@@ -344,7 +347,7 @@ class CampaignManager:
             logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
             failure = FailureEvent(category="contract", detail=f"apply_patch: {exc}")
             self._handle_failure(branch, failure)
-            self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
@@ -378,7 +381,7 @@ class CampaignManager:
                         pass
                 if not vresult.passed:
                     self._handle_failure(branch, failure)
-                    self._active_hypotheses.remove(h_record)
+                    self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
                     self._step_history.append(StepRecord(
                         round_num=rnum, branch_id=bid,
                         hypothesis=hypothesis, patch=patch,
@@ -391,8 +394,7 @@ class CampaignManager:
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
                 self._handle_failure(branch, failure)
-                self._blacklist.append(h_record)
-                self._active_hypotheses.remove(h_record)
+                self._hyp_store.mark_status(h_record.hypothesis_id, "blacklisted")
                 self._step_history.append(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=patch,
@@ -545,8 +547,8 @@ class CampaignManager:
             branch=branch,
             champion=self._champion,
             problem_spec=self._spec,
-            active_hypotheses=self._active_hypotheses,
-            blacklist=self._blacklist,
+            active_hypotheses=self._hyp_store.get_by_status("active"),
+            blacklist=self._hyp_store.get_by_status("blacklisted"),
             sibling_branches=siblings,
             step_history=self._step_history,
             branch_workspace=branch_workspace,
@@ -866,8 +868,7 @@ class CampaignManager:
 
             # Always discard current hypothesis — a new one is generated next round
             self._branch_hypotheses.pop(bid, None)
-            if h_record in self._active_hypotheses:
-                self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             # For EXPLORE_EXPAND the branch is not already in EXPLORE — call apply_decision
             # so the transition map (EXPLORE_EXPAND → EXPLORE) fires correctly.
             if branch.state != BranchState.EXPLORE:
@@ -917,8 +918,7 @@ class CampaignManager:
                     pass
             self._branch_hypotheses.pop(bid, None)
             self._branch_patches.pop(bid, None)
-            if h_record in self._active_hypotheses:
-                self._active_hypotheses.remove(h_record)
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
         else:
             self._recent_abandoned_count = 0
 
@@ -993,7 +993,7 @@ class CampaignManager:
         if action.consumes_budget:
             self._budget.used += 1
         if action.writes_hypothesis_memory:
-            # Record in blacklist (basic in-memory tracking)
+            # Record in blacklist via HypothesisStore
             hyp = self._branch_hypotheses.get(branch.branch_id)
             if hyp:
                 record = HypothesisRecord(
@@ -1001,11 +1001,11 @@ class CampaignManager:
                     branch_id=branch.branch_id,
                     change_locus=hyp.change_locus,
                     action=hyp.action,
-                    status="rejected",
+                    status="blacklisted",
                     target_file=hyp.target_file,
                     hypothesis_text=hyp.hypothesis_text,
                 )
-                self._blacklist.append(record)
+                self._hyp_store.save(record)
 
 
 # ---------------------------------------------------------------------------

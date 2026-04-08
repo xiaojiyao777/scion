@@ -80,6 +80,7 @@ class LineageRegistry:
                     target_file          TEXT,
                     parent_hypothesis_id TEXT,
                     suggested_weight     REAL,
+                    hypothesis_text      TEXT,
                     created_at           TEXT
                 )
             """)
