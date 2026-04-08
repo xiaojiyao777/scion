@@ -1,0 +1,1772 @@
+{
+  "orders": [
+    {
+      "order_id": "ORD_0000",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 478085.73,
+      "lsp": "DB Schenker",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0001",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 348537.04,
+      "lsp": "DB Schenker",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0002",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 189286.91,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_0"
+    },
+    {
+      "order_id": "ORD_0003",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 407975.66,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 4
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0004",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 2404,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 391850.52,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0005",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 132395.84,
+      "lsp": "DB Schenker",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0006",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 297150.34,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0007",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 296862.38,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0008",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 407390.46,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_1"
+    },
+    {
+      "order_id": "ORD_0009",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 407067.67,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0010",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 267837.34,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0011",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 3266,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 351910.45,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0012",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 144021.98,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0013",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 2193,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 159905.31,
+      "lsp": "Maersk",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 3
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_2"
+    },
+    {
+      "order_id": "ORD_0014",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 108564.3,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0015",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 0,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 64746.01,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "France",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0016",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 456959.86,
+      "lsp": "DB Schenker",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0017",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 388472.57,
+      "lsp": "DHL",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_3"
+    },
+    {
+      "order_id": "ORD_0018",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 359280.65,
+      "lsp": "SF_INTL",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0019",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 433169.61,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_4"
+    },
+    {
+      "order_id": "ORD_0020",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 464403.99,
+      "lsp": "DHL",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0021",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 399373.9,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0022",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 257104.95,
+      "lsp": "SF_INTL",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0023",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 185826.8,
+      "lsp": "Maersk",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0024",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 151209.73,
+      "lsp": "DB Schenker",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_5"
+    },
+    {
+      "order_id": "ORD_0025",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 389205.61,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 3
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0026",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 131648.58,
+      "lsp": "DB Schenker",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0027",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 1842,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 375431.65,
+      "lsp": "DHL",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_6"
+    },
+    {
+      "order_id": "ORD_0028",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 176353.25,
+      "lsp": "COSCO",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0029",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 286580.99,
+      "lsp": "COSCO",
+      "ship_method": "SEA",
+      "destination_country": "India",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0030",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 396224.42,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0031",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 3491,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 306624.23,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0032",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 273599.91,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0033",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 61708.8,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0034",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 336273.68,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0035",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 207023.71,
+      "lsp": "COSCO",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0036",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 349141.22,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0037",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 381963.32,
+      "lsp": "COSCO",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0038",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 61954.73,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0039",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 160341.67,
+      "lsp": "Maersk",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_7"
+    },
+    {
+      "order_id": "ORD_0040",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 471364.32,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0041",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 241068.08,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0042",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 246024.68,
+      "lsp": "COSCO",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0043",
+      "vehicle_category": 2,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 70358.52,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "UK",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0044",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 268049.44,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 4
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_8"
+    },
+    {
+      "order_id": "ORD_0045",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 290412.18,
+      "lsp": "DHL",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0046",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 431241.33,
+      "lsp": "DB Schenker",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 6
+        },
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 4
+        },
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0047",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 238883.68,
+      "lsp": "DB Schenker",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0048",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 318003.52,
+      "lsp": "SF_INTL",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 5
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0049",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 364386.91,
+      "lsp": "DB Schenker",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_9"
+    },
+    {
+      "order_id": "ORD_0050",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 191800.06,
+      "lsp": "Maersk",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_10"
+    },
+    {
+      "order_id": "ORD_0051",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 222924.1,
+      "lsp": "DHL",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 4
+        },
+        {
+          "packing_type": "FULL_PLT",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0052",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 475258.23,
+      "lsp": "DHL",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0053",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 268142.39,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0054",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 154091.78,
+      "lsp": "Maersk",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_11"
+    },
+    {
+      "order_id": "ORD_0055",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 3,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 348528.81,
+      "lsp": "DHL",
+      "ship_method": "RAIL",
+      "destination_country": "Mexico",
+      "spu_list": [
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0056",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": true,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 192747.54,
+      "lsp": "COSCO",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_12"
+    },
+    {
+      "order_id": "ORD_0057",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 211066.5,
+      "lsp": "DB Schenker",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 2
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_13"
+    },
+    {
+      "order_id": "ORD_0058",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 3101,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 390541.39,
+      "lsp": "Kuehne+Nagel",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0059",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 281965.44,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0060",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 2182,
+      "pickup_name": "SZ_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 486293.28,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 5
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0061",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "SZ_FG_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Shenzhen",
+      "declaration_amount": 282698.96,
+      "lsp": "Maersk",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 5
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        },
+        {
+          "packing_type": "FULL_CTN",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0062",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": true,
+      "hazard_quantity": 2004,
+      "pickup_name": "SKD_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 206499.14,
+      "lsp": "SF_INTL",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "TAILGATE",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0063",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "FG_CENTRAL_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 329717.13,
+      "lsp": "DB Schenker",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 3
+        }
+      ],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "ORD_0064",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_NORTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 122489.07,
+      "lsp": "Maersk",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 2
+        }
+      ],
+      "locked_vehicle_id": "V_LOCK_instance_v3_scr_m06_14"
+    },
+    {
+      "order_id": "ORD_0065",
+      "vehicle_category": 1,
+      "vehicle_subcategory": 4,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DG_SOUTH_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 262601.34,
+      "lsp": "DHL",
+      "ship_method": "ROAD",
+      "destination_country": "Germany",
+      "spu_list": [
+        {
+          "packing_type": "WOOD_CASE",
+          "quantity": 4
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 4
+        },
+        {
+          "packing_type": "LOOSE_CTN",
+          "quantity": 6
+        }
+      ],
+      "locked_vehicle_id": null
+    }
+  ],
+  "amount_limits": {
+    "France,ROAD": 11133969.85,
+    "India,SEA": 11137555.35,
+    "UK,ROAD": 8909178.22,
+    "Mexico,RAIL": 8929306.07,
+    "Germany,ROAD": 6916549.47
+  },
+  "vehicle_types": {
+    "HQ40_DG": {
+      "capacity": 40,
+      "cost": 6600,
+      "is_hazard_special": true
+    },
+    "HQ40": {
+      "capacity": 40,
+      "cost": 3300,
+      "is_hazard_special": false
+    },
+    "T10": {
+      "capacity": 14,
+      "cost": 1800,
+      "is_hazard_special": false
+    },
+    "T5": {
+      "capacity": 6,
+      "cost": 1200,
+      "is_hazard_special": false
+    },
+    "T3": {
+      "capacity": 3,
+      "cost": 800,
+      "is_hazard_special": false
+    }
+  },
+  "_meta": {
+    "generator": "generate_v3.py",
+    "spec_name": "instance_v3_scr_m06",
+    "role": "screening",
+    "tier": "medium",
+    "master_seed": 54088,
+    "num_orders": 66,
+    "num_subcategories": 5,
+    "num_dg_warehouses": 4,
+    "city_mix": "mixed",
+    "hazard_ratio": 0.08,
+    "locked_ratio": 0.15,
+    "capacity_pressure": "moderate",
+    "total_pallets": 324,
+    "min_vehicles_hq40": 9,
+    "expected_greedy_splits": 5,
+    "description": "Mixed city, 4 DG warehouses, balanced complexity."
+  }
+}

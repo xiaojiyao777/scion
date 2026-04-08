@@ -1,0 +1,220 @@
+{
+  "campaign_start": "2026-04-08T16:22:52.674025",
+  "total_time_sec": 3563.5,
+  "max_rounds": 15,
+  "llm_model": "claude-opus-4-6",
+  "protocol": {
+    "screening_n": 20,
+    "validation_n": 18,
+    "frozen_n": 12
+  },
+  "state": {
+    "n_experiments": 9,
+    "n_active_branches": 0,
+    "champion_version": 2,
+    "budget_remaining": 0.985,
+    "branches": []
+  },
+  "steps": [
+    {
+      "round": 1,
+      "branch_id": "5e9e1744-4389-4b56-8e31-de36516b5520",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"SubcategoryConsolidate\" operator that specifically targets subcategory splits \u2014 the #1 lexicographic objective. The operator identifies subcategories that are currently split across multiple vehicles, then attempts to consolidate them. It works by: (1) picking a random subcategory that has splits (orders in 2+ vehicles), (2) collecting all vehicles containing orders of that subcategory, (3) attempting to merge all those orders into the fewest possible vehicles by upgrading vehicle types (e.g., multiple T10s \u2192 one HQ40). Unlike MergeVehicles which randomly picks two vehicles regardless of subcategory, this operator is laser-focused on reducing the primary objective. It may also move non-subcategory orders OUT of a target vehicle to make room for same-subcategory orders from other vehicles. This capability \u2014 subcategory-aware consolidation with vehicle type upgrading \u2014 is completely absent from the current pool.",
+        "action": "create_new",
+        "change_locus": "vehicle_level",
+        "target_file": "operators/subcategory_consolidate.py"
+      },
+      "patch": {
+        "file_path": "operators/subcategory_consolidate.py",
+        "action": "create",
+        "code_size": 16946
+      }
+    },
+    {
+      "round": 2,
+      "branch_id": "5e9e1744-4389-4b56-8e31-de36516b5520",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"SubcategoryMerge\" operator that identifies pairs of vehicles carrying orders from the SAME vehicle_subcategory and attempts to merge them into a single vehicle (upgrading the vehicle type if needed). Unlike the generic MergeVehicles operator which randomly picks any two vehicles, this operator filters candidates to only consider same-subcategory vehicle pairs, directly targeting split reduction. It builds a subcategory-to-vehicles index, picks a subcategory that spans multiple vehicles, selects two of those vehicles, and attempts to combine their orders into one vehicle with an appropriate type upgrade. The previous SubcategoryConsolidate attempt failed due to a state leak (V5_state_leak), so this implementation will be careful to deep_copy the solution first and avoid any mutation of the input solution or shared mutable state (e.g., no caching, no class-level state, no modifying instance data).",
+        "action": "create_new",
+        "change_locus": "vehicle_level",
+        "target_file": "operators/subcategory_merge.py"
+      },
+      "patch": {
+        "file_path": "operators/subcategory_merge.py",
+        "action": "create",
+        "code_size": 5567
+      }
+    },
+    {
+      "round": 3,
+      "branch_id": "5e9e1744-4389-4b56-8e31-de36516b5520",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"SubcategoryConsolidateV2\" operator that targets subcategory splits by merging vehicles sharing the same vehicle_subcategory. The key difference from previous failed attempts (which had V5_state_leak \u2014 non-deterministic output due to mutating the input solution) is that this operator will perform a COMPLETE deep_copy at the very start before any reads or mutations, and will never reference the original solution's vehicles/assignments after copying. The operator works as follows: (1) deep_copy the solution immediately, (2) build a dict mapping each vehicle_subcategory to the list of vehicle IDs carrying orders of that subcategory, (3) for subcategories spread across 2+ vehicles, attempt to merge all orders into a single vehicle by upgrading its type (e.g., multiple T10s \u2192 one HQ40), (4) if the merged pallets exceed max capacity, try merging the two smallest vehicles of that subcategory instead. This directly attacks the #1 lexicographic objective (subcategory_splits) which no existing operator specifically targets \u2014 MergeVehicles merges random pairs regardless of subcategory alignment.",
+        "action": "create_new",
+        "change_locus": "vehicle_level",
+        "target_file": "operators/subcat_consolidate_v2.py"
+      },
+      "patch": {
+        "file_path": "operators/subcat_consolidate_v2.py",
+        "action": "create",
+        "code_size": 8395
+      }
+    },
+    {
+      "round": 4,
+      "branch_id": "5e9e1744-4389-4b56-8e31-de36516b5520",
+      "decision": "queue_validate",
+      "contract_passed": true,
+      "verification_passed": true,
+      "failure_stage": null,
+      "failure_detail": null,
+      "hypothesis": {
+        "text": "Create a \"SubcatMergeSimple\" operator that targets subcategory splits by finding two vehicles with the same vehicle_subcategory and merging all their orders into one vehicle with an upgraded type. The KEY difference from the 3 failed attempts: the operator must be extremely careful about state mutation. Specifically, it will (1) call solution.deep_copy() immediately, (2) build ALL new data structures from scratch (fresh lists, not references), (3) never read from the original solution after copying, and (4) avoid any iteration over mutable structures being modified. The mechanism: collect all vehicle_subcategory values that appear in 2+ vehicles (i.e., have splits), pick one at random, pick two vehicles carrying that subcategory, compute combined pallets, find a vehicle type that fits, merge orders into the first vehicle (using a NEW list), delete the second, and update assignments. This fills the critical gap that no existing operator specifically targets same-subcategory vehicle pairs for merging \u2014 MergeVehicles picks two random vehicles regardless of subcategory, making it very unlikely to reduce splits.",
+        "action": "create_new",
+        "change_locus": "vehicle_level",
+        "target_file": "operators/subcat_merge_safe.py"
+      },
+      "patch": {
+        "file_path": "operators/subcat_merge_safe.py",
+        "action": "create",
+        "code_size": 4929
+      }
+    },
+    {
+      "round": 5,
+      "branch_id": "da1df167-ef27-40a7-a747-fcfe306d4b67",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"cross-subcategory order displacement\" operator that targets vehicles containing mixed subcategories. When a vehicle holds orders from multiple subcategories, this operator identifies the minority subcategory orders in that vehicle and attempts to relocate them to other vehicles that already contain orders of that same subcategory \u2014 effectively purifying vehicles to be single-subcategory. This differs from existing subcategory merge/consolidate operators which try to merge entire vehicles together (requiring capacity for all orders from both vehicles). Instead, this operator performs surgical order-level moves: it picks a mixed vehicle, identifies orders whose subcategory is a minority in that vehicle, and moves each such order to an existing vehicle that already serves that subcategory (checking capacity/region/pickup constraints). This reduces splits without needing to merge full vehicles, which is critical when two vehicles are both too full to merge but each contains a few \"stray\" orders from the other's subcategory.",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/purify_vehicle.py"
+      },
+      "patch": {
+        "file_path": "operators/purify_vehicle.py",
+        "action": "create",
+        "code_size": 7183
+      }
+    },
+    {
+      "round": 6,
+      "branch_id": "da1df167-ef27-40a7-a747-fcfe306d4b67",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": true,
+      "failure_stage": null,
+      "failure_detail": null,
+      "hypothesis": {
+        "text": "Create a \"cross-subcategory swap\" operator that targets vehicles containing orders from a split subcategory. It identifies two vehicles: one that contains orders of a split subcategory mixed with other orders, and another vehicle of that same split subcategory. It then swaps non-target-subcategory orders OUT of the first vehicle into the second vehicle, while moving target-subcategory orders from the second vehicle INTO the first. Unlike the failed \"purify_vehicle\" operator (which had state leak issues from mutating the original solution), this operator performs a clean deep_copy upfront before any mutations, and uses a focused swap mechanism rather than greedy displacement. The key insight is that existing subcategory consolidation operators try to merge entire vehicles, which fails when vehicles are mixed (containing multiple subcategories). This operator instead performs targeted inter-vehicle order swaps that simultaneously purify both vehicles toward single-subcategory composition, enabling subsequent merge operators to succeed. It only attempts swaps where the pallet math works out (both vehicles stay within capacity after the swap).",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/cross_subcat_swap.py"
+      },
+      "patch": {
+        "file_path": "operators/cross_subcat_swap.py",
+        "action": "create",
+        "code_size": 10660
+      }
+    },
+    {
+      "round": 7,
+      "branch_id": "6092783c-2203-4cf3-9408-371689421e41",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"cross-subcategory order displacement\" operator that targets vehicles containing orders from MULTIPLE subcategories (mixed vehicles). When a vehicle has orders from subcategory A and subcategory B, and subcategory A is split across multiple vehicles, this operator moves the subcategory-B orders OUT of the mixed vehicle to other vehicles that already carry subcategory-B orders (or creates a new vehicle for them). This frees capacity in the mixed vehicle, making it a pure subcategory-A vehicle, which can then absorb subcategory-A orders from other vehicles \u2014 reducing splits. The key difference from existing consolidation operators is the DIRECTION of the move: instead of trying to merge same-subcategory vehicles together (which fails when capacity is tight), this operator evacuates foreign-subcategory orders from a vehicle to MAKE ROOM for consolidation. Existing operators (SubcategoryConsolidate, SubcatMergeSafe, SubcategoryMerge, SubcatConsolidateV2) all try to merge same-subcategory vehicles directly but none systematically purify mixed vehicles by relocating the minority subcategory orders elsewhere.",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/evacuate_minority_subcat.py"
+      },
+      "patch": {
+        "file_path": "operators/evacuate_minority_subcat.py",
+        "action": "create",
+        "code_size": 11182
+      }
+    },
+    {
+      "round": 8,
+      "branch_id": "6092783c-2203-4cf3-9408-371689421e41",
+      "decision": "abandon",
+      "contract_passed": true,
+      "verification_passed": false,
+      "failure_stage": "verification",
+      "failure_detail": "V5_state_leak",
+      "hypothesis": {
+        "text": "Create a \"subcategory-aware swap\" operator that specifically targets vehicles containing orders from multiple subcategories. Unlike SwapOrders (which randomly swaps between any two vehicles), this operator identifies a vehicle with mixed subcategories, picks a minority-subcategory order from it, and searches for another vehicle that contains orders of THAT subcategory to swap with \u2014 exchanging a same-subcategory order back. The net effect is that both vehicles become more \"pure\" in subcategory composition, enabling downstream merge operators (SubcatMergeSafe, SubcategoryMerge) to consolidate them more effectively. The key difference from the failed EvacuateMinoritySubcat is that this operator performs a SWAP (maintaining vehicle load balance and feasibility) rather than a one-directional move, and it operates deterministically on the deep-copied solution without any state leakage. It also differs from plain SwapOrders by being guided toward subcategory purification rather than random.",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/subcat_swap_purify.py"
+      },
+      "patch": {
+        "file_path": "operators/subcat_swap_purify.py",
+        "action": "create",
+        "code_size": 9849
+      }
+    },
+    {
+      "round": 9,
+      "branch_id": "6092783c-2203-4cf3-9408-371689421e41",
+      "decision": "queue_validate",
+      "contract_passed": true,
+      "verification_passed": true,
+      "failure_stage": null,
+      "failure_detail": null,
+      "hypothesis": {
+        "text": "Create a \"cross-subcategory order rebalancing\" operator that identifies a vehicle containing orders from multiple different subcategories, then moves the minority subcategory orders OUT to vehicles that already contain that same subcategory (or to a new dedicated vehicle). Unlike the failed evacuate_minority_subcat and subcat_swap_purify operators (which failed due to V5_state_leak from non-deterministic behavior), this operator will be carefully implemented to avoid any state mutation of the input solution \u2014 it will deep_copy FIRST before any analysis, and use only deterministic sorting (sorted by order_id) before any random selection, ensuring reproducible results. The mechanism: by \"purifying\" mixed-subcategory vehicles, we either reduce splits (if the evicted orders land in a vehicle already serving that subcategory) or enable future merge operators to consolidate now-pure vehicles. This capability is absent from the current pool \u2014 all existing subcategory operators focus on merging vehicles of the SAME subcategory, but none address the root cause of mixed-subcategory vehicles that block clean merges.",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/purify_mixed_vehicle.py"
+      },
+      "patch": {
+        "file_path": "operators/purify_mixed_vehicle.py",
+        "action": "create",
+        "code_size": 9220
+      }
+    },
+    {
+      "round": 10,
+      "branch_id": "33e086b0-cefd-465a-ad93-183bd43b3bd1",
+      "decision": "queue_validate",
+      "contract_passed": true,
+      "verification_passed": true,
+      "failure_stage": null,
+      "failure_detail": null,
+      "hypothesis": {
+        "text": "Create a \"cross-subcategory rebalance\" operator that identifies vehicles containing orders from MULTIPLE subcategories (mixed vehicles) and attempts to evacuate the minority subcategory orders to other vehicles that already carry that same subcategory. The key insight is that existing subcategory consolidation operators focus on merging entire vehicles that share a subcategory, but they don't handle the case where a vehicle has a MIX of subcategories \u2014 moving the minority subcat orders OUT of a mixed vehicle can eliminate that vehicle's contribution to the split count for the minority subcategory, without needing to merge whole vehicles. The operator: (1) finds vehicles with 2+ distinct subcategories, (2) identifies the minority subcategory in that vehicle, (3) tries to move those minority orders into existing vehicles that already carry that subcategory and have remaining capacity. This directly reduces splits by removing a vehicle from a subcategory's vehicle set rather than merging vehicles together.",
+        "action": "create_new",
+        "change_locus": "order_level",
+        "target_file": "operators/extract_minority_subcat.py"
+      },
+      "patch": {
+        "file_path": "operators/extract_minority_subcat.py",
+        "action": "create",
+        "code_size": 9892
+      }
+    }
+  ]
+}

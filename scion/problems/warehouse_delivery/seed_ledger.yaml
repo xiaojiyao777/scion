@@ -1,5 +1,5 @@
-# seed_ledger.yaml — Warehouse Delivery fixed seeds per stage
-version: "1.0"
+# seed_ledger.yaml — Warehouse Delivery v3 fixed seeds per stage
+version: "3.0"
 screening:
   - 42
   - 137
