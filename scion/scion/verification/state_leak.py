@@ -58,8 +58,8 @@ def check_state_leak(
     if raw2 is None:
         return _cr(False, "heavy", "second run failed", t0)
 
-    obj1 = raw1.get("objective", {})
-    obj2 = raw2.get("objective", {})
+    obj1 = {k: v for k, v in raw1.get("objective", {}).items() if k != "solve_time_ms"}
+    obj2 = {k: v for k, v in raw2.get("objective", {}).items() if k != "solve_time_ms"}
 
     if obj1 == obj2:
         return _cr(True, "heavy", "outputs identical across two runs", t0)
