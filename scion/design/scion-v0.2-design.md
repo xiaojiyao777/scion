@@ -1,404 +1,711 @@
 # Scion Framework — v0.2 Design Document
 
-*Date: 2026-04-08*
-*Parent: scion-architecture-v3.md §19/§20*
-*Branch: v0.2-dev*
-*Status: Design — Draft (v2, 基于完整 v0.1 回顾)*
+*Date: 2026-04-08*  
+*Parent*: `design/scion-architecture-v3.md` §19/§20  
+*Branch*: `v0.2-dev`  
+*Status*: Design — Reviewed Draft
 
 ---
 
-## 0. 设计方法论
+## 0. 文档定位
 
-本文档基于对 v0.1 全部产出的系统性回顾：
+本文档不是“想到什么做什么”的 todo list，而是基于 **v0.1 全量产出回顾 + 源码审计 + 实验记录复盘** 得出的 v0.2 正式设计文档。
 
-| 文档 | 核心发现 |
-|---|---|
-| `campaign_summary.json` + `analysis_data.json` | 15 轮 campaign，6/10 假设死于 V5_state_leak，1 promoted |
-| `v0.1-completion-report.md` | 五大目标均达成，但 frozen holdout 统计力弱、hypothesis 同质化 |
-| `operator-quality-analysis.md` | 属性名 bug（已修）、hypothesis 重复、缺创新方向、缺结构性理解 |
-| `prompt-improvement-plan.md` | 8 项改进，P0/P1 已落地，P2 未做 |
-| `v0.1-tuning-report.md` | 调优后从 0→5 次连续 Promote |
-| `v0.1.1-changelog.md` | ContextManager 重写、StepRecord、registry 自动更新、状态机修复 |
-| `cc-prompt-engineering-analysis.md` | CC 源码对 Scion 的 14 项建议，大部分已落地 |
-| `metrics-guide.md` | wr + md 指标体系完整 |
-| 源码审计 | V5 检查 + Runner 的 PYTHONHASHSEED 协议缺陷 |
+设计输入包括：
 
----
+- `design/scion-architecture-v3.md`
+- `design/scion-engineering-arch-v1.md`
+- `docs/v0.1-completion-report.md`
+- `docs/v0.1-tuning-report.md`
+- `docs/v0.1.1-changelog.md`
+- `docs/operator-quality-analysis.md`
+- `docs/prompt-improvement-plan.md`
+- `docs/cc-prompt-engineering-analysis.md`
+- `docs/metrics-guide.md`
+- `docs/campaign_summary.json`
+- `~/.openclaw/workspace/scion-v01-analysis/analysis_data.json`
+- 现有 `scion/` 源码实现
 
-## 1. v0.1 遗留问题清单（按根因分类）
+**核心结论先写在前面**：
 
-### 1.1 框架 Bug
+> v0.2 不应该是“框架大改版”，而应该是：
+> **先修掉 v0.1 暴露出的基础缺陷与观测缺口，再把蓝图里真正属于 v0.2 的参数层搜索落地。**
 
-#### BUG-1: V5_state_leak 的 PYTHONHASHSEED 问题
+因此，v0.2 的主体由三部分组成：
 
-**现象**: 6/10 假设被 V5_state_leak 拦截（60% 失败率）
-
-**根因分析**:
-- `subprocess_runner.py` 的环境变量白名单只有 `{"PATH", "PYTHONPATH"}`
-- `PYTHONHASHSEED` 未传递 → 每个 subprocess 获得随机 hash seed
-- V5 跑两次 subprocess，两次 hash seed 不同
-- 算子中任何经过 `set` 的中间数据结构（如 `for sc in set(...)` 构建 dict）会因 set 遍历顺序不同 → dict 插入顺序不同 → `rng.choice(list(d.keys()))` 选到不同目标 → objective 不同
-- **这不是 LLM 生成的代码有 bug**——是 Runner 和 V5 之间的环境一致性协议缺失
-- Champion 算子碰巧没用 set 遍历，所以不受影响
-- LLM 生成的 subcategory consolidation 算子天然需要"按 subcategory 分组"，这个操作模式必然经过 set
-
-**修复方案**:
-- Runner 的 `_build_clean_env()` 中设置 `PYTHONHASHSEED=固定值`（如 "0"）
-- 这样所有 subprocess 共享相同的 hash seed，set 遍历顺序一致
-- V5 检查仍然保留——捕获真正的 state leak（如修改了 input solution）
-- **一行修复，预期消除 ~80% 的 V5 失败**
-
-**影响评估**:
-- 如果 6 个 V5 失败中有 4-5 个是 PYTHONHASHSEED 导致的，实际的"有效假设率"从 40% 提升到 ~70-80%
-- Campaign 效率翻倍——同样 15 轮能尝试更多有效假设
-
-#### BUG-2: campaign_summary 不存 protocol_result 和 code_content
-
-**现象**: `campaign_summary.json` 存了 hypothesis text 和 patch code_size，但没存 protocol_result（wr/md/stage）和 code_content
-
-**影响**:
-- 无法事后分析"哪些算子在哪些 case 上赢/输"（除非查 SQLite）
-- 无法分析失败算子的代码模式——被 V5 拦截的代码永久丢失
-- 论文实验数据不完整
-
-**修复方案**:
-- `campaign_summary.json` 增加 `protocol_result` 字段（stage/wr/md/gate_outcome/case_feedback）
-- 增加 `code_content` 字段（或引用归档路径）
-- V5 失败的算子代码也需要归档（当前 workspace 被清理）
-
-### 1.2 实验设计缺陷
-
-#### EXP-1: Frozen holdout 统计力弱
-
-**现象**: frozen split 只有 4 个 instance，SubcatMergeSafe 在 frozen 上 wr=1.00（12/12 pairs）
-
-**问题**: 碾压级改进（splits 减少 50-58 个）当然全赢。但如果差异更微妙（wr=0.7），4 instance × 3 seeds = 12 pairs 的统计功效不足以区分真改进和噪声。
-
-**修复方案**:
-- Frozen holdout 扩容到 8-12 个 instance
-- 需要新的 large/xlarge instance，保证与 screening/validation 不重叠
-- 更新 `split_manifest.yaml`
-
-#### EXP-2: Screening 与 frozen 的难度梯度
-
-**现象**: Branch 4（ExtractMinoritySubcat）screening wr=0.70 → validation wr=0.44
-
-**分析**: screening 用 small/medium instance，validation/frozen 用 large/xlarge。算子在小规模上"碰巧"表现好，大规模上暴露真实水平。这说明三级协议在正确工作——但也说明 screening 的信号可以更强。
-
-**改进方向**:
-- screening 中混入至少 2 个 large instance，提前暴露规模依赖性
-- 或者提高 screening 门槛（当前 wr ≥ 0.60，可提到 0.65）
-
-### 1.3 LLM 搜索效率
-
-#### SEARCH-1: Hypothesis 同质化
-
-**现象**: 10 个假设全是 `create_new vehicle_level`，其中 7/10 是"subcategory consolidation"的变体
-
-**根因**: 
-- Prompt 引导 LLM 正确识别了 splits 是首要目标 → 所有假设都瞄准 splits
-- 但 LLM 不知道除了 consolidation 还有什么别的方式降 splits
-- Blacklist 机制存在但 LLM 在语义上绕过——换个名字重复同一策略
-- 从未尝试 `order_level` 类别或 `modify`/`remove` 动作
-
-**改进方向**（prompt 层）:
-- 连续 N 次同类型失败后，主动引导切换 action 或 change_locus
-- 在 hypothesis context 中展示 operator-quality-analysis 报告中的 6 个未探索方向
-- Blacklist 机制增强：不只比 target_file 和 action，做语义相似度检测
-
-#### SEARCH-2: 生成代码不够 defensive on determinism
-
-**现象**: 即使 prompt 禁止了 `list(set(...))`，LLM 仍通过间接路径引入非确定性
-
-**分析**: 这在 BUG-1 修复后可能大幅缓解。但仍值得加强 prompt 中的确定性约束描述，覆盖更隐蔽的 pattern：
-- `for x in set(...)` → dict 构建顺序非确定
-- `collections.Counter` 的 `.keys()` 遍历顺序（Counter 继承 dict，但从 set-like 操作构建）
-- `{k: v for k, v in ...}` 如果源是 set
-
-### 1.4 可观测性
-
-#### OBS-1: 上下文增长管理
-
-**现象**: 当前 8 轮窗口够用，100+ 轮需要裁剪策略
-**优先级**: P2（v0.2 的 campaign 预计 20-30 轮，8 轮窗口仍够用）
-
-#### OBS-2: Cache hit 率无监控
-
-**现象**: LLMClient 有 cache_stats 但未暴露到 campaign report
-**优先级**: P2
+1. **Part A — Foundation Fixes**：修正 v0.1 暴露出的确定性/可观测性/统计力问题
+2. **Part B — Search Efficiency Upgrades**：提升外层结构搜索的有效探索率
+3. **Part C — Parameter Layer Search**：实现蓝图定义的“外层结构 + 内层参数”两层嵌套搜索
 
 ---
 
-## 2. v0.2 工作分解
+## 1. v0.1 复盘：已经证明了什么
 
-基于上述分析，v0.2 分为三个部分：
+### 1.1 v0.1 已经成功证明的部分
 
-### Part A: 基础修复（前置条件，1-2 天）
+根据 `docs/v0.1-completion-report.md`，v0.1 的 5 个核心目标全部达成：
 
-| ID | 内容 | 优先级 | 预期效果 |
-|---|---|---|---|
-| A1 | Runner PYTHONHASHSEED 固定 | P0 | V5 误报率从 60% 降到 <15% |
-| A2 | campaign_summary 增加 protocol_result + code_content 归档 | P1 | 实验数据完整可追溯 |
-| A3 | V5 失败时保存候选代码到 archive | P1 | 事后分析失败模式 |
-| A4 | Frozen holdout 扩容到 8+ instance | P1 | 统计功效提升 |
+1. **双硬闸门可工作**：Contract + Verification 能拦截越界和语义错误
+2. **三级实验协议可工作**：Screening → Validation → Frozen 能区分真改进和噪声
+3. **分支治理可工作**：分支内迭代 + 状态机 + stale/reconcile 语义成立
+4. **全链路可追溯**：SQLite lineage 已可查
+5. **Decision Layer 与 LLM 输出隔离**：DecisionFeatures 无自由文本，边界成立
 
-### Part B: 搜索效率提升（与 Part C 并行，2-3 天）
+### 1.2 v0.1 的最好结果说明了什么
 
-| ID | 内容 | 优先级 | 预期效果 |
-|---|---|---|---|
-| B1 | Hypothesis 多样性引导（连续失败后切换策略提示） | P1 | 减少同质化 |
-| B2 | Prompt 确定性约束增强（覆盖间接 set→dict 污染） | P1 | V5 真阳性 fix 率提升 |
-| B3 | Prompt P2 级改进落地（反馈清晰度、champion 基线值） | P2 | LLM 学习效率 |
-| B4 | Screening 混入 large instance | P2 | 提前暴露规模依赖 |
+`analysis_data.json` 显示：
 
-### Part C: 参数层搜索（核心新功能，3-5 天）
+- 4 个分支
+- 1 个 promoted branch
+- 10 个假设中 4 个通过 verification，6 个失败于 `V5_state_leak`
+- Promoted 分支 `SubcatMergeSafe`：
+  - Screening: `wr=0.95`, `md=750000`
+  - Validation: `wr=1.00`, `md=2200000`
+  - Frozen: `wr=1.00`, `md=5150000`
 
-即蓝图 §19/§20 的本体。详见 §3。
+这说明：
 
-### 执行顺序
+- Scion 已经能够发现 **真实、稳定、可晋升** 的结构性改进
+- 三级协议没有把一个弱 improvement 错晋升上去
+- 在大/超大实例上，结构性改进会被放大，不是“碰巧赢”
 
-```
-A1 → A2/A3/A4（可并行）→ 跑一轮 campaign 验证基线
-  │
-  ├─→ B1/B2（可并行）
-  │
-  └─→ C: 参数层搜索设计 + 实现
-         C1 → C2 → C3 → C4 → C5（见 §3.4）
-```
+### 1.3 v0.1 的主要不足不是“框架不行”，而是“效率还不够高”
 
-**关键决策**: A1（PYTHONHASHSEED）必须最先做，因为它直接影响后续所有 campaign 的实验效率。在 60% 误报率下跑 campaign 是浪费。
+v0.1 的主问题不是方向错了，而是：
+
+- 外层搜索有效假设率不够高
+- 一些 failure 其实是**环境/诊断问题**，不是算法问题
+- 实验记录还不够完整，限制了事后分析与论文化
+- 蓝图里定义的参数层搜索尚未落地
+
+所以 v0.2 的工作不是推翻 v0.1，而是：
+
+> **把 v0.1 从“能跑通、能发现改进”推进到“能高效探索、能系统比较、能承载论文实验”。**
 
 ---
 
-## 3. 参数层搜索设计
+## 2. v0.1 复盘：真正暴露出来的问题
 
-### 3.1 定位
+### 2.1 问题一：`V5_state_leak` 失败率过高，但根因不全在 LLM
 
-在 v0.1 结构级搜索（算子 create/modify/remove）基础上，增加**参数层搜索**。
+#### 现象
 
-蓝图原文（architecture-v3 §19）：
-> v0.2 参数层：外层 LLM 探索结构 + 内层贝叶斯优化参数（算子权重等）。两层嵌套搜索是核心差异化点。
+从 `campaign_summary.json` 与 `analysis_data.json` 可见：
 
-### 3.2 差异化分析
+- 10 个 hypothesis 中有 6 个死于 `V5_state_leak`
+- 占全部 hypothesis 的 60%
+- 严重拖慢外层搜索效率
 
-| 框架 | 搜索空间 | 参数优化 |
-|---|---|---|
-| FunSearch | 函数级代码生成 | ❌ |
-| EoH | 启发式代码生成 | ❌ |
-| ReEvo | 算子代码进化 | ❌ |
-| AILS-AHD | 启发式结构设计 | ❌（人工调参） |
-| **Scion v0.1** | **算子代码变更** | **❌（权重冻结）** |
-| **Scion v0.2** | **算子代码变更 + 参数搜索** | **✅ 框架内自动化** |
+#### 审计结论
 
-### 3.3 搜索空间
+V5 的定义是：
 
-v0.1 冻结的参数：
+> 同一个 case、同一个 seed，candidate 连跑两次，objective 必须一致。
 
-```yaml
-operator_pool:
-  adaptive_weights_frozen: true     # 动态自适应权重更新机制冻结
-  injection_policy:
-    initial_weight: "uniform"       # 新算子一律均匀分配
+这本身是合理的。但源码审计发现：
+
+- `subprocess_runner.py` 只透传 `PATH` 和 `PYTHONPATH`
+- 没有固定 `PYTHONHASHSEED`
+- Python 3.12 的 **dict 有序**，但 **set/hash 仍受 hash seed 影响**
+- 如果候选算子使用 `set` 构建中间索引，再由此影响 dict 的插入顺序，就可能出现跨 subprocess 的行为差异
+
+这意味着：
+
+- 一部分 `V5_state_leak` 是**真实的非确定性 bug**
+- 另一部分是 **Runner 环境未固定导致的误放大**
+
+#### 设计结论
+
+v0.2 必须同时做两件事：
+
+1. **修环境**：让 subprocess 的 hash seed 固定，消除环境侧的伪非确定性
+2. **增强诊断**：不要只报 `run1 != run2`，要能帮助定位到底是哪一段逻辑引入了分歧
+
+> 不能只做环境修复，否则会掩盖真实 deterministic bug；
+> 也不能只做诊断，否则继续在脏环境里浪费大量实验预算。
+
+---
+
+### 2.2 问题二：Hypothesis 同质化严重
+
+#### 现象
+
+从 `campaign_summary.json` 与 `operator-quality-analysis.md`：
+
+- 10/10 hypothesis 都是 `create_new`
+- 10/10 hypothesis 都是 `vehicle_level`
+- 其中 7/10 本质都是同一个机制：**subcategory consolidation / purification** 的变体
+
+#### 含义
+
+这说明：
+
+- 框架已经把 LLM 正确引导到了“splits 是首要目标”这件事上
+- 但 LLM 没有在 **change_locus / action / mechanism family** 上形成足够多样性
+- 现有 blacklist 更像“文本去重”，不是“机制去重”
+
+#### 设计结论
+
+v0.2 不能只依靠 blacklist，而需要：
+
+1. **机制层级的失败归纳**：记录“这是一类 subcategory consolidation operator”，而不是只记录文件名/标题
+2. **策略切换提示**：连续 N 次同族机制失败后，主动引导：
+   - 从 `create_new` 切到 `modify`
+   - 从 `vehicle_level` 切到 `order_level`
+   - 从“直接 consolidation”切到“rebuild / destroy / chain-move / swap”
+3. **探索配额意识**：Context 中显式告诉 LLM 当前 campaign 在不同 action/locus 上的覆盖情况
+
+---
+
+### 2.3 问题三：实验记录不够完整，影响复盘和论文化
+
+#### 现象
+
+当前 `campaign_summary.json`：
+
+- 有 hypothesis 文本
+- 有 patch 文件路径和 code size
+- 但**没有完整 protocol_result**
+- 也**没有 code_content** 或可靠归档引用
+
+这导致：
+
+- 事后无法从单一 summary 还原每轮 screening/validation/frozen 细节
+- 无法直接统计某类假设在哪些 case 上表现好/差
+- 被 verification 拒绝的代码细节容易丢失
+
+#### 设计结论
+
+v0.2 必须把“实验 summary”升级为真正的研究 artifact：
+
+- 保存 `protocol_result`（至少 stage / wr / md / gate / case feedback 摘要）
+- 保存候选代码内容或稳定的归档路径
+- 对 verification failure 保留 failure detail + code snapshot
+
+---
+
+### 2.4 问题四：Frozen holdout 统计力仍偏弱
+
+#### 现象
+
+`v0.1-completion-report.md` 已明确指出：
+
+- 当前 frozen holdout 仍偏小
+- 对于像 `SubcatMergeSafe` 这种碾压级 improvement 没问题
+- 但如果是中等强度 improvement，统计功效不一定够
+
+#### 设计结论
+
+v0.2 需要：
+
+- 扩充 frozen set 的 case 数量与规模跨度
+- 保证 frozen 的结构异质性
+- 让 frozen 更像“真正的 final exam”，而不是“额外一次 validation”
+
+---
+
+### 2.5 问题五：Prompt 层已经大幅改进，但还缺最后一层“研究友好型提示”
+
+通过对 `cc-prompt-engineering-analysis.md`、`prompt-improvement-plan.md` 和当前源码比对，可以确认：
+
+- CC 报告中的 P0/P1 大部分已经落地
+- 当前系统 prompt / tool description / problem summary / interface spec 已明显优于 v0.1 初期
+
+所以 v0.2 **不需要再搞一次“大规模 prompt 重写”**。
+
+但仍有几个 P2 级的、对研究效率有价值的增强：
+
+- 更清晰地解释 `case_feedback` 中的 decisive objective 与 delta 含义
+- 在 hypothesis context 中加入 champion case baseline（告诉 LLM 某 case 上 splits 已经是 0，就别再瞄准 splits）
+- 增加对探索覆盖度的结构化提示
+
+---
+
+## 3. v0.2 总体目标
+
+### 3.1 一句话目标
+
+> **让 Scion 从“能发现改进的研究执行框架”升级为“能高效、可诊断、可比较地执行结构搜索 + 参数搜索的研究平台”。**
+
+### 3.2 v0.2 三大目标
+
+#### Goal A — 修正 v0.1 中影响研究效率与结论可信度的基础缺陷
+
+重点解决：
+
+- deterministic environment
+- richer V5 diagnostics
+- campaign artifact completeness
+- stronger frozen holdout
+
+#### Goal B — 提升外层结构搜索的有效探索率
+
+重点解决：
+
+- mechanism homogeneity
+- action/locus coverage不足
+- experiment feedback不够面向“研究决策”
+
+#### Goal C — 落地参数层搜索
+
+这是蓝图 `architecture-v3 §19/§20` 中 v0.2 的真正本体：
+
+- 外层：LLM 搜结构
+- 内层：算法搜参数
+
+---
+
+## 4. v0.2 不做什么
+
+为了防止 scope 膨胀，明确列出不做的事：
+
+- ❌ 不做框架大重构（v0.1 架构已验证正确）
+- ❌ 不做多问题泛化（放到 v0.3）
+- ❌ 不做 solver framework 本体搜索（放到 v1.0）
+- ❌ 不做“所有参数都搜”——v0.2 只聚焦 **operator weights**
+- ❌ 不把 PoolManager 深度集成当作主线目标（可顺手整理，但不是 v0.2 成败关键）
+
+---
+
+## 5. v0.2 设计原则
+
+### 5.1 先修“研究基础设施”，再扩大搜索空间
+
+v0.2 的第一优先级不是上新 feature，而是修掉会扭曲实验结论或浪费大算力预算的问题。
+
+### 5.2 区分“真实失败”和“环境/协议失败”
+
+v0.1 一个很重要的教训是：
+
+> 如果基础运行环境不稳定，Verification Failure 的统计就会混入环境噪声。
+
+v0.2 必须把这两类 failure 分开。
+
+### 5.3 不把 prompt 当万能药
+
+Prompt 对 v0.1 的提升已经很大，但 v0.2 的主战场不是再堆 prompt，而是：
+
+- better diagnostics
+- better experiment design
+- better search decomposition
+
+### 5.4 参数搜索要与结构搜索解耦，但保持因果顺序
+
+结构变了，参数空间也变；因此：
+
+- 参数搜索必须依附在 champion pool 上
+- 不能把结构搜索和参数搜索混在一个分支协议里
+- 但也不能完全脱离 champion 生命周期
+
+---
+
+## 6. v0.2 结构：三条工作流
+
+# 靠三个并行工作流组成 v0.2
+
+---
+
+### Workstream A — Foundation & Instrumentation
+
+这是 v0.2 的前置基础，不解决就会拖累后面所有工作。
+
+#### A1. Deterministic Runner Environment
+
+**目标**：修正 subprocess 运行环境的不一致性。
+
+**改动**：
+
+- `runtime/subprocess_runner.py`
+  - 在 clean env 中固定 `PYTHONHASHSEED`
+  - 保持其余环境继续最小白名单
+
+**注意**：
+
+- 这是为了解决环境侧伪随机，不是为了掩盖真实 bug
+- `V5_state_leak` 检查保留，不删除
+
+#### A2. V5 诊断升级
+
+当前 V5 失败 detail 只有：
+
+- run1 objective
+- run2 objective
+
+这对 LLM 或人都不够。
+
+**v0.2 增强**：
+
+1. 保存两次 run 的完整 output JSON
+2. 保存候选算子的 code snapshot
+3. 如果可能，增加轻量 trace：
+   - 本轮选中的 operator
+   - 关键中间 decision（后续可选）
+4. 把 V5 failure 分成：
+   - `ENV_NONDETERMINISM`（环境不一致导致）
+   - `CANDIDATE_NONDETERMINISM`（候选逻辑真的不确定）
+   - `UNKNOWN_NONDETERMINISM`
+
+> v0.2 至少做到分类 + 归档；精细 trace 可以 P1。
+
+#### A3. Campaign Artifact Completeness
+
+`campaign_summary.json` 扩展：
+
+- `protocol_result`
+- `case_feedback` 摘要
+- `code_archive_ref`
+- `verification_detail`
+- `cache_stats`
+
+这样 future analysis 不必重新爬 SQLite 或 log。
+
+#### A4. Frozen Holdout Expansion
+
+- 增加 frozen cases 数量
+- 增加 large/xlarge 异质性
+- 更新 split manifest 与 seed ledger
+
+#### A5. Long-run observability
+
+- 把 cache hit rate、verification failure breakdown、action/locus coverage 纳入 report
+
+---
+
+### Workstream B — Outer-loop Search Efficiency
+
+这个工作流不改变三层控制架构，而是提升 **外层结构搜索** 的有效探索率。
+
+#### B1. Hypothesis Family Tracking
+
+现有 blacklist 基于 record，不足以防止“语义改写的重复机制”。
+
+新增机制：
+
+```python
+@dataclass
+class HypothesisFamily:
+    family_id: str
+    mechanism_label: str          # e.g. subcategory_consolidation
+    action_pattern: str           # create_new / modify / remove
+    locus_pattern: str            # vehicle_level / order_level
+    evidence_count: int
+    statuses: list[str]           # rejected / borderline / promoted
+    notes: str                    # for human/LLM readable summary
 ```
 
-v0.2 的参数搜索目标：
+用途：
 
-| 参数 | 当前值 | 类型 | 影响级别 | 搜索方式 |
-|---|---|---|---|---|
-| **算子权重分配** | 均匀 | 连续向量 | 🔴 高 | 贝叶斯优化 |
-| pool_size | 40 | 整数 | 🟡 中 | v0.2 不搜索 |
-| max_iterations | 200 | 整数 | 🟡 中 | v0.2 不搜索 |
+- 让 ContextManager 告诉 LLM：
+  - “你已经连续 4 次在这个 family 上失败了”
+  - “当前 campaign 还没探索 order_level family”
 
-**v0.2 只搜索算子权重。** 原因：
-1. 权重直接决定搜索方向分配，ROI 最高
-2. 与 v0.1 结构搜索正交且互补
-3. 不改 solver 代码，风险低
-4. 算子池 6-10 个 → 6-10 维连续优化，贝叶斯可处理
+#### B2. Strategy-shift Guidance
 
-### 3.4 两层嵌套的交互
+在 hypothesis prompt 中加入结构化 guidance：
 
+- 连续 N 次 `create_new` 失败 → 建议尝试 `modify`
+- 某机制 family 连续失败 → 强制引导切换 mechanism family
+- 某个 `change_locus` 长期未探索 → 提示去探索
+
+#### B3. Feedback for research, not just for logging
+
+当前 case feedback 已经很不错，但对“下一轮应该怎么变”还不够直接。
+
+v0.2 增强：
+
+- 把 decisive objective 渲染成人可理解的解释
+- 告诉 LLM：某些 case 上 champion 的 splits 已经为 0
+- 给出跨 round 的 pattern summary：
+  - 哪类 case 一直赢
+  - 哪类 case 一直输
+  - 哪类 case 对某 family 特别敏感
+
+#### B4. Screening set rebalance
+
+- 混入少量 large cases
+- 提前暴露“只在小实例上好看”的算子
+
+---
+
+### Workstream C — Parameter Layer Search (v0.2 核心新能力)
+
+这是蓝图里定义的 v0.2 真正主线。
+
+#### C1. 设计定位
+
+> 外层结构搜索决定“有哪些算子”；内层参数搜索决定“这些算子应该如何配权”。
+
+#### C2. 为什么 v0.2 只做 operator weights
+
+v0.1 中被冻结的参数很多，但 v0.2 只选 **operator weights**，原因：
+
+1. 与结构搜索天然耦合
+2. 不需要改 solver 结构
+3. 风险低，ROI 高
+4. 可清晰对比“均匀权重 vs 优化权重”
+
+#### C3. 触发时机
+
+参数搜索在 **每次 Promote 后** 触发：
+
+```text
+new champion promoted
+    ↓
+optimize weights for current pool
+    ↓
+write optimized registry.yaml
+    ↓
+record optimization lineage
 ```
-外层（结构搜索，v0.1 已有）
-  └── LLM 提出算子变更 → Contract → Verification → Screening → Promote
-       └── Promote 触发内层搜索
 
-内层（参数搜索，v0.2 新增）
-  └── 对 promoted 后的新算子池，搜索最优权重分配
-       └── 最优权重写入 champion 的 registry.yaml
-```
+这是最自然的生命周期绑定方式。
 
-**触发时机：每次 Promote 后。** 与分支治理语义一致——Promote 意味着池结构变化，权重应重新优化。
+#### C4. 为什么不走 Branch / Verification / Protocol
 
-### 3.5 内层搜索：贝叶斯优化
+参数优化与结构搜索不同：
 
-#### 为什么贝叶斯优化
+- 不改代码
+- 不碰文件白名单问题
+- 不会引入 interface/feasibility bug
 
-- 评估一次需要跑 solver（6 cases × 3 seeds × ~10s = ~3 min）→ sample-efficient 很重要
-- 6-10 维连续空间 → GP surrogate 合适
-- 不用 LLM：连续参数调优是贝叶斯优化的主场，不需要领域推理
+因此：
 
-#### 搜索配置
+- 不需要 Contract Gate
+- 不需要 Verification Gate
+- 不需要作为 branch candidate 跑三级状态机
+
+但仍需要**独立的评估循环**和**独立的 lineage**。
+
+#### C5. 搜索空间
 
 ```python
 @dataclass(frozen=True)
 class ParameterSearchSpace:
-    operator_names: Tuple[str, ...]          # 参与搜索的算子名
-    weight_bounds: Tuple[float, float]       # 每个算子权重上下界，默认 (0.05, 5.0)
-    n_initial_random: int = 8                # 随机初始采样
-    n_iterations: int = 20                   # 贝叶斯优化迭代
-    n_eval_seeds: int = 3                    # 每组权重的评估 seed 数
-    eval_cases: Tuple[str, ...] = ()         # 评估用 case（从 screening split 取）
+    operator_names: tuple[str, ...]
+    weight_bounds: tuple[float, float] = (0.05, 5.0)
+    search_space: Literal["log"] = "log"
+    n_initial_random: int = 8
+    n_iterations: int = 20
+    n_eval_seeds: int = 3
+    eval_cases: tuple[str, ...] = ()
 ```
 
-#### 评估函数
+说明：
+
+- 在 log-space 搜索，天然保证正值
+- solver 内部会归一化，所以不需要 simplex 约束
+
+#### C6. 搜索算法
+
+默认：**Bayesian Optimization**
+
+原因：
+
+- 评估贵（每组权重要跑 solver）
+- 维度低到中等（6~10 维）
+- 比 random/grid 更 sample-efficient
+
+fallback：
+
+- 若依赖/实现复杂度过高，可先用 `random + local perturbation` 做 MVP
+- 但正式设计目标仍是贝叶斯优化
+
+#### C7. 评估函数
+
+输入：
+
+- 当前 champion pool
+- 一组候选 weights
+- screening cases + 固定 seeds
+
+输出：
+
+- 标量 score
+
+标量化保持与现有 lexicographic delta 一致：
 
 ```python
-def evaluate_weights(weight_vector, champion_workspace, cases, seeds, runner) -> float:
-    """写入 registry.yaml → 跑 solver → 收集 objectives → 聚合为标量。
-    
-    标量化：score = -splits * 100_000 - total_cost
-    与 compute_delta 的 SPLITS_WEIGHT 保持一致。
-    返回所有 (case, seed) 的 median score。
-    """
+score = -(subcategory_splits * SPLITS_WEIGHT + total_cost)
+SPLITS_WEIGHT = 100_000
 ```
 
-#### 搜索空间处理
+对所有 `(case, seed)` 求 median score。
 
-- 在 log-space 搜索（weight = exp(x)），保证 weight > 0 且等比例变化
-- 不约束权重归一化（solver 内部归一化）
-
-### 3.6 权重优化不走 Branch/Protocol
-
-权重变更不涉及代码 → Contract/Verification 无意义。
-权重变更可逆、风险低 → 不需要三级协议。
-
-但需要独立评估确认有效：
+#### C8. 输出与持久化
 
 ```python
 @dataclass(frozen=True)
 class WeightOptimizationResult:
-    baseline_weights: Dict[str, float]
-    best_weights: Dict[str, float]
+    baseline_weights: dict[str, float]
+    best_weights: dict[str, float]
     baseline_score: float
     best_score: float
     improved: bool
     n_evaluations: int
     elapsed_seconds: float
-    all_observations: List[Tuple[Dict[str, float], float]]
+    observations_ref: str
 ```
 
-### 3.7 评估 case 来源
+Lineage 需要新增独立表：
 
-使用 **screening cases**。原因：
-- 暴露控制允许（screening 层级完整暴露）
-- 不碰 validation/frozen
-- 数量足够
+- `weight_optimizations`
 
-### 3.8 Lineage 扩展
+以及 CLI 能看：
 
-```sql
-CREATE TABLE IF NOT EXISTS weight_optimizations (
-    optimization_id        TEXT PRIMARY KEY,
-    campaign_id            TEXT,
-    champion_version       INTEGER NOT NULL,
-    n_operators            INTEGER NOT NULL,
-    n_evaluations          INTEGER NOT NULL,
-    baseline_score         REAL,
-    best_score             REAL,
-    improved               INTEGER,
-    baseline_weights_json  TEXT,
-    best_weights_json      TEXT,
-    elapsed_seconds        REAL,
-    timestamp              TEXT NOT NULL
-);
+- `scion inspect` / `report` 中展示当前 champion 权重来源与优化历史
+
+---
+
+## 7. v0.2 任务拆解
+
+### Phase 0 — 审计闭环（必须先做）
+
+1. 确认 deterministic env fix 的最小实现
+2. 定义 V5 诊断增强输出 schema
+3. 设计新的 campaign artifact schema
+
+### Phase 1 — Foundation & Instrumentation
+
+- T01: Runner deterministic env fix
+- T02: V5 diagnostics enhancement
+- T03: campaign summary schema upgrade
+- T04: candidate code archiving for failed runs
+- T05: frozen holdout expansion
+- T06: observability fields in report
+
+### Phase 2 — Outer-loop Search Efficiency
+
+- T07: Hypothesis family tracking
+- T08: strategy-shift guidance injection
+- T09: richer case feedback rendering
+- T10: champion baseline hints per case
+- T11: screening set rebalance
+
+### Phase 3 — Parameter Layer Search
+
+- T12: parameter data models + config schema
+- T13: registry writer for weights
+- T14: evaluation function for weight configs
+- T15: optimizer implementation
+- T16: campaign hook on promote
+- T17: lineage + CLI + reporting
+- T18: end-to-end experiment
+
+---
+
+## 8. 验收标准
+
+### 8.1 Foundation 成功标准
+
+- `V5_state_leak` failure rate 明显下降，且失败分类更可解释
+- 每轮 candidate（包括失败的）都有稳定可追溯 artifact
+- frozen holdout 规模与异质性提升
+
+### 8.2 Outer-loop 成功标准
+
+- hypothesis family 多样性提高
+- `create_new/modify/remove` 不再极度单一
+- `vehicle_level/order_level` 覆盖更平衡
+- 同族机制重复率下降
+
+### 8.3 Parameter Layer 成功标准
+
+- 可以在 promote 后自动进行 weight optimization
+- 可以明确对比：均匀权重 vs 优化权重
+- 至少在一个 promoted champion 上观察到稳定权重收益
+
+### 8.4 研究产出标准
+
+v0.2 完成后，应能支持以下研究型问题：
+
+1. 结构搜索 alone 的收益是多少？
+2. 参数搜索 alone 的收益是多少？
+3. 结构 + 参数叠加后收益是多少？
+4. 某类算子的收益主要来自“存在”还是“被高频调用”？
+
+这四个问题正是论文化的基础。
+
+---
+
+## 9. 风险与对策
+
+### 风险 1：修 deterministic env 后，V5 真实 failure 仍然高
+
+**对策**：
+- 这是好事，说明我们把“环境噪声”剥离了
+- 进一步依赖 enhanced diagnostics 去找真实代码模式
+
+### 风险 2：Hypothesis family tracking 过于复杂
+
+**对策**：
+- v0.2 先做 rule-based / heuristic family labeling
+- 不要求一开始就做 embedding clustering
+
+### 风险 3：Bayesian Optimization 实现成本高
+
+**对策**：
+- 接口先抽象好
+- MVP 可先 random + local search
+- 但设计上保留 BO 作为正式目标
+
+### 风险 4：Promote 后的参数优化时间过长
+
+**对策**：
+- v0.2 默认串行执行（简单正确）
+- 若时间成本不可接受，v0.3 再异步化
+
+---
+
+## 10. 最终判断：什么构成“好的 v0.2”
+
+一个好的 v0.2，不是单纯多了一个 `optimize_weights()` 函数，而应该具备以下属性：
+
+1. **更少被环境问题浪费的实验预算**
+2. **更强的 failure diagnosis 能力**
+3. **更丰富、更不重复的结构探索**
+4. **真正落地的参数层搜索**
+5. **能直接支撑论文化分析的 artifact 与报告体系**
+
+如果只做参数层搜索而不修前面的基础问题，v0.2 会变成“新 feature 叠在旧噪声上”；
+如果只做基础修复而不落地参数层，v0.2 又失去蓝图定义的核心差异化。
+
+因此，v0.2 的正确形态是：
+
+> **Foundation Fixes + Outer-loop Efficiency + Parameter Layer Search**
+
+缺一不可，但主线仍然是参数层搜索。
+
+---
+
+## 11. 推荐实施顺序（最终版）
+
+```text
+Week 1:
+  A1 deterministic env
+  A2/A3 diagnostics + artifacts
+  A4 frozen expansion
+  → 跑一轮新 campaign，重新测真实 V5 failure rate
+
+Week 2:
+  B1/B2 family tracking + strategy guidance
+  B3/B4 richer feedback + screening rebalance
+  → 再跑一轮 campaign，看 hypothesis 多样性是否改善
+
+Week 3:
+  C1/C2/C3 parameter search core
+  C4/C5 campaign hook + lineage + CLI
+  → 跑 promote-after-optimize 的完整闭环
+
+Week 4:
+  C6 end-to-end evaluation
+  baseline vs optimized-weight comparison
+  撰写 v0.2 experiment note
 ```
 
-### 3.9 Task 分解
-
-```
-C1: 数据模型（ParameterSearchSpace, WeightConfig, WeightOptimizationResult）
-C2: 评估函数（evaluate_weights + registry_writer）
-C3: 贝叶斯优化器（WeightOptimizer，依赖 scipy）
-C4: Campaign 集成（_on_promote 扩展 + lineage）
-C5: CLI（scion optimize-weights）+ 配置扩展
-C6: 端到端验证
-```
-
-依赖：C1 → C2 → C3 → C4 → C6。C5 可并行。
-
-### 3.10 性能预估
-
-- (8 + 20) 配置 × 6 cases × 3 seeds × ~10s/run ≈ **84 分钟**
-- Promote 后阻塞主循环（v0.2 简单模式，v0.3 可异步）
-
 ---
 
-## 4. 配置扩展
+*本设计文档替代此前的“仅参数层版本”草稿。后续若继续细化，可拆为：*
 
-```yaml
-# problem.yaml 新增段
-parameter_search:
-  enabled: true
-  trigger: "on_promote"              # on_promote | manual | never
-  target: "operator_weights"
-  strategy: "bayesian"               # bayesian | grid | random
-  n_initial_random: 8
-  n_iterations: 20
-  n_eval_seeds: 3
-  weight_bounds: [0.05, 5.0]
-```
-
----
-
-## 5. 风险
-
-| 风险 | 缓解 |
-|---|---|
-| 贝叶斯优化维度灾难（>10 算子） | v0.1 池 6 个算子，6 维可接受；>10 时降维或切换 random search |
-| 权重过拟合 screening cases | Promote 仍需过 frozen holdout |
-| Promote 延迟 ~84 分钟 | 可配置 `trigger: manual`，或 v0.3 异步化 |
-| scipy 新依赖 | 标准库，surrogate 已有相关依赖 |
-
----
-
-## 6. 验收标准
-
-### 功能验收
-1. ✅ `PYTHONHASHSEED` 固定后，V5 误报率 < 15%
-2. ✅ 完整 campaign：结构搜索 → Promote → 自动权重优化 → 写入 champion
-3. ✅ 权重优化后 solver 在 frozen holdout 上表现 ≥ 均匀权重
-4. ✅ campaign_summary 含完整 protocol_result + code archive
-5. ✅ 所有现有 tests pass
-
-### 实验对比
-| 配置 | 对比 |
-|---|---|
-| v0.1 champion（均匀权重） | baseline |
-| v0.2 champion（结构搜索 + 权重优化） | target |
-
----
-
-## 7. 不做的事情
-
-| 不做 | 原因 |
-|---|---|
-| PoolManager 接入 campaign | 代码洁癖，零功能影响 |
-| 框架架构重构 | v0.1 已验证正确 |
-| Context 压缩 / Autocompact | v0.3+（当前 8 轮窗口够用） |
-| 多问题泛化 | v0.3+ |
-| 搜索 pool_size / max_iterations | v0.2 只搜索权重，验证参数层可行性 |
-
----
-
-## 8. 演进方向（v0.3+）
-
-1. 搜索更多参数（pool_size, stagnation_limit, acceptance 参数）
-2. 条件参数搜索（根据 instance 特征自适应权重）
-3. 结构+参数联合搜索（Screening 阶段就带权重优化）
-4. 多问题泛化
-5. 论文级 ablation 实验
-6. 上下文增长管理（100+ 轮 campaign）
-
----
-
-*本文档基于 v0.1 全部产出的系统性回顾 + scion-architecture-v3.md §19/§20。*
+- `scion-v0.2-foundation.md`
+- `scion-v0.2-parameter-search.md`
+- `scion-v0.2-experiment-plan.md`
