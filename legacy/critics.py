@@ -11,7 +11,7 @@ from datetime import datetime
 from openai import OpenAI
 
 # ============== 配置区域 ==============
-AIHUBMIX_API_KEY = "REDACTED"
+AIHUBMIX_API_KEY = os.environ.get("AIHUBMIX_API_KEY", "")
 INPUT_FILE = "prompt.md"
 OUTPUT_FILE = "review_result_final.md"
 MODEL = "gpt-5.4-pro"
