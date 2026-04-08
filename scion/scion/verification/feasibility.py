@@ -104,6 +104,7 @@ def _import_oracle(oracle_dir: str) -> Any:
     try:
         spec = importlib.util.spec_from_file_location("_scion_oracle", oracle_path)
         mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        sys.modules["_scion_oracle"] = mod  # Required for dataclass introspection
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         return mod
     finally:
@@ -124,6 +125,7 @@ def _load_solution_and_instance(raw: dict, instance_path: str, oracle_dir: str):
 
         spec = importlib.util.spec_from_file_location("_scion_models", models_path)
         models = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        sys.modules["_scion_models"] = models  # Required for dataclass introspection
         spec.loader.exec_module(models)  # type: ignore[union-attr]
 
         # Reconstruct vehicles.
