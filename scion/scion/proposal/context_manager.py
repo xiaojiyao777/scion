@@ -65,6 +65,7 @@ class ContextManager:
             if branch_workspace
             else None
         )
+        branch_direction = _build_branch_direction_prompt(branch)
 
         return {
             "problem_summary": problem_summary,
@@ -75,6 +76,7 @@ class ContextManager:
             "blacklist_summary": blacklist_summary,
             "sibling_summary": sibling_summary,
             "branch_code": branch_code,
+            "branch_direction": branch_direction,
         }
 
     # ------------------------------------------------------------------
@@ -172,6 +174,20 @@ class ContextManager:
 # Private helpers
 # ---------------------------------------------------------------------------
 
+def _build_branch_direction_prompt(branch: Branch) -> Optional[str]:
+    """Build branch direction guidance if a direction has been established."""
+    if not branch.direction:
+        return None
+    return (
+        f"## Branch Direction\n"
+        f"This branch is exploring: {branch.direction}\n"
+        f"Continue building on this direction. Propose improvements or refinements "
+        f"to the current approach.\n"
+        f"Only switch to a fundamentally different approach if the last 3+ screening "
+        f"results show no progress."
+    )
+
+
 def _build_problem_summary(spec: ProblemSpec) -> str:
     """Build a structured summary of the problem specification."""
     lines = [
@@ -238,6 +254,7 @@ def _build_experiment_history(
 
     Recent 3 rounds: aggregate + pattern + selected cases.
     Older rounds (4-8): aggregate only.
+    Consecutive 3+ same-type verification failures → inject diagnosis block.
     """
     branch_steps = [s for s in step_history if s.branch_id == branch_id]
     if not branch_steps:
@@ -257,7 +274,11 @@ def _build_experiment_history(
         line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text[:120]}"
         if s.failure_stage:
             line += f"\n    failed_at: {s.failure_stage}"
-            if s.failure_detail:
+            if s.failure_stage == "verification" and s.verification_detail:
+                # Use richer verification_detail for LLM diagnosis
+                detail_str = s.verification_detail[:200]
+                line += f" — {detail_str}"
+            elif s.failure_detail:
                 line += f" — {s.failure_detail[:120]}"
         if s.protocol_result is not None:
             pr = s.protocol_result
@@ -275,6 +296,11 @@ def _build_experiment_history(
                 for cf in selected:
                     line += "\n" + _render_case_feedback(cf)
         lines.append(line)
+
+    # Consecutive failure diagnosis injection
+    diagnosis = _build_consecutive_failure_diagnosis(branch_steps)
+    if diagnosis:
+        lines.append(diagnosis)
 
     return "\n".join(lines)
 
@@ -333,6 +359,62 @@ def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
         scored.append((score, c))
     scored.sort(key=lambda x: -x[0])
     return [c for _, c in scored[:max_cases]]
+
+
+_VERIFICATION_SUGGESTIONS: dict = {
+    "V3_feasibility": (
+        "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
+        "危险品必须在 HQ40_DG 车型"
+    ),
+    "V5_state_leak": (
+        "确保只修改 deep_copy 后的对象，不要引用原始 solution 的任何可变子对象（如 list、dict）"
+    ),
+    "V2_interface": (
+        "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"
+    ),
+    "V1_syntax": "检查 Python 语法是否正确",
+}
+
+
+def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
+    """Inject a diagnosis block when 3+ consecutive same-type verification failures occur."""
+    if len(branch_steps) < 3:
+        return ""
+    # Walk backwards through all steps to find current consecutive-failure streak
+    streak_steps = []
+    for s in reversed(branch_steps):
+        if s.failure_stage == "verification" and s.failure_detail:
+            streak_steps.append(s)
+        else:
+            break
+    if len(streak_steps) < 3:
+        return ""
+
+    # Determine dominant failure type from first_failure / failure_detail
+    failure_types: List[str] = []
+    details: List[str] = []
+    for s in streak_steps:
+        fd = s.failure_detail or ""
+        # Extract V-code prefix like V3_feasibility
+        vcode = fd.split(":")[0].strip() if ":" in fd else fd.split()[0] if fd else ""
+        failure_types.append(vcode)
+        if s.verification_detail:
+            details.append(s.verification_detail[:150])
+        elif fd:
+            details.append(fd[:150])
+
+    # Use the most common failure type
+    from collections import Counter
+    dominant_type = Counter(failure_types).most_common(1)[0][0] if failure_types else ""
+    suggestion = _VERIFICATION_SUGGESTIONS.get(dominant_type, "仔细检查验证失败的原因并修改代码")
+    aggregated = " | ".join(dict.fromkeys(details))[:300]  # deduplicate, cap length
+
+    return (
+        f"\n## ⚠️ Consecutive Failure Diagnosis\n"
+        f"The last {len(streak_steps)} attempts all failed at verification.\n"
+        f"Common failure details: {aggregated}\n"
+        f"Suggested approach: {suggestion}"
+    )
 
 
 def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:

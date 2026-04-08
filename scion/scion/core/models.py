@@ -238,6 +238,7 @@ class Branch:
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+    direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
 
 @dataclass
 class HypothesisRecord:
@@ -309,3 +310,4 @@ class StepRecord:
     decision: Decision
     failure_stage: Optional[str]
     failure_detail: Optional[str]
+    verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis

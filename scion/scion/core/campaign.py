@@ -138,6 +138,7 @@ class CampaignManager:
         self._budget = budget or BudgetState(total=1000, used=0)
         self._n_experiments = 0
         self._recent_abandoned_count = 0
+        self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
         self._start_time = datetime.now()
 
     # ------------------------------------------------------------------
@@ -386,6 +387,7 @@ class CampaignManager:
                         protocol_result=None, decision=Decision.ABANDON,
                         failure_stage="verification",
                         failure_detail=vresult.first_failure,
+                        verification_detail=_build_verification_detail(vresult),
                     ))
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
@@ -399,6 +401,7 @@ class CampaignManager:
                     protocol_result=None, decision=Decision.ABANDON,
                     failure_stage="verification",
                     failure_detail=vresult.first_failure,
+                    verification_detail=_build_verification_detail(vresult),
                 ))
                 return StepResult(action="explore", branch_id=bid, reason="verification failed (heavy)")
 
@@ -843,6 +846,25 @@ class CampaignManager:
                     del self._branch_workspaces[bid]
                 self._branch_patches.pop(bid, None)
 
+            # Branch direction tracking (Sprint 4)
+            if has_positive_signal:
+                self._branch_zero_win_streaks[bid] = 0
+                if branch.direction is None:
+                    # First positive signal on this branch — lock in direction
+                    branch.direction = (
+                        f"{hypothesis.change_locus}: "
+                        f"{(hypothesis.hypothesis_text or '')[:100]}"
+                    )
+                    logger.debug("Branch %s: direction set to %r", bid, branch.direction)
+            else:
+                streak = self._branch_zero_win_streaks.get(bid, 0) + 1
+                self._branch_zero_win_streaks[bid] = streak
+                if streak >= 3 and branch.direction is not None:
+                    logger.debug(
+                        "Branch %s: %d consecutive 0-win-rate rounds — clearing direction", bid, streak
+                    )
+                    branch.direction = None
+
             # Always discard current hypothesis — a new one is generated next round
             self._branch_hypotheses.pop(bid, None)
             if h_record in self._active_hypotheses:
@@ -974,3 +996,20 @@ class CampaignManager:
                     hypothesis_text=hyp.hypothesis_text,
                 )
                 self._blacklist.append(record)
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+def _build_verification_detail(vresult: VerificationResult) -> Optional[str]:
+    """Build a full verification failure detail string for LLM diagnosis."""
+    if not vresult or vresult.passed:
+        return None
+    failed = [c for c in vresult.checks if not c.passed]
+    if not failed:
+        return vresult.first_failure
+    lines = [f"severity={vresult.failure_severity or 'unknown'}  first_failure={vresult.first_failure or 'N/A'}"]
+    for c in failed:
+        lines.append(f"  [{c.name}] ({c.severity}) {c.detail}")
+    return "\n".join(lines)
