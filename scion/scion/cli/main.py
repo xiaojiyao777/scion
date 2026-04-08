@@ -15,6 +15,12 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+inspect_app = typer.Typer(help="Inspect campaign artefacts (branches, hypotheses).", no_args_is_help=True)
+report_app = typer.Typer(help="Generate campaign summary reports.", no_args_is_help=True)
+
+app.add_typer(inspect_app, name="inspect")
+app.add_typer(report_app, name="report")
+
 
 # ---------------------------------------------------------------------------
 # scion init
@@ -178,83 +184,214 @@ def run(
 
 
 # ---------------------------------------------------------------------------
-# scion inspect
+# scion inspect (sub-commands)
 # ---------------------------------------------------------------------------
 
-@app.command()
-def inspect(
-    branch: str = typer.Option(..., "--branch", help="Branch ID to inspect"),
+def _get_registry(campaign_dir: str):
+    """Open LineageRegistry from scion.db in campaign_dir."""
+    from scion.lineage.registry import LineageRegistry
+    db_path = Path(campaign_dir).resolve() / "scion.db"
+    if not db_path.exists():
+        typer.echo(f"ERROR: scion.db not found at {db_path}", err=True)
+        raise typer.Exit(code=1)
+    return LineageRegistry(str(db_path))
+
+
+@inspect_app.command("campaign")
+def inspect_campaign(
     campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
 ) -> None:
-    """Query the state of a specific branch."""
-    campaign_path = Path(campaign_dir).resolve()
-    if not campaign_path.exists():
-        typer.echo(f"ERROR: campaign directory not found: {campaign_path}", err=True)
+    """Campaign overview: total events, branches, champions, gate stats."""
+    registry = _get_registry(campaign_dir)
+    summary = registry.get_campaign_summary()
+    typer.echo(json.dumps(summary, indent=2))
+
+
+@inspect_app.command("branch")
+def inspect_branch(
+    branch_id: str = typer.Argument(..., help="Branch ID to inspect"),
+    campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
+) -> None:
+    """Branch details: all experiment events and hypotheses for a branch."""
+    registry = _get_registry(campaign_dir)
+    from scion.lineage.branch_store import BranchStore, HypothesisStore
+
+    branch_store = BranchStore(registry)
+    hyp_store = HypothesisStore(registry)
+
+    branch = branch_store.load(branch_id)
+    if branch is None:
+        typer.echo(f"WARNING: branch {branch_id!r} not found in branches table", err=True)
+
+    events = registry.query_by_branch(branch_id)
+    hypotheses = hyp_store.get_by_branch(branch_id)
+
+    output = {
+        "branch_id": branch_id,
+        "branch": {
+            "state": branch.state.value if branch else None,
+            "base_champion_id": branch.base_champion_id if branch else None,
+            "retry_count": branch.retry_count if branch else None,
+            "created_at": branch.created_at.isoformat() if branch else None,
+        },
+        "experiment_events": events,
+        "hypotheses": [
+            {
+                "hypothesis_id": h.hypothesis_id,
+                "action": h.action,
+                "change_locus": h.change_locus,
+                "target_file": h.target_file,
+                "status": h.status,
+                "hypothesis_text": (h.hypothesis_text or "")[:300],
+                "created_at": h.created_at.isoformat(),
+            }
+            for h in hypotheses
+        ],
+    }
+    typer.echo(json.dumps(output, indent=2, default=str))
+
+
+@inspect_app.command("hypothesis")
+def inspect_hypothesis(
+    hyp_id: str = typer.Argument(..., help="Hypothesis ID to inspect"),
+    campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
+) -> None:
+    """Hypothesis details: full record for a single hypothesis."""
+    registry = _get_registry(campaign_dir)
+    from scion.lineage.branch_store import HypothesisStore
+
+    store = HypothesisStore(registry)
+    hyp = store.get_one(hyp_id)
+    if hyp is None:
+        typer.echo(f"ERROR: hypothesis {hyp_id!r} not found", err=True)
         raise typer.Exit(code=1)
 
-    # Look for lineage data stored by campaign
-    lineage_file = campaign_path / "lineage" / f"{branch}.json"
-    if lineage_file.exists():
-        data = json.loads(lineage_file.read_text())
-        typer.echo(json.dumps(data, indent=2))
-        return
+    output = {
+        "hypothesis_id": hyp.hypothesis_id,
+        "branch_id": hyp.branch_id,
+        "action": hyp.action,
+        "change_locus": hyp.change_locus,
+        "target_file": hyp.target_file,
+        "status": hyp.status,
+        "hypothesis_text": hyp.hypothesis_text,
+        "suggested_weight": hyp.suggested_weight,
+        "parent_hypothesis_id": hyp.parent_hypothesis_id,
+        "created_at": hyp.created_at.isoformat(),
+    }
+    typer.echo(json.dumps(output, indent=2))
 
-    # Try to find branch info in the campaign directory structure
-    branch_dir = campaign_path / "branches" / branch
-    if branch_dir.exists():
-        typer.echo(f"Branch directory: {branch_dir}")
-        for item in branch_dir.iterdir():
-            typer.echo(f"  {item.name}")
-        return
-
-    typer.echo(f"Branch {branch!r} not found in campaign at {campaign_path}", err=True)
-    raise typer.Exit(code=1)
+    # Also show related experiment events
+    events = registry.query_by_branch(hyp.branch_id)
+    hyp_events = [e for e in events if e.get("hypothesis_id") == hyp_id]
+    if hyp_events:
+        typer.echo("\nRelated experiment events:")
+        typer.echo(json.dumps(hyp_events, indent=2, default=str))
 
 
 # ---------------------------------------------------------------------------
-# scion report
+# scion report (sub-commands)
 # ---------------------------------------------------------------------------
 
-@app.command()
-def report(
+@report_app.command("summary")
+def report_summary(
     campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Write JSON report to file"),
 ) -> None:
-    """Output a summary of the campaign results."""
+    """Campaign summary: total rounds, champion version, gate intercept rates."""
     campaign_path = Path(campaign_dir).resolve()
-    if not campaign_path.exists():
-        typer.echo(f"ERROR: campaign directory not found: {campaign_path}", err=True)
-        raise typer.Exit(code=1)
-
+    db_path = campaign_path / "scion.db"
     state_file = campaign_path / ".scion_state.json"
-    meta: dict = {}
-    if state_file.exists():
-        meta = json.loads(state_file.read_text())
+    meta = json.loads(state_file.read_text()) if state_file.exists() else {}
 
-    # Collect champion snapshots
-    champ_dir = campaign_path / "champions"
-    champion_versions: list = []
-    if champ_dir.exists():
-        champion_versions = sorted(str(p.name) for p in champ_dir.iterdir() if p.is_dir())
+    if db_path.exists():
+        from scion.lineage.registry import LineageRegistry
+        registry = LineageRegistry(str(db_path))
+        db_summary = registry.get_campaign_summary()
+        total_events = db_summary.get("total_events", 0)
+        n_champions = db_summary.get("n_champions", 0)
+        contract_failures = db_summary.get("contract_failures", 0)
+        verification_failures = db_summary.get("verification_failures", 0)
+        by_decision = db_summary.get("by_decision", {})
+    else:
+        total_events = n_champions = contract_failures = verification_failures = 0
+        by_decision = {}
 
-    # Collect branch info
-    branch_dir = campaign_path / "branches"
-    branch_count = 0
-    if branch_dir.exists():
-        branch_count = sum(1 for p in branch_dir.iterdir() if p.is_dir())
+    v_intercept = round(verification_failures / total_events, 4) if total_events > 0 else 0.0
+    c_intercept = round(contract_failures / total_events, 4) if total_events > 0 else 0.0
+    screening_pass = by_decision.get("queue_validate", 0)
+    screening_total = sum(by_decision.get(d, 0) for d in [
+        "continue_explore", "expand_screening", "queue_validate"
+    ])
+    screening_pass_rate = round(screening_pass / screening_total, 4) if screening_total > 0 else 0.0
+    promoted = by_decision.get("promote", 0)
 
-    report_data = {
+    report = {
         "campaign_dir": str(campaign_path),
         "problem_name": meta.get("problem_name", "unknown"),
-        "problem_yaml": meta.get("problem_yaml", "unknown"),
-        "champion_versions": champion_versions,
-        "branch_count": branch_count,
+        "total_experiments": total_events,
+        "champion_promotions": promoted,
+        "latest_champion_version": n_champions,
+        "contract_intercept_rate": c_intercept,
+        "verification_intercept_rate": v_intercept,
+        "screening_pass_rate": screening_pass_rate,
+        "by_decision": by_decision,
     }
 
-    report_json = json.dumps(report_data, indent=2)
+    report_json = json.dumps(report, indent=2)
     if output:
         Path(output).write_text(report_json)
         typer.echo(f"Report written to {output}")
+    else:
+        typer.echo(report_json)
+
+
+@report_app.command("failures")
+def report_failures(
+    campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Write JSON report to file"),
+) -> None:
+    """Failure distribution: breakdown by failure type (contract vs verification)."""
+    registry = _get_registry(campaign_dir)
+
+    all_failures = registry.query_failures()
+
+    # Group by failure type
+    by_type: dict = {}
+    for evt in all_failures:
+        contract_failed = evt.get("contract_result") == "failed"
+        verification_failed = evt.get("verification_result") == "failed"
+        v_check = evt.get("verification_result", "")
+
+        if contract_failed:
+            key = "contract"
+        elif verification_failed:
+            # Try to extract check name from verification_result value
+            key = f"verification:{v_check}" if v_check and v_check != "failed" else "verification"
+        else:
+            key = "other"
+
+        by_type[key] = by_type.get(key, 0) + 1
+
+    report = {
+        "total_failures": len(all_failures),
+        "by_type": by_type,
+        "recent_failures": [
+            {
+                "event_id": e.get("event_id"),
+                "branch_id": e.get("branch_id"),
+                "timestamp": e.get("timestamp"),
+                "contract_result": e.get("contract_result"),
+                "verification_result": e.get("verification_result"),
+                "decision": e.get("decision"),
+            }
+            for e in all_failures[:20]  # most recent 20
+        ],
+    }
+
+    report_json = json.dumps(report, indent=2, default=str)
+    if output:
+        Path(output).write_text(report_json)
+        typer.echo(f"Failure report written to {output}")
     else:
         typer.echo(report_json)
 

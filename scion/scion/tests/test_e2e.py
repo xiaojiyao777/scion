@@ -454,13 +454,13 @@ class TestCLISmoke:
             env=env, timeout=30, capture_output=True,
         )
 
-        # report
+        # report summary (new sub-command interface; works even without scion.db)
         report_result = subprocess.run(
-            base_cmd + ["report", "--campaign-dir", str(campaign_dir)],
+            base_cmd + ["report", "summary", "--campaign-dir", str(campaign_dir)],
             capture_output=True, text=True, env=env, timeout=30,
         )
         assert report_result.returncode == 0, (
-            f"scion report failed:\n{report_result.stderr}"
+            f"scion report summary failed:\n{report_result.stderr}"
         )
         import json
         data = json.loads(report_result.stdout)
