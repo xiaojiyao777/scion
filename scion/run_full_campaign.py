@@ -128,6 +128,6 @@ for step in step_history:
 
 print("\n=== Final State ===")
 print(f"  Budget used       : {mgr._budget.used}")
-print(f"  Active hypotheses : {len(mgr._active_hypotheses)}")
+print(f"  Active hypotheses : {len(mgr._branch_hypotheses)}")
 print(f"  Blacklisted       : {len(mgr._blacklist)}")
 print(f"  Archive dir       : {mgr._materializer._archive_dir}")
