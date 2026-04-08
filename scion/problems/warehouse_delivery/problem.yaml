@@ -50,3 +50,4 @@ search_space:
 solver:
   time_limit_sec: 300
   max_iter: 200
+canary_case_path: /home/clawd/research/or-autoresearch-agent/surrogate/data/instance_small_1.json

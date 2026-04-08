@@ -63,6 +63,9 @@ experiment_protocol = ExperimentProtocol(
 # --- Run ---
 max_rounds = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 
+from scion.verification.gate import VerificationGate as RealVerificationGate
+verification_gate = RealVerificationGate(problem_spec=spec, runner=runner)
+
 mgr = CampaignManager(
     problem_spec=spec,
     protocol_config=proto_cfg,
@@ -72,6 +75,7 @@ mgr = CampaignManager(
     champion=champion,
     campaign_dir=str(CAMPAIGN_DIR),
     experiment_protocol=experiment_protocol,
+    verification_gate=verification_gate,
 )
 
 print(f"=== Starting full campaign: {spec.name} (max_rounds={max_rounds}) ===")
