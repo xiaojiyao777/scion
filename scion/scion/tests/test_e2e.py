@@ -490,13 +490,13 @@ class TestWarehouseDeliveryConfig:
     def test_protocol_yaml_loads(self, warehouse_dir):
         from scion.config.problem import ProtocolConfig
         proto = ProtocolConfig.from_yaml(str(warehouse_dir / "protocol.yaml"))
-        assert proto.screening_n == 6
-        assert proto.validation_n == 9
+        assert proto.screening_n == 20
+        assert proto.validation_n == 18
 
     def test_split_manifest_loads_and_is_disjoint(self, warehouse_dir):
         from scion.config.split_manifest import SplitManifest
         manifest = SplitManifest.from_yaml(str(warehouse_dir / "split_manifest.yaml"))
-        assert len(manifest.screening) == 8
+        assert len(manifest.screening) == 10
         assert len(manifest.validation) == 6
         assert len(manifest.frozen) == 4
         # Frozen must be disjoint from screening and validation
