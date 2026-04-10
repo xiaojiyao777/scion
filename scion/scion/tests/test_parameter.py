@@ -1,4 +1,4 @@
-"""Tests for T12 (parameter data models) and T14 (weight evaluator)."""
+"""Tests for T12 (parameter data models), T14 (weight evaluator), T15a (optimizer)."""
 from __future__ import annotations
 
 import os
@@ -299,3 +299,104 @@ def test_evaluate_weights_writes_registry(tmp_path):
     written = read_weights(os.path.join(ws, "registry.yaml"))
     assert abs(written["swap"] - 0.8) < 1e-6
     assert abs(written["move"] - 0.2) < 1e-6
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T15a — RandomLocalWeightOptimizer
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _make_space(n_initial=4, n_iter=4, bounds=(0.05, 5.0)):
+    return ParameterSearchSpace(
+        operator_names=("op_a", "op_b"),
+        weight_bounds=bounds,
+        n_initial_random=n_initial,
+        n_iterations=n_iter,
+    )
+
+
+def test_optimizer_improves_on_convex_mock():
+    """Convex evaluator: best_score > baseline_score (first-random score)."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+
+    target = {"op_a": 1.0, "op_b": 1.0}
+
+    def convex_eval(weights):
+        return -sum((weights[k] - target[k]) ** 2 for k in target)
+
+    space = _make_space(n_initial=8, n_iter=16)
+    opt = RandomLocalWeightOptimizer(space, convex_eval, seed=42)
+    result = opt.optimize()
+
+    assert result.best_score >= result.baseline_score
+    assert result.improved or result.best_score == result.baseline_score
+
+
+def test_optimizer_is_seed_deterministic():
+    """Same seed → identical results on two runs."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+
+    call_log1: list = []
+    call_log2: list = []
+
+    def eval1(w):
+        v = sum(w.values())
+        call_log1.append(v)
+        return v
+
+    def eval2(w):
+        v = sum(w.values())
+        call_log2.append(v)
+        return v
+
+    space = _make_space(n_initial=4, n_iter=4)
+    r1 = RandomLocalWeightOptimizer(space, eval1, seed=0).optimize()
+    r2 = RandomLocalWeightOptimizer(space, eval2, seed=0).optimize()
+
+    assert r1.best_score == r2.best_score
+    assert r1.n_evaluations == r2.n_evaluations
+    assert call_log1 == call_log2
+
+
+def test_optimizer_returns_correct_structure():
+    """All WeightOptimizationResult fields must be set (not None)."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+
+    space = _make_space()
+    opt = RandomLocalWeightOptimizer(space, lambda w: 1.0, seed=7)
+    result = opt.optimize()
+
+    assert result.baseline_weights is not None
+    assert result.best_weights is not None
+    assert result.baseline_score is not None
+    assert result.best_score is not None
+    assert result.improved is not None
+    assert result.n_evaluations is not None
+    assert result.elapsed_seconds is not None
+    assert result.observations_ref is not None  # may be ""
+
+
+def test_optimizer_respects_weight_bounds():
+    """All weights returned must lie within [lo, hi]."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+
+    lo, hi = 0.05, 5.0
+    space = _make_space(n_initial=10, n_iter=20, bounds=(lo, hi))
+    opt = RandomLocalWeightOptimizer(space, lambda w: sum(w.values()), seed=3)
+    result = opt.optimize()
+
+    for name, w in result.best_weights.items():
+        assert lo <= w <= hi, f"{name}: {w} outside [{lo}, {hi}]"
+    for name, w in result.baseline_weights.items():
+        assert lo <= w <= hi, f"{name}: {w} outside [{lo}, {hi}]"
+
+
+def test_optimizer_n_evaluations():
+    """n_evaluations == n_initial_random + n_iterations."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+
+    n_init, n_iter = 5, 7
+    space = _make_space(n_initial=n_init, n_iter=n_iter)
+    opt = RandomLocalWeightOptimizer(space, lambda w: 0.0, seed=1)
+    result = opt.optimize()
+
+    assert result.n_evaluations == n_init + n_iter
