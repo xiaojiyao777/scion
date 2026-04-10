@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from scion.core.models import DecisionFeatures, DecisionOutcome
+from scion.core.models import DecisionFeatures, DecisionOutcome, WeightOptimizationResult
 
 
 class LineageRegistry:
@@ -93,6 +93,23 @@ class LineageRegistry:
                     code_snapshot_hash       TEXT NOT NULL,
                     promotion_experiment_id  TEXT,
                     promoted_at              TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS weight_optimizations (
+                    optimization_id        TEXT PRIMARY KEY,
+                    campaign_id            TEXT,
+                    champion_version       INTEGER NOT NULL,
+                    n_operators            INTEGER NOT NULL,
+                    n_evaluations          INTEGER NOT NULL,
+                    baseline_score         REAL,
+                    best_score             REAL,
+                    improved               INTEGER,
+                    baseline_weights_json  TEXT,
+                    best_weights_json      TEXT,
+                    elapsed_seconds        REAL,
+                    observations_ref       TEXT,
+                    timestamp              TEXT NOT NULL
                 )
             """)
 
@@ -207,3 +224,58 @@ class LineageRegistry:
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
         }
+
+    # ------------------------------------------------------------------
+    # Weight optimization lineage (T17a)
+    # ------------------------------------------------------------------
+
+    def record_weight_optimization(
+        self,
+        campaign_id: str,
+        champion_version: int,
+        result: WeightOptimizationResult,
+    ) -> str:
+        """Record a weight optimization result. Returns optimization_id."""
+        import json as _json
+        opt_id = str(uuid.uuid4())
+        row = {
+            "optimization_id": opt_id,
+            "campaign_id": campaign_id,
+            "champion_version": champion_version,
+            "n_operators": len(result.best_weights),
+            "n_evaluations": result.n_evaluations,
+            "baseline_score": result.baseline_score,
+            "best_score": result.best_score,
+            "improved": 1 if result.improved else 0,
+            "baseline_weights_json": _json.dumps(result.baseline_weights),
+            "best_weights_json": _json.dumps(result.best_weights),
+            "elapsed_seconds": result.elapsed_seconds,
+            "observations_ref": result.observations_ref,
+            "timestamp": datetime.now().isoformat(),
+        }
+        cols = ", ".join(row.keys())
+        placeholders = ", ".join(["?"] * len(row))
+        sql = f"INSERT INTO weight_optimizations ({cols}) VALUES ({placeholders})"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(sql, list(row.values()))
+        return opt_id
+
+    def query_weight_optimizations(
+        self,
+        campaign_id: Optional[str] = None,
+        champion_version: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query weight optimization records."""
+        sql = "SELECT * FROM weight_optimizations WHERE 1=1"
+        params: List[Any] = []
+        if campaign_id:
+            sql += " AND campaign_id = ?"
+            params.append(campaign_id)
+        if champion_version is not None:
+            sql += " AND champion_version = ?"
+            params.append(champion_version)
+        sql += " ORDER BY timestamp"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
