@@ -311,3 +311,5 @@ class StepRecord:
     failure_stage: Optional[str]
     failure_detail: Optional[str]
     verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis
+    code_archive_ref: Optional[str] = None  # 归档目录路径
+    cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}

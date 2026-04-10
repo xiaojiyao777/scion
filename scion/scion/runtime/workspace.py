@@ -174,7 +174,7 @@ class WorkspaceMaterializer:
             _make_tree_writable(ws)
             shutil.rmtree(ws)
 
-    def archive_workspace(self, workspace: str, branch_id: str) -> None:
+    def archive_workspace(self, workspace: str, branch_id: str) -> str | None:
         """Copy the operators/ directory from workspace into archive/<branch_id_short>/.
 
         Called before cleanup on ABANDON so generated .py files are preserved
@@ -183,11 +183,14 @@ class WorkspaceMaterializer:
         Args:
             workspace: Absolute path to the branch workspace.
             branch_id: Branch ID used to name the archive sub-directory.
+
+        Returns:
+            Absolute path to the archive directory, or None if operators/ absent.
         """
         ws = Path(workspace)
         ops_src = ws / "operators"
         if not ops_src.exists():
-            return
+            return None
 
         # Use first 8 chars of branch_id for readability
         short_id = str(branch_id)[:8]
@@ -204,6 +207,7 @@ class WorkspaceMaterializer:
         _logging.getLogger(__name__).info(
             "Archived operators from branch %s → %s", branch_id, archive_dest
         )
+        return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
         """Compute SHA-256 of operators/ .py files (sorted by relative path).

@@ -157,6 +157,7 @@ class CampaignManager:
             result = self.run_one_step()
             if result.stopped:
                 break
+        self._write_campaign_summary()
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -384,6 +385,7 @@ class CampaignManager:
                 if not vresult.passed:
                     self._handle_failure(branch, failure)
                     self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                    archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
                     self._step_history.append(StepRecord(
                         round_num=rnum, branch_id=bid,
                         hypothesis=hypothesis, patch=patch,
@@ -392,11 +394,13 @@ class CampaignManager:
                         failure_stage="verification",
                         failure_detail=vresult.first_failure,
                         verification_detail=_build_verification_detail(vresult),
+                        code_archive_ref=archive_ref,
                     ))
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
                 self._handle_failure(branch, failure)
                 self._hyp_store.mark_status(h_record.hypothesis_id, "blacklisted")
+                archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
                 self._step_history.append(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=patch,
@@ -405,6 +409,7 @@ class CampaignManager:
                     failure_stage="verification",
                     failure_detail=vresult.first_failure,
                     verification_detail=_build_verification_detail(vresult),
+                    code_archive_ref=archive_ref,
                 ))
                 return StepResult(action="explore", branch_id=bid, reason="verification failed (heavy)")
 
@@ -1008,6 +1013,83 @@ class CampaignManager:
                     hypothesis_text=hyp.hypothesis_text,
                 )
                 self._hyp_store.save(record)
+
+    # ------------------------------------------------------------------
+    # Workspace archiving
+    # ------------------------------------------------------------------
+
+    def _archive_failed_workspace(
+        self, workspace: str, branch_id: str, round_num: int
+    ) -> Optional[str]:
+        """Archive operators/ from a failed workspace. Returns archive path or None."""
+        tag = f"round_{round_num}_{branch_id[:8]}"
+        try:
+            return self._materializer.archive_workspace(workspace=workspace, branch_id=tag)
+        except Exception as exc:
+            logger.debug("Branch %s: archive_failed_workspace failed: %s", branch_id, exc)
+            return None
+
+    # ------------------------------------------------------------------
+    # Campaign summary
+    # ------------------------------------------------------------------
+
+    def _write_campaign_summary(self) -> None:
+        """Write campaign_summary.json with per-step detail."""
+        import json as _json
+        from pathlib import Path as _Path
+
+        summary: Dict[str, Any] = {
+            "campaign_id": self._campaign_id,
+            "total_rounds": self._round_num,
+            "champion_version": self._champion.version,
+            "steps": [],
+        }
+        for step in self._step_history:
+            step_data: Dict[str, Any] = {
+                "round": step.round_num,
+                "branch_id": step.branch_id,
+                "decision": step.decision.value,
+                "contract_passed": step.contract_passed,
+                "verification_passed": step.verification_passed,
+                "failure_stage": step.failure_stage,
+                "failure_detail": step.failure_detail,
+                "verification_detail": step.verification_detail,
+                "code_archive_ref": step.code_archive_ref,
+                "cache_stats": step.cache_stats,
+                "hypothesis": {
+                    "text": (step.hypothesis.hypothesis_text or "")[:200],
+                    "action": step.hypothesis.action,
+                    "change_locus": step.hypothesis.change_locus,
+                    "target_file": step.hypothesis.target_file,
+                },
+            }
+            if step.protocol_result and step.protocol_result.stats:
+                stats = step.protocol_result.stats
+                pr = step.protocol_result
+                step_data["protocol_result"] = {
+                    "stage": pr.stage.value if hasattr(pr.stage, "value") else str(pr.stage),
+                    "win_rate": stats.win_rate,
+                    "median_delta": stats.median_delta,
+                    "ci_low": stats.ci_low,
+                    "ci_high": stats.ci_high,
+                    "gate_outcome": pr.gate_outcome,
+                }
+                if pr.case_feedback:
+                    step_data["case_feedback_summary"] = [
+                        {
+                            "case_id": cf.case_id,
+                            "dominant_result": cf.dominant_result,
+                            "decisive": cf.dominant_decisive_objective,
+                        }
+                        for cf in pr.case_feedback[:20]
+                    ]
+            summary["steps"].append(step_data)
+
+        out_path = _Path(self._campaign_dir) / "campaign_summary.json"
+        try:
+            out_path.write_text(_json.dumps(summary, indent=2, default=str))
+        except Exception as exc:
+            logger.warning("Failed to write campaign_summary.json: %s", exc)
 
 
 # ---------------------------------------------------------------------------

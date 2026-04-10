@@ -669,3 +669,101 @@ class TestRunLoop:
         )
         cm.run(max_rounds=3)
         assert cm._n_experiments <= 3
+
+
+# ---------------------------------------------------------------------------
+# T03+T04: archive_workspace returns path + campaign_summary.json
+# ---------------------------------------------------------------------------
+
+class TestArchiveWorkspaceReturnsPath:
+    def test_archive_workspace_returns_path(self, tmp_path):
+        """archive_workspace() must return the archive directory path."""
+        from scion.runtime.workspace import WorkspaceMaterializer
+
+        campaign_dir = tmp_path / "campaign"
+        campaign_dir.mkdir()
+        mat = WorkspaceMaterializer(str(campaign_dir))
+
+        # Create a minimal workspace with operators/
+        ws = tmp_path / "ws"
+        (ws / "operators").mkdir(parents=True)
+        (ws / "operators" / "my_op.py").write_text("class MyOp: pass\n")
+
+        result = mat.archive_workspace(str(ws), branch_id="testbranch123")
+        assert result is not None
+        from pathlib import Path
+        assert Path(result).exists()
+
+
+class TestCampaignSummaryJson:
+    def test_campaign_summary_json_structure(self, tmp_path):
+        """run() must produce campaign_summary.json with a 'steps' array."""
+        import json
+        from pathlib import Path
+
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=None,
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+        cm.run(max_rounds=3)
+
+        summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
+        assert summary_path.exists()
+        data = json.loads(summary_path.read_text())
+        assert "steps" in data
+        assert isinstance(data["steps"], list)
+        assert len(data["steps"]) >= 1
+        step = data["steps"][0]
+        assert "round" in step
+        assert "branch_id" in step
+        assert "decision" in step
+
+    def test_campaign_summary_failed_step_has_archive(self, tmp_path):
+        """Verification-failed steps must have code_archive_ref in summary."""
+        import json
+        from pathlib import Path
+
+        cm = _campaign(
+            tmp_path,
+            verification_gate=AlwaysFailVerificationGate(),
+            experiment_protocol=None,
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+        cm.run(max_rounds=2)
+
+        summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
+        assert summary_path.exists()
+        data = json.loads(summary_path.read_text())
+        assert "steps" in data
+        # Steps that failed verification should have failure_stage='verification'
+        failed = [s for s in data["steps"] if s.get("failure_stage") == "verification"]
+        assert len(failed) >= 1
+        # code_archive_ref field must exist (may be None if operators/ absent)
+        for s in failed:
+            assert "code_archive_ref" in s
+
+    def test_step_record_has_archive_ref_field(self, tmp_path):
+        """StepRecord must have code_archive_ref attribute."""
+        from scion.core.models import StepRecord, Decision, HypothesisProposal
+
+        hyp = HypothesisProposal(
+            hypothesis_text="test",
+            change_locus="local_search",
+            action="modify",
+        )
+        sr = StepRecord(
+            round_num=1,
+            branch_id="br1",
+            hypothesis=hyp,
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=Decision.ABANDON,
+            failure_stage="verification",
+            failure_detail="test fail",
+            code_archive_ref="/some/path",
+        )
+        assert sr.code_archive_ref == "/some/path"
+        assert sr.cache_stats is None
