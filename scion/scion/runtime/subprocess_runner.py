@@ -18,11 +18,14 @@ from scion.runtime.runner import ResourceLimits
 
 # Environment variables passed through to the subprocess (whitelist)
 _ENV_PASSTHROUGH = {"PATH", "PYTHONPATH"}
+_ENV_FIXED = {"PYTHONHASHSEED": "0"}
 
 
 def _build_clean_env() -> dict[str, str]:
     """Return a sanitized environment containing only whitelisted variables."""
-    return {k: v for k, v in os.environ.items() if k in _ENV_PASSTHROUGH}
+    env = {k: v for k, v in os.environ.items() if k in _ENV_PASSTHROUGH}
+    env.update(_ENV_FIXED)
+    return env
 
 
 def _make_preexec_fn(limits: ResourceLimits):
