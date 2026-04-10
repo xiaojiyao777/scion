@@ -316,7 +316,10 @@ class TestStateleakCheck:
         r = check_state_leak(spec, runner, str(tmp_path))
         assert r.passed is False
         assert r.name == "V5_state_leak"
-        assert "non-deterministic" in r.detail
+        # detail is now a JSON string with diff_keys
+        detail = json.loads(r.detail)
+        assert "diff_keys" in detail
+        assert len(detail["diff_keys"]) > 0
 
 
 # ---------------------------------------------------------------------------

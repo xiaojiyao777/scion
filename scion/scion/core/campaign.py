@@ -111,7 +111,9 @@ class CampaignManager:
                 problem_spec.search_space.frozen
             ) if problem_spec.search_space.frozen else None,
         )
-        self._vgate = verification_gate or VerificationGate(problem_spec)
+        import os as _os2
+        _os2.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
+        self._vgate = verification_gate or VerificationGate(problem_spec, metrics_dir=str(campaign_dir) + "/metrics")
         self._experiment_protocol = experiment_protocol  # may be None (no runner)
 
         # Lineage registry (SQLite, WAL mode)

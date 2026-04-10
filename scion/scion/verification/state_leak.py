@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
+import uuid
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
@@ -18,6 +20,7 @@ def check_state_leak(
     problem_spec: ProblemSpec,
     runner: Runner,
     candidate_workspace: str,
+    metrics_dir: str | None = None,
 ) -> CheckResult:
     """V5_state_leak: two runs with identical seed must produce identical objectives."""
     t0 = time.monotonic_ns()
@@ -58,17 +61,59 @@ def check_state_leak(
     if raw2 is None:
         return _cr(False, "heavy", "second run failed", t0)
 
+    # Save run outputs to metrics_dir if provided
+    short_id = uuid.uuid4().hex[:8]
+    run1_path: str | None = None
+    run2_path: str | None = None
+    if metrics_dir and os.path.isdir(metrics_dir):
+        run1_path = os.path.join(metrics_dir, f"v5_run1_{short_id}.json")
+        run2_path = os.path.join(metrics_dir, f"v5_run2_{short_id}.json")
+        try:
+            with open(run1_path, "w", encoding="utf-8") as f:
+                json.dump(raw1, f, indent=2)
+            with open(run2_path, "w", encoding="utf-8") as f:
+                json.dump(raw2, f, indent=2)
+        except OSError:
+            run1_path = None
+            run2_path = None
+
     obj1 = {k: v for k, v in raw1.get("objective", {}).items() if k != "solve_time_ms"}
     obj2 = {k: v for k, v in raw2.get("objective", {}).items() if k != "solve_time_ms"}
 
     if obj1 == obj2:
         return _cr(True, "heavy", "outputs identical across two runs", t0)
 
-    return _cr(
-        False, "heavy",
-        f"non-deterministic output: run1={obj1} run2={obj2}",
-        t0,
-    )
+    # Archive candidate code on failure
+    archive_ref: str | None = None
+    if metrics_dir and os.path.isdir(metrics_dir):
+        archive_ref = _archive_candidate_code(
+            workspace=candidate_workspace,
+            archive_dir=metrics_dir,
+            tag=f"v5_archive_{short_id}",
+        )
+
+    detail = json.dumps({
+        "run1_objective": obj1,
+        "run2_objective": obj2,
+        "diff_keys": [k for k in obj1 if obj1[k] != obj2.get(k)],
+        "run1_ref": run1_path,
+        "run2_ref": run2_path,
+        "candidate_archive_ref": archive_ref,
+    })
+    return _cr(False, "heavy", detail, t0)
+
+
+def _archive_candidate_code(workspace: str, archive_dir: str, tag: str) -> str | None:
+    """Copy operators/ from workspace to archive_dir/tag/. Returns archive path or None."""
+    ops_src = os.path.join(workspace, "operators")
+    if not os.path.isdir(ops_src):
+        return None
+    dest = os.path.join(archive_dir, tag)
+    try:
+        shutil.copytree(ops_src, dest, symlinks=False)
+        return dest
+    except Exception:
+        return None
 
 
 def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:

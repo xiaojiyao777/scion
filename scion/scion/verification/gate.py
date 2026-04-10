@@ -48,9 +48,11 @@ class VerificationGate:
         self,
         problem_spec: Optional[ProblemSpec] = None,
         runner: Optional[Runner] = None,
+        metrics_dir: Optional[str] = None,
     ) -> None:
         self._spec = problem_spec
         self._runner = runner
+        self._metrics_dir = metrics_dir
 
     def run(
         self,
@@ -108,7 +110,7 @@ class VerificationGate:
             return _fail(checks, r)
 
         # --- V7: state_leak (heavy) ---
-        r = check_state_leak(self._spec, self._runner, candidate_workspace)
+        r = check_state_leak(self._spec, self._runner, candidate_workspace, metrics_dir=self._metrics_dir)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
