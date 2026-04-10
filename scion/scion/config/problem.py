@@ -1,8 +1,21 @@
 from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Optional, Literal, Set
+from typing import List, Dict, Optional, Literal, Set, Tuple
 import yaml
 import os
+
+
+class ParameterSearchConfig(BaseModel):
+    enabled: bool = True
+    trigger: Literal["on_promote"] = "on_promote"
+    target: Literal["operator_weights"] = "operator_weights"
+    strategy: Literal["random_local", "bayesian"] = "random_local"
+    n_initial_random: int = 8
+    n_iterations: int = 8
+    n_eval_seeds: int = 2
+    weight_bounds: Tuple[float, float] = (0.05, 5.0)
+    eval_cases: List[str] = Field(default_factory=list)
+
 
 class SolverConfig(BaseModel):
     time_limit_sec: int = 300
@@ -27,6 +40,7 @@ class ProblemSpec(BaseModel):
     operator_categories: List[str]
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
+    parameter_search: ParameterSearchConfig = Field(default_factory=ParameterSearchConfig)
 
     @property
     def operator_pool_categories(self) -> List[str]:

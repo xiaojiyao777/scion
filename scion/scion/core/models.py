@@ -284,6 +284,25 @@ class FailureEvent:
     retryable: bool = True
 
 
+@dataclass(frozen=True)
+class WeightConfig:
+    weights: Dict[str, float]
+    source: Literal["uniform", "optimized", "manual"]
+    optimization_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class WeightOptimizationResult:
+    baseline_weights: Dict[str, float]
+    best_weights: Dict[str, float]
+    baseline_score: float
+    best_score: float
+    improved: bool
+    n_evaluations: int
+    elapsed_seconds: float
+    observations_ref: str  # path to observations JSON
+
+
 @dataclass
 class StepRecord:
     """Record of one completed proposal+evaluation cycle (explore step).
