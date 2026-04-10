@@ -767,3 +767,138 @@ class TestCampaignSummaryJson:
         )
         assert sr.code_archive_ref == "/some/path"
         assert sr.cache_stats is None
+
+
+# ---------------------------------------------------------------------------
+# T16 — _on_promote weight optimization hook
+# ---------------------------------------------------------------------------
+
+def _promote_protocol():
+    """Return a protocol that produces screening→validation→frozen pass."""
+    return MockExperimentProtocol(results=[
+        _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+        _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
+                              win_rate=0.7, ci_low=0.005, ci_high=0.02),
+        _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
+                              win_rate=0.7, ci_low=0.005, ci_high=0.02),
+    ])
+
+
+def _run_to_promote(cm):
+    """Drive campaign manager through three steps to reach PROMOTE."""
+    cm.run_one_step()
+    cm.run_one_step()
+    result = cm.run_one_step()
+    assert result.decision == Decision.PROMOTE
+    return result
+
+
+def _setup_for_on_promote(tmp_path, with_registry=False):
+    """Create a campaign + workspace ready to call _on_promote directly.
+
+    Returns (cm, branch, ws_path).
+    """
+    import yaml as _yaml
+
+    ws = tmp_path / "branch_ws"
+    ws.mkdir(parents=True)
+    (ws / "operators").mkdir(exist_ok=True)
+    (ws / "operators" / "local_search.py").write_text(_VALID_CODE)
+
+    if with_registry:
+        ops = [
+            {"name": "swap", "file_path": "operators/swap.py",
+             "category": "order_level", "weight": 0.6, "class_name": "Swap"},
+            {"name": "move", "file_path": "operators/move.py",
+             "category": "order_level", "weight": 0.4, "class_name": "Move"},
+        ]
+        (ws / "registry.yaml").write_text(_yaml.dump({"operators": ops}))
+
+    cm = _campaign(tmp_path)
+    branch = cm._branch_ctrl.create_branch(cm._champion)
+    cm._branch_workspaces[branch.branch_id] = str(ws)
+    return cm, branch, str(ws)
+
+
+class TestPromoteWeightOptimizationHook:
+    def test_on_promote_runs_weight_optimization(self, tmp_path):
+        """promote → _run_weight_optimization is called when enabled + runner present."""
+        import types
+        from scion.core.models import WeightOptimizationResult
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version):
+            call_log.append(version)
+            return WeightOptimizationResult(
+                baseline_weights={},
+                best_weights={},
+                baseline_score=0.5,
+                best_score=0.8,
+                improved=True,
+                n_evaluations=8,
+                elapsed_seconds=1.0,
+                observations_ref="",
+            )
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        # Attach a protocol with a runner attribute so the enabled-and-runner check passes
+        protocol = MockExperimentProtocol(results=[])
+        protocol.runner = object()
+        cm._experiment_protocol = protocol
+        # spec.parameter_search.enabled is True by default
+
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+        cm._on_promote(branch)
+
+        assert len(call_log) == 1, "Expected _run_weight_optimization to be called once"
+        assert call_log[0] == 2  # champion version bumps from 1 → 2
+
+    def test_on_promote_rebuilds_operator_pool_from_registry(self, tmp_path):
+        """After promote, champion.operator_pool comes from snapshot registry.yaml."""
+        cm, branch, _ = _setup_for_on_promote(tmp_path, with_registry=True)
+        cm._spec.parameter_search.enabled = False  # isolate: no optimizer
+        cm._experiment_protocol = None
+
+        cm._on_promote(branch)
+
+        pool = cm._champion.operator_pool
+        assert cm._champion.version == 2
+        # Registry had swap + move — pool should include them
+        assert "swap" in pool and "move" in pool
+
+    def test_on_promote_without_parameter_search(self, tmp_path):
+        """parameter_search.enabled=False → _run_weight_optimization is NOT called."""
+        import types
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version):
+            call_log.append(version)
+            return None
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        cm._spec.parameter_search.enabled = False  # type: ignore[attr-defined]
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+
+        cm._on_promote(branch)
+
+        assert call_log == [], "_run_weight_optimization must not be called when disabled"
+
+    def test_on_promote_without_runner(self, tmp_path):
+        """experiment_protocol=None → no optimization triggered, no crash."""
+        import types
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version):
+            call_log.append(version)
+            return None
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        cm._experiment_protocol = None  # no runner
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+
+        cm._on_promote(branch)  # must not crash
+
+        assert call_log == [], "_run_weight_optimization must not be called without experiment_protocol"

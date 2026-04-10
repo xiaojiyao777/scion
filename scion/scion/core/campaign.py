@@ -947,6 +947,7 @@ class CampaignManager:
 
     def _on_promote(self, branch: Branch) -> None:
         """Update champion and mark all other active branches stale."""
+        import os as _os
         bid = branch.branch_id
         ws = self._branch_workspaces.get(bid)
         if ws is None:
@@ -970,10 +971,41 @@ class CampaignManager:
             logger.error("Branch %s: champion snapshot failed: %s", bid, exc)
             snapshot_path = ws  # fallback
 
+        # --- v0.2: Weight optimization ---
+        param_cfg = self._spec.parameter_search
+        if param_cfg.enabled and self._experiment_protocol is not None:
+            try:
+                opt_result = self._run_weight_optimization(snapshot_path, new_version)
+                if opt_result is not None and opt_result.improved:
+                    from scion.runtime.pool_manager import update_weights
+                    registry_path = _os.path.join(snapshot_path, "registry.yaml")
+                    if _os.path.exists(registry_path):
+                        update_weights(registry_path, opt_result.best_weights)
+                    logger.info(
+                        "Champion v%d: weights optimized (score %.3f → %.3f)",
+                        new_version, opt_result.baseline_score, opt_result.best_score,
+                    )
+                if opt_result is not None:
+                    self._registry.record_weight_optimization(
+                        campaign_id=self._campaign_id,
+                        champion_version=new_version,
+                        result=opt_result,
+                    )
+            except Exception as exc:
+                logger.error("Weight optimization failed for champion v%d: %s", new_version, exc)
+
+        # Rebuild operator_pool from final registry.yaml
+        from scion.runtime.pool_manager import read_registry
+        registry_path = _os.path.join(snapshot_path, "registry.yaml")
+        try:
+            final_pool = read_registry(registry_path)
+        except Exception:
+            final_pool = self._champion.operator_pool  # fallback
+
         code_hash = self._materializer.compute_code_hash(ws)
         new_champion = ChampionState(
             version=new_version,
-            operator_pool=self._champion.operator_pool,
+            operator_pool=final_pool,
             solver_config_hash=self._champion.solver_config_hash,
             code_snapshot_path=snapshot_path,
             code_snapshot_hash=code_hash,
@@ -983,6 +1015,89 @@ class CampaignManager:
         stale_ids = self._branch_ctrl.mark_all_stale(new_version)
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
+
+    def _run_weight_optimization(self, champion_snapshot: str, version: int):
+        """Run weight optimization on a copy of the champion snapshot.
+
+        Returns WeightOptimizationResult or None if prerequisites are missing.
+        """
+        import os as _os
+        import shutil
+        from scion.parameter.optimizer import RandomLocalWeightOptimizer
+        from scion.parameter.evaluator import collect_baseline, evaluate_weights
+        from scion.parameter.search_space import ParameterSearchSpace
+        from scion.runtime.pool_manager import read_weights
+
+        param_cfg = self._spec.parameter_search
+
+        # Locate runner
+        runner = getattr(self._experiment_protocol, 'runner',
+                         getattr(self._experiment_protocol, '_runner', None))
+        if runner is None:
+            logger.warning("No runner available for weight optimization")
+            return None
+
+        # Require a registry.yaml in the snapshot
+        registry_path = _os.path.join(champion_snapshot, "registry.yaml")
+        if not _os.path.exists(registry_path):
+            logger.warning("No registry.yaml in snapshot %s; skipping weight opt", champion_snapshot)
+            return None
+
+        # Create evaluation workspace (isolated copy of champion snapshot)
+        eval_ws = _os.path.join(self._campaign_dir, f"weight_opt_v{version}")
+        if _os.path.exists(eval_ws):
+            shutil.rmtree(eval_ws)
+        shutil.copytree(champion_snapshot, eval_ws)
+
+        # Determine eval cases (fall back to screening split)
+        eval_cases = list(param_cfg.eval_cases)
+        if not eval_cases:
+            eval_cases = list(self._split_manifest.screening)
+        resolved_cases = [
+            _os.path.join(self._spec.root_dir, c) if not _os.path.isabs(c) else c
+            for c in eval_cases
+        ]
+
+        seeds = list(self._seed_ledger.screening)[:param_cfg.n_eval_seeds]
+        time_limit = getattr(getattr(self._spec, 'solver', None), 'time_limit_sec', 300)
+
+        # Read current weights from eval workspace
+        current_weights = read_weights(_os.path.join(eval_ws, "registry.yaml"))
+        operator_names = tuple(current_weights.keys())
+
+        # Collect baseline
+        baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
+
+        # Build search space
+        search_space = ParameterSearchSpace(
+            operator_names=operator_names,
+            weight_bounds=param_cfg.weight_bounds,
+            n_initial_random=param_cfg.n_initial_random,
+            n_iterations=param_cfg.n_iterations,
+            n_eval_seeds=param_cfg.n_eval_seeds,
+            eval_cases=tuple(resolved_cases),
+        )
+
+        def eval_fn(weights):
+            return evaluate_weights(
+                weights=weights,
+                workspace=eval_ws,
+                cases=resolved_cases,
+                seeds=seeds,
+                runner=runner,
+                time_limit_sec=time_limit,
+                baseline_objectives=baseline,
+            )
+
+        optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
+        result = optimizer.optimize()
+
+        try:
+            shutil.rmtree(eval_ws)
+        except Exception:
+            pass
+
+        return result
 
     # ------------------------------------------------------------------
     # Failure handling
