@@ -125,4 +125,32 @@ echo "SCION_API_KEY=..." >> .env
 
 ---
 
+## 7. 实验产物归档
+
+### 7.1 不进 git 的内容
+
+- `scion.db`（SQLite lineage，几十 MB）
+- `workspaces/`（候选代码快照）
+- `metrics/`（V5 诊断输出 JSON）
+- `archive/`（被拦截候选代码）
+
+### 7.2 归档位置
+
+```bash
+# 实验结束后压缩归档
+mkdir -p ~/research/scion-experiments/
+tar czf ~/research/scion-experiments/v02-sprintA-$(date +%Y%m%d).tar.gz /tmp/scion_v3_run/
+```
+
+产物存放在 `~/research/scion-experiments/`，**不放入 git repo**。
+
+### 7.3 进 git 的内容
+
+只有精简的实验摘要（手动提取的关键指标）：
+
+- `docs/experiment-notes/v02-sprintA-note.md`（几 KB）
+- 关键图表（PNG，放 `docs/figures/`）
+
+---
+
 *本文档是实验可复现性的保障。每次实验前必须确认 baseline 版本。*
