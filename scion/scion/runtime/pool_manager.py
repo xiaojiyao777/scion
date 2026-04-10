@@ -114,3 +114,57 @@ def _stem(file_path: str) -> str:
 
 def _guess_class_name(stem: str) -> str:
     return "".join(word.capitalize() for word in stem.split("_"))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level registry IO
+# ─────────────────────────────────────────────────────────────────────────────
+
+def read_registry(registry_path: str) -> Dict[str, OperatorConfig]:
+    """Read operator pool from registry.yaml. Returns {name: OperatorConfig}."""
+    with open(registry_path, 'r') as f:
+        data = yaml.safe_load(f)
+    pool = {}
+    for op in data.get('operators', []):
+        name = op['name']
+        pool[name] = OperatorConfig(
+            name=name,
+            file_path=op['file_path'],
+            category=op.get('category', ''),
+            weight=op.get('weight', 1.0),
+            class_name=op.get('class_name', _guess_class_name(name)),
+        )
+    return pool
+
+
+def read_weights(registry_path: str) -> Dict[str, float]:
+    """Read only the weight values from registry.yaml. Returns {operator_name: weight}."""
+    pool = read_registry(registry_path)
+    return {name: op.weight for name, op in pool.items()}
+
+
+def update_weights(registry_path: str, weights: Dict[str, float]) -> None:
+    """Update only the weight field in registry.yaml. Preserves all other fields.
+
+    Raises:
+        KeyError: if weights keys don't exactly match registry operator names.
+    """
+    with open(registry_path, 'r') as f:
+        data = yaml.safe_load(f)
+
+    operators = data.get('operators', [])
+    registry_names = {op['name'] for op in operators}
+    weight_names = set(weights.keys())
+
+    if registry_names != weight_names:
+        missing_in_weights = registry_names - weight_names
+        extra_in_weights = weight_names - registry_names
+        raise KeyError(
+            f"Weight map mismatch. Missing: {missing_in_weights}, Extra: {extra_in_weights}"
+        )
+
+    for op in operators:
+        op['weight'] = round(weights[op['name']], 6)
+
+    with open(registry_path, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
