@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from pydantic import ValidationError
+
 from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.schemas import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
@@ -13,7 +15,13 @@ from scion.proposal.schemas import (
     HYPOTHESIS_PROMPT_TEMPLATE,
     CODE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
+    HypothesisProposalInput,
+    PatchProposalInput,
 )
+
+
+class ProposalValidationError(Exception):
+    """Raised when LLM response fails Pydantic schema validation."""
 
 
 class CreativeLayer:
@@ -78,25 +86,33 @@ class CreativeLayer:
 
 def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
+    try:
+        validated = HypothesisProposalInput(**raw)
+    except ValidationError as exc:
+        raise ProposalValidationError(str(exc)) from exc
     return HypothesisProposal(
-        hypothesis_text=str(raw.get("hypothesis_text", "")),
-        change_locus=str(raw.get("change_locus", "")),
-        action=raw.get("action", "modify"),  # type: ignore[arg-type]
-        target_file=raw.get("target_file") or None,
-        predicted_direction=raw.get("predicted_direction", "exploratory"),  # type: ignore[arg-type]
-        target_weakness=str(raw.get("target_weakness", "")),
-        expected_effect=str(raw.get("expected_effect", "")),
-        suggested_weight=_to_float_or_none(raw.get("suggested_weight")),
+        hypothesis_text=validated.hypothesis_text,
+        change_locus=validated.change_locus,
+        action=validated.action,  # type: ignore[arg-type]
+        target_file=validated.target_file or None,
+        predicted_direction=validated.predicted_direction,  # type: ignore[arg-type]
+        target_weakness=validated.target_weakness,
+        expected_effect=validated.expected_effect,
+        suggested_weight=validated.suggested_weight,
     )
 
 
 def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
+    try:
+        validated = PatchProposalInput(**raw)
+    except ValidationError as exc:
+        raise ProposalValidationError(str(exc)) from exc
     return PatchProposal(
-        file_path=str(raw.get("file_path", "")),
-        action=raw.get("action", "modify"),  # type: ignore[arg-type]
-        code_content=str(raw.get("code_content", "")),
-        test_hint=raw.get("test_hint") or None,
+        file_path=validated.file_path,
+        action=validated.action,  # type: ignore[arg-type]
+        code_content=validated.code_content,
+        test_hint=validated.test_hint or None,
     )
 
 

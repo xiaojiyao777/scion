@@ -32,6 +32,26 @@ _SENSITIVE_OS_ATTRS = frozenset({"system", "popen", "execve", "execvp", "execv"}
 _SENSITIVE_OPEN_MODES = frozenset({"w", "wb", "a", "ab", "x", "xb", "w+", "wb+", "a+", "ab+"})
 
 
+# Non-rng random source calls that bypass the operator's rng parameter
+_NON_RNG_RANDOM_PATTERNS = frozenset(
+    {
+        ("uuid", "uuid4"),
+        ("uuid", "uuid1"),
+        ("random", "random"),
+        ("random", "randint"),
+        ("random", "choice"),
+        ("random", "sample"),
+        ("random", "shuffle"),
+        ("random", "uniform"),
+        ("random", "randrange"),
+        ("os", "urandom"),
+        ("secrets", "token_bytes"),
+        ("secrets", "token_hex"),
+        ("secrets", "token_urlsafe"),
+    }
+)
+
+
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
 
@@ -75,6 +95,7 @@ class ContractGate:
         checks.append(self._c7_interface_signature(patch))
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
+        checks.append(self._c9b_non_rng_random(patch))
 
         return _build_result(checks)
 
@@ -303,6 +324,42 @@ class ContractGate:
         passed = len(violations) == 0
         detail = "no sensitive APIs" if passed else f"sensitive APIs detected: {violations}"
         return _cr("C9_sensitive_api", passed, "heavy", detail, t0)
+
+    # ------------------------------------------------------------------
+    # C9b: Non-rng random source detection
+    # ------------------------------------------------------------------
+
+    def _c9b_non_rng_random(self, patch: PatchProposal) -> CheckResult:
+        t0 = time.monotonic_ns()
+        if patch.action == "delete":
+            return _cr("C9b_non_rng_random", True, "heavy", "delete action — no randomness check", t0)
+
+        try:
+            tree = ast.parse(patch.code_content)
+        except SyntaxError:
+            return _cr("C9b_non_rng_random", False, "heavy", "unparseable code", t0)
+
+        violations: List[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not isinstance(func, ast.Attribute):
+                continue
+            obj_name: Optional[str] = None
+            if isinstance(func.value, ast.Name):
+                obj_name = func.value.id
+            if obj_name is None:
+                continue
+            # Skip rng.* calls — the operator's rng parameter
+            if obj_name == "rng":
+                continue
+            if (obj_name, func.attr) in _NON_RNG_RANDOM_PATTERNS:
+                violations.append(f"{obj_name}.{func.attr}")
+
+        passed = len(violations) == 0
+        detail = "no non-rng random sources" if passed else f"non-rng random sources detected: {violations}"
+        return _cr("C9b_non_rng_random", passed, "heavy", detail, t0)
 
     # ------------------------------------------------------------------
     # C10: Novelty check

@@ -24,6 +24,7 @@ from scion.failure.router import FailureRouter, RetryConfig
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError
+from scion.proposal.engine import ProposalValidationError
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import HypothesisStore
@@ -302,7 +303,7 @@ class CampaignManager:
                 bid, patch.file_path, patch.action, len(patch.code_content or ""),
             )
         if patch is None:
-            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+            self._hyp_store.mark_status(h_record.hypothesis_id, "code_failed")
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=None,
@@ -562,7 +563,7 @@ class CampaignManager:
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
-        except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError) as exc:
+        except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, ProposalValidationError) as exc:
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
             self._handle_failure(branch, failure)
@@ -596,7 +597,7 @@ class CampaignManager:
         )
         try:
             return self._creative.generate_code(context)
-        except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError) as exc:
+        except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, ProposalValidationError) as exc:
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
             self._handle_failure(branch, failure)
@@ -1048,6 +1049,12 @@ class CampaignManager:
         if _os.path.exists(eval_ws):
             shutil.rmtree(eval_ws)
         shutil.copytree(champion_snapshot, eval_ws)
+        # Fix read-only permissions from snapshot
+        for _root, _dirs, _files in _os.walk(eval_ws):
+            for _d in _dirs:
+                _os.chmod(_os.path.join(_root, _d), 0o755)
+            for _f in _files:
+                _os.chmod(_os.path.join(_root, _f), 0o644)
 
         # Determine eval cases (fall back to screening split)
         eval_cases = list(param_cfg.eval_cases)
