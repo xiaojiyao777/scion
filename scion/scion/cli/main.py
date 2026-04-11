@@ -201,9 +201,31 @@ def _get_registry(campaign_dir: str):
 def inspect_campaign(
     campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
 ) -> None:
-    """Campaign overview: total events, branches, champions, gate stats."""
+    """Campaign overview: total events, branches, champions, gate stats, weight optimizations."""
     registry = _get_registry(campaign_dir)
     summary = registry.get_campaign_summary()
+
+    # Enrich with weight optimization history
+    weight_opts = registry.query_weight_optimizations()
+    if weight_opts:
+        import json as _json
+        latest = weight_opts[-1]
+        best_weights = {}
+        try:
+            best_weights = _json.loads(latest.get("best_weights_json") or "{}")
+        except Exception:
+            pass
+        summary["weight_optimization"] = {
+            "total_runs": len(weight_opts),
+            "latest_champion_version": latest.get("champion_version"),
+            "latest_improved": bool(latest.get("improved")),
+            "latest_baseline_score": latest.get("baseline_score"),
+            "latest_best_score": latest.get("best_score"),
+            "latest_best_weights": best_weights,
+        }
+    else:
+        summary["weight_optimization"] = None
+
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -296,8 +318,13 @@ def inspect_hypothesis(
 def report_summary(
     campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Write JSON report to file"),
+    markdown: bool = typer.Option(False, "--markdown", "-m", help="Output as markdown instead of JSON"),
 ) -> None:
-    """Campaign summary: total rounds, champion version, gate intercept rates."""
+    """Campaign summary: total rounds, champion version, gate intercept rates.
+
+    Includes family distribution, stagnation signals, verification failure
+    breakdown, and weight optimization results when available.
+    """
     campaign_path = Path(campaign_dir).resolve()
     db_path = campaign_path / "scion.db"
     state_file = campaign_path / ".scion_state.json"
@@ -312,9 +339,55 @@ def report_summary(
         contract_failures = db_summary.get("contract_failures", 0)
         verification_failures = db_summary.get("verification_failures", 0)
         by_decision = db_summary.get("by_decision", {})
+
+        # Family distribution from hypotheses.change_locus
+        import sqlite3 as _sqlite3
+        family_dist: dict = {}
+        with _sqlite3.connect(str(db_path)) as conn:
+            for row in conn.execute(
+                "SELECT change_locus, COUNT(*) FROM hypotheses "
+                "WHERE change_locus IS NOT NULL GROUP BY change_locus ORDER BY 2 DESC"
+            ).fetchall():
+                family_dist[row[0]] = row[1]
+
+        # Weight optimization results
+        weight_opt_records = registry.query_weight_optimizations()
+        weight_opt_summary = None
+        if weight_opt_records:
+            improved_count = sum(1 for r in weight_opt_records if r.get("improved"))
+            latest = weight_opt_records[-1]
+            weight_opt_summary = {
+                "total_runs": len(weight_opt_records),
+                "improved_count": improved_count,
+                "latest_baseline_score": latest.get("baseline_score"),
+                "latest_best_score": latest.get("best_score"),
+                "latest_improved": bool(latest.get("improved")),
+            }
+
+        # Stagnation signals from campaign_summary.json (if present)
+        stagnation_signals: list = []
+        summary_file = campaign_path / "campaign_summary.json"
+        if summary_file.exists():
+            try:
+                cs = json.loads(summary_file.read_text())
+                stagnation_signals = cs.get("stagnation_signals", [])
+            except Exception:
+                pass
+
+        # Verification failure breakdown
+        vfail_breakdown: dict = {}
+        all_failures = registry.query_failures()
+        for evt in all_failures:
+            if evt.get("verification_result") == "failed":
+                stage = evt.get("decision_reason") or "unknown"
+                vfail_breakdown[stage] = vfail_breakdown.get(stage, 0) + 1
     else:
         total_events = n_champions = contract_failures = verification_failures = 0
         by_decision = {}
+        family_dist = {}
+        weight_opt_summary = None
+        stagnation_signals = []
+        vfail_breakdown = {}
 
     v_intercept = round(verification_failures / total_events, 4) if total_events > 0 else 0.0
     c_intercept = round(contract_failures / total_events, 4) if total_events > 0 else 0.0
@@ -335,7 +408,57 @@ def report_summary(
         "verification_intercept_rate": v_intercept,
         "screening_pass_rate": screening_pass_rate,
         "by_decision": by_decision,
+        "family_distribution": family_dist,
+        "verification_failure_breakdown": vfail_breakdown,
+        "weight_optimization": weight_opt_summary,
+        "stagnation_signals": stagnation_signals,
     }
+
+    if markdown:
+        lines = [
+            f"# Campaign Report: {meta.get('problem_name', 'unknown')}",
+            "",
+            "## Overview",
+            f"- Total experiments: {total_events}",
+            f"- Champion promotions: {promoted}",
+            f"- Latest champion version: {n_champions}",
+            f"- Contract intercept rate: {c_intercept:.1%}",
+            f"- Verification intercept rate: {v_intercept:.1%}",
+            f"- Screening pass rate: {screening_pass_rate:.1%}",
+            "",
+        ]
+        if family_dist:
+            lines.append("## Hypothesis Family Distribution")
+            for fam, cnt in family_dist.items():
+                lines.append(f"- {fam}: {cnt}")
+            lines.append("")
+        if vfail_breakdown:
+            lines.append("## Verification Failure Breakdown")
+            for reason, cnt in sorted(vfail_breakdown.items(), key=lambda x: -x[1]):
+                lines.append(f"- {reason}: {cnt}")
+            lines.append("")
+        if weight_opt_summary:
+            lines.append("## Weight Optimization")
+            lines.append(f"- Runs: {weight_opt_summary['total_runs']}")
+            lines.append(f"- Improved: {weight_opt_summary['improved_count']}")
+            lines.append(f"- Latest baseline score: {weight_opt_summary['latest_baseline_score']}")
+            lines.append(f"- Latest best score: {weight_opt_summary['latest_best_score']}")
+            lines.append("")
+        if stagnation_signals:
+            lines.append("## Stagnation Signals")
+            for sig in stagnation_signals:
+                lines.append(
+                    f"- [{sig.get('severity', '?').upper()}] {sig.get('kind', '?')}: "
+                    f"{sig.get('detail', '')}"
+                )
+            lines.append("")
+        report_text = "\n".join(lines)
+        if output:
+            Path(output).write_text(report_text)
+            typer.echo(f"Report written to {output}")
+        else:
+            typer.echo(report_text)
+        return
 
     report_json = json.dumps(report, indent=2)
     if output:
@@ -403,17 +526,19 @@ def report_failures(
 @app.command()
 def postmortem(
     campaign_dir: str = typer.Argument(..., help="Campaign directory containing campaign_summary.json"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Write markdown report to file"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Write report to file"),
+    json_output: bool = typer.Option(False, "--json", help="Output machine-readable JSON instead of markdown"),
 ) -> None:
     """Generate a postmortem analysis report from campaign artifacts.
 
-    Reads campaign_summary.json and formats a markdown report with:
+    Reads campaign_summary.json and formats a markdown (or JSON with --json) report with:
     - Campaign summary (rounds, duration, budget used)
     - Hypothesis family distribution
     - Failure breakdown by type
     - Stagnation signals (if any)
     - Promoted operators (if any)
     - Recommendations for next campaign
+    - Comparison across campaigns if multiple found in directory
     """
     campaign_path = Path(campaign_dir).resolve()
     summary_file = campaign_path / "campaign_summary.json"
@@ -543,13 +668,86 @@ def postmortem(
         lines.append(f"- Dominant family was '{dominant_family}' — consider diversifying.")
     lines.append("")
 
-    report = "\n".join(lines)
+    # 10. Comparison with sibling campaigns
+    parent = campaign_path.parent
+    sibling_summaries = []
+    for sibling in sorted(parent.iterdir()):
+        if sibling == campaign_path or not sibling.is_dir():
+            continue
+        sib_file = sibling / "campaign_summary.json"
+        if sib_file.exists():
+            try:
+                sib_data = json.loads(sib_file.read_text())
+                sibling_summaries.append((sibling.name, sib_data))
+            except Exception:
+                pass
+
+    if sibling_summaries:
+        lines.append("## Comparison with Other Campaigns")
+        lines.append(
+            f"| Campaign | Rounds | Champion | Promotions | Budget |"
+        )
+        lines.append("|---|---|---|---|---|")
+        # Current campaign row
+        this_name = campaign_path.name
+        this_rounds = summary.get("total_rounds", 0)
+        this_champ = summary.get("champion_version", 0)
+        this_prom = n_promoted
+        this_budget = f"{summary.get('budget_utilization', 0.0):.1%}"
+        lines.append(f"| **{this_name}** | {this_rounds} | {this_champ} | {this_prom} | {this_budget} |")
+        for sib_name, sib in sibling_summaries:
+            sib_steps = sib.get("steps", [])
+            sib_prom = sum(1 for s in sib_steps if s.get("decision") == "promote")
+            lines.append(
+                f"| {sib_name} | {sib.get('total_rounds', 0)} | "
+                f"{sib.get('champion_version', 0)} | {sib_prom} | "
+                f"{sib.get('budget_utilization', 0.0):.1%} |"
+            )
+        lines.append("")
+
+    md_report = "\n".join(lines)
+
+    if json_output:
+        # Build structured JSON postmortem
+        json_report = {
+            "campaign_id": summary.get("campaign_id", "unknown"),
+            "campaign_dir": str(campaign_path),
+            "total_rounds": summary.get("total_rounds", 0),
+            "champion_version": summary.get("champion_version", 0),
+            "budget_utilization": summary.get("budget_utilization", 0.0),
+            "total_steps": total_steps,
+            "n_failed": n_failed,
+            "n_promoted": n_promoted,
+            "family_coverage": family_coverage,
+            "verification_failure_breakdown": vfail,
+            "failure_stages": failure_stages,
+            "action_locus_coverage": action_locus,
+            "stagnation_signals": signals,
+            "diagnostics": diagnostics,
+            "cache_stats": cache_stats,
+            "comparisons": [
+                {
+                    "name": sib_name,
+                    "total_rounds": sib.get("total_rounds", 0),
+                    "champion_version": sib.get("champion_version", 0),
+                    "budget_utilization": sib.get("budget_utilization", 0.0),
+                }
+                for sib_name, sib in sibling_summaries
+            ],
+        }
+        report_text = json.dumps(json_report, indent=2)
+        if output:
+            Path(output).write_text(report_text)
+            typer.echo(f"Postmortem JSON written to {output}")
+        else:
+            typer.echo(report_text)
+        return
 
     if output:
-        Path(output).write_text(report)
+        Path(output).write_text(md_report)
         typer.echo(f"Postmortem report written to {output}")
     else:
-        typer.echo(report)
+        typer.echo(md_report)
 
 
 # ---------------------------------------------------------------------------

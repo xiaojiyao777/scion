@@ -1108,7 +1108,7 @@ class CampaignManager:
         """
         import os as _os
         import shutil
-        from scion.parameter.optimizer import RandomLocalWeightOptimizer
+        from scion.parameter.optimizer import RandomLocalWeightOptimizer, BayesianWeightOptimizer
         from scion.parameter.evaluator import collect_baseline, evaluate_weights
         from scion.parameter.search_space import ParameterSearchSpace
         from scion.runtime.pool_manager import read_weights
@@ -1181,6 +1181,8 @@ class CampaignManager:
             )
 
         optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
+        if getattr(param_cfg, 'strategy', 'random_local') == 'bayesian':
+            optimizer = BayesianWeightOptimizer(search_space, eval_fn, seed=version)
         result = optimizer.optimize()
 
         try:

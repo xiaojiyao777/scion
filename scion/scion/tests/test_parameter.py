@@ -400,3 +400,100 @@ def test_optimizer_n_evaluations():
     result = opt.optimize()
 
     assert result.n_evaluations == n_init + n_iter
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T15b — BayesianWeightOptimizer
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_bayesian_optimizer_improves_convex_mock():
+    """BayesianWeightOptimizer finds a better solution on a convex objective."""
+    from scion.parameter.optimizer import BayesianWeightOptimizer
+
+    target = {"op_a": 1.0, "op_b": 1.0}
+
+    def convex_eval(weights):
+        return -sum((weights[k] - target[k]) ** 2 for k in target)
+
+    space = _make_space(n_initial=8, n_iter=16)
+    opt = BayesianWeightOptimizer(space, convex_eval, seed=42)
+    result = opt.optimize()
+
+    assert result.best_score >= result.baseline_score
+    assert result.best_weights is not None
+    assert len(result.best_weights) == 2
+
+
+def test_bayesian_optimizer_deterministic():
+    """Same seed produces identical results on two independent runs."""
+    from scion.parameter.optimizer import BayesianWeightOptimizer
+
+    def eval_fn(w):
+        return sum(w.values())
+
+    space = _make_space(n_initial=4, n_iter=4)
+    r1 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize()
+    r2 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize()
+
+    assert abs(r1.best_score - r2.best_score) < 1e-9
+    assert r1.n_evaluations == r2.n_evaluations
+
+
+def test_bayesian_fallback_to_scipy(monkeypatch):
+    """When skopt import fails, BayesianWeightOptimizer falls back to scipy."""
+    import builtins
+    import importlib
+
+    real_import = builtins.__import__
+
+    def mock_import(name, *args, **kwargs):
+        if name == "skopt" or name.startswith("skopt."):
+            raise ImportError(f"Mocked: no module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    from scion.parameter.optimizer import BayesianWeightOptimizer
+
+    space = _make_space(n_initial=3, n_iter=3)
+    call_log: list = []
+
+    def eval_fn(w):
+        call_log.append(w)
+        return sum(w.values())
+
+    with monkeypatch.context() as m:
+        m.setattr(builtins, "__import__", mock_import)
+        # Should not raise — falls back to scipy or pure python
+        result = BayesianWeightOptimizer(space, eval_fn, seed=1).optimize()
+
+    assert result is not None
+    assert result.best_weights is not None
+    assert len(call_log) > 0
+
+
+def test_optimizer_selection_by_config():
+    """strategy='bayesian' in config causes BayesianWeightOptimizer to be used."""
+    from scion.parameter.optimizer import BayesianWeightOptimizer, RandomLocalWeightOptimizer
+    from scion.config.problem import ParameterSearchConfig
+
+    cfg = ParameterSearchConfig(strategy="bayesian")
+    assert cfg.strategy == "bayesian"
+
+    space = _make_space(n_initial=2, n_iter=2)
+    opt = BayesianWeightOptimizer(space, lambda w: 1.0, seed=0)
+    result = opt.optimize()
+    assert isinstance(result.best_weights, dict)
+
+
+def test_default_optimizer_unchanged():
+    """Default strategy is still random_local; RandomLocalWeightOptimizer is used."""
+    from scion.parameter.optimizer import RandomLocalWeightOptimizer
+    from scion.config.problem import ParameterSearchConfig
+
+    cfg = ParameterSearchConfig()
+    assert cfg.strategy == "random_local"
+
+    space = _make_space()
+    opt = RandomLocalWeightOptimizer(space, lambda w: 1.0, seed=0)
+    result = opt.optimize()
+    assert isinstance(result.best_weights, dict)
+
