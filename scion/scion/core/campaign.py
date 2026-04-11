@@ -20,6 +20,7 @@ from scion.core.models import (
 )
 from scion.core.scheduler import Scheduler
 from scion.core.termination import CampaignState, TerminationChecker, TerminationConfig
+from scion.core.stagnation import StagnationDetector, StagnationSignal, CampaignDiagnosis
 from scion.failure.router import FailureRouter, RetryConfig
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
@@ -149,6 +150,11 @@ class CampaignManager:
         self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
         self._start_time = datetime.now()
 
+        # Stagnation / diagnosis (T25/T23)
+        self._stagnation_detector = StagnationDetector(window_size=5)
+        self._stagnation_signals: List[StagnationSignal] = []
+        self._diagnostics: List[Dict[str, Any]] = []
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -162,6 +168,8 @@ class CampaignManager:
             result = self.run_one_step()
             if result.stopped:
                 break
+            # T25/T23: stagnation check after each round
+            self._run_stagnation_check()
         self._write_campaign_summary()
 
     def run_one_step(self) -> StepResult:
@@ -1134,6 +1142,52 @@ class CampaignManager:
         return result
 
     # ------------------------------------------------------------------
+    # Stagnation detection (T25/T23)
+    # ------------------------------------------------------------------
+
+    def _run_stagnation_check(self) -> None:
+        """Check for stagnation signals after each round and log critical ones."""
+        signals = self._stagnation_detector.check(self._step_history)
+        if signals:
+            self._stagnation_signals = signals  # keep latest signals
+            for sig in signals:
+                if sig.severity == "critical":
+                    logger.warning(
+                        "STAGNATION [%s] %s — suggested: %s",
+                        sig.kind, sig.detail, sig.suggested_action,
+                    )
+                else:
+                    logger.info(
+                        "Stagnation signal [%s] %s — suggested: %s",
+                        sig.kind, sig.detail, sig.suggested_action,
+                    )
+            # T23: generate structured diagnosis on critical signals
+            diagnosis = self._stagnation_detector.diagnose(
+                self._round_num, self._step_history
+            )
+            if diagnosis is not None:
+                diag_dict = {
+                    "round_num": diagnosis.round_num,
+                    "recommendation": diagnosis.recommendation,
+                    "family_distribution": diagnosis.family_distribution,
+                    "failure_pattern": diagnosis.failure_pattern,
+                    "signals": [
+                        {
+                            "kind": s.kind,
+                            "severity": s.severity,
+                            "detail": s.detail,
+                            "suggested_action": s.suggested_action,
+                        }
+                        for s in diagnosis.signals
+                    ],
+                }
+                self._diagnostics.append(diag_dict)
+                logger.warning(
+                    "Campaign diagnosis at round %d: %s",
+                    diagnosis.round_num, diagnosis.recommendation,
+                )
+
+    # ------------------------------------------------------------------
     # Failure handling
     # ------------------------------------------------------------------
 
@@ -1186,11 +1240,67 @@ class CampaignManager:
         """Write campaign_summary.json with per-step detail."""
         import json as _json
         from pathlib import Path as _Path
+        from collections import Counter as _Counter
+
+        # --- Aggregate cache stats across all steps ---
+        total_tokens = 0
+        cache_read_tokens = 0
+        cache_create_tokens = 0
+        for step in self._step_history:
+            cs = step.cache_stats or {}
+            total_tokens += cs.get("total", 0)
+            cache_read_tokens += cs.get("cache_read", 0)
+            cache_create_tokens += cs.get("cache_create", 0)
+        cache_hit_rate = round(cache_read_tokens / total_tokens, 4) if total_tokens > 0 else 0.0
+
+        # --- Verification failure breakdown by V-code ---
+        vfail_counter: Dict[str, int] = {}
+        for step in self._step_history:
+            if step.failure_stage == "verification" and step.failure_detail:
+                fd = step.failure_detail or ""
+                vcode = fd.split(":")[0].strip() if ":" in fd else fd.split()[0] if fd else "unknown"
+                vfail_counter[vcode] = vfail_counter.get(vcode, 0) + 1
+
+        # --- Action/locus coverage ---
+        action_locus_counter: Dict[str, int] = {}
+        for step in self._step_history:
+            key = f"{step.hypothesis.action}/{step.hypothesis.change_locus}"
+            action_locus_counter[key] = action_locus_counter.get(key, 0) + 1
+
+        # --- Family coverage (mechanism labels) ---
+        family_counter: Dict[str, int] = {}
+        from scion.proposal.context_manager import _extract_mechanism_label
+        for step in self._step_history:
+            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "")
+            family_counter[label] = family_counter.get(label, 0) + 1
+
+        # --- Budget utilization ---
+        budget_utilization = round(self._budget.used / self._budget.total, 4) if self._budget.total > 0 else 0.0
 
         summary: Dict[str, Any] = {
             "campaign_id": self._campaign_id,
             "total_rounds": self._round_num,
             "champion_version": self._champion.version,
+            "cache_stats": {
+                "total_tokens": total_tokens,
+                "cache_read_tokens": cache_read_tokens,
+                "cache_create_tokens": cache_create_tokens,
+                "cache_hit_rate": cache_hit_rate,
+            },
+            "verification_failure_breakdown": vfail_counter,
+            "action_locus_coverage": action_locus_counter,
+            "family_coverage": family_counter,
+            "budget_utilization": budget_utilization,
+            "stagnation_signals": [
+                {
+                    "kind": s.kind,
+                    "severity": s.severity,
+                    "detail": s.detail,
+                    "suggested_action": s.suggested_action,
+                }
+                for s in self._stagnation_signals
+            ],
+            "diagnostics": self._diagnostics,
             "steps": [],
         }
         for step in self._step_history:

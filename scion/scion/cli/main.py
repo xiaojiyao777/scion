@@ -397,6 +397,162 @@ def report_failures(
 
 
 # ---------------------------------------------------------------------------
+# scion postmortem (T24)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def postmortem(
+    campaign_dir: str = typer.Argument(..., help="Campaign directory containing campaign_summary.json"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Write markdown report to file"),
+) -> None:
+    """Generate a postmortem analysis report from campaign artifacts.
+
+    Reads campaign_summary.json and formats a markdown report with:
+    - Campaign summary (rounds, duration, budget used)
+    - Hypothesis family distribution
+    - Failure breakdown by type
+    - Stagnation signals (if any)
+    - Promoted operators (if any)
+    - Recommendations for next campaign
+    """
+    campaign_path = Path(campaign_dir).resolve()
+    summary_file = campaign_path / "campaign_summary.json"
+
+    if not summary_file.exists():
+        typer.echo(f"ERROR: campaign_summary.json not found at {summary_file}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        summary = json.loads(summary_file.read_text())
+    except Exception as exc:
+        typer.echo(f"ERROR: failed to read campaign_summary.json: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    lines: list = ["# Scion Campaign Postmortem", ""]
+
+    # 1. Campaign summary
+    lines.append("## Campaign Summary")
+    lines.append(f"- Campaign ID: {summary.get('campaign_id', 'unknown')}")
+    lines.append(f"- Total rounds: {summary.get('total_rounds', 0)}")
+    lines.append(f"- Champion version: {summary.get('champion_version', 0)}")
+    budget_util = summary.get("budget_utilization", 0.0)
+    lines.append(f"- Budget utilization: {budget_util:.1%}")
+    lines.append("")
+
+    # 2. Hypothesis family distribution
+    family_coverage = summary.get("family_coverage", {})
+    if family_coverage:
+        lines.append("## Hypothesis Family Distribution")
+        for family, count in sorted(family_coverage.items(), key=lambda x: -x[1]):
+            lines.append(f"- {family}: {count} hypothesis(es)")
+        lines.append("")
+
+    # 3. Failure breakdown
+    vfail = summary.get("verification_failure_breakdown", {})
+    action_locus = summary.get("action_locus_coverage", {})
+    steps = summary.get("steps", [])
+    total_steps = len(steps)
+    n_failed = sum(1 for s in steps if s.get("failure_stage"))
+    n_promoted = sum(1 for s in steps if s.get("decision") == "promote")
+
+    lines.append("## Failure Breakdown")
+    lines.append(f"- Total steps: {total_steps}")
+    lines.append(f"- Failures: {n_failed}")
+    lines.append(f"- Promotions: {n_promoted}")
+    if vfail:
+        lines.append("- Verification failures by type:")
+        for vtype, count in sorted(vfail.items(), key=lambda x: -x[1]):
+            lines.append(f"  - {vtype}: {count}")
+    # Failure stage breakdown
+    failure_stages: dict = {}
+    for s in steps:
+        fs = s.get("failure_stage")
+        if fs:
+            failure_stages[fs] = failure_stages.get(fs, 0) + 1
+    if failure_stages:
+        lines.append("- Failure stages:")
+        for stage, count in sorted(failure_stages.items(), key=lambda x: -x[1]):
+            lines.append(f"  - {stage}: {count}")
+    lines.append("")
+
+    # 4. Action/locus coverage
+    if action_locus:
+        lines.append("## Action/Locus Coverage")
+        for combo, count in sorted(action_locus.items(), key=lambda x: -x[1]):
+            lines.append(f"- {combo}: {count}")
+        lines.append("")
+
+    # 5. Cache stats
+    cache_stats = summary.get("cache_stats", {})
+    if cache_stats:
+        lines.append("## LLM Cache Statistics")
+        lines.append(f"- Total tokens: {cache_stats.get('total_tokens', 0)}")
+        lines.append(f"- Cache read tokens: {cache_stats.get('cache_read_tokens', 0)}")
+        lines.append(f"- Cache hit rate: {cache_stats.get('cache_hit_rate', 0.0):.1%}")
+        lines.append("")
+
+    # 6. Stagnation signals
+    signals = summary.get("stagnation_signals", [])
+    if signals:
+        lines.append("## Stagnation Signals")
+        for sig in signals:
+            lines.append(f"- [{sig.get('severity', '?').upper()}] {sig.get('kind', '?')}: {sig.get('detail', '')}")
+            lines.append(f"  Suggested action: {sig.get('suggested_action', '')}")
+        lines.append("")
+
+    # 7. Diagnostics
+    diagnostics = summary.get("diagnostics", [])
+    if diagnostics:
+        lines.append("## Campaign Diagnostics")
+        for diag in diagnostics:
+            lines.append(f"- Round {diag.get('round_num', '?')}: {diag.get('recommendation', '?')}")
+        lines.append("")
+
+    # 8. Promoted operators
+    promoted_steps = [s for s in steps if s.get("decision") == "promote"]
+    if promoted_steps:
+        lines.append("## Promoted Operators")
+        for s in promoted_steps:
+            hyp = s.get("hypothesis", {})
+            pr = s.get("protocol_result", {})
+            wr = pr.get("win_rate", "?") if pr else "?"
+            lines.append(
+                f"- Round {s.get('round', '?')}: {hyp.get('action', '?')} {hyp.get('target_file', '?')}"
+                f" (win_rate={wr})"
+            )
+            lines.append(f"  Hypothesis: {(hyp.get('text') or '')[:120]}")
+        lines.append("")
+
+    # 9. Recommendations for next campaign
+    lines.append("## Recommendations for Next Campaign")
+    # Derive recommendations from what we see
+    diagnostics_recs = [d.get("recommendation", "") for d in diagnostics]
+    if "check_environment" in diagnostics_recs:
+        lines.append("- **Critical**: Check execution environment — cascading failures detected.")
+    if "diversify_locus" in diagnostics_recs:
+        lines.append("- Diversify operator locus — oscillation pattern suggests current locus is stale.")
+    if "switch_action" in diagnostics_recs:
+        lines.append("- Switch mechanism family — plateau detected with same approach.")
+    if not diagnostics_recs:
+        if n_promoted == 0:
+            lines.append("- No operators promoted. Consider increasing max_rounds or exploring new mechanism families.")
+        else:
+            lines.append(f"- {n_promoted} operator(s) promoted. Continue refining promoted mechanisms.")
+    if family_coverage:
+        dominant_family = max(family_coverage, key=lambda k: family_coverage[k])
+        lines.append(f"- Dominant family was '{dominant_family}' — consider diversifying.")
+    lines.append("")
+
+    report = "\n".join(lines)
+
+    if output:
+        Path(output).write_text(report)
+        typer.echo(f"Postmortem report written to {output}")
+    else:
+        typer.echo(report)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

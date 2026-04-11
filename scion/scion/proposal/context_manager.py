@@ -78,6 +78,9 @@ class ContextManager:
         # T08: Build strategy guidance from family data
         strategy_guidance = _build_strategy_guidance(families) if families else ""
 
+        # T10: Champion baseline hints from most recent screening experiment
+        champion_baselines = _build_champion_baselines(step_history or [])
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -90,6 +93,7 @@ class ContextManager:
             "branch_direction": branch_direction,
             "exploration_coverage": exploration_coverage,
             "strategy_guidance": strategy_guidance,
+            "champion_baselines": champion_baselines,
         }
 
     # ------------------------------------------------------------------
@@ -397,16 +401,45 @@ def _render_pattern_summary(pattern) -> str:
 
 
 def _render_case_feedback(cf) -> str:
-    """Render a single CaseAggregateFeedback as compact prompt text."""
-    splits_str = f"{cf.median_delta_subcategory_splits:+.1f}" if cf.median_delta_subcategory_splits is not None else "NA"
-    cost_str = f"{cf.median_delta_total_cost:+.1f}" if cf.median_delta_total_cost is not None else "NA"
+    """Render a single CaseAggregateFeedback with directional language (T09)."""
     size = cf.case_features.get("size_bucket", "?")
+    n_orders = cf.case_features.get("n_orders", "?")
+    result_upper = cf.dominant_result.upper()
+
+    # Build directional description for the decisive objective
+    obj = cf.dominant_decisive_objective
+    splits_delta = cf.median_delta_subcategory_splits  # positive = candidate better (fewer splits)
+    cost_delta = cf.median_delta_total_cost            # positive = candidate better (lower cost)
+
+    if obj in ("business_aggregation", "mixed") and splits_delta is not None:
+        direction = "↓" if splits_delta > 0 else "↑"
+        abs_splits = abs(splits_delta)
+        decisive_str = f"Decisive: {obj} — candidate {direction}{abs_splits:.1f} splits (Δ={splits_delta:+.1f})"
+        if cost_delta is not None:
+            decisive_str += f", cost Δ={cost_delta:+.0f}"
+    elif obj == "cost" and cost_delta is not None:
+        direction = "↓" if cost_delta > 0 else "↑"
+        abs_cost = abs(cost_delta)
+        decisive_str = f"Decisive: {obj} — candidate cost {direction}{abs_cost:.0f} (Δ={cost_delta:+.0f})"
+        if splits_delta is not None:
+            decisive_str += f", splits Δ={splits_delta:+.1f}"
+    else:
+        # Fallback: show raw deltas
+        splits_str = f"{splits_delta:+.1f}" if splits_delta is not None else "NA"
+        cost_str = f"{cost_delta:+.0f}" if cost_delta is not None else "NA"
+        decisive_str = f"Decisive: {obj}  splits Δ={splits_str}, cost Δ={cost_str}"
+
+    # Champion baseline hint from case_features if available
+    champ_splits = cf.case_features.get("champion_splits")
+    baseline_note = ""
+    if champ_splits is not None:
+        baseline_note = f"\n        Champion baseline: ~{champ_splits} splits on this case"
+
     return (
-        f"      {cf.case_id}: {cf.dominant_result}"
+        f"      {cf.case_id} ({n_orders} orders, size={size}): {result_upper}"
         f" (W/L/T={cf.wins}/{cf.losses}/{cf.ties}, consistency={cf.seed_consistency:.2f})"
-        f"\n        decisive={cf.dominant_decisive_objective}"
-        f"  deltas: splits={splits_str}, cost={cost_str}"
-        f"  size={size}"
+        f"\n        {decisive_str}"
+        f"{baseline_note}"
     )
 
 
@@ -687,6 +720,68 @@ def _build_what_worked_section(branch_steps: List[StepRecord]) -> str:
             f"- {mechanism} ({h.change_locus}/{h.action}) {tag}{wr_str}: "
             f"{(h.hypothesis_text or '')[:100]}"
         )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# T10: Champion Baseline Hints
+# ---------------------------------------------------------------------------
+
+def _build_champion_baselines(step_history: List[StepRecord]) -> str:
+    """Build champion baseline section from most recent screening experiment (T10).
+
+    Extracts per-case champion objective values from the last screening step's
+    pair_feedback. If no experiment data exists, returns empty string.
+    """
+    # Find most recent step with pair_feedback (screening results)
+    last_with_pairs = None
+    for step in reversed(step_history):
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.pair_feedback
+        ):
+            last_with_pairs = step
+            break
+
+    if last_with_pairs is None:
+        return ""
+
+    # Aggregate champion splits per case from pair_feedback
+    from collections import defaultdict as _defaultdict
+    case_champ_splits: dict = _defaultdict(list)
+    for pair in last_with_pairs.protocol_result.pair_feedback:
+        ob = pair.objective_breakdown
+        if ob.champion_subcategory_splits is not None:
+            case_champ_splits[pair.case_id].append(ob.champion_subcategory_splits)
+
+    if not case_champ_splits:
+        # Fallback: use case_feedback if available but no per-pair breakdown
+        if last_with_pairs.protocol_result.case_feedback:
+            lines = ["## Champion Performance (screening cases)"]
+            for cf in last_with_pairs.protocol_result.case_feedback[:8]:
+                n_orders = cf.case_features.get("n_orders", "?")
+                size = cf.case_features.get("size_bucket", "?")
+                lines.append(f"- {cf.case_id} ({n_orders} orders, {size}): champion baseline not available in aggregate")
+            return "\n".join(lines)
+        return ""
+
+    lines = ["## Champion Performance (screening cases)"]
+    for case_id, champ_vals in sorted(case_champ_splits.items()):
+        min_val = min(champ_vals)
+        max_val = max(champ_vals)
+        if min_val == max_val:
+            splits_str = f"~{min_val:.0f} splits"
+        else:
+            splits_str = f"~{min_val:.0f}-{max_val:.0f} splits"
+        avg = sum(champ_vals) / len(champ_vals)
+        if avg <= 2:
+            note = "— splits already near optimal"
+        elif avg <= 10:
+            note = "— some room to improve"
+        else:
+            note = "— significant room on splits"
+        lines.append(f"- {case_id}: {splits_str} {note}")
+
     return "\n".join(lines)
 
 
