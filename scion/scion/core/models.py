@@ -330,6 +330,11 @@ class StepRecord:
         'verification'        — VerificationGate failed (light or heavy)
         'screening'           — experiment returned a non-promote result
         None                  — no failure (reached _apply_decision_and_finalize)
+
+    decision: None means the step did not reach the Decision Engine (early failure).
+              Only set to a real Decision value when the Decision Engine actually ran.
+    hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
+    decision_reason_codes: reason codes from the Decision Engine outcome.
     """
     round_num: int
     branch_id: str
@@ -338,9 +343,11 @@ class StepRecord:
     contract_passed: bool
     verification_passed: bool
     protocol_result: Optional[ProtocolResult]
-    decision: Decision
+    decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
     verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis
     code_archive_ref: Optional[str] = None  # 归档目录路径
     cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
+    hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
+    decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)

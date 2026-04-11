@@ -191,6 +191,27 @@ class BranchController:
             branch.last_clean_code_hash = code_hash
         branch.updated_at = datetime.now()
 
+    def record_candidate_code(self, branch_id: str, code_hash: str) -> None:
+        """Record that a candidate patch has been applied (before verification).
+
+        Only updates current_code_hash. last_clean_code_hash is NOT updated
+        until verification actually passes (call record_verification_pass).
+        """
+        branch = self._get(branch_id)
+        branch.current_code_hash = code_hash
+        branch.updated_at = datetime.now()
+
+    def record_verification_pass(self, branch_id: str, code_hash: str) -> None:
+        """Record that verification passed for the current candidate code.
+
+        Updates both current_code_hash and last_clean_code_hash. Call this
+        only after VerificationGate.run() returns passed=True.
+        """
+        branch = self._get(branch_id)
+        branch.current_code_hash = code_hash
+        branch.last_clean_code_hash = code_hash
+        branch.updated_at = datetime.now()
+
     def next_stage(self, branch_id: str) -> ExperimentStage:
         """Determine the next experiment stage based on branch state."""
         branch = self._get(branch_id)

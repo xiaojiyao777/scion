@@ -15,7 +15,7 @@ from scion.core.decision import DecisionEngine
 from scion.core.features import SafeFeatureExtractor, BudgetState
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, ContractResult,
-    Decision, FailureEvent, HypothesisProposal, HypothesisRecord,
+    Decision, ExperimentStage, FailureEvent, HypothesisProposal, HypothesisRecord,
     PatchProposal, ProtocolResult, StepRecord, VerificationResult, CheckResult,
 )
 from scion.core.scheduler import Scheduler
@@ -163,6 +163,9 @@ class CampaignManager:
         self._branch_workspaces: Dict[str, str] = {}       # branch_id → workspace path
         self._branch_hypotheses: Dict[str, HypothesisProposal] = {}
         self._branch_patches: Dict[str, PatchProposal] = {}
+        # T04: branch_id → the canonical HypothesisRecord for the current screening cycle
+        # (screening → validation → frozen all share the same record)
+        self._branch_current_hypothesis: Dict[str, HypothesisRecord] = {}
 
         # Pending hypotheses: branch_id → (hypothesis, h_record, failure_detail)
         # A code-failed hypothesis gets ONE retry for code gen in the next round.
@@ -328,6 +331,30 @@ class CampaignManager:
                 "Branch %s: retrying code gen for pending hypothesis (prior failure: %s)",
                 bid, prior_failure[:80],
             )
+            # T02: pending hypothesis must re-pass hypothesis Contract Gate before Round 2
+            c_result_pending = self._contract_gate.validate_hypothesis(
+                hypothesis,
+                self._hyp_store.get_by_status("active"),
+                self._hyp_store.get_by_status("blacklisted"),
+            )
+            if not c_result_pending.passed:
+                logger.info(
+                    "Branch %s: pending hypothesis re-failed contract gate: %s",
+                    bid, c_result_pending.failure_reason,
+                )
+                failure = FailureEvent(category="contract", detail=c_result_pending.failure_reason or "")
+                self._handle_failure(branch, failure)
+                self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                self._step_history.append(StepRecord(
+                    round_num=rnum, branch_id=bid,
+                    hypothesis=hypothesis, patch=None,
+                    contract_passed=False, verification_passed=False,
+                    protocol_result=None, decision=None,
+                    failure_stage="hypothesis_contract",
+                    failure_detail=c_result_pending.failure_reason,
+                    hypothesis_id=h_record.hypothesis_id,
+                ))
+                return StepResult(action="explore", branch_id=bid, reason="pending hypothesis re-failed contract gate")
             self._branch_hypotheses[bid] = hypothesis
         else:
             # ---------- Round 1: generate hypothesis ----------
@@ -354,9 +381,10 @@ class CampaignManager:
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=None,
                     contract_passed=False, verification_passed=False,
-                    protocol_result=None, decision=Decision.ABANDON,
+                    protocol_result=None, decision=None,
                     failure_stage="hypothesis_contract",
                     failure_detail=c_result.failure_reason,
+                    hypothesis_id=h_record.hypothesis_id,
                 ))
                 return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
 
@@ -385,9 +413,10 @@ class CampaignManager:
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=None,
                 contract_passed=True, verification_passed=False,
-                protocol_result=None, decision=Decision.ABANDON,
+                protocol_result=None, decision=None,
                 failure_stage="code_generation",
                 failure_detail=failure_stage_detail,
+                hypothesis_id=h_record.hypothesis_id,
             ))
             return StepResult(action="explore", branch_id=bid, reason="code generation failed")
 
@@ -402,9 +431,10 @@ class CampaignManager:
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=False, verification_passed=False,
-                protocol_result=None, decision=Decision.ABANDON,
+                protocol_result=None, decision=None,
                 failure_stage="patch_contract",
                 failure_detail=p_result.failure_reason,
+                hypothesis_id=h_record.hypothesis_id,
             ))
             return StepResult(action="explore", branch_id=bid, reason="patch contract failed")
 
@@ -416,9 +446,10 @@ class CampaignManager:
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=True, verification_passed=False,
-                protocol_result=None, decision=Decision.ABANDON,
+                protocol_result=None, decision=None,
                 failure_stage="workspace",
                 failure_detail="workspace setup failed",
+                hypothesis_id=h_record.hypothesis_id,
             ))
             return StepResult(action="explore", branch_id=bid, reason="workspace setup failed")
 
@@ -433,14 +464,16 @@ class CampaignManager:
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=True, verification_passed=False,
-                protocol_result=None, decision=Decision.ABANDON,
+                protocol_result=None, decision=None,
                 failure_stage="workspace",
                 failure_detail=f"apply_patch: {exc}",
+                hypothesis_id=h_record.hypothesis_id,
             ))
             return StepResult(action="explore", branch_id=bid, reason="apply_patch failed")
 
         self._branch_patches[bid] = patch
-        self._branch_ctrl.record_verification_result(bid, True, code_hash)
+        # T03: only update current_code_hash here; last_clean_code_hash updated after verification passes
+        self._branch_ctrl.record_candidate_code(bid, code_hash)
 
         # ---------- Verification gate ----------
         _champ_ws = self._champion.code_snapshot_path
@@ -454,12 +487,22 @@ class CampaignManager:
                 # Attempt fix
                 fixed = self._attempt_fix(branch, patch, vresult)
                 if fixed is not None:
-                    try:
-                        code_hash = self._materializer.apply_patch(workspace, fixed)
-                        self._branch_patches[bid] = fixed
-                        vresult = self._vgate.run(workspace, _champ_ws, fixed)
-                    except Exception:
-                        pass
+                    # T01: fix patch must pass Contract Gate before apply
+                    fixed_contract = self._contract_gate.validate_patch(fixed)
+                    if not fixed_contract.passed:
+                        logger.info(
+                            "Branch %s: fix patch failed contract gate: %s",
+                            bid, fixed_contract.failure_reason,
+                        )
+                        fixed = None  # treat as if fix failed — do not apply
+                    else:
+                        try:
+                            code_hash = self._materializer.apply_patch(workspace, fixed)
+                            self._branch_patches[bid] = fixed
+                            self._branch_ctrl.record_candidate_code(bid, code_hash)
+                            vresult = self._vgate.run(workspace, _champ_ws, fixed)
+                        except Exception:
+                            pass
                 if not vresult.passed:
                     self._handle_failure(branch, failure)
                     self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
@@ -468,11 +511,12 @@ class CampaignManager:
                         round_num=rnum, branch_id=bid,
                         hypothesis=hypothesis, patch=patch,
                         contract_passed=True, verification_passed=False,
-                        protocol_result=None, decision=Decision.ABANDON,
+                        protocol_result=None, decision=None,
                         failure_stage="verification",
                         failure_detail=vresult.first_failure,
                         verification_detail=_build_verification_detail(vresult),
                         code_archive_ref=archive_ref,
+                        hypothesis_id=h_record.hypothesis_id,
                     ))
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
@@ -483,13 +527,20 @@ class CampaignManager:
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=patch,
                     contract_passed=True, verification_passed=False,
-                    protocol_result=None, decision=Decision.ABANDON,
+                    protocol_result=None, decision=None,
                     failure_stage="verification",
                     failure_detail=vresult.first_failure,
                     verification_detail=_build_verification_detail(vresult),
                     code_archive_ref=archive_ref,
+                    hypothesis_id=h_record.hypothesis_id,
                 ))
                 return StepResult(action="explore", branch_id=bid, reason="verification failed (heavy)")
+
+        # T03: verification passed — now safe to update last_clean_code_hash
+        self._branch_ctrl.record_verification_pass(bid, code_hash)
+        # T04: store the canonical HypothesisRecord for this screening cycle
+        # (used by _run_eval_step for validation/frozen stages)
+        self._branch_current_hypothesis[bid] = h_record
 
         # ---------- Evaluate ----------
         stage = self._branch_ctrl.next_stage(bid)
@@ -521,6 +572,7 @@ class CampaignManager:
             decision=result.decision or Decision.ABANDON,
             failure_stage=None,
             failure_detail=None,
+            hypothesis_id=h_record.hypothesis_id,
         ))
         return result
 
@@ -564,18 +616,26 @@ class CampaignManager:
         p_result = ContractResult(passed=True, checks=())
         decision, protocol_result, canary_result = self._evaluate(branch, workspace, hypothesis)
 
-        h_record = HypothesisRecord(
-            hypothesis_id=str(uuid.uuid4()),
-            branch_id=bid,
-            change_locus=hypothesis.change_locus,
-            action=hypothesis.action,
-            status="active",
-            target_file=hypothesis.target_file,
-            suggested_weight=hypothesis.suggested_weight,
-            hypothesis_text=hypothesis.hypothesis_text,
-        )
+        # T04: reuse the canonical HypothesisRecord from screening — do NOT create a fake one
+        h_record = self._branch_current_hypothesis.get(bid)
+        if h_record is None:
+            # Fallback: create a minimal record if screening record was lost (should not happen)
+            logger.warning("Branch %s: no canonical h_record in _branch_current_hypothesis — creating fallback", bid)
+            h_record = HypothesisRecord(
+                hypothesis_id=str(uuid.uuid4()),
+                branch_id=bid,
+                change_locus=hypothesis.change_locus,
+                action=hypothesis.action,
+                status="active",
+                target_file=hypothesis.target_file,
+                suggested_weight=hypothesis.suggested_weight,
+                hypothesis_text=hypothesis.hypothesis_text,
+            )
 
-        return self._apply_decision_and_finalize(
+        self._round_num += 1
+        rnum = self._round_num
+
+        result = self._apply_decision_and_finalize(
             branch=branch,
             decision=decision,
             hypothesis=hypothesis,
@@ -587,32 +647,154 @@ class CampaignManager:
             action_label=action_label,
         )
 
+        # T05: write StepRecord for eval-only steps (validation/frozen)
+        stage_val = action_label  # "validate", "frozen", or "explore" for expand
+        self._step_history.append(StepRecord(
+            round_num=rnum, branch_id=bid,
+            hypothesis=hypothesis,
+            patch=patch,
+            contract_passed=True, verification_passed=True,
+            protocol_result=protocol_result,
+            decision=result.decision,
+            failure_stage=None,
+            failure_detail=None,
+            hypothesis_id=h_record.hypothesis_id,
+            decision_reason_codes=protocol_result.reason_codes if protocol_result else None,
+        ))
+        return result
+
     # ------------------------------------------------------------------
     # STALE reconciliation
     # ------------------------------------------------------------------
 
     def _run_reconcile_step(self, branch: Branch) -> StepResult:
-        """Attempt to rebase a STALE branch on the new champion."""
+        """Attempt to rebase a STALE branch on the new champion.
+
+        T06: Full reconcile pipeline — Contract → Verification → re-screening.
+        A stale branch may only resume EXPLORE (→ READY_VALIDATE) if the patch
+        passes all three gates against the new champion.
+        If the VerificationGate or ExperimentProtocol is missing (skeleton mode),
+        the stale branch is abandoned rather than silently passing.
+        """
         bid = branch.branch_id
         patch = self._branch_patches.get(bid)
         if patch is None:
+            logger.info("Branch %s: no patch to reconcile — abandoning stale branch", bid)
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason="no patch to reconcile")
 
-        # Create a fresh workspace from new champion
+        hypothesis = self._branch_hypotheses.get(bid)
+
+        # --- Step 1: fresh workspace from new champion ---
         workspace = self._setup_workspace(branch, force_champion=True)
         if workspace is None:
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason="workspace setup failed")
 
+        # --- Step 2: reapply patch ---
         try:
-            self._materializer.apply_patch(workspace, patch)
-            self._branch_ctrl.reconcile_stale(bid, success=True, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason="reconcile succeeded")
+            code_hash = self._materializer.apply_patch(workspace, patch)
         except Exception as exc:
-            logger.info("Branch %s: reconcile failed: %s", bid, exc)
+            logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason=f"reconcile failed: {exc}")
+            return StepResult(action="reconcile", branch_id=bid, reason=f"apply_patch failed: {exc}")
+
+        # T03: record candidate code hash (not yet verified)
+        self._branch_ctrl.record_candidate_code(bid, code_hash)
+
+        # --- Step 3: Contract Gate ---
+        contract_result = self._contract_gate.validate_patch(patch)
+        if not contract_result.passed:
+            logger.info(
+                "Branch %s: reconcile patch failed contract gate: %s",
+                bid, contract_result.failure_reason,
+            )
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(
+                action="reconcile", branch_id=bid,
+                reason=f"reconcile contract failed: {contract_result.failure_reason}",
+            )
+
+        # --- Step 4: Verification Gate ---
+        # If verification gate has no runner, abandon rather than silently pass
+        _champ_ws = self._champion.code_snapshot_path
+        vresult = self._vgate.run(workspace, _champ_ws, patch)
+        if not vresult.passed:
+            logger.info(
+                "Branch %s: reconcile verification failed: %s", bid, vresult.first_failure
+            )
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(
+                action="reconcile", branch_id=bid,
+                reason=f"reconcile verification failed: {vresult.first_failure}",
+            )
+
+        # T03: verification passed — update last_clean_code_hash
+        self._branch_ctrl.record_verification_pass(bid, code_hash)
+
+        # --- Step 5: re-screening ---
+        # If there is no experiment protocol, we cannot meaningfully re-screen —
+        # abandon rather than silently accept (T06 requirement).
+        if self._experiment_protocol is None:
+            logger.info(
+                "Branch %s: no experiment protocol for reconcile re-screening — abandoning stale branch", bid
+            )
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(
+                action="reconcile", branch_id=bid,
+                reason="no experiment protocol for re-screening",
+            )
+
+        hypothesis_action = hypothesis.action if hypothesis else "modify"
+        champ_ws = self._champion.code_snapshot_path
+        canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
+        if not canary_result.passed:
+            logger.info("Branch %s: reconcile canary failed — abandoning stale branch", bid)
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(action="reconcile", branch_id=bid, reason="reconcile canary failed")
+
+        try:
+            screening_result = self._experiment_protocol.run_experiment(
+                stage=ExperimentStage.SCREENING,
+                candidate_ws=workspace,
+                champion_ws=champ_ws,
+                hypothesis_action=hypothesis_action,
+                expand=False,
+                expand_round=1,
+            )
+            self._n_experiments += 1
+            self._budget.used += 1
+        except Exception as exc:
+            logger.error("Branch %s: reconcile re-screening failed: %s", bid, exc)
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(action="reconcile", branch_id=bid, reason=f"re-screening failed: {exc}")
+
+        # --- Step 6: routing based on screening result ---
+        if screening_result.gate_outcome in ("pass", "expand"):
+            # Positive signal — allow branch to continue (as READY_VALIDATE to re-enter eval)
+            self._branch_ctrl.reconcile_stale(bid, success=True, new_champion=self._champion)
+            # Put branch in READY_VALIDATE so it gets a full validation cycle against new champion
+            try:
+                b = self._branch_ctrl.get_branch(bid)
+                if b.state == BranchState.EXPLORE:
+                    self._branch_ctrl.apply_decision(bid, Decision.QUEUE_VALIDATE)
+            except Exception:
+                pass
+            logger.info(
+                "Branch %s: reconcile succeeded (screening gate_outcome=%s) → READY_VALIDATE",
+                bid, screening_result.gate_outcome,
+            )
+            return StepResult(action="reconcile", branch_id=bid, reason="reconcile succeeded — READY_VALIDATE")
+        else:
+            logger.info(
+                "Branch %s: reconcile re-screening failed (gate_outcome=%s) — abandoning",
+                bid, screening_result.gate_outcome,
+            )
+            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            return StepResult(
+                action="reconcile", branch_id=bid,
+                reason=f"reconcile re-screening failed: gate_outcome={screening_result.gate_outcome}",
+            )
 
     # ------------------------------------------------------------------
     # Round 1: generate hypothesis
@@ -987,6 +1169,9 @@ class CampaignManager:
                 self._branch_ctrl.apply_decision(bid, decision)
             except StateTransitionError as exc:
                 logger.error("Branch %s: apply_decision(%s) failed: %s", bid, decision.value, exc)
+            # T04: mark the original hypothesis as promoted
+            self._hyp_store.mark_status(h_record.hypothesis_id, "promoted")
+            self._branch_current_hypothesis.pop(bid, None)
             self._on_promote(branch)
             return StepResult(
                 action=action_label,  # type: ignore[arg-type]
@@ -1010,7 +1195,9 @@ class CampaignManager:
                     pass
             self._branch_hypotheses.pop(bid, None)
             self._branch_patches.pop(bid, None)
+            # T04: mark original hypothesis as rejected and clear mapping
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+            self._branch_current_hypothesis.pop(bid, None)
         else:
             self._recent_abandoned_count = 0
 
@@ -1359,7 +1546,7 @@ class CampaignManager:
             step_data: Dict[str, Any] = {
                 "round": step.round_num,
                 "branch_id": step.branch_id,
-                "decision": step.decision.value,
+                "decision": step.decision.value if step.decision is not None else None,
                 "contract_passed": step.contract_passed,
                 "verification_passed": step.verification_passed,
                 "failure_stage": step.failure_stage,
