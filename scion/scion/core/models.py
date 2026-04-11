@@ -241,6 +241,17 @@ class Branch:
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
 
 @dataclass
+class HypothesisFamily:
+    """Tracks a mechanism-level family of hypotheses for diversity detection (T07)."""
+    family_id: str
+    mechanism_label: str      # e.g. "subcategory_consolidation", "destroy_rebuild"
+    action_pattern: str       # "create_new" / "modify" / "remove"
+    locus_pattern: str        # "vehicle_level" / "order_level"
+    evidence_count: int
+    statuses: List[str]       # ["rejected", "promoted", ...]
+
+
+@dataclass
 class HypothesisRecord:
     hypothesis_id: str
     branch_id: str
@@ -251,6 +262,7 @@ class HypothesisRecord:
     parent_hypothesis_id: Optional[str] = None
     suggested_weight: Optional[float] = None
     hypothesis_text: Optional[str] = None
+    family_id: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
 
 # --- Solver Output ---

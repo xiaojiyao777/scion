@@ -498,7 +498,7 @@ class TestWarehouseDeliveryConfig:
         manifest = SplitManifest.from_yaml(str(warehouse_dir / "split_manifest.yaml"))
         assert len(manifest.screening) == 10
         assert len(manifest.validation) == 6
-        assert len(manifest.frozen) == 4
+        assert len(manifest.frozen) >= 6, "T05: frozen set must have 6+ cases"
         # Frozen must be disjoint from screening and validation
         frozen_set = set(manifest.frozen)
         assert frozen_set.isdisjoint(set(manifest.screening)), "Frozen must not overlap screening"

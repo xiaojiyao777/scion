@@ -1,9 +1,9 @@
 # split_manifest.yaml — Warehouse Delivery v3 case splits
-# Updated: 2026-04-08 — v3 high-quality benchmark suite
+# Updated: 2026-04-11 — T05 frozen expansion + T11 screening rebalance
 #
 # Screening (10): 6 medium (54-66 orders) + 4 large (108-134 orders)
 # Validation (6): 4 large (122-175 orders) + 2 xlarge (258-293 orders)
-# Frozen (4): 2 xlarge (349-408 orders) + 2 xxlarge (540-675 orders)
+# Frozen (8): 2 large (188-215 orders) + 4 xlarge (349-430 orders) + 2 xxlarge (540-675 orders)
 # Canary (2): medium (46-52 orders)
 version: "3.0"
 screening:
@@ -25,8 +25,12 @@ validation:
   - data/instance_v3_val_x01.json
   - data/instance_v3_val_x02.json
 frozen:
+  - data/instance_v3_fro_l01.json
+  - data/instance_v3_fro_l02.json
   - data/instance_v3_fro_x01.json
   - data/instance_v3_fro_x02.json
+  - data/instance_v3_fro_x03.json
+  - data/instance_v3_fro_x04.json
   - data/instance_v3_fro_xx01.json
   - data/instance_v3_fro_xx02.json
 canary:

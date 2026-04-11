@@ -487,6 +487,55 @@ def build_all_specs(master_seed: int = 20260408) -> list[InstanceSpec]:
         description="Canary medium with hazard + locked.",
     ))
 
+    # ================================================================
+    # FROZEN HOLDOUT EXPANSION (4 additional): 2 large + 2 xlarge
+    # Added in Sprint E2 T05 to improve statistical power and size diversity
+    # ================================================================
+
+    specs.append(InstanceSpec(
+        name="instance_v3_fro_l01", role="frozen", tier="large",
+        master_seed=next_seed(), num_subcategories=6,
+        orders_per_subcat=[38, 35, 32, 30, 28, 25],
+        num_dg_warehouses=3, city_mix="dg_only",
+        hazard_ratio=0.10, locked_ratio=0.12,
+        spu_qty_range=(2, 6), num_spus_range=(1, 3),
+        capacity_pressure="moderate",
+        description="Frozen large, 188 orders, 6 subcats, catches scale-limited operators.",
+    ))
+
+    specs.append(InstanceSpec(
+        name="instance_v3_fro_l02", role="frozen", tier="large",
+        master_seed=next_seed(), num_subcategories=7,
+        orders_per_subcat=[40, 36, 33, 30, 28, 26, 22],
+        num_dg_warehouses=4, city_mix="dg_heavy",
+        hazard_ratio=0.18, locked_ratio=0.08,
+        spu_qty_range=(2, 5), num_spus_range=(1, 3),
+        capacity_pressure="tight",
+        description="Frozen large, 215 orders, 7 subcats, tight capacity + high hazard.",
+    ))
+
+    specs.append(InstanceSpec(
+        name="instance_v3_fro_x03", role="frozen", tier="xlarge",
+        master_seed=next_seed(), num_subcategories=6,
+        orders_per_subcat=[70, 65, 60, 58, 55, 52],
+        num_dg_warehouses=3, city_mix="sz_heavy",
+        hazard_ratio=0.08, locked_ratio=0.25,
+        spu_qty_range=(3, 7), num_spus_range=(2, 4),
+        capacity_pressure="tight",
+        description="Frozen xlarge, 360 orders, SZ-heavy, high locked ratio, tight capacity.",
+    ))
+
+    specs.append(InstanceSpec(
+        name="instance_v3_fro_x04", role="frozen", tier="xlarge",
+        master_seed=next_seed(), num_subcategories=9,
+        orders_per_subcat=[60, 55, 52, 50, 48, 45, 42, 40, 38],
+        num_dg_warehouses=5, city_mix="mixed",
+        hazard_ratio=0.20, locked_ratio=0.05,
+        spu_qty_range=(2, 5), num_spus_range=(1, 3),
+        capacity_pressure="moderate",
+        description="Frozen xlarge, 430 orders, 9 subcats, very high hazard, max subcat diversity.",
+    ))
+
     return specs
 
 

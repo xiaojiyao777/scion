@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from collections import Counter
+from typing import Any, Dict, List, Optional, Tuple
 
 from scion.core.models import (
     Branch,
     ChampionState,
+    Decision,
+    HypothesisFamily,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
@@ -67,6 +70,14 @@ class ContextManager:
         )
         branch_direction = _build_branch_direction_prompt(branch)
 
+        # T07: Build family tracking and coverage
+        branch_steps = [s for s in (step_history or []) if s.branch_id == branch.branch_id]
+        families = _extract_families_from_steps(branch_steps)
+        exploration_coverage = build_exploration_coverage(families) if families else ""
+
+        # T08: Build strategy guidance from family data
+        strategy_guidance = _build_strategy_guidance(families) if families else ""
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -77,6 +88,8 @@ class ContextManager:
             "sibling_summary": sibling_summary,
             "branch_code": branch_code,
             "branch_direction": branch_direction,
+            "exploration_coverage": exploration_coverage,
+            "strategy_guidance": strategy_guidance,
         }
 
     # ------------------------------------------------------------------
@@ -304,6 +317,9 @@ def _build_experiment_history(
 ) -> str:
     """Build structured experiment history with case-level feedback.
 
+    T26: Includes "What Worked" section before "What Failed" to prevent
+    the model from becoming overly conservative after many failures.
+
     Recent 3 rounds: aggregate + pattern + selected cases.
     Older rounds (4-8): aggregate only.
     Consecutive 3+ same-type verification failures → inject diagnosis block.
@@ -312,9 +328,16 @@ def _build_experiment_history(
     if not branch_steps:
         return "(no prior experiment rounds on this branch)"
 
+    # T26: Build "What Worked" section from promoted steps
+    what_worked = _build_what_worked_section(branch_steps)
+
     recent = branch_steps[-8:]  # Last 8 rounds
     lines: List[str] = []
     n_recent = len(recent)
+
+    # T26: Prepend "What Worked" if available
+    if what_worked:
+        lines.append(what_worked)
 
     for idx, s in enumerate(recent):
         is_detailed = idx >= max(0, n_recent - 3)  # Last 3 get case detail
@@ -465,7 +488,6 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
             details.append(fd[:150])
 
     # Use the most common failure type
-    from collections import Counter
     dominant_type = Counter(failure_types).most_common(1)[0][0] if failure_types else ""
     suggestion = _VERIFICATION_SUGGESTIONS.get(dominant_type, "仔细检查验证失败的原因并修改代码")
     aggregated = " | ".join(dict.fromkeys(details))[:300]  # deduplicate, cap length
@@ -476,6 +498,196 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
         f"Common failure details: {aggregated}\n"
         f"Suggested approach: {suggestion}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T07: Hypothesis Family Tracking
+# ---------------------------------------------------------------------------
+
+# Keyword → mechanism_label mapping (ordered by specificity)
+_MECHANISM_KEYWORDS: List[Tuple[List[str], str]] = [
+    (["destroy", "rebuild"], "destroy_rebuild"),
+    (["subcategor", "consolidat", "merge"], "subcategory_consolidation"),
+    (["swap"], "order_swap"),
+    (["redistribute", "rebalance"], "rebalance"),
+    (["split"], "split_operator"),
+    (["cost", "downsize", "vehicle type", "upgrade"], "cost_reduction"),
+]
+_DEFAULT_MECHANISM = "generic"
+
+
+def _extract_mechanism_label(hypothesis_text: str) -> str:
+    """Extract mechanism label from hypothesis text using keyword matching."""
+    text_lower = hypothesis_text.lower()
+    for keywords, label in _MECHANISM_KEYWORDS:
+        if any(kw in text_lower for kw in keywords):
+            return label
+    return _DEFAULT_MECHANISM
+
+
+def _make_family_id(mechanism_label: str, action_pattern: str, locus_pattern: str) -> str:
+    return f"{mechanism_label}/{action_pattern}/{locus_pattern}"
+
+
+def _get_step_status(step: StepRecord) -> str:
+    """Derive a compact status string from a StepRecord."""
+    if step.failure_stage:
+        return f"failed_{step.failure_stage}"
+    if step.decision == Decision.PROMOTE:
+        return "promoted"
+    if step.protocol_result is not None:
+        return f"gate_{step.protocol_result.gate_outcome}"
+    return step.decision.value
+
+
+def _extract_families_from_steps(steps: List[StepRecord]) -> List[HypothesisFamily]:
+    """Build the family list from step history (rebuilt each call — no persistence needed)."""
+    family_map: Dict[str, HypothesisFamily] = {}
+    for step in steps:
+        h = step.hypothesis
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        family_id = _make_family_id(mechanism, h.action, h.change_locus)
+        status = _get_step_status(step)
+        if family_id in family_map:
+            existing = family_map[family_id]
+            family_map[family_id] = HypothesisFamily(
+                family_id=existing.family_id,
+                mechanism_label=existing.mechanism_label,
+                action_pattern=existing.action_pattern,
+                locus_pattern=existing.locus_pattern,
+                evidence_count=existing.evidence_count + 1,
+                statuses=existing.statuses + [status],
+            )
+        else:
+            family_map[family_id] = HypothesisFamily(
+                family_id=family_id,
+                mechanism_label=mechanism,
+                action_pattern=h.action,
+                locus_pattern=h.change_locus,
+                evidence_count=1,
+                statuses=[status],
+            )
+    # Return in insertion order (order of first encounter)
+    return list(family_map.values())
+
+
+def assign_family_id(hypothesis_text: str, action: str, change_locus: str) -> str:
+    """Public helper: compute family_id for a hypothesis (for HypothesisRecord.family_id)."""
+    mechanism = _extract_mechanism_label(hypothesis_text)
+    return _make_family_id(mechanism, action, change_locus)
+
+
+def build_exploration_coverage(families: List[HypothesisFamily]) -> str:
+    """Return a formatted string showing family coverage across attempts (T07)."""
+    if not families:
+        return ""
+    lines = ["## Exploration Coverage"]
+    for fam in families:
+        promoted = sum(1 for s in fam.statuses if s == "promoted")
+        failed = sum(1 for s in fam.statuses if s.startswith("failed_"))
+        passed = sum(1 for s in fam.statuses if "pass" in s)
+        status_summary = f"promoted={promoted} failed={failed} passed={passed}"
+        lines.append(
+            f"  {fam.family_id}: n={fam.evidence_count} [{status_summary}]"
+        )
+    # Show unexplored action/locus combos
+    explored_actions = {f.action_pattern for f in families}
+    all_actions = {"create_new", "modify", "remove"}
+    unexplored_actions = all_actions - explored_actions
+    if unexplored_actions:
+        lines.append(f"  Unexplored actions: {sorted(unexplored_actions)}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# T08: Strategy-shift Guidance
+# ---------------------------------------------------------------------------
+
+def _count_trailing_failures(statuses: List[str]) -> int:
+    """Count consecutive trailing failures in statuses list."""
+    count = 0
+    for s in reversed(statuses):
+        if s.startswith("failed_") or "fail" in s:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
+    """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
+    if not families:
+        return ""
+    guidance_parts: List[str] = []
+
+    # Rule 1: Same family failed 3+ consecutive times → force switch
+    for fam in families:
+        consecutive_fails = _count_trailing_failures(fam.statuses)
+        if consecutive_fails >= 3:
+            guidance_parts.append(
+                f"⚠️ Family '{fam.mechanism_label}' ({fam.action_pattern}/{fam.locus_pattern}) "
+                f"has failed {consecutive_fails} consecutive times. AVOID this approach."
+            )
+
+    # Rule 2: All recent hypotheses same action → suggest alternative
+    recent_actions = [f.action_pattern for f in families[-5:]]
+    if len(set(recent_actions)) == 1 and len(recent_actions) >= 3:
+        alt = "modify" if recent_actions[0] == "create_new" else "create_new"
+        guidance_parts.append(
+            f"Consider trying action='{alt}' — all recent attempts used '{recent_actions[0]}'."
+        )
+
+    # Rule 3: Unexplored locus → suggest
+    explored_loci = {f.locus_pattern for f in families}
+    all_loci = {"vehicle_level", "order_level"}
+    unexplored = all_loci - explored_loci
+    if unexplored:
+        guidance_parts.append(
+            f"Unexplored operator categories: {sorted(unexplored)}. Consider targeting these."
+        )
+
+    return "\n".join(guidance_parts)
+
+
+# ---------------------------------------------------------------------------
+# T26: What Worked section for experiment history
+# ---------------------------------------------------------------------------
+
+def _build_what_worked_section(branch_steps: List[StepRecord]) -> str:
+    """Build 'What Worked' section from promoted steps (T26).
+
+    Storing confirmations prevents the model from becoming overly conservative
+    after seeing many failures (CC analysis #12).
+    """
+    promoted_steps = [
+        s for s in branch_steps
+        if s.decision == Decision.PROMOTE
+    ]
+    high_wr_steps = [
+        s for s in branch_steps
+        if (
+            s.protocol_result is not None
+            and s.protocol_result.stats.win_rate >= 0.8
+            and s.decision != Decision.PROMOTE
+        )
+    ]
+    successes = promoted_steps + high_wr_steps
+    if not successes:
+        return ""
+
+    lines = ["## What Worked (learn from these)"]
+    for s in successes[:5]:  # Cap at 5 to avoid bloating context
+        h = s.hypothesis
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        tag = "(promoted)" if s.decision == Decision.PROMOTE else "(high win_rate)"
+        wr_str = ""
+        if s.protocol_result:
+            wr_str = f", wr={s.protocol_result.stats.win_rate:.2f}"
+        lines.append(
+            f"- {mechanism} ({h.change_locus}/{h.action}) {tag}{wr_str}: "
+            f"{(h.hypothesis_text or '')[:100]}"
+        )
+    return "\n".join(lines)
 
 
 def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:
