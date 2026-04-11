@@ -1,12 +1,42 @@
 # protocol.yaml — Warehouse Delivery v3 experiment protocol
-# Updated: 2026-04-08 — v3 high-quality benchmark
+# Updated: 2026-04-12 — G2 case-level stats, canary split, expand-cases rules
 #
-# screening: 10 cases × 2 seeds = 20 evaluations per operator
-# validation: 6 cases × 3 seeds = 18 evaluations
+# Statistical unit: case (not (case, seed) pair)
+# screening: modify/remove: 6 cases × 2 seeds; create: 10 cases × 2 seeds
+# validation: 6 cases × 3 seeds = 18 evaluations per case
 # frozen: 4 cases × 3 seeds = 12 evaluations
-screening_n: 20
-screening_win_rate_threshold: 0.60
-validation_n: 18
-validation_win_rate_threshold: 0.66
-frozen_n: 12
-min_practical_delta: 0.001
+version: "3.0"
+
+screening:
+  n_cases_modify: 6
+  n_cases_create: 10
+  n_seeds: 2
+  expand_to_modify: 10
+  expand_to_create: 16
+
+validation:
+  n_cases: 6
+  n_seeds: 3
+  expand_to: 10
+
+frozen:
+  n_cases: 4
+  n_seeds: 3
+  max_uses_per_campaign: 3
+
+canary:
+  cases: []
+  seeds: []
+
+gates:
+  screening:
+    win_rate_min: 0.60
+    median_delta_min: "practical_delta_screen"
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: "practical_delta_validate"
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 10000
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true

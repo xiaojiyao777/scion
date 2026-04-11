@@ -2,8 +2,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import statistics
 import uuid as _uuid_mod
-from typing import List, Optional
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,22 @@ from scion.protocol.gates import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Case-level result (T2)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CaseLevelResult:
+    """Aggregated result for a single case across all seeds."""
+    case_id: str
+    comparison: str   # majority vote: "win" / "loss" / "tie"
+    delta: float      # median delta across seeds
+
+
+# ---------------------------------------------------------------------------
+# SplitManager and SeedLedger wrappers
+# ---------------------------------------------------------------------------
+
 class SplitManager:
     def __init__(self, manifest: SplitManifest) -> None:
         self._manifest = manifest
@@ -35,6 +54,10 @@ class SplitManager:
         elif stage == ExperimentStage.FROZEN:
             return list(self._manifest.frozen)
         raise ValueError(f"Unknown stage: {stage}")
+
+    def get_canary_cases(self) -> List[str]:
+        """Return the dedicated canary case list."""
+        return list(self._manifest.canary)
 
     def validate_disjoint(self) -> bool:
         self._manifest.validate_disjoint()
@@ -54,6 +77,14 @@ class SeedLedger:
             return list(self._ledger.frozen)
         raise ValueError(f"Unknown stage: {stage}")
 
+    def get_canary_seeds(self) -> List[int]:
+        """Return the dedicated canary seed list."""
+        return list(self._ledger.canary)
+
+
+# ---------------------------------------------------------------------------
+# ExperimentProtocol
+# ---------------------------------------------------------------------------
 
 class ExperimentProtocol:
     def __init__(
@@ -73,16 +104,33 @@ class ExperimentProtocol:
         self.metrics_dir = metrics_dir
         os.makedirs(metrics_dir, exist_ok=True)
 
+    # ------------------------------------------------------------------
+    # T3: Canary — uses independent canary split + canary seeds
+    # ------------------------------------------------------------------
+
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         """
-        Canary regression check: runs a small subset of screening cases.
+        Canary regression check using the dedicated canary split and seeds.
         Veto-only — blocks if candidate produces infeasible solutions or crashes.
-        """
-        cases = self.split_manager.get_cases(ExperimentStage.SCREENING)[:2]
-        seeds = self.seed_ledger.get_seeds(ExperimentStage.SCREENING)[:1]
 
-        for case in cases:
-            for seed in seeds:
+        Raises ValueError if canary split/seeds are not configured.
+        """
+        canary_cases = self.split_manager.get_canary_cases()
+        canary_seeds = self.seed_ledger.get_canary_seeds()
+
+        if not canary_cases:
+            raise ValueError(
+                "Canary split not configured: split_manifest.canary is empty. "
+                "Add canary cases to split_manifest.yaml."
+            )
+        if not canary_seeds:
+            raise ValueError(
+                "Canary seeds not configured: seed_ledger.canary is empty. "
+                "Add canary seeds to seed_ledger.yaml."
+            )
+
+        for case in canary_cases:
+            for seed in canary_seeds:
                 cand_result = self.runner.run_solver(
                     workdir=candidate_ws,
                     instance_path=case,
@@ -120,6 +168,58 @@ class ExperimentProtocol:
 
         return CanaryResult(passed=True, reason=None)
 
+    # ------------------------------------------------------------------
+    # T4 + T5: Case selection helpers
+    # ------------------------------------------------------------------
+
+    def _select_cases(
+        self,
+        stage: ExperimentStage,
+        hypothesis_action: str,
+        expand_round: int,
+    ) -> List[str]:
+        """Select cases based on stage, action type, and whether we're in expand mode.
+
+        T5: screening selects n_cases_modify or n_cases_create based on action.
+        T4: expand increases the case count, seed set stays fixed.
+        """
+        all_cases = self.split_manager.get_cases(stage)
+
+        if stage == ExperimentStage.SCREENING:
+            if expand_round > 0:
+                # T4: expand adds cases, not seeds
+                n = (
+                    self.config.screening.expand_to_create
+                    if hypothesis_action == "create_new"
+                    else self.config.screening.expand_to_modify
+                )
+            else:
+                n = (
+                    self.config.screening.n_cases_create
+                    if hypothesis_action == "create_new"
+                    else self.config.screening.n_cases_modify
+                )
+        elif stage == ExperimentStage.VALIDATION:
+            n = (
+                self.config.validation.expand_to
+                if expand_round > 0
+                else self.config.validation.n_cases
+            )
+        elif stage == ExperimentStage.FROZEN:
+            n = self.config.frozen.n_cases
+        else:
+            return all_cases
+
+        return all_cases[:n]
+
+    def _select_seeds(self, stage: ExperimentStage) -> List[int]:
+        """Return the fixed seed list for the stage (T4: seeds never expanded)."""
+        return self.seed_ledger.get_seeds(stage)
+
+    # ------------------------------------------------------------------
+    # T2: run_experiment — case-level aggregation
+    # ------------------------------------------------------------------
+
     def run_experiment(
         self,
         stage: ExperimentStage,
@@ -129,20 +229,21 @@ class ExperimentProtocol:
         expand: bool = False,
         expand_round: int = 1,
     ) -> ProtocolResult:
-        """Execute paired A/B evaluation for the given stage."""
-        cases = self.split_manager.get_cases(stage)
-        seeds = list(self.seed_ledger.get_seeds(stage))
+        """Execute paired A/B evaluation for the given stage.
 
-        # Expand: add progressively more seeds based on expand_round
-        if expand:
-            for r in range(1, expand_round + 1):
-                extra = [s + 1000 * r for s in seeds]
-                seeds = seeds + extra
+        T2: Statistical unit is case (not pair). Each case is evaluated across
+        all seeds, then majority-voted to a case-level win/loss/tie and median delta.
+        T4: expand increases case count; seed set is unchanged.
+        T5: case count depends on stage + hypothesis_action + expand flag.
+        """
+        cases = self._select_cases(
+            stage, hypothesis_action, expand_round if expand else 0
+        )
+        seeds = self._select_seeds(stage)
 
-        comparisons: List[str] = []
-        deltas: List[float] = []
+        # Collect pair feedback grouped by case
+        pairs_by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
         raw_pairs: List[dict] = []
-        pair_feedback: List[PairwiseCaseFeedback] = []
 
         for case in cases:
             case_features = _extract_case_features(case)
@@ -173,19 +274,19 @@ class ExperimentProtocol:
                     champ_r.output.objective,
                 )
                 delta = compute_delta(cand_r.output.objective, champ_r.output.objective)
-                comparisons.append(cmp)
-                deltas.append(delta)
+
                 raw_pairs.append(
                     {"case": case, "seed": seed, "comparison": cmp, "delta": delta}
                 )
-                pair_feedback.append(PairwiseCaseFeedback(
+                pair_fb = PairwiseCaseFeedback(
                     case_id=os.path.basename(case),
                     seed=seed,
                     comparison=cmp,
                     delta=delta,
                     objective_breakdown=breakdown,
                     case_features=case_features,
-                ))
+                )
+                pairs_by_case[os.path.basename(case)].append(pair_fb)
                 logger.info(
                     "Pair %s seed=%d: cmp=%s delta=%.4f decisive=%s "
                     "cand(splits=%s cost=%s) champ(splits=%s cost=%s)",
@@ -197,14 +298,22 @@ class ExperimentProtocol:
                     breakdown.champion_total_cost,
                 )
 
-        if not comparisons:
+        # T2: Aggregate pairs → case-level results
+        all_pair_feedback = [fb for fbs in pairs_by_case.values() for fb in fbs]
+        case_level_results = _aggregate_pairs_to_case_level(all_pair_feedback)
+
+        case_comparisons = [r.comparison for r in case_level_results]
+        case_deltas = [r.delta for r in case_level_results]
+
+        if not case_comparisons:
             stats = EvalStats(
                 n_cases=0, wins=0, losses=0, ties=0,
                 win_rate=0.0, median_delta=0.0, ci_low=-1.0, ci_high=-1.0,
             )
             gate = GateResult(outcome="fail", reason_codes=("NO_VALID_RUNS",))
         else:
-            stats = compute_eval_stats(comparisons, deltas)
+            # T2: stats computed on case-level comparisons/deltas
+            stats = compute_eval_stats(case_comparisons, case_deltas)
             if stage == ExperimentStage.SCREENING:
                 gate = screening_gate(stats, self.config)
             elif stage == ExperimentStage.VALIDATION:
@@ -227,11 +336,11 @@ class ExperimentProtocol:
             # Validation / Frozen: aggregate summary only, no per-case data
             exposed = f"stage={stage.value} outcome={gate.outcome}"
 
-        # Build case-level feedback for screening
+        # Build case-level feedback for screening only
         case_fb: tuple = ()
         pattern: "ScreeningPatternSummary | None" = None
-        if stage == ExperimentStage.SCREENING and pair_feedback:
-            case_fb = tuple(_aggregate_case_feedback(pair_feedback))
+        if stage == ExperimentStage.SCREENING and all_pair_feedback:
+            case_fb = tuple(_aggregate_case_feedback(all_pair_feedback))
             pattern = _build_pattern_summary(case_fb)
 
         return ProtocolResult(
@@ -241,14 +350,50 @@ class ExperimentProtocol:
             reason_codes=gate.reason_codes,
             exposed_summary=exposed,
             raw_metrics_ref=raw_ref,
-            pair_feedback=tuple(pair_feedback) if stage == ExperimentStage.SCREENING else (),
+            pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
             case_feedback=case_fb,
             pattern_summary=pattern,
         )
 
 
 # ---------------------------------------------------------------------------
-# Case feedback helpers
+# T2: Case-level aggregation helper
+# ---------------------------------------------------------------------------
+
+def _aggregate_pairs_to_case_level(
+    pairs: List[PairwiseCaseFeedback],
+) -> List[CaseLevelResult]:
+    """For each case, aggregate across seeds: majority vote → win/loss/tie, median delta.
+
+    T2: This is the core of the case-level statistical unit change.
+    """
+    by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
+    for p in pairs:
+        by_case[p.case_id].append(p)
+
+    result = []
+    for case_id, case_pairs in by_case.items():
+        wins = sum(1 for p in case_pairs if p.comparison == "win")
+        losses = sum(1 for p in case_pairs if p.comparison == "loss")
+        ties = len(case_pairs) - wins - losses
+
+        # Majority vote across seeds
+        if wins > losses and wins > ties:
+            majority = "win"
+        elif losses > wins and losses > ties:
+            majority = "loss"
+        else:
+            # True tie in vote count (or ties dominate)
+            majority = "tie"
+
+        med_delta = statistics.median(p.delta for p in case_pairs)
+        result.append(CaseLevelResult(case_id=case_id, comparison=majority, delta=med_delta))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Case feedback helpers (unchanged from original)
 # ---------------------------------------------------------------------------
 
 def _extract_case_features(case_path: str) -> dict:
@@ -266,9 +411,6 @@ def _aggregate_case_feedback(
     pairs: List[PairwiseCaseFeedback],
 ) -> List[CaseAggregateFeedback]:
     """Group pair feedback by case_id and compute per-case aggregates."""
-    import statistics
-    from collections import defaultdict
-
     by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
     for p in pairs:
         by_case[p.case_id].append(p)
@@ -327,8 +469,6 @@ def _build_pattern_summary(
     case_feedback: tuple[CaseAggregateFeedback, ...],
 ) -> ScreeningPatternSummary:
     """Build code-generated pattern summary from case-level feedback."""
-    from collections import defaultdict
-
     winning = [c for c in case_feedback if c.dominant_result == "win"]
     losing = [c for c in case_feedback if c.dominant_result == "loss"]
     mixed = [c for c in case_feedback if c.dominant_result == "mixed"]

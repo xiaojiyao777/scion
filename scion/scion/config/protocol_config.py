@@ -139,7 +139,7 @@ class ProtocolConfig(BaseModel):
         config.screening.n_cases_modify  # 6
     """
 
-    version: str
+    version: str = "dev"
     """协议版本号。"""
 
     screening: ScreeningConfig = Field(default_factory=ScreeningConfig)
@@ -154,6 +154,25 @@ class ProtocolConfig(BaseModel):
 
     gates: GatesConfig = Field(default_factory=GatesConfig)
     """门控阈值配置。"""
+
+    # ------------------------------------------------------------------
+    # Backward-compatibility properties (used by gates.py and old tests)
+    # ------------------------------------------------------------------
+
+    @property
+    def screening_win_rate_threshold(self) -> float:
+        """Alias for gates.screening.win_rate_min."""
+        return self.gates.screening.win_rate_min
+
+    @property
+    def validation_win_rate_threshold(self) -> float:
+        """Alias for gates.validation.win_rate_min."""
+        return self.gates.validation.win_rate_min
+
+    @property
+    def min_practical_delta(self) -> float:
+        """Numeric practical delta threshold (default 0.001)."""
+        return 0.001
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ProtocolConfig":

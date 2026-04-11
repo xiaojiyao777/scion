@@ -490,8 +490,11 @@ class TestWarehouseDeliveryConfig:
     def test_protocol_yaml_loads(self, warehouse_dir):
         from scion.config.problem import ProtocolConfig
         proto = ProtocolConfig.from_yaml(str(warehouse_dir / "protocol.yaml"))
-        assert proto.screening_n == 20
-        assert proto.validation_n == 18
+        # New nested schema: screening.n_cases_modify, validation.n_cases, etc.
+        assert proto.screening.n_cases_modify == 6
+        assert proto.screening.n_cases_create == 10
+        assert proto.validation.n_cases == 6
+        assert proto.frozen.n_cases == 4
 
     def test_split_manifest_loads_and_is_disjoint(self, warehouse_dir):
         from scion.config.split_manifest import SplitManifest

@@ -172,18 +172,23 @@ def test_frozen_gate_fail_unclear():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _make_manifest():
+    # canary cases must be disjoint from screening/validation/frozen
     return SplitManifest(
+        version="test",
         screening=["case_a", "case_b"],
         validation=["case_c", "case_d"],
         frozen=["case_e", "case_f"],
+        canary=["canary_x", "canary_y"],
     )
 
 
 def _make_ledger():
     return SeedLedgerConfig(
+        version="test",
         screening=[1, 2],
         validation=[3, 4],
         frozen=[5, 6],
+        canary=[99],
     )
 
 
