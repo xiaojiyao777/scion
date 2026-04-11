@@ -404,9 +404,9 @@ class TestConsecutiveFailureDiagnosis:
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "assignment dict" in diag or "HQ40_DG" in diag
 
-    def test_diagnosis_includes_suggestion_for_state_leak(self):
+    def test_diagnosis_includes_suggestion_for_nondeterminism(self):
         bid = "b1"
-        steps = self._ver_steps(bid, 3, vcode="V5_state_leak")
+        steps = self._ver_steps(bid, 3, vcode="V8_nondeterminism")
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "deep_copy" in diag
 

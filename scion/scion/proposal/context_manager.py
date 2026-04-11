@@ -412,12 +412,17 @@ _VERIFICATION_SUGGESTIONS: dict = {
         "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
         "危险品必须在 HQ40_DG 车型"
     ),
-    "V5_state_leak": (
-        "V5 要求同 seed 两次 solver run 产出完全相同的 objective。常见非确定性来源："
+    "V5_state_mutation": (
+        "算子修改了输入 solution（state 污染）。"
+        "确保先调用 solution.deep_copy() 再操作，不要引用原始 solution 的任何可变子对象（list、dict）。"
+        "检查 assignment dict 和 vehicle.order_ids 是否一致。"
+    ),
+    "V8_nondeterminism": (
+        "同 seed 两次 solver run 产出了不同的 objective。常见非确定性来源："
         "(1) 禁止使用 uuid.uuid4()，必须用 generate_vehicle_id(rng) 生成车辆 ID；"
         "(2) 禁止 list(set(...)) 或遍历 set/dict 时依赖顺序，必须 sorted()；"
         "(3) 所有随机性必须来自 rng 参数，不要 import random 或使用任何系统熵源；"
-        "(4) 确保只修改 deep_copy 后的对象，不要引用原始 solution 的可变子对象"
+        "(4) 确保只修改 deep_copy 后的对象"
     ),
     "V2_interface": (
         "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"

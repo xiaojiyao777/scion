@@ -1,4 +1,4 @@
-"""Tests for T02: V5 state_leak diagnostics enhancement."""
+"""Tests for T02: V8 nondeterminism diagnostics enhancement."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ import pytest
 
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.models import RunResult, SolverOutput
-from scion.verification.state_leak import check_state_leak
+from scion.verification.nondeterminism import check_nondeterminism
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ class TestStateleakDiagnostics:
         spec = _make_spec(canary)
         runner = _make_nondeterministic_runner(tmp_path)
 
-        r = check_state_leak(spec, runner, str(tmp_path))
+        r = check_nondeterminism(spec, runner, str(tmp_path))
 
         assert r.passed is False
         # detail must be valid JSON
@@ -126,10 +126,10 @@ class TestStateleakDiagnostics:
         metrics_dir.mkdir()
         runner = _make_nondeterministic_runner(tmp_path)
 
-        r = check_state_leak(spec, runner, str(tmp_path), metrics_dir=str(metrics_dir))
+        r = check_nondeterminism(spec, runner, str(tmp_path), metrics_dir=str(metrics_dir))
 
         assert r.passed is False
-        run_files = list(metrics_dir.glob("v5_run*.json"))
+        run_files = list(metrics_dir.glob("v8_run*.json"))
         assert len(run_files) == 2
 
     def test_v5_failure_archives_candidate_code(self, tmp_path: Path):
@@ -147,7 +147,7 @@ class TestStateleakDiagnostics:
         metrics_dir.mkdir()
         runner = _make_nondeterministic_runner(tmp_path)
 
-        r = check_state_leak(spec, runner, str(workspace), metrics_dir=str(metrics_dir))
+        r = check_nondeterminism(spec, runner, str(workspace), metrics_dir=str(metrics_dir))
 
         assert r.passed is False
         detail = json.loads(r.detail)
@@ -162,7 +162,7 @@ class TestStateleakDiagnostics:
         spec = _make_spec(canary)
         runner = _make_nondeterministic_runner(tmp_path)
 
-        r = check_state_leak(spec, runner, str(tmp_path), metrics_dir=None)
+        r = check_nondeterminism(spec, runner, str(tmp_path), metrics_dir=None)
 
         assert r.passed is False
-        assert r.name == "V5_state_leak"
+        assert r.name == "V8_nondeterminism"
