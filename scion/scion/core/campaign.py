@@ -1220,6 +1220,8 @@ class CampaignManager:
     def _on_promote(self, branch: Branch) -> None:
         """Update champion and mark all other active branches stale."""
         import os as _os
+        import shutil as _shutil
+        from scion.runtime.workspace import _make_tree_writable
         bid = branch.branch_id
         ws = self._branch_workspaces.get(bid)
         if ws is None:
@@ -1227,30 +1229,34 @@ class CampaignManager:
             return
 
         new_version = self._champion.version + 1
-        # Create a champion snapshot from the promoted workspace
+
+        # T3: Create mutable staging at champions/champion_v{N} from promoted workspace.
+        # Weight optimization writes back to staging before it is frozen.
+        staging_path = str(self._materializer._champions_dir / f"champion_v{new_version}")
         try:
-            snapshot_path = self._materializer.create_champion_snapshot(
-                champion=ChampionState(
-                    version=new_version,
-                    operator_pool=self._champion.operator_pool,
-                    solver_config_hash=self._champion.solver_config_hash,
-                    code_snapshot_path=ws,
-                    code_snapshot_hash=self._materializer.compute_code_hash(ws),
-                ),
-                target_dir=str(self._materializer._champions_dir),
-            )
+            if _os.path.exists(staging_path):
+                from pathlib import Path as _Path
+                _make_tree_writable(_Path(staging_path))
+                _shutil.rmtree(staging_path)
+            _shutil.copytree(ws, staging_path)
+            from pathlib import Path as _Path
+            _make_tree_writable(_Path(staging_path))
         except Exception as exc:
-            logger.error("Branch %s: champion snapshot failed: %s", bid, exc)
-            snapshot_path = ws  # fallback
+            logger.error("Branch %s: mutable staging failed: %s", bid, exc)
+            staging_path = ws  # fallback
 
         # --- v0.2: Weight optimization ---
         param_cfg = self._spec.parameter_search
         if param_cfg.enabled and self._experiment_protocol is not None:
             try:
-                opt_result = self._run_weight_optimization(snapshot_path, new_version)
+                # Read current weights from staging before optimization
+                from scion.runtime.pool_manager import read_weights, update_weights
+                registry_path = _os.path.join(staging_path, "registry.yaml")
+                current_weights = read_weights(registry_path) if _os.path.exists(registry_path) else {}
+
+                opt_result = self._run_weight_optimization(staging_path, new_version, current_weights)
                 if opt_result is not None and opt_result.improved:
-                    from scion.runtime.pool_manager import update_weights
-                    registry_path = _os.path.join(snapshot_path, "registry.yaml")
+                    # Write back to mutable staging (not read-only snapshot)
                     if _os.path.exists(registry_path):
                         update_weights(registry_path, opt_result.best_weights)
                     logger.info(
@@ -1266,6 +1272,14 @@ class CampaignManager:
             except Exception as exc:
                 logger.error("Weight optimization failed for champion v%d: %s", new_version, exc)
 
+        # T3: Freeze staging → final champion snapshot (read-only)
+        try:
+            self._materializer.freeze_snapshot(staging_path)
+        except Exception as exc:
+            logger.error("Failed to freeze staging %s: %s", staging_path, exc)
+
+        snapshot_path = staging_path
+
         # Rebuild operator_pool from final registry.yaml
         from scion.runtime.pool_manager import read_registry
         registry_path = _os.path.join(snapshot_path, "registry.yaml")
@@ -1274,7 +1288,8 @@ class CampaignManager:
         except Exception:
             final_pool = self._champion.operator_pool  # fallback
 
-        code_hash = self._materializer.compute_code_hash(ws)
+        # T4: Use compute_snapshot_hash (includes registry.yaml) for champion hash
+        code_hash = self._materializer.compute_snapshot_hash(snapshot_path)
         new_champion = ChampionState(
             version=new_version,
             operator_pool=final_pool,
@@ -1288,8 +1303,16 @@ class CampaignManager:
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
 
-    def _run_weight_optimization(self, champion_snapshot: str, version: int):
+    def _run_weight_optimization(
+        self, champion_snapshot: str, version: int, current_weights: dict
+    ):
         """Run weight optimization on a copy of the champion snapshot.
+
+        Args:
+            champion_snapshot: Path to the mutable staging snapshot directory.
+            version: Champion version number (used for eval_ws naming and seed).
+            current_weights: Current champion weights — passed to optimizer as
+                true baseline (T1).
 
         Returns WeightOptimizationResult or None if prerequisites are missing.
         """
@@ -1298,7 +1321,6 @@ class CampaignManager:
         from scion.parameter.optimizer import RandomLocalWeightOptimizer, BayesianWeightOptimizer
         from scion.parameter.evaluator import collect_baseline, evaluate_weights
         from scion.parameter.search_space import ParameterSearchSpace
-        from scion.runtime.pool_manager import read_weights
 
         param_cfg = self._spec.parameter_search
 
@@ -1320,7 +1342,7 @@ class CampaignManager:
         if _os.path.exists(eval_ws):
             shutil.rmtree(eval_ws)
         shutil.copytree(champion_snapshot, eval_ws)
-        # Fix read-only permissions from snapshot
+        # Ensure eval workspace is writable
         for _root, _dirs, _files in _os.walk(eval_ws):
             for _d in _dirs:
                 _os.chmod(_os.path.join(_root, _d), 0o755)
@@ -1339,11 +1361,9 @@ class CampaignManager:
         seeds = list(self._seed_ledger.screening)[:param_cfg.n_eval_seeds]
         time_limit = getattr(getattr(self._spec, 'solver', None), 'time_limit_sec', 300)
 
-        # Read current weights from eval workspace
-        current_weights = read_weights(_os.path.join(eval_ws, "registry.yaml"))
         operator_names = tuple(current_weights.keys())
 
-        # Collect baseline
+        # Collect baseline objectives for evaluate_weights comparisons
         baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
 
         # Build search space
@@ -1370,7 +1390,13 @@ class CampaignManager:
         optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
         if getattr(param_cfg, 'strategy', 'random_local') == 'bayesian':
             optimizer = BayesianWeightOptimizer(search_space, eval_fn, seed=version)
-        result = optimizer.optimize()
+
+        # T2: artifacts dir for saving observations JSON
+        artifacts_dir = _os.path.join(self._campaign_dir, "artifacts")
+        _os.makedirs(artifacts_dir, exist_ok=True)
+
+        # T1: pass current_weights so optimizer evaluates true baseline first
+        result = optimizer.optimize(current_weights, artifacts_dir=artifacts_dir)
 
         try:
             shutil.rmtree(eval_ws)

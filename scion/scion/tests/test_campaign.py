@@ -828,7 +828,7 @@ class TestPromoteWeightOptimizationHook:
 
         call_log = []
 
-        def fake_run_opt(self_cm, snapshot, version):
+        def fake_run_opt(self_cm, snapshot, version, current_weights):
             call_log.append(version)
             return WeightOptimizationResult(
                 baseline_weights={},

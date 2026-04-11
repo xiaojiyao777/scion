@@ -325,7 +325,7 @@ def test_optimizer_improves_on_convex_mock():
 
     space = _make_space(n_initial=8, n_iter=16)
     opt = RandomLocalWeightOptimizer(space, convex_eval, seed=42)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 0.5, "op_b": 0.5})
 
     assert result.best_score >= result.baseline_score
     assert result.improved or result.best_score == result.baseline_score
@@ -349,8 +349,8 @@ def test_optimizer_is_seed_deterministic():
         return v
 
     space = _make_space(n_initial=4, n_iter=4)
-    r1 = RandomLocalWeightOptimizer(space, eval1, seed=0).optimize()
-    r2 = RandomLocalWeightOptimizer(space, eval2, seed=0).optimize()
+    r1 = RandomLocalWeightOptimizer(space, eval1, seed=0).optimize({"op_a": 1.0, "op_b": 1.0})
+    r2 = RandomLocalWeightOptimizer(space, eval2, seed=0).optimize({"op_a": 1.0, "op_b": 1.0})
 
     assert r1.best_score == r2.best_score
     assert r1.n_evaluations == r2.n_evaluations
@@ -363,7 +363,7 @@ def test_optimizer_returns_correct_structure():
 
     space = _make_space()
     opt = RandomLocalWeightOptimizer(space, lambda w: 1.0, seed=7)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
 
     assert result.baseline_weights is not None
     assert result.best_weights is not None
@@ -382,7 +382,7 @@ def test_optimizer_respects_weight_bounds():
     lo, hi = 0.05, 5.0
     space = _make_space(n_initial=10, n_iter=20, bounds=(lo, hi))
     opt = RandomLocalWeightOptimizer(space, lambda w: sum(w.values()), seed=3)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
 
     for name, w in result.best_weights.items():
         assert lo <= w <= hi, f"{name}: {w} outside [{lo}, {hi}]"
@@ -391,15 +391,15 @@ def test_optimizer_respects_weight_bounds():
 
 
 def test_optimizer_n_evaluations():
-    """n_evaluations == n_initial_random + n_iterations."""
+    """n_evaluations == 1 (baseline) + n_initial_random + n_iterations."""
     from scion.parameter.optimizer import RandomLocalWeightOptimizer
 
     n_init, n_iter = 5, 7
     space = _make_space(n_initial=n_init, n_iter=n_iter)
     opt = RandomLocalWeightOptimizer(space, lambda w: 0.0, seed=1)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
 
-    assert result.n_evaluations == n_init + n_iter
+    assert result.n_evaluations == 1 + n_init + n_iter
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ def test_bayesian_optimizer_improves_convex_mock():
 
     space = _make_space(n_initial=8, n_iter=16)
     opt = BayesianWeightOptimizer(space, convex_eval, seed=42)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 2.0, "op_b": 2.0})
 
     assert result.best_score >= result.baseline_score
     assert result.best_weights is not None
@@ -432,8 +432,8 @@ def test_bayesian_optimizer_deterministic():
         return sum(w.values())
 
     space = _make_space(n_initial=4, n_iter=4)
-    r1 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize()
-    r2 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize()
+    r1 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize({"op_a": 1.0, "op_b": 1.0})
+    r2 = BayesianWeightOptimizer(space, eval_fn, seed=7).optimize({"op_a": 1.0, "op_b": 1.0})
 
     assert abs(r1.best_score - r2.best_score) < 1e-9
     assert r1.n_evaluations == r2.n_evaluations
@@ -463,7 +463,7 @@ def test_bayesian_fallback_to_scipy(monkeypatch):
     with monkeypatch.context() as m:
         m.setattr(builtins, "__import__", mock_import)
         # Should not raise — falls back to scipy or pure python
-        result = BayesianWeightOptimizer(space, eval_fn, seed=1).optimize()
+        result = BayesianWeightOptimizer(space, eval_fn, seed=1).optimize({"op_a": 1.0, "op_b": 1.0})
 
     assert result is not None
     assert result.best_weights is not None
@@ -480,7 +480,7 @@ def test_optimizer_selection_by_config():
 
     space = _make_space(n_initial=2, n_iter=2)
     opt = BayesianWeightOptimizer(space, lambda w: 1.0, seed=0)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
     assert isinstance(result.best_weights, dict)
 
 
@@ -494,6 +494,6 @@ def test_default_optimizer_unchanged():
 
     space = _make_space()
     opt = RandomLocalWeightOptimizer(space, lambda w: 1.0, seed=0)
-    result = opt.optimize()
+    result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
     assert isinstance(result.best_weights, dict)
 
