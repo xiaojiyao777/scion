@@ -75,12 +75,14 @@ class VerificationGate:
         checks: List[CheckResult] = []
 
         # --- V1: syntax (light) ---
+        # V1_syntax: AST parse of patch code
         r = check_syntax(patch)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
 
         # --- V2: interface (light) ---
+        # V2_interface: Operator subclass + execute signature
         r = check_interface(patch, candidate_workspace)
         checks.append(r)
         if not r.passed:
@@ -105,6 +107,9 @@ class VerificationGate:
             return VerificationResult(passed=True, checks=tuple(checks))
 
         # --- V5: state_mutation (heavy) ---
+        # V5_state_mutation: solution consistency after solver run.
+        # NOTE: Current implementation is a proxy consistency check (not a true
+        # input-mutation harness). Rename target: V5_solution_consistency in v0.3.
         r = check_state_mutation(self._spec, self._runner, candidate_workspace)
         checks.append(r)
         if not r.passed:
@@ -123,6 +128,8 @@ class VerificationGate:
             return _fail(checks, r)
 
         # --- V8: nondeterminism (heavy) ---
+        # V8_nondeterminism: two identical-seed runs must produce identical output.
+        # This is the authoritative determinism check (replaces deprecated state_leak.py).
         r = check_nondeterminism(self._spec, self._runner, candidate_workspace, metrics_dir=self._metrics_dir)
         checks.append(r)
         if not r.passed:

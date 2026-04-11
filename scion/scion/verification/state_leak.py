@@ -1,4 +1,20 @@
-"""State-leak check: same case + same seed must yield identical objectives twice."""
+"""State-leak check: same case + same seed must yield identical objectives twice.
+
+DEPRECATED: This module duplicates scion.verification.nondeterminism and will be
+removed in v0.3. Use check_nondeterminism() from scion.verification.nondeterminism
+instead. gate.py uses V8_nondeterminism (nondeterminism.py) as the authoritative
+determinism check; this file is retained only for external callers that may still
+import check_state_leak.
+"""
+import warnings as _warnings
+
+_warnings.warn(
+    "scion.verification.state_leak is deprecated and will be removed in v0.3. "
+    "Use scion.verification.nondeterminism.check_nondeterminism instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from __future__ import annotations
 
 import json

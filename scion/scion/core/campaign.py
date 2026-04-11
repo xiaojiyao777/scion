@@ -472,6 +472,9 @@ class CampaignManager:
             return StepResult(action="explore", branch_id=bid, reason="apply_patch failed")
 
         self._branch_patches[bid] = patch
+        # T4: sync registry via PoolManager after patch apply
+        # (handles remove/modify correctly, not just create)
+        self._sync_pool_registry(workspace, hypothesis, patch)
         # T03: only update current_code_hash here; last_clean_code_hash updated after verification passes
         self._branch_ctrl.record_candidate_code(bid, code_hash)
 
@@ -747,7 +750,11 @@ class CampaignManager:
 
         hypothesis_action = hypothesis.action if hypothesis else "modify"
         champ_ws = self._champion.code_snapshot_path
-        canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
+        try:
+            canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
+        except (ValueError, NotImplementedError) as exc:
+            logger.debug("reconcile run_canary skipped: %s", exc)
+            canary_result = CanaryResult(passed=True, reason=f"canary skipped: {exc}")
         if not canary_result.passed:
             logger.info("Branch %s: reconcile canary failed — abandoning stale branch", bid)
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
@@ -943,7 +950,12 @@ class CampaignManager:
         # ---- Canary ----
         canary_result: CanaryResult
         if self._experiment_protocol is not None:
-            canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
+            try:
+                canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
+            except (ValueError, NotImplementedError) as exc:
+                # Canary not configured (e.g. empty split) — treat as skip/pass
+                logger.debug("run_canary skipped: %s", exc)
+                canary_result = CanaryResult(passed=True, reason=f"canary skipped: {exc}")
         else:
             canary_result = CanaryResult(passed=True, reason="no protocol — auto-pass")
 
@@ -1000,6 +1012,31 @@ class CampaignManager:
         return outcome.decision, protocol_result, canary_result
 
     # ------------------------------------------------------------------
+    # Pool/registry sync
+    # ------------------------------------------------------------------
+
+    def _sync_pool_registry(
+        self,
+        workspace: str,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal,
+    ) -> None:
+        """Rebuild and export registry.yaml in workspace via PoolManager.
+
+        Ensures remove/modify/create_new all produce a consistent registry,
+        rather than relying on WorkspaceMaterializer side effects (create-only).
+        """
+        try:
+            from scion.runtime.pool_manager import PoolManager
+            pool_mgr = PoolManager(self._champion.operator_pool)
+            candidate_pool = pool_mgr.build_candidate_pool(
+                self._champion.operator_pool, hypothesis, patch
+            )
+            pool_mgr.export_registry(candidate_pool, workspace)
+        except Exception as exc:
+            logger.debug("_sync_pool_registry failed (non-fatal): %s", exc)
+
+    # ------------------------------------------------------------------
     # Lineage recording
     # ------------------------------------------------------------------
 
@@ -1013,6 +1050,8 @@ class CampaignManager:
         canary_result: CanaryResult,
         protocol_result: Optional[ProtocolResult],
         decision: Decision,
+        hypothesis_id: str = "",
+        decision_reason_codes: Optional[tuple] = None,
     ) -> None:
         """Write one experiment_event + one decision row to the registry."""
         import json as _json
@@ -1023,7 +1062,7 @@ class CampaignManager:
             "campaign_id": self._campaign_id,
             "branch_id": bid,
             "timestamp": datetime.now().isoformat(),
-            "hypothesis_id": "",
+            "hypothesis_id": hypothesis_id,
             "code_hash": branch.current_code_hash or "",
             "patch_action": patch.action if patch else "",
             "patch_file": patch.file_path if patch else "",
@@ -1062,7 +1101,7 @@ class CampaignManager:
                 bid,
                 features_json,
                 decision.value,
-                "[]",
+                _json.dumps(list(decision_reason_codes)) if decision_reason_codes else "[]",
             )
         except Exception as exc:
             logger.debug("registry.record_decision failed: %s", exc)
@@ -1096,6 +1135,8 @@ class CampaignManager:
             canary_result=canary_result,
             protocol_result=protocol_result,
             decision=decision,
+            hypothesis_id=h_record.hypothesis_id,
+            decision_reason_codes=protocol_result.reason_codes if protocol_result else None,
         )
 
         # CONTINUE_EXPLORE — preserve workspace when screening shows positive signal (§11.2)

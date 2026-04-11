@@ -177,6 +177,28 @@ def _split_hypothesis_context(
         f"## Champion State\n{D['champion_stats']}"
     )
 
+    # Block 3: Branch-specific context (branch code, coverage, strategy, baselines)
+    # Only included when at least one field is non-empty
+    branch_context_parts = []
+    if D["branch_code"] and D["branch_code"] != D["champion_operators_code"]:
+        branch_context_parts.append(
+            f"## Current Branch Code\n"
+            f"This branch has diverged from the champion. The current branch code is:\n\n"
+            f"{D['branch_code']}"
+        )
+    if D["exploration_coverage"]:
+        branch_context_parts.append(
+            f"## Exploration Coverage\n{D['exploration_coverage']}"
+        )
+    if D["strategy_guidance"]:
+        branch_context_parts.append(
+            f"## Strategy Guidance\n{D['strategy_guidance']}"
+        )
+    if D["champion_baselines"]:
+        branch_context_parts.append(
+            f"## Champion Baseline Hints\n{D['champion_baselines']}"
+        )
+
     system_blocks = [
         {
             "type": "text",
@@ -189,6 +211,11 @@ def _split_hypothesis_context(
             "cache_control": _CACHE_5M,
         },
     ]
+    if branch_context_parts:
+        system_blocks.append({
+            "type": "text",
+            "text": "\n\n".join(branch_context_parts),
+        })
 
     user_prompt = (
         f"## Experiment History \u2014 This Branch\n{D['experiment_history']}\n\n"
@@ -268,7 +295,17 @@ def _split_code_context(
         },
     ]
 
+    prior_failure_section = ""
+    if D["prior_code_failure"]:
+        prior_failure_section = (
+            f"## Previous Attempt Failed\n"
+            f"The previous code generation failed with:\n"
+            f"{D['prior_code_failure']}\n"
+            f"Avoid the same mistake.\n\n"
+        )
+
     user_prompt = (
+        f"{prior_failure_section}"
         f"## Hypothesis to Implement\n{D['hypothesis_detail']}\n\n"
         f"## Target File (current content)\n{D['target_file_code']}\n\n"
         f"## Reference Operators\n{D['reference_operators']}\n\n"
