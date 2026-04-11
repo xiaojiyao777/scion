@@ -130,6 +130,10 @@ class CampaignManager:
         self._branch_hypotheses: Dict[str, HypothesisProposal] = {}
         self._branch_patches: Dict[str, PatchProposal] = {}
 
+        # Pending hypotheses: branch_id → (hypothesis, h_record, failure_detail)
+        # A code-failed hypothesis gets ONE retry for code gen in the next round.
+        self._pending_hypotheses: Dict[str, Tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+
         # Hypothesis memory persisted to SQLite via HypothesisStore
         # (replaces in-memory _active_hypotheses and _blacklist lists)
 
@@ -261,56 +265,77 @@ class CampaignManager:
         self._round_num += 1
         rnum = self._round_num
 
-        # ---------- Round 1: generate hypothesis ----------
-        hypothesis, h_record = self._round1_generate_hypothesis(branch)
-        if hypothesis is None:
-            return StepResult(action="explore", branch_id=bid, reason="hypothesis generation failed")
-        logger.info(
-            "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
-            bid, hypothesis.change_locus, hypothesis.action, hypothesis.target_file,
-            (hypothesis.hypothesis_text or "")[:200],
-        )
+        # ---------- Check for pending hypothesis (code-retry path) ----------
+        pending = self._pending_hypotheses.pop(bid, None)
+        prior_failure: Optional[str] = None
 
-        # ---------- Contract gate: validate_hypothesis ----------
-        c_result = self._contract_gate.validate_hypothesis(
-            hypothesis,
-            self._hyp_store.get_by_status("active"),
-            self._hyp_store.get_by_status("blacklisted"),
-        )
-        if not c_result.passed:
-            logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
-            failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
-            self._handle_failure(branch, failure)
-            self._step_history.append(StepRecord(
-                round_num=rnum, branch_id=bid,
-                hypothesis=hypothesis, patch=None,
-                contract_passed=False, verification_passed=False,
-                protocol_result=None, decision=Decision.ABANDON,
-                failure_stage="hypothesis_contract",
-                failure_detail=c_result.failure_reason,
-            ))
-            return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
+        if pending is not None:
+            # Retry code generation for a previously code-failed hypothesis (skip Round 1)
+            hypothesis, h_record, prior_failure = pending
+            logger.info(
+                "Branch %s: retrying code gen for pending hypothesis (prior failure: %s)",
+                bid, prior_failure[:80],
+            )
+            self._branch_hypotheses[bid] = hypothesis
+        else:
+            # ---------- Round 1: generate hypothesis ----------
+            hypothesis, h_record = self._round1_generate_hypothesis(branch)
+            if hypothesis is None:
+                return StepResult(action="explore", branch_id=bid, reason="hypothesis generation failed")
+            logger.info(
+                "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
+                bid, hypothesis.change_locus, hypothesis.action, hypothesis.target_file,
+                (hypothesis.hypothesis_text or "")[:200],
+            )
 
-        # Register hypothesis in SQLite store
-        self._hyp_store.save(h_record)
-        self._branch_hypotheses[bid] = hypothesis
+            # ---------- Contract gate: validate_hypothesis ----------
+            c_result = self._contract_gate.validate_hypothesis(
+                hypothesis,
+                self._hyp_store.get_by_status("active"),
+                self._hyp_store.get_by_status("blacklisted"),
+            )
+            if not c_result.passed:
+                logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
+                failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
+                self._handle_failure(branch, failure)
+                self._step_history.append(StepRecord(
+                    round_num=rnum, branch_id=bid,
+                    hypothesis=hypothesis, patch=None,
+                    contract_passed=False, verification_passed=False,
+                    protocol_result=None, decision=Decision.ABANDON,
+                    failure_stage="hypothesis_contract",
+                    failure_detail=c_result.failure_reason,
+                ))
+                return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
+
+            # Register hypothesis in SQLite store
+            self._hyp_store.save(h_record)
+            self._branch_hypotheses[bid] = hypothesis
 
         # ---------- Round 2: generate code ----------
-        patch = self._round2_generate_code(branch, hypothesis)
+        patch = self._round2_generate_code(branch, hypothesis, prior_failure=prior_failure)
         if patch is not None:
             logger.info(
                 "Branch %s R2 code: file=%s action=%s code_len=%d",
                 bid, patch.file_path, patch.action, len(patch.code_content or ""),
             )
         if patch is None:
-            self._hyp_store.mark_status(h_record.hypothesis_id, "code_failed")
+            if prior_failure is not None:
+                # Second code gen failure on retry — mark rejected, no further retries
+                self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                failure_stage_detail = "LLM code generation failed (retry — hypothesis rejected)"
+            else:
+                # First code gen failure — queue hypothesis for one retry next round
+                self._pending_hypotheses[bid] = (hypothesis, h_record, "LLM code generation failed")
+                self._hyp_store.mark_status(h_record.hypothesis_id, "code_failed")
+                failure_stage_detail = "LLM code generation failed"
             self._step_history.append(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=None,
                 contract_passed=True, verification_passed=False,
                 protocol_result=None, decision=Decision.ABANDON,
                 failure_stage="code_generation",
-                failure_detail="LLM code generation failed",
+                failure_detail=failure_stage_detail,
             ))
             return StepResult(action="explore", branch_id=bid, reason="code generation failed")
 
@@ -586,7 +611,8 @@ class CampaignManager:
     # ------------------------------------------------------------------
 
     def _round2_generate_code(
-        self, branch: Branch, hypothesis: HypothesisProposal
+        self, branch: Branch, hypothesis: HypothesisProposal,
+        prior_failure: Optional[str] = None,
     ) -> Optional[PatchProposal]:
         bid = branch.branch_id
         context = self._ctx_manager.build_code_context(
@@ -594,6 +620,7 @@ class CampaignManager:
             hypothesis=hypothesis,
             champion=self._champion,
             problem_spec=self._spec,
+            prior_failure=prior_failure,
         )
         try:
             return self._creative.generate_code(context)

@@ -89,12 +89,15 @@ class ContextManager:
         hypothesis: HypothesisProposal,
         champion: ChampionState,
         problem_spec: ProblemSpec,
+        prior_failure: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_code (Round 2).
 
         Contains problem summary, hypothesis details, target file content,
         operator interface spec, and import whitelist.
         Does NOT contain experiment stats or branch history.
+        If prior_failure is set, a previous code generation attempt failed for
+        this hypothesis — the failure detail is included so the LLM can learn.
         """
         problem_summary = _build_problem_summary(problem_spec)
         hypothesis_detail = _format_hypothesis(hypothesis)
@@ -112,7 +115,7 @@ class ContextManager:
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
-        return {
+        ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
             "hypothesis_detail": hypothesis_detail,
             "target_file_code": target_file_code,
@@ -123,6 +126,9 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if prior_failure is not None:
+            ctx["prior_code_failure"] = prior_failure
+        return ctx
 
     # ------------------------------------------------------------------
     # Fix context — after light verification failure
