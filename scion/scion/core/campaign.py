@@ -34,6 +34,39 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Circuit breaker
+# ---------------------------------------------------------------------------
+
+MAX_CONSECUTIVE_LLM_FAILURES = 3
+
+
+class CircuitBreaker:
+    """Trips after N consecutive LLM failures to prevent budget burn."""
+
+    def __init__(self, threshold: int = MAX_CONSECUTIVE_LLM_FAILURES) -> None:
+        self._threshold = threshold
+        self._consecutive_failures = 0
+        self._last_failure_detail = ""
+
+    def record_success(self) -> None:
+        self._consecutive_failures = 0
+
+    def record_failure(self, detail: str) -> bool:
+        """Record a failure. Returns True if the circuit has just tripped."""
+        self._consecutive_failures += 1
+        self._last_failure_detail = detail
+        return self._consecutive_failures >= self._threshold
+
+    @property
+    def is_tripped(self) -> bool:
+        return self._consecutive_failures >= self._threshold
+
+    @property
+    def last_failure_detail(self) -> str:
+        return self._last_failure_detail
+
+
+# ---------------------------------------------------------------------------
 # Step result
 # ---------------------------------------------------------------------------
 
@@ -155,6 +188,9 @@ class CampaignManager:
         self._stagnation_signals: List[StagnationSignal] = []
         self._diagnostics: List[Dict[str, Any]] = []
 
+        # Circuit breaker (T29)
+        self._circuit_breaker = CircuitBreaker()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -164,6 +200,14 @@ class CampaignManager:
         for _ in range(max_rounds):
             if self.should_stop():
                 logger.info("Campaign terminated.")
+                break
+            if self._circuit_breaker.is_tripped:
+                logger.critical(
+                    "Circuit breaker tripped after %d consecutive LLM failures; "
+                    "stopping campaign. Last error: %s",
+                    MAX_CONSECUTIVE_LLM_FAILURES,
+                    self._circuit_breaker.last_failure_detail,
+                )
                 break
             result = self.run_one_step()
             if result.stopped:
@@ -600,8 +644,10 @@ class CampaignManager:
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
             self._handle_failure(branch, failure)
+            self._circuit_breaker.record_failure(str(exc))
             return None, None
 
+        self._circuit_breaker.record_success()
         h_record = HypothesisRecord(
             hypothesis_id=str(uuid.uuid4()),
             branch_id=bid,
@@ -631,11 +677,14 @@ class CampaignManager:
             prior_failure=prior_failure,
         )
         try:
-            return self._creative.generate_code(context)
+            result = self._creative.generate_code(context)
+            self._circuit_breaker.record_success()
+            return result
         except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, ProposalValidationError) as exc:
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
             self._handle_failure(branch, failure)
+            self._circuit_breaker.record_failure(str(exc))
             return None
 
     # ------------------------------------------------------------------
@@ -1281,6 +1330,7 @@ class CampaignManager:
             "campaign_id": self._campaign_id,
             "total_rounds": self._round_num,
             "champion_version": self._champion.version,
+            "stopped_reason": "circuit_breaker" if self._circuit_breaker.is_tripped else None,
             "cache_stats": {
                 "total_tokens": total_tokens,
                 "cache_read_tokens": cache_read_tokens,

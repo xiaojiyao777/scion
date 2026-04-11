@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import resource
 import signal
@@ -9,11 +10,17 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
 from scion.core.models import RunResult, SolverOutput
 from scion.runtime.runner import ResourceLimits
+
+logger = logging.getLogger(__name__)
+
+MAX_INLINE_OUTPUT_BYTES = 50_000
+_OFFLOAD_PREFIX = "__offloaded__:"
 
 
 # Environment variables passed through to the subprocess (whitelist)
@@ -170,6 +177,11 @@ class LocalSubprocessRunner:
         stdout_str = stdout_bytes.decode("utf-8", errors="replace")
         stderr_str = stderr_bytes.decode("utf-8", errors="replace")
 
+        # Offload large outputs to disk to keep RunResult lightweight
+        run_id = str(uuid.uuid4())[:8]
+        stdout_str = self._maybe_offload(stdout_str, workdir, f"{run_id}_stdout")
+        stderr_str = self._maybe_offload(stderr_str, workdir, f"{run_id}_stderr")
+
         exit_code = proc.returncode
 
         # Classify non-zero exits
@@ -217,6 +229,19 @@ class LocalSubprocessRunner:
         )
 
 
+    def _maybe_offload(self, output: str, workspace: str, run_id: str) -> str:
+        """If output exceeds MAX_INLINE_OUTPUT_BYTES, write to disk and return a reference."""
+        if len(output.encode()) <= MAX_INLINE_OUTPUT_BYTES:
+            return output
+        artifact_dir = os.path.join(workspace, "artifacts")
+        os.makedirs(artifact_dir, exist_ok=True)
+        path = os.path.join(artifact_dir, f"run_{run_id}_output.json")
+        with open(path, "w") as f:
+            f.write(output)
+        logger.info("Output offloaded to disk (%d KB): %s", len(output) // 1024, path)
+        return f"{_OFFLOAD_PREFIX}{path}"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -243,3 +268,16 @@ def _try_remove(path: str) -> None:
         os.unlink(path)
     except OSError:
         pass
+
+
+def resolve_offloaded(output: str) -> str:
+    """Resolve an offloaded output reference back to its full content.
+
+    If ``output`` is an ``__offloaded__:<path>`` reference, reads and returns
+    the content from disk.  Otherwise returns ``output`` unchanged.
+    """
+    if output.startswith(_OFFLOAD_PREFIX):
+        path = output[len(_OFFLOAD_PREFIX):]
+        with open(path, "r") as f:
+            return f.read()
+    return output

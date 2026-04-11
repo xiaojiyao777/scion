@@ -29,6 +29,7 @@ from typing import List, Optional
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult, PatchProposal, VerificationResult
 from scion.runtime.runner import Runner
+from scion.runtime.subprocess_runner import resolve_offloaded
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
 from scion.verification.tests import check_unit_tests, check_regression_tests

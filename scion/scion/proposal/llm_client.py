@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 # Exponential backoff delays (seconds) between retries
 _BACKOFF_DELAYS = (5.0, 15.0)
 
+# Truncation recovery
+MAX_TRUNCATION_RETRIES = 2
+MAX_MAX_TOKENS = 16384
+
 # Default config — aihubmix Anthropic endpoint
 _DEFAULT_BASE_URL = "https://aihubmix.com"
 _DEFAULT_MODEL = "claude-opus-4-6"
@@ -113,6 +117,7 @@ class LLMClient:
         response_schema: Dict[str, Any],
         model: str | None = None,
         system_blocks: "list[dict] | None" = None,
+        priority: str = "foreground",
     ) -> Dict[str, Any]:
         """Call the LLM and return a validated JSON dict.
 
@@ -142,6 +147,8 @@ class LLMClient:
 
             except LLMRateLimitError as exc:
                 last_error = exc
+                if priority == "background":
+                    raise
                 logger.warning(
                     "LLM rate-limited (attempt %d); sleeping %.1fs", attempt, exc.retry_after
                 )
@@ -190,6 +197,7 @@ class LLMClient:
         tool: Dict[str, Any],
         model: str | None = None,
         system_blocks: "list[dict] | None" = None,
+        priority: str = "foreground",
     ) -> Dict[str, Any]:
         """Call LLM with tool_use and return the tool input dict directly.
 
@@ -204,12 +212,14 @@ class LLMClient:
         client = self._get_client()
         attempt = 0
         last_error: Exception | None = None
+        current_max_tokens = self.max_tokens
+        truncation_retries = 0
 
         while attempt <= self.max_retries:
             try:
                 kwargs: Dict[str, Any] = {
                     "model": effective_model,
-                    "max_tokens": self.max_tokens,
+                    "max_tokens": current_max_tokens,
                     "tools": [tool],
                     "tool_choice": {"type": "tool", "name": tool["name"]},
                     "messages": [{"role": "user", "content": prompt}],
@@ -237,12 +247,32 @@ class LLMClient:
                     self._cache_stats["uncached_tokens"] += input_tokens
 
                 # Extract tool_use block
+                stop_reason = getattr(response, 'stop_reason', None)
                 logger.debug(
                     "Response: stop_reason=%s blocks=%d types=%s",
-                    getattr(response, 'stop_reason', '?'),
+                    stop_reason,
                     len(response.content),
                     [getattr(b, 'type', '?') for b in response.content],
                 )
+
+                # Truncation recovery: retry with doubled max_tokens
+                if stop_reason in ("max_tokens", "length"):
+                    if truncation_retries < MAX_TRUNCATION_RETRIES:
+                        new_max = min(current_max_tokens * 2, MAX_MAX_TOKENS)
+                        logger.warning(
+                            "Response truncated (stop_reason=%s); retrying with max_tokens=%d→%d (truncation_retry %d/%d)",
+                            stop_reason, current_max_tokens, new_max,
+                            truncation_retries + 1, MAX_TRUNCATION_RETRIES,
+                        )
+                        current_max_tokens = new_max
+                        truncation_retries += 1
+                        continue
+                    else:
+                        logger.warning(
+                            "Response still truncated after %d truncation retries; returning partial content",
+                            MAX_TRUNCATION_RETRIES,
+                        )
+
                 for block in response.content:
                     if hasattr(block, "type") and block.type == "tool_use":
                         if block.name == tool["name"]:
@@ -279,6 +309,8 @@ class LLMClient:
 
             except LLMRateLimitError as exc:
                 last_error = exc
+                if priority == "background":
+                    raise
                 retry_after = exc.retry_after
                 logger.warning("Rate limited; waiting %.1fs", retry_after)
                 time.sleep(retry_after)
@@ -302,6 +334,8 @@ class LLMClient:
                 elif "429" in str(exc) or "rate_limit" in err_str:
                     retry_after = _parse_retry_after(exc)
                     last_error = LLMRateLimitError(str(exc), retry_after=retry_after)
+                    if priority == "background":
+                        raise last_error from exc
                     time.sleep(retry_after)
                     continue  # Don't consume retry
                 else:
