@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import uuid
 from random import Random
 
 from models import (
@@ -19,7 +18,7 @@ from models import (
     select_minimum_vehicle_type,
     VEHICLE_TYPES,
 )
-from operators.base import Operator
+from operators.base import Operator, generate_vehicle_id
 
 
 class SplitVehicle(Operator):
@@ -74,7 +73,7 @@ class SplitVehicle(Operator):
             vehicle.vehicle_type = select_minimum_vehicle_type(p1, h1)
 
         # 新建第二辆车承接 group2
-        new_vid = f"V_{uuid.uuid4().hex[:8]}"
+        new_vid = generate_vehicle_id(rng)
         orders2 = [self.instance.orders[oid] for oid in group2]
         p2 = sum(calc_pallets(o.spu_list) for o in orders2)
         h2 = sum(o.hazard_quantity for o in orders2 if o.hazard_flag)

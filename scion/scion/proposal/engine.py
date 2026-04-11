@@ -261,6 +261,7 @@ def _split_code_context(
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
         f"- Subclass `Operator` and implement `execute(self, solution, rng) -> Solution`\n"
         f"- Deep-copy the solution: `new_sol = solution.deep_copy()`\n"
+        f"- Generate new vehicle IDs: `from operators.base import generate_vehicle_id` then `vid = generate_vehicle_id(rng)` (NEVER use uuid)\n"
         f"- Skip locked orders (`order.locked_vehicle_id is not None`)\n"
         f"- Use `rng` for all randomness, return new solution or original\n\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"

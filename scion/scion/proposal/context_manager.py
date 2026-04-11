@@ -413,7 +413,11 @@ _VERIFICATION_SUGGESTIONS: dict = {
         "危险品必须在 HQ40_DG 车型"
     ),
     "V5_state_leak": (
-        "确保只修改 deep_copy 后的对象，不要引用原始 solution 的任何可变子对象（如 list、dict）"
+        "V5 要求同 seed 两次 solver run 产出完全相同的 objective。常见非确定性来源："
+        "(1) 禁止使用 uuid.uuid4()，必须用 generate_vehicle_id(rng) 生成车辆 ID；"
+        "(2) 禁止 list(set(...)) 或遍历 set/dict 时依赖顺序，必须 sorted()；"
+        "(3) 所有随机性必须来自 rng 参数，不要 import random 或使用任何系统熵源；"
+        "(4) 确保只修改 deep_copy 后的对象，不要引用原始 solution 的可变子对象"
     ),
     "V2_interface": (
         "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"
@@ -638,7 +642,7 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
 2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
-4. **Determinism**: NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
+4. **Determinism**: NEVER use `uuid.uuid4()` or any system entropy source. Generate vehicle IDs with `generate_vehicle_id(rng)` from `operators.base`. NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
 5. **Return value**: return the modified solution (or the original if no valid move was found)
 6. **Imports**: only use modules from the import whitelist; no external packages
 
