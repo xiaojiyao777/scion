@@ -49,7 +49,8 @@ def check_nondeterminism(
 
     reg = _registry_path(candidate_workspace)
 
-    def _run() -> dict | None:
+    def _run() -> tuple[dict | None, str]:
+        """Returns (output_dict, stderr_snippet)."""
         try:
             r = runner.run_solver(
                 workdir=candidate_workspace,
@@ -58,23 +59,25 @@ def check_nondeterminism(
                 time_limit_sec=30,
                 registry_path=reg,
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            return None, str(exc)
         if not r.success or r.output_path is None:
-            return None
+            return None, r.stderr.strip() if r.stderr else ""
         try:
             with open(r.output_path, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
+                return json.load(f), ""
+        except Exception as exc:
+            return None, str(exc)
 
-    raw1 = _run()
+    raw1, err1 = _run()
     if raw1 is None:
-        return _cr(False, "first run failed", t0)
+        detail = f"first run failed: {err1}" if err1 else "first run failed"
+        return _cr(False, detail, t0)
 
-    raw2 = _run()
+    raw2, err2 = _run()
     if raw2 is None:
-        return _cr(False, "second run failed", t0)
+        detail = f"second run failed: {err2}" if err2 else "second run failed"
+        return _cr(False, detail, t0)
 
     # Save run outputs to metrics_dir if provided
     short_id = uuid.uuid4().hex[:8]

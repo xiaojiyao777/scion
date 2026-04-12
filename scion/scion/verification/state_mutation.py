@@ -72,7 +72,10 @@ def check_state_mutation(
         return _cr(False, f"solver run failed: {exc}", t0)
 
     if not result.success or result.output_path is None:
-        return _cr(False, "solver run failed or no output", t0)
+        detail = "solver run failed or no output"
+        if result.stderr:
+            detail = f"solver run failed: {result.stderr.strip()}"
+        return _cr(False, detail, t0)
 
     try:
         with open(result.output_path, encoding="utf-8") as f:
