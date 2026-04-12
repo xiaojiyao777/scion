@@ -1,6 +1,7 @@
 from __future__ import annotations
+import ast
 import os
-from typing import Dict
+from typing import Dict, Optional
 import yaml
 
 from scion.core.models import OperatorConfig, HypothesisProposal, PatchProposal
@@ -15,10 +16,14 @@ class PoolManager:
         champion_pool: Dict[str, OperatorConfig],
         hypothesis: HypothesisProposal,
         patch: PatchProposal,
+        workspace: Optional[str] = None,
     ) -> Dict[str, OperatorConfig]:
         """
         Construct a candidate pool from the champion pool by applying the
         hypothesis action (modify / create_new / remove).
+
+        If workspace is provided, scans the patched file's AST to extract
+        the actual class name (handles LLM renaming the class on modify/create).
         """
         pool = dict(champion_pool)
         action = hypothesis.action
@@ -28,24 +33,34 @@ class PoolManager:
             target = hypothesis.target_file
             for name, op in list(pool.items()):
                 if op.file_path == target or name == _stem(target or ""):
+                    # Scan actual file for real class name if workspace available
+                    scanned_class = None
+                    if workspace:
+                        abs_path = os.path.join(workspace, patch.file_path)
+                        scanned_class = _scan_class_name(abs_path)
                     pool[name] = OperatorConfig(
                         name=op.name,
                         file_path=patch.file_path,
                         category=op.category,
                         weight=op.weight,
-                        class_name=op.class_name,
+                        class_name=scanned_class if scanned_class else op.class_name,
                     )
                     break
 
         elif action == "create_new":
             new_name = _stem(patch.file_path)
             weight = hypothesis.suggested_weight if hypothesis.suggested_weight else 0.1
+            # Scan actual file for real class name if workspace available
+            scanned_class = None
+            if workspace:
+                abs_path = os.path.join(workspace, patch.file_path)
+                scanned_class = _scan_class_name(abs_path)
             pool[new_name] = OperatorConfig(
                 name=new_name,
                 file_path=patch.file_path,
                 category=hypothesis.change_locus,
                 weight=weight,
-                class_name=_guess_class_name(new_name),
+                class_name=scanned_class if scanned_class else _guess_class_name(new_name),
             )
             pool = _normalize_weights(pool)
 
@@ -114,6 +129,38 @@ def _stem(file_path: str) -> str:
 
 def _guess_class_name(stem: str) -> str:
     return "".join(word.capitalize() for word in stem.split("_"))
+
+
+def _scan_class_name(abs_path: str) -> Optional[str]:
+    """Parse a Python file's AST and return the first class definition name.
+
+    Prefers a class that inherits from 'Operator' if present; otherwise
+    returns the first class found. Returns None if the file doesn't exist
+    or cannot be parsed.
+    """
+    try:
+        with open(abs_path, encoding="utf-8") as f:
+            source = f.read()
+        tree = ast.parse(source)
+    except (OSError, SyntaxError):
+        return None
+
+    classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+    if not classes:
+        return None
+
+    # Prefer class inheriting from Operator
+    for cls in classes:
+        for base in cls.bases:
+            base_name = None
+            if isinstance(base, ast.Name):
+                base_name = base.id
+            elif isinstance(base, ast.Attribute):
+                base_name = base.attr
+            if base_name == "Operator":
+                return cls.name
+
+    return classes[0].name
 
 
 # ─────────────────────────────────────────────────────────────────────────────

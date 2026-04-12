@@ -1055,7 +1055,8 @@ class CampaignManager:
             from scion.runtime.pool_manager import PoolManager
             pool_mgr = PoolManager(self._champion.operator_pool)
             candidate_pool = pool_mgr.build_candidate_pool(
-                self._champion.operator_pool, hypothesis, patch
+                self._champion.operator_pool, hypothesis, patch,
+                workspace=workspace,
             )
             pool_mgr.export_registry(candidate_pool, workspace)
         except Exception as exc:
