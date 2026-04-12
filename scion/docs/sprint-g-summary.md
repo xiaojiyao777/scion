@@ -452,3 +452,28 @@ Oracle 是整个系统的信任锚点：
 
 **v0.2 必须解决**，不是 v0.3 backlog。Oracle 正确性是实验有效性的前提。
 在 oracle 修复并验证前，Sprint F 的结论是"在已知有 oracle bug 的环境下的结果"，可信度存疑。
+
+---
+
+## v0.3 Backlog — 精确算法对比验证（2026-04-12）
+
+### 背景
+
+Scion 的改进目前只有"相对意义"（比上一个 champion 好）。在小规模实例上和精确算法（MILP）对比，可以给改进加上"绝对意义"。
+
+### 方案
+
+对 v4 small 实例（20-40 orders）：
+1. 用 CBC/CPLEX/Gurobi 求解 MILP，得到最优解的 optimality gap
+2. 记录 champion 的 optimality gap = (heuristic_cost - optimal_cost) / optimal_cost
+3. 每次 Scion promote 后，重新计算新 champion 的 optimality gap
+4. 观察 Scion 是否在持续压缩 gap
+
+### 预期价值
+
+如果 champion 在小规模上距最优 30%，Scion 改进把它压到 20%，这有绝对意义，不只是相对改进。
+是对 "Scion 真的在改进算法" 这一命题的更强验证。
+
+### 前置工作
+
+需要先写出仓配协同问题的 MILP 数学模型（已规划：基于 surrogate 代码建模）。
