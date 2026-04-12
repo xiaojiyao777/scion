@@ -5,3 +5,4 @@ __pycache__/
 *.log
 legacy/
 .env
+graphify-out/
