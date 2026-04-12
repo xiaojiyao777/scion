@@ -30,8 +30,8 @@ class ParameterSearchConfig(BaseModel):
     trigger: Literal["on_promote"] = "on_promote"
     target: Literal["operator_weights"] = "operator_weights"
     strategy: Literal["random_local", "bayesian"] = "random_local"
-    n_initial_random: int = 8
-    n_iterations: int = 8
+    n_initial_random: int = 4
+    n_iterations: int = 4
     n_eval_seeds: int = 2
     weight_bounds: Tuple[float, float] = (0.05, 5.0)
     eval_cases: List[str] = Field(default_factory=list)
