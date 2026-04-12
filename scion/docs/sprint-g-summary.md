@@ -218,3 +218,57 @@ ContextManager 注入预警
 ### 为什么 Classifier LLM 不会被 proposing LLM 操纵
 
 两次调用上下文完全独立（stateless），proposing LLM 不知道 classifier 的提示词和判断标准，无法操纵分类结果。之前担心的"自我作弊"是伪命题。
+
+---
+
+## v0.3 Backlog — FailureRouter 系统性升级（2026-04-12）
+
+### 背景
+
+当前 FailureRouter（Sprint G2-patch 落地）是可工作的简单实现：四层分类 + 四种路由动作，但每次失败独立处理，无历史记忆，无跨组件联动。F3 实验暴露了典型缺口：30 轮 V3_unit_tests 轻度失败无人感知，全部浪费。
+
+### 五个设计缺口
+
+1. **无时间记忆**：同类失败连续 N 次不升级，每次独立处理
+2. **与 StagnationDetector 断联**：失败模式不流入 stagnation 检测
+3. **评估路由粒度太粗**：wr=0.15 和 wr=0.55 走同一条 continue_explore
+4. **无跨分支失败共享**：同类算子在不同分支踩同一坑，重复浪费
+5. **LLM 拿到点状错误，看不到失败模式面**
+
+### v0.3 升级方案
+
+**FailureRouter 时间维度升级**：
+```python
+# 同类 light failure 连续 3 次 → 升级为 INFRA_SUSPECTED
+# → 触发 circuit breaker 检查
+# → 写入 CampaignDiagnosis
+if consecutive_same_code >= 3 and severity == "light":
+    action = FailureAction.INFRA_SUSPECTED
+    
+# 同方向 heavy failure 连续 2 次 → 提前 ABANDON
+if consecutive_heavy >= 2:
+    action = FailureAction.ABANDON_FAST
+```
+
+**StagnationDetector 第五种模式**：
+```python
+infra_loop: 同种 light failure 连续 5+ 次 → should_stop
+```
+
+**评估路由分级**：
+```python
+wr < 0.3     → ABANDON_FAST（碾压级失败，快速放弃）
+wr 0.3-0.6   → CONTINUE_EXPLORE（有苗头，继续）
+wr > 0.6 未过 → CONTINUE_EXPLORE + 提升 expand 优先级
+```
+
+**跨分支失败共享**（可选）：
+- 全局 failure registry，按 (failure_code, operator_type) 索引
+- 新分支创建时，ContextManager 注入"已知危险失败模式"
+
+### 设计目标
+
+把 FailureRouter 从"无状态点处理器"升级为"有记忆、有联动的失败智能系统"：
+- 时间维度：失败模式升级
+- 空间维度：跨分支学习
+- 联动维度：与 StagnationDetector 双向数据流
