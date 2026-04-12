@@ -142,6 +142,10 @@ class BranchController:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()
 
+    def is_blocked(self, branch_id: str) -> bool:
+        """Return True if the branch is in BLOCKED_INFRA state."""
+        return self._get(branch_id).state == BranchState.BLOCKED_INFRA
+
     def block_infra(self, branch_id: str) -> None:
         """Transition an active branch to BLOCKED_INFRA, saving prior state."""
         branch = self._get(branch_id)

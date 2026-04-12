@@ -239,6 +239,11 @@ class Branch:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
+    # FailureRouter recovery fields
+    pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
+    blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
+    consecutive_llm_retries: int = 0    # Consecutive retry_llm actions; downgrade to discard at 3
+    infra_block_count: int = 0          # How many times this branch has been BLOCKED_INFRA
 
 @dataclass
 class HypothesisFamily:

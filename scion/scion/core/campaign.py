@@ -224,6 +224,9 @@ class CampaignManager:
         if self.should_stop():
             return StepResult(action="stopped", stopped=True, reason="termination condition met")
 
+        # Tick blocked branches before scheduling (auto-unblock after 3 rounds)
+        self._tick_blocked_branches()
+
         active = self._branch_ctrl.get_active_branches()
         sched = self._scheduler.select_next(active)
 
@@ -1080,6 +1083,8 @@ class CampaignManager:
             "screening_ci_low": stats.ci_low if stats else None,
             "screening_ci_high": stats.ci_high if stats else None,
             "decision": decision.value,
+            "model_id": getattr(self._llm_client, "model", None),
+            "protocol_version": getattr(self._protocol_config, "version", None),
         }
         try:
             self._registry.record_event(event)
@@ -1498,7 +1503,7 @@ class CampaignManager:
     # ------------------------------------------------------------------
 
     def _handle_failure(self, branch: Branch, failure: FailureEvent) -> None:
-        """Route failure and update branch retry count."""
+        """Route failure and execute the appropriate recovery strategy."""
         action = self._failure_router.route(failure, branch)
         branch.retry_count += 1
         branch.failure_codes.append(failure.category.upper())
@@ -1522,6 +1527,82 @@ class CampaignManager:
                     hypothesis_text=hyp.hypothesis_text,
                 )
                 self._hyp_store.save(record)
+
+        bid = branch.branch_id
+
+        if action.action == "retry_llm":
+            branch.consecutive_llm_retries += 1
+            if branch.consecutive_llm_retries >= 3:
+                # Downgrade to discard after too many consecutive LLM retries
+                logger.info(
+                    "Branch %s: retry_llm exhausted (%d consecutive) — downgrading to discard",
+                    bid, branch.consecutive_llm_retries,
+                )
+                branch.consecutive_llm_retries = 0
+                branch.pending_retry = False
+                self._branch_patches.pop(bid, None)
+                branch.current_code_hash = branch.last_clean_code_hash
+                if branch.state not in (BranchState.ABANDONED, BranchState.PROMOTED):
+                    branch.state = BranchState.EXPLORE
+                    branch.updated_at = datetime.now()
+            else:
+                branch.pending_retry = True
+
+        elif action.action == "retry_infra":
+            branch.consecutive_llm_retries = 0
+            branch.pending_retry = False
+            branch.infra_block_count += 1
+            if branch.infra_block_count >= 2:
+                logger.warning(
+                    "Branch %s: permanent infra failure (block #%d) — abandoning",
+                    bid, branch.infra_block_count,
+                )
+                try:
+                    self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+                except StateTransitionError:
+                    pass  # already in terminal state
+            else:
+                logger.info("Branch %s: infra failure — blocking for 3 rounds", bid)
+                try:
+                    self._branch_ctrl.block_infra(bid)
+                    branch.blocked_rounds = 0
+                except StateTransitionError as exc:
+                    logger.debug("Branch %s: block_infra skipped: %s", bid, exc)
+
+        elif action.action == "discard":
+            branch.pending_retry = False
+            branch.consecutive_llm_retries = 0
+            self._branch_patches.pop(bid, None)
+            branch.current_code_hash = branch.last_clean_code_hash
+            if branch.state not in (BranchState.ABANDONED, BranchState.PROMOTED, BranchState.STALE):
+                branch.state = BranchState.EXPLORE
+                branch.updated_at = datetime.now()
+
+        elif action.action == "abandon":
+            branch.pending_retry = False
+            branch.consecutive_llm_retries = 0
+            try:
+                self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+            except StateTransitionError:
+                pass  # already in terminal state
+
+    def _tick_blocked_branches(self) -> None:
+        """Increment blocked_rounds for every BLOCKED_INFRA branch; auto-unblock at 3 rounds."""
+        for branch in self._branch_ctrl.get_active_branches():
+            if branch.state != BranchState.BLOCKED_INFRA:
+                continue
+            branch.blocked_rounds += 1
+            if branch.blocked_rounds >= 3:
+                logger.info(
+                    "Branch %s: auto-unblocking after %d blocked rounds",
+                    branch.branch_id, branch.blocked_rounds,
+                )
+                try:
+                    self._branch_ctrl.unblock_infra(branch.branch_id)
+                except StateTransitionError as exc:
+                    logger.debug("Branch %s: unblock_infra skipped: %s", branch.branch_id, exc)
+                branch.blocked_rounds = 0
+                branch.consecutive_llm_retries = 0
 
     # ------------------------------------------------------------------
     # Workspace archiving
