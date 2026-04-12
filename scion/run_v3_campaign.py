@@ -94,7 +94,7 @@ print(f"  Problem        : {spec.name}")
 print(f"  LLM model      : {llm_client.model}")
 print(f"  Max rounds     : {max_rounds}")
 print(f"  Solver timeout : {spec.solver}")
-print(f"  Protocol       : screening_n={proto_cfg.screening_n}, validation_n={proto_cfg.validation_n}, frozen_n={proto_cfg.frozen_n}")
+print(f"  Protocol       : screening={proto_cfg.screening}, validation={proto_cfg.validation}, frozen={proto_cfg.frozen}")
 print(f"  Campaign dir   : {CAMPAIGN_DIR}")
 print()
 
@@ -160,9 +160,9 @@ summary = {
     "max_rounds": max_rounds,
     "llm_model": llm_client.model,
     "protocol": {
-        "screening_n": proto_cfg.screening_n,
-        "validation_n": proto_cfg.validation_n,
-        "frozen_n": proto_cfg.frozen_n,
+        "screening": str(proto_cfg.screening),
+        "validation": str(proto_cfg.validation),
+        "frozen": str(proto_cfg.frozen),
     },
     "state": state,
     "steps": [],
