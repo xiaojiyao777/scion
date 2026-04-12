@@ -11,6 +11,7 @@ class TerminationConfig:
     max_experiments: int = 1000
     max_wall_clock_hours: float = 24.0
     stagnation_limit: int = 10  # consecutive abandoned branches
+    soft_stagnation_limit: int = 15  # consecutive T4 soft-abandoned → force diversify
 
 
 @dataclass

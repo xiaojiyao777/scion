@@ -47,6 +47,7 @@ class ContextManager:
         step_history: Optional[List[StepRecord]] = None,
         branch_workspace: Optional[str] = None,
         failure_streak: Optional[Dict[str, int]] = None,
+        forced_locus: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -88,6 +89,16 @@ class ContextManager:
         # Sprint H2 T5: Failure pattern warning
         failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
 
+        # I3: Forced locus diversification constraint
+        locus_constraint = ""
+        if forced_locus:
+            locus_constraint = (
+                f"\n## MANDATORY SEARCH CONSTRAINT\n"
+                f"Your hypothesis MUST target `{forced_locus}` operators.\n"
+                f"The campaign has detected saturation in the current search direction.\n"
+                f"Exploring `{forced_locus}` is required to find further improvements.\n"
+            )
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -102,6 +113,7 @@ class ContextManager:
             "strategy_guidance": strategy_guidance,
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
+            "locus_constraint": locus_constraint,
         }
 
     # ------------------------------------------------------------------

@@ -184,8 +184,11 @@ class CampaignManager:
         self._budget = budget or BudgetState(total=1000, used=0)
         self._n_experiments = 0
         self._recent_abandoned_count = 0
+        self._soft_abandon_streak: int = 0   # I1: T4 win_rate<0.3 consecutive count (independent of hard stagnation)
         self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
         self._start_time = datetime.now()
+        self._forced_next_locus: Optional[str] = None  # I3: set by soft-stagnation, consumed by branch creation
+        self._hard_stagnation_escape_used: bool = False  # I4: one-time escape before terminate
 
         # Stagnation / diagnosis (T25/T23)
         self._stagnation_detector = StagnationDetector(window_size=5)
@@ -226,6 +229,8 @@ class CampaignManager:
                 break
             # T25/T23: stagnation check after each round
             self._run_stagnation_check()
+            # I3: soft-stagnation check (T4 abandon consecutive accumulation)
+            self._check_soft_stagnation()
         self._write_campaign_summary()
         # R5: join all pending weight opt threads (up to 10 min each)
         pending = [t for t in self._pending_weight_opt_threads if t.is_alive()]
@@ -325,7 +330,23 @@ class CampaignManager:
             active_branches=active,
             can_create_new=True,  # always can create new in MVP
         )
-        return self._term_checker.should_stop(cs)
+        if not self._term_checker.should_stop(cs):
+            return False
+
+        # I4: stagnation detected — attempt one diversification escape before terminating
+        stagnation_triggered = self._term_checker._stagnation_detected(cs)
+        if stagnation_triggered and not self._hard_stagnation_escape_used:
+            logger.warning(
+                "Hard stagnation detected (%d consecutive hard-abandons) — "
+                "attempting locus diversification escape (one-time)",
+                self._recent_abandoned_count,
+            )
+            self._hard_stagnation_escape_used = True
+            self._recent_abandoned_count = 0  # reset counter to allow continuation
+            self._forced_next_locus = self._get_diversification_locus()
+            return False  # don't stop yet — give one more chance
+
+        return True  # escape already used, or non-stagnation termination → truly stop
 
     def get_state(self) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_active_branches()
@@ -851,6 +872,7 @@ class CampaignManager:
             step_history=self._step_history,
             branch_workspace=branch_workspace,
             failure_streak=dict(self._failure_streak),
+            forced_locus=self._consume_forced_locus(),
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
@@ -1039,16 +1061,16 @@ class CampaignManager:
             features.stage, outcome.decision.value, outcome.reason_codes,
         )
 
-        # Sprint H2 T4: Tiered evaluation routing
+        # Sprint H2 T4: Tiered evaluation routing (I1: soft-abandon path)
         decision = outcome.decision
         if (
             decision == Decision.CONTINUE_EXPLORE
             and features.win_rate is not None
         ):
             if features.win_rate < 0.3:
-                # Crushed: abandon fast, skip normal budget flow
+                # I1: T4 soft-abandon — independent of hard stagnation counter
                 logger.info(
-                    "Branch %s: win_rate=%.2f < 0.3 → abandon_fast",
+                    "Branch %s: win_rate=%.2f < 0.3 → soft_abandon (T4)",
                     bid, features.win_rate,
                 )
                 try:
@@ -1059,10 +1081,14 @@ class CampaignManager:
                         "event_kind": "abandon_fast",
                         "reason": "win_rate_below_threshold",
                         "win_rate": features.win_rate,
+                        "abandon_type": "soft_t4",
                     })
                 except Exception:
                     pass
-                decision = Decision.ABANDON
+                # T4 soft-abandon: track independently, don't go through ABANDON dispatch
+                self._soft_abandon_streak += 1
+                self._apply_soft_abandon(bid, branch, self._branch_current_hypothesis.get(bid))
+                return Decision.ABANDON, protocol_result, canary_result
             elif features.win_rate > 0.6:
                 # High potential — log for priority tracking
                 logger.info(
@@ -1071,6 +1097,38 @@ class CampaignManager:
                 )
 
         return decision, protocol_result, canary_result
+
+    def _apply_soft_abandon(
+        self,
+        bid: str,
+        branch: Branch,
+        h_record: Optional[HypothesisRecord],
+    ) -> None:
+        """T4 soft-abandon: discard branch without affecting hard-stagnation counter.
+
+        This path is for wr<0.3 'no signal' results — the branch couldn't beat the
+        champion but there was no framework failure. Does NOT increment
+        _recent_abandoned_count (which tracks framework-level stagnation only).
+        """
+        ws = self._branch_workspaces.pop(bid, None)
+        if ws:
+            try:
+                self._materializer.archive_workspace(ws, bid)
+            except Exception as exc:
+                logger.debug("Branch %s: soft_abandon archive failed: %s", bid, exc)
+            try:
+                self._materializer.cleanup(ws)
+            except Exception:
+                pass
+        self._branch_hypotheses.pop(bid, None)
+        self._branch_patches.pop(bid, None)
+        if h_record is not None:
+            self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+            self._branch_current_hypothesis.pop(bid, None)
+        try:
+            self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+        except StateTransitionError as exc:
+            logger.debug("Branch %s: soft_abandon apply_decision failed: %s", bid, exc)
 
     # ------------------------------------------------------------------
     # Pool/registry sync
@@ -1290,6 +1348,16 @@ class CampaignManager:
 
         # ABANDON
         if decision == Decision.ABANDON:
+            # I1: check if T4 soft-abandon already handled this branch
+            updated_branch = self._branch_ctrl.get_branch(bid)
+            if updated_branch and updated_branch.state == BranchState.ABANDONED:
+                # T4 path already processed — skip ABANDON dispatch
+                return StepResult(
+                    action="soft_abandon",
+                    branch_id=bid,
+                    decision=decision,
+                    reason="T4: win_rate < 0.3",
+                )
             self._recent_abandoned_count += 1
             ws = self._branch_workspaces.pop(bid, None)
             if ws:
@@ -1334,6 +1402,14 @@ class CampaignManager:
         import shutil as _shutil
         from scion.runtime.workspace import _make_tree_writable
         bid = branch.branch_id
+
+        # I2: Promotion resets stagnation counters — new champion establishes new baseline
+        self._recent_abandoned_count = 0
+        self._soft_abandon_streak = 0
+        # I4: Reset escape opportunity for the new champion cycle
+        self._hard_stagnation_escape_used = False
+        logger.debug("Branch %s promoted → stagnation counters reset", bid)
+
         ws = self._branch_workspaces.get(bid)
         if ws is None:
             logger.warning("Branch %s promoted but no workspace found", bid)
@@ -1656,6 +1732,73 @@ class CampaignManager:
                     "Campaign diagnosis at round %d: %s",
                     diagnosis.round_num, diagnosis.recommendation,
                 )
+
+    def _check_soft_stagnation(self) -> None:
+        """If soft_abandon_streak hits limit, force the next branch to diversify locus.
+
+        soft-stagnation means: champion is too strong in current locus, not that the
+        framework is broken. Response = diversify search direction, NOT terminate.
+        """
+        limit = self._term_checker.config.soft_stagnation_limit
+        if self._soft_abandon_streak < limit:
+            return
+
+        logger.info(
+            "Soft stagnation detected: %d consecutive T4 soft-abandons → forcing locus diversification",
+            self._soft_abandon_streak,
+        )
+
+        # Determine current dominant locus from recent step history
+        recent = self._step_history[-limit:] if len(self._step_history) >= limit else self._step_history
+        locus_counts: Dict[str, int] = {}
+        for step in recent:
+            locus = getattr(step.hypothesis, "change_locus", None) or ""
+            if locus:
+                locus_counts[locus] = locus_counts.get(locus, 0) + 1
+
+        # Force the opposite locus on next branch creation
+        dominant_locus = max(locus_counts, key=locus_counts.get) if locus_counts else ""
+        if dominant_locus == "vehicle_level":
+            self._forced_next_locus = "order_level"
+        elif dominant_locus == "order_level":
+            self._forced_next_locus = "vehicle_level"
+        else:
+            self._forced_next_locus = None  # unknown → no force
+
+        self._soft_abandon_streak = 0  # reset after acting
+
+        logger.info(
+            "Soft stagnation: dominant_locus=%s → forcing next branch locus=%s",
+            dominant_locus, self._forced_next_locus,
+        )
+
+    def _consume_forced_locus(self) -> Optional[str]:
+        """Consume and return forced locus (set by soft/hard stagnation), or None."""
+        forced = self._forced_next_locus
+        if forced is not None:
+            self._forced_next_locus = None
+            logger.info("Applying forced locus diversification: %s", forced)
+        return forced
+
+    def _get_diversification_locus(self) -> Optional[str]:
+        """Determine the best locus to diversify into, using StagnationDetector diagnosis."""
+        diagnosis = self._stagnation_detector.diagnose(
+            self._round_num, self._step_history,
+            failure_streak=self._failure_streak,
+        )
+        # Flip from dominant locus in recent history
+        recent = self._step_history[-5:] if len(self._step_history) >= 5 else self._step_history
+        locus_counts: Dict[str, int] = {}
+        for step in recent:
+            locus = getattr(step.hypothesis, "change_locus", None) or ""
+            if locus:
+                locus_counts[locus] = locus_counts.get(locus, 0) + 1
+        dominant = max(locus_counts, key=locus_counts.get) if locus_counts else ""
+        if dominant == "vehicle_level":
+            return "order_level"
+        elif dominant == "order_level":
+            return "vehicle_level"
+        return None
 
     # ------------------------------------------------------------------
     # Failure handling
