@@ -272,3 +272,29 @@ wr > 0.6 未过 → CONTINUE_EXPLORE + 提升 expand 优先级
 - 时间维度：失败模式升级
 - 空间维度：跨分支学习
 - 联动维度：与 StagnationDetector 双向数据流
+
+---
+
+## v0.3 Backlog 补充 — FailureRouter CC 参考设计（2026-04-12）
+
+### CC 关键设计对 Scion 的启发
+
+**1. Session 级持久计数器（最直接可用）**
+CC 的 circuit breaker 计数在 session 生命周期内持久化，不是每轮重置。Scion 应在 CampaignManager 维护 `_failure_streak: Dict[str, int]`，跨轮次累积同类失败计数。
+
+**2. Escalating Retry（CC: max_output_tokens 升级模式）**
+CC 对同类失败主动升级处理强度（8K→64K→注入提示→抛出），Scion 应引入：
+- RETRY_LLM 第 1-2 次：正常反馈
+- RETRY_LLM 第 3 次：注入更强提示
+- 第 4 次：升级为 INFRA_SUSPECTED
+
+**3. 前台/后台分级（CC: querySource 区分）**
+campaign 主循环 LLM 调用（保守重试）vs 诊断/分类调用（失败即放弃），策略不同。
+
+**4. 预防性防御层（CC: API call 前多道预处理）**
+CC 在每次 API 调用前执行 compact/budget/snip 防止错误发生。Scion 可在实验开始前加环境预检（pytest 可用性、磁盘空间等），避免 infra 问题进入主循环。
+
+### CC 没有，Scion 特有的挑战
+CC 的错误处理针对单次 LLM 对话；Scion 面对的是跨轮次、跨分支的实验失败模式。
+CC 的熔断器保护"无限 autocompact 死循环"；Scion 需要保护"无限 infra_loop 浪费"。
+两者问题结构不同，但熔断器的 session 级持久计数是通用原则。
