@@ -339,23 +339,46 @@ class ContractGate:
         except SyntaxError:
             return _cr("C9b_non_rng_random", False, "heavy", "unparseable code", t0)
 
+        # Build a set of dangerous bare names from import-from statements and alias mappings
+        # e.g. `from random import choice` → dangerous_names = {"choice"}
+        # e.g. `import random as r` → module_aliases = {"r": "random"}
+        dangerous_names: set[str] = set()
+        module_aliases: dict[str, str] = {}  # alias → canonical module name
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                for alias in node.names:
+                    local_name = alias.asname if alias.asname else alias.name
+                    if (module, alias.name) in _NON_RNG_RANDOM_PATTERNS:
+                        dangerous_names.add(local_name)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.asname:
+                        module_aliases[alias.asname] = alias.name
+
         violations: List[str] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            if not isinstance(func, ast.Attribute):
-                continue
-            obj_name: Optional[str] = None
-            if isinstance(func.value, ast.Name):
-                obj_name = func.value.id
-            if obj_name is None:
-                continue
-            # Skip rng.* calls — the operator's rng parameter
-            if obj_name == "rng":
-                continue
-            if (obj_name, func.attr) in _NON_RNG_RANDOM_PATTERNS:
-                violations.append(f"{obj_name}.{func.attr}")
+            if isinstance(func, ast.Name):
+                # Bare-name call: `choice(...)` from `from random import choice`
+                if func.id in dangerous_names:
+                    violations.append(f"{func.id}(...)")
+            elif isinstance(func, ast.Attribute):
+                obj_name: Optional[str] = None
+                if isinstance(func.value, ast.Name):
+                    obj_name = func.value.id
+                if obj_name is None:
+                    continue
+                # Skip rng.* calls — the operator's rng parameter
+                if obj_name == "rng":
+                    continue
+                # Resolve alias (e.g. `r` → `random`)
+                resolved = module_aliases.get(obj_name, obj_name)
+                if (resolved, func.attr) in _NON_RNG_RANDOM_PATTERNS:
+                    violations.append(f"{obj_name}.{func.attr}")
 
         passed = len(violations) == 0
         detail = "no non-rng random sources" if passed else f"non-rng random sources detected: {violations}"

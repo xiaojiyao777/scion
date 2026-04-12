@@ -694,3 +694,48 @@ class TestC9bNonRngRandom:
         if c9b is not None:
             assert c9b.passed
 
+    # Sprint G-patch: import-from and alias coverage
+    def test_c9b_catches_from_random_import_choice(self, gate: ContractGate):
+        code = (
+            "from random import choice\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        x = choice([1, 2, 3])\n"
+            "        return solution\n"
+        )
+        c = _c9b(gate, code)
+        assert not c.passed
+
+    def test_c9b_catches_from_uuid_import_uuid4(self, gate: ContractGate):
+        code = (
+            "from uuid import uuid4\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        vid = uuid4()\n"
+            "        return solution\n"
+        )
+        c = _c9b(gate, code)
+        assert not c.passed
+
+    def test_c9b_catches_import_random_as_alias(self, gate: ContractGate):
+        code = (
+            "import random as r\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        x = r.choice([1, 2, 3])\n"
+            "        return solution\n"
+        )
+        c = _c9b(gate, code)
+        assert not c.passed
+
+    def test_c9b_allows_rng_param_choice(self, gate: ContractGate):
+        """rng.choice() must NOT be flagged — rng is the operator's legitimate parameter."""
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        x = rng.choice([1, 2, 3])\n"
+            "        return solution\n"
+        )
+        c = _c9b(gate, code)
+        assert c.passed
+
