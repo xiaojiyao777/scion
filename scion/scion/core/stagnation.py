@@ -6,6 +6,9 @@ from typing import Dict, List, Optional
 
 from scion.core.models import Decision, StepRecord
 
+# Threshold for infra_loop detection (same failure_code streak)
+_INFRA_LOOP_THRESHOLD = 5
+
 
 @dataclass
 class StagnationSignal:
@@ -31,8 +34,17 @@ class StagnationDetector:
     def __init__(self, window_size: int = 5) -> None:
         self._window = window_size
 
-    def check(self, step_history: List[StepRecord]) -> List[StagnationSignal]:
+    def check(
+        self,
+        step_history: List[StepRecord],
+        failure_streak: Optional[Dict[str, int]] = None,
+    ) -> List[StagnationSignal]:
         """Check for stagnation signals in the step history.
+
+        Args:
+            step_history: Full campaign step history.
+            failure_streak: Optional dict of failure_code → current consecutive streak,
+                            provided by CampaignManager for infra_loop detection.
 
         Returns a (possibly empty) list of signals. Never raises.
         """
@@ -60,6 +72,12 @@ class StagnationDetector:
         plateau = self._check_plateau(recent)
         if plateau:
             signals.append(plateau)
+
+        # 5. Infra loop: same failure_code streak >= threshold
+        if failure_streak:
+            infra_loop = self._check_infra_loop(failure_streak)
+            if infra_loop:
+                signals.append(infra_loop)
 
         return signals
 
@@ -174,18 +192,31 @@ class StagnationDetector:
                     )
         return None
 
+    def _check_infra_loop(self, failure_streak: Dict[str, int]) -> Optional[StagnationSignal]:
+        """Same failure_code streak >= threshold → infra_loop (should_stop=True)."""
+        for code, streak in failure_streak.items():
+            if streak >= _INFRA_LOOP_THRESHOLD:
+                return StagnationSignal(
+                    kind="infra_loop",
+                    severity="critical",
+                    detail=f"failure_code='{code}' repeated {streak} consecutive times",
+                    suggested_action="check_environment",
+                )
+        return None
+
     # ------------------------------------------------------------------
     # Diagnosis (T23)
     # ------------------------------------------------------------------
 
     def diagnose(
-        self, round_num: int, step_history: List[StepRecord]
+        self, round_num: int, step_history: List[StepRecord],
+        failure_streak: Optional[Dict[str, int]] = None,
     ) -> Optional[CampaignDiagnosis]:
         """Produce a structured diagnosis when critical signals are detected.
 
         Returns None if no critical signals exist.
         """
-        signals = self.check(step_history)
+        signals = self.check(step_history, failure_streak=failure_streak)
         critical = [s for s in signals if s.severity == "critical"]
         if not critical:
             return None
@@ -206,7 +237,7 @@ class StagnationDetector:
 
         # Determine recommendation from signal kinds
         kinds = {s.kind for s in signals}
-        if "timeout_cascade" in kinds or "collapse" in kinds:
+        if "infra_loop" in kinds or "timeout_cascade" in kinds or "collapse" in kinds:
             recommendation = "check_environment"
         elif "oscillation" in kinds:
             recommendation = "diversify_locus"

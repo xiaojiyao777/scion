@@ -46,6 +46,7 @@ class ContextManager:
         sibling_branches: Optional[List[Branch]] = None,
         step_history: Optional[List[StepRecord]] = None,
         branch_workspace: Optional[str] = None,
+        failure_streak: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -54,6 +55,9 @@ class ContextManager:
 
         If branch_workspace is provided and differs from the champion snapshot,
         branch_code shows the modified operators so the LLM can build on them.
+
+        If failure_streak is provided, injects a failure pattern warning when
+        any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec)
         champion_operators_code = _read_champion_operators(champion)
@@ -81,6 +85,9 @@ class ContextManager:
         # T10: Champion baseline hints from most recent screening experiment
         champion_baselines = _build_champion_baselines(step_history or [])
 
+        # Sprint H2 T5: Failure pattern warning
+        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -94,6 +101,7 @@ class ContextManager:
             "exploration_coverage": exploration_coverage,
             "strategy_guidance": strategy_guidance,
             "champion_baselines": champion_baselines,
+            "failure_pattern_warning": failure_pattern_warning,
         }
 
     # ------------------------------------------------------------------
@@ -157,11 +165,13 @@ class ContextManager:
         patch: PatchProposal,
         verification_result: VerificationResult,
         problem_spec: ProblemSpec,
+        failure_streak: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         """Context for fix_code (after a light verification failure).
 
         Contains the failed patch, failure details, and operator interface spec.
         Does NOT contain experiment stats.
+        If failure_streak is provided, injects a failure pattern warning.
         """
         problem_summary = _build_problem_summary(problem_spec)
         failed_checks = [c for c in verification_result.checks if not c.passed]
@@ -179,7 +189,9 @@ class ContextManager:
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
-        return {
+        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
+
+        ctx = {
             "problem_summary": problem_summary,
             "original_code": (
                 f"File: {patch.file_path}\nAction: {patch.action}\n"
@@ -191,6 +203,9 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if failure_pattern_warning:
+            ctx["failure_pattern_warning"] = failure_pattern_warning
+        return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -682,7 +697,37 @@ def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
     return "\n".join(guidance_parts)
 
 
-# ---------------------------------------------------------------------------
+def _build_failure_pattern_warning(failure_streak: Dict[str, int]) -> str:
+    """Build a failure pattern warning string for the LLM context.
+
+    Returns an empty string if no failure has a streak >= 2.
+    """
+    significant = {k: v for k, v in failure_streak.items() if v >= 2}
+    if not significant:
+        return ""
+
+    lines = ["## Failure Pattern Warning"]
+    for code, streak in sorted(significant.items(), key=lambda x: -x[1]):
+        lines.append(
+            f"This campaign has failed '{code}' {streak} consecutive time(s)."
+        )
+        # Provide category-specific hints
+        if "verification" in code.lower():
+            lines.append(
+                "  Common causes: import errors, missing attributes, "
+                "incorrect operator interface. Consider a fundamentally different approach."
+            )
+        elif code in ("proposal", "contract"):
+            lines.append(
+                "  Common causes: malformed JSON, schema violations. "
+                "Double-check output format requirements."
+            )
+        elif code == "evaluation":
+            lines.append(
+                "  Common causes: solver crash, environment issues. "
+                "Ensure operator code is robust and handles edge cases."
+            )
+    return "\n".join(lines)# ---------------------------------------------------------------------------
 # T26: What Worked section for experiment history
 # ---------------------------------------------------------------------------
 

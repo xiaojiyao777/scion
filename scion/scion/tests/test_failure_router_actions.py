@@ -62,6 +62,13 @@ def _make_campaign_handle_failure():
             self._branch_hypotheses = {}
             self._branch_patches = {}
             self._hyp_store = hyp_store
+            # Sprint H2 T1: failure counters required by _handle_failure
+            self._failure_streak = {}
+            self._total_failures = {}
+            self._campaign_id = "stub-campaign"
+            _registry = MagicMock()
+            _registry.record_event = MagicMock()
+            self._registry = _registry
 
         # Pull in the real _handle_failure + _tick_blocked_branches
         from scion.core.campaign import CampaignManager

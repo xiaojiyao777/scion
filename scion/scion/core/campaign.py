@@ -195,6 +195,10 @@ class CampaignManager:
         # Circuit breaker (T29)
         self._circuit_breaker = CircuitBreaker()
 
+        # Sprint H2 T1: Campaign-level failure counters
+        self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
+        self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
+
         # Async weight optimization (R3/R5)
         self._champion_lock = threading.Lock()
         self._pending_weight_opt_threads: List[threading.Thread] = []
@@ -567,7 +571,8 @@ class CampaignManager:
 
         # T03: verification passed — now safe to update last_clean_code_hash
         self._branch_ctrl.record_verification_pass(bid, code_hash)
-        # T04: store the canonical HypothesisRecord for this screening cycle
+        # Sprint H2 T1: reset failure streaks on verification pass (entering screening)
+        self._failure_streak.clear()
         # (used by _run_eval_step for validation/frozen stages)
         self._branch_current_hypothesis[bid] = h_record
 
@@ -845,6 +850,7 @@ class CampaignManager:
             sibling_branches=siblings,
             step_history=self._step_history,
             branch_workspace=branch_workspace,
+            failure_streak=dict(self._failure_streak),
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
@@ -909,6 +915,7 @@ class CampaignManager:
             patch=patch,
             verification_result=vresult,
             problem_spec=self._spec,
+            failure_streak=dict(self._failure_streak),
         )
         try:
             return self._creative.fix_code(context)
@@ -1031,7 +1038,39 @@ class CampaignManager:
             bid, features.win_rate, features.median_delta,
             features.stage, outcome.decision.value, outcome.reason_codes,
         )
-        return outcome.decision, protocol_result, canary_result
+
+        # Sprint H2 T4: Tiered evaluation routing
+        decision = outcome.decision
+        if (
+            decision == Decision.CONTINUE_EXPLORE
+            and features.win_rate is not None
+        ):
+            if features.win_rate < 0.3:
+                # Crushed: abandon fast, skip normal budget flow
+                logger.info(
+                    "Branch %s: win_rate=%.2f < 0.3 → abandon_fast",
+                    bid, features.win_rate,
+                )
+                try:
+                    self._registry.record_event({
+                        "campaign_id": self._campaign_id,
+                        "branch_id": bid,
+                        "timestamp": datetime.now().isoformat(),
+                        "event_kind": "abandon_fast",
+                        "reason": "win_rate_below_threshold",
+                        "win_rate": features.win_rate,
+                    })
+                except Exception:
+                    pass
+                decision = Decision.ABANDON
+            elif features.win_rate > 0.6:
+                # High potential — log for priority tracking
+                logger.info(
+                    "Branch %s: win_rate=%.2f > 0.6 → high_potential (continue_explore)",
+                    bid, features.win_rate,
+                )
+
+        return decision, protocol_result, canary_result
 
     # ------------------------------------------------------------------
     # Pool/registry sync
@@ -1575,7 +1614,9 @@ class CampaignManager:
 
     def _run_stagnation_check(self) -> None:
         """Check for stagnation signals after each round and log critical ones."""
-        signals = self._stagnation_detector.check(self._step_history)
+        signals = self._stagnation_detector.check(
+            self._step_history, failure_streak=self._failure_streak
+        )
         if signals:
             self._stagnation_signals = signals  # keep latest signals
             for sig in signals:
@@ -1591,7 +1632,8 @@ class CampaignManager:
                     )
             # T23: generate structured diagnosis on critical signals
             diagnosis = self._stagnation_detector.diagnose(
-                self._round_num, self._step_history
+                self._round_num, self._step_history,
+                failure_streak=self._failure_streak,
             )
             if diagnosis is not None:
                 diag_dict = {
@@ -1621,12 +1663,22 @@ class CampaignManager:
 
     def _handle_failure(self, branch: Branch, failure: FailureEvent) -> None:
         """Route failure and execute the appropriate recovery strategy."""
-        action = self._failure_router.route(failure, branch)
+        # Sprint H2 T1: Update campaign-level failure counters before routing
+        fcode = failure.category
+        self._failure_streak[fcode] = self._failure_streak.get(fcode, 0) + 1
+        self._total_failures[fcode] = self._total_failures.get(fcode, 0) + 1
+
+        action = self._failure_router.route(
+            failure, branch,
+            streak=self._failure_streak[fcode],
+            total=self._total_failures[fcode],
+        )
         branch.retry_count += 1
         branch.failure_codes.append(failure.category.upper())
         logger.debug(
-            "Branch %s: failure=%s → action=%s (budget=%s)",
-            branch.branch_id, failure.category, action.action, action.consumes_budget,
+            "Branch %s: failure=%s streak=%d → action=%s (budget=%s)",
+            branch.branch_id, failure.category,
+            self._failure_streak[fcode], action.action, action.consumes_budget,
         )
         if action.consumes_budget:
             self._budget.used += 1
@@ -1698,6 +1750,56 @@ class CampaignManager:
         elif action.action == "abandon":
             branch.pending_retry = False
             branch.consecutive_llm_retries = 0
+            try:
+                self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+            except StateTransitionError:
+                pass  # already in terminal state
+
+        elif action.action == "infra_suspected":
+            # Sprint H2: Consecutive light failures → suspected infra issue
+            logger.warning(
+                "Branch %s: infra_suspected after %d consecutive '%s' failures — blocking",
+                bid, self._failure_streak[fcode], fcode,
+            )
+            branch.pending_retry = False
+            branch.consecutive_llm_retries = 0
+            try:
+                self._registry.record_event({
+                    "campaign_id": self._campaign_id,
+                    "branch_id": bid,
+                    "timestamp": datetime.now().isoformat(),
+                    "event_kind": "infra_suspected",
+                    "failure_code": fcode,
+                    "streak": self._failure_streak[fcode],
+                    "suggested_action": "check_environment",
+                })
+            except Exception:
+                pass
+            try:
+                self._branch_ctrl.block_infra(bid)
+                branch.blocked_rounds = 0
+            except StateTransitionError as exc:
+                logger.debug("Branch %s: block_infra (infra_suspected) skipped: %s", bid, exc)
+
+        elif action.action == "abandon_fast":
+            # Sprint H2: Consecutive heavy failures → fast abandon (skip budget deduction)
+            logger.warning(
+                "Branch %s: abandon_fast after %d consecutive '%s' failures",
+                bid, self._failure_streak[fcode], fcode,
+            )
+            branch.pending_retry = False
+            branch.consecutive_llm_retries = 0
+            try:
+                self._registry.record_event({
+                    "campaign_id": self._campaign_id,
+                    "branch_id": bid,
+                    "timestamp": datetime.now().isoformat(),
+                    "event_kind": "abandon_fast",
+                    "failure_code": fcode,
+                    "streak": self._failure_streak[fcode],
+                })
+            except Exception:
+                pass
             try:
                 self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
             except StateTransitionError:
