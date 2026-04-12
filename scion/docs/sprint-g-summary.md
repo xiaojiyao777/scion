@@ -410,3 +410,45 @@ if failure_code in ["V5_state_mutation", "V8_nondeterminism"]:
 
 test_oracle.py 的 TestHardConstraintViolations 测试用例本质上就是"手工设计的边界场景"。
 canary 实例的设计可以直接参考这些测试用例，确保 canary 和 oracle 测试覆盖同一类边界。
+
+---
+
+## v0.2 P0 待查 — Oracle Bug（2026-04-12 发现）
+
+### 问题描述
+
+在调试 F3 环境问题时发现：`surrogate/tests/test_oracle.py` 的两个测试失败：
+
+```
+FAILED TestHardConstraintViolations::test_H1_capacity_exceeded
+  # 构造容量超载解 → oracle 误报 is_feasible=True
+
+FAILED TestHardConstraintViolations::test_H3_too_many_pickups_donguan
+  # 构造东莞提货约束违反 → oracle 误报 is_feasible=True
+```
+
+### 影响链
+
+Oracle 是整个系统的信任锚点：
+- Verification Gate 的 feasibility check 调用 oracle
+- Screening/Validation/Frozen 的字典序比较，Level 1 = feasibility
+
+如果 oracle 把不可行解误判为可行：
+1. 生成不可行解的算子可能通过 Verification Gate
+2. 不可行解在 A/B 中被作为可行解比较，可能意外赢得 splits/cost 比较
+3. **F1 的两个 promote 是否被此 bug 污染，目前不确定**
+
+### 待做事项（F2/F3 完成后）
+
+1. **诊断**：读 oracle.py，找出容量超载和东莞提货约束的检查逻辑缺失在哪里
+2. **修复**：补齐约束检查（CC 任务）
+3. **影响评估**：
+   - F1 的 SubcategoryAwareMoveOrder 和 destroy_rebuild 车型升级，在实验中有没有产出不可行解？
+   - 检查 experiment_events 中的 feasibility_violation 字段
+   - 如有问题，需要用修复后的 oracle 重新评估
+4. **回归测试**：oracle 修复后跑完整测试套件（600 tests）
+
+### 优先级
+
+**v0.2 必须解决**，不是 v0.3 backlog。Oracle 正确性是实验有效性的前提。
+在 oracle 修复并验证前，Sprint F 的结论是"在已知有 oracle bug 的环境下的结果"，可信度存疑。
