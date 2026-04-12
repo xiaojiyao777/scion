@@ -125,3 +125,96 @@ Sprint G 完成标志着 v0.2 架构整改全部到位。下一步：
 1. **Sprint F（端到端验证 campaign）** — 跑完整 15+ round campaign，验证整改后的行为
 2. **分析 Sprint F 结果** — 对比 v0.1 验证实验，确认改善
 3. **文档固化** — 更新 architecture v3 文档，标记 Sprint G 变更
+
+---
+
+## v0.3 Backlog — Async Weight Optimization（2026-04-12）
+
+### 背景
+
+Sprint F 发现：weight optimization 在 `_on_promote()` 内同步执行，每次 promote 阻塞 campaign ~40 分钟（pure-Python UCB fallback，16次评估×34次 solver 调用）。
+
+### 设计决策：Sprint F 暂不做 async
+
+**原因**：async weight opt 会让后续分支与"未优化权重的 champion"做对比，产生系统性虚假胜率（false positive）。Sprint F 定位是完整验证实验，实验有效性优先于吞吐量。
+
+**Sprint F 临时缓解**：`n_initial_random: 4, n_iterations: 4`（评估从16→8次，时间从41min→~20min）。
+
+### v0.3 正确实现方案
+
+#### 核心原则
+Weight opt 完成前，不允许任何分支与未优化权重的 champion 做实验对比。
+
+#### 实现步骤
+
+**Step 1：_on_promote 异步化**
+```python
+# _on_promote 只做同步关键路径：
+#   copytree → freeze → new_champion（暂用旧权重）→ 返回
+# 后台 Thread 做 weight opt
+```
+
+**Step 2：配合 STALE 机制**
+- weight opt 完成后，若结果有改善 → 触发 "soft champion update"
+- `mark_all_stale(new_version, weight_update=True)` 标记活跃分支 STALE
+- 活跃分支必须 reconcile：用新权重的 champion 重新 screening
+- 有正信号则恢复，否则 ABANDONED
+
+**Step 3：版本语义**
+- weight opt 完成后 champion 版本号不变，但 `code_snapshot_hash` 更新（registry.yaml 变了）
+- Lineage 记录 `weight_opt_result` 与对应 champion 版本绑定
+
+**Step 4：Double-promote 处理**
+- 第二次 promote 发生时，取消前一个 weight opt thread（或等待其完成后丢弃结果）
+- 用 `asyncio.Event` 或 `threading.Event` 实现取消信号
+
+#### 关键约束
+- weight opt thread 必须在 STALE 触发前完成（否则 STALE 意义丧失）
+- 如果 weight opt 超时（>15min），直接跳过权重更新，保持当前权重不变
+- STALE reconcile 成本高：需要评估 weight opt 是否真的有改善（`improved=True`），改善不显著则不触发 STALE
+
+#### 工程影响范围
+- `scion/core/campaign.py`：`_on_promote`、`__init__`、`run()`
+- `scion/core/branch.py`：`mark_all_stale` 增加 `weight_update` 参数
+- `scion/parameter/optimizer.py`：增加取消信号支持
+- Tests：async 行为 + STALE trigger 条件
+
+---
+
+## v0.3 Backlog 补充 — HypothesisFamily 语义分类（2026-04-12）
+
+### 背景
+
+当前 HypothesisFamily 用 `(change_locus, action, target_weakness)` 规则分类。
+盲区：语义相近但字段不同的假设无法归族，例如：
+- modify + vehicle_level + "改善 subcategory 合并"
+- create_new + order_level + "让同品类订单聚合"
+→ 规则认为不同族，实际是同一方向，无法触发"同方向失败预警"。
+
+### 方案：双路设计
+
+```
+Hypothesis 生成（Round 1 LLM，tainted）
+    ↓
+Contract Gate
+    ↓
+[Classifier LLM] — 独立调用，小模型（Sonnet/Flash）
+  输入：hypothesis_text + 当前 family 列表 + problem spec 摘要
+  输出：family_label（预定义 taxonomy 中选，或 new_family）
+  ← Classifier 不感知"哪些族已失败"，只做纯分类
+    ↓
+FamilyTracker 记录 family_failure_streak
+    ↓
+ContextManager 注入预警
+```
+
+### 关键设计决策
+
+- **模型**：Sonnet 即可（分类任务不需要深度推理）
+- **Taxonomy**：半开放，预定义 10-15 个核心 family，允许 new_family 但规范命名
+- **Classifier 隔离**：不注入"已失败方向"信息，防止跨轮次措辞漂移
+- **一致性**：few-shot 示例注入，提升同一假设的分类稳定性
+
+### 为什么 Classifier LLM 不会被 proposing LLM 操纵
+
+两次调用上下文完全独立（stateless），proposing LLM 不知道 classifier 的提示词和判断标准，无法操纵分类结果。之前担心的"自我作弊"是伪命题。
