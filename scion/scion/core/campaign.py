@@ -276,7 +276,14 @@ class CampaignManager:
             BranchState.VALIDATING_EXPAND,
             BranchState.FROZEN_TESTING,
         ):
-            return self._run_eval_step(branch)
+            try:
+                return self._run_eval_step(branch)
+            except RuntimeError as exc:
+                logger.error("Branch %s: eval step aborted — %s", branch.branch_id, exc)
+                self._branch_ctrl.apply_decision(branch.branch_id, Decision.ABANDON)
+                return StepResult(
+                    action="validate", branch_id=branch.branch_id, reason=str(exc)
+                )
 
         logger.warning(
             "Branch %s in unexpected state %s — skipping",
@@ -622,17 +629,8 @@ class CampaignManager:
         # T04: reuse the canonical HypothesisRecord from screening — do NOT create a fake one
         h_record = self._branch_current_hypothesis.get(bid)
         if h_record is None:
-            # Fallback: create a minimal record if screening record was lost (should not happen)
-            logger.warning("Branch %s: no canonical h_record in _branch_current_hypothesis — creating fallback", bid)
-            h_record = HypothesisRecord(
-                hypothesis_id=str(uuid.uuid4()),
-                branch_id=bid,
-                change_locus=hypothesis.change_locus,
-                action=hypothesis.action,
-                status="active",
-                target_file=hypothesis.target_file,
-                suggested_weight=hypothesis.suggested_weight,
-                hypothesis_text=hypothesis.hypothesis_text,
+            raise RuntimeError(
+                f"Branch {bid}: no canonical hypothesis record — cannot proceed with eval"
             )
 
         self._round_num += 1

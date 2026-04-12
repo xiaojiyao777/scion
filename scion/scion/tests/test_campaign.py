@@ -1051,3 +1051,35 @@ class TestCodeFailureRetry:
         assert result.branch_id is not None
         assert result.branch_id not in cm._pending_hypotheses, \
             "successful round must not leave a pending hypothesis"
+
+
+# ---------------------------------------------------------------------------
+# T1: No fake HypothesisRecord fallback in eval step (Sprint G-patch)
+# ---------------------------------------------------------------------------
+
+class TestNoFakeHypothesisRecordFallback:
+    def test_missing_canonical_record_raises_and_abandons(self, tmp_path):
+        """If canonical h_record is absent when eval step runs, the branch is abandoned."""
+        protocol = MockExperimentProtocol(
+            results=[_make_protocol_result(ExperimentStage.SCREENING)]
+        )
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        # Drive branch to EXPLORE → READY_VALIDATE (screening pass)
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert bid is not None
+
+        # Manually delete the canonical hypothesis record to simulate the lost-record scenario
+        cm._branch_current_hypothesis.pop(bid, None)
+
+        # Run next step — the campaign will schedule READY_VALIDATE → VALIDATING
+        # and call _run_eval_step, which should raise RuntimeError and abandon the branch
+        result = cm.run_one_step()
+        assert result.branch_id == bid
+
+        from scion.core.models import BranchState
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.state == BranchState.ABANDONED, (
+            f"Expected ABANDONED but got {branch.state}; result={result}"
+        )
