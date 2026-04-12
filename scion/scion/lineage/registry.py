@@ -32,6 +32,7 @@ class LineageRegistry:
                     branch_id              TEXT NOT NULL,
                     hypothesis_id          TEXT,
                     timestamp              TEXT NOT NULL,
+                    event_kind             TEXT DEFAULT 'experiment',
                     code_hash              TEXT,
                     patch_action           TEXT,
                     patch_file             TEXT,
@@ -53,9 +54,21 @@ class LineageRegistry:
                     decision_features_json TEXT,
                     decision               TEXT,
                     decision_reason        TEXT,
+                    model_id               TEXT,
+                    protocol_version       TEXT,
+                    prompt_tokens          INTEGER,
+                    completion_tokens      INTEGER,
                     created_at             TEXT DEFAULT (datetime('now'))
                 )
             """)
+            # Migrate existing databases: add columns that may not exist yet
+            self._ensure_columns(conn, "experiment_events", {
+                "event_kind":        "TEXT DEFAULT 'experiment'",
+                "model_id":          "TEXT",
+                "protocol_version":  "TEXT",
+                "prompt_tokens":     "INTEGER",
+                "completion_tokens": "INTEGER",
+            })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
                     branch_id           TEXT PRIMARY KEY,
@@ -114,15 +127,32 @@ class LineageRegistry:
             """)
 
     # ------------------------------------------------------------------
+    # Schema helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ensure_columns(
+        conn: sqlite3.Connection, table: str, columns: Dict[str, str]
+    ) -> None:
+        """Add missing columns to an existing table (SQLite ALTER TABLE ADD COLUMN)."""
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for col, col_def in columns.items():
+            if col not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}")
+
+    # ------------------------------------------------------------------
     # Write: experiment events (INSERT only)
     # ------------------------------------------------------------------
 
     def record_event(self, event: Dict[str, Any]) -> str:
-        """Insert one row into experiment_events. Returns event_id."""
+        """Insert one experiment row into experiment_events. Returns event_id."""
         if "event_id" not in event:
             event = dict(event, event_id=str(uuid.uuid4()))
         if "timestamp" not in event:
             event = dict(event, timestamp=datetime.now().isoformat())
+        # Always stamp experiment rows so they can be filtered from decision rows
+        if "event_kind" not in event:
+            event = dict(event, event_kind="experiment")
         cols = ", ".join(event.keys())
         placeholders = ", ".join(["?"] * len(event))
         sql = f"INSERT INTO experiment_events ({cols}) VALUES ({placeholders})"
@@ -142,6 +172,7 @@ class LineageRegistry:
             "event_id": str(uuid.uuid4()),
             "branch_id": branch_id,
             "timestamp": datetime.now().isoformat(),
+            "event_kind": "decision",
             "decision_features_json": features_json,
             "decision": decision,
             "decision_reason": reason,
@@ -197,24 +228,28 @@ class LineageRegistry:
         """Return aggregate stats across all recorded events."""
         with sqlite3.connect(self.db_path) as conn:
             total = conn.execute(
-                "SELECT COUNT(*) FROM experiment_events"
+                "SELECT COUNT(*) FROM experiment_events WHERE event_kind = 'experiment'"
             ).fetchone()[0]
             by_decision = {}
             for row in conn.execute(
-                "SELECT decision, COUNT(*) FROM experiment_events WHERE decision IS NOT NULL GROUP BY decision"
+                "SELECT decision, COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND decision IS NOT NULL GROUP BY decision"
             ).fetchall():
                 by_decision[row[0]] = row[1]
             n_branches = conn.execute(
-                "SELECT COUNT(DISTINCT branch_id) FROM experiment_events"
+                "SELECT COUNT(DISTINCT branch_id) FROM experiment_events "
+                "WHERE event_kind = 'experiment'"
             ).fetchone()[0]
             n_champions = conn.execute(
                 "SELECT COUNT(*) FROM champions"
             ).fetchone()[0]
             contract_failures = conn.execute(
-                "SELECT COUNT(*) FROM experiment_events WHERE contract_result = 'failed'"
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND contract_result = 'failed'"
             ).fetchone()[0]
             verification_failures = conn.execute(
-                "SELECT COUNT(*) FROM experiment_events WHERE verification_result = 'failed'"
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND verification_result = 'failed'"
             ).fetchone()[0]
         return {
             "total_events": total,
