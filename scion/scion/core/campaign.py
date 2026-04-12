@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -194,6 +195,10 @@ class CampaignManager:
         # Circuit breaker (T29)
         self._circuit_breaker = CircuitBreaker()
 
+        # Async weight optimization (R3/R5)
+        self._champion_lock = threading.Lock()
+        self._pending_weight_opt_threads: List[threading.Thread] = []
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -218,6 +223,15 @@ class CampaignManager:
             # T25/T23: stagnation check after each round
             self._run_stagnation_check()
         self._write_campaign_summary()
+        # R5: join all pending weight opt threads (up to 10 min each)
+        pending = [t for t in self._pending_weight_opt_threads if t.is_alive()]
+        if pending:
+            logger.info(
+                "Waiting for %d background weight opt thread(s) to complete...",
+                len(pending),
+            )
+        for t in self._pending_weight_opt_threads:
+            t.join(timeout=600)
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -236,7 +250,9 @@ class CampaignManager:
 
         # --- Create a new branch ---
         if sched.action == "create_new":
-            branch = self._branch_ctrl.create_branch(self._champion)
+            with self._champion_lock:
+                champ_snapshot = self._champion
+            branch = self._branch_ctrl.create_branch(champ_snapshot)
             logger.info("Created new branch %s", branch.branch_id)
             result = self._run_explore_step(branch)
             result.action = "create_branch"
@@ -818,9 +834,11 @@ class CampaignManager:
         ]
         # Pass the current branch workspace so the LLM sees branch-specific code (§4.9)
         branch_workspace = self._branch_workspaces.get(bid)
+        with self._champion_lock:
+            champ_snapshot = self._champion
         context = self._ctx_manager.build_hypothesis_context(
             branch=branch,
-            champion=self._champion,
+            champion=champ_snapshot,
             problem_spec=self._spec,
             active_hypotheses=self._hyp_store.get_by_status("active"),
             blacklist=self._hyp_store.get_by_status("blacklisted"),
@@ -859,10 +877,12 @@ class CampaignManager:
         prior_failure: Optional[str] = None,
     ) -> Optional[PatchProposal]:
         bid = branch.branch_id
+        with self._champion_lock:
+            champ_snapshot = self._champion
         context = self._ctx_manager.build_code_context(
             branch=branch,
             hypothesis=hypothesis,
-            champion=self._champion,
+            champion=champ_snapshot,
             problem_spec=self._spec,
             prior_failure=prior_failure,
         )
@@ -923,7 +943,8 @@ class CampaignManager:
             except Exception:
                 pass
 
-        src = self._champion.code_snapshot_path
+        with self._champion_lock:
+            src = self._champion.code_snapshot_path
         try:
             ws = self._materializer.create_branch_workspace(bid, src)
             self._branch_workspaces[bid] = ws
@@ -1265,7 +1286,10 @@ class CampaignManager:
     # ------------------------------------------------------------------
 
     def _on_promote(self, branch: Branch) -> None:
-        """Update champion and mark all other active branches stale."""
+        """Update champion immediately (pre-optimized weights) and launch bg weight opt.
+
+        R1: returns in seconds — weight optimization runs in a daemon thread.
+        """
         import os as _os
         import shutil as _shutil
         from scion.runtime.workspace import _make_tree_writable
@@ -1275,10 +1299,12 @@ class CampaignManager:
             logger.warning("Branch %s promoted but no workspace found", bid)
             return
 
-        new_version = self._champion.version + 1
+        with self._champion_lock:
+            new_version = self._champion.version + 1
+            prev_solver_config_hash = self._champion.solver_config_hash
+            prev_pool = self._champion.operator_pool
 
         # T3: Create mutable staging at champions/champion_v{N} from promoted workspace.
-        # Weight optimization writes back to staging before it is frozen.
         staging_path = str(self._materializer._champions_dir / f"champion_v{new_version}")
         try:
             if _os.path.exists(staging_path):
@@ -1292,32 +1318,16 @@ class CampaignManager:
             logger.error("Branch %s: mutable staging failed: %s", bid, exc)
             staging_path = ws  # fallback
 
-        # --- v0.2: Weight optimization ---
+        # Read current weights before freezing (bg thread will use these)
         param_cfg = self._spec.parameter_search
+        current_weights: dict = {}
         if param_cfg.enabled and self._experiment_protocol is not None:
             try:
-                # Read current weights from staging before optimization
-                from scion.runtime.pool_manager import read_weights, update_weights
+                from scion.runtime.pool_manager import read_weights
                 registry_path = _os.path.join(staging_path, "registry.yaml")
                 current_weights = read_weights(registry_path) if _os.path.exists(registry_path) else {}
-
-                opt_result = self._run_weight_optimization(staging_path, new_version, current_weights)
-                if opt_result is not None and opt_result.improved:
-                    # Write back to mutable staging (not read-only snapshot)
-                    if _os.path.exists(registry_path):
-                        update_weights(registry_path, opt_result.best_weights)
-                    logger.info(
-                        "Champion v%d: weights optimized (score %.3f → %.3f)",
-                        new_version, opt_result.baseline_score, opt_result.best_score,
-                    )
-                if opt_result is not None:
-                    self._registry.record_weight_optimization(
-                        campaign_id=self._campaign_id,
-                        champion_version=new_version,
-                        result=opt_result,
-                    )
             except Exception as exc:
-                logger.error("Weight optimization failed for champion v%d: %s", new_version, exc)
+                logger.warning("Branch %s: failed to read weights before freeze: %s", bid, exc)
 
         # T3: Freeze staging → final champion snapshot (read-only)
         try:
@@ -1327,28 +1337,134 @@ class CampaignManager:
 
         snapshot_path = staging_path
 
-        # Rebuild operator_pool from final registry.yaml
+        # Rebuild operator_pool from final registry.yaml (pre-optimized weights)
         from scion.runtime.pool_manager import read_registry
         registry_path = _os.path.join(snapshot_path, "registry.yaml")
         try:
             final_pool = read_registry(registry_path)
         except Exception:
-            final_pool = self._champion.operator_pool  # fallback
+            final_pool = prev_pool  # fallback
 
         # T4: Use compute_snapshot_hash (includes registry.yaml) for champion hash
         code_hash = self._materializer.compute_snapshot_hash(snapshot_path)
         new_champion = ChampionState(
             version=new_version,
             operator_pool=final_pool,
-            solver_config_hash=self._champion.solver_config_hash,
+            solver_config_hash=prev_solver_config_hash,
             code_snapshot_path=snapshot_path,
             code_snapshot_hash=code_hash,
             promoted_at=datetime.now().isoformat(),
         )
-        self._champion = new_champion
+
+        # Update champion immediately with pre-optimized weights (R1)
+        with self._champion_lock:
+            self._champion = new_champion
         stale_ids = self._branch_ctrl.mark_all_stale(new_version)
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
+
+        # Launch background weight optimization (R2)
+        if param_cfg.enabled and self._experiment_protocol is not None:
+            t = threading.Thread(
+                target=self._bg_weight_opt_task,
+                args=(staging_path, new_version, current_weights),
+                daemon=True,
+                name=f"weight-opt-v{new_version}",
+            )
+            self._pending_weight_opt_threads.append(t)
+            t.start()
+
+    def _bg_weight_opt_task(
+        self, staging_path: str, version: int, current_weights: dict
+    ) -> None:
+        """Background thread: run weight opt and update champion on success.
+
+        R2: Writes optimized weights back to the frozen snapshot, updates
+            self._champion.operator_pool and code_snapshot_hash.
+        R4: Checks version before updating; discards result if champion advanced.
+        """
+        import os as _os
+        import time as _time
+        from scion.runtime.workspace import _make_tree_writable
+        from pathlib import Path as _Path
+
+        t0 = _time.monotonic()
+        try:
+            opt_result = self._run_weight_optimization(staging_path, version, current_weights)
+        except Exception as exc:
+            logger.error("Background weight opt failed for champion v%d: %s", version, exc)
+            return
+
+        elapsed_min = (_time.monotonic() - t0) / 60.0
+
+        if opt_result is None:
+            return
+
+        # Record result regardless of improvement
+        try:
+            self._registry.record_weight_optimization(
+                campaign_id=self._campaign_id,
+                champion_version=version,
+                result=opt_result,
+            )
+        except Exception as exc:
+            logger.warning("Background weight opt: failed to record result: %s", exc)
+
+        if not opt_result.improved:
+            logger.info(
+                "Background weight opt complete for champion v%d (%.1f min) — no improvement",
+                version, elapsed_min,
+            )
+            return
+
+        # Write optimized weights back to snapshot (temporarily make writable)
+        registry_path = _os.path.join(staging_path, "registry.yaml")
+        try:
+            from scion.runtime.pool_manager import update_weights, read_registry
+            _make_tree_writable(_Path(staging_path))
+            if _os.path.exists(registry_path):
+                update_weights(registry_path, opt_result.best_weights)
+            self._materializer.freeze_snapshot(staging_path)
+        except Exception as exc:
+            logger.error(
+                "Background weight opt: failed to write weights for champion v%d: %s",
+                version, exc,
+            )
+            return
+
+        # Recompute hash and read updated pool
+        try:
+            new_pool = read_registry(registry_path)
+            new_hash = self._materializer.compute_snapshot_hash(staging_path)
+        except Exception as exc:
+            logger.error(
+                "Background weight opt: failed to recompute hash for champion v%d: %s",
+                version, exc,
+            )
+            return
+
+        # R4: Only update champion if version is still current
+        with self._champion_lock:
+            if self._champion.version != version:
+                logger.warning(
+                    "Background weight opt for champion v%d discarded — "
+                    "champion has advanced to v%d",
+                    version, self._champion.version,
+                )
+                return
+            self._champion = ChampionState(
+                version=self._champion.version,
+                operator_pool=new_pool,
+                solver_config_hash=self._champion.solver_config_hash,
+                code_snapshot_path=self._champion.code_snapshot_path,
+                code_snapshot_hash=new_hash,
+                promoted_at=self._champion.promoted_at,
+            )
+
+        logger.info(
+            "Background weight opt complete for champion v%d (%.1f min)",
+            version, elapsed_min,
+        )
 
     def _run_weight_optimization(
         self, champion_snapshot: str, version: int, current_weights: dict
