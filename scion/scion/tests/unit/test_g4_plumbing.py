@@ -68,6 +68,7 @@ def _base_context(**overrides) -> Dict[str, Any]:
         "sibling_summary": "none",
         "operator_categories": "['order_level']",
         "branch_code": "",
+        "branch_direction": "",
         "exploration_coverage": "",
         "strategy_guidance": "",
         "champion_baselines": "",
@@ -143,6 +144,23 @@ def test_hypothesis_prompt_never_contains_validation_per_case():
     # No per-case validation data should appear
     assert "validation_per_case" not in all_text
     assert "frozen_per_case" not in all_text
+
+
+def test_hypothesis_prompt_contains_branch_direction():
+    """branch_direction 非空时出现在 hypothesis prompt system blocks 中"""
+    ctx = _base_context(branch_direction="local_search: explore 2-opt improvements")
+    system_blocks, _user = _split_hypothesis_context(ctx)
+    all_text = " ".join(b["text"] for b in system_blocks)
+    assert "## Branch Direction" in all_text
+    assert "2-opt improvements" in all_text
+
+
+def test_hypothesis_prompt_omits_branch_direction_when_empty():
+    """branch_direction が空のとき，prompt に ## Branch Direction は出現しない"""
+    ctx = _base_context(branch_direction="")
+    system_blocks, _user = _split_hypothesis_context(ctx)
+    all_text = " ".join(b["text"] for b in system_blocks)
+    assert "## Branch Direction" not in all_text
 
 
 # ---------------------------------------------------------------------------

@@ -186,6 +186,10 @@ def _split_hypothesis_context(
             f"This branch has diverged from the champion. The current branch code is:\n\n"
             f"{D['branch_code']}"
         )
+    if D["branch_direction"]:
+        branch_context_parts.append(
+            f"## Branch Direction\n{D['branch_direction']}"
+        )
     if D["exploration_coverage"]:
         branch_context_parts.append(
             f"## Exploration Coverage\n{D['exploration_coverage']}"
