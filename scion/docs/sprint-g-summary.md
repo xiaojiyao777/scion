@@ -298,3 +298,38 @@ CC 在每次 API 调用前执行 compact/budget/snip 防止错误发生。Scion 
 CC 的错误处理针对单次 LLM 对话；Scion 面对的是跨轮次、跨分支的实验失败模式。
 CC 的熔断器保护"无限 autocompact 死循环"；Scion 需要保护"无限 infra_loop 浪费"。
 两者问题结构不同，但熔断器的 session 级持久计数是通用原则。
+
+---
+
+## v0.3 Backlog — Weight Opt 结果反馈给 LLM（2026-04-12）
+
+### 背景
+
+当前 weight opt 结果（算子优化权重）不进入 LLM 上下文，形成信息断层。
+weight opt 知道当前 pool 里每个算子的实际贡献，这对 LLM 提假设有指导价值：
+- 低权重算子 = 改进机会信号（设计薄弱或与 pool 不互补）
+- 高权重算子 = 深挖或多样化信号（可专项改进或分摊压力）
+
+### 方案
+
+在 Round 1 上下文里注入 weight opt 结果作为**弱信号**（不是指令）：
+
+```
+"当前算子贡献估计（weight opt 结果）：
+  - destroy_rebuild: 高贡献（权重 4.97）
+  - subcat_move: 中等贡献（权重 1.12）
+  - move_order: 低贡献（权重 0.05）—— 可能是改进机会"
+```
+
+措辞为"贡献估计"而非"改进指令"，给 LLM 信息让它自行推断，不强制指挥。
+
+### 风险控制
+
+exploitation 偏差：高权重算子信息可能让 LLM 更集中在已成功方向。
+缓解：与"未探索方向提示"（HypothesisFamily 语义分类 v0.3）配合使用，形成双向信号：
+- weight opt 告诉"哪里弱"（改进机会）
+- HypothesisFamily 告诉"哪里还没探索"（新方向机会）
+
+### 时机
+
+weight opt 完成后，写入 champion metadata；下一个分支创建时，ContextManager 读取并注入。

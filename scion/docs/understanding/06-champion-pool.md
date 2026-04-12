@@ -1,17 +1,17 @@
-# 06 — Champion Pool 与权重优化
+# 06 — Champion Pool、Weight Optimization 与 Bayesian Optimization
 
 ## Champion 的定义
 
 **Champion 是池级别，不是算子级别。**
 
-Champion 不是"某个算子赢了"，而是**整个算子集合（pool）的一个配置**赢了。
+Champion 是整个算子集合（pool）的一个配置赢了，而不是某个算子单独赢了。
 
 ```python
 ChampionState:
-  version: int                           # 版本号
+  version: int
   operator_pool: dict[str, OperatorConfig]  # 算子名 → {file, weight}
-  code_snapshot_path: str               # 文件系统快照路径
-  code_snapshot_hash: str               # 内容哈希，用于 Stale 检测
+  code_snapshot_path: str
+  code_snapshot_hash: str                    # 含 registry.yaml，weight 变化会改变 hash
   promoted_at: str
 ```
 
@@ -25,64 +25,135 @@ ChampionState:
 Champion Solver:   pool = {现有算子集合，权重 w1...wN}
 Candidate Solver:  pool = {现有算子集合 ± 变更，权重同}
 
-相同实例 × 相同 seed → 配对比较结果（win / loss / tie）
+相同实例 × 相同 seed → 配对比较（win / loss / tie）
 ```
 
-**字典序比较规则（多目标）：**
+**字典序比较规则：**
 ```
 Level 1: 业务聚合约束（splits 数）← 最高优先级
 Level 2: 成本（cost）
 Level 3: 运行效率
 ```
 
-先比 Level 1，若相当（在容忍度内）才比 Level 2，以此类推。
+---
+
+## Promote 的语义
+
+Promote = 把"新的 pool 配置"提升为 champion。
+
+原 pool = {A, B, C}，候选是"新增算子 D" → Promote 后 champion = {A, B, C, D}。
+下一次实验的 champion baseline 是 {A, B, C, D}，不是原来的 {A, B, C}。
 
 ---
 
-## Promote 的含义
+## Weight Optimization：参数层优化
 
-Promote 一个候选 = 把"新的 pool 配置"提升为 champion。
+### 两层优化的分工
 
-假设原 champion pool 有算子 {A, B, C}，候选是"新增算子 D"：
-- Promote 后：champion = {A, B, C, D}
-- 下一次实验的 champion baseline 是 {A, B, C, D}
+```
+算法层（LLM 驱动）
+  → 找更好的算子：有哪些算子？每个做什么？
+  → 离散、开放的搜索空间
 
----
+参数层（BayesianWeightOpt）
+  → 给定算子集合，各自概率分配多少最优？
+  → 连续、有界的搜索空间 [0.05, 5.0]
+```
 
-## 权重优化（Weight Optimization）
+每次 promote 成功后，参数层接着跑：在新算子组合上找最优权重。
 
-**时机**：每次 promote 成功后立即运行。
+### 为什么需要 Bayesian Optimization
 
-**目标**：找到让新 champion pool 性能最优的算子权重分配。
+目标函数 f(w) = "权重向量 w 下 solver 的表现"：
+- **不可微**：VNS 输出不是解析函数，没有梯度
+- **评估代价高**：每次 f(w) = N 个 instance × M 个 seed 的 solver，数十秒
 
-**当前实现**：pure-Python UCB fallback（scipy/skopt 未安装）
-- 评估次数：n_initial_random(4) + n_iterations(4) = 8 次
-- 每次评估：8个screening实例 × 2 seeds = 16次 solver 调用
-- 总计：~128 次 solver 调用，约 10-20 分钟
+这两个特点决定要用**无梯度、样本高效**的优化方法——Bayesian Optimization。
 
-**权重的作用**：VNS 在每次迭代时按概率选算子。权重高的算子被选中概率高。优化后的权重让 champion pool 发挥最优综合效果。
+### Bayesian Optimization 原理
 
----
+**核心假设**：相近的 w，得分也相近。
 
-## 已知问题：同步阻塞
+```
+已观测 n 个点：(w₁,f₁), ..., (wₙ,fₙ)
 
-**当前问题**：weight optimization 在 `_on_promote()` 内同步运行，每次 promote 阻塞 campaign 10-40 分钟（取决于参数和 solver 速度）。
+对未观测的 w*：
+  μ(w*) = 加权平均（越近的观测点权重越大）
+  σ(w*) = 加权方差（附近观测稀疏 → 不确定性大）
 
-**影响**：campaign 探索效率低，每次 promote 后长时间停顿。
+权重计算：exp(-distance(w*, wᵢ)² / h²)
 
-**v0.3 计划**：改为异步，但需要配合 STALE 机制——详见 [08-known-issues-roadmap.md](08-known-issues-roadmap.md)。
+UCB(w*) = μ(w*) + κ × σ(w*)
+  → 选"均值高"（exploitation）和"不确定性高"（exploration）之间的平衡点
+```
 
-**Sprint F 临时缓解**：`n_initial_random=4, n_iterations=4`（从原来 8+8=16 次评估降到 4+4=8 次）。
+每轮选 UCB 最高的 w 评估，更新代理模型，再选下一个。
+
+**比随机采样好在哪**：不往已知不好的区域浪费，往"可能好但还没探索"的地方钻。
+
+### 实现层次
+
+```
+BayesianWeightOptimizer.optimize(current_weights)
+  ↓
+try:
+  → skopt.gp_minimize（GP + acquisition function）
+  → scipy.optimize.minimize L-BFGS-B（多次随机重启）← claw 环境有，F2/F3 走这条
+  → Pure Python UCB fallback（自实现）← 无依赖时的兜底，F1 走的是这条
+```
+
+### 当前配置（Sprint G 后）
+
+```
+n_initial_random = 4   # 随机探索次数
+n_iterations     = 4   # UCB 引导次数
+n_eval_seeds     = 2   # 每个 case 跑 2 个 seed
+
+总评估次数 = 4+4+1(baseline) = 9 次
+每次评估 = ~8 个 instance × 2 seed = 16 次 solver 调用
+总时间 ≈ 10-20 分钟（claw 环境 + scipy）
+```
 
 ---
 
 ## Oracle：评估的信任锚点
 
-**Oracle** 是验证算子输出"业务正确性"的代码，用于 Verification Gate 的 feasibility check 和 objective recomputation。
+Oracle 是验证算子输出"业务正确性"的代码，用于 Verification Gate 的 feasibility check 和 objective recomputation。
 
-Oracle 的特殊性：
-- **由人写 spec，由 Opus 写实现，由人审核**
-- **冻结为 frozen files，不可被搜索过程修改**
-- 这是整个系统的信任锚点——如果 oracle 有 bug，所有实验结论都不可信
+**Oracle 的特殊性：**
+- 由人写 spec + Opus 写实现 + 人审核
+- 冻结为 frozen files，搜索过程不可修改
+- 这是整个系统的信任锚点——oracle 有 bug，所有实验结论不可信
 
-这也是为什么说"人在回路但不在循环里"：人不参与每轮迭代，但人定义了 oracle（即"什么叫正确"）。
+---
+
+## 已知局限
+
+**Weight opt 只改"怎么用现有算子"，不改"用什么算子"。**
+
+如果某算子设计本身不适合当前 pool 组合（如两个功能重叠），weight opt 无法发现，更不会删除其中一个。改变算子组合结构仍依赖 LLM 的 remove action。
+
+**同步阻塞（v0.3 待修复）：**
+weight opt 在 `_on_promote()` 内同步运行，每次 promote 阻塞 campaign。
+v0.3 方案：async + STALE 机制（详见 08-known-issues-roadmap.md）。
+
+---
+
+## v0.3 改进：Weight Opt 结果反馈给 LLM
+
+**当前**：weight opt 结果（各算子优化权重）不进入 LLM 上下文，信息断层。
+
+**价值**：weight opt 量化了每个算子的实际贡献——
+- 低权重算子（0.05）= 设计薄弱或与 pool 不互补 → 改进机会
+- 高权重算子（4.97）= 承担过多搜索压力 → 深挖或建立互补算子
+
+**注入方式**（弱信号，非指令）：
+```
+"当前算子贡献估计（weight opt 结果）：
+  - destroy_rebuild: 高贡献（4.97）
+  - subcat_move: 中等（1.12）
+  - move_order: 低贡献（0.05）—— 可能是改进机会"
+```
+
+**风险**：加剧 exploitation 偏差（高权重方向被 LLM 过度聚焦）。
+**缓解**：与 HypothesisFamily 语义分类配合，形成"弱方向改进"+"未探索方向"双向信号。
