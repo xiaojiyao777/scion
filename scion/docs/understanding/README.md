@@ -8,6 +8,8 @@
 
 | 文件 | 内容 |
 |------|------|
+| [00-architecture-overview.md](00-architecture-overview.md) | **整体架构概览：完整 campaign round 数据流 + 组件分工** |
+|------|------|
 | [01-what-is-scion.md](01-what-is-scion.md) | Scion 是什么、解决什么问题、名字含义 |
 | [02-three-layer-isolation.md](02-three-layer-isolation.md) | 三层隔离：Contract Gate / Verification Gate / Decision Input Guard |
 | [03-experiment-protocol.md](03-experiment-protocol.md) | 三级实验协议：Screening / Validation / Frozen Holdout |
