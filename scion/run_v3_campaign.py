@@ -26,7 +26,9 @@ from scion.core.campaign import CampaignManager
 from scion.verification.gate import VerificationGate
 
 PROBLEM_DIR = Path(__file__).parent / "problems" / "warehouse_delivery"
-CAMPAIGN_DIR = Path("/tmp/scion_v3_run")
+CAMPAIGN_DIR = Path(
+    os.environ.get("SCION_CAMPAIGN_DIR", "/tmp/scion_v3_run")
+)
 
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
