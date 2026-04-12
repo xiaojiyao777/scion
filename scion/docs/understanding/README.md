@@ -18,6 +18,7 @@
 | [08-known-issues-roadmap.md](08-known-issues-roadmap.md) | 当前已知问题 / v0.3 路线图 |
 | [09-failure-router.md](09-failure-router.md) | Failure Router：四层分类 / 路由动作 / 设计缺口 |
 | [10-lineage-registry.md](10-lineage-registry.md) | Lineage Registry：持久化审计层 / 双重角色 / 事后分析 |
+| [11-canary-regression.md](11-canary-regression.md) | Canary Regression Check：设计目的 / 实例局限 / v0.3升级方案 |
 
 ## 快速入口
 

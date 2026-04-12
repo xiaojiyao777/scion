@@ -362,3 +362,51 @@ self._registry.record_champion(
 - `scion/lineage/registry.py`：实现 `record_champion()`
 - `scion/core/campaign.py`：`_on_promote()` 末尾调用
 - 现有测试：补充 champion 写入验证
+
+---
+
+## v0.3 Backlog — Canary 实例设计升级（2026-04-12）
+
+### 核心设计原则（不变）
+
+> Canary 选的是**已知容易出问题的边界场景**，作为确定性的基准检查。
+
+Canary 的设计目的是"正确性底线"，不是"性能采样"。这决定了 Canary 实例不应该来自随机生成器，而应该精心设计。
+
+### 当前问题
+
+当前 3 个 canary 实例（instance_v3_can_m01/m02, instance_v4_can_s01）来自同一生成器，
+和 screening/validation/frozen 有相同的系统性偏差——无法测试业务边界场景的正确性。
+
+### v0.3 升级方案：两类实例来源
+
+**来源一：手工设计的对抗性实例（静态，入仓库）**
+
+覆盖已知业务边界：
+- 全部订单锁定（locked_vehicle_id 全设置）
+- 容量满载边界（总 pallets = 车辆容量上限）
+- 全危险品订单（必须走 HQ40_DG 专用车型）
+- 单一提货点极端集中（与 test_oracle.py 设计的测试用例对齐）
+- 订单数恰好触碰各车型边界（T10/HQ40/HQ40_DG 的 capacity 边界值）
+
+**来源二：实验中总结出的失败实例（动态，自动积累）**
+
+从历史实验记录中提取"已知出错的场景"：
+- 触发过 V5_state_mutation 或 V8_nondeterminism 的实例模式
+- 历史上 screening 大败（wr < 0.2）的特定实例类型
+- 算子在某个实例上产出 feasibility_violation 的配置特征
+
+自动积累机制：
+```python
+# 每次出现重度 verification failure
+if failure_code in ["V5_state_mutation", "V8_nondeterminism"]:
+    candidate_canary_pool.append(extract_instance_pattern(instance))
+    
+# 人工审核后提升为正式 canary
+# 保持 canary set 小而精（5-10 个），不做大规模扩张
+```
+
+### 与 test_oracle.py 的对齐
+
+test_oracle.py 的 TestHardConstraintViolations 测试用例本质上就是"手工设计的边界场景"。
+canary 实例的设计可以直接参考这些测试用例，确保 canary 和 oracle 测试覆盖同一类边界。
