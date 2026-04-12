@@ -1026,6 +1026,9 @@ class CampaignManager:
         Ensures remove/modify/create_new all produce a consistent registry,
         rather than relying on WorkspaceMaterializer side effects (create-only).
         """
+        if not self._champion.operator_pool:
+            logger.debug("_sync_pool_registry skipped: champion pool is empty")
+            return
         try:
             from scion.runtime.pool_manager import PoolManager
             pool_mgr = PoolManager(self._champion.operator_pool)
