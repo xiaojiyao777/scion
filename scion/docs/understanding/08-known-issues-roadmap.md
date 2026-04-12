@@ -117,3 +117,18 @@ _on_promote() 新流程：
 | **v0.2 收尾** | Sprint F 结果分析 + 最终报告 |
 | **v0.3 开发** | 异步 weight opt + STALE + ChampionStore |
 | **生产接入** | 生成器扩充（引入真实统计） + shadow deployment |
+
+---
+
+## v0.3 — 精确算法对比验证
+
+**目的**：给 Scion 的改进加上"绝对意义"——当前只有相对改进（比上一个 champion 好），和精确算法对比才能知道距离全局最优还有多远。
+
+**方案**：对 small 实例（20-40 orders）用 MILP 求最优解，计算：
+$$\text{gap} = \frac{f_{\text{champion}} - f_{\text{optimal}}}{f_{\text{optimal}}}$$
+
+观察 Scion 迭代过程中 gap 的收敛曲线。
+
+**MILP 模型**：已完成，见 `scion/docs/milp-model.md`（Opus 建模，两阶段 epsilon-constraint，$O(n^2)$ 复杂度，$n=40$ 时 Gurobi 分钟级可证最优）。
+
+**实现计划**：PuLP + CBC（无需商业 license），对接 v4_scr_s 系列实例，oracle 修复后统一实施。
