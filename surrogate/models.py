@@ -54,6 +54,9 @@ REGION_MAX_PICKUPS: dict[str, int] = {
 CITY_TO_REGION: dict[str, str] = {
     "Dongguan": "Dongguan",
     "Shenzhen": "Shenzhen",
+    # Chinese aliases used in test instances
+    "东莞": "Dongguan",
+    "深圳": "Shenzhen",
 }
 
 
@@ -71,8 +74,8 @@ def get_max_pickups(region: str) -> int:
 # SPU 与栈板计算
 # ---------------------------------------------------------------------------
 
-# FULL_PLT/TAILGATE/WOOD_CASE: each unit = 1 pallet; FULL_CTN/LOOSE_CTN: every 8 = 1 pallet
-PALLET_TYPE = {"FULL_PLT", "TAILGATE", "WOOD_CASE"}
+# FULL_PLT/TAILGATE/WOOD_CASE/整板: each unit = 1 pallet; FULL_CTN/LOOSE_CTN: every 8 = 1 pallet
+PALLET_TYPE = {"FULL_PLT", "TAILGATE", "WOOD_CASE", "整板"}
 BOX_TYPE    = {"FULL_CTN", "LOOSE_CTN"}
 
 
