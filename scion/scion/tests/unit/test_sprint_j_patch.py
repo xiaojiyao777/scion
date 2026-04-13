@@ -345,7 +345,7 @@ class TestResearchLogRender:
         assert "frozen_wr" not in rendered
 
     def test_research_log_screening_failures_compact(self, tmp_path):
-        """Multiple screening failures shown in compact format."""
+        """Multiple screening failures shown with trajectory detail."""
         db_path = str(tmp_path)
         rows = []
         for i in range(5):

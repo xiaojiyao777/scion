@@ -238,10 +238,10 @@ class TestSaturationExtractFromCaseFeatures:
 
 class TestResearchLogCompactDisplay:
     def test_compact_at_large_scale(self, tmp_path):
-        """More than 10 failed screening branches should use compact grouped format."""
+        """More than 20 failed screening branches should use batch format for overflow."""
         db_path = str(tmp_path)
         rows = []
-        for i in range(15):
+        for i in range(25):
             prefix = "subcat" if i < 8 else "order"
             rows.append({
                 "branch_id": f"b{i}", "stage": "screening", "wr": 0.1 + i * 0.01,
@@ -251,14 +251,12 @@ class TestResearchLogCompactDisplay:
         _create_test_db(os.path.join(db_path, "scion.db"), rows)
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        # Compact format shows mechanism counts, not individual entries
-        assert "subcat: 8 attempts" in rendered
-        assert "order: 7 attempts" in rendered
-        # Should NOT have the pipe-separated per-entry format
-        assert "wr=0.10" not in rendered
+        # Should show individual branches for top 20 and batch for remaining 5
+        assert "ABANDONED" in rendered
+        assert "ABANDONED x5 more" in rendered
 
     def test_normal_display_under_10(self, tmp_path):
-        """10 or fewer failed screening branches should use normal per-entry display."""
+        """10 or fewer failed screening branches should use per-branch trajectory display."""
         db_path = str(tmp_path)
         rows = [
             {"branch_id": f"b{i}", "stage": "screening", "wr": 0.2,
@@ -268,6 +266,6 @@ class TestResearchLogCompactDisplay:
         _create_test_db(os.path.join(db_path, "scion.db"), rows)
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        # Normal format shows per-entry with wr
-        assert "wr=0.20" in rendered
-        assert "attempts" not in rendered
+        # Individual branch format with scr= prefix
+        assert "scr=0.20" in rendered
+        assert "[ABANDONED]" in rendered
