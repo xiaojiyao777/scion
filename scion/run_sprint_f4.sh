@@ -56,7 +56,8 @@ run_group() {
 
 GROUPS=("$@")
 if [ ${#GROUPS[@]} -eq 0 ]; then
-    echo "Usage: $0 [b] [c]"
+    echo "Usage: $0 [a] [b] [c]"
+    echo "  a = Group A (synthetic baseline, 200r stability test)"
     echo "  b = Group B (pure production-style)"
     echo "  c = Group C (mixed: synthetic scr/val + production frozen)"
     exit 1
@@ -64,9 +65,10 @@ fi
 
 for g in "${GROUPS[@]}"; do
     case "$g" in
+        a) run_group "a" "split_manifest.yaml" ;;
         b) run_group "b" "split_manifest_prod.yaml" ;;
         c) run_group "c" "split_manifest_mixed.yaml" ;;
-        *) echo "Unknown group: $g (valid: b c)" ;;
+        *) echo "Unknown group: $g (valid: a b c)" ;;
     esac
 done
 
