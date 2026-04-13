@@ -240,9 +240,10 @@ class CampaignResearchLog:
         """Get full hypothesis text + screening wr + frozen result for a promoted operator."""
         try:
             row = conn.execute("""
-                SELECT e.hypothesis_text,
+                SELECT COALESCE(h.hypothesis_text, e.hypothesis_text) AS hypothesis_text,
                        e.screening_win_rate
                 FROM experiment_events e
+                LEFT JOIN hypotheses h ON e.hypothesis_id = h.hypothesis_id
                 WHERE e.event_kind = 'experiment'
                   AND e.decision = 'promote'
                   AND (e.patch_file LIKE ? OR e.patch_file LIKE ?)
@@ -311,7 +312,7 @@ class CampaignResearchLog:
                     e.screening_median_delta,
                     e.decision,
                     COALESCE(e.patch_file, h.target_file) AS resolved_file,
-                    e.hypothesis_text,
+                    COALESCE(h.hypothesis_text, e.hypothesis_text) AS hypothesis_text,
                     e.created_at
                 FROM experiment_events e
                 LEFT JOIN hypotheses h ON e.hypothesis_id = h.hypothesis_id
