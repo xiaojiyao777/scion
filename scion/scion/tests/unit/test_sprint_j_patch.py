@@ -303,13 +303,13 @@ class TestResearchLogRender:
         ])
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        assert "[PROMOTED]" in rendered
+        assert "promoted" in rendered
         assert "subcat_consolidate" in rendered
         assert "scr=1.00" in rendered
-        assert "frozen=PASS" in rendered
+        assert "frozen: PASS" in rendered
 
     def test_research_log_render_failed_frozen(self, tmp_path):
-        """Failed frozen branches in 'reached validation' section, pass/fail only."""
+        """Failed frozen branches show frozen: FAIL."""
         db_path = str(tmp_path)
         _create_test_db(os.path.join(db_path, "scion.db"), [
             {"branch_id": "b2", "stage": "screening", "wr": 0.80, "decision": "pass",
@@ -321,9 +321,9 @@ class TestResearchLogRender:
         ])
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        assert "[FAILED frozen]" in rendered
+        assert "failed_frozen" in rendered
         assert "evict_consolidate" in rendered
-        assert "frozen=FAIL" in rendered
+        assert "frozen: FAIL" in rendered
 
     def test_research_log_no_frozen_wr_exposed(self, tmp_path):
         """render() output must not contain frozen wr value."""
@@ -360,9 +360,10 @@ class TestResearchLogRender:
         _create_test_db(os.path.join(db_path, "scion.db"), rows)
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        assert "Failed at Screening (5 branches)" in rendered
+        # v3: all branches rendered individually with trajectory
         assert "fail_op_0" in rendered
-        assert "no signal" in rendered
+        assert "abandoned" in rendered
+        assert "scr=0.10" in rendered
 
     def test_research_log_empty_db(self, tmp_path):
         """No SQLite file → empty string, no crash."""

@@ -141,7 +141,7 @@ class TestResearchLogNullPatchFile:
 
 class TestResearchLogExhaustedThreshold:
     def test_no_signal_warning_at_015(self, tmp_path):
-        """max_wr=0.15 triggers 'no signal' warning."""
+        """max_wr=0.15 — all branches rendered with low scr values (v3: no pattern warnings)."""
         db_path = str(tmp_path)
         _create_test_db(os.path.join(db_path, "scion.db"), [
             {"branch_id": f"b{i}", "stage": "screening", "wr": 0.15,
@@ -150,11 +150,11 @@ class TestResearchLogExhaustedThreshold:
         ])
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        assert "no signal" in rendered
-        assert "avoid repeating" in rendered
+        assert "scr=0.15" in rendered
+        assert "abandoned" in rendered
 
     def test_no_warning_at_030(self, tmp_path):
-        """max_wr=0.30 should not trigger any exhaustion warning."""
+        """max_wr=0.30 — branches rendered with scr values (v3: no pattern warnings)."""
         db_path = str(tmp_path)
         _create_test_db(os.path.join(db_path, "scion.db"), [
             {"branch_id": "b1", "stage": "screening", "wr": 0.30,
@@ -164,14 +164,11 @@ class TestResearchLogExhaustedThreshold:
         ])
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        # max_wr=0.30 is between 0.20 and 0.35 → weak signal warning
-        assert "weak signal" in rendered
-        # Should NOT have "no signal" or "exhausted"
-        assert "no signal" not in rendered
-        assert "exhausted" not in rendered
+        assert "scr=0.30" in rendered
+        assert "scr=0.10" in rendered
 
     def test_weak_signal_at_025(self, tmp_path):
-        """max_wr=0.25 triggers 'weak signal' hint."""
+        """max_wr=0.25 — branch rendered with scr value (v3: no pattern warnings)."""
         db_path = str(tmp_path)
         _create_test_db(os.path.join(db_path, "scion.db"), [
             {"branch_id": "b1", "stage": "screening", "wr": 0.25,
@@ -179,8 +176,8 @@ class TestResearchLogExhaustedThreshold:
         ])
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        assert "weak signal" in rendered
-        assert "fundamentally different" in rendered
+        assert "scr=0.25" in rendered
+        assert "abandoned" in rendered
 
     def test_no_warning_at_040(self, tmp_path):
         """max_wr=0.40 (>= 0.35) should not trigger any warning."""
@@ -238,7 +235,7 @@ class TestSaturationExtractFromCaseFeatures:
 
 class TestResearchLogCompactDisplay:
     def test_compact_at_large_scale(self, tmp_path):
-        """More than 20 failed screening branches should use batch format for overflow."""
+        """More than 20 failed screening branches — all rendered individually in v3."""
         db_path = str(tmp_path)
         rows = []
         for i in range(25):
@@ -251,9 +248,9 @@ class TestResearchLogCompactDisplay:
         _create_test_db(os.path.join(db_path, "scion.db"), rows)
         log = CampaignResearchLog(db_path)
         rendered = log.render()
-        # Should show individual branches for top 20 and batch for remaining 5
-        assert "ABANDONED" in rendered
-        assert "ABANDONED x5 more" in rendered
+        # v3: all branches rendered individually, no batch
+        assert "abandoned" in rendered
+        assert "subcat_op0" in rendered
 
     def test_normal_display_under_10(self, tmp_path):
         """10 or fewer failed screening branches should use per-branch trajectory display."""
@@ -268,4 +265,4 @@ class TestResearchLogCompactDisplay:
         rendered = log.render()
         # Individual branch format with scr= prefix
         assert "scr=0.20" in rendered
-        assert "[ABANDONED]" in rendered
+        assert "abandoned" in rendered
