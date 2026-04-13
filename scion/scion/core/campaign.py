@@ -633,6 +633,12 @@ class CampaignManager:
         self._branch_current_hypothesis[bid] = h_record
 
         # ---------- Evaluate ----------
+        # J4 concurrency guard: async weight-opt thread may have marked this branch STALE
+        # while the LLM call was in flight. Re-fetch state before next_stage.
+        _fresh = self._branch_ctrl.get_branch(bid)
+        if _fresh and _fresh.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
+            logger.info("Branch %s: marked stale by async weight-opt during explore — deferring", bid)
+            return StepResult(action="skip", branch_id=bid, reason="stale_during_explore")
         stage = self._branch_ctrl.next_stage(bid)
         decision, protocol_result, canary_result = self._evaluate(branch, workspace, hypothesis)
 
