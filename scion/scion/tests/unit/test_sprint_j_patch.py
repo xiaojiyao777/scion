@@ -247,6 +247,7 @@ def _create_test_db(path: str, rows: list) -> None:
             event_id TEXT PRIMARY KEY,
             branch_id TEXT NOT NULL,
             event_kind TEXT DEFAULT 'experiment',
+            hypothesis_id TEXT,
             stage TEXT,
             screening_win_rate REAL,
             screening_median_delta REAL,
@@ -254,6 +255,18 @@ def _create_test_db(path: str, rows: list) -> None:
             patch_file TEXT,
             hypothesis_text TEXT,
             created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS hypotheses (
+            hypothesis_id TEXT PRIMARY KEY,
+            branch_id TEXT,
+            change_locus TEXT,
+            action TEXT,
+            status TEXT,
+            target_file TEXT,
+            hypothesis_text TEXT,
+            created_at TEXT
         )
     """)
     for i, row in enumerate(rows):
@@ -349,7 +362,7 @@ class TestResearchLogRender:
         rendered = log.render()
         assert "Failed at Screening (5 branches)" in rendered
         assert "fail_op_0" in rendered
-        assert "directions are exhausted" in rendered
+        assert "no signal" in rendered
 
     def test_research_log_empty_db(self, tmp_path):
         """No SQLite file → empty string, no crash."""

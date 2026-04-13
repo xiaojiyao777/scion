@@ -45,15 +45,16 @@ class CampaignResearchLog:
 
     def _query_branches(self, conn: sqlite3.Connection) -> List[BranchSummary]:
         rows = conn.execute("""
-            SELECT branch_id,
-                   stage,
-                   screening_win_rate,
-                   decision,
-                   patch_file,
-                   hypothesis_text
-            FROM experiment_events
-            WHERE event_kind = 'experiment'
-            ORDER BY branch_id, created_at
+            SELECT e.branch_id,
+                   e.stage,
+                   e.screening_win_rate,
+                   e.decision,
+                   COALESCE(e.patch_file, h.target_file) AS resolved_file,
+                   e.hypothesis_text
+            FROM experiment_events e
+            LEFT JOIN hypotheses h ON e.hypothesis_id = h.hypothesis_id
+            WHERE e.event_kind = 'experiment'
+            ORDER BY e.branch_id, e.created_at
         """).fetchall()
 
         branch_data: dict = defaultdict(list)
@@ -151,19 +152,32 @@ class CampaignResearchLog:
 
         if failed_scr:
             lines.append(f"\n### Failed at Screening ({len(failed_scr)} branches)")
-            entries = []
-            for s in failed_scr:
-                wr_str = f"wr={s.screening_wr:.2f}" if s.screening_wr is not None else "wr=?"
-                name = s.operator_name or s.hypothesis_snippet[:40]
-                entries.append(f"{name}({wr_str})")
-            for i in range(0, len(entries), 3):
-                lines.append("  " + " | ".join(entries[i:i + 3]))
+            if len(failed_scr) > 10:
+                # Compact: group by mechanism prefix
+                from collections import Counter
+                names = [
+                    s.operator_name.split('_')[0] if s.operator_name else 'unknown'
+                    for s in failed_scr
+                ]
+                top = Counter(names).most_common(5)
+                for name, cnt in top:
+                    lines.append(f"    {name}: {cnt} attempts")
+            else:
+                entries = []
+                for s in failed_scr:
+                    wr_str = f"wr={s.screening_wr:.2f}" if s.screening_wr is not None else "wr=?"
+                    name = s.operator_name or s.hypothesis_snippet[:40]
+                    entries.append(f"{name}({wr_str})")
+                for i in range(0, len(entries), 3):
+                    lines.append("  " + " | ".join(entries[i:i + 3]))
 
             # Pattern analysis
             scr_wrs = [s.screening_wr for s in failed_scr if s.screening_wr is not None]
             if scr_wrs:
                 max_scr = max(scr_wrs)
-                if max_scr < 0.4:
-                    lines.append(f"  \u2192 All screening failures: max_wr={max_scr:.2f} \u2014 these directions are exhausted")
+                if max_scr < 0.20:
+                    lines.append(f"  \u2192 All wr < 0.20: these directions show no signal \u2014 avoid repeating them")
+                elif max_scr < 0.35:
+                    lines.append(f"  \u2192 Best screening wr={max_scr:.2f}: weak signal \u2014 consider fundamentally different approaches")
 
         return "\n".join(lines)

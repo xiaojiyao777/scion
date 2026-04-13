@@ -108,12 +108,35 @@ def render_saturation_signals(signals: List[SaturationSignal]) -> str:
 def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, float]]:
     """Extract champion-side metrics from a step's protocol result.
 
-    Looks for champion_subcategory_splits and champion_total_cost
-    in the objective_breakdown of pairwise case feedback.
-    Returns averages across all pairs, or None if no data.
+    Looks for champion_subcategory_splits and champion_total_cost in:
+      1. case_feedback[*].case_features (populated by ContextManager)
+      2. pair_feedback[*].objective_breakdown (original path)
+    Returns averages across all pairs/cases, or None if no data.
     """
     if step.protocol_result is None:
         return None
+
+    # Method 1: from case_feedback.case_features (most direct)
+    if step.protocol_result.case_feedback:
+        splits_vals: list = []
+        cost_vals: list = []
+        for cf in step.protocol_result.case_feedback:
+            feats = cf.case_features if hasattr(cf, "case_features") else None
+            if not feats:
+                continue
+            s = feats.get("champion_splits")
+            c = feats.get("champion_cost")
+            if s is not None:
+                splits_vals.append(float(s))
+            if c is not None:
+                cost_vals.append(float(c))
+        if splits_vals:
+            return {
+                "subcategory_splits": sum(splits_vals) / len(splits_vals),
+                "total_cost": sum(cost_vals) / len(cost_vals) if cost_vals else 0.0,
+            }
+
+    # Method 2: from pair_feedback.objective_breakdown (original path)
     if not step.protocol_result.pair_feedback:
         return None
 

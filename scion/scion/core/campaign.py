@@ -1175,7 +1175,8 @@ class CampaignManager:
             except Exception:
                 pass
         self._branch_hypotheses.pop(bid, None)
-        self._branch_patches.pop(bid, None)
+        # Note: do NOT pop _branch_patches here — _record_step_lineage needs it
+        # for patch_file recording. Cleanup happens in _apply_decision_and_finalize.
         if h_record is not None:
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             self._branch_current_hypothesis.pop(bid, None)
@@ -1405,7 +1406,8 @@ class CampaignManager:
             # I1: check if T4 soft-abandon already handled this branch
             updated_branch = self._branch_ctrl.get_branch(bid)
             if updated_branch and updated_branch.state == BranchState.ABANDONED:
-                # T4 path already processed — skip ABANDON dispatch
+                # T4 path already processed — clean up deferred patch and skip ABANDON dispatch
+                self._branch_patches.pop(bid, None)
                 return StepResult(
                     action="soft_abandon",
                     branch_id=bid,
