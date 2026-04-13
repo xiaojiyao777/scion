@@ -210,6 +210,10 @@ class CampaignManager:
         # J1: Campaign search memory (cross-branch)
         self._search_memory = CampaignSearchMemory()
 
+        # J-patch: Campaign research log (cross-branch trajectory from SQLite)
+        from scion.proposal.research_log import CampaignResearchLog
+        self._research_log = CampaignResearchLog(str(campaign_dir))
+
         # J2: Saturation analyzer (initialized lazily after first screening with data)
         self._saturation_analyzer: Optional[ChampionSaturationAnalyzer] = None
         self._baseline_metrics: Optional[Dict[str, float]] = None
@@ -922,6 +926,7 @@ class CampaignManager:
             search_memory=self._search_memory,
             saturation_signals=saturation_signals,
             weight_opt_result=self._latest_weight_opt_result,
+            research_log=self._research_log,
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
@@ -1528,11 +1533,20 @@ class CampaignManager:
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
 
-        # J1: Record champion promotion in search memory
-        self._search_memory.record_champion_promotion(
-            f"v{new_version - 1} → v{new_version} (R{self._round_num})",
-            new_version,
-        )
+        # J1: Record champion promotion in search memory (J-patch: include operator name + screening wr)
+        patch = self._branch_patches.get(bid)
+        op_name = patch.file_path.split('/')[-1].replace('.py', '') if patch and patch.file_path else 'unknown'
+        # Find most recent screening wr for this branch
+        scr_wr = None
+        for s in reversed(self._step_history):
+            if s.branch_id == bid and s.protocol_result and s.protocol_result.stage == ExperimentStage.SCREENING:
+                scr_wr = s.protocol_result.stats.win_rate
+                break
+        desc = f"→v{new_version} {op_name} (R{self._round_num}"
+        if scr_wr is not None:
+            desc += f", scr_wr={scr_wr:.2f}"
+        desc += ")"
+        self._search_memory.record_champion_promotion(desc, new_version)
 
         # J6: Persist champion to SQLite
         try:

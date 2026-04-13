@@ -69,6 +69,7 @@ class CampaignSearchMemory:
     champion_evolution: List[str] = field(default_factory=list)
     families: Dict[str, FamilyEntry] = field(default_factory=dict)
     coverage_counts: Dict[str, int] = field(default_factory=dict)  # locus/action → count
+    recent_hypotheses: List[str] = field(default_factory=list)     # last N hypothesis texts for loop detection
 
     # ---------------------------------------------------------------
     # Incremental update
@@ -87,6 +88,12 @@ class CampaignSearchMemory:
         coverage_key = f"{hyp.change_locus}/{hyp.action}"
         self.coverage_counts[coverage_key] = self.coverage_counts.get(coverage_key, 0) + 1
 
+        # Track recent hypotheses for loop detection
+        if hyp.hypothesis_text:
+            self.recent_hypotheses.append(hyp.hypothesis_text)
+            if len(self.recent_hypotheses) > 20:
+                self.recent_hypotheses = self.recent_hypotheses[-20:]
+
         # Get or create family entry
         if key not in self.families:
             self.families[key] = FamilyEntry(
@@ -98,10 +105,6 @@ class CampaignSearchMemory:
         fam.total_attempts += 1
 
         # Determine outcome
-        is_success = (
-            step.protocol_result is not None
-            and step.protocol_result.stats.win_rate > 0.0
-        )
         is_promoted = step.decision is not None and step.decision.value == "promote"
 
         if is_promoted:
@@ -120,7 +123,7 @@ class CampaignSearchMemory:
             fam.consecutive_fails += 1
             fam.last_failure_reason = step.failure_detail or step.failure_stage or ""
 
-        # Update exhaustion
+        # Exhaustion: total_attempts >= 5 AND best_wr < 0.35 (uniform for all families)
         fam.is_exhausted = (fam.total_attempts >= 5 and fam.best_wr < 0.35)
 
     def record_champion_promotion(
@@ -130,6 +133,44 @@ class CampaignSearchMemory:
     ) -> None:
         """Record a champion promotion event in evolution history."""
         self.champion_evolution.append(description)
+
+    # ---------------------------------------------------------------
+    # Semantic loop detection
+    # ---------------------------------------------------------------
+
+    def _detect_hypothesis_loop(self, threshold: int = 3) -> Optional[str]:
+        """Detect if recent hypotheses are semantically looping.
+
+        Compares recent hypothesis texts pairwise using keyword overlap.
+        Returns a warning string if ≥ threshold similar pairs found, else None.
+        """
+        if len(self.recent_hypotheses) < 4:
+            return None
+
+        recent = self.recent_hypotheses[-10:]  # last 10
+
+        def _keyword_set(text: str) -> set:
+            stop = {"the", "a", "an", "to", "for", "of", "in", "on", "and", "or", "is", "by", "with"}
+            return {w for w in text.lower().split() if len(w) > 2 and w not in stop}
+
+        similar_pairs = 0
+        for i in range(len(recent)):
+            for j in range(i + 1, len(recent)):
+                kw_i = _keyword_set(recent[i])
+                kw_j = _keyword_set(recent[j])
+                if not kw_i or not kw_j:
+                    continue
+                overlap = len(kw_i & kw_j) / max(len(kw_i | kw_j), 1)
+                if overlap >= 0.6:
+                    similar_pairs += 1
+
+        if similar_pairs >= threshold:
+            return (
+                f"⚠ SEMANTIC LOOP DETECTED: {similar_pairs} similar hypothesis pairs in "
+                f"last {len(recent)} proposals. You are revisiting the same idea. "
+                f"Try a fundamentally different mechanism or locus."
+            )
+        return None
 
     # ---------------------------------------------------------------
     # Rendering
@@ -184,6 +225,11 @@ class CampaignSearchMemory:
                 "### Champion 演化\n" +
                 "\n".join(self.champion_evolution)
             )
+
+        # Loop detection (before AVOID)
+        loop_warning = self._detect_hypothesis_loop()
+        if loop_warning:
+            sections.append("### Hypothesis Loop Warning\n" + loop_warning)
 
         # L0+L1: Exhausted families (AVOID list)
         exhausted = self.exhausted_families

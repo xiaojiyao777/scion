@@ -51,6 +51,7 @@ class ContextManager:
         search_memory: Optional[Any] = None,
         saturation_signals: Optional[List[Any]] = None,
         weight_opt_result: Optional[Any] = None,
+        research_log: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -78,12 +79,12 @@ class ContextManager:
         )
         branch_direction = _build_branch_direction_prompt(branch)
 
-        # T07: Build family tracking and coverage
-        branch_steps = [s for s in (step_history or []) if s.branch_id == branch.branch_id]
-        families = _extract_families_from_steps(branch_steps)
+        # T07: Build family tracking and coverage (J-patch: use global step_history)
+        all_steps = step_history or []
+        families = _extract_families_from_steps(all_steps)
         exploration_coverage = build_exploration_coverage(families) if families else ""
 
-        # T08: Build strategy guidance from family data
+        # T08: Build strategy guidance from family data (J-patch: global)
         strategy_guidance = _build_strategy_guidance(families) if families else ""
 
         # T10: Champion baseline hints from most recent screening experiment
@@ -131,6 +132,11 @@ class ContextManager:
                 lines.append(f"  {name}: {level}（权重 {w:.2f}）")
             weight_opt_block = "\n".join(lines)
 
+        # J-patch: Render research log (cross-branch trajectory)
+        research_log_block = ""
+        if research_log is not None:
+            research_log_block = research_log.render()
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -149,6 +155,7 @@ class ContextManager:
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
+            "research_log": research_log_block,
         }
 
     # ------------------------------------------------------------------

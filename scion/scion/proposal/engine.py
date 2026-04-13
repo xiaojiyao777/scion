@@ -189,6 +189,10 @@ def _split_hypothesis_context(
     if D["saturation_signal"]:
         branch_context_parts.append(D["saturation_signal"])
 
+    # J-patch: Research log (cross-branch trajectory)
+    if D["research_log"]:
+        branch_context_parts.append(D["research_log"])
+
     if D["branch_code"] and D["branch_code"] != D["champion_operators_code"]:
         branch_context_parts.append(
             f"## Current Branch Code\n"
