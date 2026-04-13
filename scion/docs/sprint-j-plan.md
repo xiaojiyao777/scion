@@ -85,16 +85,30 @@ class CampaignSearchMemory:
     exhausted_families: List[FamilyEntry]   # AVOID 列表
     promising_families: List[FamilyEntry]   # wr=0.3-0.6 但未晋升
     coverage_gaps: Dict[str, int]           # locus/action → attempt_count
-    token_budget: int = 1200               # 硬上限
+    # 注意：不设固定 token_budget，由调用方（ContextManager）测量后传入
 
     def update(self, step: StepRecord) -> None:
         """每轮结束后增量更新，O(1)"""
     
-    def render(self) -> str:
-        """渲染为固定预算内的 prompt block，超出时按优先级淘汰"""
+    def render(self, available_tokens: Optional[int] = None) -> str:
+        """
+        available_tokens=None → 全量输出（不裁剪）
+        available_tokens=N   → 在 N tokens 内按优先级分级裁剪
+
+        裁剪优先级（高→低，越高越不能丢）：
+          L0: champion 演化 + AVOID 列表标签（最小可用信息）
+          L1: AVOID 条目的 last_failure_reason
+          L2: promising 方向
+          L3: coverage_gaps 详细统计
+
+        token 估算用字符/4（保守，不调用 API）。
+        """
+    
+    def estimate_tokens(self, level: Literal["full", "compact", "minimal"]) -> int:
+        """估算各压缩级别的 token 数，供 ContextManager 决策用"""
 ```
 
-**渲染格式**（固定 1200 token 上限）：
+**渲染格式**（无固定预算，由 ContextManager 根据实际 context 剩余空间决定传入多少）：
 
 ```
 ## Campaign Search Memory
@@ -126,7 +140,26 @@ vehicle_level/remove:      0次 ← 从未尝试
 
 **"已耗尽"判定**：同一 family（跨所有 branch）累计 ≥ 5 次 fail，且 best_wr < 0.35。
 
-### 2.3 接入点
+### 2.3 ContextManager 负责测量与调度
+
+**核心原则**：Search Memory 自己不知道也不应该知道 context window 总量——它只负责按调用方传入的可用空间做分级渲染。测量和调度是 ContextManager 的职责。
+
+```python
+# context_manager.py 中，build_hypothesis_context() 调用 render() 前：
+def _compute_search_memory_budget(self, other_blocks: List[str]) -> Optional[int]:
+    """
+    测量其他所有 blocks 已占用的 token 数，
+    返回 Search Memory 可用的剩余预算（None = 不限）。
+    
+    token 估算：字符数 / 4（保守系数），避免调用 API 计数。
+    CONTEXT_WINDOW_LIMIT 和 SAFETY_MARGIN 从 config 读取，
+    不同模型（Opus 200K / Sonnet 200K）配置不同。
+    """
+    used = sum(len(b) // 4 for b in other_blocks)
+    remaining = self._config.context_window_limit - used - self._config.safety_margin
+    return max(0, remaining) if remaining < self._config.context_window_limit * 0.8 else None
+    # 若剩余 > 80% → 不限制（全量输出），只在接近上限时才收紧
+```
 
 **`CampaignManager.__init__`**：
 ```python
