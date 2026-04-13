@@ -48,6 +48,9 @@ class ContextManager:
         branch_workspace: Optional[str] = None,
         failure_streak: Optional[Dict[str, int]] = None,
         forced_locus: Optional[str] = None,
+        search_memory: Optional[Any] = None,
+        saturation_signals: Optional[List[Any]] = None,
+        weight_opt_result: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -99,6 +102,35 @@ class ContextManager:
                 f"Exploring `{forced_locus}` is required to find further improvements.\n"
             )
 
+        # J1: Render search memory (cross-branch search history)
+        search_memory_block = ""
+        if search_memory is not None:
+            search_memory_block = search_memory.render()
+
+        # J2: Render saturation signals
+        saturation_block = ""
+        if saturation_signals:
+            from scion.proposal.saturation import render_saturation_signals
+            saturation_block = render_saturation_signals(saturation_signals)
+
+        # J6: Weight optimization result feedback
+        weight_opt_block = ""
+        if weight_opt_result is not None and hasattr(weight_opt_result, 'best_weights'):
+            lines = ["## 当前算子贡献估计（weight optimization 结果）"]
+            sorted_weights = sorted(
+                weight_opt_result.best_weights.items(),
+                key=lambda x: -x[1],
+            )
+            for name, w in sorted_weights:
+                if w >= 2.0:
+                    level = "高贡献"
+                elif w >= 0.5:
+                    level = "中等贡献"
+                else:
+                    level = "低贡献"
+                lines.append(f"  {name}: {level}（权重 {w:.2f}）")
+            weight_opt_block = "\n".join(lines)
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -114,6 +146,9 @@ class ContextManager:
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
             "locus_constraint": locus_constraint,
+            "search_memory": search_memory_block,
+            "saturation_signal": saturation_block,
+            "weight_opt_feedback": weight_opt_block,
         }
 
     # ------------------------------------------------------------------

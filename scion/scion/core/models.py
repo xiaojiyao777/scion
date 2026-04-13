@@ -19,6 +19,7 @@ class BranchState(Enum):
     PROMOTED = "promoted"
     ABANDONED = "abandoned"
     STALE = "stale"
+    STALE_WEIGHT_UPDATE = "stale_weight_update"  # J4: re-screen needed after weight opt
     BLOCKED_INFRA = "blocked_infra"
 
 class ExperimentState(Enum):

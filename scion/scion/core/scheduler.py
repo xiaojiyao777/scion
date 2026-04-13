@@ -16,7 +16,7 @@ class SchedulerAction:
 _PRIORITY_TIERS: List[frozenset] = [
     frozenset({BranchState.READY_FROZEN}),
     frozenset({BranchState.READY_VALIDATE}),
-    frozenset({BranchState.STALE}),
+    frozenset({BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE}),
     frozenset({
         BranchState.EXPLORE,
         BranchState.EXPLORE_EXPAND,

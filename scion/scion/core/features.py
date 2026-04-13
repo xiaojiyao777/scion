@@ -91,7 +91,7 @@ class SafeFeatureExtractor:
             median_delta=median_delta,
             ci_low=ci_low,
             ci_high=ci_high,
-            stale=branch.state == BranchState.STALE,
+            stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
             recent_retry_count=branch.retry_count,
             expand_count=branch.expand_count,
             recent_failure_codes=recent_failure_codes,

@@ -32,6 +32,7 @@ _ACTIVE_STATES = frozenset({
     BranchState.READY_FROZEN,
     BranchState.FROZEN_TESTING,
     BranchState.STALE,
+    BranchState.STALE_WEIGHT_UPDATE,
     BranchState.BLOCKED_INFRA,
 })
 

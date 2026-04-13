@@ -180,6 +180,15 @@ def _split_hypothesis_context(
     # Block 3: Branch-specific context (branch code, coverage, strategy, baselines)
     # Only included when at least one field is non-empty
     branch_context_parts = []
+
+    # J1: Search memory (cross-branch history) — highest priority dynamic block
+    if D["search_memory"]:
+        branch_context_parts.append(D["search_memory"])
+
+    # J2: Saturation signals
+    if D["saturation_signal"]:
+        branch_context_parts.append(D["saturation_signal"])
+
     if D["branch_code"] and D["branch_code"] != D["champion_operators_code"]:
         branch_context_parts.append(
             f"## Current Branch Code\n"
@@ -202,6 +211,17 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Champion Baseline Hints\n{D['champion_baselines']}"
         )
+    # J3: Failure pattern warning (Sprint H2 — was built but not injected)
+    if D["failure_pattern_warning"]:
+        branch_context_parts.append(
+            f"## Failure Pattern Warning\n{D['failure_pattern_warning']}"
+        )
+    # I3: Forced locus constraint
+    if D["locus_constraint"]:
+        branch_context_parts.append(D["locus_constraint"])
+    # J6: Weight optimization feedback
+    if D["weight_opt_feedback"]:
+        branch_context_parts.append(D["weight_opt_feedback"])
 
     system_blocks = [
         {

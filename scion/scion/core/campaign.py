@@ -27,9 +27,12 @@ from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError
 from scion.proposal.engine import ProposalValidationError
+from scion.proposal.search_memory import CampaignSearchMemory
+from scion.proposal.saturation import ChampionSaturationAnalyzer, render_saturation_signals
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import HypothesisStore
+from scion.lineage.champion_store import ChampionStore
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,12 @@ class CampaignManager:
         )
         self._hyp_store = HypothesisStore(self._registry)
 
+        # J6: Champion store for persistence
+        self._champion_store = ChampionStore(
+            _os.path.join(campaign_dir, "scion.db"),
+            _os.path.join(campaign_dir, "champions"),
+        )
+
         # Per-branch transient state
         self._branch_workspaces: Dict[str, str] = {}       # branch_id → workspace path
         self._branch_hypotheses: Dict[str, HypothesisProposal] = {}
@@ -198,6 +207,16 @@ class CampaignManager:
         # Circuit breaker (T29)
         self._circuit_breaker = CircuitBreaker()
 
+        # J1: Campaign search memory (cross-branch)
+        self._search_memory = CampaignSearchMemory()
+
+        # J2: Saturation analyzer (initialized lazily after first screening with data)
+        self._saturation_analyzer: Optional[ChampionSaturationAnalyzer] = None
+        self._baseline_metrics: Optional[Dict[str, float]] = None
+
+        # J6: Latest weight optimization result (for LLM feedback)
+        self._latest_weight_opt_result: Optional[Any] = None
+
         # Sprint H2 T1: Campaign-level failure counters
         self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
         self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
@@ -209,6 +228,18 @@ class CampaignManager:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _record_step(self, step: StepRecord) -> None:
+        """Record a completed step and update search memory (J1)."""
+        self._step_history.append(step)
+        self._search_memory.update(step)
+        # J2: Lazily initialize baseline metrics from first champion-side data
+        if self._baseline_metrics is None and step.protocol_result is not None:
+            from scion.proposal.saturation import extract_champion_metrics_from_step
+            metrics = extract_champion_metrics_from_step(step)
+            if metrics:
+                self._baseline_metrics = metrics
+                self._saturation_analyzer = ChampionSaturationAnalyzer(metrics)
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
@@ -290,7 +321,7 @@ class CampaignManager:
         branch = self._branch_ctrl.get_branch(branch.branch_id)
 
         # --- STALE: attempt reconciliation ---
-        if branch.state == BranchState.STALE:
+        if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return self._run_reconcile_step(branch)
 
         # --- EXPLORE: full proposal + eval ---
@@ -396,7 +427,7 @@ class CampaignManager:
                 failure = FailureEvent(category="contract", detail=c_result_pending.failure_reason or "")
                 self._handle_failure(branch, failure)
                 self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
-                self._step_history.append(StepRecord(
+                self._record_step(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=None,
                     contract_passed=False, verification_passed=False,
@@ -428,7 +459,7 @@ class CampaignManager:
                 logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
                 failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
                 self._handle_failure(branch, failure)
-                self._step_history.append(StepRecord(
+                self._record_step(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=None,
                     contract_passed=False, verification_passed=False,
@@ -460,7 +491,7 @@ class CampaignManager:
                 self._pending_hypotheses[bid] = (hypothesis, h_record, "LLM code generation failed")
                 self._hyp_store.mark_status(h_record.hypothesis_id, "code_failed")
                 failure_stage_detail = "LLM code generation failed"
-            self._step_history.append(StepRecord(
+            self._record_step(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=None,
                 contract_passed=True, verification_passed=False,
@@ -478,7 +509,7 @@ class CampaignManager:
             failure = FailureEvent(category="contract", detail=p_result.failure_reason or "")
             self._handle_failure(branch, failure)
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
-            self._step_history.append(StepRecord(
+            self._record_step(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=False, verification_passed=False,
@@ -493,7 +524,7 @@ class CampaignManager:
         workspace = self._setup_workspace(branch)
         if workspace is None:
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
-            self._step_history.append(StepRecord(
+            self._record_step(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=True, verification_passed=False,
@@ -511,7 +542,7 @@ class CampaignManager:
             failure = FailureEvent(category="contract", detail=f"apply_patch: {exc}")
             self._handle_failure(branch, failure)
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
-            self._step_history.append(StepRecord(
+            self._record_step(StepRecord(
                 round_num=rnum, branch_id=bid,
                 hypothesis=hypothesis, patch=patch,
                 contract_passed=True, verification_passed=False,
@@ -561,7 +592,7 @@ class CampaignManager:
                     self._handle_failure(branch, failure)
                     self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
                     archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
-                    self._step_history.append(StepRecord(
+                    self._record_step(StepRecord(
                         round_num=rnum, branch_id=bid,
                         hypothesis=hypothesis, patch=patch,
                         contract_passed=True, verification_passed=False,
@@ -577,7 +608,7 @@ class CampaignManager:
                 self._handle_failure(branch, failure)
                 self._hyp_store.mark_status(h_record.hypothesis_id, "blacklisted")
                 archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
-                self._step_history.append(StepRecord(
+                self._record_step(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=patch,
                     contract_passed=True, verification_passed=False,
@@ -618,7 +649,7 @@ class CampaignManager:
             bid, decision.value, list(self._branch_workspaces.keys()),
         )
         # Record the completed step
-        self._step_history.append(StepRecord(
+        self._record_step(StepRecord(
             round_num=rnum, branch_id=bid,
             hypothesis=hypothesis,
             patch=self._branch_patches.get(bid, patch),
@@ -695,7 +726,7 @@ class CampaignManager:
 
         # T05: write StepRecord for eval-only steps (validation/frozen)
         stage_val = action_label  # "validate", "frozen", or "explore" for expand
-        self._step_history.append(StepRecord(
+        self._record_step(StepRecord(
             round_num=rnum, branch_id=bid,
             hypothesis=hypothesis,
             patch=patch,
@@ -862,6 +893,21 @@ class CampaignManager:
         branch_workspace = self._branch_workspaces.get(bid)
         with self._champion_lock:
             champ_snapshot = self._champion
+        # J2: Compute saturation signals if analyzer is available
+        saturation_signals = None
+        if self._saturation_analyzer is not None:
+            from scion.proposal.saturation import extract_candidate_metrics_from_step
+            # Use latest promoted champion metrics
+            current_metrics = self._baseline_metrics  # fallback
+            for s in reversed(self._step_history):
+                if s.decision is not None and s.decision.value == "promote":
+                    m = extract_candidate_metrics_from_step(s)
+                    if m:
+                        current_metrics = m
+                        break
+            if current_metrics:
+                saturation_signals = self._saturation_analyzer.analyze(current_metrics)
+
         context = self._ctx_manager.build_hypothesis_context(
             branch=branch,
             champion=champ_snapshot,
@@ -873,6 +919,9 @@ class CampaignManager:
             branch_workspace=branch_workspace,
             failure_streak=dict(self._failure_streak),
             forced_locus=self._consume_forced_locus(),
+            search_memory=self._search_memory,
+            saturation_signals=saturation_signals,
+            weight_opt_result=self._latest_weight_opt_result,
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
@@ -1479,6 +1528,18 @@ class CampaignManager:
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
 
+        # J1: Record champion promotion in search memory
+        self._search_memory.record_champion_promotion(
+            f"v{new_version - 1} → v{new_version} (R{self._round_num})",
+            new_version,
+        )
+
+        # J6: Persist champion to SQLite
+        try:
+            self._champion_store.promote(new_champion)
+        except Exception as exc:
+            logger.warning("Failed to persist champion v%d to store: %s", new_version, exc)
+
         # Launch background weight optimization (R2)
         if param_cfg.enabled and self._experiment_protocol is not None:
             t = threading.Thread(
@@ -1517,6 +1578,8 @@ class CampaignManager:
             return
 
         # Record result regardless of improvement
+        # J6: Store latest weight opt result for LLM feedback
+        self._latest_weight_opt_result = opt_result
         try:
             self._registry.record_weight_optimization(
                 campaign_id=self._campaign_id,
@@ -1581,6 +1644,17 @@ class CampaignManager:
             "Background weight opt complete for champion v%d (%.1f min)",
             version, elapsed_min,
         )
+
+        # J4: Mark active branches as stale so they re-screen with new weights
+        try:
+            stale_weight_ids = self._branch_ctrl.mark_all_stale(version)
+            if stale_weight_ids:
+                logger.info(
+                    "Background weight opt: marked %d branches stale for re-screening",
+                    len(stale_weight_ids),
+                )
+        except Exception as exc:
+            logger.warning("Background weight opt: failed to mark branches stale: %s", exc)
 
     def _run_weight_optimization(
         self, champion_snapshot: str, version: int, current_weights: dict
@@ -1886,7 +1960,7 @@ class CampaignManager:
             branch.consecutive_llm_retries = 0
             self._branch_patches.pop(bid, None)
             branch.current_code_hash = branch.last_clean_code_hash
-            if branch.state not in (BranchState.ABANDONED, BranchState.PROMOTED, BranchState.STALE):
+            if branch.state not in (BranchState.ABANDONED, BranchState.PROMOTED, BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
                 branch.state = BranchState.EXPLORE
                 branch.updated_at = datetime.now()
 

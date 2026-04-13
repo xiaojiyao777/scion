@@ -130,7 +130,7 @@ class BranchController:
         else → ABANDONED.
         """
         branch = self._get(branch_id)
-        if branch.state != BranchState.STALE:
+        if branch.state not in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             raise StateTransitionError(
                 f"Branch {branch_id} is not STALE (state={branch.state.value})"
             )
@@ -177,7 +177,7 @@ class BranchController:
                               existing branch workspace rather than copying from champion
         """
         branch = self._get(branch_id)
-        if branch.state == BranchState.STALE:
+        if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return "champion"
         if branch.current_code_hash is None:
             return "champion"
