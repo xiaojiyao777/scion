@@ -33,7 +33,9 @@ CAMPAIGN_DIR = Path(
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
 proto_cfg = ProtocolConfig.from_yaml(str(PROBLEM_DIR / "protocol.yaml"))
-split_manifest = SplitManifest.from_yaml(str(PROBLEM_DIR / "split_manifest.yaml"))
+split_manifest = SplitManifest.from_yaml(
+    os.environ.get("SCION_SPLIT_MANIFEST", str(PROBLEM_DIR / "split_manifest.yaml"))
+)
 seed_ledger = SeedLedgerConfig.from_yaml(str(PROBLEM_DIR / "seed_ledger.yaml"))
 
 # --- Real LLM client ---

@@ -1,0 +1,94 @@
+# split_manifest_mixed.yaml — Group C: Mixed Benchmark (Synthetic + Production)
+# Sprint F4 正式实验 C 组
+#
+# Screening/Validation 使用合成 v3/v4 实例（LLM 在合成分布上演化）
+# Frozen 在合成基础上叠加生产 xlarge + 真实 day1/day2（泛化验证）
+#
+# 目的：验证合成数据训练出的算子是否在真实生产数据上泛化
+# Screening (17): 原 v3/v4 screening（不变）
+# Validation (10): 原 v3/v4 validation（不变）
+# Frozen (24): 原 v3/v4 frozen(18) + prod xlarge×4 + day1 + day2
+# Canary (3): 原 v3/v4 canary（不变）
+
+version: "mixed-1.0"
+
+canary:
+  - data/instance_can_s01.json
+  - data/instance_can_s02.json
+  - data/instance_v4_can_s01.json
+
+screening:
+  # v3 medium (54-66 orders)
+  - data/instance_v3_scr_m01.json
+  - data/instance_v3_scr_m02.json
+  - data/instance_v3_scr_m03.json
+  - data/instance_v3_scr_m04.json
+  - data/instance_v3_scr_m05.json
+  - data/instance_v3_scr_m06.json
+  # v3 large (108-134 orders)
+  - data/instance_v3_scr_l01.json
+  - data/instance_v3_scr_l02.json
+  - data/instance_v3_scr_l03.json
+  - data/instance_v3_scr_l04.json
+  # v4 small (22-39 orders)
+  - data/instance_v4_scr_s01.json
+  - data/instance_v4_scr_s02.json
+  - data/instance_v4_scr_s03.json
+  # v4 medium-large (73-93 orders)
+  - data/instance_v4_scr_ml01.json
+  - data/instance_v4_scr_ml02.json
+  - data/instance_v4_scr_ml03.json
+  - data/instance_v4_scr_ml04.json
+
+validation:
+  # v3 large (122-175 orders)
+  - data/instance_v3_val_l01.json
+  - data/instance_v3_val_l02.json
+  - data/instance_v3_val_l03.json
+  - data/instance_v3_val_l04.json
+  # v3 xlarge (258-293 orders)
+  - data/instance_v3_val_x01.json
+  - data/instance_v3_val_x02.json
+  # v4 medium (70-87 orders)
+  - data/instance_v4_val_m01.json
+  - data/instance_v4_val_m02.json
+  # v4 xxlarge (725-825 orders)
+  - data/instance_v4_val_xx01.json
+  - data/instance_v4_val_xx02.json
+
+frozen:
+  # ── 原 v3/v4 frozen（18个，维持原有对照基础）──
+  # v3 large (188-215 orders)
+  - data/instance_v3_fro_l01.json
+  - data/instance_v3_fro_l02.json
+  # v3 xlarge (349-430 orders)
+  - data/instance_v3_fro_x01.json
+  - data/instance_v3_fro_x02.json
+  - data/instance_v3_fro_x03.json
+  - data/instance_v3_fro_x04.json
+  # v3 xxlarge (540-625 orders)
+  - data/instance_v3_fro_xx01.json
+  - data/instance_v3_fro_xx02.json
+  # v4 medium (70-87 orders)
+  - data/instance_v4_fro_m01.json
+  - data/instance_v4_fro_m02.json
+  # v4 large (188-220 orders)
+  - data/instance_v4_fro_l03.json
+  - data/instance_v4_fro_l04.json
+  # v4 xlarge (350-430 orders)
+  - data/instance_v4_fro_x05.json
+  - data/instance_v4_fro_x06.json
+  # v4 xxlarge (540-650 orders)
+  - data/instance_v4_fro_xx03.json
+  - data/instance_v4_fro_xx04.json
+  # v4 xxxlarge (800-990 orders)
+  - data/instance_v4_fro_xxx01.json
+  - data/instance_v4_fro_xxx02.json
+  # ── 生产风格 xlarge（新增，~353-515 orders）──
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x04.json
+  # ── 真实生产数据（holdout，泛化验证）──
+  - /home/clawd/research/scion-data/production/converted/instance_prod_day1.json
+  - /home/clawd/research/scion-data/production/converted/instance_prod_day2.json
