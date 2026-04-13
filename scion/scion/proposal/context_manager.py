@@ -419,7 +419,7 @@ def _build_experiment_history(
         line += f"  hypothesis: {s.hypothesis.change_locus}/{s.hypothesis.action}"
         if s.hypothesis.target_file:
             line += f" → {s.hypothesis.target_file}"
-        line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text[:120]}"
+        line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text}"
         if s.failure_stage:
             line += f"\n    failed_at: {s.failure_stage}"
             if s.failure_stage == "verification" and s.verification_detail:
