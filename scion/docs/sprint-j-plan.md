@@ -153,7 +153,10 @@ def _compute_search_memory_budget(self, other_blocks: List[str]) -> Optional[int
     
     token 估算：字符数 / 4（保守系数），避免调用 API 计数。
     CONTEXT_WINDOW_LIMIT 和 SAFETY_MARGIN 从 config 读取，
-    不同模型（Opus 200K / Sonnet 200K）配置不同。
+    不同模型（Opus 1M / Sonnet 1M）context window 均为 1,000,000 tokens，
+    safety_margin 建议 50K（留给输出 + 工具结果），实际可用约 950K。
+    在 1M 窗口下，Search Memory 几乎不会被压缩，available_tokens=None（全量）是常态。
+    分级裁剪逻辑作为保险机制保留，应对未来更小 context 模型。
     """
     used = sum(len(b) // 4 for b in other_blocks)
     remaining = self._config.context_window_limit - used - self._config.safety_margin
