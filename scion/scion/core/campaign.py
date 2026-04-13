@@ -240,10 +240,15 @@ class CampaignManager:
         # J2: Lazily initialize baseline metrics from first champion-side data
         if self._baseline_metrics is None and step.protocol_result is not None:
             from scion.proposal.saturation import extract_champion_metrics_from_step
+            _pf_len = len(step.protocol_result.pair_feedback) if step.protocol_result.pair_feedback else 0
+            logger.info("[SATURATION DEBUG] R%d stage=%s pair_feedback_len=%d", step.round_num, step.protocol_result.stage, _pf_len)
             metrics = extract_champion_metrics_from_step(step)
             if metrics:
+                logger.info("[SATURATION] Baseline initialized: splits=%.1f cost=%.0f", metrics.get('subcategory_splits',0), metrics.get('total_cost',0))
                 self._baseline_metrics = metrics
                 self._saturation_analyzer = ChampionSaturationAnalyzer(metrics)
+            else:
+                logger.info("[SATURATION DEBUG] extract returned None for stage=%s", step.protocol_result.stage)
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
