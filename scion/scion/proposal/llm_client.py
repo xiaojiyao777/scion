@@ -52,6 +52,10 @@ class LLMRetryExhaustedError(LLMError):
     """All retry attempts exhausted."""
 
 
+class LLMBalanceError(LLMError):
+    """API balance/credits exhausted (HTTP 403 with insufficient-balance message)."""
+
+
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
@@ -338,6 +342,8 @@ class LLMClient:
                         raise last_error from exc
                     time.sleep(retry_after)
                     continue  # Don't consume retry
+                elif "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
+                    raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
                 else:
                     last_error = LLMError(str(exc))
                 if attempt < self.max_retries:
@@ -396,6 +402,8 @@ class LLMClient:
             if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
                 retry_after = _parse_retry_after(exc)
                 raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
+            if "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
+                raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
             raise LLMError(f"API error: {exc}") from exc
 
     def get_cache_stats(self) -> dict:

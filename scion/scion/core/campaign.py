@@ -25,13 +25,13 @@ from scion.core.stagnation import StagnationDetector, StagnationSignal, Campaign
 from scion.failure.router import FailureRouter, RetryConfig
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
-from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError
+from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, LLMBalanceError
 from scion.proposal.engine import ProposalValidationError
 from scion.proposal.search_memory import CampaignSearchMemory
 from scion.proposal.saturation import ChampionSaturationAnalyzer, render_saturation_signals
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.lineage.registry import LineageRegistry
-from scion.lineage.branch_store import HypothesisStore
+from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.champion_store import ChampionStore
 
 logger = logging.getLogger(__name__)
@@ -162,6 +162,7 @@ class CampaignManager:
             _os.path.join(campaign_dir, "scion.db")
         )
         self._hyp_store = HypothesisStore(self._registry)
+        self._branch_store = BranchStore(self._registry)
 
         # J6: Champion store for persistence
         self._champion_store = ChampionStore(
@@ -206,6 +207,7 @@ class CampaignManager:
 
         # Circuit breaker (T29)
         self._circuit_breaker = CircuitBreaker()
+        self._balance_exhausted: bool = False  # T6: set on 403 balance-exhausted errors
 
         # J1: Campaign search memory (cross-branch)
         self._search_memory = CampaignSearchMemory()
@@ -303,6 +305,10 @@ class CampaignManager:
                 champ_snapshot = self._champion
             branch = self._branch_ctrl.create_branch(champ_snapshot)
             logger.info("Created new branch %s", branch.branch_id)
+            try:
+                self._branch_store.save(branch)
+            except Exception as _exc:
+                logger.debug("BranchStore.save (create) failed: %s", _exc)
             result = self._run_explore_step(branch)
             result.action = "create_branch"
             return result
@@ -630,6 +636,23 @@ class CampaignManager:
                     self._handle_failure(branch, failure)
                     self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
                     archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
+                    try:
+                        self._registry.record_event({
+                            "campaign_id": self._campaign_id,
+                            "branch_id": bid,
+                            "hypothesis_id": h_record.hypothesis_id,
+                            "timestamp": datetime.now().isoformat(),
+                            "event_kind": "verification_fail",
+                            "contract_passed": True,
+                            "verification_passed": False,
+                            "verification_result": vresult.first_failure,
+                            "patch_file": patch.file_path if patch else None,
+                            "hypothesis_text": (hypothesis.hypothesis_text or "")[:200],
+                            "stage": "verification",
+                            "decision_reason": "light",
+                        })
+                    except Exception:
+                        pass
                     self._record_step(StepRecord(
                         round_num=rnum, branch_id=bid,
                         hypothesis=hypothesis, patch=patch,
@@ -643,9 +666,26 @@ class CampaignManager:
                     ))
                     return StepResult(action="explore", branch_id=bid, reason="verification failed (light)")
             else:
-                self._handle_failure(branch, failure)
                 self._hyp_store.mark_status(h_record.hypothesis_id, "blacklisted")
+                self._handle_failure(branch, failure, hypothesis_already_recorded=True)
                 archive_ref = self._archive_failed_workspace(workspace, bid, rnum)
+                try:
+                    self._registry.record_event({
+                        "campaign_id": self._campaign_id,
+                        "branch_id": bid,
+                        "hypothesis_id": h_record.hypothesis_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "event_kind": "verification_fail",
+                        "contract_passed": True,
+                        "verification_passed": False,
+                        "verification_result": vresult.first_failure,
+                        "patch_file": patch.file_path if patch else None,
+                        "hypothesis_text": (hypothesis.hypothesis_text or "")[:200],
+                        "stage": "verification",
+                        "decision_reason": "heavy",
+                    })
+                except Exception:
+                    pass
                 self._record_step(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=patch,
@@ -942,6 +982,12 @@ class CampaignManager:
                 "Branch %s: reconcile succeeded (screening gate_outcome=%s) → READY_VALIDATE",
                 bid, screening_result.gate_outcome,
             )
+            try:
+                _b = self._branch_ctrl.get_branch(bid)
+                if _b:
+                    self._branch_store.save(_b)
+            except Exception as _exc:
+                logger.debug("BranchStore.save (reconcile ok) failed: %s", _exc)
             return StepResult(action="reconcile", branch_id=bid, reason="reconcile succeeded — READY_VALIDATE")
         else:
             logger.info(
@@ -950,6 +996,12 @@ class CampaignManager:
             )
             _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
+            try:
+                _b = self._branch_ctrl.get_branch(bid)
+                if _b:
+                    self._branch_store.save(_b)
+            except Exception as _exc:
+                logger.debug("BranchStore.save (reconcile fail) failed: %s", _exc)
             return StepResult(
                 action="reconcile", branch_id=bid,
                 reason=f"reconcile re-screening failed: gate_outcome={screening_result.gate_outcome}",
@@ -1004,6 +1056,11 @@ class CampaignManager:
         )
         try:
             hypothesis = self._creative.generate_hypothesis(context)
+        except LLMBalanceError as exc:
+            logger.critical("Branch %s: API balance exhausted — stopping campaign: %s", bid, exc)
+            self._balance_exhausted = True
+            self._circuit_breaker.record_failure(str(exc))
+            return None, None
         except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, ProposalValidationError) as exc:
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
@@ -1046,6 +1103,11 @@ class CampaignManager:
             result = self._creative.generate_code(context)
             self._circuit_breaker.record_success()
             return result
+        except LLMBalanceError as exc:
+            logger.critical("Branch %s: API balance exhausted — stopping campaign: %s", bid, exc)
+            self._balance_exhausted = True
+            self._circuit_breaker.record_failure(str(exc))
+            return None
         except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, ProposalValidationError) as exc:
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             failure = FailureEvent(category="proposal", detail=str(exc))
@@ -1512,6 +1574,13 @@ class CampaignManager:
         except StateTransitionError as exc:
             logger.error("Branch %s: apply_decision(%s) failed: %s", bid, decision.value, exc)
 
+        try:
+            _b = self._branch_ctrl.get_branch(bid)
+            if _b:
+                self._branch_store.save(_b)
+        except Exception as _exc:
+            logger.debug("BranchStore.save (decision) failed: %s", _exc)
+
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
             branch_id=bid,
@@ -1968,8 +2037,20 @@ class CampaignManager:
     # Failure handling
     # ------------------------------------------------------------------
 
-    def _handle_failure(self, branch: Branch, failure: FailureEvent) -> None:
-        """Route failure and execute the appropriate recovery strategy."""
+    def _handle_failure(
+        self,
+        branch: Branch,
+        failure: FailureEvent,
+        hypothesis_already_recorded: bool = False,
+    ) -> None:
+        """Route failure and execute the appropriate recovery strategy.
+
+        Args:
+            hypothesis_already_recorded: When True, skip the hypothesis memory
+                write in this method (the caller has already called mark_status
+                on the original record).  Used for verification_heavy failures
+                to prevent a duplicate blacklisted record.
+        """
         # Sprint H2 T1: Update campaign-level failure counters before routing
         fcode = failure.category
         self._failure_streak[fcode] = self._failure_streak.get(fcode, 0) + 1
@@ -1989,7 +2070,7 @@ class CampaignManager:
         )
         if action.consumes_budget:
             self._budget.used += 1
-        if action.writes_hypothesis_memory:
+        if action.writes_hypothesis_memory and not hypothesis_already_recorded:
             # Record in blacklist via HypothesisStore
             hyp = self._branch_hypotheses.get(branch.branch_id)
             if hyp:
@@ -2113,6 +2194,14 @@ class CampaignManager:
             except StateTransitionError:
                 pass  # already in terminal state
 
+        # Persist branch state after any failure action
+        try:
+            _b = self._branch_ctrl.get_branch(bid)
+            if _b:
+                self._branch_store.save(_b)
+        except Exception as _exc:
+            logger.debug("BranchStore.save (failure) failed: %s", _exc)
+
     def _tick_blocked_branches(self) -> None:
         """Increment blocked_rounds for every BLOCKED_INFRA branch; auto-unblock at 3 rounds."""
         for branch in self._branch_ctrl.get_active_branches():
@@ -2195,7 +2284,10 @@ class CampaignManager:
             "campaign_id": self._campaign_id,
             "total_rounds": self._round_num,
             "champion_version": self._champion.version,
-            "stopped_reason": "circuit_breaker" if self._circuit_breaker.is_tripped else None,
+            "stopped_reason": (
+                "api_balance_exhausted" if self._balance_exhausted
+                else ("circuit_breaker" if self._circuit_breaker.is_tripped else None)
+            ),
             "cache_stats": {
                 "total_tokens": total_tokens,
                 "cache_read_tokens": cache_read_tokens,
