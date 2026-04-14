@@ -1,32 +1,210 @@
-# Scion — LLM-Driven Algorithm Auto-Improvement for Combinatorial Optimization
+# Scion — LLM 驱动的组合优化算法自动改进框架
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests: 289 passed](https://img.shields.io/badge/tests-289%20passed-brightgreen.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version: v0.2](https://img.shields.io/badge/version-v0.2-blue.svg)](#)
 
-**Scion** is an LLM-driven framework for automatically improving combinatorial optimization algorithms through structured hypothesis generation, rigorous experimental validation, and parameter optimization.
+**Scion**（嫁接/分支）是一个研究项目，探索如何利用 LLM 的推理能力自动改进组合优化算法中的启发式算子。与传统的 LLM+进化算法方法不同，Scion 将 LLM 视为**推理主体**（而非随机变异算子），通过假设驱动的搜索、三级统计验证、契约式治理和参数层优化，在保证安全性的前提下实现算子自动发现与权重优化。
 
-> 📖 **Full documentation and experiment results → [`scion/README.md`](scion/README.md)**
-
-## Quick Links
-
-- **Framework code**: [`scion/`](scion/) — 57 Python files, ~11,400 lines, 289 tests
-- **Architecture**: [`scion/design/scion-architecture-v3.md`](scion/design/scion-architecture-v3.md)
-- **v0.2 Report**: [`scion/docs/v0.2-completion-report.md`](scion/docs/v0.2-completion-report.md)
-- **Understanding guides**: [`scion/docs/understanding/`](scion/docs/understanding/) — 11 module deep-dives
-- **Surrogate solver**: [`surrogate/`](surrogate/) — Warehouse delivery VNS + Solution Pool
-
-## Repository Structure
+## 项目结构
 
 ```
-or-autoresearch-agent/
-├── scion/          # Scion framework (main project)
-├── surrogate/      # Target problem: warehouse delivery VNS solver
-├── docs/blog/      # Blog posts and public write-ups
-└── reviews/        # External review documents
+.
+├── scion/               # Scion Framework — 核心自动改进框架（57 文件，~11,400 行）
+├── surrogate/           # Surrogate Solver — 仓配协同 VNS 求解器
+├── docs/blog/           # 博客文章与致谢
+└── reviews/             # GPT-5.4-Pro 架构审核报告
 ```
+
+---
+
+## 📐 设计理念
+
+### 核心问题
+
+> 如何让 LLM 在人类定义好的"算法沙盒"内，自主且可信地改进组合优化算法？
+
+### 三个关键洞察
+
+1. **LLM 是推理主体，不是变异算子**：FunSearch/EoH 等方法将 LLM 当作进化算法中的变异算子（无记忆、随机变异）。Scion 让 LLM 提出**有理由的假设**，基于历史失败学习，在搜索空间中做**有方向的探索**。
+
+2. **治理先于搜索**：LLM 输出不可信（幻觉、state leak、越界）。先把安全边界做硬（Contract Gate + Verification Gate + Decision Input Guard），再放开搜索空间。
+
+3. **两层嵌套搜索**（v0.2）：外层 LLM 搜索算子结构（发现新算子），内层算法搜索参数（优化算子权重配比）。结构决定"有什么工具"，参数决定"怎么用这些工具"。
+
+### 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Campaign Manager                         │
+│  (Branch lifecycle, round scheduling, budget control)       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Creative Layer    Contract Gate    Verification Gate       │
+│  (LLM, tainted) ──> (C1-C10,     ──> (V3-V8,         ──>  │
+│                      static)          dynamic)              │
+│                                                             │
+│  Experiment Protocol (Screening → Validation → Frozen)      │
+│  Decision Layer (Oracle, numerical features only)           │
+│  Weight Optimization (on promote, 25 evals)    ← v0.2 新增  │
+├─────────────────────────────────────────────────────────────┤
+│  Lineage (SQLite) │ Runtime (subprocess) │ Config (Pydantic)│
+└─────────────────────────────────────────────────────────────┘
+```
+
+**设计原则**：
+
+- **三层控制**：Creative（LLM, tainted）→ Gate Layer（静态+动态校验）→ Decision Layer（纯数值 Oracle）
+- **Decision Input Guard**：决策层仅接收 `DecisionFeatures`（数值+枚举），彻底隔离 LLM 文本干扰
+- **两轮 Proposal**：Round 1 Hypothesis（假设推理）→ Round 2 Code（代码生成）
+- **三级实验协议**：Screening → Validation → Frozen Holdout，Bootstrap CI 控制过拟合
+- **字典序多目标**：业务聚合（subcategory splits）> 物流成本 > 求解效率
+
+> 📖 详细架构：[`scion/design/scion-architecture-v3.md`](scion/design/scion-architecture-v3.md)（基石设计，22 条关键决策）
+
+---
+
+## 🚚 目标问题：仓配协同 VNS
+
+`surrogate/` 是 Scion 的目标问题实现：仓配协同场景下的 VNS + Solution Pool 求解器。
+
+**问题**：给定一批订单（含子品类属性），分配到不同车型的车辆，最小化子品类拆分（同子品类订单尽量同车）并优化物流成本。
+
+**求解器**：9 个基础算子（订单级 + 车辆级），统一接口 `execute(solution, rng) → Solution`，这是 Scion 能自动发现新算子的基础。
+
+**Benchmark**：48 个实例（22→990 orders），覆盖合成数据 + 真实生产数据统计特征。
+
+---
+
+## ⚙️ Scion Framework
+
+`scion/` 是核心框架实现。**57 个 Python 文件，~11,400 行代码，289 unit tests。**
+
+| 模块 | 职责 |
+|------|------|
+| `core/` | Campaign 主循环、Branch 状态机、Decision Engine、Scheduler、Termination |
+| `config/` | ProblemSpec、ProtocolConfig、SplitManifest、SeedLedger（Pydantic v2） |
+| `contract/` | ContractGate — C1-C10 静态检查（语法、接口、import 白名单、novelty） |
+| `verification/` | VerificationGate — V3-V8 动态校验（feasibility、objective、state mutation、nondeterminism） |
+| `protocol/` | ExperimentProtocol — 三级实验、Case-level 统计、Bootstrap CI |
+| `proposal/` | LLMClient、CreativeLayer、ContextManager、SearchMemory、SaturationSignal |
+| `parameter/` | WeightOptimizer、Evaluator — 算子权重优化（v0.2 新增） |
+| `runtime/` | SubprocessRunner（隔离执行）、WorkspaceMaterializer、PoolManager |
+| `failure/` | FailureRouter — 四层故障分类 + escalation + infra 检测 |
+| `lineage/` | SQLite Registry、BranchStore、ChampionStore、HypothesisStore |
+| `cli/` | Typer CLI（init / run / inspect / report） |
+
+> 📖 模块深度指南：[`scion/docs/understanding/`](scion/docs/understanding/)（11 篇文档）
+
+---
+
+## 🏆 实验结果
+
+### v0.2 标杆实验：F6 Group A（合成数据，100r，Opus）
+
+**3 次 Champion 晋升**，全部 Frozen wr=1.0 + **3/3 Weight Optimization 有效**：
+
+| 版本 | 算子 | Frozen wr | Frozen md | Weight Opt |
+|------|------|-----------|-----------|------------|
+| v1→v2 | ConsolidateSubcategory | **1.00** | 3,575,000 | improved ✅ |
+| v2→v3 | ChainConsolidate | **1.00** | 2,450,000 | improved ✅ |
+| v3→v4 | DestroyRebuild (subcat-aware) | **1.00** | 500,000 | improved ✅ |
+
+**权重优化揭示算子贡献度**：
+
+```
+consolidate_subcategory  2.05  ★ 核心算子，权重最高
+change_vehicle_type      0.84
+move_order               0.55
+merge_vehicles           0.50
+swap_orders              0.35
+destroy_rebuild          0.23
+split_vehicle            0.14
+chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
+```
+
+> **研究发现**：算子收益不仅来自"存在"，更来自"被高频调用"。Weight optimization 将 consolidate_subcategory 权重放大 30 倍。
+
+### 合成 vs 生产数据对比
+
+| | Group A（合成） | Group B（生产） |
+|---|---|---|
+| Promotes | 3 | 1 |
+| Weight opt | **3/3 improved** | 0/1 |
+| Abandon wr mean | 0.129 | 0.002 |
+
+> 📖 完整实验报告：[`scion/docs/v0.2-completion-report.md`](scion/docs/v0.2-completion-report.md)
+
+<details>
+<summary>📊 展开查看 F6 实验图表</summary>
+
+#### Champion 演化时间线
+![Champion Evolution](scion/docs/figures/sprint-f6/01_champion_evolution.png)
+
+#### Weight Optimization 权重对比
+![Weight Optimization](scion/docs/figures/sprint-f6/02_weight_optimization.png)
+
+#### A/B/C 三组对比
+![ABC Comparison](scion/docs/figures/sprint-f6/03_abc_comparison.png)
+
+#### Frozen Holdout 结果
+![Frozen Results](scion/docs/figures/sprint-f6/04_frozen_results.png)
+
+</details>
+
+---
+
+## 与相关工作的对比
+
+| 特征 | FunSearch / EoH / ReEvo | Scion |
+|------|------------------------|-------|
+| LLM 角色 | 变异算子（无记忆） | 推理主体（有记忆，假设驱动） |
+| 搜索策略 | 随机变异 + 适应度选择 | 假设推理 + 统计检验 |
+| 安全控制 | 无/弱 | Contract Gate + Verification Gate |
+| 评估方式 | 单轮 fitness | 三级实验协议 + Bootstrap CI |
+| 决策机制 | LLM 参与选择 | 纯数值 Oracle（Decision Input Guard） |
+| 参数优化 | 无 | Weight Optimization（两层嵌套搜索） |
+
+---
+
+## 🚀 快速开始
+
+```bash
+# 安装
+git clone https://github.com/xiaojiyao777/scion.git
+cd scion/scion && pip install -e .
+
+# 运行测试
+python -m pytest tests/unit/ -q  # 289 passed ✅
+
+# 运行 Campaign
+export SCION_API_KEY="your-api-key"
+export SCION_MODEL="claude-opus-4-6"
+python run_v3_campaign.py 30
+```
+
+## 开发路线
+
+- [x] **v0.1** — MVP：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
+- [x] **v0.1.1** — 调优：ContextManager 重写、prompt caching、subprocess 修复 ✅
+- [x] **v0.2** — 参数层搜索、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
+- [ ] **v0.3** — 异步 Weight Opt、自动早停、Scoring 独立化、MILP 精确对比
+- [ ] **v1.0** — 多问题泛化、结构级搜索、论文实验
+
+## 致谢
+
+Scion 的灵感来源于 Andrej Karpathy 的 [autoresearch](https://github.com/karpathy/autoresearch) 愿景——LLM 可以在人类定义好的沙盒内自主进行研究。Scion 将这个理念带入组合优化领域，并加入了形式化治理（三层控制 + 三级实验协议 + Decision Input Guard）来保障研究的可信性与可追溯性。
+
+## Blog
+
+- [Why Scion: Rethinking How LLMs Improve Optimization Algorithms](docs/blog/why-scion-en.md) (English)
+- [为什么做 Scion：重新思考 LLM 如何改进优化算法](docs/blog/why-scion-zh.md)（中文）
 
 ## License
 
-MIT License
+MIT
+
+---
+
+*Built with ⚙️ precision — Scion Framework v0.2*
