@@ -31,8 +31,9 @@ class FailureAction:
 
 
 # Failure category → severity mapping
-_LIGHT_CATS = frozenset({"proposal", "contract", "verification_light"})
-_HEAVY_CATS = frozenset({"verification_heavy", "evaluation"})
+_LIGHT_CATS   = frozenset({"proposal", "contract", "verification_light"})
+_HEAVY_CATS   = frozenset({"verification_heavy", "evaluation"})
+_SEARCH_CATS  = frozenset({"search_guidance"})  # C10_novelty etc: retry_llm, never infra streak
 
 
 class FailureRouter:
@@ -64,6 +65,18 @@ class FailureRouter:
     ) -> FailureAction:
         cat = failure.category
         esc = self.retry_config.escalation
+
+        # ----------------------------------------------------------------
+        # search_guidance (C10_novelty etc): always retry_llm, never infra streak
+        # ----------------------------------------------------------------
+        if cat in _SEARCH_CATS:
+            return FailureAction(
+                action="retry_llm",
+                consumes_budget=False,
+                writes_hypothesis_memory=False,
+                max_retries_remaining=self.retry_config.max_llm_retries,
+                escalation_level=0,
+            )
 
         # ----------------------------------------------------------------
         # Streak-based escalation (overrides normal routing)

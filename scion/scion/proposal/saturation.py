@@ -14,6 +14,7 @@ class SaturationSignal:
     improvement_ratio: float          # (initial - current) / initial, positive = improved
     saturation_level: Literal["low", "medium", "high"]
     opportunity_hint: str             # human-readable improvement hint
+    at_absolute_minimum: bool = False  # baseline already at absolute minimum (e.g. splits ≈ 0)
 
 
 class ChampionSaturationAnalyzer:
@@ -49,6 +50,18 @@ class ChampionSaturationAnalyzer:
         for obj, baseline_val in self._baseline.items():
             current_val = current_metrics.get(obj)
             if current_val is None or baseline_val == 0:
+                continue
+
+            # Absolute minimum detection: splits cannot go below 0
+            _AT_MINIMUM_THRESHOLD = 1.0
+            if obj == "subcategory_splits" and baseline_val < _AT_MINIMUM_THRESHOLD:
+                signals.append(SaturationSignal(
+                    objective=obj,
+                    improvement_ratio=0.0,
+                    saturation_level="high",
+                    opportunity_hint="已达绝对下界，无法进一步改善",
+                    at_absolute_minimum=True,
+                ))
                 continue
 
             # For minimization objectives (splits, cost): improvement = baseline - current
@@ -101,6 +114,20 @@ def render_saturation_signals(signals: List[SaturationSignal]) -> str:
             f"\n搜索建议：{', '.join(high_saturated)} 改善空间已高度饱和，"
             f"建议探索 {', '.join(low_saturated)} 方向。"
         )
+
+    # Absolute minimum objects → inject MANDATORY CONSTRAINT
+    absolute_min_objs = [s.objective for s in signals if s.at_absolute_minimum]
+    if absolute_min_objs:
+        lines.append(
+            f"\n⚠️  MANDATORY CONSTRAINT — 以下目标已在绝对下界，禁止提案："
+        )
+        for obj in absolute_min_objs:
+            if "split" in obj:
+                lines.append(
+                    f"  - {obj} = 0（生产数据中 splits 已无改进空间）"
+                    f"\n    禁止提议任何 subcategory/split/consolidate 类算子。"
+                    f"\n    只允许针对 COST（总车辆费用）的改进方向。"
+                )
 
     return "\n".join(lines)
 

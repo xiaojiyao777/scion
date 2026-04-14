@@ -443,7 +443,9 @@ class CampaignManager:
                     "Branch %s: pending hypothesis re-failed contract gate: %s",
                     bid, c_result_pending.failure_reason,
                 )
-                failure = FailureEvent(category="contract", detail=c_result_pending.failure_reason or "")
+                _reason_p = c_result_pending.failure_reason or ""
+                _cat_p = "search_guidance" if "C10_novelty" in _reason_p else "contract"
+                failure = FailureEvent(category=_cat_p, detail=_reason_p)
                 self._handle_failure(branch, failure)
                 self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
                 self._record_step(StepRecord(
@@ -478,7 +480,9 @@ class CampaignManager:
             )
             if not c_result.passed:
                 logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
-                failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
+                _reason = c_result.failure_reason or ""
+                _cat = "search_guidance" if "C10_novelty" in _reason else "contract"
+                failure = FailureEvent(category=_cat, detail=_reason)
                 self._handle_failure(branch, failure)
                 try:
                     self._registry.record_contract_failure(

@@ -114,6 +114,21 @@ class ContextManager:
             from scion.proposal.saturation import render_saturation_signals
             saturation_block = render_saturation_signals(saturation_signals)
 
+        # L2: Absolute minimum constraint (splits at floor → force COST-only)
+        abs_min_constraint = ""
+        if saturation_signals:
+            abs_min_objs = [
+                s.objective for s in saturation_signals
+                if getattr(s, "at_absolute_minimum", False)
+            ]
+            if abs_min_objs and "subcategory_splits" in abs_min_objs:
+                abs_min_constraint = (
+                    "\n## MANDATORY CONSTRAINT — SPLITS AT MINIMUM\n"
+                    "Champion baseline splits ≈ 0. Splits CANNOT be reduced further.\n"
+                    "DO NOT propose subcategory-aware, split-reduction, or consolidation operators.\n"
+                    "ALL proposals MUST target COST reduction ONLY.\n"
+                )
+
         # J6: Weight optimization result feedback
         weight_opt_block = ""
         if weight_opt_result is not None and hasattr(weight_opt_result, 'best_weights'):
@@ -152,6 +167,7 @@ class ContextManager:
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
             "locus_constraint": locus_constraint,
+            "abs_min_constraint": abs_min_constraint,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
