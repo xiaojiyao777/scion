@@ -25,6 +25,10 @@ Round 2: 基于假设写具体代码
 | 已失败 hypothesis 列表 | ✅ | 防止重复提案 |
 | 兄弟分支状态（简要） | ✅ | 避免重复探索方向 |
 | HypothesisFamily 预警 | ✅ | 同族 3+ 次失败时提示换方向 |
+| SearchMemory（跨分支去重）| ✅ | Sprint J1 新增，Jaccard 相似度过滤历史方向 |
+| Saturation Signal | ✅ | Sprint J2 新增，splits 饱和时提示转向 cost 优化 |
+| exploration_coverage | ✅ | Sprint J3 新增，全局已探索 (locus, action) 组合状态 |
+| Currently Occupied 活跃假设 | ✅ | Sprint K4 新增，已在进行中的方向清单 |
 | Validation/frozen 细节 | ❌ | 防止信息泄漏 |
 
 **输出（结构化 JSON）：**
@@ -41,6 +45,94 @@ HypothesisProposal:
 ```
 
 → Contract Gate：schema 校验 + change_locus 合法性 + novelty check
+
+---
+
+## Sprint J1：SearchMemory 跨分支去重（v0.2 Sprint J1 新增）
+
+HypothesisFamily 仅在单分支内防止重复方向，无法阻止不同分支独立探索语义相同的假设。
+
+Sprint J1 引入 `SearchMemory`：跨所有分支共享的已探索方向记录，使用 Jaccard 相似度计算新提案与历史提案的文本距离。
+
+```python
+SearchMemory:
+  # 跨分支全局共享
+  past_hypotheses: List[str]   # 所有 ABANDONED / PROMOTED 假设文本
+
+  def is_too_similar(new_hypothesis: str, threshold=0.6) -> bool:
+      # Jaccard 相似度：词集合交集 / 并集
+      # 相似度 > threshold → 触发 novelty warning 注入 Round 1
+```
+
+SearchMemory 不阻止提案，而是在 Round 1 上下文里注入"已探索方向"提示，引导 LLM 主动差异化。不持久化（session 结束后清空），v0.3 family_id 持久化是后续工作。
+
+---
+
+## Sprint J2：Saturation Signal（v0.2 Sprint J2 新增）
+
+`ChampionSaturationAnalyzer` 检测当前 champion 在各目标维度的饱和程度，注入 Round 1 作为方向信号。
+
+```python
+ChampionSaturationAnalyzer:
+  def analyze(champion, frozen_instances) -> SaturationReport:
+    at_absolute_minimum: bool   # splits 是否已降至理论最小值
+    splits_headroom: float      # 还能减多少 splits（0=饱和）
+    cost_headroom: float        # cost 改善空间估计
+```
+
+当 `at_absolute_minimum=True` 时，Round 1 注入：
+```
+"splits 已在当前实例集的理论最小值，继续追求 splits 减少的方向可能无效，
+ 建议转向 cost 优化或多目标权衡方向。"
+```
+
+Sprint L2 MANDATORY CONSTRAINT 与此联动（见下）。
+
+---
+
+## Sprint J3：exploration_coverage 全局化（v0.2 Sprint J3 新增）
+
+之前 exploration_coverage（已探索的 change_locus × action 组合）只在单分支内统计。Sprint J3 将其全局化，所有分支的探索记录汇总后注入 Round 1。
+
+```python
+# Round 1 上下文注入示例
+exploration_coverage:
+  modify × order_level:    12次（高度探索）
+  modify × vehicle_level:  8次（中度探索）
+  create_new × order_level: 3次（低度探索，值得尝试）
+  remove × *:              0次（未探索）
+```
+
+LLM 看到全局覆盖图，主动往低覆盖方向提案，提升全局搜索多样性。
+
+---
+
+## Sprint K4："Currently Occupied" 活跃假设（v0.2 Sprint K4 新增）
+
+除了历史记录外，Round 1 上下文现在包含当前**正在进行中**的活跃假设清单：
+
+```
+## Currently Occupied（正在进行的方向）
+- Branch-03: "利用 subcategory 信息重排订单装载顺序" [VALIDATING]
+- Branch-05: "引入成本感知的车辆拆分策略" [EXPLORE]
+```
+
+防止新分支提出与正在进行中的分支语义相同的假设，减少并行探索的重复浪费。
+
+---
+
+## Sprint L2：MANDATORY CONSTRAINT（v0.2 Sprint L2 新增）
+
+当 splits 达到绝对最小值（`ChampionSaturationAnalyzer.at_absolute_minimum=True`）时，Protocol 在 frozen 阶段注入强制约束：
+
+```
+## MANDATORY CONSTRAINT
+当前 splits 已达绝对最小值。候选方案必须满足：
+  splits_count <= champion_splits_count  （不能让 splits 变多）
+不满足此约束的候选方案直接判负，不论 cost 改善多少。
+```
+
+这防止了在 splits 饱和后，LLM 提出"牺牲少量 splits 换 cost 改善"的方案被错误促进。
 
 ---
 

@@ -16,16 +16,18 @@ Scion 的**持久化审计层**——所有发生在 campaign 里的事情都被
 ```
 experiment_events   ← 主事件表（核心）
 hypotheses          ← 假设记录
-branches            ← 分支状态快照
-champions           ← Champion 版本（当前 P2，还没写入）
-weight_optimizations← 权重优化结果
+branches            ← 分支状态快照（Sprint M T2 修复，现在有数据）
+champions           ← Champion 版本（Sprint M T4 修复，现在有数据）
+weight_optimizations← 权重优化结果（每次 promote 后写入一条）
 ```
 
 ### experiment_events 关键字段
 
 ```sql
 event_id, campaign_id, branch_id, hypothesis_id
-event_kind          -- "experiment" | "decision"（Sprint G2-patch 新增区分）
+event_kind          -- "experiment" | "decision"（Sprint G2-patch 新增）
+                    -- "contract_fail"（Sprint K5 新增，Contract Gate 失败独立记录）
+                    -- "verification_fail"（Sprint M T3 新增，V-failure 独立事件）
 code_hash           -- 算子代码 SHA-256，可精确还原代码版本
 stage               -- screening | validation | frozen
 screening_win_rate, screening_median_delta, screening_ci_low, screening_ci_high
@@ -35,6 +37,19 @@ model_id            -- 哪个 LLM（Sprint G2-patch 新增）
 protocol_version    -- 实验协议版本（Sprint G2-patch 新增）
 prompt_tokens, completion_tokens  -- token 用量审计
 ```
+
+### weight_optimizations 表
+
+```sql
+opt_id, campaign_id, champion_version
+n_evals             -- 本次优化评估总次数（Sprint M T5 起为 25：8 random + 16 UCB + 1 baseline）
+improved            -- 0/1：优化后是否比 current_weights 得分更高
+best_score          -- 最优权重下的评分（compute_delta 标量值）
+best_weights_json   -- 最优权重向量（JSON，算子名→权重值）
+duration_seconds    -- 优化耗时
+```
+
+F6 实验验证：Group A 3 条记录（3/3 improved=1），Group B 1 条记录（improved=0，SPLITS_WEIGHT 信号淹没）。
 
 ---
 
@@ -139,12 +154,15 @@ GROUP BY patch_action;
 
 ---
 
-## 当前 P2 缺口
+## 当前 P2 缺口 ✅ FIXED (v0.2 Sprint M T4 新增)
 
-`champions` 表为空——`_on_promote()` 只更新内存中的 `self._champion`，没有写 DB。
+`champions` 表 — Sprint M T4 修复，`_on_promote()` 末尾现在调用 `registry.record_champion()`，DB 有数据。
 
-Champion 历史只能从文件系统 `champions/champion_vN/` 恢复，不能 SQL 查询。
-v0.3 修复：`_on_promote()` 末尾调用 `registry.record_champion()`。
+F6 实验验证：Group A 3 records，Group B 1 record，Group C 0 records（无 promote）。
+
+Champion 历史现在可以同时从 DB（SQL 查询）和文件系统 `champions/champion_vN/` 两种方式获取。
+
+`branches` 表 — Sprint M T2 修复 BranchStore 写入逻辑，F6 实验验证：Group A 54 records，Group B 62 records，Group C 18 records（F5 实验全是 0 条）。
 
 ---
 
@@ -154,3 +172,8 @@ v0.3 修复：`_on_promote()` 末尾调用 `registry.record_champion()`。
 - `model_id`：记录用了哪个 LLM，支持 Opus vs Sonnet 对比分析
 - `protocol_version`：实验协议版本号，支持跨版本对比
 - `prompt_tokens / completion_tokens`：token 用量审计，成本分析用
+
+## Sprint K5 / Sprint M T3 新增 event_kind（v0.2 新增）
+
+- `contract_fail`（Sprint K5 新增）：Contract Gate 的所有失败（schema 错、黑名单违规、novelty check 失败）现在独立记录为 `event_kind="contract_fail"`，不混入 experiment 记录，便于单独统计 LLM proposal 质量。
+- `verification_fail`（Sprint M T3 新增）：V-failure 事件（V5 state_mutation、V6 perf_guard、V8 nondeterminism 等）现在独立记录为 `event_kind="verification_fail"`，F6 实验验证：Group C 2 条记录（2 次 V6_perf_guard），F5 实验该字段全空（修复前）。

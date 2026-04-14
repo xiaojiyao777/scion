@@ -140,6 +140,43 @@ should_stop = (
 
 ---
 
+## Sprint I：Stagnation 修复（v0.2 Sprint I 新增）
+
+长时间无 promote 的 campaign 容易陷入局部搜索循环，Sprint I 引入 soft stagnation limit 和多样化逃逸机制。
+
+**soft_stagnation_limit=15**：当单个分支连续 15 轮都是 `CONTINUE_EXPLORE`（无 screening pass），触发 soft stagnation 检测。该分支不立即 ABANDON，而是：
+
+```
+soft_stagnation 触发 →
+  1. 记录 StagnationSignal(type="plateau", branch_id=...)
+  2. Scheduler 降低该分支优先级
+  3. 若有 slot：优先 create_new（开新方向）
+  4. 原分支继续但预算警告（再 N 轮无进展 → 真正 ABANDON）
+```
+
+**diversify escape**：StagnationDetector 检测到 campaign 级平台期（多个分支同时 soft_stagnation）时，注入"多样化逃逸"信号，强制 Round 1 上下文排除最近 K 轮的 change_locus，引导 LLM 进入新维度。
+
+---
+
+## Sprint K1/K2：Hypothesis Zombie 清理（v0.2 Sprint K1/K2 新增）
+
+**问题**：某些假设在 EXPLORE 状态下被反复重试，但从未通过 Verification Gate——这些"僵尸假设"占用分支预算，永远不会进入 screening。
+
+**Sprint K1**：引入 `max_verification_retries`（每个 hypothesis 的 Verification 重试上限）。超出后该 hypothesis 标记 `ZOMBIE`，不再消耗重试机会。
+
+**Sprint K2**：`BranchManager` 定期扫描（每 10 轮）活跃分支的 hypothesis 状态，批量清理 ZOMBIE hypothesis，释放分支预算。分支若全是 ZOMBIE hypothesis 且无其他 pending → 分支 ABANDON。
+
+```python
+# Sprint K2 清理逻辑
+for branch in active_branches:
+    zombie_count = count_zombie_hypotheses(branch)
+    if zombie_count / total_hypotheses > 0.8:  # 80% 僵尸率
+        branch.state = ABANDONED
+        lineage.record_decision("zombie_dominated")
+```
+
+---
+
 ## Stale Branch：Scion 独有的机制
 
 **触发**：某个分支 promote，champion 更新，其他活跃分支基线过期。
@@ -157,6 +194,8 @@ Branch B 标记 STALE（champion v1 → v2）
 ```
 
 这保证了所有进入 validation/frozen 的算子，都是和**最新 champion** 比较的。
+
+**Sprint K3 例外（v0.2 Sprint K3 新增）**：处于 `FROZEN_TESTING` 状态的分支在 `mark_all_stale()` 时**不被标记 STALE**。原因：frozen test 是最终判定阶段，使用的代码已锁定，中途打断并让其 reconcile 会浪费已完成的 frozen 评估代价，且 frozen 本身是与"分叉时的 champion"对比设计，不需要用最新 champion 重测。
 
 **已知风险（v0.3 待解决）**：patch 文本层面合并成功，不代表语义正交。两个改动可能有交互效应，被误认为 B 的独立贡献。
 

@@ -1,12 +1,23 @@
 # 08 — 已知问题与 v0.3 路线图
 
-## 当前状态（v0.2，Sprint F 进行中）
+## 当前状态（v0.2 已归档，2026-04-14）
 
-- **Sprint F1**（30r Opus）：已完成，2 个 promote，frozen wr=1.0
-  - SubcategoryAwareMoveOrder：frozen median_delta=850K
-  - destroy_rebuild + 车型升级：frozen median_delta=3.25M
-- **Sprint F2**（50r Opus）：运行中（tmux: scion-f2）
-- **Sprint F3**（30r Sonnet）：运行中（tmux: scion-f3）
+v0.2 全部 Sprint（A→M）已完成，共 6 轮正式实验（F1→F6），289 unit tests 全部通过。
+
+**实验矩阵最终结果**：
+
+| 实验 | 轮数 | 数据 | Promotions | Weight Opt |
+|---|---|---|---|---|
+| F1 | 30r Opus | 合成 | 2 (frozen wr=1.0) | 未记录 |
+| F2 | 50r Opus | 合成 | — | — |
+| F3 | 30r Sonnet | 合成 | — | — |
+| F4 A/B | 200r Opus | 合成+生产 | 3+1 | 0/1 (未验证) |
+| F5 A/B | 186r*/200r Opus | 合成+生产 | 3+1 | 0/3 + 0/1 (n=9，全部失败) |
+| **F6 A** | **98r Opus** | **合成** | **3** | **3/3 improved ✅** |
+| **F6 B** | **100r Opus** | **生产** | **1** | **0/1 (SPLITS_WEIGHT 信号淹没)** |
+| **F6 C** | **30r Opus** | **生产 SW=1K** | **0** | **N/A** |
+
+*F5-A: 186r，aihubmix 余额耗尽提前终止
 
 ---
 
@@ -24,21 +35,21 @@
 
 ---
 
-### P2：ChampionStore 持久化未完成
+### P2：ChampionStore 持久化未完成 ✅ FIXED (v0.2 Sprint M T4 新增)
 
 **描述**：`champions` SQLite 表未被写入（`_on_promote` 直接更新内存中的 `self._champion`，未调用 `ChampionStore.record()`）。
 
 **影响**：champion 历史无法从 DB 查询，只能从文件系统 `champions/champion_vN/` 目录恢复。
 
-**优先级**：P2（当前实验不受影响，lineage 可追溯）。
+**修复状态**：✅ FIXED — Sprint M T4 在 `_on_promote()` 末尾调用 `registry.record_champion()`，F6 实验验证：Group A 3 records，Group B 1 record（DB 有数据）。
 
 ---
 
-### P3：nohup 进程不健壮
+### P3：nohup 进程不健壮 ✅ FIXED
 
 **描述**：F1 实验因 nohup bash 进程被外部 kill（原因：weight opt 耗时过长 + 终端断开），导致 campaign 在第 10 轮后中断。
 
-**修复**：改用 tmux 管理长时间运行的 campaign（F2/F3 已采用）。
+**修复状态**：✅ FIXED — 改用 tmux 管理长时间运行的 campaign（F2/F3 起全部采用，F4→F6 均使用 tmux）。
 
 ---
 
@@ -111,12 +122,16 @@ _on_promote() 新流程：
 
 ## 实验路线图
 
-| 阶段 | 内容 |
-|------|------|
-| **当前（v0.2 Sprint F）** | F2(50r Opus) + F3(30r Sonnet) 验证实验 |
-| **v0.2 收尾** | Sprint F 结果分析 + 最终报告 |
-| **v0.3 开发** | 异步 weight opt + STALE + ChampionStore |
-| **生产接入** | 生成器扩充（引入真实统计） + shadow deployment |
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **F1** | 30r Opus 合成，2 promotes，frozen wr=1.0 | ✅ 完成 |
+| **F2** | 50r Opus 合成，验证实验 | ✅ 完成 |
+| **F3** | 30r Sonnet 合成，模型对比 | ✅ 完成 |
+| **F4** | 200r Opus 合成+生产，v3 manifest | ✅ 完成 |
+| **F5** | 186r/200r Opus，weight opt n=9 验证（失败）| ✅ 完成 |
+| **F6** | 98/100/30r Opus，Sprint M 全面验证，weight opt n=25（3/3 成功）| ✅ 完成 |
+| **v0.3 开发** | 异步 weight opt + scoring 独立化 + 早停 | 规划中 |
+| **生产接入** | MILP 精确验证 + shadow deployment | 规划中 |
 
 ---
 
