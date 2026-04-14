@@ -94,7 +94,8 @@ class LineageRegistry:
                     parent_hypothesis_id TEXT,
                     suggested_weight     REAL,
                     hypothesis_text      TEXT,
-                    created_at           TEXT
+                    created_at           TEXT,
+                    base_champion_version INTEGER DEFAULT 0
                 )
             """)
             conn.execute("""
@@ -125,6 +126,10 @@ class LineageRegistry:
                     timestamp              TEXT NOT NULL
                 )
             """)
+            # Migrate hypotheses table
+            self._ensure_columns(conn, "hypotheses", {
+                "base_champion_version": "INTEGER DEFAULT 0",
+            })
 
     # ------------------------------------------------------------------
     # Schema helpers

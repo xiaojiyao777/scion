@@ -703,7 +703,7 @@ class TestK6C10ModifyKey:
         return spec
 
     def test_modify_different_text_passes_c10(self):
-        """Two modify hypotheses on same file but different text[:50] should both pass."""
+        """Two modify hypotheses on same file with different text are blocked — file-level key (K6-fix)."""
         gate = ContractGate(self._make_spec())
         h1 = HypothesisRecord(
             hypothesis_id="h1", branch_id="b1",
@@ -712,13 +712,13 @@ class TestK6C10ModifyKey:
             hypothesis_text="A" * 60,
         )
         hyp = HypothesisProposal(
-            hypothesis_text="B" * 60,  # different first 50 chars
+            hypothesis_text="B" * 60,  # different text but same file
             change_locus="vehicle_level",
             action="modify",
             target_file="ops/foo.py",
         )
         result = gate._c10_novelty(hyp, [h1], [])
-        assert result.passed, f"Should pass but failed: {result.detail}"
+        assert not result.passed, "Same file modify should be blocked (K6-fix: file-level key)"
 
     def test_modify_same_text_blocked_by_c10(self):
         """Two modify hypotheses with same locus/file/text[:50] should be blocked."""
@@ -908,18 +908,21 @@ class TestK8C10RejectsRejected:
         assert not result.passed
         assert "C10_novelty" in (result.failure_reason or "")
 
-    # K8-2: complement to K6 — different text[:50] is allowed even if rejected exists
+    # K8-2: with K6-fix, same modify file is blocked regardless of text when champion version matches
     def test_rejected_different_text_passes_c10(self):
         gate = ContractGate(self._make_spec())
-        rejected = self._make_rejected(text="approach A" + "x" * 50)
+        rejected = self._make_rejected(text="approach A" + "x" * 50, hid="h-rej")
+        rejected.base_champion_version = 0
         hyp = HypothesisProposal(
-            hypothesis_text="approach B" + "y" * 50,  # first 50 chars differ
+            hypothesis_text="approach B" + "y" * 50,  # different text, same file
             change_locus="order_level",
             action="modify",
             target_file="operators/foo.py",
         )
-        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected])
-        assert result.passed, f"Different text should pass, got: {result.failure_reason}"
+        # Same champion version (both 0): modify uses file-level key → blocked
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected],
+                                          current_champion_version=0)
+        assert not result.passed, "Same file+champion_version modify should be blocked (K6-fix)"
 
     # K8-3a: backward compat — not passing rejected_hypotheses defaults to None, same behaviour
     def test_no_rejected_arg_backward_compat(self):
@@ -967,3 +970,186 @@ class TestK8C10RejectsRejected:
         result = gate.validate_hypothesis(hyp, [], [blacklisted])
         assert not result.passed
         assert "C10_novelty" in (result.failure_reason or "")
+
+
+# ---------------------------------------------------------------------------
+# K6-fix: modify key reverted to file-level, rejected filtered by champion_version
+# ---------------------------------------------------------------------------
+
+class TestK6FixChampionVersion:
+    def _make_spec(self) -> MagicMock:
+        spec = MagicMock()
+        spec.operator_categories = ["vehicle_level"]
+        spec.search_space = MagicMock()
+        spec.search_space.editable = ["operators/*.py"]
+        spec.search_space.frozen = []
+        return spec
+
+    def _make_gate(self) -> ContractGate:
+        return ContractGate(self._make_spec())
+
+    def _make_record(self, status: str, file: str, text: str, champ_ver: int = 0,
+                     action: str = "modify", hid: str = "h1") -> HypothesisRecord:
+        r = HypothesisRecord(
+            hypothesis_id=hid, branch_id="b1",
+            change_locus="vehicle_level", action=action,
+            status=status, target_file=file,
+            hypothesis_text=text,
+        )
+        r.base_champion_version = champ_ver
+        return r
+
+    # K6fix-1: modify same file, different text, same champion → blocked
+    def test_modify_same_file_different_text_same_champion_blocked(self):
+        gate = self._make_gate()
+        existing = self._make_record("active", "operators/foo.py", "Approach A " * 5, champ_ver=0)
+        hyp = HypothesisProposal(
+            hypothesis_text="Approach B completely different idea",
+            change_locus="vehicle_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate._c10_novelty(hyp, [existing], [], current_champion_version=0)
+        assert not result.passed, "Same file modify should be blocked regardless of text"
+
+    # K6fix-2: modify same file, different champion version → allowed (retry after promotion)
+    def test_modify_same_file_different_champion_allowed(self):
+        gate = self._make_gate()
+        # Rejected at champion v0
+        rejected = self._make_record("rejected", "operators/foo.py", "Approach A " * 5, champ_ver=0)
+        hyp = HypothesisProposal(
+            hypothesis_text="Approach A " * 5,
+            change_locus="vehicle_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        # Current champion is v1 → rejected from v0 is skipped
+        result = gate._c10_novelty(hyp, [], [rejected], current_champion_version=1)
+        assert result.passed, f"Cross-champion modify should be allowed, got: {result.detail}"
+
+    # K6fix-3: create_new text[:50] key still works (K6 preserved)
+    def test_create_new_different_text_still_passes(self):
+        gate = self._make_gate()
+        existing = self._make_record("active", None, "Create operator A for subcats",
+                                     action="create_new", hid="h1")
+        hyp = HypothesisProposal(
+            hypothesis_text="Create operator B for cost reduction totally new",
+            change_locus="vehicle_level",
+            action="create_new",
+            target_file=None,
+        )
+        result = gate._c10_novelty(hyp, [existing], [], current_champion_version=0)
+        assert result.passed, f"Different create_new text should pass: {result.detail}"
+
+    def test_create_new_same_text_blocked(self):
+        gate = self._make_gate()
+        shared = "Create operator A for subcategory consolidation"
+        existing = self._make_record("active", None, shared, action="create_new", hid="h1")
+        hyp = HypothesisProposal(
+            hypothesis_text=shared,
+            change_locus="vehicle_level",
+            action="create_new",
+            target_file=None,
+        )
+        result = gate._c10_novelty(hyp, [existing], [], current_champion_version=0)
+        assert not result.passed
+
+    # K6fix-4: rejected + same champion_version → blocked
+    def test_rejected_same_champion_version_blocked(self):
+        gate = self._make_gate()
+        rejected = self._make_record("rejected", "operators/foo.py", "text", champ_ver=2)
+        hyp = HypothesisProposal(
+            hypothesis_text="text",
+            change_locus="vehicle_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected],
+                                          current_champion_version=2)
+        assert not result.passed
+        assert "C10_novelty" in (result.failure_reason or "")
+
+    # K6fix-5: rejected + different champion_version → allowed
+    def test_rejected_different_champion_version_allowed(self):
+        gate = self._make_gate()
+        rejected = self._make_record("rejected", "operators/foo.py", "text", champ_ver=1)
+        hyp = HypothesisProposal(
+            hypothesis_text="text",
+            change_locus="vehicle_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected],
+                                          current_champion_version=2)
+        assert result.passed, f"Cross-champion rejected should be allowed: {result.failure_reason}"
+
+    # K6fix-6: validate_hypothesis without current_champion_version → no error
+    def test_validate_hypothesis_default_champion_version_no_error(self):
+        gate = self._make_gate()
+        hyp = HypothesisProposal(
+            hypothesis_text="A novel idea for vehicle operator",
+            change_locus="vehicle_level",
+            action="modify",
+            target_file="operators/new.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [])
+        assert result.passed  # no collision, sensible behaviour
+
+    # K6fix-7: HypothesisRecord base_champion_version default is 0
+    def test_hypothesis_record_default_base_champion_version(self):
+        rec = HypothesisRecord(
+            hypothesis_id="x", branch_id="b", change_locus="locus",
+            action="modify", status="active",
+        )
+        assert rec.base_champion_version == 0
+
+    # K6fix-8: HypothesisStore persists and reads back base_champion_version
+    def test_hypothesis_store_persists_base_champion_version(self, tmp_path):
+        from scion.lineage.registry import LineageRegistry
+        from scion.lineage.branch_store import HypothesisStore
+
+        reg = LineageRegistry(str(tmp_path / "test.db"))
+        store = HypothesisStore(reg)
+
+        rec = HypothesisRecord(
+            hypothesis_id="htest", branch_id="b1",
+            change_locus="vehicle_level", action="modify",
+            status="active", target_file="operators/foo.py",
+            hypothesis_text="some text",
+        )
+        rec.base_champion_version = 5
+        store.save(rec)
+
+        loaded = store.get_by_status("active")
+        assert len(loaded) == 1
+        assert loaded[0].base_champion_version == 5
+
+    # K6fix-9: DB migration — old schema without base_champion_version gets column added
+    def test_db_migration_adds_base_champion_version_column(self, tmp_path):
+        import sqlite3 as _sqlite3
+        from scion.lineage.registry import LineageRegistry
+
+        db_path = str(tmp_path / "old.db")
+        # Create table without base_champion_version (old schema)
+        with _sqlite3.connect(db_path) as conn:
+            conn.execute("""
+                CREATE TABLE hypotheses (
+                    hypothesis_id TEXT PRIMARY KEY,
+                    branch_id TEXT,
+                    change_locus TEXT,
+                    action TEXT,
+                    status TEXT,
+                    target_file TEXT,
+                    parent_hypothesis_id TEXT,
+                    suggested_weight REAL,
+                    hypothesis_text TEXT,
+                    created_at TEXT
+                )
+            """)
+
+        # Running LineageRegistry._init_db should migrate
+        reg = LineageRegistry(db_path)
+
+        with _sqlite3.connect(db_path) as conn:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(hypotheses)")}
+        assert "base_champion_version" in cols, "Migration should add base_champion_version column"

@@ -298,9 +298,10 @@ class TestPendingHypothesisContractGate:
         cm = _campaign(tmp_path, llm_client=llm)
         original_validate_hyp = cm._contract_gate.validate_hypothesis
 
-        def spy_validate_hypothesis(hyp, active, blacklist, rejected_hypotheses=None):
+        def spy_validate_hypothesis(hyp, active, blacklist, rejected_hypotheses=None, current_champion_version=0):
             validate_hyp_calls[0] += 1
-            return original_validate_hyp(hyp, active, blacklist, rejected_hypotheses=rejected_hypotheses)
+            return original_validate_hyp(hyp, active, blacklist, rejected_hypotheses=rejected_hypotheses,
+                                         current_champion_version=current_champion_version)
 
         cm._contract_gate.validate_hypothesis = spy_validate_hypothesis
 
@@ -604,7 +605,7 @@ class TestContractFailStepRecord:
         cm = _campaign(tmp_path)
 
         # Make validate_hypothesis always fail
-        cm._contract_gate.validate_hypothesis = lambda hyp, active, blacklist, rejected_hypotheses=None: ContractResult(
+        cm._contract_gate.validate_hypothesis = lambda hyp, active, blacklist, rejected_hypotheses=None, current_champion_version=0: ContractResult(
             passed=False, checks=(), failure_reason="forced contract failure"
         )
 

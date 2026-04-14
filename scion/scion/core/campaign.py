@@ -436,6 +436,7 @@ class CampaignManager:
                 self._hyp_store.get_by_status("active"),
                 self._hyp_store.get_by_status("blacklisted"),
                 rejected_hypotheses=self._hyp_store.get_by_status("rejected"),
+                current_champion_version=self._champion.version if self._champion else 0,
             )
             if not c_result_pending.passed:
                 logger.info(
@@ -473,6 +474,7 @@ class CampaignManager:
                 self._hyp_store.get_by_status("active"),
                 self._hyp_store.get_by_status("blacklisted"),
                 rejected_hypotheses=self._hyp_store.get_by_status("rejected"),
+                current_champion_version=self._champion.version if self._champion else 0,
             )
             if not c_result.passed:
                 logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
@@ -502,6 +504,7 @@ class CampaignManager:
                 return StepResult(action="explore", branch_id=bid, reason="hypothesis contract failed")
 
             # Register hypothesis in SQLite store
+            h_record.base_champion_version = self._champion.version if self._champion else 0
             self._hyp_store.save(h_record)
             self._branch_hypotheses[bid] = hypothesis
 
@@ -1994,6 +1997,7 @@ class CampaignManager:
                     status="blacklisted",
                     target_file=hyp.target_file,
                     hypothesis_text=hyp.hypothesis_text,
+                    base_champion_version=self._champion.version if self._champion else 0,
                 )
                 self._hyp_store.save(record)
 

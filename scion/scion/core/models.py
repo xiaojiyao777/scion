@@ -270,6 +270,7 @@ class HypothesisRecord:
     hypothesis_text: Optional[str] = None
     family_id: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
+    base_champion_version: int = 0      # champion version at hypothesis creation time
 
 # --- Solver Output ---
 

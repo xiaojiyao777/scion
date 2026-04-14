@@ -68,6 +68,7 @@ class ContractGate:
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
         rejected_hypotheses: Optional[List[HypothesisRecord]] = None,
+        current_champion_version: int = 0,
     ) -> ContractResult:
         """Run C1, C2, C3, C10 checks on a HypothesisProposal."""
         checks: List[CheckResult] = []
@@ -79,6 +80,7 @@ class ContractGate:
             hypothesis,
             active_hypotheses,
             blacklist + (rejected_hypotheses or []),
+            current_champion_version=current_champion_version,
         ))
 
         return _build_result(checks)
@@ -398,21 +400,27 @@ class ContractGate:
         h: HypothesisProposal,
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
+        current_champion_version: int = 0,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
-        # For create_new and modify, add hypothesis prefix to distinguish different intents
-        # on the same locus/file combination.
-        if h.action in ("create_new", "modify"):
-            key = (h.change_locus, h.action, h.target_file, h.hypothesis_text[:50])
+        # create_new: keyed by (locus, action, target_file, text[:50]) to allow different intents
+        # modify / remove: keyed by (locus, action, target_file) — one attempt per file per champion
+        if h.action == "create_new":
+            key = (h.change_locus, h.action, h.target_file, (h.hypothesis_text or "")[:50])
         else:
             key = (h.change_locus, h.action, h.target_file)
         for existing in active_hypotheses + blacklist:
-            if existing.action in ("create_new", "modify"):
+            # Rejected hypotheses only block if they come from the same champion version;
+            # a champion upgrade opens the door to retry previously rejected modify paths.
+            if existing.status == "rejected":
+                if existing.base_champion_version != current_champion_version:
+                    continue
+            if existing.action == "create_new":
                 existing_key = (
                     existing.change_locus,
                     existing.action,
                     existing.target_file,
-                    existing.hypothesis_text[:50] if existing.hypothesis_text else "",
+                    (existing.hypothesis_text or "")[:50],
                 )
             else:
                 existing_key = (
