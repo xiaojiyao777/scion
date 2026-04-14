@@ -860,3 +860,110 @@ class TestK7FamilyKey:
     def test_family_entry_no_file_backward_compat(self):
         entry = FamilyEntry(label="generic", locus="vehicle_level", action="modify")
         assert entry.family_key == "generic/modify/vehicle_level"
+
+
+# ---------------------------------------------------------------------------
+# K8: C10 novelty check includes rejected hypotheses
+# ---------------------------------------------------------------------------
+
+class TestK8C10RejectsRejected:
+    def _make_spec(self) -> MagicMock:
+        spec = MagicMock()
+        spec.operator_categories = ["order_level"]
+        spec.search_space = MagicMock()
+        spec.search_space.editable = ["operators/*.py"]
+        spec.search_space.frozen = []
+        return spec
+
+    def _make_rejected(
+        self,
+        locus: str = "order_level",
+        action: str = "modify",
+        target_file: str = "operators/foo.py",
+        text: str = "same text approach",
+        hid: str = "h-rej",
+    ) -> HypothesisRecord:
+        return HypothesisRecord(
+            hypothesis_id=hid,
+            branch_id="b1",
+            change_locus=locus,
+            action=action,
+            status="rejected",
+            target_file=target_file,
+            hypothesis_text=text,
+        )
+
+    # K8-1: basic — rejected hypothesis with same key blocks new proposal
+    def test_rejected_same_text_blocks_c10(self):
+        gate = ContractGate(self._make_spec())
+        shared_text = "same text approach for foo"
+        rejected = self._make_rejected(text=shared_text)
+        hyp = HypothesisProposal(
+            hypothesis_text=shared_text,
+            change_locus="order_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected])
+        assert not result.passed
+        assert "C10_novelty" in (result.failure_reason or "")
+
+    # K8-2: complement to K6 — different text[:50] is allowed even if rejected exists
+    def test_rejected_different_text_passes_c10(self):
+        gate = ContractGate(self._make_spec())
+        rejected = self._make_rejected(text="approach A" + "x" * 50)
+        hyp = HypothesisProposal(
+            hypothesis_text="approach B" + "y" * 50,  # first 50 chars differ
+            change_locus="order_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[rejected])
+        assert result.passed, f"Different text should pass, got: {result.failure_reason}"
+
+    # K8-3a: backward compat — not passing rejected_hypotheses defaults to None, same behaviour
+    def test_no_rejected_arg_backward_compat(self):
+        gate = ContractGate(self._make_spec())
+        hyp = HypothesisProposal(
+            hypothesis_text="novel idea here",
+            change_locus="order_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [])
+        assert result.passed
+
+    # K8-3b: empty rejected list has no effect
+    def test_empty_rejected_list_passes(self):
+        gate = ContractGate(self._make_spec())
+        hyp = HypothesisProposal(
+            hypothesis_text="another novel idea",
+            change_locus="order_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [], rejected_hypotheses=[])
+        assert result.passed
+
+    # K8-4: blacklisted behaviour unchanged (regression)
+    def test_blacklisted_still_blocked(self):
+        gate = ContractGate(self._make_spec())
+        shared_text = "blacklisted approach here"
+        blacklisted = HypothesisRecord(
+            hypothesis_id="h-bl",
+            branch_id="b1",
+            change_locus="order_level",
+            action="modify",
+            status="blacklisted",
+            target_file="operators/foo.py",
+            hypothesis_text=shared_text,
+        )
+        hyp = HypothesisProposal(
+            hypothesis_text=shared_text,
+            change_locus="order_level",
+            action="modify",
+            target_file="operators/foo.py",
+        )
+        result = gate.validate_hypothesis(hyp, [], [blacklisted])
+        assert not result.passed
+        assert "C10_novelty" in (result.failure_reason or "")

@@ -67,6 +67,7 @@ class ContractGate:
         hypothesis: HypothesisProposal,
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
+        rejected_hypotheses: Optional[List[HypothesisRecord]] = None,
     ) -> ContractResult:
         """Run C1, C2, C3, C10 checks on a HypothesisProposal."""
         checks: List[CheckResult] = []
@@ -74,7 +75,11 @@ class ContractGate:
         checks.append(self._c1_schema(hypothesis))
         checks.append(self._c2_change_locus(hypothesis))
         checks.append(self._c3_action_target(hypothesis))
-        checks.append(self._c10_novelty(hypothesis, active_hypotheses, blacklist))
+        checks.append(self._c10_novelty(
+            hypothesis,
+            active_hypotheses,
+            blacklist + (rejected_hypotheses or []),
+        ))
 
         return _build_result(checks)
 

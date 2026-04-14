@@ -435,6 +435,7 @@ class CampaignManager:
                 hypothesis,
                 self._hyp_store.get_by_status("active"),
                 self._hyp_store.get_by_status("blacklisted"),
+                rejected_hypotheses=self._hyp_store.get_by_status("rejected"),
             )
             if not c_result_pending.passed:
                 logger.info(
@@ -471,6 +472,7 @@ class CampaignManager:
                 hypothesis,
                 self._hyp_store.get_by_status("active"),
                 self._hyp_store.get_by_status("blacklisted"),
+                rejected_hypotheses=self._hyp_store.get_by_status("rejected"),
             )
             if not c_result.passed:
                 logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
