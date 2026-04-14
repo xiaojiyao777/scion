@@ -1,0 +1,5 @@
+{
+  "problem_yaml": "/home/clawd/research/or-autoresearch-agent/scion/problems/warehouse_delivery/problem.yaml",
+  "campaign_dir": "/home/clawd/research/or-autoresearch-agent/scion/campaign_v02_sprintA",
+  "problem_name": "warehouse_delivery"
+}

@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import uuid
 from random import Random
 
 from models import (
@@ -19,7 +18,7 @@ from models import (
     select_minimum_vehicle_type,
     VEHICLE_TYPES,
 )
-from operators.base import Operator
+from operators.base import Operator, generate_vehicle_id
 
 
 class DestroyRebuild(Operator):
@@ -83,7 +82,7 @@ class DestroyRebuild(Operator):
 
             if not placed:
                 # 新建车辆
-                new_vid = f"V_{uuid.uuid4().hex[:8]}"
+                new_vid = generate_vehicle_id(rng)
                 hazard = order.hazard_quantity if order.hazard_flag else 0
                 vtype = select_minimum_vehicle_type(order_pallets, hazard)
                 new_sol.vehicles[new_vid] = Vehicle(

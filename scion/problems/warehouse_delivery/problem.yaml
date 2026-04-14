@@ -45,7 +45,6 @@ search_space:
     - collections
     - enum
     - abc
-    - uuid
     - models
 solver:
   time_limit_sec: 300

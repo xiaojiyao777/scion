@@ -32,6 +32,26 @@ _SENSITIVE_OS_ATTRS = frozenset({"system", "popen", "execve", "execvp", "execv"}
 _SENSITIVE_OPEN_MODES = frozenset({"w", "wb", "a", "ab", "x", "xb", "w+", "wb+", "a+", "ab+"})
 
 
+# Non-rng random source calls that bypass the operator's rng parameter
+_NON_RNG_RANDOM_PATTERNS = frozenset(
+    {
+        ("uuid", "uuid4"),
+        ("uuid", "uuid1"),
+        ("random", "random"),
+        ("random", "randint"),
+        ("random", "choice"),
+        ("random", "sample"),
+        ("random", "shuffle"),
+        ("random", "uniform"),
+        ("random", "randrange"),
+        ("os", "urandom"),
+        ("secrets", "token_bytes"),
+        ("secrets", "token_hex"),
+        ("secrets", "token_urlsafe"),
+    }
+)
+
+
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
 
@@ -47,6 +67,8 @@ class ContractGate:
         hypothesis: HypothesisProposal,
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
+        rejected_hypotheses: Optional[List[HypothesisRecord]] = None,
+        current_champion_version: int = 0,
     ) -> ContractResult:
         """Run C1, C2, C3, C10 checks on a HypothesisProposal."""
         checks: List[CheckResult] = []
@@ -54,7 +76,12 @@ class ContractGate:
         checks.append(self._c1_schema(hypothesis))
         checks.append(self._c2_change_locus(hypothesis))
         checks.append(self._c3_action_target(hypothesis))
-        checks.append(self._c10_novelty(hypothesis, active_hypotheses, blacklist))
+        checks.append(self._c10_novelty(
+            hypothesis,
+            active_hypotheses,
+            blacklist + (rejected_hypotheses or []),
+            current_champion_version=current_champion_version,
+        ))
 
         return _build_result(checks)
 
@@ -75,6 +102,7 @@ class ContractGate:
         checks.append(self._c7_interface_signature(patch))
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
+        checks.append(self._c9b_non_rng_random(patch))
 
         return _build_result(checks)
 
@@ -305,6 +333,65 @@ class ContractGate:
         return _cr("C9_sensitive_api", passed, "heavy", detail, t0)
 
     # ------------------------------------------------------------------
+    # C9b: Non-rng random source detection
+    # ------------------------------------------------------------------
+
+    def _c9b_non_rng_random(self, patch: PatchProposal) -> CheckResult:
+        t0 = time.monotonic_ns()
+        if patch.action == "delete":
+            return _cr("C9b_non_rng_random", True, "heavy", "delete action — no randomness check", t0)
+
+        try:
+            tree = ast.parse(patch.code_content)
+        except SyntaxError:
+            return _cr("C9b_non_rng_random", False, "heavy", "unparseable code", t0)
+
+        # Build a set of dangerous bare names from import-from statements and alias mappings
+        # e.g. `from random import choice` → dangerous_names = {"choice"}
+        # e.g. `import random as r` → module_aliases = {"r": "random"}
+        dangerous_names: set[str] = set()
+        module_aliases: dict[str, str] = {}  # alias → canonical module name
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                for alias in node.names:
+                    local_name = alias.asname if alias.asname else alias.name
+                    if (module, alias.name) in _NON_RNG_RANDOM_PATTERNS:
+                        dangerous_names.add(local_name)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.asname:
+                        module_aliases[alias.asname] = alias.name
+
+        violations: List[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Name):
+                # Bare-name call: `choice(...)` from `from random import choice`
+                if func.id in dangerous_names:
+                    violations.append(f"{func.id}(...)")
+            elif isinstance(func, ast.Attribute):
+                obj_name: Optional[str] = None
+                if isinstance(func.value, ast.Name):
+                    obj_name = func.value.id
+                if obj_name is None:
+                    continue
+                # Skip rng.* calls — the operator's rng parameter
+                if obj_name == "rng":
+                    continue
+                # Resolve alias (e.g. `r` → `random`)
+                resolved = module_aliases.get(obj_name, obj_name)
+                if (resolved, func.attr) in _NON_RNG_RANDOM_PATTERNS:
+                    violations.append(f"{obj_name}.{func.attr}")
+
+        passed = len(violations) == 0
+        detail = "no non-rng random sources" if passed else f"non-rng random sources detected: {violations}"
+        return _cr("C9b_non_rng_random", passed, "heavy", detail, t0)
+
+    # ------------------------------------------------------------------
     # C10: Novelty check
     # ------------------------------------------------------------------
 
@@ -313,21 +400,27 @@ class ContractGate:
         h: HypothesisProposal,
         active_hypotheses: List[HypothesisRecord],
         blacklist: List[HypothesisRecord],
+        current_champion_version: int = 0,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
-        # For create_new, target_file is typically None/empty so two different new
-        # operators in the same category would collide — add hypothesis prefix to distinguish.
+        # create_new: keyed by (locus, action, target_file, text[:50]) to allow different intents
+        # modify / remove: keyed by (locus, action, target_file) — one attempt per file per champion
         if h.action == "create_new":
-            key = (h.change_locus, h.action, h.target_file, h.hypothesis_text[:50])
+            key = (h.change_locus, h.action, h.target_file, (h.hypothesis_text or "")[:50])
         else:
             key = (h.change_locus, h.action, h.target_file)
         for existing in active_hypotheses + blacklist:
+            # Rejected hypotheses only block if they come from the same champion version;
+            # a champion upgrade opens the door to retry previously rejected modify paths.
+            if existing.status == "rejected":
+                if existing.base_champion_version != current_champion_version:
+                    continue
             if existing.action == "create_new":
                 existing_key = (
                     existing.change_locus,
                     existing.action,
                     existing.target_file,
-                    existing.hypothesis_text[:50] if existing.hypothesis_text else "",
+                    (existing.hypothesis_text or "")[:50],
                 )
             else:
                 existing_key = (

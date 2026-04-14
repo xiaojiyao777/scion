@@ -18,7 +18,7 @@ from scion.verification.interface import check_interface
 from scion.verification.tests import check_unit_tests, check_regression_tests
 from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
-from scion.verification.state_leak import check_state_leak
+from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
 
 
@@ -261,14 +261,14 @@ class TestObjectiveCheck:
 
 
 # ---------------------------------------------------------------------------
-# V5: state_leak
+# V8: nondeterminism
 # ---------------------------------------------------------------------------
 
 class TestStateleakCheck:
     def test_skipped_when_no_canary(self):
         spec = _make_spec(canary="")
         runner = _mock_runner()
-        r = check_state_leak(spec, runner, "/tmp")
+        r = check_nondeterminism(spec, runner, "/tmp")
         assert r.passed is True
         assert "skipped" in r.detail
 
@@ -278,9 +278,9 @@ class TestStateleakCheck:
         spec = _make_spec(canary=canary)
         # Both runs return same objective.
         runner = _mock_runner(output_dict=_solver_output_dict(splits=2, cost=6600))
-        r = check_state_leak(spec, runner, str(tmp_path))
+        r = check_nondeterminism(spec, runner, str(tmp_path))
         # Check passes (even if oracle isn't available — we compare raw JSON objects).
-        assert r.name == "V5_state_leak"
+        assert r.name == "V8_nondeterminism"
         assert r.passed is True
 
     def test_non_deterministic_runs_fail(self, tmp_path):
@@ -313,10 +313,13 @@ class TestStateleakCheck:
         runner = MagicMock()
         runner.run_solver.side_effect = run_solver
 
-        r = check_state_leak(spec, runner, str(tmp_path))
+        r = check_nondeterminism(spec, runner, str(tmp_path))
         assert r.passed is False
-        assert r.name == "V5_state_leak"
-        assert "non-deterministic" in r.detail
+        assert r.name == "V8_nondeterminism"
+        # detail is now a JSON string with diff_keys
+        detail = json.loads(r.detail)
+        assert "diff_keys" in detail
+        assert len(detail["diff_keys"]) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +442,7 @@ class TestVerificationGateIntegration:
         check_names = [c.name for c in result.checks]
         assert "V3_feasibility" in check_names
         assert "V4_objective" in check_names
-        assert "V5_state_leak" in check_names
+        assert "V8_nondeterminism" in check_names
         assert "V6_perf_guard" in check_names
 
     def test_delete_patch_passes_all(self):

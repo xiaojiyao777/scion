@@ -22,7 +22,7 @@ class SplitManifest(BaseModel):
         manifest.screening  # ['cases/screening/case_001.json', ...]
     """
 
-    version: str
+    version: str = "dev"
     """Manifest 版本号。"""
 
     screening: list[str] = Field(default_factory=list)
@@ -57,14 +57,14 @@ class SplitManifest(BaseModel):
             overlap = frozen & other
             if overlap:
                 raise ValueError(
-                    f"split 集合 'frozen' 和 '{name}' 存在交集: {sorted(overlap)}"
+                    f"split 集合 'frozen' 和 '{name}' 存在交集 (overlap): {sorted(overlap)}"
                 )
         # Canary must be disjoint from screening/validation
         for name, other in [("screening", screening), ("validation", validation)]:
             overlap = canary & other
             if overlap:
                 raise ValueError(
-                    f"split 集合 'canary' 和 '{name}' 存在交集: {sorted(overlap)}"
+                    f"split 集合 'canary' 和 '{name}' 存在交集 (overlap): {sorted(overlap)}"
                 )
         return self
 

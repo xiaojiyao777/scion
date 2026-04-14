@@ -1,7 +1,52 @@
 """JSON schemas and prompt templates for hypothesis and patch proposals."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, field_validator
+
+
+# ---------------------------------------------------------------------------
+# Pydantic v2 validation models (T19)
+# ---------------------------------------------------------------------------
+
+class HypothesisProposalInput(BaseModel):
+    hypothesis_text: str
+    change_locus: str
+    action: str
+    target_file: Optional[str] = None
+    predicted_direction: str = "exploratory"
+    target_weakness: str = ""
+    expected_effect: str = ""
+    suggested_weight: Optional[float] = None
+
+    @field_validator("hypothesis_text", "change_locus")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("field must not be empty")
+        return v
+
+    @field_validator("action")
+    @classmethod
+    def valid_action(cls, v: str) -> str:
+        if v not in ("modify", "create_new", "remove"):
+            raise ValueError(f"action must be modify/create_new/remove, got '{v}'")
+        return v
+
+
+class PatchProposalInput(BaseModel):
+    file_path: str
+    action: str
+    code_content: str
+    test_hint: Optional[str] = None
+
+    @field_validator("file_path", "code_content")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("field must not be empty")
+        return v
 
 # ---------------------------------------------------------------------------
 # JSON Schemas
@@ -120,7 +165,8 @@ FIX_TOOL: Dict[str, Any] = {
         "- Return the COMPLETE corrected file, not just changed lines.\n\n"
         "Common patterns:\n"
         "- V3_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
-        "- V5_state_leak: non-deterministic iteration (use sorted()).\n"
+        "- V5_state_mutation: operator modified input solution (use deep_copy()).\n"
+        "- V8_nondeterminism: non-deterministic code (no uuid, use sorted(), use rng).\n"
         "- V1_syntax: indentation, parentheses, colons.\n"
         "- V2_interface: missing Operator base class or wrong execute() signature."
     ),

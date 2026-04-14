@@ -1,8 +1,41 @@
 from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Optional, Literal, Set
+from typing import List, Dict, Optional, Literal, Set, Tuple
 import yaml
 import os
+
+# Re-export authoritative schema — these are the ONLY authoritative implementations.
+# Old code that imported simplified versions from this module will get the real ones.
+from scion.config.protocol_config import ProtocolConfig
+from scion.config.split_manifest import SplitManifest
+from scion.config.seed_ledger import SeedLedger
+
+# Backward-compatible alias: old code used SeedLedgerConfig, now it maps to SeedLedger
+SeedLedgerConfig = SeedLedger
+
+__all__ = [
+    "ProtocolConfig",
+    "SplitManifest",
+    "SeedLedger",
+    "SeedLedgerConfig",
+    "ProblemSpec",
+    "SearchSpace",
+    "SolverConfig",
+    "ParameterSearchConfig",
+]
+
+
+class ParameterSearchConfig(BaseModel):
+    enabled: bool = True
+    trigger: Literal["on_promote"] = "on_promote"
+    target: Literal["operator_weights"] = "operator_weights"
+    strategy: Literal["random_local", "bayesian"] = "random_local"
+    n_initial_random: int = 8
+    n_iterations: int = 16
+    n_eval_seeds: int = 2
+    weight_bounds: Tuple[float, float] = (0.05, 5.0)
+    eval_cases: List[str] = Field(default_factory=list)
+
 
 class SolverConfig(BaseModel):
     time_limit_sec: int = 300
@@ -27,6 +60,7 @@ class ProblemSpec(BaseModel):
     operator_categories: List[str]
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
+    parameter_search: ParameterSearchConfig = Field(default_factory=ParameterSearchConfig)
 
     @property
     def operator_pool_categories(self) -> List[str]:
@@ -51,61 +85,4 @@ class ProblemSpec(BaseModel):
         # Ensure root_dir is set correctly if not in YAML
         if 'root_dir' not in data:
             data['root_dir'] = os.path.dirname(os.path.abspath(path))
-        return cls(**data)
-
-class ProtocolConfig(BaseModel):
-    screening_n: int = 6
-    screening_win_rate_threshold: float = 0.66
-    validation_n: int = 12
-    validation_win_rate_threshold: float = 0.66
-    frozen_n: int = 24
-    min_practical_delta: float = 0.001
-    
-    @classmethod
-    def from_yaml(cls, path: str) -> ProtocolConfig:
-        with open(path, 'r') as f:
-            data = yaml.safe_load(f)
-        return cls(**data)
-
-class SplitManifest(BaseModel):
-    screening: List[str]
-    validation: List[str]
-    frozen: List[str]
-
-    @field_validator('screening', 'validation', 'frozen')
-    @classmethod
-    def check_disjoint(cls, v, info):
-        # We'll check all splits in a cross-validator
-        return v
-
-    def validate_disjoint(self):
-        s = set(self.screening)
-        v = set(self.validation)
-        f = set(self.frozen)
-        
-        # Frozen must be disjoint from both screening and validation
-        # (holdout integrity). Screening/validation overlap is allowed
-        # — validation uses different seeds to test stability.
-        if not s.isdisjoint(f):
-            raise ValueError(f"Screening and Frozen splits overlap: {s & f}")
-        if not v.isdisjoint(f):
-            raise ValueError(f"Validation and Frozen splits overlap: {v & f}")
-
-    @classmethod
-    def from_yaml(cls, path: str) -> SplitManifest:
-        with open(path, 'r') as f:
-            data = yaml.safe_load(f)
-        manifest = cls(**data)
-        manifest.validate_disjoint()
-        return manifest
-
-class SeedLedgerConfig(BaseModel):
-    screening: List[int]
-    validation: List[int]
-    frozen: List[int]
-
-    @classmethod
-    def from_yaml(cls, path: str) -> SeedLedgerConfig:
-        with open(path, 'r') as f:
-            data = yaml.safe_load(f)
         return cls(**data)

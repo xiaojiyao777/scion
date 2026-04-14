@@ -48,22 +48,32 @@ def check_feasibility(
     """
     violations: list[str] = []
 
+    # -----------------------------------------------------------------
+    # H7: 锁定组完整性 — 同一 locked_vehicle_id 的订单必须在同一辆车
+    #     两辆车合并方向不限，但锁定组不能被拆散
+    # -----------------------------------------------------------------
+    locked_group_vehicle: dict[str, str] = {}  # group_id → vid
+    for vid, vehicle in solution.vehicles.items():
+        for oid in vehicle.order_ids:
+            o = instance.orders[oid]
+            if o.locked_vehicle_id is None:
+                continue
+            gid = o.locked_vehicle_id
+            if gid in locked_group_vehicle:
+                if locked_group_vehicle[gid] != vid:
+                    violations.append(
+                        f"H7: locked group {gid} is split across vehicles "
+                        f"{locked_group_vehicle[gid]} and {vid}"
+                    )
+                    return FeasibilityResult(False, violations)
+            else:
+                locked_group_vehicle[gid] = vid
+
     for vid, vehicle in solution.vehicles.items():
         if not vehicle.order_ids:
             continue  # 空车跳过
 
         orders = [instance.orders[oid] for oid in vehicle.order_ids]
-
-        # -----------------------------------------------------------------
-        # H7: 锁定订单未被移动
-        # -----------------------------------------------------------------
-        for o in orders:
-            if o.locked_vehicle_id is not None and o.locked_vehicle_id != vid:
-                violations.append(
-                    f"H7: order {o.order_id} locked to {o.locked_vehicle_id}, "
-                    f"but assigned to {vid}"
-                )
-                return FeasibilityResult(False, violations)
 
         # -----------------------------------------------------------------
         # H4: 分车大类隔离（Phase 1）

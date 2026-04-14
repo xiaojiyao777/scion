@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from collections import Counter
+from typing import Any, Dict, List, Optional, Tuple
 
 from scion.core.models import (
     Branch,
     ChampionState,
+    Decision,
+    HypothesisFamily,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
@@ -43,6 +46,12 @@ class ContextManager:
         sibling_branches: Optional[List[Branch]] = None,
         step_history: Optional[List[StepRecord]] = None,
         branch_workspace: Optional[str] = None,
+        failure_streak: Optional[Dict[str, int]] = None,
+        forced_locus: Optional[str] = None,
+        search_memory: Optional[Any] = None,
+        saturation_signals: Optional[List[Any]] = None,
+        weight_opt_result: Optional[Any] = None,
+        research_log: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
@@ -51,6 +60,9 @@ class ContextManager:
 
         If branch_workspace is provided and differs from the champion snapshot,
         branch_code shows the modified operators so the LLM can build on them.
+
+        If failure_streak is provided, injects a failure pattern warning when
+        any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec)
         champion_operators_code = _read_champion_operators(champion)
@@ -67,6 +79,79 @@ class ContextManager:
         )
         branch_direction = _build_branch_direction_prompt(branch)
 
+        # T07: Build family tracking and coverage (J-patch: use global step_history)
+        all_steps = step_history or []
+        families = _extract_families_from_steps(all_steps)
+        exploration_coverage = build_exploration_coverage(families) if families else ""
+
+        # T08: Build strategy guidance from family data (J-patch: global)
+        strategy_guidance = _build_strategy_guidance(families) if families else ""
+
+        # T10: Champion baseline hints from most recent screening experiment
+        champion_baselines = _build_champion_baselines(step_history or [])
+
+        # Sprint H2 T5: Failure pattern warning
+        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
+
+        # I3: Forced locus diversification constraint
+        locus_constraint = ""
+        if forced_locus:
+            locus_constraint = (
+                f"\n## MANDATORY SEARCH CONSTRAINT\n"
+                f"Your hypothesis MUST target `{forced_locus}` operators.\n"
+                f"The campaign has detected saturation in the current search direction.\n"
+                f"Exploring `{forced_locus}` is required to find further improvements.\n"
+            )
+
+        # J1: Render search memory (cross-branch search history)
+        search_memory_block = ""
+        if search_memory is not None:
+            search_memory_block = search_memory.render()
+
+        # J2: Render saturation signals
+        saturation_block = ""
+        if saturation_signals:
+            from scion.proposal.saturation import render_saturation_signals
+            saturation_block = render_saturation_signals(saturation_signals)
+
+        # L2: Absolute minimum constraint (splits at floor → force COST-only)
+        abs_min_constraint = ""
+        if saturation_signals:
+            abs_min_objs = [
+                s.objective for s in saturation_signals
+                if getattr(s, "at_absolute_minimum", False)
+            ]
+            if abs_min_objs and "subcategory_splits" in abs_min_objs:
+                abs_min_constraint = (
+                    "\n## MANDATORY CONSTRAINT — SPLITS AT MINIMUM\n"
+                    "Champion baseline splits ≈ 0. Splits CANNOT be reduced further.\n"
+                    "DO NOT propose subcategory-aware, split-reduction, or consolidation operators.\n"
+                    "ALL proposals MUST target COST reduction ONLY.\n"
+                )
+
+        # J6: Weight optimization result feedback
+        weight_opt_block = ""
+        if weight_opt_result is not None and hasattr(weight_opt_result, 'best_weights'):
+            lines = ["## 当前算子贡献估计（weight optimization 结果）"]
+            sorted_weights = sorted(
+                weight_opt_result.best_weights.items(),
+                key=lambda x: -x[1],
+            )
+            for name, w in sorted_weights:
+                if w >= 2.0:
+                    level = "高贡献"
+                elif w >= 0.5:
+                    level = "中等贡献"
+                else:
+                    level = "低贡献"
+                lines.append(f"  {name}: {level}（权重 {w:.2f}）")
+            weight_opt_block = "\n".join(lines)
+
+        # J-patch: Render research log (cross-branch trajectory)
+        research_log_block = ""
+        if research_log is not None:
+            research_log_block = research_log.render()
+
         return {
             "problem_summary": problem_summary,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -77,6 +162,17 @@ class ContextManager:
             "sibling_summary": sibling_summary,
             "branch_code": branch_code,
             "branch_direction": branch_direction,
+            "exploration_coverage": exploration_coverage,
+            "strategy_guidance": strategy_guidance,
+            "champion_baselines": champion_baselines,
+            "failure_pattern_warning": failure_pattern_warning,
+            "locus_constraint": locus_constraint,
+            "abs_min_constraint": abs_min_constraint,
+            "search_memory": search_memory_block,
+            "saturation_signal": saturation_block,
+            "weight_opt_feedback": weight_opt_block,
+            "research_log": research_log_block,
+            "active_hyp_summary": _summarise_active_hypotheses(active_hypotheses),
         }
 
     # ------------------------------------------------------------------
@@ -89,12 +185,15 @@ class ContextManager:
         hypothesis: HypothesisProposal,
         champion: ChampionState,
         problem_spec: ProblemSpec,
+        prior_failure: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_code (Round 2).
 
         Contains problem summary, hypothesis details, target file content,
         operator interface spec, and import whitelist.
         Does NOT contain experiment stats or branch history.
+        If prior_failure is set, a previous code generation attempt failed for
+        this hypothesis — the failure detail is included so the LLM can learn.
         """
         problem_summary = _build_problem_summary(problem_spec)
         hypothesis_detail = _format_hypothesis(hypothesis)
@@ -112,7 +211,7 @@ class ContextManager:
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
-        return {
+        ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
             "hypothesis_detail": hypothesis_detail,
             "target_file_code": target_file_code,
@@ -123,6 +222,9 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if prior_failure is not None:
+            ctx["prior_code_failure"] = prior_failure
+        return ctx
 
     # ------------------------------------------------------------------
     # Fix context — after light verification failure
@@ -134,11 +236,13 @@ class ContextManager:
         patch: PatchProposal,
         verification_result: VerificationResult,
         problem_spec: ProblemSpec,
+        failure_streak: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         """Context for fix_code (after a light verification failure).
 
         Contains the failed patch, failure details, and operator interface spec.
         Does NOT contain experiment stats.
+        If failure_streak is provided, injects a failure pattern warning.
         """
         problem_summary = _build_problem_summary(problem_spec)
         failed_checks = [c for c in verification_result.checks if not c.passed]
@@ -156,7 +260,9 @@ class ContextManager:
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
-        return {
+        failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
+
+        ctx = {
             "problem_summary": problem_summary,
             "original_code": (
                 f"File: {patch.file_path}\nAction: {patch.action}\n"
@@ -168,6 +274,9 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if failure_pattern_warning:
+            ctx["failure_pattern_warning"] = failure_pattern_warning
+        return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +407,9 @@ def _build_experiment_history(
 ) -> str:
     """Build structured experiment history with case-level feedback.
 
+    T26: Includes "What Worked" section before "What Failed" to prevent
+    the model from becoming overly conservative after many failures.
+
     Recent 3 rounds: aggregate + pattern + selected cases.
     Older rounds (4-8): aggregate only.
     Consecutive 3+ same-type verification failures → inject diagnosis block.
@@ -306,9 +418,16 @@ def _build_experiment_history(
     if not branch_steps:
         return "(no prior experiment rounds on this branch)"
 
+    # T26: Build "What Worked" section from promoted steps
+    what_worked = _build_what_worked_section(branch_steps)
+
     recent = branch_steps[-8:]  # Last 8 rounds
     lines: List[str] = []
     n_recent = len(recent)
+
+    # T26: Prepend "What Worked" if available
+    if what_worked:
+        lines.append(what_worked)
 
     for idx, s in enumerate(recent):
         is_detailed = idx >= max(0, n_recent - 3)  # Last 3 get case detail
@@ -317,7 +436,7 @@ def _build_experiment_history(
         line += f"  hypothesis: {s.hypothesis.change_locus}/{s.hypothesis.action}"
         if s.hypothesis.target_file:
             line += f" → {s.hypothesis.target_file}"
-        line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text[:120]}"
+        line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text}"
         if s.failure_stage:
             line += f"\n    failed_at: {s.failure_stage}"
             if s.failure_stage == "verification" and s.verification_detail:
@@ -368,16 +487,45 @@ def _render_pattern_summary(pattern) -> str:
 
 
 def _render_case_feedback(cf) -> str:
-    """Render a single CaseAggregateFeedback as compact prompt text."""
-    splits_str = f"{cf.median_delta_subcategory_splits:+.1f}" if cf.median_delta_subcategory_splits is not None else "NA"
-    cost_str = f"{cf.median_delta_total_cost:+.1f}" if cf.median_delta_total_cost is not None else "NA"
+    """Render a single CaseAggregateFeedback with directional language (T09)."""
     size = cf.case_features.get("size_bucket", "?")
+    n_orders = cf.case_features.get("n_orders", "?")
+    result_upper = cf.dominant_result.upper()
+
+    # Build directional description for the decisive objective
+    obj = cf.dominant_decisive_objective
+    splits_delta = cf.median_delta_subcategory_splits  # positive = candidate better (fewer splits)
+    cost_delta = cf.median_delta_total_cost            # positive = candidate better (lower cost)
+
+    if obj in ("business_aggregation", "mixed") and splits_delta is not None:
+        direction = "↓" if splits_delta > 0 else "↑"
+        abs_splits = abs(splits_delta)
+        decisive_str = f"Decisive: {obj} — candidate {direction}{abs_splits:.1f} splits (Δ={splits_delta:+.1f})"
+        if cost_delta is not None:
+            decisive_str += f", cost Δ={cost_delta:+.0f}"
+    elif obj == "cost" and cost_delta is not None:
+        direction = "↓" if cost_delta > 0 else "↑"
+        abs_cost = abs(cost_delta)
+        decisive_str = f"Decisive: {obj} — candidate cost {direction}{abs_cost:.0f} (Δ={cost_delta:+.0f})"
+        if splits_delta is not None:
+            decisive_str += f", splits Δ={splits_delta:+.1f}"
+    else:
+        # Fallback: show raw deltas
+        splits_str = f"{splits_delta:+.1f}" if splits_delta is not None else "NA"
+        cost_str = f"{cost_delta:+.0f}" if cost_delta is not None else "NA"
+        decisive_str = f"Decisive: {obj}  splits Δ={splits_str}, cost Δ={cost_str}"
+
+    # Champion baseline hint from case_features if available
+    champ_splits = cf.case_features.get("champion_splits")
+    baseline_note = ""
+    if champ_splits is not None:
+        baseline_note = f"\n        Champion baseline: ~{champ_splits} splits on this case"
+
     return (
-        f"      {cf.case_id}: {cf.dominant_result}"
+        f"      {cf.case_id} ({n_orders} orders, size={size}): {result_upper}"
         f" (W/L/T={cf.wins}/{cf.losses}/{cf.ties}, consistency={cf.seed_consistency:.2f})"
-        f"\n        decisive={cf.dominant_decisive_objective}"
-        f"  deltas: splits={splits_str}, cost={cost_str}"
-        f"  size={size}"
+        f"\n        {decisive_str}"
+        f"{baseline_note}"
     )
 
 
@@ -412,8 +560,17 @@ _VERIFICATION_SUGGESTIONS: dict = {
         "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
         "危险品必须在 HQ40_DG 车型"
     ),
-    "V5_state_leak": (
-        "确保只修改 deep_copy 后的对象，不要引用原始 solution 的任何可变子对象（如 list、dict）"
+    "V5_state_mutation": (
+        "算子修改了输入 solution（state 污染）。"
+        "确保先调用 solution.deep_copy() 再操作，不要引用原始 solution 的任何可变子对象（list、dict）。"
+        "检查 assignment dict 和 vehicle.order_ids 是否一致。"
+    ),
+    "V8_nondeterminism": (
+        "同 seed 两次 solver run 产出了不同的 objective。常见非确定性来源："
+        "(1) 禁止使用 uuid.uuid4()，必须用 generate_vehicle_id(rng) 生成车辆 ID；"
+        "(2) 禁止 list(set(...)) 或遍历 set/dict 时依赖顺序，必须 sorted()；"
+        "(3) 所有随机性必须来自 rng 参数，不要 import random 或使用任何系统熵源；"
+        "(4) 确保只修改 deep_copy 后的对象"
     ),
     "V2_interface": (
         "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"
@@ -450,7 +607,6 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
             details.append(fd[:150])
 
     # Use the most common failure type
-    from collections import Counter
     dominant_type = Counter(failure_types).most_common(1)[0][0] if failure_types else ""
     suggestion = _VERIFICATION_SUGGESTIONS.get(dominant_type, "仔细检查验证失败的原因并修改代码")
     aggregated = " | ".join(dict.fromkeys(details))[:300]  # deduplicate, cap length
@@ -461,6 +617,301 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
         f"Common failure details: {aggregated}\n"
         f"Suggested approach: {suggestion}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T07: Hypothesis Family Tracking
+# ---------------------------------------------------------------------------
+
+# Keyword → mechanism_label mapping (ordered by specificity)
+_MECHANISM_KEYWORDS: List[Tuple[List[str], str]] = [
+    (["destroy", "rebuild"], "destroy_rebuild"),
+    (["subcategor", "consolidat", "merge"], "subcategory_consolidation"),
+    (["swap"], "order_swap"),
+    (["redistribute", "rebalance"], "rebalance"),
+    (["split"], "split_operator"),
+    (["cost", "downsize", "vehicle type", "upgrade"], "cost_reduction"),
+]
+_DEFAULT_MECHANISM = "generic"
+
+
+def _extract_mechanism_label(hypothesis_text: str) -> str:
+    """Extract mechanism label from hypothesis text using keyword matching."""
+    text_lower = hypothesis_text.lower()
+    for keywords, label in _MECHANISM_KEYWORDS:
+        if any(kw in text_lower for kw in keywords):
+            return label
+    return _DEFAULT_MECHANISM
+
+
+def _make_family_id(mechanism_label: str, action_pattern: str, locus_pattern: str) -> str:
+    return f"{mechanism_label}/{action_pattern}/{locus_pattern}"
+
+
+def _get_step_status(step: StepRecord) -> str:
+    """Derive a compact status string from a StepRecord."""
+    if step.failure_stage:
+        return f"failed_{step.failure_stage}"
+    if step.decision == Decision.PROMOTE:
+        return "promoted"
+    if step.protocol_result is not None:
+        return f"gate_{step.protocol_result.gate_outcome}"
+    return step.decision.value
+
+
+def _extract_families_from_steps(steps: List[StepRecord]) -> List[HypothesisFamily]:
+    """Build the family list from step history (rebuilt each call — no persistence needed)."""
+    family_map: Dict[str, HypothesisFamily] = {}
+    for step in steps:
+        h = step.hypothesis
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        family_id = _make_family_id(mechanism, h.action, h.change_locus)
+        status = _get_step_status(step)
+        if family_id in family_map:
+            existing = family_map[family_id]
+            family_map[family_id] = HypothesisFamily(
+                family_id=existing.family_id,
+                mechanism_label=existing.mechanism_label,
+                action_pattern=existing.action_pattern,
+                locus_pattern=existing.locus_pattern,
+                evidence_count=existing.evidence_count + 1,
+                statuses=existing.statuses + [status],
+            )
+        else:
+            family_map[family_id] = HypothesisFamily(
+                family_id=family_id,
+                mechanism_label=mechanism,
+                action_pattern=h.action,
+                locus_pattern=h.change_locus,
+                evidence_count=1,
+                statuses=[status],
+            )
+    # Return in insertion order (order of first encounter)
+    return list(family_map.values())
+
+
+def assign_family_id(hypothesis_text: str, action: str, change_locus: str) -> str:
+    """Public helper: compute family_id for a hypothesis (for HypothesisRecord.family_id)."""
+    mechanism = _extract_mechanism_label(hypothesis_text)
+    return _make_family_id(mechanism, action, change_locus)
+
+
+def build_exploration_coverage(families: List[HypothesisFamily]) -> str:
+    """Return a formatted string showing family coverage across attempts (T07)."""
+    if not families:
+        return ""
+    lines = ["## Exploration Coverage"]
+    for fam in families:
+        promoted = sum(1 for s in fam.statuses if s == "promoted")
+        failed = sum(1 for s in fam.statuses if s.startswith("failed_"))
+        passed = sum(1 for s in fam.statuses if "pass" in s)
+        status_summary = f"promoted={promoted} failed={failed} passed={passed}"
+        lines.append(
+            f"  {fam.family_id}: n={fam.evidence_count} [{status_summary}]"
+        )
+    # Show unexplored action/locus combos
+    explored_actions = {f.action_pattern for f in families}
+    all_actions = {"create_new", "modify", "remove"}
+    unexplored_actions = all_actions - explored_actions
+    if unexplored_actions:
+        lines.append(f"  Unexplored actions: {sorted(unexplored_actions)}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# T08: Strategy-shift Guidance
+# ---------------------------------------------------------------------------
+
+def _count_trailing_failures(statuses: List[str]) -> int:
+    """Count consecutive trailing failures in statuses list."""
+    count = 0
+    for s in reversed(statuses):
+        if s.startswith("failed_") or "fail" in s:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
+    """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
+    if not families:
+        return ""
+    guidance_parts: List[str] = []
+
+    # Rule 1: Same family failed 3+ consecutive times → force switch
+    for fam in families:
+        consecutive_fails = _count_trailing_failures(fam.statuses)
+        if consecutive_fails >= 3:
+            guidance_parts.append(
+                f"⚠️ Family '{fam.mechanism_label}' ({fam.action_pattern}/{fam.locus_pattern}) "
+                f"has failed {consecutive_fails} consecutive times. AVOID this approach."
+            )
+
+    # Rule 2: All recent hypotheses same action → suggest alternative
+    recent_actions = [f.action_pattern for f in families[-5:]]
+    if len(set(recent_actions)) == 1 and len(recent_actions) >= 3:
+        alt = "modify" if recent_actions[0] == "create_new" else "create_new"
+        guidance_parts.append(
+            f"Consider trying action='{alt}' — all recent attempts used '{recent_actions[0]}'."
+        )
+
+    # Rule 3: Unexplored locus → suggest
+    explored_loci = {f.locus_pattern for f in families}
+    all_loci = {"vehicle_level", "order_level"}
+    unexplored = all_loci - explored_loci
+    if unexplored:
+        guidance_parts.append(
+            f"Unexplored operator categories: {sorted(unexplored)}. Consider targeting these."
+        )
+
+    return "\n".join(guidance_parts)
+
+
+def _build_failure_pattern_warning(failure_streak: Dict[str, int]) -> str:
+    """Build a failure pattern warning string for the LLM context.
+
+    Returns an empty string if no failure has a streak >= 2.
+    """
+    significant = {k: v for k, v in failure_streak.items() if v >= 2}
+    if not significant:
+        return ""
+
+    lines = ["## Failure Pattern Warning"]
+    for code, streak in sorted(significant.items(), key=lambda x: -x[1]):
+        lines.append(
+            f"This campaign has failed '{code}' {streak} consecutive time(s)."
+        )
+        # Provide category-specific hints
+        if "verification" in code.lower():
+            lines.append(
+                "  Common causes: import errors, missing attributes, "
+                "incorrect operator interface. Consider a fundamentally different approach."
+            )
+        elif code in ("proposal", "contract"):
+            lines.append(
+                "  Common causes: malformed JSON, schema violations. "
+                "Double-check output format requirements."
+            )
+        elif code == "evaluation":
+            lines.append(
+                "  Common causes: solver crash, environment issues. "
+                "Ensure operator code is robust and handles edge cases."
+            )
+    return "\n".join(lines)# ---------------------------------------------------------------------------
+# T26: What Worked section for experiment history
+# ---------------------------------------------------------------------------
+
+def _build_what_worked_section(branch_steps: List[StepRecord]) -> str:
+    """Build 'What Worked' section from promoted steps (T26).
+
+    Storing confirmations prevents the model from becoming overly conservative
+    after seeing many failures (CC analysis #12).
+    """
+    promoted_steps = [
+        s for s in branch_steps
+        if s.decision == Decision.PROMOTE
+    ]
+    high_wr_steps = [
+        s for s in branch_steps
+        if (
+            s.protocol_result is not None
+            and s.protocol_result.stats.win_rate >= 0.8
+            and s.decision != Decision.PROMOTE
+        )
+    ]
+    successes = promoted_steps + high_wr_steps
+    if not successes:
+        return ""
+
+    lines = ["## What Worked (learn from these)"]
+    for s in successes[:5]:  # Cap at 5 to avoid bloating context
+        h = s.hypothesis
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        tag = "(promoted)" if s.decision == Decision.PROMOTE else "(high win_rate)"
+        wr_str = ""
+        if s.protocol_result:
+            wr_str = f", wr={s.protocol_result.stats.win_rate:.2f}"
+        lines.append(
+            f"- {mechanism} ({h.change_locus}/{h.action}) {tag}{wr_str}: "
+            f"{(h.hypothesis_text or '')[:100]}"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# T10: Champion Baseline Hints
+# ---------------------------------------------------------------------------
+
+def _build_champion_baselines(step_history: List[StepRecord]) -> str:
+    """Build champion baseline section from most recent screening experiment (T10).
+
+    Extracts per-case champion objective values from the last screening step's
+    pair_feedback. If no experiment data exists, returns empty string.
+    """
+    # Find most recent step with pair_feedback (screening results)
+    last_with_pairs = None
+    for step in reversed(step_history):
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.pair_feedback
+        ):
+            last_with_pairs = step
+            break
+
+    if last_with_pairs is None:
+        return ""
+
+    # Aggregate champion splits per case from pair_feedback
+    from collections import defaultdict as _defaultdict
+    case_champ_splits: dict = _defaultdict(list)
+    for pair in last_with_pairs.protocol_result.pair_feedback:
+        ob = pair.objective_breakdown
+        if ob.champion_subcategory_splits is not None:
+            case_champ_splits[pair.case_id].append(ob.champion_subcategory_splits)
+
+    if not case_champ_splits:
+        # Fallback: use case_feedback if available but no per-pair breakdown
+        if last_with_pairs.protocol_result.case_feedback:
+            lines = ["## Champion Performance (screening cases)"]
+            for cf in last_with_pairs.protocol_result.case_feedback[:8]:
+                n_orders = cf.case_features.get("n_orders", "?")
+                size = cf.case_features.get("size_bucket", "?")
+                lines.append(f"- {cf.case_id} ({n_orders} orders, {size}): champion baseline not available in aggregate")
+            return "\n".join(lines)
+        return ""
+
+    lines = ["## Champion Performance (screening cases)"]
+    for case_id, champ_vals in sorted(case_champ_splits.items()):
+        min_val = min(champ_vals)
+        max_val = max(champ_vals)
+        if min_val == max_val:
+            splits_str = f"~{min_val:.0f} splits"
+        else:
+            splits_str = f"~{min_val:.0f}-{max_val:.0f} splits"
+        avg = sum(champ_vals) / len(champ_vals)
+        if avg <= 2:
+            note = "— splits already near optimal"
+        elif avg <= 10:
+            note = "— some room to improve"
+        else:
+            note = "— significant room on splits"
+        lines.append(f"- {case_id}: {splits_str} {note}")
+
+    return "\n".join(lines)
+
+
+def _summarise_active_hypotheses(active_hypotheses: List[HypothesisRecord]) -> str:
+    """Summarise currently active hypotheses so the LLM avoids proposing duplicates."""
+    if not active_hypotheses:
+        return "(none)"
+    lines = []
+    for h in active_hypotheses:
+        key_str = f"{h.change_locus}/{h.action}"
+        if h.target_file:
+            key_str += f" → {h.target_file}"
+        lines.append(f"  - {key_str}  [OCCUPIED — C10 will reject any duplicate]")
+    return "\n".join(lines)
 
 
 def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:
@@ -638,7 +1089,7 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
 2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
-4. **Determinism**: NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
+4. **Determinism**: NEVER use `uuid.uuid4()` or any system entropy source. Generate vehicle IDs with `generate_vehicle_id(rng)` from `operators.base`. NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
 5. **Return value**: return the modified solution (or the original if no valid move was found)
 6. **Imports**: only use modules from the import whitelist; no external packages
 

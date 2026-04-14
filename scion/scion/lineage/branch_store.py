@@ -90,8 +90,8 @@ class HypothesisStore:
                 INSERT OR REPLACE INTO hypotheses
                 (hypothesis_id, branch_id, change_locus, action, status,
                  target_file, parent_hypothesis_id, suggested_weight,
-                 hypothesis_text, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 hypothesis_text, created_at, base_champion_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -104,6 +104,7 @@ class HypothesisStore:
                     hyp.suggested_weight,
                     hyp.hypothesis_text,
                     hyp.created_at.isoformat(),
+                    hyp.base_champion_version,
                 ),
             )
 
@@ -192,4 +193,5 @@ class HypothesisStore:
             suggested_weight=d.get("suggested_weight"),
             hypothesis_text=d.get("hypothesis_text"),
             created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
+            base_champion_version=d.get("base_champion_version") or 0,
         )

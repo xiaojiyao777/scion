@@ -26,12 +26,18 @@ from scion.core.campaign import CampaignManager
 from scion.verification.gate import VerificationGate
 
 PROBLEM_DIR = Path(__file__).parent / "problems" / "warehouse_delivery"
-CAMPAIGN_DIR = Path("/tmp/scion_v3_run")
+CAMPAIGN_DIR = Path(
+    os.environ.get("SCION_CAMPAIGN_DIR", "/tmp/scion_v3_run")
+)
 
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
-proto_cfg = ProtocolConfig.from_yaml(str(PROBLEM_DIR / "protocol.yaml"))
-split_manifest = SplitManifest.from_yaml(str(PROBLEM_DIR / "split_manifest.yaml"))
+proto_cfg = ProtocolConfig.from_yaml(
+    os.environ.get("SCION_PROTOCOL", str(PROBLEM_DIR / "protocol.yaml"))
+)
+split_manifest = SplitManifest.from_yaml(
+    os.environ.get("SCION_SPLIT_MANIFEST", str(PROBLEM_DIR / "split_manifest.yaml"))
+)
 seed_ledger = SeedLedgerConfig.from_yaml(str(PROBLEM_DIR / "seed_ledger.yaml"))
 
 # --- Real LLM client ---
@@ -92,7 +98,7 @@ print(f"  Problem        : {spec.name}")
 print(f"  LLM model      : {llm_client.model}")
 print(f"  Max rounds     : {max_rounds}")
 print(f"  Solver timeout : {spec.solver}")
-print(f"  Protocol       : screening_n={proto_cfg.screening_n}, validation_n={proto_cfg.validation_n}, frozen_n={proto_cfg.frozen_n}")
+print(f"  Protocol       : screening={proto_cfg.screening}, validation={proto_cfg.validation}, frozen={proto_cfg.frozen}")
 print(f"  Campaign dir   : {CAMPAIGN_DIR}")
 print()
 
@@ -158,9 +164,9 @@ summary = {
     "max_rounds": max_rounds,
     "llm_model": llm_client.model,
     "protocol": {
-        "screening_n": proto_cfg.screening_n,
-        "validation_n": proto_cfg.validation_n,
-        "frozen_n": proto_cfg.frozen_n,
+        "screening": str(proto_cfg.screening),
+        "validation": str(proto_cfg.validation),
+        "frozen": str(proto_cfg.frozen),
     },
     "state": state,
     "steps": [],

@@ -7,11 +7,10 @@
 
 from __future__ import annotations
 
-import uuid
 from random import Random
 
 from models import Instance, Solution, Vehicle, select_minimum_vehicle_type, calc_pallets
-from operators.base import Operator
+from operators.base import Operator, generate_vehicle_id
 
 
 class MoveOrder(Operator):
@@ -50,7 +49,7 @@ class MoveOrder(Operator):
 
         if not other_vehicles or rng.random() < 0.1:
             # 10% 概率新建一辆车
-            new_vid = f"V_{uuid.uuid4().hex[:8]}"
+            new_vid = generate_vehicle_id(rng)
             pallets = calc_pallets(order.spu_list)
             vtype = select_minimum_vehicle_type(pallets, order.hazard_quantity if order.hazard_flag else 0)
             new_sol.vehicles[new_vid] = Vehicle(

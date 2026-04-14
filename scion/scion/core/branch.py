@@ -112,11 +112,13 @@ class BranchController:
     def mark_all_stale(self, new_champion_id: int) -> List[str]:
         """
         Mark every active branch STALE after a champion change.
+        FROZEN_TESTING branches are excluded — they have already passed
+        screening + validation and should be allowed to complete.
         Returns the list of affected branch_ids.
         """
         affected: List[str] = []
         for branch in self._branches.values():
-            if branch.state in _ACTIVE_STATES:
+            if branch.state in _ACTIVE_STATES and branch.state != BranchState.FROZEN_TESTING:
                 branch.state = BranchState.STALE
                 branch.updated_at = datetime.now()
                 affected.append(branch.branch_id)
@@ -130,7 +132,7 @@ class BranchController:
         else → ABANDONED.
         """
         branch = self._get(branch_id)
-        if branch.state != BranchState.STALE:
+        if branch.state not in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             raise StateTransitionError(
                 f"Branch {branch_id} is not STALE (state={branch.state.value})"
             )
@@ -141,6 +143,10 @@ class BranchController:
         else:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()
+
+    def is_blocked(self, branch_id: str) -> bool:
+        """Return True if the branch is in BLOCKED_INFRA state."""
+        return self._get(branch_id).state == BranchState.BLOCKED_INFRA
 
     def block_infra(self, branch_id: str) -> None:
         """Transition an active branch to BLOCKED_INFRA, saving prior state."""
@@ -173,7 +179,7 @@ class BranchController:
                               existing branch workspace rather than copying from champion
         """
         branch = self._get(branch_id)
-        if branch.state == BranchState.STALE:
+        if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return "champion"
         if branch.current_code_hash is None:
             return "champion"
@@ -189,6 +195,27 @@ class BranchController:
         branch.current_code_hash = code_hash
         if passed:
             branch.last_clean_code_hash = code_hash
+        branch.updated_at = datetime.now()
+
+    def record_candidate_code(self, branch_id: str, code_hash: str) -> None:
+        """Record that a candidate patch has been applied (before verification).
+
+        Only updates current_code_hash. last_clean_code_hash is NOT updated
+        until verification actually passes (call record_verification_pass).
+        """
+        branch = self._get(branch_id)
+        branch.current_code_hash = code_hash
+        branch.updated_at = datetime.now()
+
+    def record_verification_pass(self, branch_id: str, code_hash: str) -> None:
+        """Record that verification passed for the current candidate code.
+
+        Updates both current_code_hash and last_clean_code_hash. Call this
+        only after VerificationGate.run() returns passed=True.
+        """
+        branch = self._get(branch_id)
+        branch.current_code_hash = code_hash
+        branch.last_clean_code_hash = code_hash
         branch.updated_at = datetime.now()
 
     def next_stage(self, branch_id: str) -> ExperimentStage:

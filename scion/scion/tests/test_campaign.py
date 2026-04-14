@@ -669,3 +669,417 @@ class TestRunLoop:
         )
         cm.run(max_rounds=3)
         assert cm._n_experiments <= 3
+
+
+# ---------------------------------------------------------------------------
+# T03+T04: archive_workspace returns path + campaign_summary.json
+# ---------------------------------------------------------------------------
+
+class TestArchiveWorkspaceReturnsPath:
+    def test_archive_workspace_returns_path(self, tmp_path):
+        """archive_workspace() must return the archive directory path."""
+        from scion.runtime.workspace import WorkspaceMaterializer
+
+        campaign_dir = tmp_path / "campaign"
+        campaign_dir.mkdir()
+        mat = WorkspaceMaterializer(str(campaign_dir))
+
+        # Create a minimal workspace with operators/
+        ws = tmp_path / "ws"
+        (ws / "operators").mkdir(parents=True)
+        (ws / "operators" / "my_op.py").write_text("class MyOp: pass\n")
+
+        result = mat.archive_workspace(str(ws), branch_id="testbranch123")
+        assert result is not None
+        from pathlib import Path
+        assert Path(result).exists()
+
+
+class TestCampaignSummaryJson:
+    def test_campaign_summary_json_structure(self, tmp_path):
+        """run() must produce campaign_summary.json with a 'steps' array."""
+        import json
+        from pathlib import Path
+
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=None,
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+        cm.run(max_rounds=3)
+
+        summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
+        assert summary_path.exists()
+        data = json.loads(summary_path.read_text())
+        assert "steps" in data
+        assert isinstance(data["steps"], list)
+        assert len(data["steps"]) >= 1
+        step = data["steps"][0]
+        assert "round" in step
+        assert "branch_id" in step
+        assert "decision" in step
+
+    def test_campaign_summary_failed_step_has_archive(self, tmp_path):
+        """Verification-failed steps must have code_archive_ref in summary."""
+        import json
+        from pathlib import Path
+
+        cm = _campaign(
+            tmp_path,
+            verification_gate=AlwaysFailVerificationGate(),
+            experiment_protocol=None,
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+        cm.run(max_rounds=2)
+
+        summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
+        assert summary_path.exists()
+        data = json.loads(summary_path.read_text())
+        assert "steps" in data
+        # Steps that failed verification should have failure_stage='verification'
+        failed = [s for s in data["steps"] if s.get("failure_stage") == "verification"]
+        assert len(failed) >= 1
+        # code_archive_ref field must exist (may be None if operators/ absent)
+        for s in failed:
+            assert "code_archive_ref" in s
+
+    def test_step_record_has_archive_ref_field(self, tmp_path):
+        """StepRecord must have code_archive_ref attribute."""
+        from scion.core.models import StepRecord, Decision, HypothesisProposal
+
+        hyp = HypothesisProposal(
+            hypothesis_text="test",
+            change_locus="local_search",
+            action="modify",
+        )
+        sr = StepRecord(
+            round_num=1,
+            branch_id="br1",
+            hypothesis=hyp,
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=Decision.ABANDON,
+            failure_stage="verification",
+            failure_detail="test fail",
+            code_archive_ref="/some/path",
+        )
+        assert sr.code_archive_ref == "/some/path"
+        assert sr.cache_stats is None
+
+
+# ---------------------------------------------------------------------------
+# T16 — _on_promote weight optimization hook
+# ---------------------------------------------------------------------------
+
+def _promote_protocol():
+    """Return a protocol that produces screening→validation→frozen pass."""
+    return MockExperimentProtocol(results=[
+        _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+        _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
+                              win_rate=0.7, ci_low=0.005, ci_high=0.02),
+        _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
+                              win_rate=0.7, ci_low=0.005, ci_high=0.02),
+    ])
+
+
+def _run_to_promote(cm):
+    """Drive campaign manager through three steps to reach PROMOTE."""
+    cm.run_one_step()
+    cm.run_one_step()
+    result = cm.run_one_step()
+    assert result.decision == Decision.PROMOTE
+    return result
+
+
+def _setup_for_on_promote(tmp_path, with_registry=False):
+    """Create a campaign + workspace ready to call _on_promote directly.
+
+    Returns (cm, branch, ws_path).
+    """
+    import yaml as _yaml
+
+    ws = tmp_path / "branch_ws"
+    ws.mkdir(parents=True)
+    (ws / "operators").mkdir(exist_ok=True)
+    (ws / "operators" / "local_search.py").write_text(_VALID_CODE)
+
+    if with_registry:
+        ops = [
+            {"name": "swap", "file_path": "operators/swap.py",
+             "category": "order_level", "weight": 0.6, "class_name": "Swap"},
+            {"name": "move", "file_path": "operators/move.py",
+             "category": "order_level", "weight": 0.4, "class_name": "Move"},
+        ]
+        (ws / "registry.yaml").write_text(_yaml.dump({"operators": ops}))
+
+    cm = _campaign(tmp_path)
+    branch = cm._branch_ctrl.create_branch(cm._champion)
+    cm._branch_workspaces[branch.branch_id] = str(ws)
+    return cm, branch, str(ws)
+
+
+class TestPromoteWeightOptimizationHook:
+    def test_on_promote_runs_weight_optimization(self, tmp_path):
+        """promote → _run_weight_optimization is called when enabled + runner present."""
+        import types
+        from scion.core.models import WeightOptimizationResult
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version, current_weights):
+            call_log.append(version)
+            return WeightOptimizationResult(
+                baseline_weights={},
+                best_weights={},
+                baseline_score=0.5,
+                best_score=0.8,
+                improved=True,
+                n_evaluations=8,
+                elapsed_seconds=1.0,
+                observations_ref="",
+            )
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        # Attach a protocol with a runner attribute so the enabled-and-runner check passes
+        protocol = MockExperimentProtocol(results=[])
+        protocol.runner = object()
+        cm._experiment_protocol = protocol
+        # spec.parameter_search.enabled is True by default
+
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+        cm._on_promote(branch)
+
+        assert len(call_log) == 1, "Expected _run_weight_optimization to be called once"
+        assert call_log[0] == 2  # champion version bumps from 1 → 2
+
+    def test_on_promote_rebuilds_operator_pool_from_registry(self, tmp_path):
+        """After promote, champion.operator_pool comes from snapshot registry.yaml."""
+        cm, branch, _ = _setup_for_on_promote(tmp_path, with_registry=True)
+        cm._spec.parameter_search.enabled = False  # isolate: no optimizer
+        cm._experiment_protocol = None
+
+        cm._on_promote(branch)
+
+        pool = cm._champion.operator_pool
+        assert cm._champion.version == 2
+        # Registry had swap + move — pool should include them
+        assert "swap" in pool and "move" in pool
+
+    def test_on_promote_without_parameter_search(self, tmp_path):
+        """parameter_search.enabled=False → _run_weight_optimization is NOT called."""
+        import types
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version):
+            call_log.append(version)
+            return None
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        cm._spec.parameter_search.enabled = False  # type: ignore[attr-defined]
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+
+        cm._on_promote(branch)
+
+        assert call_log == [], "_run_weight_optimization must not be called when disabled"
+
+    def test_on_promote_without_runner(self, tmp_path):
+        """experiment_protocol=None → no optimization triggered, no crash."""
+        import types
+
+        call_log = []
+
+        def fake_run_opt(self_cm, snapshot, version):
+            call_log.append(version)
+            return None
+
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        cm._experiment_protocol = None  # no runner
+        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+
+        cm._on_promote(branch)  # must not crash
+
+        assert call_log == [], "_run_weight_optimization must not be called without experiment_protocol"
+
+
+# ---------------------------------------------------------------------------
+# T20: Code-failure degraded recovery (pending hypothesis retry)
+# ---------------------------------------------------------------------------
+
+class TestCodeFailureRetry:
+    """Tests for T20: hypothesis preserved on code gen failure and retried next round."""
+
+    def _make_fail_then_succeed_llm(self):
+        """LLM that fails the first code gen call but succeeds on retry."""
+        from scion.proposal.llm_client import LLMRetryExhaustedError
+
+        class _LLM:
+            def __init__(self):
+                self._code_calls = 0
+
+            def call(self, prompt, schema, model=None, system_blocks=None):
+                required = set(schema.get("required", []))
+                if "hypothesis_text" in required or "change_locus" in required:
+                    return dict(_VALID_HYPOTHESIS)
+                self._code_calls += 1
+                if self._code_calls == 1:
+                    raise LLMRetryExhaustedError("simulated code gen failure")
+                return dict(_VALID_PATCH)
+
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+
+        return _LLM()
+
+    def _make_always_fail_code_llm(self):
+        """LLM that always fails code gen calls."""
+        from scion.proposal.llm_client import LLMRetryExhaustedError
+
+        class _LLM:
+            def call(self, prompt, schema, model=None, system_blocks=None):
+                required = set(schema.get("required", []))
+                if "hypothesis_text" in required or "change_locus" in required:
+                    return dict(_VALID_HYPOTHESIS)
+                raise LLMRetryExhaustedError("simulated code gen failure")
+
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+
+        return _LLM()
+
+    def test_code_failure_triggers_retry_next_round(self, tmp_path):
+        """Code gen failure adds hypothesis to pending; next round reuses it."""
+        llm = self._make_fail_then_succeed_llm()
+        cm = _campaign(
+            tmp_path,
+            llm_client=llm,
+            experiment_protocol=MockExperimentProtocol(
+                results=[_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+
+        # Step 1: creates branch, hypothesis succeeds, code gen fails
+        r1 = cm.run_one_step()
+        assert r1.branch_id is not None
+        bid = r1.branch_id
+        # The hypothesis should now be in pending (not discarded)
+        assert bid in cm._pending_hypotheses, "hypothesis should be queued for retry"
+
+        # Step 2: retries code gen with pending hypothesis — should succeed
+        r2 = cm.run_one_step()
+        assert r2.branch_id == bid
+        # Pending entry consumed
+        assert bid not in cm._pending_hypotheses, "pending hypothesis should be cleared on success"
+        # Step 2 produced a valid decision (not just a failure skip)
+        assert r2.decision is not None
+
+    def test_code_retry_failure_marks_rejected(self, tmp_path):
+        """Two consecutive code gen failures → hypothesis marked rejected, no more pending."""
+        llm = self._make_always_fail_code_llm()
+        cm = _campaign(tmp_path, llm_client=llm)
+
+        # Step 1: code gen fails for the first time → pending
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert bid in cm._pending_hypotheses, "hypothesis should be queued after first failure"
+
+        # Step 2: retry also fails → hypothesis rejected, no longer pending
+        r2 = cm.run_one_step()
+        assert r2.branch_id == bid
+        assert bid not in cm._pending_hypotheses, "hypothesis must not be re-queued after retry failure"
+
+        # The step history should reflect both failures
+        code_fail_steps = [
+            s for s in cm._step_history
+            if s.branch_id == bid and s.failure_stage == "code_generation"
+        ]
+        assert len(code_fail_steps) == 2, "both attempts should be recorded in step history"
+
+        # Second record should note it was the retry
+        assert "retry" in (code_fail_steps[1].failure_detail or "").lower(), \
+            "second failure detail should mention 'retry'"
+
+    def test_code_retry_includes_failure_context(self, tmp_path):
+        """On retry, build_code_context receives the prior failure detail."""
+        from scion.proposal.context_manager import ContextManager
+
+        captured_contexts = []
+        original_build = ContextManager.build_code_context
+
+        def capturing_build(self_ctx, branch, hypothesis, champion, problem_spec,
+                            prior_failure=None):
+            ctx = original_build(self_ctx, branch=branch, hypothesis=hypothesis,
+                                 champion=champion, problem_spec=problem_spec,
+                                 prior_failure=prior_failure)
+            captured_contexts.append(ctx)
+            return ctx
+
+        llm = self._make_fail_then_succeed_llm()
+        cm = _campaign(
+            tmp_path,
+            llm_client=llm,
+            experiment_protocol=MockExperimentProtocol(
+                results=[_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+        cm._ctx_manager.build_code_context = lambda **kw: capturing_build(
+            cm._ctx_manager, **kw
+        )
+
+        cm.run_one_step()  # step 1: code gen fails
+        cm.run_one_step()  # step 2: retry
+
+        assert len(captured_contexts) >= 2, "build_code_context must be called for both attempts"
+        # First attempt: no prior failure context
+        assert "prior_code_failure" not in captured_contexts[0], \
+            "first attempt must not have prior_code_failure"
+        # Retry attempt: prior failure context present
+        assert "prior_code_failure" in captured_contexts[1], \
+            "retry attempt must include prior_code_failure in context"
+
+    def test_successful_code_clears_pending(self, tmp_path):
+        """A successful code gen round leaves no pending hypothesis."""
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                results=[_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+        result = cm.run_one_step()
+        assert result.branch_id is not None
+        assert result.branch_id not in cm._pending_hypotheses, \
+            "successful round must not leave a pending hypothesis"
+
+
+# ---------------------------------------------------------------------------
+# T1: No fake HypothesisRecord fallback in eval step (Sprint G-patch)
+# ---------------------------------------------------------------------------
+
+class TestNoFakeHypothesisRecordFallback:
+    def test_missing_canonical_record_raises_and_abandons(self, tmp_path):
+        """If canonical h_record is absent when eval step runs, the branch is abandoned."""
+        protocol = MockExperimentProtocol(
+            results=[_make_protocol_result(ExperimentStage.SCREENING)]
+        )
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        # Drive branch to EXPLORE → READY_VALIDATE (screening pass)
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert bid is not None
+
+        # Manually delete the canonical hypothesis record to simulate the lost-record scenario
+        cm._branch_current_hypothesis.pop(bid, None)
+
+        # Run next step — the campaign will schedule READY_VALIDATE → VALIDATING
+        # and call _run_eval_step, which should raise RuntimeError and abandon the branch
+        result = cm.run_one_step()
+        assert result.branch_id == bid
+
+        from scion.core.models import BranchState
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.state == BranchState.ABANDONED, (
+            f"Expected ABANDONED but got {branch.state}; result={result}"
+        )

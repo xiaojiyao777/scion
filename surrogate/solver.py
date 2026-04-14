@@ -15,6 +15,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from random import Random
 
 from config import Config
 from greedy_init import greedy_init
@@ -186,7 +187,8 @@ def solve(
         cfg = Config()
 
     # 1. 生成初始解
-    init_sol = greedy_init(instance)
+    greedy_rng = Random(cfg.random_seed)
+    init_sol = greedy_init(instance, greedy_rng)
 
     # 检查初始解可行性（如有违反则警告，仍继续求解）
     feas = check_feasibility(init_sol, instance, instance.phase)

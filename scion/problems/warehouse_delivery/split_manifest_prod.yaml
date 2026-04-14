@@ -1,0 +1,65 @@
+# split_manifest_prod.yaml — Group B: Pure Production-Style Benchmark
+# Sprint F4 正式实验 B 组
+#
+# 全部使用生产统计特征生成的实例（无合成数据）
+# Screening (20): micro×4 + small×4 + medium_small×3 + medium×4 + medium_large×3 + small×2 overlap
+# Validation (8): large×4 + large_xl×2
+# Frozen (9): xlarge×4 + xxlarge×3 + day1(real) + day2(real)
+# Canary (2): canary×2
+#
+# 规模覆盖：22→1263 orders（7个规模层级）
+
+version: "prod-1.0"
+
+canary:
+  - /home/clawd/research/scion-data/production/generated/instance_prod_can_s01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_can_s02.json
+
+screening:
+  # Micro tier (~33-50 orders, 12-18 subcats) — fast signal
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro04.json
+  # Small tier (~56-78 orders, 20-28 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s04.json
+  # Medium-small tier (~85-122 orders, 30-38 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms03.json
+  # Medium tier (~149-248 orders, 45-58 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m04.json
+  # Medium-large tier (~255-282 orders, 75-85 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml03.json
+
+validation:
+  # Large tier (~338-426 orders, 100-130 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_l01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_l02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_l03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_l04.json
+  # Large-XL tier (~401-497 orders, 135-148 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_lx01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_val_lx02.json
+
+frozen:
+  # XLarge generated (~353-515 orders, 140-170 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x04.json
+  # XXLarge generated (~661-808 orders, 220-250 subcats)
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_xx01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_xx02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_xx03.json
+  # Real production data — day1 (383 orders, 133 subcats) + day2 (519 orders, 160 subcats)
+  - /home/clawd/research/scion-data/production/converted/instance_prod_day1.json
+  - /home/clawd/research/scion-data/production/converted/instance_prod_day2.json

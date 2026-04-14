@@ -174,7 +174,7 @@ class WorkspaceMaterializer:
             _make_tree_writable(ws)
             shutil.rmtree(ws)
 
-    def archive_workspace(self, workspace: str, branch_id: str) -> None:
+    def archive_workspace(self, workspace: str, branch_id: str) -> str | None:
         """Copy the operators/ directory from workspace into archive/<branch_id_short>/.
 
         Called before cleanup on ABANDON so generated .py files are preserved
@@ -183,11 +183,14 @@ class WorkspaceMaterializer:
         Args:
             workspace: Absolute path to the branch workspace.
             branch_id: Branch ID used to name the archive sub-directory.
+
+        Returns:
+            Absolute path to the archive directory, or None if operators/ absent.
         """
         ws = Path(workspace)
         ops_src = ws / "operators"
         if not ops_src.exists():
-            return
+            return None
 
         # Use first 8 chars of branch_id for readability
         short_id = str(branch_id)[:8]
@@ -204,6 +207,7 @@ class WorkspaceMaterializer:
         _logging.getLogger(__name__).info(
             "Archived operators from branch %s → %s", branch_id, archive_dest
         )
+        return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
         """Compute SHA-256 of operators/ .py files (sorted by relative path).
@@ -224,6 +228,69 @@ class WorkspaceMaterializer:
                 h.update(py_file.read_bytes())
 
         return h.hexdigest()
+
+    def compute_snapshot_hash(self, workspace: str) -> str:
+        """Compute SHA-256 of operators/**/*.py + registry.yaml.
+
+        Includes registry.yaml so weight changes affect the champion hash.
+
+        Args:
+            workspace: Absolute path to the workspace.
+
+        Returns:
+            Hex-encoded SHA-256 string.
+        """
+        ws = Path(workspace)
+        h = hashlib.sha256()
+
+        ops_dir = ws / "operators"
+        if ops_dir.exists():
+            py_files = sorted(ops_dir.rglob("*.py"), key=lambda p: str(p.relative_to(ops_dir)))
+            for py_file in py_files:
+                h.update(str(py_file.relative_to(ops_dir)).encode())
+                h.update(py_file.read_bytes())
+
+        registry_path = ws / "registry.yaml"
+        if registry_path.exists():
+            h.update(b"registry.yaml")
+            h.update(registry_path.read_bytes())
+
+        return h.hexdigest()
+
+    def create_mutable_staging(self, source_workspace: str) -> str:
+        """Create a writable staging copy of source_workspace.
+
+        Used in the promote + weight-optimization flow so that weight writes
+        land on a mutable copy before the snapshot is frozen.
+
+        Args:
+            source_workspace: Path to copy from (may be read-only).
+
+        Returns:
+            Absolute path to the new writable staging directory.
+        """
+        import time as _time
+
+        src = Path(source_workspace)
+        staging_dir = self._campaign_dir / "staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+
+        staging = staging_dir / f"staging_{int(_time.time() * 1000)}"
+        if staging.exists():
+            _make_tree_writable(staging)
+            shutil.rmtree(staging)
+
+        shutil.copytree(src, staging, symlinks=False)
+        _make_tree_writable(staging)
+        return str(staging)
+
+    def freeze_snapshot(self, path: str) -> None:
+        """Recursively make path and its contents read-only.
+
+        Args:
+            path: Absolute path to the directory to freeze.
+        """
+        _make_tree_readonly(Path(path))
 
     # ------------------------------------------------------------------
     # Private helpers

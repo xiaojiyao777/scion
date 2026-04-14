@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from random import Random
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -140,7 +141,7 @@ class TestMediumInstance:
         """medium_2：VNS 优化后目标不差于贪心初始解。"""
         from greedy_init import greedy_init
         inst = load_instance(get_instance_path("instance_medium_2.json"), phase=1)
-        init_sol = greedy_init(inst)
+        init_sol = greedy_init(inst, Random(42))
         init_obj = recompute_objective(init_sol, inst)
 
         cfg = Config(max_iterations=30, no_improve_limit=15, random_seed=42)
@@ -162,14 +163,14 @@ class TestGreedyInit:
         """贪心初始解包含所有订单。"""
         from greedy_init import greedy_init
         inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
-        sol = greedy_init(inst)
+        sol = greedy_init(inst, Random(42))
         assert set(sol.assignment.keys()) == set(inst.orders.keys())
 
     def test_init_solution_assignment_consistent(self):
         """贪心初始解 assignment 与 vehicles 一致。"""
         from greedy_init import greedy_init
         inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
-        sol = greedy_init(inst)
+        sol = greedy_init(inst, Random(42))
         for oid, vid in sol.assignment.items():
             assert oid in sol.vehicles[vid].order_ids
 
@@ -179,6 +180,6 @@ class TestGreedyInit:
         inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
         if _has_infeasible_locked_assignments(inst):
             pytest.skip("测试数据含超容量锁定车辆")
-        sol = greedy_init(inst)
+        sol = greedy_init(inst, Random(42))
         result = check_feasibility(sol, inst, phase=1)
         assert result.is_feasible, f"初始解不可行: {result.violations}"

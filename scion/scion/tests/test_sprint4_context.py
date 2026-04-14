@@ -283,15 +283,24 @@ class TestBranchDirection:
         assert "Improve local search" in branch.direction  # hypothesis_text prefix
 
     def test_direction_not_set_on_zero_win_rate(self, tmp_path):
-        """CONTINUE_EXPLORE with win_rate == 0 should not set branch.direction."""
+        """win_rate == 0 → abandon_fast (T4): branch is abandoned, direction never set."""
         cm = _campaign(tmp_path, protocol=MockProtocol(win_rate=0.0, gate_outcome="continue"))
         cm.run_one_step()
 
-        branch = cm._branch_ctrl.get_active_branches()[0]
-        assert branch.direction is None
+        # T4: win_rate=0.0 < 0.3 → branch is fast-abandoned, not in active_branches
+        active = cm._branch_ctrl.get_active_branches()
+        assert len(active) == 0 or all(
+            b.branch_id != cm._branch_ctrl._branches.get(list(cm._branch_ctrl._branches.keys())[0], None)
+            for b in active
+        ), "Branch with win_rate=0 should be abandoned"
+        # Verify abandoned branch has direction=None
+        from scion.core.models import BranchState
+        all_branches = list(cm._branch_ctrl._branches.values())
+        assert len(all_branches) == 1
+        assert all_branches[0].state == BranchState.ABANDONED
 
     def test_direction_cleared_after_3_consecutive_zero_wins(self, tmp_path):
-        """After 3 consecutive zero-win-rate rounds, branch.direction should be cleared."""
+        """T4: once win_rate drops to 0 (<0.3), branch is fast-abandoned after 1 round."""
         # First round: positive signal (win_rate=0.3 → CONTINUE_EXPLORE) sets direction
         protocol = MockProtocol(win_rate=0.3, gate_outcome="continue")
         cm = _campaign(tmp_path, protocol=protocol)
@@ -300,12 +309,13 @@ class TestBranchDirection:
         branch = cm._branch_ctrl.get_active_branches()[0]
         assert branch.direction is not None  # direction set
 
-        # Now switch to zero-win protocol and run 3 more rounds
+        # Switch to zero-win: T4 abandons on first round (no need for 3 rounds)
         protocol._win_rate = 0.0
-        for _ in range(3):
-            cm.run_one_step()
+        cm.run_one_step()
 
-        assert branch.direction is None
+        # Branch should be abandoned after the first zero-win round under T4
+        from scion.core.models import BranchState
+        assert branch.state == BranchState.ABANDONED
 
     def test_direction_not_cleared_after_only_2_zero_wins(self, tmp_path):
         """After 2 zero-win-rate rounds, branch.direction should be preserved."""
@@ -404,9 +414,9 @@ class TestConsecutiveFailureDiagnosis:
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "assignment dict" in diag or "HQ40_DG" in diag
 
-    def test_diagnosis_includes_suggestion_for_state_leak(self):
+    def test_diagnosis_includes_suggestion_for_nondeterminism(self):
         bid = "b1"
-        steps = self._ver_steps(bid, 3, vcode="V5_state_leak")
+        steps = self._ver_steps(bid, 3, vcode="V8_nondeterminism")
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "deep_copy" in diag
 

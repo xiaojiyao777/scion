@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from scion.runtime.runner import ResourceLimits, Runner
-from scion.runtime.subprocess_runner import LocalSubprocessRunner
+from scion.runtime.subprocess_runner import LocalSubprocessRunner, _build_clean_env
 from scion.core.models import RunResult
 
 
@@ -219,3 +219,25 @@ class TestEnvSanitization:
         result = run(workdir)
         assert result.success is True
         assert "LEAKED" not in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Tests: _build_clean_env (T01)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildCleanEnv:
+    def test_build_clean_env_contains_pythonhashseed(self, monkeypatch):
+        env = _build_clean_env()
+        assert "PYTHONHASHSEED" in env
+        assert env["PYTHONHASHSEED"] == "0"
+
+    def test_build_clean_env_fixed_overrides_system(self, monkeypatch):
+        monkeypatch.setenv("PYTHONHASHSEED", "42")
+        env = _build_clean_env()
+        assert env["PYTHONHASHSEED"] == "0"
+
+    def test_build_clean_env_excludes_other_vars(self, monkeypatch):
+        monkeypatch.setenv("MY_SECRET", "abc")
+        env = _build_clean_env()
+        assert "MY_SECRET" not in env

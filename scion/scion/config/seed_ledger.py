@@ -23,7 +23,7 @@ class SeedLedger(BaseModel):
         ledger.screening  # [42, 123]
     """
 
-    version: str
+    version: str = "dev"
     """Ledger 版本号。"""
 
     screening: list[int] = Field(default_factory=list)

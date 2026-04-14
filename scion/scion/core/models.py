@@ -19,6 +19,7 @@ class BranchState(Enum):
     PROMOTED = "promoted"
     ABANDONED = "abandoned"
     STALE = "stale"
+    STALE_WEIGHT_UPDATE = "stale_weight_update"  # J4: re-screen needed after weight opt
     BLOCKED_INFRA = "blocked_infra"
 
 class ExperimentState(Enum):
@@ -239,6 +240,22 @@ class Branch:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
+    # FailureRouter recovery fields
+    pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
+    blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
+    consecutive_llm_retries: int = 0    # Consecutive retry_llm actions; downgrade to discard at 3
+    infra_block_count: int = 0          # How many times this branch has been BLOCKED_INFRA
+
+@dataclass
+class HypothesisFamily:
+    """Tracks a mechanism-level family of hypotheses for diversity detection (T07)."""
+    family_id: str
+    mechanism_label: str      # e.g. "subcategory_consolidation", "destroy_rebuild"
+    action_pattern: str       # "create_new" / "modify" / "remove"
+    locus_pattern: str        # "vehicle_level" / "order_level"
+    evidence_count: int
+    statuses: List[str]       # ["rejected", "promoted", ...]
+
 
 @dataclass
 class HypothesisRecord:
@@ -251,7 +268,9 @@ class HypothesisRecord:
     parent_hypothesis_id: Optional[str] = None
     suggested_weight: Optional[float] = None
     hypothesis_text: Optional[str] = None
+    family_id: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
+    base_champion_version: int = 0      # champion version at hypothesis creation time
 
 # --- Solver Output ---
 
@@ -284,6 +303,25 @@ class FailureEvent:
     retryable: bool = True
 
 
+@dataclass(frozen=True)
+class WeightConfig:
+    weights: Dict[str, float]
+    source: Literal["uniform", "optimized", "manual"]
+    optimization_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class WeightOptimizationResult:
+    baseline_weights: Dict[str, float]
+    best_weights: Dict[str, float]
+    baseline_score: float
+    best_score: float
+    improved: bool
+    n_evaluations: int
+    elapsed_seconds: float
+    observations_ref: str  # path to observations JSON
+
+
 @dataclass
 class StepRecord:
     """Record of one completed proposal+evaluation cycle (explore step).
@@ -299,6 +337,11 @@ class StepRecord:
         'verification'        — VerificationGate failed (light or heavy)
         'screening'           — experiment returned a non-promote result
         None                  — no failure (reached _apply_decision_and_finalize)
+
+    decision: None means the step did not reach the Decision Engine (early failure).
+              Only set to a real Decision value when the Decision Engine actually ran.
+    hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
+    decision_reason_codes: reason codes from the Decision Engine outcome.
     """
     round_num: int
     branch_id: str
@@ -307,7 +350,11 @@ class StepRecord:
     contract_passed: bool
     verification_passed: bool
     protocol_result: Optional[ProtocolResult]
-    decision: Decision
+    decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
     verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis
+    code_archive_ref: Optional[str] = None  # 归档目录路径
+    cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
+    hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
+    decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)

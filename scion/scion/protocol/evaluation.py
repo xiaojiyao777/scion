@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from typing import Literal, Tuple
 from scion.core.models import SolverOutput, ObjectiveBreakdown
 
@@ -97,7 +98,7 @@ def compute_delta(candidate_objective: dict, champion_objective: dict) -> float:
     if cand_splits != champ_splits:
         # Splits are the decisive dimension.
         # Use a large multiplier so split deltas dominate cost deltas in CI.
-        SPLITS_WEIGHT = 100_000  # larger than any realistic cost delta
+        SPLITS_WEIGHT = int(os.environ.get("SCION_SPLITS_WEIGHT", "100000"))
         return (champ_splits - cand_splits) * SPLITS_WEIGHT
     else:
         # Same splits — cost is decisive

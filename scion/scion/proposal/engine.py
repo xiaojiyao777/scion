@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from pydantic import ValidationError
+
 from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.schemas import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
@@ -13,7 +15,13 @@ from scion.proposal.schemas import (
     HYPOTHESIS_PROMPT_TEMPLATE,
     CODE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
+    HypothesisProposalInput,
+    PatchProposalInput,
 )
+
+
+class ProposalValidationError(Exception):
+    """Raised when LLM response fails Pydantic schema validation."""
 
 
 class CreativeLayer:
@@ -78,25 +86,33 @@ class CreativeLayer:
 
 def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
+    try:
+        validated = HypothesisProposalInput(**raw)
+    except ValidationError as exc:
+        raise ProposalValidationError(str(exc)) from exc
     return HypothesisProposal(
-        hypothesis_text=str(raw.get("hypothesis_text", "")),
-        change_locus=str(raw.get("change_locus", "")),
-        action=raw.get("action", "modify"),  # type: ignore[arg-type]
-        target_file=raw.get("target_file") or None,
-        predicted_direction=raw.get("predicted_direction", "exploratory"),  # type: ignore[arg-type]
-        target_weakness=str(raw.get("target_weakness", "")),
-        expected_effect=str(raw.get("expected_effect", "")),
-        suggested_weight=_to_float_or_none(raw.get("suggested_weight")),
+        hypothesis_text=validated.hypothesis_text,
+        change_locus=validated.change_locus,
+        action=validated.action,  # type: ignore[arg-type]
+        target_file=validated.target_file or None,
+        predicted_direction=validated.predicted_direction,  # type: ignore[arg-type]
+        target_weakness=validated.target_weakness,
+        expected_effect=validated.expected_effect,
+        suggested_weight=validated.suggested_weight,
     )
 
 
 def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
+    try:
+        validated = PatchProposalInput(**raw)
+    except ValidationError as exc:
+        raise ProposalValidationError(str(exc)) from exc
     return PatchProposal(
-        file_path=str(raw.get("file_path", "")),
-        action=raw.get("action", "modify"),  # type: ignore[arg-type]
-        code_content=str(raw.get("code_content", "")),
-        test_hint=raw.get("test_hint") or None,
+        file_path=validated.file_path,
+        action=validated.action,  # type: ignore[arg-type]
+        code_content=validated.code_content,
+        test_hint=validated.test_hint or None,
     )
 
 
@@ -161,6 +177,59 @@ def _split_hypothesis_context(
         f"## Champion State\n{D['champion_stats']}"
     )
 
+    # Block 3: Branch-specific context (branch code, coverage, strategy, baselines)
+    # Only included when at least one field is non-empty
+    branch_context_parts = []
+
+    # J1: Search memory (cross-branch history) — highest priority dynamic block
+    if D["search_memory"]:
+        branch_context_parts.append(D["search_memory"])
+
+    # J2: Saturation signals
+    if D["saturation_signal"]:
+        branch_context_parts.append(D["saturation_signal"])
+
+    # J-patch: Research log (cross-branch trajectory)
+    if D["research_log"]:
+        branch_context_parts.append(D["research_log"])
+
+    if D["branch_code"] and D["branch_code"] != D["champion_operators_code"]:
+        branch_context_parts.append(
+            f"## Current Branch Code\n"
+            f"This branch has diverged from the champion. The current branch code is:\n\n"
+            f"{D['branch_code']}"
+        )
+    if D["branch_direction"]:
+        branch_context_parts.append(
+            f"## Branch Direction\n{D['branch_direction']}"
+        )
+    if D["exploration_coverage"]:
+        branch_context_parts.append(
+            f"## Exploration Coverage\n{D['exploration_coverage']}"
+        )
+    if D["strategy_guidance"]:
+        branch_context_parts.append(
+            f"## Strategy Guidance\n{D['strategy_guidance']}"
+        )
+    if D["champion_baselines"]:
+        branch_context_parts.append(
+            f"## Champion Baseline Hints\n{D['champion_baselines']}"
+        )
+    # J3: Failure pattern warning (Sprint H2 — was built but not injected)
+    if D["failure_pattern_warning"]:
+        branch_context_parts.append(
+            f"## Failure Pattern Warning\n{D['failure_pattern_warning']}"
+        )
+    # I3: Forced locus constraint
+    if D["locus_constraint"]:
+        branch_context_parts.append(D["locus_constraint"])
+    # L2: Absolute minimum constraint
+    if D["abs_min_constraint"]:
+        branch_context_parts.append(D["abs_min_constraint"])
+    # J6: Weight optimization feedback
+    if D["weight_opt_feedback"]:
+        branch_context_parts.append(D["weight_opt_feedback"])
+
     system_blocks = [
         {
             "type": "text",
@@ -173,10 +242,16 @@ def _split_hypothesis_context(
             "cache_control": _CACHE_5M,
         },
     ]
+    if branch_context_parts:
+        system_blocks.append({
+            "type": "text",
+            "text": "\n\n".join(branch_context_parts),
+        })
 
     user_prompt = (
         f"## Experiment History \u2014 This Branch\n{D['experiment_history']}\n\n"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
+        f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
         f"1. Read EVERY champion operator. For each, note: what move type, what objective it targets, what it cannot improve.\n"
@@ -252,7 +327,17 @@ def _split_code_context(
         },
     ]
 
+    prior_failure_section = ""
+    if D["prior_code_failure"]:
+        prior_failure_section = (
+            f"## Previous Attempt Failed\n"
+            f"The previous code generation failed with:\n"
+            f"{D['prior_code_failure']}\n"
+            f"Avoid the same mistake.\n\n"
+        )
+
     user_prompt = (
+        f"{prior_failure_section}"
         f"## Hypothesis to Implement\n{D['hypothesis_detail']}\n\n"
         f"## Target File (current content)\n{D['target_file_code']}\n\n"
         f"## Reference Operators\n{D['reference_operators']}\n\n"
@@ -261,6 +346,7 @@ def _split_code_context(
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
         f"- Subclass `Operator` and implement `execute(self, solution, rng) -> Solution`\n"
         f"- Deep-copy the solution: `new_sol = solution.deep_copy()`\n"
+        f"- Generate new vehicle IDs: `from operators.base import generate_vehicle_id` then `vid = generate_vehicle_id(rng)` (NEVER use uuid)\n"
         f"- Skip locked orders (`order.locked_vehicle_id is not None`)\n"
         f"- Use `rng` for all randomness, return new solution or original\n\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"

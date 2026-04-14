@@ -1,0 +1,63 @@
+# protocol_prod.yaml — 生产数据场景专用 experiment protocol
+# 适用：Group B / 生产风格数据（splits≈0，优化维度以 cost 为主）
+#
+# 与默认 protocol.yaml 的区别：
+#   - screening.win_rate_min: 0.60 → 0.55
+#     原因：生产数据 splits 接近饱和，比较维度降为 cost（绝对值小，信号弱），
+#     真实有效算子的 wr 天花板约 0.5-0.6，0.60 会系统性漏掉有价值的方向。
+#     0.55 在统计上仍要求"赢多输少"，同时允许捕获中等强度的 cost 信号。
+#
+#   - validation.win_rate_min: 0.60 → 0.55（同理，保持一致性）
+#
+#   - screening expand_to_modify: 10 → 14
+#     screening expand_to_create: 16 → 20
+#     原因：生产数据信号弱，expand 后需要更多 case 才能稳定 wr 估计。
+#
+# 不变项：
+#   - frozen gate 保持 bootstrap CI，不降低，晋升标准不松动
+#   - n_seeds 保持 2/3（已够用）
+#   - validation n_cases 保持 6（frozen 是最终关卡，validation 可以宽松一点）
+#
+# TODO（需代码支持）：
+#   - min_practical_delta 当前硬编码为 0.001（任何正改善即通过）
+#     生产数据建议改为 100 元（过滤统计噪声），需在 protocol_config.py 里
+#     把 min_practical_delta 改为可配置字段后再启用。
+#
+# 使用方式：
+#   在 run_prod_campaign.py 里改 protocol_config_path 指向本文件。
+
+version: "3.1-prod"
+
+screening:
+  n_cases_modify: 6
+  n_cases_create: 10
+  n_seeds: 2
+  expand_to_modify: 14    # 原 10，信号弱时需更多样本
+  expand_to_create: 20    # 原 16
+
+validation:
+  n_cases: 6
+  n_seeds: 3
+  expand_to: 12           # 原 10，略微放宽
+
+frozen:
+  n_cases: 4
+  n_seeds: 3
+  max_uses_per_campaign: 3
+
+canary:
+  cases: []
+  seeds: []
+
+gates:
+  screening:
+    win_rate_min: 0.55          # 原 0.60，生产数据 cost-only 场景
+    median_delta_min: "practical_delta_screen"
+  validation:
+    win_rate_min: 0.55          # 原 0.66，与 screening 保持对称
+    median_delta_min: "practical_delta_validate"
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 10000
+  frozen:
+    bootstrap_ci_low_min: 0.0   # 不变，晋升需 CI 下界 >= 0
+    canary_required: true
