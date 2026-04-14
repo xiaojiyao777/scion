@@ -156,6 +156,7 @@ class ContextManager:
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
             "research_log": research_log_block,
+            "active_hyp_summary": _summarise_active_hypotheses(active_hypotheses),
         }
 
     # ------------------------------------------------------------------
@@ -881,6 +882,19 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
             note = "— significant room on splits"
         lines.append(f"- {case_id}: {splits_str} {note}")
 
+    return "\n".join(lines)
+
+
+def _summarise_active_hypotheses(active_hypotheses: List[HypothesisRecord]) -> str:
+    """Summarise currently active hypotheses so the LLM avoids proposing duplicates."""
+    if not active_hypotheses:
+        return "(none)"
+    lines = []
+    for h in active_hypotheses:
+        key_str = f"{h.change_locus}/{h.action}"
+        if h.target_file:
+            key_str += f" → {h.target_file}"
+        lines.append(f"  - {key_str}  [OCCUPIED — C10 will reject any duplicate]")
     return "\n".join(lines)
 
 

@@ -112,11 +112,13 @@ class BranchController:
     def mark_all_stale(self, new_champion_id: int) -> List[str]:
         """
         Mark every active branch STALE after a champion change.
+        FROZEN_TESTING branches are excluded — they have already passed
+        screening + validation and should be allowed to complete.
         Returns the list of affected branch_ids.
         """
         affected: List[str] = []
         for branch in self._branches.values():
-            if branch.state in _ACTIVE_STATES:
+            if branch.state in _ACTIVE_STATES and branch.state != BranchState.FROZEN_TESTING:
                 branch.state = BranchState.STALE
                 branch.updated_at = datetime.now()
                 affected.append(branch.branch_id)

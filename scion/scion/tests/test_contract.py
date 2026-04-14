@@ -52,6 +52,7 @@ def _hyp_record(
     change_locus: str = "selection",
     action: str = "modify",
     target_file: str = "operators/sel.py",
+    hypothesis_text: str = "New idea",
 ) -> HypothesisRecord:
     return HypothesisRecord(
         hypothesis_id="h-001",
@@ -60,6 +61,7 @@ def _hyp_record(
         action=action,
         status="active",
         target_file=target_file,
+        hypothesis_text=hypothesis_text,
         created_at=datetime.datetime.now(),
     )
 

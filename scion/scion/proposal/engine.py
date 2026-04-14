@@ -248,6 +248,7 @@ def _split_hypothesis_context(
     user_prompt = (
         f"## Experiment History \u2014 This Branch\n{D['experiment_history']}\n\n"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
+        f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
         f"1. Read EVERY champion operator. For each, note: what move type, what objective it targets, what it cannot improve.\n"

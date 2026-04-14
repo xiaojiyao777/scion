@@ -32,7 +32,10 @@ def _extract_mechanism_label(hypothesis_text: str) -> str:
     return _DEFAULT_MECHANISM
 
 
-def _make_family_key(mechanism_label: str, action: str, locus: str) -> str:
+def _make_family_key(mechanism_label: str, action: str, locus: str, target_file: str = "") -> str:
+    if target_file:
+        fname = target_file.split("/")[-1].replace(".py", "")
+        return f"{mechanism_label}/{action}/{locus}/{fname}"
     return f"{mechanism_label}/{action}/{locus}"
 
 
@@ -46,6 +49,7 @@ class FamilyEntry:
     label: str                          # mechanism label
     locus: str                          # change_locus
     action: str                         # action type
+    target_file: str = ""               # target file (filename only, no path)
     total_attempts: int = 0
     best_wr: float = 0.0
     consecutive_fails: int = 0
@@ -56,7 +60,7 @@ class FamilyEntry:
 
     @property
     def family_key(self) -> str:
-        return _make_family_key(self.label, self.action, self.locus)
+        return _make_family_key(self.label, self.action, self.locus, self.target_file)
 
 
 @dataclass
@@ -82,7 +86,7 @@ class CampaignSearchMemory:
             return
 
         mechanism = _extract_mechanism_label(hyp.hypothesis_text or "")
-        key = _make_family_key(mechanism, hyp.action, hyp.change_locus)
+        key = _make_family_key(mechanism, hyp.action, hyp.change_locus, hyp.target_file or "")
 
         # Update coverage counts
         coverage_key = f"{hyp.change_locus}/{hyp.action}"
@@ -100,6 +104,7 @@ class CampaignSearchMemory:
                 label=mechanism,
                 locus=hyp.change_locus,
                 action=hyp.action,
+                target_file=hyp.target_file or "",
             )
         fam = self.families[key]
         fam.total_attempts += 1

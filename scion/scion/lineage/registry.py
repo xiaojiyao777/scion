@@ -160,6 +160,36 @@ class LineageRegistry:
             conn.execute(sql, list(event.values()))
         return event["event_id"]
 
+    def record_contract_failure(
+        self,
+        campaign_id: str,
+        branch_id: str,
+        hypothesis_text: str,
+        change_locus: str,
+        action: str,
+        target_file: Optional[str],
+        failure_reason: str,
+    ) -> None:
+        """Record a C10/contract failure event so research_log can surface it."""
+        event = {
+            "campaign_id": campaign_id,
+            "branch_id": branch_id,
+            "timestamp": datetime.now().isoformat(),
+            "event_kind": "contract_fail",
+            "hypothesis_text": hypothesis_text[:500],
+            "patch_action": action,
+            "patch_file": target_file or "",
+            "contract_result": "failed",
+            "verification_result": "skipped",
+            "canary_result": "skipped",
+            "stage": "hypothesis_contract",
+            "decision": "abandon",
+        }
+        try:
+            self.record_event(event)
+        except Exception:
+            pass
+
     def record_decision(
         self,
         branch_id: str,

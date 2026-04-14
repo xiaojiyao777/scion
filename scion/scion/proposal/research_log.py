@@ -308,6 +308,7 @@ class CampaignResearchLog:
                 SELECT
                     e.branch_id,
                     e.stage,
+                    e.event_kind,
                     e.screening_win_rate,
                     e.screening_median_delta,
                     e.decision,
@@ -316,7 +317,7 @@ class CampaignResearchLog:
                     e.created_at
                 FROM experiment_events e
                 LEFT JOIN hypotheses h ON e.hypothesis_id = h.hypothesis_id
-                WHERE e.event_kind = 'experiment'
+                WHERE e.event_kind IN ('experiment', 'contract_fail')
                 ORDER BY e.branch_id, e.created_at
             """).fetchall()
         except Exception:
@@ -326,6 +327,7 @@ class CampaignResearchLog:
         for r in rows:
             branch_data[r['branch_id']].append({
                 'stage': r['stage'],
+                'event_kind': r['event_kind'],
                 'wr': r['screening_win_rate'],
                 'md': r['screening_median_delta'],
                 'decision': r['decision'],
@@ -418,7 +420,10 @@ class CampaignResearchLog:
         screening_idx = 0
         for s in t.stages:
             stage = s['stage']
-            if stage == 'frozen':
+            event_kind = s.get('event_kind', 'experiment')
+            if event_kind == 'contract_fail':
+                traj_parts.append("  [C10 blocked]")
+            elif stage == 'frozen':
                 # Only PASS/FAIL, no wr, no md
                 if s.get('decision') == 'promote':
                     traj_parts.append("  frozen: PASS")

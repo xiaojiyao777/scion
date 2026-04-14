@@ -348,6 +348,14 @@ class CampaignManager:
                 return self._run_eval_step(branch)
             except RuntimeError as exc:
                 logger.error("Branch %s: eval step aborted — %s", branch.branch_id, exc)
+                bid = branch.branch_id
+                h_record = self._branch_current_hypothesis.get(bid)
+                if h_record is not None:
+                    try:
+                        self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                    except Exception:
+                        pass
+                    self._branch_current_hypothesis.pop(bid, None)
                 self._branch_ctrl.apply_decision(branch.branch_id, Decision.ABANDON)
                 return StepResult(
                     action="validate", branch_id=branch.branch_id, reason=str(exc)
@@ -468,6 +476,18 @@ class CampaignManager:
                 logger.info("Branch %s: hypothesis contract failed: %s", bid, c_result.failure_reason)
                 failure = FailureEvent(category="contract", detail=c_result.failure_reason or "")
                 self._handle_failure(branch, failure)
+                try:
+                    self._registry.record_contract_failure(
+                        campaign_id=self._campaign_id,
+                        branch_id=bid,
+                        hypothesis_text=hypothesis.hypothesis_text or "",
+                        change_locus=hypothesis.change_locus,
+                        action=hypothesis.action,
+                        target_file=hypothesis.target_file,
+                        failure_reason=c_result.failure_reason or "",
+                    )
+                except Exception:
+                    pass
                 self._record_step(StepRecord(
                     round_num=rnum, branch_id=bid,
                     hypothesis=hypothesis, patch=None,
@@ -692,12 +712,26 @@ class CampaignManager:
         if workspace is None:
             # Workspace lost — abandon
             logger.warning("Branch %s: no workspace for eval step — abandoning", bid)
+            h_record = self._branch_current_hypothesis.get(bid)
+            if h_record is not None:
+                try:
+                    self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                except Exception:
+                    pass
+                self._branch_current_hypothesis.pop(bid, None)
             self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
             return StepResult(action="validate", branch_id=bid, reason="workspace not found")
 
         hypothesis = self._branch_hypotheses.get(bid)
         if hypothesis is None:
             logger.warning("Branch %s: no hypothesis for eval step — abandoning", bid)
+            h_record = self._branch_current_hypothesis.get(bid)
+            if h_record is not None:
+                try:
+                    self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                except Exception:
+                    pass
+                self._branch_current_hypothesis.pop(bid, None)
             self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
             return StepResult(action="validate", branch_id=bid, reason="hypothesis not found")
 
@@ -770,8 +804,20 @@ class CampaignManager:
         """
         bid = branch.branch_id
         patch = self._branch_patches.get(bid)
+        h_record = self._branch_current_hypothesis.get(bid)
+
+        def _cleanup() -> None:
+            """Clean up zombie hypothesis to free C10 slot."""
+            if h_record is not None:
+                try:
+                    self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
+                except Exception:
+                    pass
+                self._branch_current_hypothesis.pop(bid, None)
+
         if patch is None:
             logger.info("Branch %s: no patch to reconcile — abandoning stale branch", bid)
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason="no patch to reconcile")
 
@@ -780,6 +826,7 @@ class CampaignManager:
         # --- Step 1: fresh workspace from new champion ---
         workspace = self._setup_workspace(branch, force_champion=True)
         if workspace is None:
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason="workspace setup failed")
 
@@ -788,6 +835,7 @@ class CampaignManager:
             code_hash = self._materializer.apply_patch(workspace, patch)
         except Exception as exc:
             logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason=f"apply_patch failed: {exc}")
 
@@ -801,6 +849,7 @@ class CampaignManager:
                 "Branch %s: reconcile patch failed contract gate: %s",
                 bid, contract_result.failure_reason,
             )
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(
                 action="reconcile", branch_id=bid,
@@ -815,6 +864,7 @@ class CampaignManager:
             logger.info(
                 "Branch %s: reconcile verification failed: %s", bid, vresult.first_failure
             )
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(
                 action="reconcile", branch_id=bid,
@@ -831,6 +881,7 @@ class CampaignManager:
             logger.info(
                 "Branch %s: no experiment protocol for reconcile re-screening — abandoning stale branch", bid
             )
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(
                 action="reconcile", branch_id=bid,
@@ -846,6 +897,7 @@ class CampaignManager:
             canary_result = CanaryResult(passed=True, reason=f"canary skipped: {exc}")
         if not canary_result.passed:
             logger.info("Branch %s: reconcile canary failed — abandoning stale branch", bid)
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason="reconcile canary failed")
 
@@ -862,6 +914,7 @@ class CampaignManager:
             self._budget.used += 1
         except Exception as exc:
             logger.error("Branch %s: reconcile re-screening failed: %s", bid, exc)
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(action="reconcile", branch_id=bid, reason=f"re-screening failed: {exc}")
 
@@ -886,6 +939,7 @@ class CampaignManager:
                 "Branch %s: reconcile re-screening failed (gate_outcome=%s) — abandoning",
                 bid, screening_result.gate_outcome,
             )
+            _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
             return StepResult(
                 action="reconcile", branch_id=bid,
