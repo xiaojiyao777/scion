@@ -132,3 +132,37 @@ $$\text{gap} = \frac{f_{\text{champion}} - f_{\text{optimal}}}{f_{\text{optimal}
 **MILP 模型**：已完成，见 `scion/docs/milp-model.md`（Opus 建模，两阶段 epsilon-constraint，$O(n^2)$ 复杂度，$n=40$ 时 Gurobi 分钟级可证最优）。
 
 **实现计划**：PuLP + CBC（无需商业 license），对接 v4_scr_s 系列实例，oracle 修复后统一实施。
+
+---
+
+## v0.3 Backlog — Weight Opt Scoring Function 独立化（2026-04-14 F6 实验发现）
+
+### 问题
+
+`compute_delta()` 被实验协议和 weight optimization 共用，但两者需求不同：
+
+- **实验协议**：需要字典序严格分层（splits 绝对优先于 cost），用于 win/loss 判定。`SPLITS_WEIGHT=100K` 是正确的——任何 split 改善都必须压倒 cost。
+- **Weight optimization**：需要连续可微的评分信号来引导搜索方向。当 splits≈0 时，随机 split 波动（0↔1）= ±100K，淹没 cost 信号 O(1K-10K)，优化器无法区分真实 cost 改善和 splits 噪声。
+
+### F6 证据
+
+- Group A（splits=23.8）：weight opt 2/2 improved=1，权重优化有效
+- Group B（splits≈0, SPLITS_WEIGHT=100K）：weight opt improved=0，完全失灵
+- Group C（splits≈0, SPLITS_WEIGHT=1K）：验证中，预期可恢复 cost 信号
+
+### 设计方向
+
+1. Weight opt evaluator 使用**独立的 scoring function**，不复用 `compute_delta()`
+2. Scoring function 应可配置（per problem spec / per protocol）：
+   - 合成数据：保持字典序大权重（与实验协议一致）
+   - 生产数据 splits 饱和：自动检测饱和 → 切换为 cost-dominant scoring
+   - 或直接暴露 `weight_opt_scoring` 配置项
+3. 更深层：这与**问题定义**相关——不同问题实例的目标空间结构不同，weight opt 的评分函数应该是 problem spec 的一部分，不是框架硬编码
+
+### 与 Saturation Signal 的关联
+
+Sprint L2 已有 `ChampionSaturationAnalyzer` 检测 splits at_absolute_minimum。Weight opt 可复用此信号：当 `at_absolute_minimum=True` 时自动将 splits_weight 降阶（如 100K→1K 或直接 cost_only）。
+
+### 临时方案（F6 已实施）
+
+`SCION_SPLITS_WEIGHT` 环境变量注入 `compute_delta()`，影响全局（含实验协议）。v0.3 应改为 weight opt 专属配置。
