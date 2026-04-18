@@ -22,36 +22,60 @@ _surrogate_dir = Path(__file__).parent
 if str(_surrogate_dir) not in sys.path:
     sys.path.insert(0, str(_surrogate_dir))
 
-from milp_model import build_milp, compute_K, build_locked_slot_map, extract_solution
+from milp_model import (
+    build_milp,
+    compute_K,
+    build_locked_slot_map,
+    extract_solution,
+    extract_solution_strict,
+)
 from models import Instance, Solution, VEHICLE_TYPES
 from oracle import check_feasibility, recompute_objective
 
 
 @dataclass
 class MILPResult:
-    status: str                      # "optimal" | "feasible" | "infeasible" | "timeout" | "error"
-    solution: Optional[Solution]     # None if infeasible/error
-    objective_f1: Optional[int]      # subcategory_splits
+    status: str                      # "optimal" | "feasible" | "infeasible" | "timeout" | "error" | "no_feasible"
+    solution: Optional[Solution]     # None if infeasible/error or solution not integer-feasible
+    objective_f1: Optional[int]      # subcategory_splits (from solution if verified, else from MILP proof if available)
     objective_f2: Optional[float]    # total_cost
     phase1_time: float               # seconds
     phase2_time: float               # seconds
     phase1_gap: float                # MIP gap at phase1 end (0 if optimal)
     phase2_gap: float
-    lower_bound_f1: Optional[int]    # best lower bound if not optimal
+    lower_bound_f1: Optional[int]    # best proven lower bound on f1
     lower_bound_f2: Optional[float]
+    solution_verified: bool = False  # True iff solution passes C0a + oracle feasibility
+    verification_issues: Optional[list[str]] = None  # populated when verified=False
 
 
 def _solve_phase(
     prob: pulp.LpProblem,
     time_limit: int,
     verbose: bool,
+    solver_name: str = "HiGHS",
 ) -> tuple[int, float, float]:
-    """Solve a single MIP phase. Returns (status_code, gap, elapsed_seconds)."""
-    solver = pulp.PULP_CBC_CMD(
-        msg=1 if verbose else 0,
-        timeLimit=time_limit,
-        gapRel=0,
-    )
+    """Solve a single MIP phase. Returns (status_code, gap, elapsed_seconds).
+
+    Default solver is HiGHS (native, via highspy). HiGHS significantly
+    outperforms CBC on this model structure — see
+    /tmp/milp-solver-compare/results.json for benchmarks.
+
+    Fallback to CBC if HiGHS is unavailable. CBC is known to:
+      - report 'Optimal' status on timeout+incumbent (PuLP parsing quirk), and
+      - leave Phase 2 with fractional LP relaxation solutions on medium-size
+        instances (>=30 orders) within a 300s time limit.
+    """
+    if solver_name == "HiGHS":
+        try:
+            solver = pulp.HiGHS(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
+            if not solver.available():
+                solver = pulp.PULP_CBC_CMD(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
+        except Exception:
+            solver = pulp.PULP_CBC_CMD(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
+    else:
+        solver = pulp.PULP_CBC_CMD(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
+
     t0 = time.time()
     prob.solve(solver)
     elapsed = time.time() - t0
@@ -104,11 +128,16 @@ def solve_exact(
     time_limit_seconds: int = 600,
     symmetry_breaking: bool = True,
     verbose: bool = False,
+    solver_name: str = "HiGHS",
 ) -> MILPResult:
     """Two-phase epsilon-constraint MILP solver.
 
     Phase 1: minimize subcategory_splits (sum alpha)
     Phase 2: minimize total_cost subject to f1 == f1*
+
+    solver_name: 'HiGHS' (default, recommended) or 'CBC'.
+    HiGHS is 5-50x faster than CBC on this model and does not suffer from
+    CBC's timeout-Optimal status parsing bug.
     """
     K = compute_K(instance)
     locked_slot_map = build_locked_slot_map(instance)
@@ -134,7 +163,7 @@ def solve_exact(
         )
 
     phase1_time_limit = max(time_limit_seconds // 2, 60)
-    status1, gap1, elapsed1 = _solve_phase(prob1, phase1_time_limit, verbose)
+    status1, gap1, elapsed1 = _solve_phase(prob1, phase1_time_limit, verbose, solver_name)
 
     if status1 == -1:
         return MILPResult(
@@ -165,6 +194,13 @@ def solve_exact(
 
     phase1_optimal = (status1 == 1)
 
+    # Phase 1 MIP best bound → lower bound on f1 (φ_s formulation is exact)
+    # NOTE: PuLP's prob.bestBound via CBC is unreliable on timeout — it often
+    # reports the incumbent upper bound rather than the dual bound. To avoid
+    # the invariant LB ≤ UB being violated, we only report LB when phase 1
+    # proved optimality.
+    phase1_lb_f1: Optional[int] = f1_star if phase1_optimal else None
+
     # If phase 1 timed out but has a feasible solution, proceed with best found
     remaining_time = max(time_limit_seconds - elapsed1, 30)
 
@@ -182,16 +218,16 @@ def solve_exact(
         return MILPResult(
             status="feasible" if phase1_optimal else "timeout",
             solution=sol1,
-            objective_f1=f1_star,
-            objective_f2=None,
+            objective_f1=sol1.objective.subcategory_splits if sol1.objective else f1_star,
+            objective_f2=sol1.objective.total_cost if sol1.objective else None,
             phase1_time=elapsed1, phase2_time=0,
             phase1_gap=gap1, phase2_gap=0,
-            lower_bound_f1=f1_star if phase1_optimal else None,
+            lower_bound_f1=phase1_lb_f1,
             lower_bound_f2=None,
         )
 
     phase2_time_limit = int(remaining_time)
-    status2, gap2, elapsed2 = _solve_phase(prob2, phase2_time_limit, verbose)
+    status2, gap2, elapsed2 = _solve_phase(prob2, phase2_time_limit, verbose, solver_name)
 
     if status2 == -1:
         # Phase 2 infeasible means Phase 1 solution was boundary;
@@ -201,11 +237,11 @@ def solve_exact(
         return MILPResult(
             status="feasible",
             solution=sol1,
-            objective_f1=f1_star,
+            objective_f1=sol1.objective.subcategory_splits if sol1.objective else f1_star,
             objective_f2=sol1.objective.total_cost if sol1.objective else None,
             phase1_time=elapsed1, phase2_time=elapsed2,
             phase1_gap=gap1, phase2_gap=0,
-            lower_bound_f1=f1_star,
+            lower_bound_f1=phase1_lb_f1,
             lower_bound_f2=None,
         )
 
@@ -217,11 +253,11 @@ def solve_exact(
             return MILPResult(
                 status="feasible",
                 solution=sol1,
-                objective_f1=f1_star,
+                objective_f1=sol1.objective.subcategory_splits if sol1.objective else f1_star,
                 objective_f2=sol1.objective.total_cost if sol1.objective else None,
                 phase1_time=elapsed1, phase2_time=elapsed2,
                 phase1_gap=gap1, phase2_gap=0,
-                lower_bound_f1=f1_star,
+                lower_bound_f1=phase1_lb_f1,
                 lower_bound_f2=None,
             )
 
@@ -231,35 +267,85 @@ def solve_exact(
 
     f2_star = _compute_cost(vars2)
 
-    # Determine overall status
-    phase2_optimal = (status2 == 1)
-    if phase1_optimal and phase2_optimal:
-        overall_status = "optimal"
-    elif gap1 > 0 or gap2 > 0:
-        overall_status = "feasible"
-    else:
-        overall_status = "feasible"
+    # -----------------------------------------------------------------
+    # Extract + verify phase 2 solution
+    # -----------------------------------------------------------------
+    solution2, issues2 = extract_solution_strict(instance, vars2)
+    if not issues2:
+        # Phase 2 solution is integer-feasible and complete → also run oracle
+        solution2.objective = recompute_objective(solution2, instance)
+        feas2 = check_feasibility(solution2, instance, 1)
+        if not feas2.is_feasible:
+            issues2 = [f"oracle: {v}" for v in feas2.violations]
 
-    # Lower bounds
+    # Phase 1 solution as fallback (may also be broken on extreme timeout)
+    solution1, issues1 = extract_solution_strict(instance, vars1)
+    if not issues1:
+        solution1.objective = recompute_objective(solution1, instance)
+        feas1 = check_feasibility(solution1, instance, 1)
+        if not feas1.is_feasible:
+            issues1 = [f"oracle: {v}" for v in feas1.violations]
+
+    # -----------------------------------------------------------------
+    # Determine status, solution, f1, f2 based on verification outcomes
+    # -----------------------------------------------------------------
+    phase2_optimal = (status2 == 1)
+
+    if not issues2:
+        # Phase 2 solution verified — use it as source of truth
+        verified_solution = solution2
+        verification_issues = None
+        verified_f1 = solution2.objective.subcategory_splits
+        verified_f2 = solution2.objective.total_cost
+        if phase1_optimal and phase2_optimal:
+            overall_status = "optimal"
+        else:
+            overall_status = "feasible"
+    elif not issues1:
+        # Phase 2 broken but Phase 1 solution verified — report Phase 1 result
+        verified_solution = solution1
+        verification_issues = [
+            f"phase2 solution rejected ({len(issues2)} issues)",
+            *issues2[:3],
+        ]
+        verified_f1 = solution1.objective.subcategory_splits
+        verified_f2 = solution1.objective.total_cost
+        overall_status = "feasible" if phase1_optimal else "timeout"
+    else:
+        # Neither phase produced a verified integer solution — no solution
+        # but we still have a proven lower bound on f1 if phase 1 was optimal.
+        verified_solution = None
+        verification_issues = [
+            f"phase1 issues ({len(issues1)}): {issues1[:2]}",
+            f"phase2 issues ({len(issues2)}): {issues2[:2]}",
+        ]
+        verified_f1 = f1_star if phase1_optimal else None
+        verified_f2 = None
+        overall_status = "no_feasible"
+
+    # Lower bound on f1: phase 1 optimal value is a valid LB regardless of
+    # phase 2 outcome (phase 2 just refines cost within the α-sum level set).
     lb_f1 = f1_star if phase1_optimal else None
     lb_f2 = None
     try:
-        if hasattr(prob2, 'bestBound') and prob2.bestBound is not None:
+        if hasattr(prob2, 'bestBound') and prob2.bestBound is not None and verified_solution is not None:
             lb_f2 = prob2.bestBound
     except Exception:
         pass
 
     return MILPResult(
         status=overall_status,
-        solution=solution,
-        objective_f1=f1_star,
-        objective_f2=f2_star,
+        solution=verified_solution,
+        objective_f1=verified_f1,
+        objective_f2=verified_f2,
         phase1_time=elapsed1,
         phase2_time=elapsed2,
         phase1_gap=gap1,
         phase2_gap=gap2,
         lower_bound_f1=lb_f1,
         lower_bound_f2=lb_f2,
+        solution_verified=(verification_issues is None),
+        verification_issues=verification_issues,
     )
 
 
@@ -310,6 +396,8 @@ def main() -> None:
     parser.add_argument("--output", default=None, help="Output result JSON path")
     parser.add_argument("--verbose", action="store_true", help="Show CBC output")
     parser.add_argument("--no-symmetry-breaking", action="store_true")
+    parser.add_argument("--solver", default="HiGHS", choices=["HiGHS", "CBC"],
+                        help="MIP solver (default: HiGHS)")
     args = parser.parse_args()
 
     instance = _load_instance(args.instance)
@@ -319,6 +407,7 @@ def main() -> None:
         time_limit_seconds=args.time_limit,
         symmetry_breaking=not args.no_symmetry_breaking,
         verbose=args.verbose,
+        solver_name=args.solver,
     )
 
     # Print summary

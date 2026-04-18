@@ -552,3 +552,55 @@ def extract_solution(
             assignment[oid] = vid
 
     return Solution(vehicles=vehicles, assignment=assignment)
+
+
+def extract_solution_strict(
+    instance: Instance,
+    vars_dict: dict,
+    tol: float = 1e-4,
+) -> tuple[Solution, list[str]]:
+    """Extract solution with integrality + C0a completeness verification.
+
+    Returns (solution, issues). `issues` is empty iff solution is verified
+    as an integer-feasible, complete assignment (every order placed exactly
+    once). Otherwise the solution may still be useful for diagnostics.
+    """
+    issues: list[str] = []
+    x = vars_dict["x"]
+    y = vars_dict["y"]
+    I = vars_dict["I"]
+    J = vars_dict["J"]
+    orders = vars_dict["orders"]
+
+    # Integrality check
+    for i in I:
+        for j in J:
+            val = pulp.value(x[i, j])
+            if val is None:
+                issues.append(f"x[{i},{j}] is None")
+                continue
+            if min(abs(val), abs(1 - val)) > tol:
+                issues.append(f"x[{i},{j}]={val:.6f} non-integer")
+
+    # C0a: every order assigned exactly once
+    for i in I:
+        row_sum = 0.0
+        for j in J:
+            val = pulp.value(x[i, j])
+            if val is not None and val > 0.5:
+                row_sum += 1
+        if row_sum != 1:
+            issues.append(
+                f"C0a violation: order {orders[i].order_id} (i={i}) "
+                f"assigned to {int(row_sum)} slots"
+            )
+
+    solution = extract_solution(instance, vars_dict)
+    n_placed = len(solution.assignment)
+    if n_placed != len(I):
+        issues.append(
+            f"assignment incomplete: {n_placed}/{len(I)} orders placed"
+        )
+
+    return solution, issues
+
