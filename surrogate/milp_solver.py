@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import pulp
 
@@ -294,9 +297,23 @@ def solve_exact(
         )
 
     phase2_time_limit = int(remaining_time)
-    # TODO: warm start for phase 2 is future work. The champion's f1 may differ
-    # from phase 1 optimum, making it infeasible for phase 2's eps-constraint.
-    status2, gap2, elapsed2 = _solve_phase(prob2, phase2_time_limit, verbose, solver_name)
+
+    # Phase 2 warm start: use phase 1 solution, which satisfies f1 == f1* <= f1*
+    # (the eps-constraint), so it is always feasible for phase 2.
+    phase2_warm_values: Optional[dict] = None
+    if solver_name == "HiGHS":
+        try:
+            sol1 = extract_solution(instance, vars1)
+            phase2_warm_values = build_warmstart_values(
+                sol1, instance, K, locked_slot_map
+            )
+        except Exception as e:
+            logger.warning(f"Phase 2 warm start build failed: {e}; continuing cold.")
+            phase2_warm_values = None
+
+    status2, gap2, elapsed2 = _solve_phase(
+        prob2, phase2_time_limit, verbose, solver_name, phase2_warm_values
+    )
 
     if status2 == -1:
         # Phase 2 infeasible means Phase 1 solution was boundary;
