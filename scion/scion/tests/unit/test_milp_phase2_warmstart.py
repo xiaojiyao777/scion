@@ -24,7 +24,7 @@ for _mod_name in list(sys.modules):
     if _mod_name == "config" or _mod_name.startswith("config."):
         del sys.modules[_mod_name]
 
-from milp_model import build_milp, compute_K, build_locked_slot_map, extract_solution
+from milp_model import build_milp, compute_K, extract_solution
 from milp_warmstart import build_warmstart_values
 from milp_solver import solve_exact, _load_instance
 from oracle import recompute_objective
@@ -106,11 +106,10 @@ def test_phase2_warmstart_feasible_for_eps_constraint():
     """Phase 1 sol has f1 == f1*, so f1 <= f1* holds — safe for phase 2 warm start."""
     inst = _load("s01")
     K = compute_K(inst)
-    locked_slot_map = build_locked_slot_map(inst)
 
     # Build and solve phase 1
     prob1, vars1 = build_milp(
-        inst, K, locked_slot_map,
+        inst, K,
         symmetry_breaking=True,
         phase2_sum_alpha_star=None,
     )
@@ -132,13 +131,13 @@ def test_phase2_warmstart_feasible_for_eps_constraint():
         1 for s in S for j in J if (pulp.value(alpha[s, j]) or 0) > 0.5
     )
 
-    # Build warm start for phase 2 (same K, locked_slot_map)
-    warm_vals = build_warmstart_values(sol1, inst, K, locked_slot_map)
+    # Build warm start for phase 2
+    warm_vals = build_warmstart_values(sol1, inst, K)
     assert len(warm_vals) > 0, "build_warmstart_values returned empty dict"
 
     # Build phase 2 model
     prob2, vars2 = build_milp(
-        inst, K, locked_slot_map,
+        inst, K,
         symmetry_breaking=True,
         phase2_sum_alpha_star=sum_alpha_star,
     )

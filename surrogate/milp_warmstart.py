@@ -50,7 +50,6 @@ def build_warmstart_values(
     solution: Solution,
     instance: Instance,
     K: int,
-    locked_slot_map: dict[str, int],
 ) -> dict[str, float]:
     """Translate champion Solution into PuLP variable name → value mapping.
 
@@ -62,9 +61,6 @@ def build_warmstart_values(
         Problem instance.
     K : int
         Number of MILP slots.
-    locked_slot_map : dict[str, int]
-        Maps locked_vehicle_id (from instance) → MILP slot index.
-
     Returns
     -------
     dict[str, float]
@@ -80,122 +76,43 @@ def build_warmstart_values(
     R = sorted({get_region(o.pickup_city) for o in orders})
     P = sorted({o.pickup_name for o in orders})
 
-    L = len(locked_slot_map)
-    locked_slots: set[int] = set(locked_slot_map.values())
-
     # -------------------------------------------------------------------------
-    # Identify champion vehicles that contain locked orders
+    # Assign each non-empty champion vehicle to one MILP slot directly.
+    # H7 is modeled via group-equality constraints in the MILP, so warm start
+    # no longer needs any special locked-slot handling.
     # -------------------------------------------------------------------------
-    # A champion vehicle is "locked" if it contains at least one locked order.
-    # Free orders in locked champion vehicles are skipped (MILP preprocessing
-    # fixes x[free_order, locked_slot] = 0, so they can't go there).
-    locked_champion_vids: set[str] = set()
-    for o in orders:
-        if o.locked_vehicle_id is not None:
-            champ_vid = solution.assignment.get(o.order_id)
-            if champ_vid:
-                locked_champion_vids.add(champ_vid)
-
-    # -------------------------------------------------------------------------
-    # Map each locked slot to its champion vehicle's type.
-    # One champion vehicle may cover multiple locked groups (e.g., if the VNS
-    # merged two locked groups into one vehicle); each group still maps to a
-    # separate MILP slot, and all such slots must have a vehicle type set.
-    # -------------------------------------------------------------------------
-    locked_slot_vtype: dict[int, str] = {}  # slot j → vehicle type
-    for locked_instance_vid, slot_j in locked_slot_map.items():
-        for o in orders:
-            if o.locked_vehicle_id == locked_instance_vid:
-                champ_vid = solution.assignment.get(o.order_id)
-                if champ_vid is not None:
-                    locked_slot_vtype[slot_j] = solution.vehicles[champ_vid].vehicle_type
-                break
-
-    # -------------------------------------------------------------------------
-    # Assign pure-free champion vehicles to free MILP slots
-    # -------------------------------------------------------------------------
-    free_slot = L
-    free_vehicle_to_slot: dict[str, int] = {}
+    next_slot = 0
+    vehicle_to_slot: dict[str, int] = {}
 
     for champ_vid, vehicle in solution.vehicles.items():
         if not vehicle.order_ids:
             continue
-        if champ_vid in locked_champion_vids:
-            continue  # handled via locked_slot_vtype and spillover below
-        if free_slot >= K:
+        if next_slot >= K:
             logger.warning(
                 "warm start: champion has more vehicles than K=%d; skipping warm start",
                 K,
             )
             return {}
-        free_vehicle_to_slot[champ_vid] = free_slot
-        free_slot += 1
-
-    # -------------------------------------------------------------------------
-    # Allocate spillover free slots for free orders stranded in locked vehicles.
-    # In the MILP, free orders cannot go on locked slots (preprocessing fixes
-    # x[free_order, locked_slot] = 0). Each mixed champion vehicle (one that has
-    # both locked and free orders) gets one fresh free slot for its free orders.
-    # -------------------------------------------------------------------------
-    spillover_free_oids: dict[str, int] = {}  # order_id → spillover slot j
-    spillover_slot_vtype: dict[int, str] = {}  # spillover slot j → vehicle type
-
-    for champ_vid in sorted(locked_champion_vids):  # sorted for determinism
-        vehicle = solution.vehicles.get(champ_vid)
-        if vehicle is None:
-            continue
-        free_oids_in_mixed = [
-            oid for oid in vehicle.order_ids
-            if instance.orders[oid].locked_vehicle_id is None
-        ]
-        if not free_oids_in_mixed:
-            continue  # purely locked vehicle; no spillover needed
-        if free_slot >= K:
-            logger.warning(
-                "warm start: K=%d exhausted; skipping spillover for %s "
-                "(%d free orders unassigned)",
-                K, champ_vid, len(free_oids_in_mixed),
-            )
-            continue  # leave unassigned rather than aborting entirely
-        j_spill = free_slot
-        free_slot += 1
-        spillover_slot_vtype[j_spill] = vehicle.vehicle_type
-        for oid in free_oids_in_mixed:
-            spillover_free_oids[oid] = j_spill
+        vehicle_to_slot[champ_vid] = next_slot
+        next_slot += 1
 
     # -------------------------------------------------------------------------
     # Build order → warm-start slot mapping
     # -------------------------------------------------------------------------
     order_to_slot: dict[str, int] = {}
 
-    # Locked orders → their locked slot
-    for o in orders:
-        if o.locked_vehicle_id is not None:
-            order_to_slot[o.order_id] = locked_slot_map[o.locked_vehicle_id]
-
-    # Free orders in pure-free vehicles → their free slot
-    for champ_vid, j in free_vehicle_to_slot.items():
+    # All orders follow their champion vehicle's slot.
+    for champ_vid, j in vehicle_to_slot.items():
         for oid in solution.vehicles[champ_vid].order_ids:
             order_to_slot[oid] = j
-
-    # Free orders in mixed vehicles → their spillover slot
-    order_to_slot.update(spillover_free_oids)
 
     # -------------------------------------------------------------------------
     # Build slot → vehicle type
     # -------------------------------------------------------------------------
     slot_to_vtype: dict[int, str] = {}
 
-    # Locked slots: each locked group has its own MILP slot with its champion's type
-    for slot_j, vtype in locked_slot_vtype.items():
-        slot_to_vtype[slot_j] = vtype
-
-    # Free slots: use champion vehicle type
-    for champ_vid, j in free_vehicle_to_slot.items():
+    for champ_vid, j in vehicle_to_slot.items():
         slot_to_vtype[j] = solution.vehicles[champ_vid].vehicle_type
-
-    # Spillover slots: same type as the mixed champion vehicle
-    slot_to_vtype.update(spillover_slot_vtype)
 
     # -------------------------------------------------------------------------
     # Build variable value dict

@@ -36,42 +36,21 @@ H_MAX: int = 1800
 
 
 # ---------------------------------------------------------------------------
-# K and locked-slot computation
+# K computation
 # ---------------------------------------------------------------------------
 
 def compute_K(instance: Instance) -> int:
     """Compute vehicle-slot upper bound K per §6.3.
 
-    K = ceil(sum(p_i) / min_cap) + locked_count, capped at n.
+    K = ceil(sum(p_i) / min_cap), capped at n.
     min_cap = 3 (T3).
     """
     total_pallets = sum(
         calc_pallets(o.spu_list) for o in instance.orders.values()
     )
-    locked_ids = {
-        o.locked_vehicle_id
-        for o in instance.orders.values()
-        if o.locked_vehicle_id is not None
-    }
-    L = len(locked_ids)
-    K = math.ceil(total_pallets / 3) + L
+    K = math.ceil(total_pallets / 3)
     K = min(K, len(instance.orders))
-    return max(K, max(L + 1, 1))
-
-
-def build_locked_slot_map(instance: Instance) -> dict[str, int]:
-    """Map each unique locked_vehicle_id → slot index (0-based).
-
-    Locked groups occupy the first L slots (0, 1, …, L-1).
-    The order of group assignment follows insertion order of orders.
-    """
-    locked_groups: dict[str, int] = {}
-    slot = 0
-    for o in instance.orders.values():
-        if o.locked_vehicle_id is not None and o.locked_vehicle_id not in locked_groups:
-            locked_groups[o.locked_vehicle_id] = slot
-            slot += 1
-    return locked_groups
+    return max(K, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +60,6 @@ def build_locked_slot_map(instance: Instance) -> dict[str, int]:
 def build_milp(
     instance: Instance,
     K: int,
-    locked_slot_map: dict[str, int],
     symmetry_breaking: bool = True,
     phase2_sum_alpha_star: Optional[int] = None,
 ) -> tuple[pulp.LpProblem, dict]:
@@ -93,8 +71,6 @@ def build_milp(
         Problem data.
     K : int
         Number of vehicle slots.
-    locked_slot_map : dict[str, int]
-        Maps locked_vehicle_id → slot index.
     symmetry_breaking : bool
         If True, add y_j ≥ y_{j+1} for free (unlocked) slots.
     phase2_sum_alpha_star : int or None
@@ -195,28 +171,14 @@ def build_milp(
             if h_i > H_MAX and t != "HQ40_DG":
                 order_infeasible_types[i].add(t)
 
-    # (i, j) hard constraints from locked assignment:
-    #   - locked order i MUST be on slot locked_slot_map[lock_id]
-    #   - so x[i, j] = 0 for all other j
-    # This is redundant with H7 (x[i, slot]=1 forces others=0 via C0a) but
-    # fixing variables upfront shrinks the MILP dramatically.
-    forced_x_one: list[tuple[int, int]] = []
-    forced_x_zero: list[tuple[int, int]] = []
-    locked_slots_set: set[int] = set(locked_slot_map.values())
-    order_locked_slot: dict[int, int] = {}
+    # Locked-group indices for H7.
+    # Same locked_vehicle_id means the orders must move together as a block,
+    # but the block is not pinned to a specific vehicle/slot.
+    locked_group_to_indices: dict[str, list[int]] = {}
     for i in I:
-        o = orders[i]
-        if o.locked_vehicle_id is not None:
-            j_locked = locked_slot_map[o.locked_vehicle_id]
-            order_locked_slot[i] = j_locked
-            forced_x_one.append((i, j_locked))
-            for j in J:
-                if j != j_locked:
-                    forced_x_zero.append((i, j))
-        else:
-            # non-locked orders cannot go on locked slots (those are reserved)
-            for j in locked_slots_set:
-                forced_x_zero.append((i, j))
+        gid = orders[i].locked_vehicle_id
+        if gid is not None:
+            locked_group_to_indices.setdefault(gid, []).append(i)
 
     # -----------------------------------------------------------------------
     # Decision Variables
@@ -261,38 +223,8 @@ def build_milp(
     # -----------------------------------------------------------------------
     # Apply preprocessing fixes (Optimization B)
     # -----------------------------------------------------------------------
-    # Fix x[i,j] = 0 for locked-order conflicts (forces direct assignment)
-    for (i, j) in forced_x_zero:
-        x[i, j].setInitialValue(0)
-        x[i, j].fixValue()
-    for (i, j) in forced_x_one:
-        x[i, j].setInitialValue(1)
-        x[i, j].fixValue()
-    # Fix z[j,t] = 0 when all orders assignable to j are infeasible on type t.
-    # For locked slots, use the locked group's orders; for free slots, if every
-    # order pool contains at least one order that cannot fit type t, we still
-    # keep z[j,t] flexible (another order may be excluded from slot via x).
-    # So we only fix z[j,t] when j is a locked slot and the locked orders
-    # collectively cannot fit type t.
-    if locked_slot_map:
-        # Map slot → list of locked orders on that slot
-        locked_slot_orders: dict[int, list[int]] = {j: [] for j in locked_slots_set}
-        for i, j_locked in order_locked_slot.items():
-            locked_slot_orders[j_locked].append(i)
-        for j_locked, locked_is in locked_slot_orders.items():
-            if not locked_is:
-                continue
-            total_p = sum(pallets[i] for i in locked_is)
-            total_h = sum(
-                orders[i].hazard_quantity for i in locked_is
-                if orders[i].hazard_flag
-            )
-            for t in T:
-                cap_t = VEHICLE_TYPES[t].capacity
-                # type infeasible if capacity or hazmat cannot cover locked group
-                if total_p > cap_t or (total_h > H_MAX and t != "HQ40_DG"):
-                    z[j_locked, t].setInitialValue(0)
-                    z[j_locked, t].fixValue()
+    # Keep preprocessing limited to type infeasibility only. H7 is modeled as
+    # group-equality constraints below, not as reserved-slot fixes.
 
     # -----------------------------------------------------------------------
     # Objective
@@ -444,22 +376,22 @@ def build_milp(
                 f"h6_{j}_{g.replace(',', '_')}",
             )
 
-    # H7: locked order assignments (fix x_{i, l_i} = 1)
-    # Note: redundant with preprocessing (forced_x_one), but kept for auditability
-    # against milp-model.md §4.7. PuLP handles constant constraints gracefully.
-    for i in I:
-        o = orders[i]
-        if o.locked_vehicle_id is not None:
-            j_locked = locked_slot_map[o.locked_vehicle_id]
-            prob += (x[i, j_locked] == 1, f"h7_{i}")
+    # H7: locked-group integrity.
+    # Orders sharing the same locked_vehicle_id must move together as one block,
+    # but the block is NOT pinned to any specific slot and may be merged with
+    # free orders or with other locked groups.
+    for gid, idxs in locked_group_to_indices.items():
+        if len(idxs) <= 1:
+            continue
+        anchor = idxs[0]
+        for i in idxs[1:]:
+            for j in J:
+                prob += (x[i, j] == x[anchor, j], f"h7_{gid}_{anchor}_{i}_{j}")
 
-    # Symmetry breaking: y_j ≥ y_{j+1} for free (unlocked) slots
+    # Symmetry breaking: y_j ≥ y_{j+1} across all slots
     if symmetry_breaking:
-        locked_slots = set(locked_slot_map.values())
-        L = len(locked_slot_map)
-        for j in range(L, K - 1):
-            if j not in locked_slots and (j + 1) not in locked_slots:
-                prob += (y[j] >= y[j + 1], f"sym_{j}")
+        for j in range(K - 1):
+            prob += (y[j] >= y[j + 1], f"sym_{j}")
 
     # Phase 2 epsilon-constraint: fix α-sum = Phase-1 optimal
     if is_phase2:

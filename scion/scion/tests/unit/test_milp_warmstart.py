@@ -2,7 +2,7 @@
 
 Tests:
 1. test_warmstart_values_sum_to_n_orders   — sum of x[i,j] over all j per order == 1
-2. test_warmstart_locked_slots_respected   — locked orders at correct slot
+2. test_warmstart_locked_group_moves_together — locked-group orders share a slot
 3. test_warmstart_vehicle_type_matches     — z[j, t] = 1 for correct vehicle type
 4. test_warmstart_feasibility              — values correspond to oracle-feasible solution
 5. test_solve_exact_with_warmstart         — warm-start solve gives same or better f1/f2
@@ -20,7 +20,7 @@ import pytest
 
 from models import Instance, Order, Solution, SPU, Vehicle
 from oracle import check_feasibility, recompute_objective
-from milp_model import compute_K, build_locked_slot_map
+from milp_model import compute_K
 from milp_warmstart import build_warmstart_values, _vname
 from milp_solver import solve_exact, _load_instance
 
@@ -98,8 +98,7 @@ def _small_instance_with_locked() -> tuple[Instance, Solution]:
 def test_warmstart_values_sum_to_n_orders():
     inst, champion = _small_instance_with_locked()
     K = compute_K(inst)
-    locked_slot_map = build_locked_slot_map(inst)
-    values = build_warmstart_values(champion, inst, K, locked_slot_map)
+    values = build_warmstart_values(champion, inst, K)
 
     orders = list(inst.orders.values())
     I = list(range(len(orders)))
@@ -126,33 +125,22 @@ def test_warmstart_values_sum_to_n_orders():
 
 
 # ---------------------------------------------------------------------------
-# T2: locked orders land on the slot specified by locked_slot_map
+# T2: locked-group orders move together (same warm-start slot)
 # ---------------------------------------------------------------------------
 
-def test_warmstart_locked_slots_respected():
+def test_warmstart_locked_group_moves_together():
     inst, champion = _small_instance_with_locked()
     K = compute_K(inst)
-    locked_slot_map = build_locked_slot_map(inst)
-    values = build_warmstart_values(champion, inst, K, locked_slot_map)
+    values = build_warmstart_values(champion, inst, K)
 
     orders = list(inst.orders.values())
     order_id_to_i = {o.order_id: i for i, o in enumerate(orders)}
+    i1 = order_id_to_i["O1"]
+    i2 = order_id_to_i["O2"]
 
-    locked_slot = locked_slot_map["LOCK_A"]
-
-    # O1 and O2 have locked_vehicle_id=LOCK_A → must be on locked_slot
-    for oid in ("O1", "O2"):
-        i = order_id_to_i[oid]
-        assert values.get(_vname("x", (i, locked_slot)), 0.0) == 1.0, (
-            f"Order {oid} (i={i}) should be at locked slot {locked_slot}"
-        )
-        # Must be 0 on all other slots
-        for j in range(K):
-            if j == locked_slot:
-                continue
-            assert values.get(_vname("x", (i, j)), 0.0) == 0.0, (
-                f"Order {oid} (i={i}) should not be at slot {j}"
-            )
+    slot1 = next(j for j in range(K) if values.get(_vname("x", (i1, j)), 0.0) == 1.0)
+    slot2 = next(j for j in range(K) if values.get(_vname("x", (i2, j)), 0.0) == 1.0)
+    assert slot1 == slot2, f"locked group orders should share a slot, got {slot1} vs {slot2}"
 
 
 # ---------------------------------------------------------------------------
@@ -162,15 +150,16 @@ def test_warmstart_locked_slots_respected():
 def test_warmstart_vehicle_type_matches():
     inst, champion = _small_instance_with_locked()
     K = compute_K(inst)
-    locked_slot_map = build_locked_slot_map(inst)
-    values = build_warmstart_values(champion, inst, K, locked_slot_map)
+    values = build_warmstart_values(champion, inst, K)
 
-    # Locked slot: V_LOCK has type T5
-    locked_slot = locked_slot_map["LOCK_A"]
-    assert values.get(_vname("z", (locked_slot, "T5")), 0.0) == 1.0, "Locked slot should have z[j, T5]=1"
+    orders = list(inst.orders.values())
+    order_id_to_i = {o.order_id: i for i, o in enumerate(orders)}
+    i1 = order_id_to_i["O1"]
+    slot = next(j for j in range(K) if values.get(_vname("x", (i1, j)), 0.0) == 1.0)
+    assert values.get(_vname("z", (slot, "T5")), 0.0) == 1.0, "Champion slot should have z[j, T5]=1"
     for t in ("HQ40_DG", "HQ40", "T10", "T3"):
-        assert values.get(_vname("z", (locked_slot, t)), 0.0) == 0.0, (
-            f"Locked slot should have z[j, {t}]=0"
+        assert values.get(_vname("z", (slot, t)), 0.0) == 0.0, (
+            f"Champion slot should have z[j, {t}]=0"
         )
 
     # Verify each used free slot has exactly one z=1
@@ -190,14 +179,13 @@ def test_warmstart_feasibility():
     """The champion used to build warm-start values must pass oracle feasibility."""
     inst, champion = _small_instance_with_locked()
     K = compute_K(inst)
-    locked_slot_map = build_locked_slot_map(inst)
 
     # Warm start builds from champion — verify champion itself is feasible
     feas = check_feasibility(champion, inst, 1)
     assert feas.is_feasible, f"Champion is not oracle-feasible: {feas.violations}"
 
     # Warm start values should be non-empty
-    values = build_warmstart_values(champion, inst, K, locked_slot_map)
+    values = build_warmstart_values(champion, inst, K)
     assert len(values) > 0, "build_warmstart_values returned empty dict for valid champion"
 
 

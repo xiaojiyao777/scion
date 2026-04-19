@@ -28,7 +28,6 @@ if str(_surrogate_dir) not in sys.path:
 from milp_model import (
     build_milp,
     compute_K,
-    build_locked_slot_map,
     extract_solution,
     extract_solution_strict,
 )
@@ -200,7 +199,6 @@ def solve_exact(
         raise NotImplementedError("warm_start only supported with solver_name='HiGHS'")
 
     K = compute_K(instance)
-    locked_slot_map = build_locked_slot_map(instance)
 
     # Count active subcategories for converting sum_alpha → splits
     active_subcats = {o.vehicle_subcategory for o in instance.orders.values()}
@@ -209,7 +207,7 @@ def solve_exact(
     # ---- Phase 1 ----
     try:
         prob1, vars1 = build_milp(
-            instance, K, locked_slot_map,
+            instance, K,
             symmetry_breaking=symmetry_breaking,
             phase2_sum_alpha_star=None,
         )
@@ -228,7 +226,7 @@ def solve_exact(
     phase1_warm_values: Optional[dict] = None
     if warm_start is not None:
         phase1_warm_values = build_warmstart_values(
-            warm_start, instance, K, locked_slot_map
+            warm_start, instance, K
         )
 
     status1, gap1, elapsed1 = _solve_phase(
@@ -277,7 +275,7 @@ def solve_exact(
     # ---- Phase 2 ----
     try:
         prob2, vars2 = build_milp(
-            instance, K, locked_slot_map,
+            instance, K,
             symmetry_breaking=symmetry_breaking,
             phase2_sum_alpha_star=sum_alpha_star,
         )
@@ -305,7 +303,7 @@ def solve_exact(
         try:
             sol1 = extract_solution(instance, vars1)
             phase2_warm_values = build_warmstart_values(
-                sol1, instance, K, locked_slot_map
+                sol1, instance, K
             )
         except Exception as e:
             logger.warning(f"Phase 2 warm start build failed: {e}; continuing cold.")
