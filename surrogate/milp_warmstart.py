@@ -36,6 +36,16 @@ from models import Instance, Solution, get_region
 logger = logging.getLogger(__name__)
 
 
+def _vname(prefix: str, key: tuple) -> str:
+    """Return the PuLP variable name for LpVariable.dicts with a tuple key.
+
+    PuLP does: name = f"{prefix}_{str(key)}".replace(" ", "_")
+    e.g. ("x", (2, 3)) → "x_(2,_3)"
+         ("z", (1, "HQ40")) → "z_(1,_'HQ40')"
+    """
+    return f"{prefix}_{str(key)}".replace(" ", "_")
+
+
 def build_warmstart_values(
     solution: Solution,
     instance: Instance,
@@ -87,17 +97,18 @@ def build_warmstart_values(
                 locked_champion_vids.add(champ_vid)
 
     # -------------------------------------------------------------------------
-    # Map locked-group champion vehicles to locked slots
-    # (one locked_vehicle_id → one slot; find the champion vehicle for it)
+    # Map each locked slot to its champion vehicle's type.
+    # One champion vehicle may cover multiple locked groups (e.g., if the VNS
+    # merged two locked groups into one vehicle); each group still maps to a
+    # separate MILP slot, and all such slots must have a vehicle type set.
     # -------------------------------------------------------------------------
-    locked_champ_to_slot: dict[str, int] = {}  # champion vehicle_id → slot j
+    locked_slot_vtype: dict[int, str] = {}  # slot j → vehicle type
     for locked_instance_vid, slot_j in locked_slot_map.items():
-        # Find the champion vehicle that covers this locked group
         for o in orders:
             if o.locked_vehicle_id == locked_instance_vid:
                 champ_vid = solution.assignment.get(o.order_id)
-                if champ_vid is not None and champ_vid not in locked_champ_to_slot:
-                    locked_champ_to_slot[champ_vid] = slot_j
+                if champ_vid is not None:
+                    locked_slot_vtype[slot_j] = solution.vehicles[champ_vid].vehicle_type
                 break
 
     # -------------------------------------------------------------------------
@@ -110,7 +121,7 @@ def build_warmstart_values(
         if not vehicle.order_ids:
             continue
         if champ_vid in locked_champion_vids:
-            continue  # handled via locked_champ_to_slot
+            continue  # handled via locked_slot_vtype and spillover below
         if free_slot >= K:
             logger.warning(
                 "warm start: champion has more vehicles than K=%d; skipping warm start",
@@ -119,6 +130,38 @@ def build_warmstart_values(
             return {}
         free_vehicle_to_slot[champ_vid] = free_slot
         free_slot += 1
+
+    # -------------------------------------------------------------------------
+    # Allocate spillover free slots for free orders stranded in locked vehicles.
+    # In the MILP, free orders cannot go on locked slots (preprocessing fixes
+    # x[free_order, locked_slot] = 0). Each mixed champion vehicle (one that has
+    # both locked and free orders) gets one fresh free slot for its free orders.
+    # -------------------------------------------------------------------------
+    spillover_free_oids: dict[str, int] = {}  # order_id → spillover slot j
+    spillover_slot_vtype: dict[int, str] = {}  # spillover slot j → vehicle type
+
+    for champ_vid in sorted(locked_champion_vids):  # sorted for determinism
+        vehicle = solution.vehicles.get(champ_vid)
+        if vehicle is None:
+            continue
+        free_oids_in_mixed = [
+            oid for oid in vehicle.order_ids
+            if instance.orders[oid].locked_vehicle_id is None
+        ]
+        if not free_oids_in_mixed:
+            continue  # purely locked vehicle; no spillover needed
+        if free_slot >= K:
+            logger.warning(
+                "warm start: K=%d exhausted; skipping spillover for %s "
+                "(%d free orders unassigned)",
+                K, champ_vid, len(free_oids_in_mixed),
+            )
+            continue  # leave unassigned rather than aborting entirely
+        j_spill = free_slot
+        free_slot += 1
+        spillover_slot_vtype[j_spill] = vehicle.vehicle_type
+        for oid in free_oids_in_mixed:
+            spillover_free_oids[oid] = j_spill
 
     # -------------------------------------------------------------------------
     # Build order → warm-start slot mapping
@@ -135,30 +178,24 @@ def build_warmstart_values(
         for oid in solution.vehicles[champ_vid].order_ids:
             order_to_slot[oid] = j
 
-    # Free orders in locked vehicles → no warm start (skip)
+    # Free orders in mixed vehicles → their spillover slot
+    order_to_slot.update(spillover_free_oids)
 
     # -------------------------------------------------------------------------
     # Build slot → vehicle type
     # -------------------------------------------------------------------------
     slot_to_vtype: dict[int, str] = {}
 
-    # Locked slots: use the vehicle type of the champion vehicle for that group
-    for champ_vid, j in locked_champ_to_slot.items():
-        slot_to_vtype[j] = solution.vehicles[champ_vid].vehicle_type
+    # Locked slots: each locked group has its own MILP slot with its champion's type
+    for slot_j, vtype in locked_slot_vtype.items():
+        slot_to_vtype[slot_j] = vtype
 
     # Free slots: use champion vehicle type
     for champ_vid, j in free_vehicle_to_slot.items():
         slot_to_vtype[j] = solution.vehicles[champ_vid].vehicle_type
 
-    # -------------------------------------------------------------------------
-    # Helper: PuLP's name for LpVariable.dicts tuple key
-    # PuLP does: name = f"{prefix}_{str(key)}".replace(" ", "_")
-    # For tuple (i, j): str((i, j)) == "(i, j)" → "(i,_j)"
-    # For tuple (j, 'HQ40'): str((j, 'HQ40')) == "(j, 'HQ40')" → "(j,_'HQ40')"
-    # (single quotes kept, spaces → underscore)
-    # -------------------------------------------------------------------------
-    def _vname(prefix: str, key: tuple) -> str:
-        return f"{prefix}_{str(key)}".replace(" ", "_")
+    # Spillover slots: same type as the mixed champion vehicle
+    slot_to_vtype.update(spillover_slot_vtype)
 
     # -------------------------------------------------------------------------
     # Build variable value dict

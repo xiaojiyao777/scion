@@ -21,7 +21,7 @@ import pytest
 from models import Instance, Order, Solution, SPU, Vehicle
 from oracle import check_feasibility, recompute_objective
 from milp_model import compute_K, build_locked_slot_map
-from milp_warmstart import build_warmstart_values
+from milp_warmstart import build_warmstart_values, _vname
 from milp_solver import solve_exact, _load_instance
 
 
@@ -108,7 +108,7 @@ def test_warmstart_values_sum_to_n_orders():
     # For each order i, sum x[i,j] over all j
     for i in I:
         row_sum = sum(
-            values.get(f"x_{i}_{j}", 0.0) for j in J
+            values.get(_vname("x", (i, j)), 0.0) for j in J
         )
         # Each order should have exactly 1 assignment (or 0 if no warm-start slot)
         assert row_sum in (0.0, 1.0), (
@@ -117,7 +117,7 @@ def test_warmstart_values_sum_to_n_orders():
 
     # Total x=1 entries should equal number of orders with warm-start slots
     total = sum(
-        values.get(f"x_{i}_{j}", 0.0) for i in I for j in J
+        values.get(_vname("x", (i, j)), 0.0) for i in I for j in J
     )
     n_orders = len(orders)
     assert total == n_orders, (
@@ -143,14 +143,14 @@ def test_warmstart_locked_slots_respected():
     # O1 and O2 have locked_vehicle_id=LOCK_A → must be on locked_slot
     for oid in ("O1", "O2"):
         i = order_id_to_i[oid]
-        assert values.get(f"x_{i}_{locked_slot}", 0.0) == 1.0, (
+        assert values.get(_vname("x", (i, locked_slot)), 0.0) == 1.0, (
             f"Order {oid} (i={i}) should be at locked slot {locked_slot}"
         )
         # Must be 0 on all other slots
         for j in range(K):
             if j == locked_slot:
                 continue
-            assert values.get(f"x_{i}_{j}", 0.0) == 0.0, (
+            assert values.get(_vname("x", (i, j)), 0.0) == 0.0, (
                 f"Order {oid} (i={i}) should not be at slot {j}"
             )
 
@@ -167,16 +167,16 @@ def test_warmstart_vehicle_type_matches():
 
     # Locked slot: V_LOCK has type T5
     locked_slot = locked_slot_map["LOCK_A"]
-    assert values.get(f"z_{locked_slot}_T5", 0.0) == 1.0, "Locked slot should have z[j, T5]=1"
+    assert values.get(_vname("z", (locked_slot, "T5")), 0.0) == 1.0, "Locked slot should have z[j, T5]=1"
     for t in ("HQ40_DG", "HQ40", "T10", "T3"):
-        assert values.get(f"z_{locked_slot}_{t}", 0.0) == 0.0, (
+        assert values.get(_vname("z", (locked_slot, t)), 0.0) == 0.0, (
             f"Locked slot should have z[j, {t}]=0"
         )
 
     # Verify each used free slot has exactly one z=1
     J = list(range(K))
     for j in J:
-        z_vals = [values.get(f"z_{j}_{t}", 0.0) for t in ("HQ40_DG", "HQ40", "T10", "T5", "T3")]
+        z_vals = [values.get(_vname("z", (j, t)), 0.0) for t in ("HQ40_DG", "HQ40", "T10", "T5", "T3")]
         z_sum = sum(z_vals)
         # Either slot is used (z_sum=1) or unused (z_sum=0)
         assert z_sum in (0.0, 1.0), f"Slot {j}: z sum = {z_sum}, expected 0 or 1"
