@@ -5,14 +5,18 @@ Translates a champion Solution into a dict[str, float] mapping PuLP
 variable names → warm-start values, consistent with build_milp()'s
 variable layout.
 
-PuLP variable name convention (from LpVariable.dicts):
-  x[(i, j)]  → "x_{i}_{j}"
-  y[j]        → "y_{j}"
-  z[(j, t)]   → "z_{j}_{t}"
-  a[(s, j)]   → "a_{s}_{j}"   (prefix "a", not "alpha")
-  w[(j, r)]   → "w_{j}_{r}"
-  u[(j, p)]   → "u_{j}_{p_safe}"  (spaces replaced by "_")
-  v[(j, c)]   → "v_{j}_{c}"
+PuLP variable name convention (from LpVariable.dicts with tuple keys):
+  x[(i, j)]   → "x_(i,_j)"           ← spaces → _, parens kept
+  y[j]         → "y_j"
+  z[(j, t)]    → "z_(j,_'type')"      ← string index gets quoted
+  a[(s, j)]    → "a_(s,_j)"           (prefix "a", not "alpha")
+  w[(j, r)]    → "w_(j,_'region')"
+  u[(j, p)]    → "u_(j,_'pickup')"
+  v[(j, c)]    → "v_(j,_'cat')"
+
+PuLP's LpVariable.dicts() calls `str(key)` for tuple keys, producing
+"(i, j)" with spaces, then replaces spaces with underscores in the final
+variable name. String components in the tuple keep their single quotes.
 """
 
 from __future__ import annotations
@@ -147,31 +151,41 @@ def build_warmstart_values(
         slot_to_vtype[j] = solution.vehicles[champ_vid].vehicle_type
 
     # -------------------------------------------------------------------------
+    # Helper: PuLP's name for LpVariable.dicts tuple key
+    # PuLP does: name = f"{prefix}_{str(key)}".replace(" ", "_")
+    # For tuple (i, j): str((i, j)) == "(i, j)" → "(i,_j)"
+    # For tuple (j, 'HQ40'): str((j, 'HQ40')) == "(j, 'HQ40')" → "(j,_'HQ40')"
+    # (single quotes kept, spaces → underscore)
+    # -------------------------------------------------------------------------
+    def _vname(prefix: str, key: tuple) -> str:
+        return f"{prefix}_{str(key)}".replace(" ", "_")
+
+    # -------------------------------------------------------------------------
     # Build variable value dict
     # -------------------------------------------------------------------------
     values: dict[str, float] = {}
 
-    # x[i, j]: "x_{i}_{j}"
+    # x[i, j]
     for i in I:
         oid = orders[i].order_id
         j_assigned = order_to_slot.get(oid)
         if j_assigned is None:
             continue  # skip orders with no warm-start slot
         for j in J:
-            values[f"x_{i}_{j}"] = 1.0 if j == j_assigned else 0.0
+            values[_vname("x", (i, j))] = 1.0 if j == j_assigned else 0.0
 
-    # y[j]: "y_{j}"
+    # y[j]
     used_slots: set[int] = set(order_to_slot.values())
     for j in J:
         values[f"y_{j}"] = 1.0 if j in used_slots else 0.0
 
-    # z[j, t]: "z_{j}_{t}"
+    # z[j, t]
     for j in J:
         vtype_j = slot_to_vtype.get(j)
         for t in T:
-            values[f"z_{j}_{t}"] = 1.0 if t == vtype_j else 0.0
+            values[_vname("z", (j, t))] = 1.0 if t == vtype_j else 0.0
 
-    # alpha[s, j]: prefix "a" → "a_{s}_{j}"
+    # alpha[s, j] — prefix "a"
     slot_to_subcats: dict[int, set] = defaultdict(set)
     for i in I:
         j_assigned = order_to_slot.get(orders[i].order_id)
@@ -180,9 +194,9 @@ def build_warmstart_values(
 
     for s in S:
         for j in J:
-            values[f"a_{s}_{j}"] = 1.0 if s in slot_to_subcats[j] else 0.0
+            values[_vname("a", (s, j))] = 1.0 if s in slot_to_subcats[j] else 0.0
 
-    # w[j, r]: "w_{j}_{r}"
+    # w[j, r]
     slot_to_region: dict[int, str] = {}
     for i in I:
         j_assigned = order_to_slot.get(orders[i].order_id)
@@ -192,9 +206,9 @@ def build_warmstart_values(
     for j in J:
         region_j = slot_to_region.get(j)
         for r in R:
-            values[f"w_{j}_{r}"] = 1.0 if r == region_j else 0.0
+            values[_vname("w", (j, r))] = 1.0 if r == region_j else 0.0
 
-    # u[j, p]: "u_{j}_{p_safe}" (spaces replaced by "_" in pickup names)
+    # u[j, p]
     slot_to_pickups: dict[int, set] = defaultdict(set)
     for i in I:
         j_assigned = order_to_slot.get(orders[i].order_id)
@@ -203,10 +217,9 @@ def build_warmstart_values(
 
     for j in J:
         for p in P:
-            p_safe = p.replace(" ", "_")
-            values[f"u_{j}_{p_safe}"] = 1.0 if p in slot_to_pickups[j] else 0.0
+            values[_vname("u", (j, p))] = 1.0 if p in slot_to_pickups[j] else 0.0
 
-    # v[j, c]: "v_{j}_{c}" (Phase 1 only)
+    # v[j, c] — Phase 1 only
     if instance.phase == 1:
         slot_to_cats: dict[int, set] = defaultdict(set)
         for i in I:
@@ -216,6 +229,6 @@ def build_warmstart_values(
 
         for j in J:
             for c in C:
-                values[f"v_{j}_{c}"] = 1.0 if c in slot_to_cats[j] else 0.0
+                values[_vname("v", (j, c))] = 1.0 if c in slot_to_cats[j] else 0.0
 
     return values
