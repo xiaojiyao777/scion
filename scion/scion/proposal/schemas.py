@@ -234,7 +234,7 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
 """
 
 CODE_PROMPT_TEMPLATE = """\
-You are a software engineer implementing a VRP operator for a solver optimisation framework.
+You are a software engineer implementing a vehicle-assignment operator for a solver optimisation framework.
 Your task is to write the complete file contents that implement the approved hypothesis below.
 
 ## Problem Summary
@@ -288,7 +288,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
 """
 
 FIX_PROMPT_TEMPLATE = """\
-You are a software engineer fixing a VRP operator that failed verification.
+You are a software engineer fixing a vehicle-assignment operator that failed verification.
 Correct the code so it passes, while preserving the intended logic.
 
 ## Problem Summary

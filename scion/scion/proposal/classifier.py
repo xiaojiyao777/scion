@@ -20,7 +20,7 @@ TAXONOMY = [
 ]
 
 _CLASSIFIER_PROMPT = """\
-You are a hypothesis classifier for a VRP (Vehicle Routing Problem) operator search system.
+You are a hypothesis classifier for a vehicle-assignment operator search system.
 
 Given a hypothesis text, classify it into exactly ONE of these family categories:
 {taxonomy}

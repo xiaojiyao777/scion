@@ -6,3 +6,4 @@ __pycache__/
 legacy/
 .env
 graphify-out/
+.learnings/

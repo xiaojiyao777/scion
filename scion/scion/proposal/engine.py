@@ -281,7 +281,7 @@ def _split_code_context(
 
     # Block 1: Static role + quality rules + problem + interface (never changes)
     static_text = (
-        "You are a software engineer implementing a VRP operator for a solver optimisation framework.\n"
+        "You are a software engineer implementing a vehicle-assignment operator for a solver optimisation framework.\n"
         "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
         "- Write ONLY what the hypothesis requires. No extra features, helper functions, or abstractions.\n"
@@ -372,7 +372,7 @@ def _split_fix_context(
     D = _DefaultDict(context)
 
     system_text = (
-        "You are a software engineer fixing a VRP operator that failed verification.\n"
+        "You are a software engineer fixing a vehicle-assignment operator that failed verification.\n"
         "Correct the code so it passes, while preserving the intended logic.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"## Operator Interface Specification\n"
