@@ -39,6 +39,36 @@ SMALL = [
 ]
 
 
+def load_baseline_champion(instance):
+    """Run the surrogate solver for a short budget to get a baseline champion."""
+    from config import Config
+    from greedy_init import greedy_init
+    from operators import (
+        ChangeVehicleType, DestroyRebuild, MergeVehicles,
+        MoveOrder, SplitVehicle, SwapOrders,
+    )
+    from vns import run_vns
+    from random import Random
+
+    cfg = Config()
+    cfg.max_iterations = 50
+    rng = Random(42)
+    init_sol = greedy_init(instance, rng)
+    init_sol.objective = recompute_objective(init_sol, instance)
+    ops = [
+        SwapOrders(instance, 1),
+        MoveOrder(instance, 1),
+        MergeVehicles(instance, 1),
+        ChangeVehicleType(instance, 1),
+        DestroyRebuild(instance, 1),
+        SplitVehicle(instance, 1),
+    ]
+    weights = [3, 3, 2, 2, 2, 1]
+    champion = run_vns(instance, [init_sol], ops, weights, cfg)
+    champion.objective = recompute_objective(champion, instance)
+    return champion
+
+
 def run_one(short, path, time_limit, note=""):
     inst = _load_instance(path)
     n = len(inst.orders)
@@ -48,8 +78,17 @@ def run_one(short, path, time_limit, note=""):
     print(f"[{short}] n={n} n_active_subcats={n_active}  time_limit={time_limit}s", flush=True)
     print(f"  start: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
 
+    champion = load_baseline_champion(inst)
+    champ_obj = recompute_objective(champion, inst)
+
     t0 = time.monotonic()
-    r = solve_exact(inst, time_limit_seconds=time_limit, verbose=False, solver_name="HiGHS")
+    r = solve_exact(
+        inst,
+        time_limit_seconds=time_limit,
+        verbose=False,
+        solver_name="HiGHS",
+        warm_start=champion,
+    )
     elapsed = time.monotonic() - t0
 
     rec = {
@@ -72,6 +111,8 @@ def run_one(short, path, time_limit, note=""):
         "phase2_gap": r.phase2_gap,
         "lower_bound_f1": r.lower_bound_f1,
         "lower_bound_f2": r.lower_bound_f2,
+        "warmstart_f1": champ_obj.subcategory_splits,
+        "warmstart_f2": champ_obj.total_cost,
         "note": note,
     }
 
@@ -97,7 +138,7 @@ def run_one(short, path, time_limit, note=""):
     print(
         f"  DONE status={r.status} verified={r.solution_verified} "
         f"f1={r.objective_f1} f2={r.objective_f2} lb_f1={r.lower_bound_f1} "
-        f"elapsed={elapsed:.1f}s",
+        f"elapsed={elapsed:.1f}s (warmstart f1={champ_obj.subcategory_splits})",
         flush=True,
     )
     return rec
@@ -157,3 +198,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -29,8 +29,46 @@ from milp_model import (
     extract_solution,
     extract_solution_strict,
 )
+from milp_warmstart import build_warmstart_values
 from models import Instance, Solution, VEHICLE_TYPES
 from oracle import check_feasibility, recompute_objective
+
+
+# ---------------------------------------------------------------------------
+# HiGHS warm-start solver (subclass of pulp.HiGHS)
+# ---------------------------------------------------------------------------
+try:
+    import highspy as _highspy
+    import numpy as _np
+
+    class _HiGHSWithWarmStart(pulp.HiGHS):
+        """HiGHS solver that injects a MIP start via setSolution before run()."""
+
+        def __init__(self, warm_values: dict[str, float], **kwargs):
+            super().__init__(**kwargs)
+            self._warm_values = warm_values
+
+        def callSolver(self, lp: pulp.LpProblem) -> None:  # type: ignore[override]
+            h = lp.solverModel  # highspy.Highs instance
+            n_cols = h.getNumCol()
+            col_indices = []
+            col_vals = []
+            for var in lp.variables():
+                if var.name in self._warm_values and hasattr(var, "index"):
+                    idx = var.index
+                    if 0 <= idx < n_cols:
+                        col_indices.append(idx)
+                        col_vals.append(self._warm_values[var.name])
+            if col_indices:
+                h.setSolution(
+                    len(col_indices),
+                    _np.array(col_indices, dtype=_np.int32),
+                    _np.array(col_vals, dtype=_np.float64),
+                )
+            super().callSolver(lp)
+
+except (ImportError, Exception):
+    _HiGHSWithWarmStart = None  # type: ignore[assignment,misc]
 
 
 @dataclass
@@ -54,6 +92,7 @@ def _solve_phase(
     time_limit: int,
     verbose: bool,
     solver_name: str = "HiGHS",
+    warm_values: Optional[dict] = None,
 ) -> tuple[int, float, float]:
     """Solve a single MIP phase. Returns (status_code, gap, elapsed_seconds).
 
@@ -65,10 +104,20 @@ def _solve_phase(
       - report 'Optimal' status on timeout+incumbent (PuLP parsing quirk), and
       - leave Phase 2 with fractional LP relaxation solutions on medium-size
         instances (>=30 orders) within a 300s time limit.
+
+    warm_values : dict or None
+        When provided with solver_name='HiGHS', injects a MIP warm start via
+        highspy.setSolution() before solving. Ignored for CBC.
     """
     if solver_name == "HiGHS":
         try:
-            solver = pulp.HiGHS(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
+            use_warmstart = warm_values and _HiGHSWithWarmStart is not None
+            if use_warmstart:
+                solver = _HiGHSWithWarmStart(
+                    warm_values, msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0
+                )
+            else:
+                solver = pulp.HiGHS(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
             if not solver.available():
                 solver = pulp.PULP_CBC_CMD(msg=1 if verbose else 0, timeLimit=time_limit, gapRel=0)
         except Exception:
@@ -129,6 +178,7 @@ def solve_exact(
     symmetry_breaking: bool = True,
     verbose: bool = False,
     solver_name: str = "HiGHS",
+    warm_start: Optional[Solution] = None,
 ) -> MILPResult:
     """Two-phase epsilon-constraint MILP solver.
 
@@ -138,7 +188,14 @@ def solve_exact(
     solver_name: 'HiGHS' (default, recommended) or 'CBC'.
     HiGHS is 5-50x faster than CBC on this model and does not suffer from
     CBC's timeout-Optimal status parsing bug.
+
+    warm_start: optional champion Solution to use as MIP warm start.
+    Only supported with solver_name='HiGHS'. Raises NotImplementedError
+    if provided with a non-HiGHS solver.
     """
+    if warm_start is not None and solver_name != "HiGHS":
+        raise NotImplementedError("warm_start only supported with solver_name='HiGHS'")
+
     K = compute_K(instance)
     locked_slot_map = build_locked_slot_map(instance)
 
@@ -163,7 +220,17 @@ def solve_exact(
         )
 
     phase1_time_limit = max(time_limit_seconds // 2, 60)
-    status1, gap1, elapsed1 = _solve_phase(prob1, phase1_time_limit, verbose, solver_name)
+
+    # Build warm-start values for phase 1 (if requested)
+    phase1_warm_values: Optional[dict] = None
+    if warm_start is not None:
+        phase1_warm_values = build_warmstart_values(
+            warm_start, instance, K, locked_slot_map
+        )
+
+    status1, gap1, elapsed1 = _solve_phase(
+        prob1, phase1_time_limit, verbose, solver_name, phase1_warm_values
+    )
 
     if status1 == -1:
         return MILPResult(
@@ -227,6 +294,8 @@ def solve_exact(
         )
 
     phase2_time_limit = int(remaining_time)
+    # TODO: warm start for phase 2 is future work. The champion's f1 may differ
+    # from phase 1 optimum, making it infeasible for phase 2's eps-constraint.
     status2, gap2, elapsed2 = _solve_phase(prob2, phase2_time_limit, verbose, solver_name)
 
     if status2 == -1:
