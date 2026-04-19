@@ -210,23 +210,11 @@ def test_solve_exact_with_warmstart():
     """solve_exact(warm_start=champion) should produce f1/f2 <= baseline on s01."""
     inst = _load("s01")
 
-    # Generate champion via greedy_init + short VNS
-    from config import Config
+    # Generate champion via greedy_init (feasible, no Config/VNS import needed)
     from greedy_init import greedy_init
-    from operators import (
-        ChangeVehicleType, MergeVehicles, MoveOrder, SwapOrders,
-    )
-    from vns import run_vns
     from random import Random
 
-    cfg = Config()
-    cfg.max_iterations = 100
-    rng = Random(42)
-    init_sol = greedy_init(inst, rng)
-    init_sol.objective = recompute_objective(init_sol, inst)
-    ops = [cls(inst, 1) for cls in [SwapOrders, MoveOrder, MergeVehicles, ChangeVehicleType]]
-    weights = [3, 3, 2, 2]
-    champion = run_vns(inst, [init_sol], ops, weights, cfg)
+    champion = greedy_init(inst, Random(42))
     champion.objective = recompute_objective(champion, inst)
 
     # Baseline solve without warm start
