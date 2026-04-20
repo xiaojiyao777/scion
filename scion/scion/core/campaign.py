@@ -1717,11 +1717,11 @@ class CampaignManager:
     ) -> None:
         """Background thread: run weight opt and update champion on success.
 
-        R2: Writes optimized weights back to the frozen snapshot, updates
-            self._champion.operator_pool and code_snapshot_hash.
-        R4: Checks version before updating; discards result if champion advanced.
+        Creates a NEW immutable snapshot rather than modifying the original.
+        Atomic pointer switch under champion_lock.
         """
         import os as _os
+        import shutil as _shutil
         import time as _time
         from scion.runtime.workspace import _make_tree_writable
         from pathlib import Path as _Path
@@ -1738,8 +1738,6 @@ class CampaignManager:
         if opt_result is None:
             return
 
-        # Record result regardless of improvement
-        # J6: Store latest weight opt result for LLM feedback
         self._latest_weight_opt_result = opt_result
         try:
             self._registry.record_weight_optimization(
@@ -1757,33 +1755,51 @@ class CampaignManager:
             )
             return
 
-        # Write optimized weights back to snapshot (temporarily make writable)
-        registry_path = _os.path.join(staging_path, "registry.yaml")
+        # Determine new revision number
+        with self._champion_lock:
+            if self._champion.version != version:
+                logger.warning(
+                    "Background weight opt for champion v%d discarded — "
+                    "champion has advanced to v%d",
+                    version, self._champion.version,
+                )
+                return
+            new_revision = self._champion.weight_revision + 1
+
+        # Create NEW immutable snapshot with optimized weights (never modify original)
+        new_snapshot_path = str(self._materializer._champions_dir / f"champion_v{version}_r{new_revision}")
         try:
+            if _os.path.exists(new_snapshot_path):
+                _make_tree_writable(_Path(new_snapshot_path))
+                _shutil.rmtree(new_snapshot_path)
+            _shutil.copytree(staging_path, new_snapshot_path)
+            _make_tree_writable(_Path(new_snapshot_path))
+
             from scion.runtime.pool_manager import update_weights, read_registry
-            _make_tree_writable(_Path(staging_path))
+            registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
             if _os.path.exists(registry_path):
                 update_weights(registry_path, opt_result.best_weights)
-            self._materializer.freeze_snapshot(staging_path)
+            self._materializer.freeze_snapshot(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "Background weight opt: failed to write weights for champion v%d: %s",
-                version, exc,
+                "Background weight opt: failed to create snapshot for champion v%d_r%d: %s",
+                version, new_revision, exc,
             )
             return
 
         # Recompute hash and read updated pool
         try:
+            registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
             new_pool = read_registry(registry_path)
-            new_hash = self._materializer.compute_snapshot_hash(staging_path)
+            new_hash = self._materializer.compute_snapshot_hash(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "Background weight opt: failed to recompute hash for champion v%d: %s",
-                version, exc,
+                "Background weight opt: failed to recompute hash for champion v%d_r%d: %s",
+                version, new_revision, exc,
             )
             return
 
-        # R4: Only update champion if version is still current
+        # Atomic pointer switch
         with self._champion_lock:
             if self._champion.version != version:
                 logger.warning(
@@ -1796,22 +1812,23 @@ class CampaignManager:
                 version=self._champion.version,
                 operator_pool=new_pool,
                 solver_config_hash=self._champion.solver_config_hash,
-                code_snapshot_path=self._champion.code_snapshot_path,
+                code_snapshot_path=new_snapshot_path,
                 code_snapshot_hash=new_hash,
                 promoted_at=self._champion.promoted_at,
+                weight_revision=new_revision,
             )
 
         logger.info(
-            "Background weight opt complete for champion v%d (%.1f min)",
-            version, elapsed_min,
+            "Background weight opt complete for champion v%d_r%d (%.1f min)",
+            version, new_revision, elapsed_min,
         )
 
-        # J4: Mark active branches as stale so they re-screen with new weights
+        # Stage-aware stale: only mark screening/explore branches
         try:
-            stale_weight_ids = self._branch_ctrl.mark_all_stale(version)
+            stale_weight_ids = self._branch_ctrl.mark_stale_for_weight_update(version)
             if stale_weight_ids:
                 logger.info(
-                    "Background weight opt: marked %d branches stale for re-screening",
+                    "Background weight opt: marked %d screening branches stale for re-screening",
                     len(stale_weight_ids),
                 )
         except Exception as exc:

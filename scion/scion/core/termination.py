@@ -21,6 +21,8 @@ class CampaignState:
     recent_abandoned_count: int = 0
     active_branches: List[Branch] = field(default_factory=list)
     can_create_new: bool = True
+    early_stop_detected: bool = False
+    early_stop_reason: str = ""
 
 
 _ACTIVE_STATES = frozenset({
@@ -55,6 +57,7 @@ class TerminationChecker:
             or self._wall_clock_exceeded(campaign_state)
             or self._stagnation_detected(campaign_state)
             or self._no_progress_possible(campaign_state)
+            or self._early_stop_detected(campaign_state)
         )
 
     # ------------------------------------------------------------------
@@ -74,3 +77,6 @@ class TerminationChecker:
     def _no_progress_possible(self, state: CampaignState) -> bool:
         has_active = any(b.state in _ACTIVE_STATES for b in state.active_branches)
         return not has_active and not state.can_create_new
+
+    def _early_stop_detected(self, state: CampaignState) -> bool:
+        return state.early_stop_detected

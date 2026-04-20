@@ -124,6 +124,26 @@ class BranchController:
                 affected.append(branch.branch_id)
         return affected
 
+    def mark_stale_for_weight_update(self, champion_version: int) -> List[str]:
+        """Mark branches stale after a weight-opt update (stage-aware).
+
+        Only screening/explore branches are marked STALE_WEIGHT_UPDATE.
+        Validation and frozen branches continue with old weights — they will
+        be re-evaluated on next promotion cycle.
+        """
+        _SCREENING_STATES = frozenset({
+            BranchState.EXPLORE,
+            BranchState.EXPLORE_EXPAND,
+            BranchState.NEW,
+        })
+        affected: List[str] = []
+        for branch in self._branches.values():
+            if branch.state in _SCREENING_STATES:
+                branch.state = BranchState.STALE_WEIGHT_UPDATE
+                branch.updated_at = datetime.now()
+                affected.append(branch.branch_id)
+        return affected
+
     def reconcile_stale(
         self, branch_id: str, success: bool, new_champion: ChampionState
     ) -> None:

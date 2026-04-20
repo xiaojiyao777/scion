@@ -15,6 +15,7 @@ class SaturationSignal:
     saturation_level: Literal["low", "medium", "high"]
     opportunity_hint: str             # human-readable improvement hint
     at_absolute_minimum: bool = False  # baseline already at absolute minimum (e.g. splits ≈ 0)
+    saturation_type: Literal["hard", "soft", "none"] = "none"
 
 
 class ChampionSaturationAnalyzer:
@@ -61,6 +62,7 @@ class ChampionSaturationAnalyzer:
                     saturation_level="high",
                     opportunity_hint="已达绝对下界，无法进一步改善",
                     at_absolute_minimum=True,
+                    saturation_type="hard",
                 ))
                 continue
 
@@ -71,18 +73,22 @@ class ChampionSaturationAnalyzer:
             if improvement_ratio > 0.70:
                 level: Literal["low", "medium", "high"] = "high"
                 hint = "接近局部最优"
+                sat_type: Literal["hard", "soft", "none"] = "soft"
             elif improvement_ratio > 0.30:
                 level = "medium"
                 hint = "有一定改进空间"
+                sat_type = "none"
             else:
                 level = "low"
                 hint = "仍有较大空间"
+                sat_type = "none"
 
             signals.append(SaturationSignal(
                 objective=obj,
                 improvement_ratio=improvement_ratio,
                 saturation_level=level,
                 opportunity_hint=hint,
+                saturation_type=sat_type,
             ))
 
         return signals
