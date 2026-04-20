@@ -6,7 +6,7 @@ import statistics
 import uuid as _uuid_mod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,9 @@ from scion.protocol.stats import compute_eval_stats
 from scion.protocol.gates import (
     GateResult, screening_gate, validation_gate, frozen_gate,
 )
+
+if TYPE_CHECKING:
+    from scion.problem.spec import ObjectiveMetricSpec
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +98,8 @@ class ExperimentProtocol:
         runner: Runner,
         time_limit_sec: int = 300,
         metrics_dir: str = "/tmp/scion_metrics",
+        *,
+        metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -102,7 +107,42 @@ class ExperimentProtocol:
         self.runner = runner
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
+        self._metric_specs = metric_specs
         os.makedirs(metrics_dir, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Comparison dispatch: generic (v0.3+) or legacy
+    # ------------------------------------------------------------------
+
+    def _compare_objectives(
+        self,
+        candidate_objective: dict,
+        champion_objective: dict,
+    ) -> tuple:
+        """Return (comparison_str, ObjectiveBreakdown)."""
+        if self._metric_specs is not None:
+            from scion.problem.objectives import compare_lexicographic
+            result = compare_lexicographic(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+            breakdown = _objective_comparison_to_breakdown(
+                result, candidate_objective, champion_objective,
+            )
+            return result.outcome, breakdown
+        return compare_with_breakdown(candidate_objective, champion_objective)
+
+    def _compute_delta(
+        self,
+        candidate_objective: dict,
+        champion_objective: dict,
+    ) -> float:
+        if self._metric_specs is not None:
+            from scion.problem.objectives import compare_lexicographic
+            result = compare_lexicographic(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+            return result.scalar_delta
+        return compute_delta(candidate_objective, champion_objective)
 
     # ------------------------------------------------------------------
     # T3: Canary — uses independent canary split + canary seeds
@@ -269,11 +309,11 @@ class ExperimentProtocol:
                 if cand_r.output is None or champ_r.output is None:
                     continue
 
-                cmp, breakdown = compare_with_breakdown(
+                cmp, breakdown = self._compare_objectives(
                     cand_r.output.objective,
                     champ_r.output.objective,
                 )
-                delta = compute_delta(cand_r.output.objective, champ_r.output.objective)
+                delta = self._compute_delta(cand_r.output.objective, champ_r.output.objective)
 
                 raw_pairs.append(
                     {"case": case, "seed": seed, "comparison": cmp, "delta": delta}
@@ -528,4 +568,48 @@ def _build_pattern_summary(
         consistent_win_cases=consistent_wins,
         consistent_loss_cases=consistent_losses,
         key_observations=tuple(observations),
+    )
+
+
+# ---------------------------------------------------------------------------
+# ObjectiveComparison → ObjectiveBreakdown adapter (backward compat)
+# ---------------------------------------------------------------------------
+
+def _objective_comparison_to_breakdown(
+    result,  # ObjectiveComparison
+    candidate_objective: dict,
+    champion_objective: dict,
+) -> ObjectiveBreakdown:
+    """Convert a generic ObjectiveComparison to the legacy ObjectiveBreakdown.
+
+    Maps metric names to the warehouse-specific fields when they match;
+    for non-warehouse problems, fields that don't map remain None.
+    """
+    cand_splits = candidate_objective.get("subcategory_splits")
+    champ_splits = champion_objective.get("subcategory_splits")
+    cand_cost = candidate_objective.get("total_cost")
+    champ_cost = champion_objective.get("total_cost")
+
+    delta_splits = None
+    delta_cost = None
+    if cand_splits is not None and champ_splits is not None:
+        delta_splits = float(champ_splits) - float(cand_splits)
+    if cand_cost is not None and champ_cost is not None:
+        delta_cost = float(champ_cost) - float(cand_cost)
+
+    decisive = result.decisive_metric or "tie"
+    decisive_map = {
+        "subcategory_splits": "business_aggregation",
+        "total_cost": "cost",
+    }
+    decisive_display = decisive_map.get(decisive, decisive)
+
+    return ObjectiveBreakdown(
+        candidate_subcategory_splits=cand_splits,
+        champion_subcategory_splits=champ_splits,
+        candidate_total_cost=cand_cost,
+        champion_total_cost=champ_cost,
+        delta_subcategory_splits=delta_splits,
+        delta_total_cost=delta_cost,
+        decisive_objective=decisive_display,
     )

@@ -125,6 +125,7 @@ class CampaignManager:
         budget: Optional[BudgetState] = None,
         termination_config: Optional[TerminationConfig] = None,
         retry_config: Optional[RetryConfig] = None,
+        adapter: Optional[Any] = None,
     ) -> None:
         self._spec = problem_spec
         self._protocol_config = protocol_config
@@ -134,6 +135,7 @@ class CampaignManager:
         self._champion = champion
         self._campaign_dir = campaign_dir
         self._campaign_id = str(uuid.uuid4())
+        self._adapter = adapter
 
         # Sub-modules
         self._branch_ctrl = BranchController()
@@ -152,7 +154,7 @@ class CampaignManager:
         )
         import os as _os2
         _os2.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
-        self._vgate = verification_gate or VerificationGate(problem_spec, metrics_dir=str(campaign_dir) + "/metrics")
+        self._vgate = verification_gate or VerificationGate(problem_spec, metrics_dir=str(campaign_dir) + "/metrics", adapter=adapter)
         self._experiment_protocol = experiment_protocol  # may be None (no runner)
 
         # Lineage registry (SQLite, WAL mode)

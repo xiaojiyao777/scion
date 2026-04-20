@@ -1,0 +1,124 @@
+"""ProblemSpecV1 — strict Pydantic schema for problem definitions.
+
+All problem-specific configuration enters Scion through this schema.
+``extra="forbid"`` ensures no unrecognised fields slip through.
+"""
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ObjectiveMetricSpec(_Strict):
+    name: str
+    direction: Literal["minimize", "maximize"]
+    priority: int
+    tie_tolerance: float = 0.0
+
+
+class OperatorCategorySpec(_Strict):
+    name: str
+    description: str = ""
+
+
+class OperatorInterfaceSpec(_Strict):
+    base_class_import: str
+    execute_signature: str = "execute(self, solution, rng) -> Solution"
+    categories: list[OperatorCategorySpec]
+
+    @property
+    def category_names(self) -> tuple[str, ...]:
+        return tuple(c.name for c in self.categories)
+
+
+class LLMHintsSpec(_Strict):
+    problem_summary: str = ""
+    operator_interface: str = ""
+
+
+class FamilyTaxonomySpec(_Strict):
+    version: str = "v1"
+    families: list[str] = []
+
+
+class ProblemAdapterRef(_Strict):
+    import_path: str
+    api_version: Literal["v1"] = "v1"
+
+
+class SearchSpaceSpec(_Strict):
+    editable: list[str]
+    frozen: list[str]
+    import_whitelist: list[str]
+
+
+class SolverSpec(_Strict):
+    time_limit_sec: int = 300
+    max_iter: int = 1000
+
+
+class ParameterSearchSpec(_Strict):
+    enabled: bool = True
+    trigger: Literal["on_promote"] = "on_promote"
+    target: Literal["operator_weights"] = "operator_weights"
+    strategy: Literal["random_local", "bayesian"] = "random_local"
+    n_initial_random: int = 8
+    n_iterations: int = 16
+    n_eval_seeds: int = 2
+    weight_bounds: tuple[float, float] = (0.05, 5.0)
+    eval_cases: list[str] = []
+
+
+class ProblemSpecV1(_Strict):
+    spec_version: Literal["problem-v1"] = "problem-v1"
+
+    id: str
+    display_name: str
+    root_dir: str
+    description: str = ""
+
+    search_space: SearchSpaceSpec
+    solver: SolverSpec = SolverSpec()
+    parameter_search: ParameterSearchSpec = ParameterSearchSpec()
+
+    operator_interface: OperatorInterfaceSpec
+    objectives: list[ObjectiveMetricSpec]
+    llm_hints: LLMHintsSpec = LLMHintsSpec()
+    family_taxonomy: FamilyTaxonomySpec | None = None
+    adapter: ProblemAdapterRef
+
+    # Legacy compat fields (optional, for warehouse migration in N1)
+    operators_dir: str = "operators"
+    data_dir: str = "data"
+    oracle_path: str = "oracle.py"
+    solver_path: str = "solver.py"
+    canary_case_path: str = ""
+    unit_test_path: str = ""
+    regression_test_path: str = ""
+
+    @model_validator(mode="after")
+    def _validate_objectives(self) -> ProblemSpecV1:
+        names = [m.name for m in self.objectives]
+        if len(names) != len(set(names)):
+            raise ValueError("objective metric names must be unique")
+
+        priorities = sorted(m.priority for m in self.objectives)
+        expected = list(range(1, len(priorities) + 1))
+        if priorities != expected:
+            raise ValueError(
+                f"objective priorities must be contiguous 1..N: got {priorities}"
+            )
+
+        module_part = self.adapter.import_path.split(":")[0]
+        expected_prefix = f"scion.problems.{self.id}."
+        if not module_part.startswith(expected_prefix):
+            raise ValueError(
+                f"adapter import_path module must start with "
+                f"'{expected_prefix}', got '{module_part}'"
+            )
+        return self

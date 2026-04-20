@@ -1,0 +1,91 @@
+spec_version: "problem-v1"
+
+id: warehouse_delivery
+display_name: "Warehouse Delivery Assignment"
+root_dir: /home/clawd/research/or-autoresearch-agent/surrogate
+description: >-
+  Warehouse Delivery Assignment: assign B2B orders to a fleet of vehicle slots
+  for last-mile logistics. Objective (lexicographic): minimise subcategory_splits
+  first, then total_cost. This is NOT a routing problem — it is a multi-attribute
+  generalised assignment / bin-packing problem.
+
+operators_dir: operators
+data_dir: data
+oracle_path: oracle.py
+solver_path: solver.py
+canary_case_path: /home/clawd/research/or-autoresearch-agent/surrogate/data/instance_small_1.json
+unit_test_path: tests/test_operators.py
+regression_test_path: tests/test_solver.py
+
+search_space:
+  editable:
+    - "operators/*.py"
+  frozen:
+    - "solver.py"
+    - "vns.py"
+    - "pool.py"
+    - "models.py"
+    - "config.py"
+    - "oracle.py"
+    - "greedy_init.py"
+    - "operators/base.py"
+    - "operators/__init__.py"
+  import_whitelist:
+    - __future__
+    - math
+    - random
+    - copy
+    - typing
+    - dataclasses
+    - operators
+    - itertools
+    - functools
+    - collections
+    - enum
+    - abc
+    - models
+
+solver:
+  time_limit_sec: 300
+  max_iter: 200
+
+parameter_search:
+  enabled: true
+  trigger: on_promote
+  target: operator_weights
+  strategy: random_local
+  n_initial_random: 8
+  n_iterations: 16
+  n_eval_seeds: 2
+  weight_bounds: [0.05, 5.0]
+
+operator_interface:
+  base_class_import: "operators.base:Operator"
+  execute_signature: "execute(self, solution, rng) -> Solution"
+  categories:
+    - name: order_level
+      description: "Operators that move/swap individual orders between vehicles"
+    - name: vehicle_level
+      description: "Operators that merge, split, or restructure entire vehicles"
+
+objectives:
+  - name: subcategory_splits
+    direction: minimize
+    priority: 1
+    tie_tolerance: 0
+  - name: total_cost
+    direction: minimize
+    priority: 2
+    tie_tolerance: 0
+
+llm_hints:
+  problem_summary: >-
+    Vehicle assignment problem with subcategory consolidation.
+    NOT a routing/TSP problem. No distance matrix.
+  operator_interface: >-
+    Operators subclass operators.base.Operator and implement
+    execute(self, solution, rng) -> Solution.
+
+adapter:
+  import_path: "scion.problems.warehouse_delivery.adapter:WarehouseDeliveryAdapter"
+  api_version: "v1"

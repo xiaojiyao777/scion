@@ -24,7 +24,7 @@ Test checks (V3, V4) are skipped when runner is None or no test file is found.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult, PatchProposal, VerificationResult
@@ -39,6 +39,9 @@ from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
 
+if TYPE_CHECKING:
+    from scion.problem.contracts import ProblemAdapter
+
 
 class VerificationGate:
     """Full Verification Gate — runs V1–V9 checks in fail-fast order.
@@ -46,6 +49,8 @@ class VerificationGate:
     Args:
         problem_spec: ProblemSpec with canary_case_path, oracle_path, root_dir.
         runner:       Runner for executing the solver in subprocesses.
+        adapter:      Optional ProblemAdapter; when provided, V6/V7 use adapter
+                      instead of direct oracle imports.
 
     When problem_spec is None or runner is None (e.g., in unit tests), runtime
     checks V3–V9 are automatically skipped and return passed=True.
@@ -56,10 +61,13 @@ class VerificationGate:
         problem_spec: Optional[ProblemSpec] = None,
         runner: Optional[Runner] = None,
         metrics_dir: Optional[str] = None,
+        *,
+        adapter: Optional[ProblemAdapter] = None,
     ) -> None:
         self._spec = problem_spec
         self._runner = runner
         self._metrics_dir = metrics_dir
+        self._adapter = adapter
 
     def run(
         self,
@@ -116,13 +124,13 @@ class VerificationGate:
             return _fail(checks, r)
 
         # --- V6: feasibility (heavy) ---
-        r = check_feasibility(self._spec, self._runner, candidate_workspace)
+        r = check_feasibility(self._spec, self._runner, candidate_workspace, adapter=self._adapter)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
 
         # --- V7: objective (heavy) ---
-        r = check_objective(self._spec, self._runner, candidate_workspace)
+        r = check_objective(self._spec, self._runner, candidate_workspace, adapter=self._adapter)
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)

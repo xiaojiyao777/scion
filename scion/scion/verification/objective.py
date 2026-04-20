@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from typing import TYPE_CHECKING, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
@@ -14,11 +15,16 @@ from scion.verification.feasibility import (
     _registry_path,
 )
 
+if TYPE_CHECKING:
+    from scion.problem.contracts import ProblemAdapter
+
 
 def check_objective(
     problem_spec: ProblemSpec,
     runner: Runner,
     candidate_workspace: str,
+    *,
+    adapter: Optional[ProblemAdapter] = None,
 ) -> CheckResult:
     """V4_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
@@ -55,7 +61,11 @@ def check_objective(
     except Exception as exc:
         return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
-    # Extract solver-reported objective.
+    # --- Adapter-based path (v0.3+) ---
+    if adapter is not None:
+        return _check_via_adapter(adapter, raw, canary, t0)
+
+    # --- Legacy path (direct oracle import) ---
     obj_raw = raw.get("objective", {})
     solver_splits = obj_raw.get("subcategory_splits")
     solver_cost = obj_raw.get("total_cost")
@@ -70,7 +80,6 @@ def check_objective(
     except Exception as exc:
         return _cr(False, "heavy", f"oracle error: {exc}", t0)
 
-    # Compare.
     mismatches = []
     if solver_splits is not None and oracle_obj.subcategory_splits != solver_splits:
         mismatches.append(
@@ -80,6 +89,31 @@ def check_objective(
         mismatches.append(
             f"cost: solver={solver_cost} oracle={oracle_obj.total_cost}"
         )
+
+    if mismatches:
+        return _cr(False, "heavy", "objective mismatch: " + "; ".join(mismatches), t0)
+    return _cr(True, "heavy", "objective matches oracle", t0)
+
+
+def _check_via_adapter(
+    adapter: ProblemAdapter, raw: dict, canary: str, t0: int,
+) -> CheckResult:
+    try:
+        instance = adapter.load_instance(canary)
+        artifact = adapter.deserialize_solver_output(raw, instance)
+    except Exception as exc:
+        return _cr(False, "heavy", f"adapter deserialize error: {exc}", t0)
+
+    try:
+        recomputed = adapter.recompute_objective(artifact, instance)
+    except Exception as exc:
+        return _cr(False, "heavy", f"adapter.recompute_objective error: {exc}", t0)
+
+    mismatches = []
+    for key, oracle_val in recomputed.items():
+        solver_val = artifact.objective.get(key)
+        if solver_val is not None and solver_val != oracle_val:
+            mismatches.append(f"{key}: solver={solver_val} oracle={oracle_val}")
 
     if mismatches:
         return _cr(False, "heavy", "objective mismatch: " + "; ".join(mismatches), t0)

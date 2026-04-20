@@ -1,0 +1,45 @@
+spec_version: "problem-v1"
+
+id: toy_tsp
+display_name: "Toy TSP"
+root_dir: PLACEHOLDER
+description: >-
+  Minimal Travelling Salesman Problem on 2D Euclidean plane.
+  Used as MWE to validate ProblemAdapter interface completeness.
+
+search_space:
+  editable:
+    - "operators/*.py"
+  frozen:
+    - "solver.py"
+    - "models.py"
+    - "oracle.py"
+  import_whitelist:
+    - __future__
+    - math
+    - random
+    - typing
+
+solver:
+  time_limit_sec: 30
+  max_iter: 100
+
+parameter_search:
+  enabled: false
+
+operator_interface:
+  base_class_import: "scion.problems.toy_tsp.operators.two_opt:TwoOptOperator"
+  execute_signature: "execute(self, solution, instance, rng) -> TspSolution"
+  categories:
+    - name: local_search
+      description: "Local search operators (2-opt, swap, etc.)"
+
+objectives:
+  - name: tour_cost
+    direction: minimize
+    priority: 1
+    tie_tolerance: 0.001
+
+adapter:
+  import_path: "scion.problems.toy_tsp.adapter:ToyTspAdapter"
+  api_version: "v1"
