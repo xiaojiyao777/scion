@@ -271,6 +271,8 @@ class HypothesisRecord:
     suggested_weight: Optional[float] = None
     hypothesis_text: Optional[str] = None
     family_id: Optional[str] = None
+    family_source: Optional[str] = None  # "classifier" | "keyword" | "manual"
+    taxonomy_version: Optional[str] = None  # e.g. "v1"
     created_at: datetime = field(default_factory=datetime.now)
     base_champion_version: int = 0      # champion version at hypothesis creation time
 

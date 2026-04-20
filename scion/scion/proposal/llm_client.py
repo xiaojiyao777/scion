@@ -413,6 +413,24 @@ class LLMClient:
         hit_rate = s["cache_read_tokens"] / total_in if total_in > 0 else 0
         return {"hit_rate": f"{hit_rate:.1%}", **s}
 
+    def call_text(
+        self,
+        prompt: str,
+        model: str | None = None,
+    ) -> str:
+        """Call LLM and return raw text response (no JSON parsing).
+
+        Single attempt with timeout handling. Used by classifier and other
+        lightweight calls that don't need structured output.
+        """
+        effective_model = model or self.model
+        try:
+            return self._call_once(prompt, effective_model)
+        except (LLMTimeoutError, LLMRateLimitError):
+            raise
+        except Exception as exc:
+            raise LLMError(f"call_text failed: {exc}") from exc
+
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client

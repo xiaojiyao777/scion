@@ -95,7 +95,10 @@ class LineageRegistry:
                     suggested_weight     REAL,
                     hypothesis_text      TEXT,
                     created_at           TEXT,
-                    base_champion_version INTEGER DEFAULT 0
+                    base_champion_version INTEGER DEFAULT 0,
+                    family_id            TEXT,
+                    family_source        TEXT,
+                    taxonomy_version     TEXT
                 )
             """)
             conn.execute("""
