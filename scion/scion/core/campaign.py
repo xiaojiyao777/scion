@@ -229,6 +229,20 @@ class CampaignManager:
         # J6: Latest weight optimization result (for LLM feedback)
         self._latest_weight_opt_result: Optional[Any] = None
 
+        # W3: Early-stop controller
+        from scion.core.early_stop import EarlyStopController
+        self._early_stop = EarlyStopController()
+
+        # W9: Campaign journal (lineage-derived)
+        from scion.proposal.journal import CampaignJournal
+        self._journal = CampaignJournal(self._registry)
+
+        # W13: Token usage tracker
+        from scion.core.token_usage import TokenUsageTracker
+        self._token_tracker = TokenUsageTracker()
+        if hasattr(llm_client, 'set_token_tracker'):
+            llm_client.set_token_tracker(self._token_tracker)
+
         # Sprint H2 T1: Campaign-level failure counters
         self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
         self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
@@ -383,12 +397,37 @@ class CampaignManager:
 
     def should_stop(self) -> bool:
         active = self._branch_ctrl.get_active_branches()
+
+        # W3: Check early-stop from saturation + stagnation signals
+        early_stop_detected = False
+        early_stop_reason = ""
+        if self._saturation_analyzer is not None and self._baseline_metrics:
+            from scion.proposal.saturation import extract_candidate_metrics_from_step
+            current_metrics = self._baseline_metrics
+            for s in reversed(self._step_history):
+                if s.decision is not None and s.decision.value == "promote":
+                    m = extract_candidate_metrics_from_step(s)
+                    if m:
+                        current_metrics = m
+                        break
+            if current_metrics:
+                sat_signals = self._saturation_analyzer.analyze(current_metrics)
+                es_decision = self._early_stop.should_early_stop(
+                    sat_signals, self._stagnation_signals,
+                )
+                if es_decision.stop:
+                    early_stop_detected = True
+                    early_stop_reason = es_decision.reason
+                    logger.info("Early-stop triggered: %s (rule=%s)", es_decision.reason, es_decision.rule)
+
         cs = CampaignState(
             n_experiments=self._n_experiments,
             start_time=self._start_time,
             recent_abandoned_count=self._recent_abandoned_count,
             active_branches=active,
-            can_create_new=True,  # always can create new in MVP
+            can_create_new=True,
+            early_stop_detected=early_stop_detected,
+            early_stop_reason=early_stop_reason,
         )
         if not self._term_checker.should_stop(cs):
             return False

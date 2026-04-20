@@ -110,6 +110,11 @@ class LLMClient:
         self.max_tokens = max_tokens
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._client: Any = None  # lazy-initialised
+        self._token_tracker: Any = None  # W13: set via set_token_tracker()
+
+    def set_token_tracker(self, tracker) -> None:
+        """W13: Attach a TokenUsageTracker for per-call recording."""
+        self._token_tracker = tracker
 
     # ------------------------------------------------------------------
     # Public API
@@ -383,16 +388,26 @@ class LLMClient:
             if system_blocks:
                 kwargs["system"] = system_blocks
             message = client.messages.create(**kwargs)
-            # Log cache performance
             usage = getattr(message, "usage", None)
             if usage:
                 cache_create = getattr(usage, "cache_creation_input_tokens", 0)
                 cache_read = getattr(usage, "cache_read_input_tokens", 0)
                 input_tokens = getattr(usage, "input_tokens", 0)
+                output_tokens = getattr(usage, "output_tokens", 0)
                 if cache_create or cache_read:
                     logger.info(
                         "Cache: created=%d read=%d uncached=%d",
                         cache_create, cache_read, input_tokens,
+                    )
+                # W13: record to tracker
+                if self._token_tracker is not None:
+                    self._token_tracker.record(
+                        request_kind="llm_call",
+                        model_id=model,
+                        prompt_tokens=input_tokens,
+                        completion_tokens=output_tokens,
+                        cache_read_tokens=cache_read,
+                        cache_create_tokens=cache_create,
                     )
             return message.content[0].text
         except Exception as exc:

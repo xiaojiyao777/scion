@@ -129,23 +129,11 @@ class ContextManager:
                     "ALL proposals MUST target COST reduction ONLY.\n"
                 )
 
-        # J6: Weight optimization result feedback
+        # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
-        if weight_opt_result is not None and hasattr(weight_opt_result, 'best_weights'):
-            lines = ["## 当前算子贡献估计（weight optimization 结果）"]
-            sorted_weights = sorted(
-                weight_opt_result.best_weights.items(),
-                key=lambda x: -x[1],
-            )
-            for name, w in sorted_weights:
-                if w >= 2.0:
-                    level = "高贡献"
-                elif w >= 0.5:
-                    level = "中等贡献"
-                else:
-                    level = "低贡献"
-                lines.append(f"  {name}: {level}（权重 {w:.2f}）")
-            weight_opt_block = "\n".join(lines)
+        if weight_opt_result is not None:
+            from scion.proposal.weight_feedback import render_weight_feedback
+            weight_opt_block = render_weight_feedback(weight_opt_result)
 
         # J-patch: Render research log (cross-branch trajectory)
         research_log_block = ""
