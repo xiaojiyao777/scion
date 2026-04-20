@@ -96,8 +96,8 @@ def compute_delta(candidate_objective: dict, champion_objective: dict) -> float:
     champ_cost = champion_objective.get("total_cost", float("inf"))
 
     if cand_splits != champ_splits:
-        # Splits are the decisive dimension.
-        # Use a large multiplier so split deltas dominate cost deltas in CI.
+        # DEPRECATED(v0.3): Use scion.problem.objectives.compare_lexicographic instead.
+        # This env var will be removed when all callers migrate to the generic comparator.
         SPLITS_WEIGHT = int(os.environ.get("SCION_SPLITS_WEIGHT", "100000"))
         return (champ_splits - cand_splits) * SPLITS_WEIGHT
     else:
