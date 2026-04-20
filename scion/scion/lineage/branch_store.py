@@ -202,3 +202,44 @@ class HypothesisStore:
             created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
             base_champion_version=d.get("base_champion_version") or 0,
         )
+
+    # ---------------------------------------------------------------
+    # W5: Lineage-derived family views
+    # ---------------------------------------------------------------
+
+    def get_family_stats(self) -> List[dict]:
+        """Derive family statistics from lineage (persist facts, rebuild views).
+
+        Returns list of dicts with: family_id, total_attempts, statuses,
+        promoted_count, rejected_count, active_count.
+        """
+        with sqlite3.connect(self.registry.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT
+                    family_id,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'promoted' THEN 1 ELSE 0 END) as promoted,
+                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted') THEN 1 ELSE 0 END) as rejected,
+                    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
+                FROM hypotheses
+                WHERE family_id IS NOT NULL
+                GROUP BY family_id
+                ORDER BY total DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_failure_summary(self) -> List[dict]:
+        """Derive failure summary from hypothesis statuses in lineage.
+
+        Returns list of dicts with: status, count.
+        """
+        with sqlite3.connect(self.registry.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT status, COUNT(*) as count
+                FROM hypotheses
+                GROUP BY status
+                ORDER BY count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]

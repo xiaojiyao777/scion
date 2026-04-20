@@ -299,6 +299,81 @@ class LineageRegistry:
         }
 
     # ------------------------------------------------------------------
+    # W8: Lineage-derived failure summary v2
+    # ------------------------------------------------------------------
+
+    def get_failure_summary_v2(self) -> Dict[str, Any]:
+        """Derive structured failure summary from lineage events.
+
+        Returns:
+            {
+                "by_stage": {"contract": N, "verification": N, ...},
+                "by_decision": {"abandon": N, "discard": N, ...},
+                "by_family": {"family_id": {"total": N, "failed": N}, ...},
+                "recent_failures": [last 10 failure events as dicts],
+            }
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+
+            by_stage: Dict[str, int] = {}
+            for row in conn.execute("""
+                SELECT
+                    CASE
+                        WHEN contract_result = 'failed' THEN 'contract'
+                        WHEN verification_result = 'failed' THEN 'verification'
+                        ELSE 'other'
+                    END as fail_stage,
+                    COUNT(*) as cnt
+                FROM experiment_events
+                WHERE event_kind = 'experiment'
+                  AND (contract_result = 'failed' OR verification_result = 'failed')
+                GROUP BY 1
+            """).fetchall():
+                by_stage[row["fail_stage"]] = row["cnt"]
+
+            by_decision: Dict[str, int] = {}
+            for row in conn.execute("""
+                SELECT decision, COUNT(*) as cnt
+                FROM experiment_events
+                WHERE event_kind = 'experiment' AND decision IS NOT NULL
+                GROUP BY decision
+            """).fetchall():
+                by_decision[row["decision"]] = row["cnt"]
+
+            # Family-level failure stats (joined with hypotheses table)
+            by_family: Dict[str, Dict[str, int]] = {}
+            for row in conn.execute("""
+                SELECT
+                    h.family_id,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN h.status IN ('rejected', 'abandoned', 'blacklisted') THEN 1 ELSE 0 END) as failed
+                FROM hypotheses h
+                WHERE h.family_id IS NOT NULL
+                GROUP BY h.family_id
+            """).fetchall():
+                by_family[row["family_id"]] = {
+                    "total": row["total"], "failed": row["failed"],
+                }
+
+            recent = [dict(r) for r in conn.execute("""
+                SELECT branch_id, hypothesis_id, contract_result, verification_result,
+                       decision, timestamp
+                FROM experiment_events
+                WHERE event_kind = 'experiment'
+                  AND (contract_result = 'failed' OR verification_result = 'failed')
+                ORDER BY timestamp DESC
+                LIMIT 10
+            """).fetchall()]
+
+        return {
+            "by_stage": by_stage,
+            "by_decision": by_decision,
+            "by_family": by_family,
+            "recent_failures": recent,
+        }
+
+    # ------------------------------------------------------------------
     # Weight optimization lineage (T17a)
     # ------------------------------------------------------------------
 

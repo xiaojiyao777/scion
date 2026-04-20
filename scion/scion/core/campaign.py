@@ -146,6 +146,10 @@ class CampaignManager:
         self._failure_router = FailureRouter(retry_config or RetryConfig())
         self._creative = CreativeLayer(llm_client)
         self._ctx_manager = ContextManager()
+
+        # O1: Hypothesis family classifier (keyword-only if no LLM client)
+        from scion.proposal.classifier import HypothesisFamilyClassifier
+        self._classifier = HypothesisFamilyClassifier(llm_client=llm_client)
         self._materializer = WorkspaceMaterializer(
             campaign_dir,
             frozen_patterns=frozenset(
@@ -1071,6 +1075,8 @@ class CampaignManager:
             return None, None
 
         self._circuit_breaker.record_success()
+        # O1: classify hypothesis family
+        cls_result = self._classifier.classify(hypothesis.hypothesis_text or "")
         h_record = HypothesisRecord(
             hypothesis_id=str(uuid.uuid4()),
             branch_id=bid,
@@ -1080,6 +1086,9 @@ class CampaignManager:
             target_file=hypothesis.target_file,
             suggested_weight=hypothesis.suggested_weight,
             hypothesis_text=hypothesis.hypothesis_text,
+            family_id=cls_result.family_id,
+            family_source=cls_result.source,
+            taxonomy_version=cls_result.taxonomy_version,
         )
         return hypothesis, h_record
 
