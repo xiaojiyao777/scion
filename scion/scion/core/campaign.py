@@ -209,7 +209,8 @@ class CampaignManager:
         self._hard_stagnation_escape_used: bool = False  # I4: one-time escape before terminate
 
         # Stagnation / diagnosis (T25/T23)
-        self._stagnation_detector = StagnationDetector(window_size=5)
+        _taxonomy = getattr(getattr(self._spec, 'family_taxonomy', None), 'families', None)
+        self._stagnation_detector = StagnationDetector(window_size=5, taxonomy=_taxonomy)
         self._stagnation_signals: List[StagnationSignal] = []
         self._diagnostics: List[Dict[str, Any]] = []
 
@@ -2347,8 +2348,9 @@ class CampaignManager:
         # --- Family coverage (mechanism labels) ---
         family_counter: Dict[str, int] = {}
         from scion.proposal.context_manager import _extract_mechanism_label
+        _taxonomy = getattr(getattr(self._spec, 'family_taxonomy', None), 'families', None)
         for step in self._step_history:
-            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "")
+            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "", taxonomy=_taxonomy)
             family_counter[label] = family_counter.get(label, 0) + 1
 
         # --- Budget utilization ---
