@@ -23,7 +23,6 @@ from scion.core.scheduler import Scheduler
 from scion.core.termination import CampaignState, TerminationChecker, TerminationConfig
 from scion.core.stagnation import StagnationDetector, StagnationSignal, CampaignDiagnosis
 from scion.failure.router import FailureRouter, RetryConfig
-from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, LLMBalanceError
 from scion.proposal.engine import ProposalValidationError
@@ -128,7 +127,11 @@ class CampaignManager:
         adapter: Optional[Any] = None,
         objective_lower_bounds: Optional[Dict[str, float]] = None,
     ) -> None:
-        self._spec = problem_spec
+        # v0.3 B3: ProblemRuntime owns problem_spec + adapter + ContextManager.
+        # Instantiate FIRST so the backward-compat properties below (_spec,
+        # _adapter, _ctx_manager) can proxy to it.
+        from scion.core.problem_runtime import ProblemRuntime
+        self._problem_runtime = ProblemRuntime(problem_spec=problem_spec, adapter=adapter)
         self._protocol_config = protocol_config
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
@@ -136,7 +139,6 @@ class CampaignManager:
         self._champion = champion
         self._campaign_dir = campaign_dir
         self._campaign_id = str(uuid.uuid4())
-        self._adapter = adapter
         self._objective_lower_bounds = objective_lower_bounds
 
         # Sub-modules
@@ -147,7 +149,7 @@ class CampaignManager:
         self._feature_extractor = SafeFeatureExtractor()
         self._failure_router = FailureRouter(retry_config or RetryConfig())
         self._creative = CreativeLayer(llm_client)
-        self._ctx_manager = ContextManager(adapter=self._adapter)
+        # _ctx_manager now backed by ProblemRuntime (see property below).
 
         # O1: Hypothesis family classifier (keyword-only if no LLM client)
         from scion.proposal.classifier import HypothesisFamilyClassifier
@@ -297,6 +299,36 @@ class CampaignManager:
     @_latest_weight_opt_result.setter
     def _latest_weight_opt_result(self, value: Optional[Any]) -> None:
         self._weight_opt_coord.latest_result = value
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by
+    # ProblemRuntime (v0.3 B3). Tests and internal code read these by
+    # name (e.g. ``cm._spec``, ``cm._ctx_manager``).
+    # ------------------------------------------------------------------
+
+    @property
+    def _spec(self):
+        return self._problem_runtime.spec
+
+    @_spec.setter
+    def _spec(self, value):
+        self._problem_runtime._spec = value
+
+    @property
+    def _adapter(self):
+        return self._problem_runtime.adapter
+
+    @_adapter.setter
+    def _adapter(self, value):
+        self._problem_runtime._adapter = value
+
+    @property
+    def _ctx_manager(self):
+        return self._problem_runtime.ctx_manager
+
+    @_ctx_manager.setter
+    def _ctx_manager(self, value):
+        self._problem_runtime._ctx_manager = value
 
     # ------------------------------------------------------------------
     # Public API
@@ -1134,10 +1166,9 @@ class CampaignManager:
             if current_metrics:
                 saturation_signals = self._saturation_analyzer.analyze(current_metrics)
 
-        context = self._ctx_manager.build_hypothesis_context(
+        context = self._problem_runtime.build_hypothesis_context(
             branch=branch,
             champion=champ_snapshot,
-            problem_spec=self._spec,
             active_hypotheses=self._hyp_store.get_by_status("active"),
             blacklist=self._hyp_store.get_by_status("blacklisted"),
             sibling_branches=siblings,
@@ -1193,11 +1224,10 @@ class CampaignManager:
         bid = branch.branch_id
         with self._champion_lock:
             champ_snapshot = self._champion
-        context = self._ctx_manager.build_code_context(
+        context = self._problem_runtime.build_code_context(
             branch=branch,
             hypothesis=hypothesis,
             champion=champ_snapshot,
-            problem_spec=self._spec,
             prior_failure=prior_failure,
         )
         try:
@@ -1223,11 +1253,10 @@ class CampaignManager:
     def _attempt_fix(
         self, branch: Branch, patch: PatchProposal, vresult: VerificationResult
     ) -> Optional[PatchProposal]:
-        context = self._ctx_manager.build_fix_context(
+        context = self._problem_runtime.build_fix_context(
             branch=branch,
             patch=patch,
             verification_result=vresult,
-            problem_spec=self._spec,
             failure_streak=dict(self._failure_streak),
         )
         try:
