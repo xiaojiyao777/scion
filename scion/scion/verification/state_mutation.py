@@ -145,9 +145,7 @@ def _cr(
     name = "V5_solution_consistency"
     if diagnosis and not passed:
         detail = f"[{diagnosis}] {detail}"
-    severity: Literal["light", "heavy"] = (
-        "light" if diagnosis == "CANDIDATE" else "heavy"
-    )
+    severity: Literal["light", "heavy"] = "light" if not passed else "heavy"
     return CheckResult(
         name=name,
         passed=passed,
