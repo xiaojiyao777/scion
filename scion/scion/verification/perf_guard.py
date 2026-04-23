@@ -20,7 +20,7 @@ def check_perf(
     candidate_workspace: str,
     champion_workspace: str,
 ) -> CheckResult:
-    """V6_perf_guard: candidate solve time ≤ champion × 5."""
+    """V9_perf_guard: candidate solve time ≤ champion × 5."""
     t0 = time.monotonic_ns()
 
     canary = problem_spec.canary_case_path
@@ -74,7 +74,7 @@ def check_perf(
 def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     return CheckResult(
-        name="V6_perf_guard",
+        name="V9_perf_guard",
         passed=passed,
         severity=severity,  # type: ignore[arg-type]
         detail=detail,

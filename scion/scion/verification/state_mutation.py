@@ -4,7 +4,7 @@ Runs the candidate solver on a canary case and checks that the output
 solution has correct internal structure (assignment ↔ vehicle membership).
 Classifies failures as ENV / CANDIDATE / UNKNOWN for diagnosis.
 
-Semantic rename: was V5_state_mutation in v0.2, now V5_solution_consistency (W11).
+Semantic rename: was V5_solution_consistency in v0.2, now V5_solution_consistency (W11).
 """
 from __future__ import annotations
 

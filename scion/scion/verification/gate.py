@@ -1,18 +1,18 @@
-"""VerificationGate: fail-fast orchestrator for all V1–V8 checks.
+"""VerificationGate: fail-fast orchestrator for all V1–V9 checks.
 
 Checks (in order):
-  V1_syntax           light   AST parse of patch code
-  V2_interface        light   Operator subclass + execute signature
-  V3_unit_tests       light   pytest unit tests in candidate workspace
-  V4_regression_tests light   pytest regression/solver tests in candidate workspace
-  V5_state_mutation   heavy   solution consistency after solver run (detects input mutation)
-  V6_feasibility      heavy   oracle.check_feasibility on canary run
-  V7_objective        heavy   oracle.recompute_objective matches solver output
-  V8_nondeterminism   heavy   two identical-seed runs produce identical output
-  V9_perf_guard       heavy   candidate ≤ champion × 5 wall-clock
+  V1_syntax                light   AST parse of patch code
+  V2_interface             light   Operator subclass + execute signature
+  V3_unit_tests            light   pytest unit tests in candidate workspace
+  V4_regression_tests      light   pytest regression/solver tests in candidate workspace
+  V5_solution_consistency  heavy   solver output assignment/vehicle integrity (W11)
+  V6_feasibility           heavy   oracle.check_feasibility on canary run
+  V7_objective             heavy   oracle.recompute_objective matches solver output
+  V8_nondeterminism        heavy   two identical-seed runs produce identical output
+  V9_perf_guard            heavy   candidate ≤ champion × 5 wall-clock
 
 V5 and V8 are separate concerns:
-  - V5_state_mutation: does the operator corrupt the input solution? (data integrity)
+  - V5_solution_consistency: does the solver output have consistent assignment / vehicle_ids? (data integrity)
   - V8_nondeterminism: is the solver deterministic? (uuid, set iteration, entropy)
 
 Runtime checks (V5–V9) are skipped when:
@@ -115,7 +115,7 @@ class VerificationGate:
             return VerificationResult(passed=True, checks=tuple(checks))
 
         # --- V5: state_mutation (heavy) ---
-        # V5_state_mutation: solution consistency after solver run.
+        # V5_solution_consistency: solution consistency after solver run.
         # NOTE: Current implementation is a proxy consistency check (not a true
         # input-mutation harness). Rename target: V5_solution_consistency in v0.3.
         r = check_state_mutation(self._spec, self._runner, candidate_workspace)

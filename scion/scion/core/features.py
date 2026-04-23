@@ -9,11 +9,25 @@ from scion.core.models import (
 )
 
 
-KNOWN_FAILURE_CODES = frozenset({
+# Failure taxonomy — two layers, both allowed in branch.failure_codes / DecisionFeatures.
+#
+# Layer 1: raw failure category (what pipeline stage the failure happened in).
+# These are what campaign._handle_failure pushes (uppercased from FailureEvent.category).
+_RAW_CATEGORIES = frozenset({
+    "PROPOSAL", "CONTRACT",
+    "VERIFICATION_LIGHT", "VERIFICATION_HEAVY",
+    "EVALUATION", "INFRA", "SEARCH_GUIDANCE",
+})
+# Layer 2: normalized check / outcome codes. Used by some legacy lineage paths
+# and by protocol outcomes. Kept for backward compatibility — v0.3 doesn't push
+# these from _handle_failure, but lineage_store / tests may carry them.
+_NORMALIZED_CODES = frozenset({
     "SYNTAX", "INTERFACE", "UNIT_TEST", "REGRESSION",
-    "FEASIBILITY", "OBJECTIVE", "STATE_LEAK", "WALL_CLOCK",
+    "FEASIBILITY", "OBJECTIVE", "SOLUTION_CONSISTENCY", "STATE_LEAK",
+    "WALL_CLOCK", "NONDETERMINISM",
     "CANARY_FAIL", "SCREENING_FAIL", "VALIDATION_FAIL", "FROZEN_FAIL",
 })
+KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

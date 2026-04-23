@@ -22,7 +22,7 @@ def check_feasibility(
     *,
     adapter: Optional[ProblemAdapter] = None,
 ) -> CheckResult:
-    """V3_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
+    """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
 
     canary = problem_spec.canary_case_path
@@ -226,7 +226,7 @@ def _load_solution_and_instance(raw: dict, instance_path: str, oracle_dir: str):
 def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     return CheckResult(
-        name="V3_feasibility",
+        name="V6_feasibility",
         passed=passed,
         severity=severity,  # type: ignore[arg-type]
         detail=detail,

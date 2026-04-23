@@ -518,7 +518,7 @@ def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
 
 
 _VERIFICATION_SUGGESTIONS: dict = {
-    "V3_feasibility": (
+    "V6_feasibility": (
         "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
         "危险品必须在 HQ40_DG 车型"
     ),
@@ -561,7 +561,7 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
     details: List[str] = []
     for s in streak_steps:
         fd = s.failure_detail or ""
-        # Extract V-code prefix like V3_feasibility
+        # Extract V-code prefix like V6_feasibility
         vcode = fd.split(":")[0].strip() if ":" in fd else fd.split()[0] if fd else ""
         failure_types.append(vcode)
         if s.verification_detail:

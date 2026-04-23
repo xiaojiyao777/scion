@@ -504,7 +504,7 @@ class TestT23CampaignDiagnosis:
             _make_step(
                 round_num=i,
                 failure_stage="verification",
-                failure_detail="V3_feasibility: assignment mismatch",
+                failure_detail="V6_feasibility: assignment mismatch",
                 hypothesis_text="destroy rebuild approach",
             )
             for i in range(5)
@@ -589,7 +589,7 @@ class TestT24PostmortemCLI:
                 "cache_create_tokens": 3000,
                 "cache_hit_rate": 0.4,
             },
-            "verification_failure_breakdown": {"V8_nondeterminism": 3, "V3_feasibility": 1},
+            "verification_failure_breakdown": {"V8_nondeterminism": 3, "V6_feasibility": 1},
             "action_locus_coverage": {"modify/vehicle_level": 5, "create_new/order_level": 3},
             "family_coverage": {"subcategory_consolidation": 6, "destroy_rebuild": 2},
             "budget_utilization": 0.25,

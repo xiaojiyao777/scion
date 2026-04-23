@@ -228,7 +228,7 @@ class TestFeasibilityCheck:
         runner = _mock_runner(success=False)
         r = check_feasibility(spec, runner, str(tmp_path))
         assert r.passed is False
-        assert r.name == "V3_feasibility"
+        assert r.name == "V6_feasibility"
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ class TestObjectiveCheck:
         runner = _mock_runner(success=False)
         r = check_objective(spec, runner, str(tmp_path))
         assert r.passed is False
-        assert r.name == "V4_objective"
+        assert r.name == "V7_objective"
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ class TestPerfGuardCheck:
         runner.run_solver.side_effect = run_solver
         r = check_perf(spec, runner, str(tmp_path), champ_ws)
         assert r.passed is True
-        assert r.name == "V6_perf_guard"
+        assert r.name == "V9_perf_guard"
 
     def test_slow_candidate_fails(self, tmp_path):
         canary = str(tmp_path / "small.json")
@@ -413,7 +413,7 @@ class TestVerificationGateIntegration:
         assert "V1_syntax" in check_names
         assert "V2_interface" in check_names
         # No runtime checks
-        assert "V3_feasibility" not in check_names
+        assert "V6_feasibility" not in check_names
 
     def test_syntax_fail_stops_early(self):
         gate = VerificationGate()
@@ -440,10 +440,10 @@ class TestVerificationGateIntegration:
         assert result.passed is True
         # All runtime checks should be present (but skipped/passed)
         check_names = [c.name for c in result.checks]
-        assert "V3_feasibility" in check_names
-        assert "V4_objective" in check_names
+        assert "V6_feasibility" in check_names
+        assert "V7_objective" in check_names
         assert "V8_nondeterminism" in check_names
-        assert "V6_perf_guard" in check_names
+        assert "V9_perf_guard" in check_names
 
     def test_delete_patch_passes_all(self):
         gate = VerificationGate()

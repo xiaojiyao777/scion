@@ -164,7 +164,7 @@ FIX_TOOL: Dict[str, Any] = {
         "- Preserve the intended algorithmic logic \u2014 only fix the mechanical error.\n"
         "- Return the COMPLETE corrected file, not just changed lines.\n\n"
         "Common patterns:\n"
-        "- V3_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
+        "- V6_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
         "- V5_solution_consistency: output solution has assignment/vehicle mismatch or missing/duplicate orders.\n"
         "- V8_nondeterminism: non-deterministic code (no uuid, use sorted(), use rng).\n"
         "- V1_syntax: indentation, parentheses, colons.\n"

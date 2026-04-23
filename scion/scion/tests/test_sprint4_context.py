@@ -147,7 +147,7 @@ class FailWithDetailVerificationGate:
     """Returns a heavy verification failure with detailed check info."""
     def run(self, workspace, champion_workspace, patch) -> VerificationResult:
         check = CheckResult(
-            name="V3_feasibility",
+            name="V6_feasibility",
             passed=False,
             severity="heavy",
             detail="infeasible: H7 capacity violation on vehicle V_001",
@@ -157,7 +157,7 @@ class FailWithDetailVerificationGate:
             passed=False,
             checks=(check,),
             failure_severity="heavy",
-            first_failure="V3_feasibility",
+            first_failure="V6_feasibility",
         )
 
 
@@ -229,7 +229,7 @@ class TestVerificationDetail:
         assert ver_steps, "Expected at least one verification failure step"
         s = ver_steps[0]
         assert s.verification_detail is not None
-        assert "V3_feasibility" in s.verification_detail
+        assert "V6_feasibility" in s.verification_detail
         assert "infeasible" in s.verification_detail
 
     def test_verification_detail_none_on_success(self, tmp_path):
@@ -245,16 +245,16 @@ class TestVerificationDetail:
         """_build_verification_detail from campaign module."""
         from scion.core.campaign import _build_verification_detail
         check = CheckResult(
-            name="V3_feasibility", passed=False, severity="heavy",
+            name="V6_feasibility", passed=False, severity="heavy",
             detail="infeasible: assignment mismatch", elapsed_ms=1,
         )
         vresult = VerificationResult(
             passed=False, checks=(check,),
-            failure_severity="heavy", first_failure="V3_feasibility",
+            failure_severity="heavy", first_failure="V6_feasibility",
         )
         detail = _build_verification_detail(vresult)
         assert detail is not None
-        assert "V3_feasibility" in detail
+        assert "V6_feasibility" in detail
         assert "infeasible: assignment mismatch" in detail
         assert "heavy" in detail
 
@@ -338,8 +338,8 @@ class TestExperimentHistoryVerificationDetail:
             _make_step(
                 bid, 1,
                 failure_stage="verification",
-                failure_detail="V3_feasibility: assignment mismatch",
-                verification_detail="severity=heavy  first_failure=V3_feasibility\n  [V3_feasibility] (heavy) infeasible: H7 capacity violation",
+                failure_detail="V6_feasibility: assignment mismatch",
+                verification_detail="severity=heavy  first_failure=V6_feasibility\n  [V6_feasibility] (heavy) infeasible: H7 capacity violation",
             )
         ]
         history = _build_experiment_history(steps, bid)
@@ -379,7 +379,7 @@ class TestExperimentHistoryVerificationDetail:
 # ---------------------------------------------------------------------------
 
 class TestConsecutiveFailureDiagnosis:
-    def _ver_steps(self, bid: str, n: int, vcode: str = "V3_feasibility") -> List[StepRecord]:
+    def _ver_steps(self, bid: str, n: int, vcode: str = "V6_feasibility") -> List[StepRecord]:
         detail = f"{vcode}: some detail"
         vdetail = f"severity=heavy  first_failure={vcode}\n  [{vcode}] (heavy) some detail"
         return [
@@ -399,11 +399,11 @@ class TestConsecutiveFailureDiagnosis:
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "Consecutive Failure Diagnosis" in diag
         assert "3" in diag
-        assert "V3_feasibility" in diag
+        assert "V6_feasibility" in diag
 
     def test_diagnosis_includes_suggestion_for_feasibility(self):
         bid = "b1"
-        steps = self._ver_steps(bid, 3, vcode="V3_feasibility")
+        steps = self._ver_steps(bid, 3, vcode="V6_feasibility")
         diag = _build_consecutive_failure_diagnosis(steps)
         assert "assignment dict" in diag or "HQ40_DG" in diag
 
@@ -435,8 +435,8 @@ class TestConsecutiveFailureDiagnosis:
         bid = "b1"
         steps = [
             _make_step(bid, i, failure_stage="verification",
-                       failure_detail="V3_feasibility: x",
-                       verification_detail="severity=heavy  first_failure=V3_feasibility\n  [V3_feasibility] (heavy) x")
+                       failure_detail="V6_feasibility: x",
+                       verification_detail="severity=heavy  first_failure=V6_feasibility\n  [V6_feasibility] (heavy) x")
             for i in range(1, 4)
         ]
         history = _build_experiment_history(steps, bid)

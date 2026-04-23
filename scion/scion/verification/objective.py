@@ -26,7 +26,7 @@ def check_objective(
     *,
     adapter: Optional[ProblemAdapter] = None,
 ) -> CheckResult:
-    """V4_objective: oracle.recompute_objective must match solver-reported objective."""
+    """V7_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
 
     canary = problem_spec.canary_case_path
@@ -123,7 +123,7 @@ def _check_via_adapter(
 def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     return CheckResult(
-        name="V4_objective",
+        name="V7_objective",
         passed=passed,
         severity=severity,  # type: ignore[arg-type]
         detail=detail,
