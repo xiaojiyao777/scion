@@ -230,9 +230,6 @@ class CampaignManager:
         self._saturation_analyzer: Optional[ChampionSaturationAnalyzer] = None
         self._baseline_metrics: Optional[Dict[str, float]] = None
 
-        # J6: Latest weight optimization result (for LLM feedback)
-        self._latest_weight_opt_result: Optional[Any] = None
-
         # W3 / v0.3 B1: PlateauController — idle counter + early-stop + forced locus
         from scion.core.plateau_controller import PlateauController
         self._plateau = PlateauController()
@@ -254,9 +251,13 @@ class CampaignManager:
         self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
         self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
 
-        # Async weight optimization (R3/R5)
+        # Async weight optimization (R3/R5) — v0.3 B2 coordinator owns
+        # _pending_threads and _latest_result. Backward-compat properties
+        # below expose them as _pending_weight_opt_threads /
+        # _latest_weight_opt_result for tests and lineage paths.
         self._champion_lock = threading.Lock()
-        self._pending_weight_opt_threads: List[threading.Thread] = []
+        from scion.core.async_weight_opt import AsyncWeightOptCoordinator
+        self._weight_opt_coord = AsyncWeightOptCoordinator(self)
 
     # ------------------------------------------------------------------
     # Backward-compat properties for attributes now owned by PlateauController.
@@ -278,6 +279,24 @@ class CampaignManager:
     @_forced_next_locus.setter
     def _forced_next_locus(self, value: Optional[str]) -> None:
         self._plateau._forced_next_locus = value
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by
+    # AsyncWeightOptCoordinator (v0.3 B2). Tests and lineage paths read
+    # these by name.
+    # ------------------------------------------------------------------
+
+    @property
+    def _pending_weight_opt_threads(self) -> List[threading.Thread]:
+        return self._weight_opt_coord.pending_threads
+
+    @property
+    def _latest_weight_opt_result(self) -> Optional[Any]:
+        return self._weight_opt_coord.latest_result
+
+    @_latest_weight_opt_result.setter
+    def _latest_weight_opt_result(self, value: Optional[Any]) -> None:
+        self._weight_opt_coord.latest_result = value
 
     # ------------------------------------------------------------------
     # Public API
@@ -325,14 +344,7 @@ class CampaignManager:
             self._check_soft_stagnation()
         self._write_campaign_summary()
         # R5: join all pending weight opt threads (up to 10 min each)
-        pending = [t for t in self._pending_weight_opt_threads if t.is_alive()]
-        if pending:
-            logger.info(
-                "Waiting for %d background weight opt thread(s) to complete...",
-                len(pending),
-            )
-        for t in self._pending_weight_opt_threads:
-            t.join(timeout=600)
+        self._weight_opt_coord.wait_all(timeout=600)
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -1792,239 +1804,22 @@ class CampaignManager:
             logger.warning("Failed to persist champion v%d to store: %s", new_version, exc)
 
         # Launch background weight optimization (R2)
-        if param_cfg.enabled and self._experiment_protocol is not None:
-            t = threading.Thread(
-                target=self._bg_weight_opt_task,
-                args=(staging_path, new_version, current_weights),
-                daemon=True,
-                name=f"weight-opt-v{new_version}",
-            )
-            self._pending_weight_opt_threads.append(t)
-            t.start()
-
-    def _bg_weight_opt_task(
-        self, staging_path: str, version: int, current_weights: dict
-    ) -> None:
-        """Background thread: run weight opt and update champion on success.
-
-        Creates a NEW immutable snapshot rather than modifying the original.
-        Atomic pointer switch under champion_lock.
-        """
-        import os as _os
-        import shutil as _shutil
-        import time as _time
-        from scion.runtime.workspace import _make_tree_writable
-        from pathlib import Path as _Path
-
-        t0 = _time.monotonic()
-        try:
-            opt_result = self._run_weight_optimization(staging_path, version, current_weights)
-        except Exception as exc:
-            logger.error("Background weight opt failed for champion v%d: %s", version, exc)
-            return
-
-        elapsed_min = (_time.monotonic() - t0) / 60.0
-
-        if opt_result is None:
-            return
-
-        self._latest_weight_opt_result = opt_result
-        try:
-            self._registry.record_weight_optimization(
-                campaign_id=self._campaign_id,
-                champion_version=version,
-                result=opt_result,
-            )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to record result: %s", exc)
-
-        if not opt_result.improved:
-            logger.info(
-                "Background weight opt complete for champion v%d (%.1f min) — no improvement",
-                version, elapsed_min,
-            )
-            return
-
-        # Determine new revision number
-        with self._champion_lock:
-            if self._champion.version != version:
-                logger.warning(
-                    "Background weight opt for champion v%d discarded — "
-                    "champion has advanced to v%d",
-                    version, self._champion.version,
-                )
-                return
-            new_revision = self._champion.weight_revision + 1
-
-        # Create NEW immutable snapshot with optimized weights (never modify original)
-        new_snapshot_path = str(self._materializer._champions_dir / f"champion_v{version}_r{new_revision}")
-        try:
-            if _os.path.exists(new_snapshot_path):
-                _make_tree_writable(_Path(new_snapshot_path))
-                _shutil.rmtree(new_snapshot_path)
-            _shutil.copytree(staging_path, new_snapshot_path)
-            _make_tree_writable(_Path(new_snapshot_path))
-
-            from scion.runtime.pool_manager import update_weights, read_registry
-            registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
-            if _os.path.exists(registry_path):
-                update_weights(registry_path, opt_result.best_weights)
-            self._materializer.freeze_snapshot(new_snapshot_path)
-        except Exception as exc:
-            logger.error(
-                "Background weight opt: failed to create snapshot for champion v%d_r%d: %s",
-                version, new_revision, exc,
-            )
-            return
-
-        # Recompute hash and read updated pool
-        try:
-            registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
-            new_pool = read_registry(registry_path)
-            new_hash = self._materializer.compute_snapshot_hash(new_snapshot_path)
-        except Exception as exc:
-            logger.error(
-                "Background weight opt: failed to recompute hash for champion v%d_r%d: %s",
-                version, new_revision, exc,
-            )
-            return
-
-        # Atomic pointer switch
-        with self._champion_lock:
-            if self._champion.version != version:
-                logger.warning(
-                    "Background weight opt for champion v%d discarded — "
-                    "champion has advanced to v%d",
-                    version, self._champion.version,
-                )
-                return
-            self._champion = ChampionState(
-                version=self._champion.version,
-                operator_pool=new_pool,
-                solver_config_hash=self._champion.solver_config_hash,
-                code_snapshot_path=new_snapshot_path,
-                code_snapshot_hash=new_hash,
-                promoted_at=self._champion.promoted_at,
-                weight_revision=new_revision,
-            )
-
-        logger.info(
-            "Background weight opt complete for champion v%d_r%d (%.1f min)",
-            version, new_revision, elapsed_min,
+        self._weight_opt_coord.spawn_for_promoted_champion(
+            staging_path, new_version, current_weights
         )
-
-        # Stage-aware stale: only mark screening/explore branches
-        try:
-            stale_weight_ids = self._branch_ctrl.mark_stale_for_weight_update(version)
-            if stale_weight_ids:
-                logger.info(
-                    "Background weight opt: marked %d screening branches stale for re-screening",
-                    len(stale_weight_ids),
-                )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to mark branches stale: %s", exc)
 
     def _run_weight_optimization(
         self, champion_snapshot: str, version: int, current_weights: dict
     ):
-        """Run weight optimization on a copy of the champion snapshot.
+        """Delegate to AsyncWeightOptCoordinator (v0.3 B2).
 
-        Args:
-            champion_snapshot: Path to the mutable staging snapshot directory.
-            version: Champion version number (used for eval_ws naming and seed).
-            current_weights: Current champion weights — passed to optimizer as
-                true baseline (T1).
-
-        Returns WeightOptimizationResult or None if prerequisites are missing.
+        Kept as a method on CampaignManager so existing tests that monkey-patch
+        ``cm._run_weight_optimization`` continue to work — the coordinator's bg
+        thread calls back through ``self._mgr._run_weight_optimization(...)``.
         """
-        import os as _os
-        import shutil
-        from scion.parameter.optimizer import RandomLocalWeightOptimizer, BayesianWeightOptimizer
-        from scion.parameter.evaluator import collect_baseline, evaluate_weights
-        from scion.parameter.search_space import ParameterSearchSpace
-
-        param_cfg = self._spec.parameter_search
-
-        # Locate runner
-        runner = getattr(self._experiment_protocol, 'runner',
-                         getattr(self._experiment_protocol, '_runner', None))
-        if runner is None:
-            logger.warning("No runner available for weight optimization")
-            return None
-
-        # Require a registry.yaml in the snapshot
-        registry_path = _os.path.join(champion_snapshot, "registry.yaml")
-        if not _os.path.exists(registry_path):
-            logger.warning("No registry.yaml in snapshot %s; skipping weight opt", champion_snapshot)
-            return None
-
-        # Create evaluation workspace (isolated copy of champion snapshot)
-        eval_ws = _os.path.join(self._campaign_dir, f"weight_opt_v{version}")
-        if _os.path.exists(eval_ws):
-            shutil.rmtree(eval_ws)
-        shutil.copytree(champion_snapshot, eval_ws)
-        # Ensure eval workspace is writable
-        for _root, _dirs, _files in _os.walk(eval_ws):
-            for _d in _dirs:
-                _os.chmod(_os.path.join(_root, _d), 0o755)
-            for _f in _files:
-                _os.chmod(_os.path.join(_root, _f), 0o644)
-
-        # Determine eval cases (fall back to screening split)
-        eval_cases = list(param_cfg.eval_cases)
-        if not eval_cases:
-            eval_cases = list(self._split_manifest.screening)
-        resolved_cases = [
-            _os.path.join(self._spec.root_dir, c) if not _os.path.isabs(c) else c
-            for c in eval_cases
-        ]
-
-        seeds = list(self._seed_ledger.screening)[:param_cfg.n_eval_seeds]
-        time_limit = getattr(getattr(self._spec, 'solver', None), 'time_limit_sec', 300)
-
-        operator_names = tuple(current_weights.keys())
-
-        # Collect baseline objectives for evaluate_weights comparisons
-        baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
-
-        # Build search space
-        search_space = ParameterSearchSpace(
-            operator_names=operator_names,
-            weight_bounds=param_cfg.weight_bounds,
-            n_initial_random=param_cfg.n_initial_random,
-            n_iterations=param_cfg.n_iterations,
-            n_eval_seeds=param_cfg.n_eval_seeds,
-            eval_cases=tuple(resolved_cases),
+        return self._weight_opt_coord.run_optimization(
+            champion_snapshot, version, current_weights
         )
-
-        def eval_fn(weights):
-            return evaluate_weights(
-                weights=weights,
-                workspace=eval_ws,
-                cases=resolved_cases,
-                seeds=seeds,
-                runner=runner,
-                time_limit_sec=time_limit,
-                baseline_objectives=baseline,
-            )
-
-        optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
-        if getattr(param_cfg, 'strategy', 'random_local') == 'bayesian':
-            optimizer = BayesianWeightOptimizer(search_space, eval_fn, seed=version)
-
-        # T2: artifacts dir for saving observations JSON
-        artifacts_dir = _os.path.join(self._campaign_dir, "artifacts")
-        _os.makedirs(artifacts_dir, exist_ok=True)
-
-        # T1: pass current_weights so optimizer evaluates true baseline first
-        result = optimizer.optimize(current_weights, artifacts_dir=artifacts_dir)
-
-        try:
-            shutil.rmtree(eval_ws)
-        except Exception:
-            pass
-
-        return result
 
     # ------------------------------------------------------------------
     # Stagnation detection (T25/T23)
