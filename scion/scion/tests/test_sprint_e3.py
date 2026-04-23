@@ -209,6 +209,11 @@ class TestT09RicherCaseFeedback:
         median_delta_total_cost: Optional[float] = 1000.0,
         case_features: Optional[Dict] = None,
     ) -> CaseAggregateFeedback:
+        median_deltas = {}
+        if median_delta_subcategory_splits is not None:
+            median_deltas["subcategory_splits"] = median_delta_subcategory_splits
+        if median_delta_total_cost is not None:
+            median_deltas["total_cost"] = median_delta_total_cost
         return CaseAggregateFeedback(
             case_id=case_id,
             n_pairs=6,
@@ -217,29 +222,30 @@ class TestT09RicherCaseFeedback:
             ties=0,
             win_rate=0.67,
             dominant_result=dominant_result,
+            decisive_metric=dominant_decisive_objective,
+            median_deltas=median_deltas,
+            seed_consistency=0.67,
+            case_features=case_features or {"size_bucket": "large", "n_orders": 150},
+            # Deprecated aliases
             dominant_decisive_objective=dominant_decisive_objective,
             median_delta_total_cost=median_delta_total_cost,
             median_delta_subcategory_splits=median_delta_subcategory_splits,
-            seed_consistency=0.67,
-            case_features=case_features or {"size_bucket": "large", "n_orders": 150},
         )
 
     def test_feedback_includes_decisive_objective(self):
         from scion.proposal.context_manager import _render_case_feedback
         cf = self._make_case_feedback()
         result = _render_case_feedback(cf)
-        assert "business_aggregation" in result or "Decisive:" in result
+        assert "Decisive:" in result
 
     def test_feedback_shows_directional_change_win(self):
         from scion.proposal.context_manager import _render_case_feedback
-        # splits_delta positive → candidate better (fewer splits) → down arrow
         cf = self._make_case_feedback(
             dominant_result="win",
-            dominant_decisive_objective="business_aggregation",
-            median_delta_subcategory_splits=22.0,  # positive = candidate better
+            dominant_decisive_objective="subcategory_splits",
+            median_delta_subcategory_splits=22.0,
         )
         result = _render_case_feedback(cf)
-        # Should show ↓ (candidate reduced splits)
         assert "↓" in result or "22" in result
 
     def test_feedback_shows_directional_change_loss(self):
@@ -278,20 +284,24 @@ class TestT10ChampionBaselines:
     """T10: hypothesis context includes champion baseline hints."""
 
     def _make_pair_feedback(self, case_id: str, seed: int, champ_splits: float) -> PairwiseCaseFeedback:
+        from scion.problem.objectives import ObjectiveComparison, MetricComparison
+        oc = ObjectiveComparison(
+            outcome="win", decisive_metric="subcategory_splits", scalar_delta=15000.0,
+            metrics=(
+                MetricComparison(name="subcategory_splits", candidate_value=champ_splits - 5,
+                                 champion_value=champ_splits, signed_delta=5.0,
+                                 relation="candidate", decisive=True),
+                MetricComparison(name="total_cost", candidate_value=50000,
+                                 champion_value=60000, signed_delta=10000.0,
+                                 relation="candidate"),
+            ),
+        )
         return PairwiseCaseFeedback(
             case_id=case_id,
             seed=seed,
             comparison="win",
             delta=100.0,
-            objective_breakdown=ObjectiveBreakdown(
-                candidate_subcategory_splits=champ_splits - 5,
-                champion_subcategory_splits=champ_splits,
-                candidate_total_cost=50000,
-                champion_total_cost=60000,
-                delta_subcategory_splits=5.0,
-                delta_total_cost=10000.0,
-                decisive_objective="business_aggregation",
-            ),
+            objective_comparison=oc,
             case_features={"size_bucket": "large"},
         )
 

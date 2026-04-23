@@ -102,15 +102,19 @@ class TestSaturationRender:
 class TestMetricExtraction:
     def test_extract_champion_metrics(self):
         """Extract champion metrics from pair feedback."""
-        ob = ObjectiveBreakdown(
-            champion_subcategory_splits=5.0,
-            champion_total_cost=30000.0,
-            candidate_subcategory_splits=3.0,
-            candidate_total_cost=28000.0,
+        from scion.problem.objectives import ObjectiveComparison, MetricComparison
+        oc = ObjectiveComparison(
+            outcome="win", decisive_metric="subcategory_splits", scalar_delta=2000.0,
+            metrics=(
+                MetricComparison(name="subcategory_splits", candidate_value=3.0, champion_value=5.0,
+                                 signed_delta=2.0, relation="candidate", decisive=True),
+                MetricComparison(name="total_cost", candidate_value=28000.0, champion_value=30000.0,
+                                 signed_delta=2000.0, relation="candidate"),
+            ),
         )
         pf = PairwiseCaseFeedback(
             case_id="c1", seed=42, comparison="win", delta=2000.0,
-            objective_breakdown=ob,
+            objective_comparison=oc,
         )
         step = StepRecord(
             round_num=1, branch_id="b1",

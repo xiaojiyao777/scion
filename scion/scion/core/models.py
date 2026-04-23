@@ -118,17 +118,17 @@ class ProtocolResult:
 
 # --- Case-level Feedback (for screening) ---
 
+# DEPRECATED: ObjectiveBreakdown — replaced by ObjectiveComparison from problem/objectives.py.
+# Kept for import compatibility only. Do not construct new instances.
 @dataclass(frozen=True)
 class ObjectiveBreakdown:
-    """Per-pair breakdown of objectives with 'positive = candidate better' convention."""
+    """DEPRECATED — use ObjectiveComparison from scion.problem.objectives instead."""
     candidate_subcategory_splits: Optional[float] = None
     champion_subcategory_splits: Optional[float] = None
     candidate_total_cost: Optional[float] = None
     champion_total_cost: Optional[float] = None
-    # Deltas: positive = candidate is better
-    delta_subcategory_splits: Optional[float] = None  # champ - cand
-    delta_total_cost: Optional[float] = None           # champ - cand
-    # Which objective level decided win/loss
+    delta_subcategory_splits: Optional[float] = None
+    delta_total_cost: Optional[float] = None
     decisive_objective: Literal[
         "business_aggregation", "cost", "efficiency", "tie"
     ] = "tie"
@@ -140,9 +140,11 @@ class PairwiseCaseFeedback:
     case_id: str
     seed: int
     comparison: Literal["win", "loss", "tie"]
-    delta: float  # cost delta, positive = candidate better
-    objective_breakdown: ObjectiveBreakdown
+    delta: float  # scalar delta, positive = candidate better
+    objective_comparison: Any = None  # ObjectiveComparison from problem/objectives.py
     case_features: Dict[str, Any] = field(default_factory=dict)
+    # DEPRECATED: kept for backward compat with tests that still construct with old field
+    objective_breakdown: Optional[ObjectiveBreakdown] = None
 
 
 @dataclass(frozen=True)
@@ -155,13 +157,14 @@ class CaseAggregateFeedback:
     ties: int
     win_rate: float
     dominant_result: Literal["win", "loss", "tie", "mixed"]
-    dominant_decisive_objective: Literal[
-        "business_aggregation", "cost", "efficiency", "mixed", "tie"
-    ]
-    median_delta_total_cost: Optional[float] = None
-    median_delta_subcategory_splits: Optional[float] = None
+    decisive_metric: str = "tie"  # generic metric name that decided majority of pairs
+    median_deltas: Dict[str, float] = field(default_factory=dict)  # {metric_name: median_delta}
     seed_consistency: float = 0.0  # max(win,loss,tie) / n_pairs
     case_features: Dict[str, Any] = field(default_factory=dict)
+    # DEPRECATED aliases for backward compat
+    dominant_decisive_objective: str = ""
+    median_delta_total_cost: Optional[float] = None
+    median_delta_subcategory_splits: Optional[float] = None
 
 
 @dataclass(frozen=True)

@@ -458,28 +458,19 @@ def _render_case_feedback(cf) -> str:
     n_orders = cf.case_features.get("n_orders", "?")
     result_upper = cf.dominant_result.upper()
 
-    # Build directional description for the decisive objective
-    obj = cf.dominant_decisive_objective
-    splits_delta = cf.median_delta_subcategory_splits  # positive = candidate better (fewer splits)
-    cost_delta = cf.median_delta_total_cost            # positive = candidate better (lower cost)
+    # Build directional description using generic metric deltas
+    metric = cf.decisive_metric if hasattr(cf, 'decisive_metric') else getattr(cf, 'dominant_decisive_objective', 'tie')
+    deltas = cf.median_deltas if hasattr(cf, 'median_deltas') and cf.median_deltas else {}
 
-    if obj in ("business_aggregation", "mixed") and splits_delta is not None:
-        direction = "↓" if splits_delta > 0 else "↑"
-        abs_splits = abs(splits_delta)
-        decisive_str = f"Decisive: {obj} — candidate {direction}{abs_splits:.1f} splits (Δ={splits_delta:+.1f})"
-        if cost_delta is not None:
-            decisive_str += f", cost Δ={cost_delta:+.0f}"
-    elif obj == "cost" and cost_delta is not None:
-        direction = "↓" if cost_delta > 0 else "↑"
-        abs_cost = abs(cost_delta)
-        decisive_str = f"Decisive: {obj} — candidate cost {direction}{abs_cost:.0f} (Δ={cost_delta:+.0f})"
-        if splits_delta is not None:
-            decisive_str += f", splits Δ={splits_delta:+.1f}"
+    delta_parts = []
+    for name, val in sorted(deltas.items()):
+        direction = "↓" if val > 0 else "↑"
+        delta_parts.append(f"{name} {direction}{abs(val):.1f} (Δ={val:+.1f})")
+
+    if delta_parts:
+        decisive_str = f"Decisive: {metric} — " + ", ".join(delta_parts)
     else:
-        # Fallback: show raw deltas
-        splits_str = f"{splits_delta:+.1f}" if splits_delta is not None else "NA"
-        cost_str = f"{cost_delta:+.0f}" if cost_delta is not None else "NA"
-        decisive_str = f"Decisive: {obj}  splits Δ={splits_str}, cost Δ={cost_str}"
+        decisive_str = f"Decisive: {metric}"
 
     # Champion baseline hint from case_features if available
     champ_splits = cf.case_features.get("champion_splits")
@@ -509,13 +500,18 @@ def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
             score += 4
         if c.seed_consistency >= 0.99:
             score += 2
-        if c.dominant_decisive_objective == "business_aggregation":
+        # Boost cases where decisive metric is the highest-priority objective
+        dm = c.decisive_metric if hasattr(c, 'decisive_metric') else ""
+        if dm and dm != "tie":
             score += 2
         bucket = c.case_features.get("size_bucket", "unknown")
         if bucket not in seen_sizes:
             score += 2
             seen_sizes.add(bucket)
-        score += min(abs(c.median_delta_total_cost or 0) / 100, 3)
+        # Use largest absolute median delta across all metrics
+        deltas = c.median_deltas if hasattr(c, 'median_deltas') and c.median_deltas else {}
+        max_delta = max((abs(v) for v in deltas.values()), default=0)
+        score += min(max_delta / 100, 3)
         scored.append((score, c))
     scored.sort(key=lambda x: -x[0])
     return [c for _, c in scored[:max_cases]]
@@ -833,15 +829,16 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
     if last_with_pairs is None:
         return ""
 
-    # Aggregate champion splits per case from pair_feedback
+    # Aggregate champion metrics per case from pair_feedback
     from collections import defaultdict as _defaultdict
-    case_champ_splits: dict = _defaultdict(list)
+    case_champ_metrics: dict = _defaultdict(lambda: _defaultdict(list))
     for pair in last_with_pairs.protocol_result.pair_feedback:
-        ob = pair.objective_breakdown
-        if ob.champion_subcategory_splits is not None:
-            case_champ_splits[pair.case_id].append(ob.champion_subcategory_splits)
+        oc = getattr(pair, 'objective_comparison', None)
+        if oc and hasattr(oc, 'metrics') and oc.metrics:
+            for m in oc.metrics:
+                case_champ_metrics[pair.case_id][m.name].append(m.champion_value)
 
-    if not case_champ_splits:
+    if not case_champ_metrics:
         # Fallback: use case_feedback if available but no per-pair breakdown
         if last_with_pairs.protocol_result.case_feedback:
             lines = ["## Champion Performance (screening cases)"]
@@ -853,15 +850,12 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
         return ""
 
     lines = ["## Champion Performance (screening cases)"]
-    for case_id, champ_vals in sorted(case_champ_splits.items()):
-        min_val = min(champ_vals)
-        max_val = max(champ_vals)
-        if min_val == max_val:
-            splits_str = f"~{min_val:.0f} splits"
-        else:
-            splits_str = f"~{min_val:.0f}-{max_val:.0f} splits"
-        avg = sum(champ_vals) / len(champ_vals)
-        lines.append(f"- {case_id}: {splits_str} (avg={avg:.1f})")
+    for case_id, metrics in sorted(case_champ_metrics.items()):
+        parts = []
+        for metric_name, vals in sorted(metrics.items()):
+            avg = sum(vals) / len(vals)
+            parts.append(f"{metric_name}={avg:.1f}")
+        lines.append(f"- {case_id}: {', '.join(parts)}")
 
     return "\n".join(lines)
 

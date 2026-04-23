@@ -119,17 +119,35 @@ class ExperimentProtocol:
         candidate_objective: dict,
         champion_objective: dict,
     ) -> tuple:
-        """Return (comparison_str, ObjectiveBreakdown)."""
+        """Return (comparison_str, ObjectiveComparison)."""
         if self._metric_specs is not None:
             from scion.problem.objectives import compare_lexicographic
             result = compare_lexicographic(
                 self._metric_specs, candidate_objective, champion_objective,
             )
-            breakdown = _objective_comparison_to_breakdown(
-                result, candidate_objective, champion_objective,
-            )
-            return result.outcome, breakdown
-        return compare_with_breakdown(candidate_objective, champion_objective)
+            return result.outcome, result
+        # Legacy path: build an ObjectiveComparison from the hardcoded comparator
+        from scion.problem.objectives import ObjectiveComparison, MetricComparison
+        cmp, old_bd = compare_with_breakdown(candidate_objective, champion_objective)
+        metrics = []
+        for name in ["subcategory_splits", "total_cost"]:
+            cv = candidate_objective.get(name, 0)
+            hv = champion_objective.get(name, 0)
+            sd = float(hv) - float(cv)
+            metrics.append(MetricComparison(
+                name=name, candidate_value=cv, champion_value=hv,
+                signed_delta=sd, relation="candidate" if sd > 0 else ("champion" if sd < 0 else "tie"),
+                decisive=(name == "subcategory_splits" and old_bd.decisive_objective == "business_aggregation")
+                    or (name == "total_cost" and old_bd.decisive_objective == "cost"),
+            ))
+        decisive_map = {"business_aggregation": "subcategory_splits", "cost": "total_cost"}
+        result = ObjectiveComparison(
+            outcome=cmp,
+            decisive_metric=decisive_map.get(old_bd.decisive_objective),
+            scalar_delta=sum(m.signed_delta for m in metrics),
+            metrics=tuple(metrics),
+        )
+        return cmp, result
 
     def _compute_delta(
         self,
@@ -323,19 +341,19 @@ class ExperimentProtocol:
                     seed=seed,
                     comparison=cmp,
                     delta=delta,
-                    objective_breakdown=breakdown,
+                    objective_comparison=breakdown,
                     case_features=case_features,
                 )
                 pairs_by_case[os.path.basename(case)].append(pair_fb)
+                # Log per-pair result with generic metric values
+                _mc = {m.name: m for m in breakdown.metrics} if breakdown.metrics else {}
+                _cand_vals = " ".join(f"{m.name}={m.candidate_value}" for m in breakdown.metrics) if breakdown.metrics else ""
+                _chmp_vals = " ".join(f"{m.name}={m.champion_value}" for m in breakdown.metrics) if breakdown.metrics else ""
                 logger.info(
-                    "Pair %s seed=%d: cmp=%s delta=%.4f decisive=%s "
-                    "cand(splits=%s cost=%s) champ(splits=%s cost=%s)",
+                    "Pair %s seed=%d: cmp=%s delta=%.4f decisive=%s cand(%s) champ(%s)",
                     os.path.basename(case), seed, cmp, delta,
-                    breakdown.decisive_objective,
-                    breakdown.candidate_subcategory_splits,
-                    breakdown.candidate_total_cost,
-                    breakdown.champion_subcategory_splits,
-                    breakdown.champion_total_cost,
+                    breakdown.decisive_metric,
+                    _cand_vals, _chmp_vals,
                 )
 
         # T2: Aggregate pairs → case-level results
@@ -474,19 +492,26 @@ def _aggregate_case_feedback(
         else:
             dominant = "tie"
 
-        # Dominant decisive objective
+        # Dominant decisive metric (generic)
         decisive_counts: dict[str, int] = defaultdict(int)
         for p in case_pairs:
-            decisive_counts[p.objective_breakdown.decisive_objective] += 1
+            oc = p.objective_comparison
+            dm = (oc.decisive_metric if oc and hasattr(oc, 'decisive_metric') else None) or "tie"
+            decisive_counts[dm] += 1
         dominant_decisive = max(decisive_counts, key=decisive_counts.get)  # type: ignore
         if len(set(decisive_counts.values())) == 1 and len(decisive_counts) > 1:
             dominant_decisive = "mixed"
 
-        # Median deltas
-        cost_deltas = [p.objective_breakdown.delta_total_cost for p in case_pairs
-                       if p.objective_breakdown.delta_total_cost is not None]
-        splits_deltas = [p.objective_breakdown.delta_subcategory_splits for p in case_pairs
-                         if p.objective_breakdown.delta_subcategory_splits is not None]
+        # Median deltas per metric (generic)
+        metric_deltas: dict[str, list[float]] = defaultdict(list)
+        for p in case_pairs:
+            oc = p.objective_comparison
+            if oc and hasattr(oc, 'metrics'):
+                for m in oc.metrics:
+                    metric_deltas[m.name].append(m.signed_delta)
+        median_deltas = {
+            name: statistics.median(vals) for name, vals in metric_deltas.items() if vals
+        }
 
         result.append(CaseAggregateFeedback(
             case_id=case_id,
@@ -496,11 +521,14 @@ def _aggregate_case_feedback(
             ties=ties,
             win_rate=wr,
             dominant_result=dominant,
-            dominant_decisive_objective=dominant_decisive,
-            median_delta_total_cost=statistics.median(cost_deltas) if cost_deltas else None,
-            median_delta_subcategory_splits=statistics.median(splits_deltas) if splits_deltas else None,
+            decisive_metric=dominant_decisive,
+            median_deltas=median_deltas,
             seed_consistency=mx / n if n > 0 else 0.0,
             case_features=case_pairs[0].case_features if case_pairs else {},
+            # Deprecated aliases for backward compat
+            dominant_decisive_objective=dominant_decisive,
+            median_delta_total_cost=median_deltas.get("total_cost"),
+            median_delta_subcategory_splits=median_deltas.get("subcategory_splits"),
         ))
     return result
 
@@ -519,22 +547,19 @@ def _build_pattern_summary(
     losses_by_size: dict[str, int] = defaultdict(int)
 
     for c in winning:
-        wins_by_obj[c.dominant_decisive_objective] += 1
+        wins_by_obj[c.decisive_metric] += 1
         wins_by_size[c.case_features.get("size_bucket", "unknown")] += 1
     for c in losing:
-        losses_by_obj[c.dominant_decisive_objective] += 1
+        losses_by_obj[c.decisive_metric] += 1
         losses_by_size[c.case_features.get("size_bucket", "unknown")] += 1
 
-    # Generate key observations (rule-based)
+    # Generate key observations (rule-based, generic metric names)
     observations: list[str] = []
-    if losses_by_obj.get("business_aggregation", 0) >= 2:
-        observations.append(
-            "Most losses decided at business_aggregation: candidate often harmed split quality."
-        )
-    if losses_by_obj.get("cost", 0) >= 2:
-        observations.append(
-            "Most losses decided at cost: candidate preserved splits but increased cost."
-        )
+    for metric, count in losses_by_obj.items():
+        if count >= 2 and metric != "tie":
+            observations.append(
+                f"Most losses decided by {metric}: candidate often worsened this objective."
+            )
 
     # Size pattern
     win_sizes = set(wins_by_size.keys())
@@ -571,45 +596,5 @@ def _build_pattern_summary(
     )
 
 
-# ---------------------------------------------------------------------------
-# ObjectiveComparison → ObjectiveBreakdown adapter (backward compat)
-# ---------------------------------------------------------------------------
-
-def _objective_comparison_to_breakdown(
-    result,  # ObjectiveComparison
-    candidate_objective: dict,
-    champion_objective: dict,
-) -> ObjectiveBreakdown:
-    """Convert a generic ObjectiveComparison to the legacy ObjectiveBreakdown.
-
-    Maps metric names to the warehouse-specific fields when they match;
-    for non-warehouse problems, fields that don't map remain None.
-    """
-    cand_splits = candidate_objective.get("subcategory_splits")
-    champ_splits = champion_objective.get("subcategory_splits")
-    cand_cost = candidate_objective.get("total_cost")
-    champ_cost = champion_objective.get("total_cost")
-
-    delta_splits = None
-    delta_cost = None
-    if cand_splits is not None and champ_splits is not None:
-        delta_splits = float(champ_splits) - float(cand_splits)
-    if cand_cost is not None and champ_cost is not None:
-        delta_cost = float(champ_cost) - float(cand_cost)
-
-    decisive = result.decisive_metric or "tie"
-    decisive_map = {
-        "subcategory_splits": "business_aggregation",
-        "total_cost": "cost",
-    }
-    decisive_display = decisive_map.get(decisive, decisive)
-
-    return ObjectiveBreakdown(
-        candidate_subcategory_splits=cand_splits,
-        champion_subcategory_splits=champ_splits,
-        candidate_total_cost=cand_cost,
-        champion_total_cost=champ_cost,
-        delta_subcategory_splits=delta_splits,
-        delta_total_cost=delta_cost,
-        decisive_objective=decisive_display,
-    )
+# _objective_comparison_to_breakdown — DELETED in ObjectiveBreakdown genericization sprint.
+# ObjectiveComparison from problem/objectives.py is now used directly.

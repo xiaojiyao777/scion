@@ -143,18 +143,27 @@ def render_saturation_signals(signals: List[SaturationSignal]) -> str:
 def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, float]]:
     """Extract champion-side metrics from a step's protocol result.
 
-    Looks for champion_subcategory_splits and champion_total_cost in:
-      1. case_feedback[*].case_features (populated by ContextManager)
-      2. pair_feedback[*].objective_breakdown (original path)
+    Uses ObjectiveComparison.metrics when available (generic path),
+    falls back to case_features for legacy compatibility.
     Returns averages across all pairs/cases, or None if no data.
-
-    TODO: Replace hardcoded field names with generic objective iteration from
-    ProblemSpecV1.objectives when ObjectiveBreakdown is genericized.
     """
     if step.protocol_result is None:
         return None
 
-    # Method 1: from case_feedback.case_features (most direct)
+    # Method 1: from pair_feedback.objective_comparison (generic path)
+    if step.protocol_result.pair_feedback:
+        metric_sums: Dict[str, float] = {}
+        count = 0
+        for pf in step.protocol_result.pair_feedback:
+            oc = getattr(pf, 'objective_comparison', None)
+            if oc and hasattr(oc, 'metrics') and oc.metrics:
+                for m in oc.metrics:
+                    metric_sums[m.name] = metric_sums.get(m.name, 0.0) + m.champion_value
+                count += 1
+        if count > 0:
+            return {name: total / count for name, total in metric_sums.items()}
+
+    # Method 2: from case_feedback.case_features (legacy fallback)
     if step.protocol_result.case_feedback:
         splits_vals: list = []
         cost_vals: list = []
@@ -174,28 +183,7 @@ def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, f
                 "total_cost": sum(cost_vals) / len(cost_vals) if cost_vals else 0.0,
             }
 
-    # Method 2: from pair_feedback.objective_breakdown (original path)
-    if not step.protocol_result.pair_feedback:
-        return None
-
-    splits_sum = 0.0
-    cost_sum = 0.0
-    count = 0
-
-    for pf in step.protocol_result.pair_feedback:
-        ob = pf.objective_breakdown
-        if ob.champion_subcategory_splits is not None:
-            splits_sum += ob.champion_subcategory_splits
-            cost_sum += (ob.champion_total_cost or 0.0)
-            count += 1
-
-    if count == 0:
-        return None
-
-    return {
-        "subcategory_splits": splits_sum / count,
-        "total_cost": cost_sum / count,
-    }
+    return None
 
 
 def extract_candidate_metrics_from_step(step: StepRecord) -> Optional[Dict[str, float]]:
@@ -205,21 +193,16 @@ def extract_candidate_metrics_from_step(step: StepRecord) -> Optional[Dict[str, 
     if not step.protocol_result.pair_feedback:
         return None
 
-    splits_sum = 0.0
-    cost_sum = 0.0
+    metric_sums: Dict[str, float] = {}
     count = 0
-
     for pf in step.protocol_result.pair_feedback:
-        ob = pf.objective_breakdown
-        if ob.candidate_subcategory_splits is not None:
-            splits_sum += ob.candidate_subcategory_splits
-            cost_sum += (ob.candidate_total_cost or 0.0)
+        oc = getattr(pf, 'objective_comparison', None)
+        if oc and hasattr(oc, 'metrics') and oc.metrics:
+            for m in oc.metrics:
+                metric_sums[m.name] = metric_sums.get(m.name, 0.0) + m.candidate_value
             count += 1
 
     if count == 0:
         return None
 
-    return {
-        "subcategory_splits": splits_sum / count,
-        "total_cost": cost_sum / count,
-    }
+    return {name: total / count for name, total in metric_sums.items()}

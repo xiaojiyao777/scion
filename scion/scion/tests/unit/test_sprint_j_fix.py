@@ -86,7 +86,7 @@ def _make_step_with_case_features(case_features_list):
             case_id=f"case-{i}",
             n_pairs=3, wins=2, losses=1, ties=0,
             win_rate=0.67, dominant_result="win",
-            dominant_decisive_objective="business_aggregation",
+            decisive_metric="subcategory_splits",
             case_features=feats,
         ))
     pr = ProtocolResult(

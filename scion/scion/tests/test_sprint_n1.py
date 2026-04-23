@@ -99,12 +99,10 @@ class TestWarehouseGenericComparator:
 
 
 class TestExperimentGenericPath:
-    """Verify that _objective_comparison_to_breakdown produces valid ObjectiveBreakdown."""
+    """Verify that _compare_objectives returns ObjectiveComparison directly."""
 
-    def test_breakdown_conversion(self) -> None:
-        from scion.protocol.experiment import _objective_comparison_to_breakdown
-        from scion.core.models import ObjectiveBreakdown
-
+    def test_compare_returns_objective_comparison(self) -> None:
+        from scion.problem.objectives import ObjectiveComparison
         specs = [
             ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
             ObjectiveMetricSpec(name="total_cost", direction="minimize", priority=2),
@@ -114,18 +112,11 @@ class TestExperimentGenericPath:
             {"subcategory_splits": 2, "total_cost": 100},
             {"subcategory_splits": 3, "total_cost": 80},
         )
-        bd = _objective_comparison_to_breakdown(
-            result,
-            {"subcategory_splits": 2, "total_cost": 100},
-            {"subcategory_splits": 3, "total_cost": 80},
-        )
-        assert isinstance(bd, ObjectiveBreakdown)
-        assert bd.decisive_objective == "business_aggregation"
-        assert bd.delta_subcategory_splits == 1.0
+        assert isinstance(result, ObjectiveComparison)
+        assert result.decisive_metric == "subcategory_splits"
+        assert result.outcome == "win"
 
-    def test_breakdown_tie(self) -> None:
-        from scion.protocol.experiment import _objective_comparison_to_breakdown
-
+    def test_compare_tie(self) -> None:
         specs = [
             ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
             ObjectiveMetricSpec(name="total_cost", direction="minimize", priority=2),
@@ -135,28 +126,19 @@ class TestExperimentGenericPath:
             {"subcategory_splits": 2, "total_cost": 100},
             {"subcategory_splits": 2, "total_cost": 100},
         )
-        bd = _objective_comparison_to_breakdown(
-            result,
-            {"subcategory_splits": 2, "total_cost": 100},
-            {"subcategory_splits": 2, "total_cost": 100},
-        )
-        assert bd.decisive_objective == "tie"
+        assert result.outcome == "tie"
+        assert result.decisive_metric is None
 
-    def test_breakdown_non_warehouse_metrics(self) -> None:
-        from scion.protocol.experiment import _objective_comparison_to_breakdown
-
+    def test_non_warehouse_metrics(self) -> None:
         specs = [
             ObjectiveMetricSpec(name="tour_cost", direction="minimize", priority=1),
         ]
         result = compare_lexicographic(
             specs, {"tour_cost": 10}, {"tour_cost": 20},
         )
-        bd = _objective_comparison_to_breakdown(
-            result, {"tour_cost": 10}, {"tour_cost": 20},
-        )
-        # Non-warehouse metrics: warehouse-specific fields stay None
-        assert bd.candidate_subcategory_splits is None
-        assert bd.decisive_objective == "tour_cost"
+        assert result.decisive_metric == "tour_cost"
+        assert result.outcome == "win"
+        assert result.metrics[0].name == "tour_cost"
 
 
 # ---------------------------------------------------------------------------

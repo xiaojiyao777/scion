@@ -2421,7 +2421,7 @@ class CampaignManager:
                         {
                             "case_id": cf.case_id,
                             "dominant_result": cf.dominant_result,
-                            "decisive": cf.dominant_decisive_objective,
+                            "decisive": cf.decisive_metric if hasattr(cf, 'decisive_metric') else getattr(cf, 'dominant_decisive_objective', ''),
                         }
                         for cf in pr.case_feedback[:20]
                     ]

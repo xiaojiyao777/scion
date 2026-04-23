@@ -112,19 +112,21 @@ def _champ_result() -> RunResult:
 
 
 def _make_pair_fb(case_id: str, seed: int, comparison: str, delta: float) -> PairwiseCaseFeedback:
-    bd = ObjectiveBreakdown(
-        decisive_objective="splits",
-        candidate_subcategory_splits=1,
-        champion_subcategory_splits=2,
-        candidate_total_cost=900.0,
-        champion_total_cost=1000.0,
-        delta_subcategory_splits=1.0,
-        delta_total_cost=100.0,
+    from scion.problem.objectives import ObjectiveComparison, MetricComparison
+    oc = ObjectiveComparison(
+        outcome=comparison, decisive_metric="subcategory_splits",
+        scalar_delta=delta,
+        metrics=(
+            MetricComparison(name="subcategory_splits", candidate_value=1, champion_value=2,
+                             signed_delta=1.0, relation="candidate", decisive=True),
+            MetricComparison(name="total_cost", candidate_value=900.0, champion_value=1000.0,
+                             signed_delta=100.0, relation="candidate"),
+        ),
     )
     return PairwiseCaseFeedback(
         case_id=case_id, seed=seed,
         comparison=comparison, delta=delta,
-        objective_breakdown=bd,
+        objective_comparison=oc,
         case_features={},
     )
 
