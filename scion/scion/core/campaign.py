@@ -205,7 +205,8 @@ class CampaignManager:
         self._soft_abandon_streak: int = 0   # I1: T4 win_rate<0.3 consecutive count (independent of hard stagnation)
         self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
         self._start_time = datetime.now()
-        self._forced_next_locus: Optional[str] = None  # I3: set by soft-stagnation, consumed by branch creation
+        # _forced_next_locus / _rounds_since_last_promote now live in PlateauController;
+        # backward-compat properties defined below expose them as attributes.
         self._hard_stagnation_escape_used: bool = False  # I4: one-time escape before terminate
 
         # Stagnation / diagnosis (T25/T23)
@@ -232,10 +233,12 @@ class CampaignManager:
         # J6: Latest weight optimization result (for LLM feedback)
         self._latest_weight_opt_result: Optional[Any] = None
 
-        # W3: Early-stop controller
-        from scion.core.early_stop import EarlyStopController
-        self._early_stop = EarlyStopController()
-        self._rounds_since_last_promote: int = 0
+        # W3 / v0.3 B1: PlateauController — idle counter + early-stop + forced locus
+        from scion.core.plateau_controller import PlateauController
+        self._plateau = PlateauController()
+        # Legacy attribute names kept as thin passthroughs for now (branch_store
+        # and tests may still read them). Prefer self._plateau going forward.
+        self._early_stop = self._plateau.early_stop
 
         # W9: Campaign journal (lineage-derived)
         from scion.proposal.journal import CampaignJournal
@@ -254,6 +257,27 @@ class CampaignManager:
         # Async weight optimization (R3/R5)
         self._champion_lock = threading.Lock()
         self._pending_weight_opt_threads: List[threading.Thread] = []
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by PlateauController.
+    # External callers (tests, branch_store) still read these by name.
+    # ------------------------------------------------------------------
+
+    @property
+    def _rounds_since_last_promote(self) -> int:
+        return self._plateau.rounds_since_last_promote
+
+    @_rounds_since_last_promote.setter
+    def _rounds_since_last_promote(self, value: int) -> None:
+        self._plateau._rounds_since_last_promote = value
+
+    @property
+    def _forced_next_locus(self) -> Optional[str]:
+        return self._plateau.forced_next_locus
+
+    @_forced_next_locus.setter
+    def _forced_next_locus(self, value: Optional[str]) -> None:
+        self._plateau._forced_next_locus = value
 
     # ------------------------------------------------------------------
     # Public API
