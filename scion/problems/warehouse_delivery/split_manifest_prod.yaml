@@ -2,14 +2,17 @@
 # Sprint F4 正式实验 B 组
 #
 # 全部使用生产统计特征生成的实例（无合成数据）
-# Screening (20): micro×4 + small×4 + medium_small×3 + medium×4 + medium_large×3 + small×2 overlap
-# Validation (8): large×4 + large_xl×2
-# Frozen (9): xlarge×4 + xxlarge×3 + day1(real) + day2(real)
+# Screening (17): micro×4 + small×4 + medium_small×3 + medium×3 + medium_large×2
+#   (removed scr_m02/scr_ml03: infeasible — locked vehicle capacity bug)
+# Validation (5): large×3 + large_xl×2
+#   (removed val_l03: infeasible — locked vehicle capacity bug)
+# Frozen (8): xlarge×3 + xxlarge×3 + day1(real) + day2(real)
+#   (removed fro_x02: infeasible — locked vehicle capacity bug)
 # Canary (2): canary×2
 #
 # 规模覆盖：22→1263 orders（7个规模层级）
 
-version: "prod-1.0"
+version: "prod-1.1"
 
 canary:
   - /home/clawd/research/scion-data/production/generated/instance_prod_can_s01.json
@@ -32,19 +35,16 @@ screening:
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms03.json
   # Medium tier (~149-248 orders, 45-58 subcats)
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m01.json
-  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m02.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m03.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m04.json
   # Medium-large tier (~255-282 orders, 75-85 subcats)
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml01.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml02.json
-  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml03.json
 
 validation:
   # Large tier (~338-426 orders, 100-130 subcats)
   - /home/clawd/research/scion-data/production/generated/instance_prod_val_l01.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_val_l02.json
-  - /home/clawd/research/scion-data/production/generated/instance_prod_val_l03.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_val_l04.json
   # Large-XL tier (~401-497 orders, 135-148 subcats)
   - /home/clawd/research/scion-data/production/generated/instance_prod_val_lx01.json
@@ -53,7 +53,6 @@ validation:
 frozen:
   # XLarge generated (~353-515 orders, 140-170 subcats)
   - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x01.json
-  - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x02.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x03.json
   - /home/clawd/research/scion-data/production/generated/instance_prod_fro_x04.json
   # XXLarge generated (~661-808 orders, 220-250 subcats)
