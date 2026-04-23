@@ -294,6 +294,32 @@ def test_decision_screening_pass_negative_delta_queues_validation():
     assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
 
 
+def test_decision_screening_pass_negative_delta_exhausted():
+    """wr >= threshold md < 0 with expand_count>=1 → continue_explore (don't burn val/frozen twice)."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=10,
+        win_rate=0.7,
+        median_delta=-1000.0,
+        ci_low=None,
+        ci_high=None,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        expand_count=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_PASS_NEGATIVE_DELTA_EXHAUSTED" in out.reason_codes
+
+
 def test_decision_validation_pass_to_queue_frozen():
     f = _features(stage="validation", win_rate=0.7, ci_low=0.005, ci_high=0.02)
     out = _engine.decide(f)

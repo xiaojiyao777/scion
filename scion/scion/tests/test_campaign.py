@@ -284,8 +284,37 @@ class TestContinueExplore:
         assert branch.state == BranchState.EXPLORE
 
     def test_second_step_proposes_new_hypothesis(self, tmp_path):
-        """After CONTINUE_EXPLORE, the next step generates a fresh hypothesis."""
-        cm = _campaign(tmp_path, experiment_protocol=None)
+        """After CONTINUE_EXPLORE, the next step generates a fresh hypothesis.
+
+        Uses a sequenced LLM so the two steps produce different hypotheses.
+        C10_novelty key for action='modify' is (locus, action, target_file), so the
+        two hypotheses must differ in one of those — we vary target_file.
+        """
+        hyp1 = dict(_VALID_HYPOTHESIS)
+        hyp1["target_file"] = "operators/local_search.py"
+        hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["target_file"] = "operators/other_op.py"
+        patch1 = dict(_VALID_PATCH)
+        patch1["file_path"] = "operators/local_search.py"
+        patch2 = dict(_VALID_PATCH)
+        patch2["file_path"] = "operators/other_op.py"
+
+        class SequencedLLM:
+            def __init__(self):
+                self.hyp_calls = 0
+                self.patch_calls = 0
+            def call(self, prompt, schema, model=None, system_blocks=None):
+                if "code_content" in schema.get("required", []):
+                    self.patch_calls += 1
+                    return patch1 if self.patch_calls == 1 else patch2
+                self.hyp_calls += 1
+                return hyp1 if self.hyp_calls == 1 else hyp2
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+
+        cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
+        # _campaign seeds champion_code/operators/local_search.py; seed other_op.py for step 2
+        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
         r1 = cm.run_one_step()
         r2 = cm.run_one_step()
         # Both steps should be on the same branch
@@ -435,29 +464,39 @@ class TestContractFailure:
         assert result.decision is None
 
     def test_retry_after_contract_fail(self, tmp_path):
-        """Second step on same branch succeeds after initial contract failure."""
+        """Second step on same branch succeeds after initial contract failure.
+
+        Step 1's hypothesis gets marked 'rejected' after patch contract fails, but
+        C10_novelty still blocks same-keyed hypothesis within the same champion version.
+        So step 2 needs a distinct hypothesis (different target_file).
+        """
         bad_patch = {
             "file_path": "solver.py",  # frozen file
             "action": "modify",
             "code_content": _VALID_CODE,
             "test_hint": None,
         }
-        # First two calls: bad patch; subsequent calls: good patch
+        hyp1 = dict(_VALID_HYPOTHESIS)  # target_file=operators/local_search.py
+        hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["target_file"] = "operators/other_op.py"
+        good_patch2 = dict(_VALID_PATCH)
+        good_patch2["file_path"] = "operators/other_op.py"
+
         call_count = [0]
-        good_llm = MockLLMClient(
-            hypothesis_response=_VALID_HYPOTHESIS, patch_response=_VALID_PATCH
-        )
 
         class SequencedLLM:
+            def __init__(self):
+                self.hyp_calls = 0
             def call(self, prompt, schema, model=None, system_blocks=None):
                 call_count[0] += 1
                 if "code_content" in schema.get("required", []):
-                    # patch call
+                    # patch call — step 1 returns bad (→ contract fail), step 2 returns good
                     if call_count[0] <= 2:
-                        # First patch call: return bad
                         return dict(bad_patch)
-                    return dict(_VALID_PATCH)
-                return dict(_VALID_HYPOTHESIS)
+                    return dict(good_patch2)
+                # hypothesis call — vary target_file so step 2 passes novelty
+                self.hyp_calls += 1
+                return hyp1 if self.hyp_calls == 1 else hyp2
             def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
@@ -468,6 +507,8 @@ class TestContractFailure:
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
         )
+        # Seed operators/other_op.py for step 2
+        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
         # Step 1: contract fails
         r1 = cm.run_one_step()
         assert r1.decision is None

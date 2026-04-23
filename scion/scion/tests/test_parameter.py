@@ -20,8 +20,8 @@ def test_parameter_search_config_defaults():
     assert cfg.trigger == "on_promote"
     assert cfg.target == "operator_weights"
     assert cfg.strategy == "random_local"
-    assert cfg.n_initial_random == 4
-    assert cfg.n_iterations == 4
+    assert cfg.n_initial_random == 8
+    assert cfg.n_iterations == 16
     assert cfg.n_eval_seeds == 2
     assert cfg.weight_bounds == (0.05, 5.0)
     assert cfg.eval_cases == []

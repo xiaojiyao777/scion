@@ -170,7 +170,7 @@ class TestEarlyStopReplaySmoke:
         )
         decision2 = ctrl.should_early_stop(
             signals, [plateau],
-            total_rounds=50, rounds_since_last_promote=20,
+            total_rounds=50, rounds_since_last_promote=30,
         )
         assert decision2.stop is True
         assert decision2.rule == "diminishing_returns"

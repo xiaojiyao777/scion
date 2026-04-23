@@ -34,7 +34,7 @@ class EarlyStopController:
         *,
         force_continue: bool = False,
         max_idle_ratio: float = 0.6,
-        stagnation_window: int = 15,
+        stagnation_window: int = 25,
     ) -> None:
         self._force_continue = force_continue
         self._max_idle_ratio = max_idle_ratio

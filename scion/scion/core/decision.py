@@ -62,6 +62,9 @@ class DecisionEngine:
             # Win rate passes gate but median delta is negative.
             # Expanding with the same deterministic cases produces no new info,
             # so we send to validation — bootstrap CI on diverse cases is the proper adjudicator.
+            # Cap at expand_count>=1 so a cost-regressive candidate doesn't burn val/frozen budget twice.
+            if features.expand_count >= 1:
+                return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_PASS_NEGATIVE_DELTA_EXHAUSTED"])
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_NEGATIVE_DELTA"])
         elif wr >= 0.5 and wr < threshold:
             # Check if already expanded too many times (max 3 expands)

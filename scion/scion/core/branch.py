@@ -44,6 +44,11 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     },
     Decision.EXPAND_VALIDATION: {
         BranchState.VALIDATING: BranchState.VALIDATING_EXPAND,
+        # Note: VALIDATING_EXPAND + EXPAND_VALIDATION is intentionally unmapped.
+        # DecisionEngine._decide_validation enforces expand_count >= 1 → QUEUE_FROZEN,
+        # so this (state, decision) combination cannot be produced in practice.
+        # If the guard is ever loosened, add VALIDATING_EXPAND: VALIDATING_EXPAND here
+        # (self-loop, mirroring EXPLORE_EXPAND) and set an expand_count cap elsewhere.
     },
     Decision.QUEUE_FROZEN: {
         BranchState.VALIDATING: BranchState.READY_FROZEN,

@@ -863,7 +863,12 @@ class CampaignManager:
             )
 
         self._round_num += 1
-        self._rounds_since_last_promote += 1
+        # A2 (v0.3 post-opt regression fix): only count screening-expand self-loops as idle.
+        # Branches that reach VALIDATING / FROZEN_TESTING are productive activity even if they
+        # eventually fail — don't penalize them with idle accounting that would trigger
+        # budget_efficiency early-stop.
+        if action_label == "explore":
+            self._rounds_since_last_promote += 1
         rnum = self._round_num
         result = self._apply_decision_and_finalize(
             branch=branch,
