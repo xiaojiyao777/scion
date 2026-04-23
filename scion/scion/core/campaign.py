@@ -126,6 +126,7 @@ class CampaignManager:
         termination_config: Optional[TerminationConfig] = None,
         retry_config: Optional[RetryConfig] = None,
         adapter: Optional[Any] = None,
+        objective_lower_bounds: Optional[Dict[str, float]] = None,
     ) -> None:
         self._spec = problem_spec
         self._protocol_config = protocol_config
@@ -136,6 +137,7 @@ class CampaignManager:
         self._campaign_dir = campaign_dir
         self._campaign_id = str(uuid.uuid4())
         self._adapter = adapter
+        self._objective_lower_bounds = objective_lower_bounds
 
         # Sub-modules
         self._branch_ctrl = BranchController()
@@ -232,6 +234,7 @@ class CampaignManager:
         # W3: Early-stop controller
         from scion.core.early_stop import EarlyStopController
         self._early_stop = EarlyStopController()
+        self._rounds_since_last_promote: int = 0
 
         # W9: Campaign journal (lineage-derived)
         from scion.proposal.journal import CampaignJournal
@@ -268,7 +271,9 @@ class CampaignManager:
             if metrics:
                 logger.info("[SATURATION] Baseline initialized: splits=%.1f cost=%.0f", metrics.get('subcategory_splits',0), metrics.get('total_cost',0))
                 self._baseline_metrics = metrics
-                self._saturation_analyzer = ChampionSaturationAnalyzer(metrics)
+                self._saturation_analyzer = ChampionSaturationAnalyzer(
+                    metrics, lower_bounds=self._objective_lower_bounds,
+                )
             else:
                 logger.info("[SATURATION DEBUG] extract returned None for stage=%s", step.protocol_result.stage)
 
@@ -401,6 +406,7 @@ class CampaignManager:
         # W3: Check early-stop from saturation + stagnation signals
         early_stop_detected = False
         early_stop_reason = ""
+        sat_signals = []
         if self._saturation_analyzer is not None and self._baseline_metrics:
             from scion.proposal.saturation import extract_candidate_metrics_from_step
             current_metrics = self._baseline_metrics
@@ -412,13 +418,15 @@ class CampaignManager:
                         break
             if current_metrics:
                 sat_signals = self._saturation_analyzer.analyze(current_metrics)
-                es_decision = self._early_stop.should_early_stop(
-                    sat_signals, self._stagnation_signals,
-                )
-                if es_decision.stop:
-                    early_stop_detected = True
-                    early_stop_reason = es_decision.reason
-                    logger.info("Early-stop triggered: %s (rule=%s)", es_decision.reason, es_decision.rule)
+        es_decision = self._early_stop.should_early_stop(
+            sat_signals, self._stagnation_signals,
+            total_rounds=self._round_num,
+            rounds_since_last_promote=self._rounds_since_last_promote,
+        )
+        if es_decision.stop:
+            early_stop_detected = True
+            early_stop_reason = es_decision.reason
+            logger.info("Early-stop triggered: %s (rule=%s)", es_decision.reason, es_decision.rule)
 
         cs = CampaignState(
             n_experiments=self._n_experiments,
@@ -468,6 +476,7 @@ class CampaignManager:
         """Full 14-step flow for an EXPLORE/EXPLORE_EXPAND branch."""
         bid = branch.branch_id
         self._round_num += 1
+        self._rounds_since_last_promote += 1
         rnum = self._round_num
 
         # ---------- Check for pending hypothesis (code-retry path) ----------
@@ -1552,7 +1561,8 @@ class CampaignManager:
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             # For EXPLORE_EXPAND the branch is not already in EXPLORE — call apply_decision
             # so the transition map (EXPLORE_EXPAND → EXPLORE) fires correctly.
-            if branch.state != BranchState.EXPLORE:
+            # Skip STALE_WEIGHT_UPDATE: let it flow to reconcile unchanged.
+            if branch.state not in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE):
                 try:
                     self._branch_ctrl.apply_decision(bid, decision)
                 except StateTransitionError as exc:
@@ -1560,7 +1570,8 @@ class CampaignManager:
                         "Branch %s: apply_decision(CONTINUE_EXPLORE) from %s failed: %s",
                         bid, branch.state.value, exc,
                     )
-            # Otherwise branch stays EXPLORE — no apply_decision needed.
+            # Otherwise branch stays as-is — EXPLORE needs no transition,
+            # STALE_WEIGHT_UPDATE flows to reconcile on next step.
             self._recent_abandoned_count = 0
             return StepResult(
                 action=action_label,  # type: ignore[arg-type]
@@ -1724,6 +1735,7 @@ class CampaignManager:
         # Update champion immediately with pre-optimized weights (R1)
         with self._champion_lock:
             self._champion = new_champion
+        self._rounds_since_last_promote = 0
         stale_ids = self._branch_ctrl.mark_all_stale(new_version)
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))

@@ -143,14 +143,17 @@ class TestAsyncWeightStress:
 
 class TestEarlyStopReplaySmoke:
     def test_hard_saturation_stops_campaign(self) -> None:
-        analyzer = ChampionSaturationAnalyzer({"subcategory_splits": 0.5})
+        analyzer = ChampionSaturationAnalyzer(
+            {"subcategory_splits": 0.5},
+            lower_bounds={"subcategory_splits": 0.0},
+        )
         signals = analyzer.analyze({"subcategory_splits": 0.3})
         assert signals[0].saturation_type == "hard"
 
         ctrl = EarlyStopController()
         decision = ctrl.should_early_stop(signals, [])
         assert decision.stop is True
-        assert decision.rule == "all_hard"
+        assert decision.rule == "all_bounded"
 
     def test_soft_saturation_needs_plateau(self) -> None:
         analyzer = ChampionSaturationAnalyzer({"total_cost": 100000})
@@ -165,9 +168,12 @@ class TestEarlyStopReplaySmoke:
             kind="plateau", severity="warning",
             detail="flat", suggested_action="switch",
         )
-        decision2 = ctrl.should_early_stop(signals, [plateau])
+        decision2 = ctrl.should_early_stop(
+            signals, [plateau],
+            total_rounds=50, rounds_since_last_promote=20,
+        )
         assert decision2.stop is True
-        assert decision2.rule == "saturated_stagnant"
+        assert decision2.rule == "diminishing_returns"
 
     def test_termination_integration(self) -> None:
         checker = TerminationChecker()

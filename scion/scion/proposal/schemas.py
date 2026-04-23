@@ -165,7 +165,7 @@ FIX_TOOL: Dict[str, Any] = {
         "- Return the COMPLETE corrected file, not just changed lines.\n\n"
         "Common patterns:\n"
         "- V3_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
-        "- V5_state_mutation: operator modified input solution (use deep_copy()).\n"
+        "- V5_solution_consistency: output solution has assignment/vehicle mismatch or missing/duplicate orders.\n"
         "- V8_nondeterminism: non-deterministic code (no uuid, use sorted(), use rng).\n"
         "- V1_syntax: indentation, parentheses, colons.\n"
         "- V2_interface: missing Operator base class or wrong execute() signature."

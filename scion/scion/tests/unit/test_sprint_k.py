@@ -103,6 +103,7 @@ def _make_campaign_harness(
     harness._materializer = MagicMock()
     harness._registry = MagicMock()
     harness._experiment_protocol = None
+    harness._rounds_since_last_promote = 0
     return harness
 
 

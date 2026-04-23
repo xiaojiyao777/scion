@@ -223,9 +223,9 @@ def _split_hypothesis_context(
     # I3: Forced locus constraint
     if D["locus_constraint"]:
         branch_context_parts.append(D["locus_constraint"])
-    # L2: Absolute minimum constraint
-    if D["abs_min_constraint"]:
-        branch_context_parts.append(D["abs_min_constraint"])
+    # L2: Objective improvement guidance (tendency-based)
+    if D.get("objective_guidance"):
+        branch_context_parts.append(D["objective_guidance"])
     # J6: Weight optimization feedback
     if D["weight_opt_feedback"]:
         branch_context_parts.append(D["weight_opt_feedback"])

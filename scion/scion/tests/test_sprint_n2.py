@@ -99,7 +99,10 @@ class TestStageAwareStale:
 class TestSaturationTypes:
     def test_hard_saturation(self) -> None:
         from scion.proposal.saturation import ChampionSaturationAnalyzer
-        analyzer = ChampionSaturationAnalyzer({"subcategory_splits": 0.5, "total_cost": 50000})
+        analyzer = ChampionSaturationAnalyzer(
+            {"subcategory_splits": 0.5, "total_cost": 50000},
+            lower_bounds={"subcategory_splits": 0.0},
+        )
         signals = analyzer.analyze({"subcategory_splits": 0.3, "total_cost": 30000})
         splits_sig = next(s for s in signals if s.objective == "subcategory_splits")
         assert splits_sig.saturation_type == "hard"
@@ -155,22 +158,40 @@ class TestEarlyStopController:
             detail="flat win rate", suggested_action="switch_action",
         )
 
-    def test_all_hard_stops(self) -> None:
+    def test_all_bounded_stops(self) -> None:
         ctrl = EarlyStopController()
         d = ctrl.should_early_stop(
             [self._hard_signal("a"), self._hard_signal("b")], [],
         )
         assert d.stop is True
-        assert d.rule == "all_hard"
+        assert d.rule == "all_bounded"
 
-    def test_saturated_stagnant_stops(self) -> None:
-        ctrl = EarlyStopController()
+    def test_budget_efficiency_stops(self) -> None:
+        ctrl = EarlyStopController(max_idle_ratio=0.6)
+        d = ctrl.should_early_stop(
+            [], [],
+            total_rounds=50, rounds_since_last_promote=35,
+        )
+        assert d.stop is True
+        assert d.rule == "budget_efficiency"
+
+    def test_budget_efficiency_under_threshold_continues(self) -> None:
+        ctrl = EarlyStopController(max_idle_ratio=0.6)
+        d = ctrl.should_early_stop(
+            [], [],
+            total_rounds=50, rounds_since_last_promote=20,
+        )
+        assert d.stop is False
+
+    def test_diminishing_returns_with_plateau_stops(self) -> None:
+        ctrl = EarlyStopController(stagnation_window=15)
         d = ctrl.should_early_stop(
             [self._hard_signal(), self._soft_high_signal()],
             [self._plateau_signal()],
+            total_rounds=50, rounds_since_last_promote=20,
         )
         assert d.stop is True
-        assert d.rule == "saturated_stagnant"
+        assert d.rule == "diminishing_returns"
 
     def test_high_without_plateau_continues(self) -> None:
         ctrl = EarlyStopController()

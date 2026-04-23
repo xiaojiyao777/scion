@@ -85,7 +85,7 @@ class ContextManager:
         exploration_coverage = build_exploration_coverage(families) if families else ""
 
         # T08: Build strategy guidance from family data (J-patch: global)
-        strategy_guidance = _build_strategy_guidance(families) if families else ""
+        strategy_guidance = _build_strategy_guidance(families, problem_spec) if families else ""
 
         # T10: Champion baseline hints from most recent screening experiment
         champion_baselines = _build_champion_baselines(step_history or [])
@@ -114,20 +114,8 @@ class ContextManager:
             from scion.proposal.saturation import render_saturation_signals
             saturation_block = render_saturation_signals(saturation_signals)
 
-        # L2: Absolute minimum constraint (splits at floor → force COST-only)
-        abs_min_constraint = ""
-        if saturation_signals:
-            abs_min_objs = [
-                s.objective for s in saturation_signals
-                if getattr(s, "at_absolute_minimum", False)
-            ]
-            if abs_min_objs and "subcategory_splits" in abs_min_objs:
-                abs_min_constraint = (
-                    "\n## MANDATORY CONSTRAINT — SPLITS AT MINIMUM\n"
-                    "Champion baseline splits ≈ 0. Splits CANNOT be reduced further.\n"
-                    "DO NOT propose subcategory-aware, split-reduction, or consolidation operators.\n"
-                    "ALL proposals MUST target COST reduction ONLY.\n"
-                )
+        # L2: Objective guidance from saturation signals (tendency-based)
+        objective_guidance = _build_objective_guidance(saturation_signals)
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -155,7 +143,7 @@ class ContextManager:
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
             "locus_constraint": locus_constraint,
-            "abs_min_constraint": abs_min_constraint,
+            "objective_guidance": objective_guidance,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
@@ -270,6 +258,34 @@ class ContextManager:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _build_objective_guidance(saturation_signals) -> str:
+    """Build tendency-based objective guidance from saturation signals."""
+    if not saturation_signals:
+        return ""
+    lines = []
+    for s in saturation_signals:
+        if getattr(s, "at_absolute_minimum", False):
+            lines.append(
+                f"- {s.objective}: at or near its theoretical minimum. "
+                f"Further improvement on this dimension is unlikely. "
+                f"Focusing search effort on other objectives is strongly preferred."
+            )
+        elif s.saturation_level == "high":
+            pct = int(s.improvement_ratio * 100)
+            lines.append(
+                f"- {s.objective}: improvement has reached high saturation ({pct}% from baseline). "
+                f"Exploring other objectives is valuable when {s.objective} is stable."
+            )
+        elif s.saturation_level == "low":
+            lines.append(
+                f"- {s.objective}: has significant room for improvement. "
+                f"This is a promising search direction."
+            )
+    if not lines:
+        return ""
+    return "\n## Objective Improvement Guidance\n" + "\n".join(lines)
+
 
 def _build_branch_direction_prompt(branch: Branch) -> Optional[str]:
     """Build branch direction guidance if a direction has been established."""
@@ -548,10 +564,11 @@ _VERIFICATION_SUGGESTIONS: dict = {
         "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
         "危险品必须在 HQ40_DG 车型"
     ),
-    "V5_state_mutation": (
-        "算子修改了输入 solution（state 污染）。"
-        "确保先调用 solution.deep_copy() 再操作，不要引用原始 solution 的任何可变子对象（list、dict）。"
-        "检查 assignment dict 和 vehicle.order_ids 是否一致。"
+    "V5_solution_consistency": (
+        "求解器输出的 solution 中 assignment dict 与 vehicle.order_ids 不一致。"
+        "检查：(1) 每个 order 只出现在一个 vehicle 中；"
+        "(2) assignment[order_id] 指向的 vehicle 确实包含该 order；"
+        "(3) 没有遗漏或重复的 order。"
     ),
     "V8_nondeterminism": (
         "同 seed 两次 solver run 产出了不同的 objective。常见非确定性来源："
@@ -721,7 +738,7 @@ def _count_trailing_failures(statuses: List[str]) -> int:
     return count
 
 
-def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
+def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[ProblemSpec] = None) -> str:
     """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
     if not families:
         return ""
@@ -746,7 +763,7 @@ def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
 
     # Rule 3: Unexplored locus → suggest
     explored_loci = {f.locus_pattern for f in families}
-    all_loci = {"vehicle_level", "order_level"}
+    all_loci = set(spec.operator_categories) if spec and hasattr(spec, 'operator_categories') and spec.operator_categories else {"vehicle_level", "order_level"}
     unexplored = all_loci - explored_loci
     if unexplored:
         guidance_parts.append(
@@ -878,13 +895,7 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
         else:
             splits_str = f"~{min_val:.0f}-{max_val:.0f} splits"
         avg = sum(champ_vals) / len(champ_vals)
-        if avg <= 2:
-            note = "— splits already near optimal"
-        elif avg <= 10:
-            note = "— some room to improve"
-        else:
-            note = "— significant room on splits"
-        lines.append(f"- {case_id}: {splits_str} {note}")
+        lines.append(f"- {case_id}: {splits_str} (avg={avg:.1f})")
 
     return "\n".join(lines)
 

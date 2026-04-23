@@ -57,6 +57,7 @@ class FamilyEntry:
     last_failure_reason: str = ""
     champion_version_at_discovery: int = 0
     promoted: bool = False              # whether this family was ever promoted
+    recent_failure_details: List[str] = field(default_factory=list)  # last 3 verification failure details
 
     @property
     def family_key(self) -> str:
@@ -127,6 +128,10 @@ class CampaignSearchMemory:
             # Failed before reaching protocol — counts as a fail
             fam.consecutive_fails += 1
             fam.last_failure_reason = step.failure_detail or step.failure_stage or ""
+            if step.failure_detail and step.failure_stage == "verification":
+                fam.recent_failure_details.append(step.failure_detail[:200])
+                if len(fam.recent_failure_details) > 3:
+                    fam.recent_failure_details = fam.recent_failure_details[-3:]
 
         # Exhaustion: total_attempts >= 5 AND best_wr < 0.35 (uniform for all families)
         fam.is_exhausted = (fam.total_attempts >= 5 and fam.best_wr < 0.35)
@@ -244,6 +249,8 @@ class CampaignSearchMemory:
                 line = f"{f.label} [{f.total_attempts}次, best_wr={f.best_wr:.2f}]"
                 if f.last_failure_reason:
                     line += f": {f.last_failure_reason[:100]}"
+                if f.recent_failure_details:
+                    line += "\n  Recent failures: " + "; ".join(f.recent_failure_details[-2:])
                 lines.append(line)
             sections.append(
                 "### 已耗尽方向（AVOID — 全局失败 ≥5 次，best_wr < 0.35）\n" +

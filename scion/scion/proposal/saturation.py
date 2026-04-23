@@ -32,8 +32,14 @@ class ChampionSaturationAnalyzer:
         high:   > 70% improvement
     """
 
-    def __init__(self, baseline_metrics: Dict[str, float]) -> None:
+    def __init__(
+        self,
+        baseline_metrics: Dict[str, float],
+        *,
+        lower_bounds: Optional[Dict[str, float]] = None,
+    ) -> None:
         self._baseline = baseline_metrics  # e.g. {"subcategory_splits": 10.0, "total_cost": 50000.0}
+        self._lower_bounds = lower_bounds or {}
 
     def analyze(
         self,
@@ -48,19 +54,21 @@ class ChampionSaturationAnalyzer:
             List of SaturationSignal, one per objective dimension.
         """
         signals = []
+        _HARD_EPSILON = 0.5
+
         for obj, baseline_val in self._baseline.items():
             current_val = current_metrics.get(obj)
             if current_val is None or baseline_val == 0:
                 continue
 
-            # Absolute minimum detection: splits cannot go below 0
-            _AT_MINIMUM_THRESHOLD = 1.0
-            if obj == "subcategory_splits" and baseline_val < _AT_MINIMUM_THRESHOLD:
+            # Hard saturation: baseline already at known lower bound
+            lb = self._lower_bounds.get(obj)
+            if lb is not None and baseline_val <= lb + _HARD_EPSILON:
                 signals.append(SaturationSignal(
                     objective=obj,
                     improvement_ratio=0.0,
                     saturation_level="high",
-                    opportunity_hint="已达绝对下界，无法进一步改善",
+                    opportunity_hint=f"at theoretical lower bound ({lb})",
                     at_absolute_minimum=True,
                     saturation_type="hard",
                 ))
@@ -121,19 +129,13 @@ def render_saturation_signals(signals: List[SaturationSignal]) -> str:
             f"建议探索 {', '.join(low_saturated)} 方向。"
         )
 
-    # Absolute minimum objects → inject MANDATORY CONSTRAINT
+    # Note objectives at absolute minimum (tendency, not prohibition)
     absolute_min_objs = [s.objective for s in signals if s.at_absolute_minimum]
     if absolute_min_objs:
         lines.append(
-            f"\n⚠️  MANDATORY CONSTRAINT — 以下目标已在绝对下界，禁止提案："
+            f"\nNote: {', '.join(absolute_min_objs)} at theoretical lower bound. "
+            f"Proposals targeting other objectives are strongly preferred."
         )
-        for obj in absolute_min_objs:
-            if "split" in obj:
-                lines.append(
-                    f"  - {obj} = 0（生产数据中 splits 已无改进空间）"
-                    f"\n    禁止提议任何 subcategory/split/consolidate 类算子。"
-                    f"\n    只允许针对 COST（总车辆费用）的改进方向。"
-                )
 
     return "\n".join(lines)
 

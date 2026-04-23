@@ -27,16 +27,19 @@ _ACTIVE_STATES = frozenset({
 _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     Decision.CONTINUE_EXPLORE: {
         BranchState.EXPLORE: BranchState.EXPLORE,
+        BranchState.NEW: BranchState.EXPLORE,
         # Expand screening didn't yield a strong enough win_rate — fall back to
         # a fresh explore iteration on the same branch.
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
     },
     Decision.EXPAND_SCREENING: {
         BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,
+        BranchState.NEW: BranchState.EXPLORE_EXPAND,
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE_EXPAND,  # self-loop: keep expanding
     },
     Decision.QUEUE_VALIDATE: {
         BranchState.EXPLORE: BranchState.READY_VALIDATE,
+        BranchState.NEW: BranchState.READY_VALIDATE,
         BranchState.EXPLORE_EXPAND: BranchState.READY_VALIDATE,
     },
     Decision.EXPAND_VALIDATION: {
