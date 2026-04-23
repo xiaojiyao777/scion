@@ -24,8 +24,12 @@ _MECHANISM_KEYWORDS: List[tuple] = [
 _DEFAULT_MECHANISM = "generic"
 
 
-def _extract_mechanism_label(hypothesis_text: str) -> str:
+def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[List[str]] = None) -> str:
     text_lower = hypothesis_text.lower()
+    if taxonomy:
+        for label in taxonomy:
+            if label.lower() in text_lower:
+                return label
     for keywords, label in _MECHANISM_KEYWORDS:
         if any(kw in text_lower for kw in keywords):
             return label

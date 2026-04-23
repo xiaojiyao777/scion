@@ -147,7 +147,7 @@ class CampaignManager:
         self._feature_extractor = SafeFeatureExtractor()
         self._failure_router = FailureRouter(retry_config or RetryConfig())
         self._creative = CreativeLayer(llm_client)
-        self._ctx_manager = ContextManager()
+        self._ctx_manager = ContextManager(adapter=self._adapter)
 
         # O1: Hypothesis family classifier (keyword-only if no LLM client)
         from scion.proposal.classifier import HypothesisFamilyClassifier
@@ -2068,14 +2068,11 @@ class CampaignManager:
             if locus:
                 locus_counts[locus] = locus_counts.get(locus, 0) + 1
 
-        # Force the opposite locus on next branch creation
+        # Force a non-dominant locus on next branch creation
         dominant_locus = max(locus_counts, key=locus_counts.get) if locus_counts else ""
-        if dominant_locus == "vehicle_level":
-            self._forced_next_locus = "order_level"
-        elif dominant_locus == "order_level":
-            self._forced_next_locus = "vehicle_level"
-        else:
-            self._forced_next_locus = None  # unknown → no force
+        all_loci = set(getattr(self._spec, 'operator_categories', [])) or {"vehicle_level", "order_level"}
+        unexplored = all_loci - {dominant_locus}
+        self._forced_next_locus = next(iter(sorted(unexplored)), None)
 
         self._soft_abandon_streak = 0  # reset after acting
 
@@ -2106,11 +2103,9 @@ class CampaignManager:
             if locus:
                 locus_counts[locus] = locus_counts.get(locus, 0) + 1
         dominant = max(locus_counts, key=locus_counts.get) if locus_counts else ""
-        if dominant == "vehicle_level":
-            return "order_level"
-        elif dominant == "order_level":
-            return "vehicle_level"
-        return None
+        all_loci = set(getattr(self._spec, 'operator_categories', [])) or {"vehicle_level", "order_level"}
+        unexplored = all_loci - {dominant}
+        return next(iter(sorted(unexplored)), None)
 
     # ------------------------------------------------------------------
     # Failure handling

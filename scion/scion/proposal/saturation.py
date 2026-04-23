@@ -147,6 +147,9 @@ def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, f
       1. case_feedback[*].case_features (populated by ContextManager)
       2. pair_feedback[*].objective_breakdown (original path)
     Returns averages across all pairs/cases, or None if no data.
+
+    TODO: Replace hardcoded field names with generic objective iteration from
+    ProblemSpecV1.objectives when ObjectiveBreakdown is genericized.
     """
     if step.protocol_result is None:
         return None

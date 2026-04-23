@@ -32,6 +32,9 @@ class ContextManager:
     └─────────────────────────┴─────────────────────────────────────────┘
     """
 
+    def __init__(self, *, adapter=None):
+        self._adapter = adapter
+
     # ------------------------------------------------------------------
     # Round 1 — hypothesis context
     # ------------------------------------------------------------------
@@ -64,7 +67,7 @@ class ContextManager:
         If failure_streak is provided, injects a failure pattern warning when
         any failure code has a streak >= 2.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         champion_operators_code = _read_champion_operators(champion)
         experiment_history = _build_experiment_history(
             step_history or [], branch.branch_id
@@ -171,7 +174,7 @@ class ContextManager:
         If prior_failure is set, a previous code generation attempt failed for
         this hypothesis — the failure detail is included so the LLM can learn.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         hypothesis_detail = _format_hypothesis(hypothesis)
         if hypothesis.action == "create_new":
             target_file_code = "(new file — will be created)"
@@ -182,7 +185,7 @@ class ContextManager:
         reference_operators = _read_reference_operators(
             champion, hypothesis.change_locus, problem_spec
         )
-        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
@@ -220,7 +223,7 @@ class ContextManager:
         Does NOT contain experiment stats.
         If failure_streak is provided, injects a failure pattern warning.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         failed_checks = [c for c in verification_result.checks if not c.passed]
         failure_detail = (
             f"Severity: {verification_result.failure_severity or 'unknown'}\n"
@@ -231,7 +234,7 @@ class ContextManager:
             )
         ) or "No detail available."
 
-        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
@@ -301,8 +304,10 @@ def _build_branch_direction_prompt(branch: Branch) -> Optional[str]:
     )
 
 
-def _build_problem_summary(spec: ProblemSpec) -> str:
+def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
     """Build a structured summary of the problem specification."""
+    if adapter is not None and hasattr(adapter, 'render_problem_summary'):
+        return adapter.render_problem_summary()
     lines = [
         f"Name: {spec.name}",
     ]
@@ -640,9 +645,13 @@ _MECHANISM_KEYWORDS: List[Tuple[List[str], str]] = [
 _DEFAULT_MECHANISM = "generic"
 
 
-def _extract_mechanism_label(hypothesis_text: str) -> str:
+def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[list] = None) -> str:
     """Extract mechanism label from hypothesis text using keyword matching."""
     text_lower = hypothesis_text.lower()
+    if taxonomy:
+        for label in taxonomy:
+            if label.lower() in text_lower:
+                return label
     for keywords, label in _MECHANISM_KEYWORDS:
         if any(kw in text_lower for kw in keywords):
             return label
@@ -1038,8 +1047,10 @@ def _read_branch_code(branch_workspace: str, champion: ChampionState) -> Optiona
     return "\n\n".join(sections) if sections else None
 
 
-def _build_operator_interface_spec(spec: ProblemSpec) -> str:
+def _build_operator_interface_spec(spec: ProblemSpec, *, adapter=None) -> str:
     """Build the operator interface specification including base class and data models."""
+    if adapter is not None and hasattr(adapter, 'render_operator_interface'):
+        return adapter.render_operator_interface()
     # Try to read base.py from the problem's root_dir
     base_py_path = os.path.join(spec.root_dir, "operators", "base.py")
     base_class_src = ""
