@@ -2113,9 +2113,8 @@ class CampaignManager:
 
     def _consume_forced_locus(self) -> Optional[str]:
         """Consume and return forced locus (set by soft/hard stagnation), or None."""
-        forced = self._forced_next_locus
+        forced = self._plateau.consume_forced_locus()
         if forced is not None:
-            self._forced_next_locus = None
             logger.info("Applying forced locus diversification: %s", forced)
         return forced
 
