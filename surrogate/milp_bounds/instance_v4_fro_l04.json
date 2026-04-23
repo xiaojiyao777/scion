@@ -1,0 +1,7 @@
+{
+  "subcategory_splits": 64,
+  "total_cost": 186900,
+  "status": "feasible",
+  "gap": 0.0,
+  "solver_time_sec": 1193.99
+}
