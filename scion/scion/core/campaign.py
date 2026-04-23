@@ -863,8 +863,8 @@ class CampaignManager:
             )
 
         self._round_num += 1
+        self._rounds_since_last_promote += 1
         rnum = self._round_num
-
         result = self._apply_decision_and_finalize(
             branch=branch,
             decision=decision,

@@ -286,6 +286,14 @@ def test_decision_screening_expand():
     assert out.decision == Decision.EXPAND_SCREENING
 
 
+def test_decision_screening_pass_negative_delta_queues_validation():
+    """wr >= threshold but md < 0 → queue_validate (not expand, to avoid dead loop)."""
+    f = _features(stage="screening", win_rate=0.7, median_delta=-1000.0)
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
+
+
 def test_decision_validation_pass_to_queue_frozen():
     f = _features(stage="validation", win_rate=0.7, ci_low=0.005, ci_high=0.02)
     out = _engine.decide(f)

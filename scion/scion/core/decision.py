@@ -59,8 +59,10 @@ class DecisionEngine:
             # → pass to validation which has more diverse instances
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_MARGINAL_DELTA"])
         elif wr >= threshold and md is not None and md < 0:
-            # High win_rate but negative median — expand to confirm
-            return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND_DELTA"])
+            # Win rate passes gate but median delta is negative.
+            # Expanding with the same deterministic cases produces no new info,
+            # so we send to validation — bootstrap CI on diverse cases is the proper adjudicator.
+            return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_NEGATIVE_DELTA"])
         elif wr >= 0.5 and wr < threshold:
             # Check if already expanded too many times (max 3 expands)
             if features.expand_count >= 3:
