@@ -41,13 +41,16 @@ CAMPAIGN_DIR.mkdir(parents=True, exist_ok=True)
 
 log_file = CAMPAIGN_DIR / "campaign.log"
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
     handlers=[
         logging.FileHandler(str(log_file)),
         logging.StreamHandler(),
     ],
 )
+# Silence noisy third-party loggers
+for _lib in ("httpcore", "httpx", "anthropic", "openai", "urllib3"):
+    logging.getLogger(_lib).setLevel(logging.WARNING)
 logger = logging.getLogger("scion.validation")
 
 MANIFEST = PROBLEM_DIR / "split_manifest.yaml"
