@@ -69,8 +69,15 @@ class DecisionEngine:
         elif wr >= 0.5 and wr < threshold:
             # Check if already expanded too many times (max 3 expands)
             if features.expand_count >= 3:
-                if wr >= threshold - 0.05:  # Close enough, try validation
+                # Borderline candidates (wr close to threshold) may still be worth validating,
+                # but only if median_delta is non-negative. Cost-regressive candidates
+                # (md < 0) that leak through this path burn val/frozen budget and typically
+                # fail frozen on ci_low<0 — reject them here instead. Symmetric with the
+                # SPND cap at line 66-68.
+                if wr >= threshold - 0.05 and (md is None or md >= 0):
                     return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_EXPAND_EXHAUSTED_BORDERLINE"])
+                if wr >= threshold - 0.05 and md is not None and md < 0:
+                    return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA"])
                 return self._out(features, Decision.CONTINUE_EXPLORE, ["SCREENING_EXPAND_EXHAUSTED"])
             return self._out(features, Decision.EXPAND_SCREENING, ["SCREENING_EXPAND"])
         elif wr < 0.5:

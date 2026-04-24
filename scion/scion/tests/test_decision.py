@@ -286,6 +286,44 @@ def test_decision_screening_expand():
     assert out.decision == Decision.EXPAND_SCREENING
 
 
+def test_decision_screening_expand_exhausted_borderline_positive_delta():
+    """wr in [threshold-0.05, threshold) with md>=0 after 3 expands → queue_validate."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.63, median_delta=100.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0, expand_count=3,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE" in out.reason_codes
+
+
+def test_decision_screening_expand_exhausted_borderline_negative_delta():
+    """wr in [threshold-0.05, threshold) with md<0 after 3 expands → continue_explore,
+    not queue_validate. Cost-regressive candidates must not leak through BORDERLINE path
+    (symmetric with SPND cap for wr>=threshold md<0)."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.63, median_delta=-1200.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0, expand_count=3,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA" in out.reason_codes
+
+
 def test_decision_screening_pass_negative_delta_queues_validation():
     """wr >= threshold but md < 0 → queue_validate (not expand, to avoid dead loop)."""
     f = _features(stage="screening", win_rate=0.7, median_delta=-1000.0)
