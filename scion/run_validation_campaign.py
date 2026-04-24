@@ -25,6 +25,8 @@ parser.add_argument("--model", required=True, help="LLM model ID")
 parser.add_argument("--seed", required=True, type=int)
 parser.add_argument("--max-rounds", type=int, default=100)
 parser.add_argument("--splits-weight", type=int, default=1000)
+parser.add_argument("--base-dir", default="v03-post-opt",
+                    help="subdir under ~/research/scion-experiments/ (default: v03-post-opt)")
 args = parser.parse_args()
 
 random.seed(args.seed)
@@ -32,7 +34,7 @@ os.environ["SCION_SPLITS_WEIGHT"] = str(args.splits_weight)
 
 SCION_DIR = Path(__file__).parent
 PROBLEM_DIR = SCION_DIR / "problems" / "warehouse_delivery"
-EXP_BASE = Path.home() / "research" / "scion-experiments" / "v03-post-opt"
+EXP_BASE = Path.home() / "research" / "scion-experiments" / args.base_dir
 
 model_short = args.model.replace("claude-", "").replace(".", "")
 campaign_name = f"{model_short}_synthetic_seed{args.seed}"
