@@ -1,0 +1,124 @@
+# Scion v0.3 当前状态 (2026-04-24)
+
+**定位**：v0.3 收尾阶段实时状态。**Previous version**: `v0.3-current-state.md.pre-closure`（2026-04-20，收尾前）。待 F 验证实验完成后升级为 `v0.3-final-state.md`。
+
+## 一、已完成的 v0.3 收尾工作
+
+参见 `docs/v0.3-optimization-design.md` 为权威设计。本次 optimization 执行全部 P0/P1 项（F 除外，运行中）：
+
+### A. 回归修复
+| # | 项 | 文件 | 状态 |
+|---|---|---|---|
+| A1 | SPND expand_count cap | `core/decision.py:61-68` | ✅ |
+| A2 | Idle counter skips val/frozen eval | `core/campaign.py:865-871` | ✅ |
+| A3 | stagnation_window 15→25 | `core/early_stop.py:37` | ✅ |
+| A4 | BORDERLINE md>=0 cap (smoke-discovered) | `core/decision.py:69-79` | ✅ |
+
+### B. campaign.py 最低限度服务抽离
+| 服务 | 文件 | 行数 | 职责 |
+|---|---|---|---|
+| `PlateauController` | `core/plateau_controller.py` | 108 | idle counter + early-stop + forced locus |
+| `AsyncWeightOptCoordinator` | `core/async_weight_opt.py` | 334 | 权重优化线程生命周期 + bg thread + 优化循环 |
+| `ProblemRuntime` | `core/problem_runtime.py` | 63 | adapter + spec + ContextManager 组合 |
+
+`campaign.py` 从 2451 行 → **2303 行**（−148）。进一步 <800 行是 v1.0 Phase 1 范围。
+
+### C. §11.2 Tech debt
+| # | 项 | 状态 |
+|---|---|---|
+| C1 | V1-V9 命名统一（V3/V4/V6 重叠、V5 新旧并存）| ✅ |
+| C2 | ProblemSpec strict mode (`extra=forbid`) | ✅ |
+| C3 | Failure code taxonomy 对齐（RAW + NORMALIZED 两层）| ✅ |
+| — | `state_leak.py` 删除 | ✅（早先完成）|
+| — | classifier API mismatch | ✅（早先完成）|
+| — | logger 统一 | ✅（早先完成）|
+
+### D. 状态机 P5 注释
+`core/branch.py:45-51` 添加注释说明 `VALIDATING_EXPAND + EXPAND_VALIDATION` 为何不映射（被 decision engine 的 `expand_count>=1` guard 挡住）。
+
+### E. Pre-existing test failures
+4 个 test drift 全部修：
+- `test_parameter_search_config_defaults`：默认值 4→8 同步
+- `test_direction_cleared_after_3_consecutive_zero_wins`：标 skip（T4 语义已变）
+- `test_second_step_proposes_new_hypothesis`：SequencedLLM 生成 distinct target_file
+- `test_retry_after_contract_fail`：同上
+- 新 test failure `test_soft_saturation_needs_plateau`：跟随 stagnation_window 变化调整
+
+## 二、测试状态
+
+**972 pass / 1 skipped / 0 failures**
+
+每次 commit 之后跑一遍完整 pytest 都保持该状态。
+
+## 三、F 验证状态
+
+**启动时间**：2026-04-24 00:49 UTC
+**Launcher PID**：1404378
+**Base dir**：`~/research/scion-experiments/v03-closure-validation/`
+**Status**：6 campaigns queued, 2 running (sonnet s11 + s29)
+**Pre-registration**：`docs/v0.3-closure-validation-prereg.md`
+
+预计 20-22h 墙钟完成。用户将在新 session 分析。
+
+## 四、Git 历史（本轮 v0.3 optimization）
+
+```
+24ed3dc fix(v0.3): A4 — BORDERLINE cap rejects cost-regressive candidates
+e35db3e refactor(v0.3): B3 extract ProblemRuntime
+b73a357 refactor(v0.3): B2 extract AsyncWeightOptCoordinator
+928d8ca refactor(v0.3): B1 tidy — _consume_forced_locus delegates to plateau
+03f91c6 refactor(v0.3): B1 extract PlateauController
+ff4b651 refactor(v0.3): C1 V1-V9 naming unification + C3 failure taxonomy alignment
+5e964fd fix(v0.3): A1-A3 regression fixes + C2 strict spec + D state machine + E test drift
+072dac4 docs(v0.3): optimization design + engineering assessment + v1.0 roadmap
+```
+
+## 五、Smoke 测试结果（pre-formal-run）
+
+单 campaign smoke（sonnet s11, 43 min, manually terminated）验证了：
+
+✅ **全部核心代码路径实际被触发**：
+- R1 hypothesis → R2 code → verification pass → screening pair 评估
+- `SCREENING_EXPAND_EXHAUSTED_BORDERLINE` 路径触发（发现 A4 遗漏）
+- `VALIDATION_EXPAND_EXHAUSTED_PASS` → frozen → **FROZEN_FAIL** (ci_low<0)
+- T4 soft-abandon (wr<0.3)
+- 分支内 R2 hypothesis 迭代
+- 新分支创建 after abandon
+- `PlateauController` idle counter 按 A2 语义递增
+- `ProblemRuntime` adapter-driven context 渲染
+
+📌 **发现**：A1 SPND cap 没覆盖 BORDERLINE 路径，cost-regressive 候选从 BORDERLINE 路径泄漏 → A4 补丁加上后问题闭合。
+
+Smoke 日志归档在 `~/research/scion-experiments/v03-closure-smoke-r1/`（pre-A4 状态）。
+
+## 六、v0.3 vs v1.0 Phase 1 边界
+
+**v0.3 scope（本轮已做）**：
+- A1-A4 回归修复
+- B1-B3 最低限度服务抽离
+- C1-C3 tech debt
+- D/E minor cleanup
+
+**v1.0 Phase 1 scope（保留，不做）**：
+- `campaign.py` < 800 行完整重构
+- `if adapter is not None` silent fallback 去除（adapter 强制 required）
+- `ObjectiveBreakdown` / `compare_with_breakdown` / `_MECHANISM_KEYWORDS` fallback 等 DEPRECATED 类删除
+- systemd launcher / transient service
+- Observability (status.json 实时推送、prometheus metrics 等)
+- FCMCNF 第二 problem 接入
+
+参见 `docs/v1.0-roadmap.md` Phase 1。
+
+## 七、已知开放问题（留给 v1.0 或 F 分析后决定）
+
+1. **`VALIDATION_EXPAND_EXHAUSTED_PASS` 潜在漏网**：即使 A1+A4 修了 screening 两条路径，validation 仍可能以 `ci_low<0` + `expand_count>=1` 强制升 frozen。Smoke 中的 branch a0db1502 就是这样走到 frozen_fail 的。如果 F 显示这仍是主要 budget 消耗源，v1.0 需加类似 md/ci guard。
+2. **LLM proposal 分布漂移**：倾向性 context 让 Sonnet 更愿意生成 cost-regressive 候选。是净利好（更多探索）还是净受损（更多 dead end）要看 F 数据。
+3. **MILP 下界仅 Medium 规模有效**：W16 分析已说明。v1.0 FCMCNF + Benders 接入后才会真正有有效下界。
+
+## 八、一句话总结
+
+v0.3 的回归已修 + campaign.py god object 被打破（3 协调器存在）+ tech debt 清完。F 实验在跑，等 20-22h 后数据出来确认。v1.0 Phase 1 的起点清晰。
+
+---
+
+*本文档在 F 完成、结果分析后将升级为 `v0.3-final-state.md`。*
