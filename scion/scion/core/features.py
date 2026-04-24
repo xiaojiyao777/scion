@@ -107,7 +107,8 @@ class SafeFeatureExtractor:
             ci_high=ci_high,
             stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
             recent_retry_count=branch.retry_count,
-            expand_count=branch.expand_count,
+            screening_expand_count=branch.screening_expand_count,
+            validation_expand_count=branch.validation_expand_count,
             recent_failure_codes=recent_failure_codes,
             budget_remaining_ratio=budget.remaining_ratio,
         )

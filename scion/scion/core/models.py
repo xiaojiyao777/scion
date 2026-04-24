@@ -201,7 +201,11 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
-    expand_count: int = 0  # Number of screening expands on this branch
+    # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
+    # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
+    # hypothesis is generated for this branch.
+    screening_expand_count: int = 0
+    validation_expand_count: int = 0
 
 @dataclass(frozen=True)
 class DecisionOutcome:
@@ -239,7 +243,12 @@ class Branch:
     current_code_hash: Optional[str] = None
     last_clean_code_hash: Optional[str] = None
     retry_count: int = 0
-    expand_count: int = 0  # Tracks screening expand rounds
+    # Stage-specific expand counters. Per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
+    # are per-candidate budgets, not per-branch. campaign._run_explore_step resets both when a new
+    # hypothesis is generated on this branch. campaign._run_eval_step increments the corresponding
+    # counter based on branch.state (EXPLORE_EXPAND → screening; VALIDATING_EXPAND → validation).
+    screening_expand_count: int = 0
+    validation_expand_count: int = 0
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)

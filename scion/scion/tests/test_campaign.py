@@ -322,6 +322,52 @@ class TestContinueExplore:
         # Both should be CONTINUE_EXPLORE
         assert r2.decision == Decision.CONTINUE_EXPLORE
 
+    def test_new_hypothesis_resets_expand_counters(self, tmp_path):
+        """T3: When a new hypothesis is generated on a branch (pending=None),
+        screening_expand_count and validation_expand_count must reset to 0.
+        Per v3 §11.5 'expand 1 次' is per-candidate, not per-branch."""
+        hyp1 = dict(_VALID_HYPOTHESIS)
+        hyp1["target_file"] = "operators/local_search.py"
+        hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["target_file"] = "operators/other_op.py"
+        patch1 = dict(_VALID_PATCH)
+        patch1["file_path"] = "operators/local_search.py"
+        patch2 = dict(_VALID_PATCH)
+        patch2["file_path"] = "operators/other_op.py"
+
+        class SequencedLLM:
+            def __init__(self):
+                self.hyp_calls = 0
+                self.patch_calls = 0
+            def call(self, prompt, schema, model=None, system_blocks=None):
+                if "code_content" in schema.get("required", []):
+                    self.patch_calls += 1
+                    return patch1 if self.patch_calls == 1 else patch2
+                self.hyp_calls += 1
+                return hyp1 if self.hyp_calls == 1 else hyp2
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+
+        cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
+        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
+
+        # First step: first hypothesis — counters start at 0
+        r1 = cm.run_one_step()
+        branch = cm._branch_ctrl.get_branch(r1.branch_id)
+        # Simulate that the first candidate had expands happen (e.g., a prior screening expand
+        # leaked from hypothesis 1's cycle, or validation expand from a prior trip)
+        branch.screening_expand_count = 2
+        branch.validation_expand_count = 1
+
+        # Second step: new hypothesis (pending is None) — counters must reset
+        r2 = cm.run_one_step()
+        assert r2.branch_id == r1.branch_id
+        branch_after = cm._branch_ctrl.get_branch(r2.branch_id)
+        assert branch_after.screening_expand_count == 0, \
+            "screening_expand_count must reset on new hypothesis (v3 §11.5 per-candidate)"
+        assert branch_after.validation_expand_count == 0, \
+            "validation_expand_count must reset on new hypothesis (v3 §11.5 per-candidate)"
+
 
 # ---------------------------------------------------------------------------
 # Full successful path: EXPLORE → QUEUE_VALIDATE → VALIDATING → QUEUE_FROZEN → PROMOTE

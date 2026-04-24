@@ -552,6 +552,14 @@ class CampaignManager:
         pending = self._pending_hypotheses.pop(bid, None)
         prior_failure: Optional[str] = None
 
+        if pending is None:
+            # New hypothesis: reset per-candidate expand counters (v3 §11.5 "expand
+            # 1 次" is per-candidate, not per-branch). Without this reset, a prior
+            # candidate's screening expand would wrongly block the next candidate's
+            # SPND path, and a prior candidate's screening expand would poison the
+            # next candidate's validation decision (VALIDATION_EXPAND_EXHAUSTED path).
+            branch.screening_expand_count = 0
+            branch.validation_expand_count = 0
         if pending is not None:
             # Retry code generation for a previously code-failed hypothesis (skip Round 1)
             hypothesis, h_record, prior_failure = pending
@@ -1337,8 +1345,16 @@ class CampaignManager:
                 BranchState.EXPLORE_EXPAND,
                 BranchState.VALIDATING_EXPAND,
             )
-            if expand:
-                branch.expand_count += 1
+            # Stage-specific expand counters (v3 §11.5): screening and validation
+            # have independent per-candidate budgets. `expand_round` reflects the
+            # N-th expansion for the active stage.
+            expand_round_val = 1
+            if branch.state == BranchState.EXPLORE_EXPAND:
+                branch.screening_expand_count += 1
+                expand_round_val = branch.screening_expand_count
+            elif branch.state == BranchState.VALIDATING_EXPAND:
+                branch.validation_expand_count += 1
+                expand_round_val = branch.validation_expand_count
             try:
                 protocol_result = self._experiment_protocol.run_experiment(
                     stage=stage,
@@ -1346,7 +1362,7 @@ class CampaignManager:
                     champion_ws=champ_ws,
                     hypothesis_action=hypothesis.action,
                     expand=expand,
-                    expand_round=branch.expand_count if expand else 1,
+                    expand_round=expand_round_val,
                 )
                 self._n_experiments += 1
                 self._budget.used += 1

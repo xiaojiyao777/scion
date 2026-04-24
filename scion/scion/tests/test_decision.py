@@ -133,6 +133,25 @@ def test_extract_validation_stage():
     assert features.stage == "validation"
 
 
+def test_extract_expand_counters_propagate():
+    """T3: SafeFeatureExtractor must copy stage-aware expand counters from
+    Branch to DecisionFeatures so decision rules can use them."""
+    branch = _branch()
+    branch.screening_expand_count = 2
+    branch.validation_expand_count = 1
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=None,
+        budget=BudgetState(total=100, used=0),
+    )
+    assert features.screening_expand_count == 2
+    assert features.validation_expand_count == 1
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # _validate_no_free_text
 # ─────────────────────────────────────────────────────────────────────────────
@@ -287,7 +306,7 @@ def test_decision_screening_expand():
 
 
 def test_decision_screening_expand_exhausted_borderline_positive_delta():
-    """wr in [threshold-0.05, threshold) with md>=0 after 3 expands → queue_validate."""
+    """wr in [threshold-0.05, threshold) with md>=0 after 3 screening expands → queue_validate."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -297,7 +316,7 @@ def test_decision_screening_expand_exhausted_borderline_positive_delta():
         n_cases=10, win_rate=0.63, median_delta=100.0,
         ci_low=None, ci_high=None,
         stale=False, recent_retry_count=0, recent_failure_codes=(),
-        budget_remaining_ratio=1.0, expand_count=3,
+        budget_remaining_ratio=1.0, screening_expand_count=3,
     )
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_VALIDATE
@@ -305,9 +324,8 @@ def test_decision_screening_expand_exhausted_borderline_positive_delta():
 
 
 def test_decision_screening_expand_exhausted_borderline_negative_delta():
-    """wr in [threshold-0.05, threshold) with md<0 after 3 expands → continue_explore,
-    not queue_validate. Cost-regressive candidates must not leak through BORDERLINE path
-    (symmetric with SPND cap for wr>=threshold md<0)."""
+    """wr in [threshold-0.05, threshold) with md<0 after 3 screening expands → continue_explore.
+    Cost-regressive candidates must not leak through BORDERLINE path."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -317,7 +335,7 @@ def test_decision_screening_expand_exhausted_borderline_negative_delta():
         n_cases=10, win_rate=0.63, median_delta=-1200.0,
         ci_low=None, ci_high=None,
         stale=False, recent_retry_count=0, recent_failure_codes=(),
-        budget_remaining_ratio=1.0, expand_count=3,
+        budget_remaining_ratio=1.0, screening_expand_count=3,
     )
     out = _engine.decide(f)
     assert out.decision == Decision.CONTINUE_EXPLORE
@@ -325,37 +343,54 @@ def test_decision_screening_expand_exhausted_borderline_negative_delta():
 
 
 def test_decision_screening_pass_negative_delta_queues_validation():
-    """wr >= threshold but md < 0 → queue_validate (not expand, to avoid dead loop)."""
+    """wr >= threshold but md < 0 → queue_validate (v3 lex-order: splits-better candidate,
+    validation's bootstrap CI on diverse cases is the authoritative judge)."""
     f = _features(stage="screening", win_rate=0.7, median_delta=-1000.0)
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_VALIDATE
     assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
 
 
-def test_decision_screening_pass_negative_delta_exhausted():
-    """wr >= threshold md < 0 with expand_count>=1 → continue_explore (don't burn val/frozen twice)."""
+def test_decision_screening_pass_negative_delta_unaffected_by_screening_expand():
+    """T1: SPND no longer has expand_count cap. A prior screening_expand on the
+    same candidate (or leaked from the same branch pre-T3) must NOT block SPND
+    from QUEUE_VALIDATE. Per v3, screening_expand_count and the SPND decision
+    are independent concerns."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
         stage="screening",
-        contract_passed=True,
-        verification_passed=True,
-        canary_passed=True,
-        n_cases=10,
-        win_rate=0.7,
-        median_delta=-1000.0,
-        ci_low=None,
-        ci_high=None,
-        stale=False,
-        recent_retry_count=0,
-        recent_failure_codes=(),
-        budget_remaining_ratio=1.0,
-        expand_count=1,
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.7, median_delta=-1500.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0, screening_expand_count=1,
     )
     out = _engine.decide(f)
-    assert out.decision == Decision.CONTINUE_EXPLORE
-    assert "SCREENING_PASS_NEGATIVE_DELTA_EXHAUSTED" in out.reason_codes
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
+
+
+def test_decision_screening_pass_negative_delta_unaffected_by_validation_expand_count():
+    """T3: validation_expand_count leaking from a prior candidate must NOT affect
+    SPND decision on the current candidate (this was the cross-stage counter leak
+    that caused sonnet s11 to 0-promote in the 2026-04-24 F experiment)."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=10, win_rate=0.7, median_delta=-1500.0,
+        ci_low=None, ci_high=None,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        screening_expand_count=0, validation_expand_count=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
 
 
 def test_decision_validation_pass_to_queue_frozen():
@@ -374,6 +409,71 @@ def test_decision_validation_expand():
     f = _features(stage="validation", win_rate=0.7, ci_low=-0.005, ci_high=0.02)
     out = _engine.decide(f)
     assert out.decision == Decision.EXPAND_VALIDATION
+
+
+def test_decision_validation_expand_exhausted_marginal_pass_queue_frozen():
+    """T2: after val_expand (validation_expand_count >= 1), ci_low<0 AND md>=0
+    → QUEUE_FROZEN (MARGINAL_PASS). md is non-negative so give frozen the
+    final judgment."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="validation",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=12, win_rate=0.7, median_delta=5.0,
+        ci_low=-0.01, ci_high=0.02,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        validation_expand_count=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_FROZEN
+    assert "VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS" in out.reason_codes
+
+
+def test_decision_validation_expand_exhausted_md_negative_abandon():
+    """T2: after val_expand (validation_expand_count >= 1), ci_low<0 AND md<0
+    → ABANDON (EXHAUSTED_FAIL). Triple negative signal: wr passes but ci_low<0
+    AND md<0 → candidate is genuinely cost-regressive at validation layer.
+    Don't burn frozen slot."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="validation",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=12, win_rate=0.7, median_delta=-800.0,
+        ci_low=-0.01, ci_high=0.02,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        validation_expand_count=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "VALIDATION_EXPAND_EXHAUSTED_FAIL" in out.reason_codes
+
+
+def test_decision_validation_expand_not_blocked_by_screening_expand_count():
+    """T3: screening_expand_count on current candidate should NOT cause
+    _decide_validation to think validation has been expanded. First validation
+    eval (validation_expand_count=0) should EXPAND_VALIDATION, regardless of
+    how many screening expands happened for this candidate."""
+    from scion.core.models import DecisionFeatures
+    f = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="validation",
+        contract_passed=True, verification_passed=True, canary_passed=True,
+        n_cases=12, win_rate=0.7, median_delta=5.0,
+        ci_low=-0.01, ci_high=0.02,
+        stale=False, recent_retry_count=0, recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        screening_expand_count=3, validation_expand_count=0,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.EXPAND_VALIDATION
+    assert "VALIDATION_EXPAND" in out.reason_codes
 
 
 def test_decision_frozen_promote():
