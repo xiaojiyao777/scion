@@ -124,6 +124,8 @@ class ProtocolResult:
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
     raw_metrics_ref: str  # Path to full JSON metrics
+    case_ids: Tuple[str, ...] = ()
+    seed_set: Tuple[int, ...] = ()
     # Case-level feedback (screening only; empty for validation/frozen)
     pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
     case_feedback: Tuple["CaseAggregateFeedback", ...] = ()

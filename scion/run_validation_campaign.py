@@ -182,7 +182,7 @@ logger.info("Campaign finished in %.0fs (%.1fh)", t_total, t_total / 3600)
 logger.info("  Experiments: %d", state["n_experiments"])
 logger.info("  Champion v%d", state["champion_version"])
 
-summary = {
+runner_summary = {
     **config,
     "finished_at": datetime.now().isoformat(),
     "total_time_sec": round(t_total, 1),
@@ -215,7 +215,29 @@ for step in mgr._step_history:
             "median_delta": pr.stats.median_delta,
             "gate_outcome": pr.gate_outcome,
         }
-    summary["steps"].append(step_data)
+    runner_summary["steps"].append(step_data)
 
-(CAMPAIGN_DIR / "campaign_summary.json").write_text(json.dumps(summary, indent=2, default=str))
-logger.info("Summary saved to %s/campaign_summary.json", CAMPAIGN_DIR)
+runner_summary_path = CAMPAIGN_DIR / "validation_runner_summary.json"
+runner_summary_path.write_text(json.dumps(runner_summary, indent=2, default=str))
+
+summary_path = CAMPAIGN_DIR / "campaign_summary.json"
+if summary_path.exists():
+    try:
+        summary = json.loads(summary_path.read_text())
+    except Exception:
+        summary = {}
+else:
+    summary = {}
+
+summary.update({
+    "validation_runner": {
+        **config,
+        "finished_at": runner_summary["finished_at"],
+        "total_time_sec": runner_summary["total_time_sec"],
+    },
+    "state": state,
+    "llm_cache_stats": llm_client.get_cache_stats(),
+})
+summary_path.write_text(json.dumps(summary, indent=2, default=str))
+logger.info("Summary saved to %s", summary_path)
+logger.info("Runner summary saved to %s", runner_summary_path)

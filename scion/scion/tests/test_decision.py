@@ -310,7 +310,7 @@ def test_decision_screening_expand():
 
 
 def test_decision_screening_expand_exhausted_borderline_positive_delta():
-    """wr in [threshold-0.05, threshold) with md>=0 after 3 screening expands → queue_validate."""
+    """wr in [threshold-0.05, threshold) with md>=0 after 1 screening expand → queue_validate."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -320,7 +320,7 @@ def test_decision_screening_expand_exhausted_borderline_positive_delta():
         n_cases=10, win_rate=0.63, median_delta=100.0,
         ci_low=None, ci_high=None,
         stale=False, recent_retry_count=0, recent_failure_codes=(),
-        budget_remaining_ratio=1.0, screening_expand_count=3,
+        budget_remaining_ratio=1.0, screening_expand_count=1,
     )
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_VALIDATE
@@ -328,7 +328,7 @@ def test_decision_screening_expand_exhausted_borderline_positive_delta():
 
 
 def test_decision_screening_expand_exhausted_borderline_negative_delta():
-    """wr in [threshold-0.05, threshold) with md<0 after 3 screening expands → continue_explore.
+    """wr in [threshold-0.05, threshold) with md<0 after 1 screening expand → continue_explore.
     Cost-regressive candidates must not leak through BORDERLINE path."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
@@ -339,7 +339,7 @@ def test_decision_screening_expand_exhausted_borderline_negative_delta():
         n_cases=10, win_rate=0.63, median_delta=-1200.0,
         ci_low=None, ci_high=None,
         stale=False, recent_retry_count=0, recent_failure_codes=(),
-        budget_remaining_ratio=1.0, screening_expand_count=3,
+        budget_remaining_ratio=1.0, screening_expand_count=1,
     )
     out = _engine.decide(f)
     assert out.decision == Decision.CONTINUE_EXPLORE

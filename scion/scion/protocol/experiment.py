@@ -6,7 +6,7 @@ import statistics
 import uuid as _uuid_mod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Sequence, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,7 @@ class ExperimentProtocol:
         self.metrics_dir = metrics_dir
         self._metric_specs = metric_specs
         self._require_metric_specs = require_metric_specs
+        self._progress_callback: Optional[Callable[..., None]] = None
         if self._require_metric_specs and self._metric_specs is None:
             raise ValueError("metric_specs are required for production ExperimentProtocol")
         if self._metric_specs is None:
@@ -119,6 +120,18 @@ class ExperimentProtocol:
                 "warehouse objective fallback"
             )
         os.makedirs(metrics_dir, exist_ok=True)
+
+    def set_progress_callback(self, callback: Optional[Callable[..., None]]) -> None:
+        """Register a lightweight progress hook for long validation/frozen runs."""
+        self._progress_callback = callback
+
+    def _emit_progress(self, **payload: object) -> None:
+        if self._progress_callback is None:
+            return
+        try:
+            self._progress_callback(**payload)
+        except Exception:
+            logger.debug("Experiment progress callback failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Comparison dispatch: generic (v0.3+) or legacy
@@ -320,14 +333,59 @@ class ExperimentProtocol:
             stage, hypothesis_action, expand_round if expand else 0
         )
         seeds = self._select_seeds(stage)
+        total_pairs = len(cases) * len(seeds)
+        attempted_pairs = 0
+        valid_pairs = 0
+
+        # Persist a partial metrics file from the start of the stage, then update
+        # it after every attempted pair. Long validation/frozen stages remain
+        # inspectable even if the campaign is interrupted.
+        raw_ref = os.path.join(self.metrics_dir, f"{_uuid_mod.uuid4()}.json")
 
         # Collect pair feedback grouped by case
         pairs_by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
         raw_pairs: List[dict] = []
 
+        def _write_metrics_snapshot(*, complete: bool) -> None:
+            with open(raw_ref, "w") as f:
+                json.dump(
+                    {
+                        "stage": stage.value,
+                        "case_ids": cases,
+                        "seed_set": seeds,
+                        "total_pairs": total_pairs,
+                        "attempted_pairs": attempted_pairs,
+                        "valid_pairs": valid_pairs,
+                        "complete": complete,
+                        "pairs": raw_pairs,
+                    },
+                    f,
+                )
+
+        _write_metrics_snapshot(complete=False)
+        self._emit_progress(
+            stage=stage.value,
+            case=None,
+            seed=None,
+            attempted_pairs=attempted_pairs,
+            completed_pairs=valid_pairs,
+            total_pairs=total_pairs,
+            raw_metrics_ref=raw_ref,
+        )
+
         for case in cases:
             case_features = _extract_case_features(case)
             for seed in seeds:
+                attempted_pairs += 1
+                self._emit_progress(
+                    stage=stage.value,
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=valid_pairs,
+                    total_pairs=total_pairs,
+                    raw_metrics_ref=raw_ref,
+                )
                 champ_r = self.runner.run_solver(
                     workdir=champion_ws,
                     instance_path=case,
@@ -344,9 +402,11 @@ class ExperimentProtocol:
                 )
 
                 if not cand_r.success or not champ_r.success:
+                    _write_metrics_snapshot(complete=False)
                     continue  # Infra failure — skip pair
 
                 if cand_r.output is None or champ_r.output is None:
+                    _write_metrics_snapshot(complete=False)
                     continue
 
                 cmp, breakdown = self._compare_objectives(
@@ -367,6 +427,7 @@ class ExperimentProtocol:
                         } if breakdown.metrics else {},
                     }
                 )
+                valid_pairs += 1
                 pair_fb = PairwiseCaseFeedback(
                     case_id=os.path.basename(case),
                     seed=seed,
@@ -385,6 +446,16 @@ class ExperimentProtocol:
                     os.path.basename(case), seed, cmp, delta,
                     breakdown.decisive_metric,
                     _cand_vals, _chmp_vals,
+                )
+                _write_metrics_snapshot(complete=False)
+                self._emit_progress(
+                    stage=stage.value,
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=valid_pairs,
+                    total_pairs=total_pairs,
+                    raw_metrics_ref=raw_ref,
                 )
 
         # T2: Aggregate pairs → case-level results
@@ -421,10 +492,8 @@ class ExperimentProtocol:
             else:
                 gate = frozen_gate(stats, self.config)
 
-        # Persist raw metrics
-        raw_ref = os.path.join(self.metrics_dir, f"{_uuid_mod.uuid4()}.json")
-        with open(raw_ref, "w") as f:
-            json.dump({"stage": stage.value, "pairs": raw_pairs}, f)
+        # Persist final raw metrics snapshot.
+        _write_metrics_snapshot(complete=True)
 
         # Exposure control
         if stage == ExperimentStage.SCREENING:
@@ -454,6 +523,8 @@ class ExperimentProtocol:
             reason_codes=gate.reason_codes,
             exposed_summary=exposed,
             raw_metrics_ref=raw_ref,
+            case_ids=tuple(cases),
+            seed_set=tuple(seeds),
             pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
             case_feedback=case_fb,
             pattern_summary=pattern,

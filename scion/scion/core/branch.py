@@ -75,6 +75,7 @@ class BranchController:
             state=BranchState.EXPLORE,
             base_champion_id=champion.version,
             base_champion_hash=champion.code_snapshot_hash,
+            weight_revision=champion.weight_revision,
         )
         self._branches[branch_id] = branch
         return branch
@@ -137,18 +138,22 @@ class BranchController:
     def mark_stale_for_weight_update(self, champion_version: int) -> List[str]:
         """Mark branches stale after a weight-opt update (stage-aware).
 
-        Only screening/explore branches are marked STALE_WEIGHT_UPDATE.
-        Validation and frozen branches continue with old weights — they will
-        be re-evaluated on next promotion cycle.
+        FROZEN_TESTING is not interrupted mid-holdout. Other non-terminal
+        branches are conservatively reconciled before they can spend more
+        validation/frozen budget against a changed champion weight revision.
         """
-        _SCREENING_STATES = frozenset({
+        _WEIGHT_STALE_STATES = frozenset({
             BranchState.EXPLORE,
             BranchState.EXPLORE_EXPAND,
             BranchState.NEW,
+            BranchState.READY_VALIDATE,
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.READY_FROZEN,
         })
         affected: List[str] = []
         for branch in self._branches.values():
-            if branch.state in _SCREENING_STATES:
+            if branch.state in _WEIGHT_STALE_STATES:
                 branch.state = BranchState.STALE_WEIGHT_UPDATE
                 branch.updated_at = datetime.now()
                 affected.append(branch.branch_id)
@@ -170,6 +175,7 @@ class BranchController:
             branch.state = BranchState.EXPLORE
             branch.base_champion_id = new_champion.version
             branch.base_champion_hash = new_champion.code_snapshot_hash
+            branch.weight_revision = new_champion.weight_revision
         else:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()

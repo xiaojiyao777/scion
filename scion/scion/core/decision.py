@@ -72,8 +72,9 @@ class DecisionEngine:
             # and the new T2 validation-layer md guard below.
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_NEGATIVE_DELTA"])
         elif wr >= 0.5 and wr < threshold:
-            # Check if already expanded too many times (max 3 screening expands per candidate)
-            if features.screening_expand_count >= 3:
+            # v3 §11.5: screening expansion is one pre-registered statistical
+            # expand per candidate, not a repeatable retry loop.
+            if features.screening_expand_count >= 1:
                 # Borderline candidates (wr close to threshold) may still be worth validating,
                 # but only if median_delta is non-negative. Cost-regressive candidates
                 # (md < 0) that leak through this path burn val/frozen budget and typically
