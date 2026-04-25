@@ -77,6 +77,7 @@ experiment_protocol = ExperimentProtocol(
     time_limit_sec=spec.solver.time_limit_sec if spec.solver else 300,
     metrics_dir=str(CAMPAIGN_DIR / "metrics"),
     metric_specs=adapter_spec.objectives,
+    require_metric_specs=True,
 )
 
 # --- Verification Gate ---

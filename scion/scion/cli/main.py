@@ -174,6 +174,7 @@ def run(
         proto_cfg, split_manager, seed_ledger_obj, runner,
         metrics_dir=metrics_dir,
         metric_specs=metric_specs,
+        require_metric_specs=True,
     )
     verification_gate = VerificationGate(
         spec,

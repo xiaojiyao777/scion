@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 from scion.core.models import (
     ExperimentStage, CanaryResult, ProtocolResult, EvalStats,
-    ObjectiveBreakdown, PairwiseCaseFeedback, CaseAggregateFeedback,
+    PairwiseCaseFeedback, CaseAggregateFeedback,
     ScreeningPatternSummary,
 )
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
@@ -101,6 +101,7 @@ class ExperimentProtocol:
         metrics_dir: str = "/tmp/scion_metrics",
         *,
         metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
+        require_metric_specs: bool = False,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -109,6 +110,14 @@ class ExperimentProtocol:
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
         self._metric_specs = metric_specs
+        self._require_metric_specs = require_metric_specs
+        if self._require_metric_specs and self._metric_specs is None:
+            raise ValueError("metric_specs are required for production ExperimentProtocol")
+        if self._metric_specs is None:
+            logger.warning(
+                "ExperimentProtocol initialized without metric_specs; using legacy "
+                "warehouse objective fallback"
+            )
         os.makedirs(metrics_dir, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -127,6 +136,8 @@ class ExperimentProtocol:
                 self._metric_specs, candidate_objective, champion_objective,
             )
             return result.outcome, result
+        if self._require_metric_specs:
+            raise RuntimeError("metric_specs are required for objective comparison")
         # Legacy path: build an ObjectiveComparison from the hardcoded comparator
         from scion.problem.objectives import ObjectiveComparison, MetricComparison
         cmp, old_bd = compare_with_breakdown(candidate_objective, champion_objective)
@@ -161,6 +172,8 @@ class ExperimentProtocol:
                 self._metric_specs, candidate_objective, champion_objective,
             )
             return result.scalar_delta
+        if self._require_metric_specs:
+            raise RuntimeError("metric_specs are required for objective delta")
         return compute_delta(candidate_objective, champion_objective)
 
     # ------------------------------------------------------------------
@@ -567,10 +580,6 @@ def _aggregate_case_feedback(
             median_deltas=median_deltas,
             seed_consistency=mx / n if n > 0 else 0.0,
             case_features=case_pairs[0].case_features if case_pairs else {},
-            # Deprecated aliases for backward compat
-            dominant_decisive_objective=dominant_decisive,
-            median_delta_total_cost=median_deltas.get("total_cost"),
-            median_delta_subcategory_splits=median_deltas.get("subcategory_splits"),
         ))
     return result
 

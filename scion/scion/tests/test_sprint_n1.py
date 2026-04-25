@@ -140,6 +140,24 @@ class TestExperimentGenericPath:
         assert result.outcome == "win"
         assert result.metrics[0].name == "tour_cost"
 
+    def test_production_protocol_requires_metric_specs(self, tmp_path) -> None:
+        from unittest.mock import MagicMock
+        from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
+        from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
+
+        manifest = SplitManifest(screening=[], validation=[], frozen=[])
+        ledger = SeedLedgerConfig(screening=[], validation=[], frozen=[])
+
+        with pytest.raises(ValueError, match="metric_specs"):
+            ExperimentProtocol(
+                ProtocolConfig(),
+                SplitManager(manifest),
+                SeedLedger(ledger),
+                MagicMock(),
+                metrics_dir=str(tmp_path / "metrics"),
+                require_metric_specs=True,
+            )
+
 
 # ---------------------------------------------------------------------------
 # MILP bounds
