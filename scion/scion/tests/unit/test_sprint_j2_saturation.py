@@ -12,7 +12,7 @@ from scion.proposal.saturation import (
 )
 from scion.core.models import (
     EvalStats, ExperimentStage, HypothesisProposal,
-    ObjectiveBreakdown, PairwiseCaseFeedback, ProtocolResult, StepRecord,
+    PairwiseCaseFeedback, ProtocolResult, StepRecord,
 )
 
 

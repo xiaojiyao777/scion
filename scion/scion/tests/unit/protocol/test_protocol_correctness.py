@@ -21,7 +21,7 @@ import pytest
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.config.protocol_config import ScreeningConfig, ValidationConfig, FrozenConfig
 from scion.core.models import (
-    ExperimentStage, EvalStats, RunResult, SolverOutput, ObjectiveBreakdown,
+    ExperimentStage, EvalStats, RunResult, SolverOutput,
     PairwiseCaseFeedback,
 )
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci

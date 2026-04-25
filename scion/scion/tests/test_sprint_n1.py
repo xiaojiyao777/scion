@@ -158,6 +158,51 @@ class TestExperimentGenericPath:
                 require_metric_specs=True,
             )
 
+    def test_warehouse_production_stack_loads_strict_adapter_and_metrics(
+        self, tmp_path
+    ) -> None:
+        """Smoke the production wiring without LLM/solver execution."""
+        from unittest.mock import MagicMock
+        from scion.config.problem import (
+            ProblemSpec,
+            ProtocolConfig,
+            SplitManifest,
+            SeedLedgerConfig,
+        )
+        from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
+        from scion.verification.gate import VerificationGate
+
+        problem_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, "problems", "warehouse_delivery")
+        )
+        spec = ProblemSpec.from_yaml(os.path.join(problem_dir, "problem.yaml"))
+        with open(os.path.join(problem_dir, "problem-v1.yaml"), encoding="utf-8") as fh:
+            adapter_spec = ProblemSpecV1(**yaml.safe_load(fh))
+        adapter = load_problem_adapter(adapter_spec)
+
+        proto = ExperimentProtocol(
+            ProtocolConfig(),
+            SplitManager(SplitManifest(screening=[], validation=[], frozen=[])),
+            SeedLedger(SeedLedgerConfig(screening=[], validation=[], frozen=[])),
+            MagicMock(),
+            metrics_dir=str(tmp_path / "metrics"),
+            metric_specs=adapter_spec.objectives,
+            require_metric_specs=True,
+        )
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=MagicMock(),
+            adapter=adapter,
+            strict_runtime_checks=True,
+            require_adapter_for_runtime=True,
+            operator_execute_signature=adapter_spec.operator_interface.execute_signature,
+        )
+
+        assert proto._metric_specs == adapter_spec.objectives
+        assert proto._require_metric_specs is True
+        assert gate._adapter is adapter
+        assert gate._require_adapter_for_runtime is True
+
 
 # ---------------------------------------------------------------------------
 # MILP bounds

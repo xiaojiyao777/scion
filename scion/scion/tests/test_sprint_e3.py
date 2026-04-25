@@ -12,7 +12,7 @@ import pytest
 
 from scion.core.models import (
     Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    ObjectiveBreakdown, PairwiseCaseFeedback, CaseAggregateFeedback,
+    PairwiseCaseFeedback, CaseAggregateFeedback,
     ProtocolResult, StepRecord, VerificationResult, CheckResult,
 )
 from scion.core.stagnation import StagnationDetector, StagnationSignal, CampaignDiagnosis

@@ -18,7 +18,7 @@ from scion.core.models import (
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.runtime.runner import Runner
 from scion.protocol.evaluation import (
-    lexicographic_compare, compute_delta, compare_with_breakdown,
+    lexicographic_compare, compute_delta,
 )
 from scion.protocol.stats import compute_eval_stats
 from scion.protocol.gates import (
@@ -138,9 +138,10 @@ class ExperimentProtocol:
             return result.outcome, result
         if self._require_metric_specs:
             raise RuntimeError("metric_specs are required for objective comparison")
-        # Legacy path: build an ObjectiveComparison from the hardcoded comparator
+        # Legacy compatibility path: build an ObjectiveComparison from the
+        # hardcoded warehouse comparator.
         from scion.problem.objectives import ObjectiveComparison, MetricComparison
-        cmp, old_bd = compare_with_breakdown(candidate_objective, champion_objective)
+        cmp = lexicographic_compare(candidate_objective, champion_objective)
         metrics = []
         for name in ["subcategory_splits", "total_cost"]:
             cv = candidate_objective.get(name, 0)
@@ -149,13 +150,20 @@ class ExperimentProtocol:
             metrics.append(MetricComparison(
                 name=name, candidate_value=cv, champion_value=hv,
                 signed_delta=sd, relation="candidate" if sd > 0 else ("champion" if sd < 0 else "tie"),
-                decisive=(name == "subcategory_splits" and old_bd.decisive_objective == "business_aggregation")
-                    or (name == "total_cost" and old_bd.decisive_objective == "cost"),
+                decisive=(
+                    (name == "subcategory_splits" and cv != hv)
+                    or (
+                        name == "total_cost"
+                        and candidate_objective.get("subcategory_splits", 0)
+                        == champion_objective.get("subcategory_splits", 0)
+                        and cv != hv
+                    )
+                ),
             ))
-        decisive_map = {"business_aggregation": "subcategory_splits", "cost": "total_cost"}
+        decisive_metric = next((m.name for m in metrics if m.decisive), None)
         result = ObjectiveComparison(
             outcome=cmp,
-            decisive_metric=decisive_map.get(old_bd.decisive_objective),
+            decisive_metric=decisive_metric,
             scalar_delta=sum(m.signed_delta for m in metrics),
             metrics=tuple(metrics),
         )
@@ -647,5 +655,4 @@ def _build_pattern_summary(
     )
 
 
-# _objective_comparison_to_breakdown — DELETED in ObjectiveBreakdown genericization sprint.
 # ObjectiveComparison from problem/objectives.py is now used directly.

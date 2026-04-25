@@ -130,24 +130,6 @@ class ProtocolResult:
     pattern_summary: Optional["ScreeningPatternSummary"] = None
 
 
-# --- Case-level Feedback (for screening) ---
-
-# DEPRECATED: ObjectiveBreakdown — replaced by ObjectiveComparison from problem/objectives.py.
-# Kept for import compatibility only. Do not construct new instances.
-@dataclass(frozen=True)
-class ObjectiveBreakdown:
-    """DEPRECATED — use ObjectiveComparison from scion.problem.objectives instead."""
-    candidate_subcategory_splits: Optional[float] = None
-    champion_subcategory_splits: Optional[float] = None
-    candidate_total_cost: Optional[float] = None
-    champion_total_cost: Optional[float] = None
-    delta_subcategory_splits: Optional[float] = None
-    delta_total_cost: Optional[float] = None
-    decisive_objective: Literal[
-        "business_aggregation", "cost", "efficiency", "tie"
-    ] = "tie"
-
-
 @dataclass(frozen=True)
 class PairwiseCaseFeedback:
     """Single instance × seed A/B comparison result."""
@@ -157,8 +139,6 @@ class PairwiseCaseFeedback:
     delta: float  # scalar delta, positive = candidate better
     objective_comparison: Any = None  # ObjectiveComparison from problem/objectives.py
     case_features: Dict[str, Any] = field(default_factory=dict)
-    # DEPRECATED: kept for backward compat with tests that still construct with old field
-    objective_breakdown: Optional[ObjectiveBreakdown] = None
 
 
 @dataclass(frozen=True)
