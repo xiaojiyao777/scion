@@ -519,24 +519,20 @@ def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
 
 _VERIFICATION_SUGGESTIONS: dict = {
     "V6_feasibility": (
-        "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
-        "危险品必须在 HQ40_DG 车型"
+        "检查 operator_interface_spec 中定义的可行性约束，确保输出满足问题适配器的 feasibility oracle。"
     ),
     "V5_solution_consistency": (
-        "求解器输出的 solution 中 assignment dict 与 vehicle.order_ids 不一致。"
-        "检查：(1) 每个 order 只出现在一个 vehicle 中；"
-        "(2) assignment[order_id] 指向的 vehicle 确实包含该 order；"
-        "(3) 没有遗漏或重复的 order。"
+        "检查 operator_interface_spec 中定义的解结构一致性约束，确保 solver 输出可被问题适配器正确反序列化和校验。"
     ),
     "V8_nondeterminism": (
         "同 seed 两次 solver run 产出了不同的 objective。常见非确定性来源："
-        "(1) 禁止使用 uuid.uuid4()，必须用 generate_vehicle_id(rng) 生成车辆 ID；"
+        "(1) 禁止使用 uuid.uuid4() 或系统熵；"
         "(2) 禁止 list(set(...)) 或遍历 set/dict 时依赖顺序，必须 sorted()；"
-        "(3) 所有随机性必须来自 rng 参数，不要 import random 或使用任何系统熵源；"
-        "(4) 确保只修改 deep_copy 后的对象"
+        "(3) 所有随机性必须来自 operator execute 的 rng 参数；"
+        "(4) 避免依赖文件系统、时间、全局状态或未排序容器顺序"
     ),
     "V2_interface": (
-        "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"
+        "确保类和 execute 方法签名严格符合 operator_interface_spec。"
     ),
     "V1_syntax": "检查 Python 语法是否正确",
 }
@@ -725,7 +721,11 @@ def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[Pr
 
     # Rule 3: Unexplored locus → suggest
     explored_loci = {f.locus_pattern for f in families}
-    all_loci = set(spec.operator_categories) if spec and hasattr(spec, 'operator_categories') and spec.operator_categories else {"vehicle_level", "order_level"}
+    all_loci = (
+        set(spec.operator_categories)
+        if spec and hasattr(spec, 'operator_categories') and spec.operator_categories
+        else set()
+    )
     unexplored = all_loci - explored_loci
     if unexplored:
         guidance_parts.append(

@@ -215,6 +215,42 @@ class TestC4FileWhitelist:
         assert not c4.passed
         assert not result.passed
 
+    def test_path_traversal_file_fails(self, gate: ContractGate):
+        patch = PatchProposal(
+            file_path="operators/../../outside.py",
+            action="create",
+            code_content="x = 1",
+        )
+        result = gate.validate_patch(patch)
+        c4 = next(c for c in result.checks if c.name == "C4_file_whitelist")
+        assert not c4.passed
+        assert "path segment" in c4.detail
+        assert not result.passed
+
+    def test_absolute_file_path_fails(self, gate: ContractGate):
+        patch = PatchProposal(
+            file_path="/operators/my_op.py",
+            action="create",
+            code_content="x = 1",
+        )
+        result = gate.validate_patch(patch)
+        c4 = next(c for c in result.checks if c.name == "C4_file_whitelist")
+        assert not c4.passed
+        assert "relative" in c4.detail
+        assert not result.passed
+
+    def test_backslash_file_path_fails(self, gate: ContractGate):
+        patch = PatchProposal(
+            file_path=r"operators\my_op.py",
+            action="create",
+            code_content="x = 1",
+        )
+        result = gate.validate_patch(patch)
+        c4 = next(c for c in result.checks if c.name == "C4_file_whitelist")
+        assert not c4.passed
+        assert "POSIX" in c4.detail
+        assert not result.passed
+
 
 # ---------------------------------------------------------------------------
 # C5: Frozen files
@@ -330,6 +366,37 @@ class TestC7InterfaceSignature:
         c7 = next(c for c in result.checks if c.name == "C7_interface")
         assert not c7.passed
         assert not result.passed
+
+    def test_problem_defined_signature_passes(self, spec: ProblemSpec):
+        gate = ContractGate(
+            spec,
+            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution",
+        )
+        code = (
+            "class MyOp:\n"
+            "    def execute(self, solution, instance, rng):\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c7 = next(c for c in result.checks if c.name == "C7_interface")
+        assert c7.passed
+
+    def test_problem_defined_signature_rejects_legacy_args(self, spec: ProblemSpec):
+        gate = ContractGate(
+            spec,
+            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution",
+        )
+        code = (
+            "class MyOp:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c7 = next(c for c in result.checks if c.name == "C7_interface")
+        assert not c7.passed
+        assert "instance" in c7.detail
 
     def test_missing_execute_fails(self, gate: ContractGate):
         code = "class MyOp:\n    pass\n"
@@ -740,4 +807,3 @@ class TestC9bNonRngRandom:
         )
         c = _c9b(gate, code)
         assert c.passed
-

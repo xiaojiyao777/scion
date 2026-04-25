@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
@@ -41,18 +40,75 @@ class ChampionStore:
 
     def _ensure_table(self) -> None:
         """确保 champions 表存在（幂等）。"""
+        exists = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='champions'"
+        ).fetchone()
+        if exists is not None:
+            self._migrate_champions_table_if_needed()
+            return
+
         self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS champions (
-                version                 INTEGER PRIMARY KEY,
+            CREATE TABLE champions (
+                version                 INTEGER NOT NULL,
+                weight_revision         INTEGER NOT NULL DEFAULT 0,
                 operator_pool_json      TEXT NOT NULL,
                 solver_config_hash      TEXT NOT NULL,
                 code_snapshot_path      TEXT NOT NULL,
                 code_snapshot_hash      TEXT NOT NULL,
                 promotion_experiment_id TEXT,
-                promoted_at             TEXT
+                promoted_at             TEXT,
+                PRIMARY KEY (version, weight_revision)
             )
         """)
         self._conn.commit()
+
+    def _migrate_champions_table_if_needed(self) -> None:
+        """Migrate legacy champions(version PRIMARY KEY) to revision-aware schema."""
+        rows = self._conn.execute("PRAGMA table_info(champions)").fetchall()
+        columns = {row["name"]: row for row in rows}
+        version_pk = columns["version"]["pk"] if "version" in columns else 0
+        revision_pk = (
+            columns["weight_revision"]["pk"] if "weight_revision" in columns else 0
+        )
+        if version_pk > 0 and revision_pk > 0:
+            return
+
+        with self._conn:
+            self._conn.execute("ALTER TABLE champions RENAME TO champions_legacy")
+            self._conn.execute("""
+                CREATE TABLE champions (
+                    version                 INTEGER NOT NULL,
+                    weight_revision         INTEGER NOT NULL DEFAULT 0,
+                    operator_pool_json      TEXT NOT NULL,
+                    solver_config_hash      TEXT NOT NULL,
+                    code_snapshot_path      TEXT NOT NULL,
+                    code_snapshot_hash      TEXT NOT NULL,
+                    promotion_experiment_id TEXT,
+                    promoted_at             TEXT,
+                    PRIMARY KEY (version, weight_revision)
+                )
+            """)
+            legacy_cols = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info(champions_legacy)")
+            }
+            revision_expr = (
+                "COALESCE(weight_revision, 0)"
+                if "weight_revision" in legacy_cols else "0"
+            )
+            self._conn.execute(f"""
+                INSERT OR IGNORE INTO champions (
+                    version, weight_revision, operator_pool_json,
+                    solver_config_hash, code_snapshot_path, code_snapshot_hash,
+                    promotion_experiment_id, promoted_at
+                )
+                SELECT
+                    version, {revision_expr}, operator_pool_json,
+                    solver_config_hash, code_snapshot_path, code_snapshot_hash,
+                    promotion_experiment_id, promoted_at
+                FROM champions_legacy
+            """)
+            self._conn.execute("DROP TABLE champions_legacy")
 
     # ──────────────────────────────────────────────────────────────────────
     # 写入接口（INSERT only）
@@ -65,7 +121,7 @@ class ChampionStore:
             new_champion: 新的 ChampionState 对象。
 
         Raises:
-            sqlite3.IntegrityError: version 重复时抛出。
+            sqlite3.IntegrityError: version + weight_revision 重复时抛出。
         """
         operator_pool_json = json.dumps(
             {
@@ -81,17 +137,18 @@ class ChampionStore:
         )
         sql = """
             INSERT INTO champions (
-                version, operator_pool_json, solver_config_hash,
+                version, weight_revision, operator_pool_json, solver_config_hash,
                 code_snapshot_path, code_snapshot_hash,
                 promotion_experiment_id, promoted_at
             ) VALUES (
-                :version, :operator_pool_json, :solver_config_hash,
+                :version, :weight_revision, :operator_pool_json, :solver_config_hash,
                 :code_snapshot_path, :code_snapshot_hash,
                 :promotion_experiment_id, :promoted_at
             )
         """
         params = {
             "version": new_champion.version,
+            "weight_revision": new_champion.weight_revision,
             "operator_pool_json": operator_pool_json,
             "solver_config_hash": new_champion.solver_config_hash,
             "code_snapshot_path": new_champion.code_snapshot_path,
@@ -113,12 +170,13 @@ class ChampionStore:
             ChampionState 对象；如果没有任何 champion 则返回 None。
         """
         row = self._conn.execute(
-            "SELECT * FROM champions ORDER BY version DESC LIMIT 1"
+            "SELECT * FROM champions "
+            "ORDER BY version DESC, weight_revision DESC LIMIT 1"
         ).fetchone()
         return self._row_to_champion(row) if row else None
 
     def get_by_version(self, version: int) -> Optional[ChampionState]:
-        """按版本号获取 champion。
+        """按版本号获取最新 weight revision 的 champion。
 
         Args:
             version: champion 版本号。
@@ -127,7 +185,19 @@ class ChampionStore:
             ChampionState 对象；不存在时返回 None。
         """
         row = self._conn.execute(
-            "SELECT * FROM champions WHERE version = ?", (version,)
+            "SELECT * FROM champions WHERE version = ? "
+            "ORDER BY weight_revision DESC LIMIT 1",
+            (version,),
+        ).fetchone()
+        return self._row_to_champion(row) if row else None
+
+    def get_by_version_revision(
+        self, version: int, weight_revision: int
+    ) -> Optional[ChampionState]:
+        """按版本号和权重 revision 精确获取 champion。"""
+        row = self._conn.execute(
+            "SELECT * FROM champions WHERE version = ? AND weight_revision = ?",
+            (version, weight_revision),
         ).fetchone()
         return self._row_to_champion(row) if row else None
 
@@ -138,7 +208,7 @@ class ChampionStore:
             ChampionState 列表。
         """
         rows = self._conn.execute(
-            "SELECT * FROM champions ORDER BY version ASC"
+            "SELECT * FROM champions ORDER BY version ASC, weight_revision ASC"
         ).fetchall()
         return [self._row_to_champion(r) for r in rows]
 
@@ -181,6 +251,7 @@ class ChampionStore:
             code_snapshot_hash=d["code_snapshot_hash"],
             promotion_experiment_id=d.get("promotion_experiment_id"),
             promoted_at=d.get("promoted_at"),
+            weight_revision=d.get("weight_revision", 0),
         )
 
     def close(self) -> None:

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from scion.core.operator_interface import parse_execute_signature
 
 
 class _Strict(BaseModel):
@@ -31,6 +33,12 @@ class OperatorInterfaceSpec(_Strict):
     execute_signature: str = "execute(self, solution, rng) -> Solution"
     categories: list[OperatorCategorySpec]
 
+    @field_validator("execute_signature")
+    @classmethod
+    def _validate_execute_signature(cls, value: str) -> str:
+        parse_execute_signature(value)
+        return value
+
     @property
     def category_names(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.categories)
@@ -49,6 +57,11 @@ class FamilyTaxonomySpec(_Strict):
 class ProblemAdapterRef(_Strict):
     import_path: str
     api_version: Literal["v1"] = "v1"
+
+
+class ObjectivePolicySpec(_Strict):
+    mode: Literal["single", "lexicographic", "weighted_sum"] = "lexicographic"
+    expose_weights_to_llm: bool = False
 
 
 class SearchSpaceSpec(_Strict):
@@ -87,6 +100,7 @@ class ProblemSpecV1(_Strict):
     parameter_search: ParameterSearchSpec = ParameterSearchSpec()
 
     operator_interface: OperatorInterfaceSpec
+    objective_policy: ObjectivePolicySpec = ObjectivePolicySpec()
     objectives: list[ObjectiveMetricSpec]
     llm_hints: LLMHintsSpec = LLMHintsSpec()
     family_taxonomy: FamilyTaxonomySpec | None = None
@@ -103,6 +117,12 @@ class ProblemSpecV1(_Strict):
 
     @model_validator(mode="after")
     def _validate_objectives(self) -> ProblemSpecV1:
+        if self.objective_policy.mode == "weighted_sum":
+            raise ValueError(
+                "objective_policy.mode='weighted_sum' is not executable yet; "
+                "define a single weighted_score objective with mode='single' for now"
+            )
+
         names = [m.name for m in self.objectives]
         if len(names) != len(set(names)):
             raise ValueError("objective metric names must be unique")

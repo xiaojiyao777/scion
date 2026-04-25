@@ -68,6 +68,10 @@ operator_interface:
     - name: vehicle_level
       description: "Operators that merge, split, or restructure entire vehicles"
 
+objective_policy:
+  mode: lexicographic
+  expose_weights_to_llm: false
+
 objectives:
   - name: subcategory_splits
     direction: minimize

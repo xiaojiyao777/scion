@@ -45,6 +45,15 @@ def validation_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     wr = stats.win_rate
     threshold = config.validation_win_rate_threshold
 
+    if stats.statistical_status is not None:
+        if wr >= threshold and stats.statistical_status == "positive":
+            return GateResult(outcome="pass", reason_codes=("VALIDATION_PASS_HIERARCHICAL",))
+        if stats.statistical_status == "negative":
+            return GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",))
+        if wr >= threshold and stats.statistical_status == "uncertain":
+            return GateResult(outcome="expand", reason_codes=("VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",))
+        return GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",))
+
     if wr >= threshold and stats.ci_low >= 0:
         return GateResult(outcome="pass", reason_codes=("VALIDATION_PASS",))
     elif stats.ci_high < 0:
@@ -61,6 +70,15 @@ def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     - pass: ci_low >= 0
     - fail: anything else (including CI straddling 0)
     """
+    if stats.statistical_status is not None:
+        if stats.statistical_status == "positive":
+            return GateResult(outcome="pass", reason_codes=("FROZEN_PASS_HIERARCHICAL",))
+        if stats.statistical_status == "negative":
+            return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_HIERARCHICAL_NEGATIVE",))
+        if stats.statistical_status == "tie":
+            return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_NO_HIERARCHICAL_GAIN",))
+        return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_HIERARCHICAL_UNCERTAIN",))
+
     if stats.ci_low >= 0:
         return GateResult(outcome="pass", reason_codes=("FROZEN_PASS",))
     elif stats.ci_high < 0:

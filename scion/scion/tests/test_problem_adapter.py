@@ -63,6 +63,7 @@ class TestProblemSpecV1:
     def test_valid_spec_loads(self, toy_spec: ProblemSpecV1) -> None:
         assert toy_spec.id == "toy_tsp"
         assert toy_spec.spec_version == "problem-v1"
+        assert toy_spec.objective_policy.mode == "single"
         assert len(toy_spec.objectives) == 1
         assert toy_spec.objectives[0].name == "tour_cost"
 
@@ -98,6 +99,7 @@ class TestProblemSpecV1:
 
     def test_valid_multi_objective(self) -> None:
         data = _minimal_spec_data()
+        data["objective_policy"] = {"mode": "lexicographic"}
         data["objectives"] = [
             {"name": "splits", "direction": "minimize", "priority": 1},
             {"name": "cost", "direction": "minimize", "priority": 2},
@@ -105,6 +107,31 @@ class TestProblemSpecV1:
         spec = ProblemSpecV1(**data)
         assert len(spec.objectives) == 2
         assert spec.objectives[0].priority == 1
+
+    def test_weighted_policy_rejected_until_execution_semantics_exist(self) -> None:
+        data = _minimal_spec_data()
+        data["objective_policy"] = {
+            "mode": "weighted_sum",
+            "expose_weights_to_llm": True,
+        }
+        with pytest.raises(ValueError, match="weighted_sum"):
+            ProblemSpecV1(**data)
+
+    def test_operator_execute_signature_validated(self) -> None:
+        data = _minimal_spec_data()
+        data["operator_interface"]["execute_signature"] = (
+            "execute(self, solution, instance, rng) -> TspSolution"
+        )
+        spec = ProblemSpecV1(**data)
+        assert "instance" in spec.operator_interface.execute_signature
+
+    def test_invalid_operator_execute_signature_rejected(self) -> None:
+        data = _minimal_spec_data()
+        data["operator_interface"]["execute_signature"] = (
+            "apply(self, solution, rng) -> Solution"
+        )
+        with pytest.raises(ValueError, match="execute"):
+            ProblemSpecV1(**data)
 
 
 # ---------------------------------------------------------------------------

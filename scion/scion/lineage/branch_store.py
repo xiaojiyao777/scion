@@ -24,8 +24,11 @@ class BranchStore:
                 INSERT OR REPLACE INTO branches
                 (branch_id, state, base_champion_id, base_champion_hash,
                  current_code_hash, last_clean_code_hash, retry_count,
-                 failure_codes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 screening_expand_count, validation_expand_count,
+                 failure_codes, created_at, updated_at, direction,
+                 weight_revision, pending_retry, blocked_rounds,
+                 consecutive_llm_retries, infra_block_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -35,9 +38,17 @@ class BranchStore:
                     branch.current_code_hash,
                     branch.last_clean_code_hash,
                     branch.retry_count,
+                    branch.screening_expand_count,
+                    branch.validation_expand_count,
                     json.dumps(branch.failure_codes),
                     branch.created_at.isoformat(),
                     branch.updated_at.isoformat(),
+                    branch.direction,
+                    branch.weight_revision,
+                    1 if branch.pending_retry else 0,
+                    branch.blocked_rounds,
+                    branch.consecutive_llm_retries,
+                    branch.infra_block_count,
                 ),
             )
 
@@ -73,9 +84,17 @@ class BranchStore:
             current_code_hash=d.get("current_code_hash"),
             last_clean_code_hash=d.get("last_clean_code_hash"),
             retry_count=d.get("retry_count", 0),
+            screening_expand_count=d.get("screening_expand_count") or 0,
+            validation_expand_count=d.get("validation_expand_count") or 0,
             failure_codes=json.loads(d["failure_codes"]) if d.get("failure_codes") else [],
             created_at=datetime.fromisoformat(d["created_at"]),
             updated_at=datetime.fromisoformat(d["updated_at"]),
+            direction=d.get("direction"),
+            weight_revision=d.get("weight_revision") or 0,
+            pending_retry=bool(d.get("pending_retry") or 0),
+            blocked_rounds=d.get("blocked_rounds") or 0,
+            consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,
+            infra_block_count=d.get("infra_block_count") or 0,
         )
 
 

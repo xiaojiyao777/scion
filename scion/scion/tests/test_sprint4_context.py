@@ -405,13 +405,15 @@ class TestConsecutiveFailureDiagnosis:
         bid = "b1"
         steps = self._ver_steps(bid, 3, vcode="V6_feasibility")
         diag = _build_consecutive_failure_diagnosis(steps)
-        assert "assignment dict" in diag or "HQ40_DG" in diag
+        assert "operator_interface_spec" in diag
+        assert "feasibility oracle" in diag
 
     def test_diagnosis_includes_suggestion_for_nondeterminism(self):
         bid = "b1"
         steps = self._ver_steps(bid, 3, vcode="V8_nondeterminism")
         diag = _build_consecutive_failure_diagnosis(steps)
-        assert "deep_copy" in diag
+        assert "uuid.uuid4()" in diag
+        assert "sorted()" in diag
 
     def test_diagnosis_not_injected_when_non_verification_step_breaks_streak(self):
         bid = "b1"

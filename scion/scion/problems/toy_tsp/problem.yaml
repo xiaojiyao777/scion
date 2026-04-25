@@ -34,6 +34,10 @@ operator_interface:
     - name: local_search
       description: "Local search operators (2-opt, swap, etc.)"
 
+objective_policy:
+  mode: single
+  expose_weights_to_llm: false
+
 objectives:
   - name: tour_cost
     direction: minimize

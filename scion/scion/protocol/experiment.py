@@ -39,6 +39,7 @@ class CaseLevelResult:
     case_id: str
     comparison: str   # majority vote: "win" / "loss" / "tie"
     delta: float      # median delta across seeds
+    metric_deltas: Dict[str, float] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +335,16 @@ class ExperimentProtocol:
                 delta = self._compute_delta(cand_r.output.objective, champ_r.output.objective)
 
                 raw_pairs.append(
-                    {"case": case, "seed": seed, "comparison": cmp, "delta": delta}
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": cmp,
+                        "delta": delta,
+                        "decisive_metric": breakdown.decisive_metric,
+                        "metric_deltas": {
+                            m.name: m.signed_delta for m in breakdown.metrics
+                        } if breakdown.metrics else {},
+                    }
                 )
                 pair_fb = PairwiseCaseFeedback(
                     case_id=os.path.basename(case),
@@ -370,8 +380,19 @@ class ExperimentProtocol:
             )
             gate = GateResult(outcome="fail", reason_codes=("NO_VALID_RUNS",))
         else:
-            # T2: stats computed on case-level comparisons/deltas
-            stats = compute_eval_stats(case_comparisons, case_deltas)
+            # T2: stats computed on case-level comparisons/deltas.
+            # F3: when metric_specs are present, gate CI is computed
+            # hierarchically by objective priority instead of one raw scalar.
+            metric_order = (
+                [m.name for m in sorted(self._metric_specs, key=lambda s: s.priority)]
+                if self._metric_specs is not None else None
+            )
+            stats = compute_eval_stats(
+                case_comparisons,
+                case_deltas,
+                metric_deltas=[r.metric_deltas or {} for r in case_level_results],
+                metric_order=metric_order,
+            )
             if stage == ExperimentStage.SCREENING:
                 gate = screening_gate(stats, self.config)
             elif stage == ExperimentStage.VALIDATION:
@@ -392,7 +413,11 @@ class ExperimentProtocol:
             )
         else:
             # Validation / Frozen: aggregate summary only, no per-case data
-            exposed = f"stage={stage.value} outcome={gate.outcome}"
+            exposed = (
+                f"stage={stage.value} outcome={gate.outcome} "
+                f"stat={stats.statistical_status or 'legacy'} "
+                f"metric={stats.statistical_metric or 'scalar'}"
+            )
 
         # Build case-level feedback for screening only
         case_fb: tuple = ()
@@ -445,7 +470,24 @@ def _aggregate_pairs_to_case_level(
             majority = "tie"
 
         med_delta = statistics.median(p.delta for p in case_pairs)
-        result.append(CaseLevelResult(case_id=case_id, comparison=majority, delta=med_delta))
+        metric_deltas: dict[str, float] = {}
+        metric_values: dict[str, list[float]] = defaultdict(list)
+        for p in case_pairs:
+            oc = p.objective_comparison
+            if oc is not None and hasattr(oc, "metrics"):
+                for m in oc.metrics:
+                    metric_values[m.name].append(float(m.signed_delta))
+        metric_deltas = {
+            name: statistics.median(vals)
+            for name, vals in metric_values.items()
+            if vals
+        }
+        result.append(CaseLevelResult(
+            case_id=case_id,
+            comparison=majority,
+            delta=med_delta,
+            metric_deltas=metric_deltas,
+        ))
 
     return result
 

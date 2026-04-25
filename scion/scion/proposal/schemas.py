@@ -62,7 +62,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         },
         "change_locus": {
             "type": "string",
-            "description": "Which operator category: order_level or vehicle_level.",
+            "description": "Which operator category from the active problem specification.",
         },
         "action": {
             "type": "string",
@@ -83,7 +83,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         },
         "expected_effect": {
             "type": "string",
-            "description": "Concrete expected outcome: e.g. 'reduce splits by consolidating same-subcategory vehicles'.",
+            "description": "Concrete expected measurable outcome.",
         },
         "suggested_weight": {
             "type": ["number", "null"],
@@ -122,7 +122,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "high variance is good, rare great outcomes beat frequent mediocre ones.\n"
         "- Prefer operators that provide a CAPABILITY the pool currently LACKS.\n\n"
         "Common mistakes to avoid:\n"
-        "- Proposing random order moves between arbitrary vehicles (unlikely to improve splits).\n"
+        "- Proposing random moves without a concrete objective mechanism.\n"
         "- Ignoring feasibility constraints (your operator MUST produce feasible solutions).\n"
         "- Reinventing logic already present in an existing operator with different variable names."
     ),
@@ -136,17 +136,15 @@ PATCH_TOOL: Dict[str, Any] = {
         "Usage:\n"
         "- Write the COMPLETE file \u2014 not a diff, not a snippet. The entire file content.\n"
         "- Study the champion operator code for style, data model usage, and import patterns.\n"
-        "- Follow the operator interface EXACTLY: subclass Operator, implement execute(self, solution, rng) -> Solution.\n\n"
+        "- Follow the problem-specific operator interface EXACTLY.\n\n"
         "Code quality requirements:\n"
-        "- Deep-copy the solution FIRST: `new_sol = solution.deep_copy()`.\n"
-        "- Skip locked orders: check `order.locked_vehicle_id is not None`.\n"
-        "- Use `rng` for ALL randomness \u2014 do NOT import random directly.\n"
+        "- Preserve every feasibility and consistency invariant described in the interface spec.\n"
+        "- Use the provided `rng` argument for ALL randomness.\n"
         "- NEVER use `list(set(...))` or iterate over set/dict in order-dependent ways \u2014 "
         "use `sorted()` for determinism.\n"
-        "- Call `new_sol.remove_empty_vehicles()` before returning.\n"
-        "- Maintain assignment dict consistency: update BOTH vehicle.order_ids and solution.assignment.\n\n"
+        "- Return a valid solution/artifact according to the problem adapter contract.\n\n"
         "Common rejection causes:\n"
-        "- Feasibility violation: dropping or duplicating orders.\n"
+        "- Feasibility or solution consistency violation.\n"
         "- Non-determinism: iterating over sets without sorting.\n"
         "- Import violation: using modules not in the whitelist.\n"
         "- Interface mismatch: wrong method signature or missing deep copy."
@@ -164,8 +162,8 @@ FIX_TOOL: Dict[str, Any] = {
         "- Preserve the intended algorithmic logic \u2014 only fix the mechanical error.\n"
         "- Return the COMPLETE corrected file, not just changed lines.\n\n"
         "Common patterns:\n"
-        "- V6_feasibility: assignment dict and vehicle.order_ids inconsistent.\n"
-        "- V5_solution_consistency: output solution has assignment/vehicle mismatch or missing/duplicate orders.\n"
+        "- V6_feasibility: output violates the problem-specific feasibility oracle.\n"
+        "- V5_solution_consistency: output violates problem-specific solution consistency.\n"
         "- V8_nondeterminism: non-deterministic code (no uuid, use sorted(), use rng).\n"
         "- V1_syntax: indentation, parentheses, colons.\n"
         "- V2_interface: missing Operator base class or wrong execute() signature."
@@ -234,7 +232,7 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
 """
 
 CODE_PROMPT_TEMPLATE = """\
-You are a software engineer implementing a vehicle-assignment operator for a solver optimisation framework.
+You are a software engineer implementing an operator for a combinatorial optimisation solver framework.
 Your task is to write the complete file contents that implement the approved hypothesis below.
 
 ## Problem Summary
@@ -271,11 +269,10 @@ Only use modules from this whitelist — any other import will be rejected:
 
 ## Task
 Produce the complete file content that implements the hypothesis.
-- Subclass `Operator` and implement `execute(self, solution, rng) -> Solution`
-- Deep-copy the solution at the start: `new_sol = solution.deep_copy()`
-- Skip locked orders (where `order.locked_vehicle_id is not None`)
-- Use `rng` for all randomness
-- Return the new solution (or original if no valid move found)
+- Conform to the operator interface specification exactly
+- Preserve all feasibility, consistency, and determinism invariants described there
+- Use the provided `rng` argument for all randomness
+- Return the new solution/artifact, or original if no valid move found
 - If action is "delete", set code_content to an empty string ""
 
 Respond with a single JSON object (no markdown fences, no extra text):
@@ -288,7 +285,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
 """
 
 FIX_PROMPT_TEMPLATE = """\
-You are a software engineer fixing a vehicle-assignment operator that failed verification.
+You are a software engineer fixing an optimisation operator that failed verification.
 Correct the code so it passes, while preserving the intended logic.
 
 ## Problem Summary
@@ -314,7 +311,7 @@ Correct the code so it passes, while preserving the intended logic.
 
 ## Task
 Fix the code so it passes verification.
-Preserve the operator interface: `def execute(self, solution, rng) -> Solution`.
+Preserve the operator interface specification exactly.
 Make only the minimal changes needed to fix the reported failure.
 
 Respond with a single JSON object (no markdown fences, no extra text):

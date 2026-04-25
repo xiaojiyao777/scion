@@ -92,6 +92,15 @@ class CanaryResult:
     reason: Optional[str] = None
 
 @dataclass(frozen=True)
+class MetricEvalStats:
+    metric_name: str
+    median_delta: float
+    ci_low: float
+    ci_high: float
+    n_cases: int
+
+
+@dataclass(frozen=True)
 class EvalStats:
     n_cases: int
     wins: int
@@ -101,6 +110,11 @@ class EvalStats:
     median_delta: float
     ci_low: float
     ci_high: float
+    # v0.3 F3: priority-aware statistical decision summary.
+    # Backward-compatible callers may leave these unset and rely on ci_low/ci_high.
+    statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
+    statistical_metric: Optional[str] = None
+    metric_stats: Tuple[MetricEvalStats, ...] = ()
 
 @dataclass(frozen=True)
 class ProtocolResult:
@@ -201,6 +215,8 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
+    statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
+    statistical_metric: Optional[str] = None
     # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
     # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
     # hypothesis is generated for this branch.

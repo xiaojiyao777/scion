@@ -79,6 +79,8 @@ class SafeFeatureExtractor:
         median_delta: Optional[float] = None
         ci_low: Optional[float] = None
         ci_high: Optional[float] = None
+        statistical_status = None
+        statistical_metric = None
         n_cases = 0
 
         if protocol is not None:
@@ -88,6 +90,8 @@ class SafeFeatureExtractor:
             median_delta = stats.median_delta
             ci_low = stats.ci_low
             ci_high = stats.ci_high
+            statistical_status = stats.statistical_status
+            statistical_metric = stats.statistical_metric
 
         recent_failure_codes: Tuple[str, ...] = tuple(
             c for c in branch.failure_codes if c in KNOWN_FAILURE_CODES
@@ -105,6 +109,8 @@ class SafeFeatureExtractor:
             median_delta=median_delta,
             ci_low=ci_low,
             ci_high=ci_high,
+            statistical_status=statistical_status,
+            statistical_metric=statistical_metric,
             stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
             recent_retry_count=branch.retry_count,
             screening_expand_count=branch.screening_expand_count,

@@ -131,6 +131,17 @@ class TestClassifier:
         assert r.source == "classifier"
         assert r.family_id == "vehicle_elimination_cost"
 
+    def test_classifier_uses_problem_taxonomy_without_warehouse_keywords(self) -> None:
+        c = HypothesisFamilyClassifier(
+            llm_client=None,
+            taxonomy=["two_opt_local_search", "nearest_neighbor_seed"],
+            taxonomy_version="tsp-v1",
+        )
+        r = c.classify("Try a two opt local search move for tour improvement")
+        assert r.source == "keyword"
+        assert r.family_id == "two_opt_local_search"
+        assert r.taxonomy_version == "tsp-v1"
+
     def test_classifier_invalid_response_falls_back(self) -> None:
         class MockClient:
             def call_text(self, prompt, model=None):

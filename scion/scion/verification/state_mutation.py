@@ -100,7 +100,11 @@ def _check_solution_consistency(raw: dict) -> list[str]:
     """Check that the output solution is internally consistent."""
     issues: list[str] = []
 
-    solution = raw.get("solution", {})
+    solution = raw.get("solution")
+    if not isinstance(solution, dict) or not (
+        "assignment" in solution or "vehicles" in solution
+    ):
+        solution = raw
     assignment = solution.get("assignment", {})
     vehicles = solution.get("vehicles", {})
 
@@ -145,12 +149,10 @@ def _cr(
     name = "V5_solution_consistency"
     if diagnosis and not passed:
         detail = f"[{diagnosis}] {detail}"
-    severity: Literal["light", "heavy"] = "light" if not passed else "heavy"
     return CheckResult(
         name=name,
         passed=passed,
-        severity=severity,
+        severity="heavy",
         detail=detail,
         elapsed_ms=elapsed,
     )
-

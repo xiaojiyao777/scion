@@ -16,10 +16,13 @@ from scion.verification.gate import VerificationGate
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
 from scion.verification.tests import check_unit_tests, check_regression_tests
+from scion.verification.state_mutation import check_state_mutation
 from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
+from scion.problem.loader import load_problem_adapter
+from scion.problem.spec import ProblemSpecV1
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +55,18 @@ def _make_patch(code: str = _VALID_CODE, action: str = "modify") -> PatchProposa
         file_path="operators/my_op.py",
         action=action,
         code_content=code,
+    )
+
+
+def _make_toy_tsp_patch() -> PatchProposal:
+    return PatchProposal(
+        file_path="operators/two_opt.py",
+        action="modify",
+        code_content=(
+            "class MyOp:\n"
+            "    def execute(self, solution, instance, rng):\n"
+            "        return solution\n"
+        ),
     )
 
 
@@ -88,6 +103,17 @@ def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
         },
         "feasible": True,
     }
+
+
+def _load_toy_tsp_adapter():
+    import yaml
+
+    toy_dir = Path(__file__).resolve().parents[1] / "problems" / "toy_tsp"
+    with open(toy_dir / "problem.yaml", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    data["root_dir"] = str(toy_dir)
+    spec_v1 = ProblemSpecV1(**data)
+    return spec_v1, load_problem_adapter(spec_v1)
 
 
 def _mock_runner(
@@ -170,6 +196,28 @@ class TestInterfaceCheck:
         r = check_interface(_make_patch(_WRONG_ARGS), str(tmp_path))
         assert r.passed is False
 
+    def test_problem_defined_signature_passes(self, tmp_path):
+        code = """\
+class MyOp:
+    def execute(self, solution, instance, rng):
+        return solution
+"""
+        r = check_interface(
+            _make_patch(code),
+            str(tmp_path),
+            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution",
+        )
+        assert r.passed is True
+
+    def test_problem_defined_signature_rejects_legacy_args(self, tmp_path):
+        r = check_interface(
+            _make_patch(_VALID_CODE),
+            str(tmp_path),
+            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution",
+        )
+        assert r.passed is False
+        assert "instance" in r.detail
+
     def test_delete_action_skipped(self, tmp_path):
         r = check_interface(_make_patch(action="delete"), str(tmp_path))
         assert r.passed is True
@@ -200,6 +248,35 @@ class TestInterfaceCheck:
         r = check_interface(patch, str(tmp_path))
         assert r.passed is False
 
+    def test_interface_check_does_not_execute_top_level_code(self, tmp_path):
+        op_dir = tmp_path / "operators"
+        op_dir.mkdir()
+        marker = tmp_path / "executed.txt"
+        code = f"""\
+from pathlib import Path
+Path({str(marker)!r}).write_text("executed")
+
+class MyOp:
+    def execute(self, solution, rng):
+        return solution
+"""
+        (op_dir / "my_op.py").write_text(code)
+
+        patch = _make_patch(code)
+        r = check_interface(patch, str(tmp_path))
+        assert r.passed is True
+        assert not marker.exists()
+
+    def test_interface_check_rejects_invalid_patch_path(self, tmp_path):
+        patch = PatchProposal(
+            file_path="operators/../../outside.py",
+            action="modify",
+            code_content=_VALID_CODE,
+        )
+        r = check_interface(patch, str(tmp_path))
+        assert r.passed is False
+        assert "path segment" in r.detail
+
 
 # ---------------------------------------------------------------------------
 # V3: feasibility
@@ -229,6 +306,26 @@ class TestFeasibilityCheck:
         r = check_feasibility(spec, runner, str(tmp_path))
         assert r.passed is False
         assert r.name == "V6_feasibility"
+
+
+# ---------------------------------------------------------------------------
+# V5: solution consistency
+# ---------------------------------------------------------------------------
+
+class TestSolutionConsistencyCheck:
+    def test_top_level_assignment_vehicle_mismatch_fails(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        output = _solver_output_dict()
+        output["assignment"] = {"O1": "V_MISMATCH"}
+        runner = _mock_runner(output_dict=output)
+
+        r = check_state_mutation(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.severity == "heavy"
+        assert "assignment says" in r.detail
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +541,93 @@ class TestVerificationGateIntegration:
         assert "V7_objective" in check_names
         assert "V8_nondeterminism" in check_names
         assert "V9_perf_guard" in check_names
+
+    def test_strict_runtime_checks_fail_without_runner_or_spec(self):
+        gate = VerificationGate(strict_runtime_checks=True)
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run("/tmp", "/tmp", patch)
+        assert result.passed is False
+        assert result.failure_severity == "heavy"
+        assert result.first_failure == "V_runtime_config"
+
+    def test_strict_runtime_checks_fail_without_canary(self, tmp_path):
+        spec = _make_spec(canary="")
+        runner = _mock_runner()
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=runner,
+            strict_runtime_checks=True,
+        )
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run(str(tmp_path), str(tmp_path), patch)
+        assert result.passed is False
+        assert result.first_failure == "V_runtime_config"
+        assert "canary_case_path" in result.checks[-1].detail
+
+    def test_strict_runtime_checks_fail_without_champion_workspace(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_spec(canary=str(canary))
+        runner = _mock_runner()
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=runner,
+            strict_runtime_checks=True,
+        )
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run(str(tmp_path), str(tmp_path / "missing_champion"), patch)
+        assert result.passed is False
+        assert result.first_failure == "V_runtime_config"
+        assert "champion workspace" in result.checks[-1].detail
+
+    def test_strict_runtime_checks_can_require_adapter(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_spec(canary=str(canary))
+        runner = _mock_runner()
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=runner,
+            strict_runtime_checks=True,
+            require_adapter_for_runtime=True,
+        )
+        patch = _make_patch(_VALID_CODE)
+
+        result = gate.run(str(tmp_path), str(tmp_path), patch)
+
+        assert result.passed is False
+        assert result.first_failure == "V_runtime_config"
+        assert "problem adapter" in result.checks[-1].detail
+
+    def test_strict_adapter_backed_runtime_passes_toy_tsp(self, tmp_path):
+        spec_v1, adapter = _load_toy_tsp_adapter()
+        canary = os.path.join(spec_v1.root_dir, "data", "tsp_10.json")
+        spec = _make_spec(canary=canary).model_copy(update={"root_dir": spec_v1.root_dir})
+        runner = _mock_runner(output_dict={"tour": list(range(10))}, elapsed_ms=100)
+        gate = VerificationGate(
+            problem_spec=spec,
+            runner=runner,
+            adapter=adapter,
+            strict_runtime_checks=True,
+            require_adapter_for_runtime=True,
+            operator_execute_signature=spec_v1.operator_interface.execute_signature,
+        )
+
+        result = gate.run(str(tmp_path), str(tmp_path), _make_toy_tsp_patch())
+
+        assert result.passed is True
+        check_names = [c.name for c in result.checks]
+        assert "V6_feasibility" in check_names
+        assert "V7_objective" in check_names
+
+    def test_gate_uses_problem_defined_interface_signature(self, tmp_path):
+        gate = VerificationGate(
+            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution"
+        )
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run(str(tmp_path), "", patch)
+        assert result.passed is False
+        assert result.first_failure == "V2_interface"
 
     def test_delete_patch_passes_all(self):
         gate = VerificationGate()

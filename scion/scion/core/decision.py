@@ -26,9 +26,6 @@ class DecisionEngine:
         if not features.canary_passed:
             return self._out(features, Decision.ABANDON, ["CANARY_FAILED"])
 
-        if features.budget_remaining_ratio <= 0.0:
-            return self._out(features, Decision.ABANDON, ["BUDGET_EXHAUSTED"])
-
         stage = features.stage
         if stage == "screening":
             return self._decide_screening(features)
@@ -97,10 +94,26 @@ class DecisionEngine:
         md = features.median_delta
         ci_low = features.ci_low
         ci_high = features.ci_high
+        stat = features.statistical_status
         threshold = self.config.validation_win_rate_threshold
 
         if wr is None or ci_low is None:
             return self._out(features, Decision.ABANDON, ["NO_VALIDATION_STATS"])
+
+        if stat is not None:
+            if wr >= threshold and stat == "positive":
+                return self._out(features, Decision.QUEUE_FROZEN, ["VALIDATION_PASS_HIERARCHICAL"])
+            if stat == "negative":
+                return self._out(features, Decision.ABANDON, ["VALIDATION_FAIL_HIERARCHICAL_NEGATIVE"])
+            if stat == "tie":
+                return self._out(features, Decision.ABANDON, ["VALIDATION_FAIL_NO_HIERARCHICAL_GAIN"])
+            if wr >= threshold and stat == "uncertain":
+                if features.validation_expand_count >= 1:
+                    if md is not None and md < 0:
+                        return self._out(features, Decision.ABANDON, ["VALIDATION_EXPAND_EXHAUSTED_FAIL"])
+                    return self._out(features, Decision.QUEUE_FROZEN, ["VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS"])
+                return self._out(features, Decision.EXPAND_VALIDATION, ["VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN"])
+            return self._out(features, Decision.ABANDON, ["VALIDATION_FAIL_WIN_RATE"])
 
         if wr >= threshold and ci_low >= 0:
             return self._out(features, Decision.QUEUE_FROZEN, ["VALIDATION_PASS"])
@@ -125,9 +138,19 @@ class DecisionEngine:
 
     def _decide_frozen(self, features: DecisionFeatures) -> DecisionOutcome:
         ci_low = features.ci_low
+        stat = features.statistical_status
 
         if ci_low is None:
             return self._out(features, Decision.ABANDON, ["NO_FROZEN_STATS"])
+
+        if stat is not None:
+            if stat == "positive":
+                return self._out(features, Decision.PROMOTE, ["FROZEN_PASS_HIERARCHICAL"])
+            if stat == "negative":
+                return self._out(features, Decision.ABANDON, ["FROZEN_FAIL_HIERARCHICAL_NEGATIVE"])
+            if stat == "tie":
+                return self._out(features, Decision.ABANDON, ["FROZEN_FAIL_NO_HIERARCHICAL_GAIN"])
+            return self._out(features, Decision.ABANDON, ["FROZEN_FAIL_HIERARCHICAL_UNCERTAIN"])
 
         if ci_low >= 0:
             return self._out(features, Decision.PROMOTE, ["FROZEN_PASS"])

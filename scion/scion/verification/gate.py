@@ -19,17 +19,21 @@ Runtime checks (V5–V9) are skipped when:
   - runner is None, OR
   - problem_spec is None, OR
   - problem_spec.canary_case_path is empty
+unless strict_runtime_checks=True, in which case missing runtime verification
+    configuration fails closed. Production callers can also set
+    require_adapter_for_runtime=True so V5-V9 never fall back to legacy
+    direct-oracle reconstruction.
 
 Test checks (V3, V4) are skipped when runner is None or no test file is found.
 """
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, List, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult, PatchProposal, VerificationResult
 from scion.runtime.runner import Runner
-from scion.runtime.subprocess_runner import resolve_offloaded
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
 from scion.verification.tests import check_unit_tests, check_regression_tests
@@ -63,11 +67,17 @@ class VerificationGate:
         metrics_dir: Optional[str] = None,
         *,
         adapter: Optional[ProblemAdapter] = None,
+        strict_runtime_checks: bool = False,
+        require_adapter_for_runtime: bool = False,
+        operator_execute_signature: str | None = None,
     ) -> None:
         self._spec = problem_spec
         self._runner = runner
         self._metrics_dir = metrics_dir
         self._adapter = adapter
+        self._strict_runtime_checks = strict_runtime_checks
+        self._require_adapter_for_runtime = require_adapter_for_runtime
+        self._operator_execute_signature = operator_execute_signature
 
     def run(
         self,
@@ -91,7 +101,11 @@ class VerificationGate:
 
         # --- V2: interface (light) ---
         # V2_interface: Operator subclass + execute signature
-        r = check_interface(patch, candidate_workspace)
+        r = check_interface(
+            patch,
+            candidate_workspace,
+            operator_execute_signature=self._operator_execute_signature,
+        )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -110,9 +124,24 @@ class VerificationGate:
             if not r.passed:
                 return _fail(checks, r)
 
-        # --- Runtime checks (skipped when runner/spec unavailable) ---
+        # --- Runtime checks (skipped when runner/spec unavailable unless strict) ---
         if self._runner is None or self._spec is None:
+            if self._strict_runtime_checks:
+                r = _runtime_config_failure("runner and problem_spec are required")
+                checks.append(r)
+                return _fail(checks, r)
             return VerificationResult(passed=True, checks=tuple(checks))
+
+        if self._strict_runtime_checks:
+            r = _validate_runtime_config(
+                self._spec,
+                champion_workspace,
+                adapter=self._adapter,
+                require_adapter_for_runtime=self._require_adapter_for_runtime,
+            )
+            if r is not None:
+                checks.append(r)
+                return _fail(checks, r)
 
         # --- V5: state_mutation (heavy) ---
         # V5_solution_consistency: solution consistency after solver run.
@@ -160,4 +189,33 @@ def _fail(checks: List[CheckResult], failed: CheckResult) -> VerificationResult:
         checks=tuple(checks),
         failure_severity=failed.severity,
         first_failure=failed.name,
+    )
+
+
+def _validate_runtime_config(
+    problem_spec: ProblemSpec,
+    champion_workspace: str,
+    *,
+    adapter: ProblemAdapter | None = None,
+    require_adapter_for_runtime: bool = False,
+) -> CheckResult | None:
+    if require_adapter_for_runtime and adapter is None:
+        return _runtime_config_failure("problem adapter is required for runtime verification")
+    canary = problem_spec.canary_case_path
+    if not canary:
+        return _runtime_config_failure("canary_case_path is required")
+    if not os.path.isfile(canary):
+        return _runtime_config_failure(f"canary file not found: {canary}")
+    if not champion_workspace or not os.path.isdir(champion_workspace):
+        return _runtime_config_failure("champion workspace is required")
+    return None
+
+
+def _runtime_config_failure(detail: str) -> CheckResult:
+    return CheckResult(
+        name="V_runtime_config",
+        passed=False,
+        severity="heavy",
+        detail=detail,
+        elapsed_ms=0,
     )

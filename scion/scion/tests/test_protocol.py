@@ -71,6 +71,51 @@ def test_compute_eval_stats_basic():
     assert stats.median_delta == pytest.approx(30.0)
 
 
+def test_hierarchical_stats_primary_metric_wins_despite_cost_outliers():
+    """Primary metric CI drives gate stats when metric details are available."""
+    comparisons = ["win"] * 6
+    scalar_deltas = [-10000.0, -8000.0, -500.0, 200.0, 1000.0, 1200.0]
+    metric_rows = [
+        {"subcategory_splits": 1.0, "total_cost": -20000.0},
+        {"subcategory_splits": 1.0, "total_cost": -9000.0},
+        {"subcategory_splits": 1.0, "total_cost": -5000.0},
+        {"subcategory_splits": 2.0, "total_cost": 1000.0},
+        {"subcategory_splits": 1.0, "total_cost": 2000.0},
+        {"subcategory_splits": 3.0, "total_cost": 3000.0},
+    ]
+    stats = compute_eval_stats(
+        comparisons,
+        scalar_deltas,
+        metric_deltas=metric_rows,
+        metric_order=["subcategory_splits", "total_cost"],
+    )
+
+    assert stats.statistical_status == "positive"
+    assert stats.statistical_metric == "subcategory_splits"
+    assert stats.ci_low > 0
+    assert stats.median_delta == pytest.approx(1.0)
+
+
+def test_hierarchical_stats_falls_through_exact_primary_tie_to_cost():
+    comparisons = ["win"] * 4
+    metric_rows = [
+        {"subcategory_splits": 0.0, "total_cost": 10.0},
+        {"subcategory_splits": 0.0, "total_cost": 15.0},
+        {"subcategory_splits": 0.0, "total_cost": 8.0},
+        {"subcategory_splits": 0.0, "total_cost": 12.0},
+    ]
+    stats = compute_eval_stats(
+        comparisons,
+        [10.0, 15.0, 8.0, 12.0],
+        metric_deltas=metric_rows,
+        metric_order=["subcategory_splits", "total_cost"],
+    )
+
+    assert stats.statistical_status == "positive"
+    assert stats.statistical_metric == "total_cost"
+    assert stats.ci_low > 0
+
+
 def test_bootstrap_ci_all_positive():
     """When all deltas are positive, ci_low should be > 0."""
     deltas = [10.0, 20.0, 15.0, 25.0, 18.0, 12.0]
@@ -137,6 +182,19 @@ def test_validation_gate_pass():
     assert result.outcome == "pass"
 
 
+def test_validation_gate_uses_hierarchical_status():
+    stats = _make_stats(
+        win_rate=1.0,
+        ci_low=1.0,
+        ci_high=2.0,
+        statistical_status="positive",
+        statistical_metric="subcategory_splits",
+    )
+    result = validation_gate(stats, _cfg)
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("VALIDATION_PASS_HIERARCHICAL",)
+
+
 def test_validation_gate_fail_ci_negative():
     stats = _make_stats(win_rate=0.7, ci_low=-0.02, ci_high=-0.001)
     result = validation_gate(stats, _cfg)
@@ -153,6 +211,18 @@ def test_frozen_gate_pass():
     stats = _make_stats(ci_low=0.005, ci_high=0.02)
     result = frozen_gate(stats, _cfg)
     assert result.outcome == "pass"
+
+
+def test_frozen_gate_rejects_hierarchical_uncertain_even_if_legacy_ci_nonnegative():
+    stats = _make_stats(
+        ci_low=0.005,
+        ci_high=0.02,
+        statistical_status="uncertain",
+        statistical_metric="subcategory_splits",
+    )
+    result = frozen_gate(stats, _cfg)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("FROZEN_FAIL_HIERARCHICAL_UNCERTAIN",)
 
 
 def test_frozen_gate_fail_ci_negative():

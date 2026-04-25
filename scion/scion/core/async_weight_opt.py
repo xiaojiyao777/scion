@@ -5,29 +5,48 @@ Owns thread lifecycle + the optimization loop body that was previously part
 of the CampaignManager god-object:
 
   - ``_pending_threads`` — background thread registry
-  - ``_latest_result`` — last completed optimization result (for LLM feedback)
+  - ``_latest_result`` — last drained optimization result (for LLM feedback)
+  - ``_completed_events`` — worker results awaiting CampaignManager commit
   - ``spawn_for_promoted_champion`` — entry point from ``_on_promote`` tail
   - ``run_optimization`` — the optimization loop body (formerly
     ``CampaignManager._run_weight_optimization``)
   - ``wait_all`` — shutdown join
 
 The coordinator holds a reference to ``CampaignManager`` (v0.3 minimum
-extraction — dependency injection is for v1.0) and reads manager state via
-``self._mgr._xxx``. It intentionally does NOT own champion state or
-materialization — those remain with the manager. The bg thread delegates
-the optimization call through ``self._mgr._run_weight_optimization(...)``
-so that existing tests which monkey-patch that method continue to work.
+extraction — dependency injection is for v1.0) and reads manager services via
+``self._mgr._xxx``. It intentionally does NOT own champion or branch state.
+The bg thread delegates the optimization call through
+``self._mgr._run_weight_optimization(...)`` so that existing tests which
+monkey-patch that method continue to work, then enqueues a completion event
+for CampaignManager to commit on the main loop boundary.
 """
 from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type checking
     from scion.core.campaign import CampaignManager
+    from scion.core.models import OperatorConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class WeightOptCompletionEvent:
+    """Completed weight optimization work ready for main-thread commit."""
+
+    version: int
+    base_weight_revision: int
+    result: Any
+    elapsed_minutes: float
+    improved: bool
+    new_revision: Optional[int] = None
+    snapshot_path: Optional[str] = None
+    snapshot_hash: Optional[str] = None
+    operator_pool: Optional[dict[str, "OperatorConfig"]] = None
 
 
 class AsyncWeightOptCoordinator:
@@ -36,6 +55,8 @@ class AsyncWeightOptCoordinator:
     def __init__(self, manager: "CampaignManager") -> None:
         self._mgr = manager
         self._pending_threads: List[threading.Thread] = []
+        self._completed_events: List[WeightOptCompletionEvent] = []
+        self._events_lock = threading.Lock()
         self._latest_result: Optional[Any] = None
 
     # ------------------------------------------------------------------
@@ -60,7 +81,11 @@ class AsyncWeightOptCoordinator:
         return len(self._pending_threads)
 
     def spawn_for_promoted_champion(
-        self, staging_path: str, version: int, current_weights: dict
+        self,
+        staging_path: str,
+        version: int,
+        current_weights: dict,
+        base_weight_revision: int = 0,
     ) -> None:
         """Launch bg weight optimization for a freshly promoted champion.
 
@@ -72,7 +97,7 @@ class AsyncWeightOptCoordinator:
             return
         t = threading.Thread(
             target=self._bg_weight_opt_task,
-            args=(staging_path, version, current_weights),
+            args=(staging_path, version, current_weights, base_weight_revision),
             daemon=True,
             name=f"weight-opt-v{version}",
         )
@@ -94,17 +119,32 @@ class AsyncWeightOptCoordinator:
         for t in self._pending_threads:
             t.join(timeout=timeout)
 
+    def drain_completed_events(self) -> List[WeightOptCompletionEvent]:
+        """Return and clear completed optimization events.
+
+        CampaignManager owns applying these events. Keeping this explicit
+        prevents the background worker from mutating champion or branch state.
+        """
+        with self._events_lock:
+            events = list(self._completed_events)
+            self._completed_events.clear()
+        return events
+
     # ------------------------------------------------------------------
     # Internal: background thread body
     # ------------------------------------------------------------------
 
     def _bg_weight_opt_task(
-        self, staging_path: str, version: int, current_weights: dict
+        self,
+        staging_path: str,
+        version: int,
+        current_weights: dict,
+        base_weight_revision: int = 0,
     ) -> None:
-        """Background thread: run weight opt and update champion on success.
+        """Background thread: run weight opt and prepare an event on success.
 
-        Creates a NEW immutable snapshot rather than modifying the original.
-        Atomic pointer switch under champion_lock.
+        The worker may create immutable snapshot artifacts, but campaign state
+        changes are committed later by CampaignManager on the main loop boundary.
         """
         import os as _os
         import shutil as _shutil
@@ -128,33 +168,21 @@ class AsyncWeightOptCoordinator:
         if opt_result is None:
             return
 
-        self._latest_result = opt_result
-        try:
-            self._mgr._registry.record_weight_optimization(
-                campaign_id=self._mgr._campaign_id,
-                champion_version=version,
-                result=opt_result,
-            )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to record result: %s", exc)
-
         if not opt_result.improved:
             logger.info(
                 "Background weight opt complete for champion v%d (%.1f min) — no improvement",
                 version, elapsed_min,
             )
+            self._enqueue_event(WeightOptCompletionEvent(
+                version=version,
+                base_weight_revision=base_weight_revision,
+                result=opt_result,
+                elapsed_minutes=elapsed_min,
+                improved=False,
+            ))
             return
 
-        # Determine new revision number
-        with self._mgr._champion_lock:
-            if self._mgr._champion.version != version:
-                logger.warning(
-                    "Background weight opt for champion v%d discarded — "
-                    "champion has advanced to v%d",
-                    version, self._mgr._champion.version,
-                )
-                return
-            new_revision = self._mgr._champion.weight_revision + 1
+        new_revision = base_weight_revision + 1
 
         # Create NEW immutable snapshot with optimized weights (never modify original)
         new_snapshot_path = str(
@@ -191,41 +219,25 @@ class AsyncWeightOptCoordinator:
             )
             return
 
-        # Atomic pointer switch
-        from scion.core.models import ChampionState
-        with self._mgr._champion_lock:
-            if self._mgr._champion.version != version:
-                logger.warning(
-                    "Background weight opt for champion v%d discarded — "
-                    "champion has advanced to v%d",
-                    version, self._mgr._champion.version,
-                )
-                return
-            self._mgr._champion = ChampionState(
-                version=self._mgr._champion.version,
-                operator_pool=new_pool,
-                solver_config_hash=self._mgr._champion.solver_config_hash,
-                code_snapshot_path=new_snapshot_path,
-                code_snapshot_hash=new_hash,
-                promoted_at=self._mgr._champion.promoted_at,
-                weight_revision=new_revision,
-            )
-
         logger.info(
-            "Background weight opt complete for champion v%d_r%d (%.1f min)",
+            "Background weight opt prepared champion v%d_r%d (%.1f min)",
             version, new_revision, elapsed_min,
         )
+        self._enqueue_event(WeightOptCompletionEvent(
+            version=version,
+            base_weight_revision=base_weight_revision,
+            result=opt_result,
+            elapsed_minutes=elapsed_min,
+            improved=True,
+            new_revision=new_revision,
+            snapshot_path=new_snapshot_path,
+            snapshot_hash=new_hash,
+            operator_pool=new_pool,
+        ))
 
-        # Stage-aware stale: only mark screening/explore branches
-        try:
-            stale_weight_ids = self._mgr._branch_ctrl.mark_stale_for_weight_update(version)
-            if stale_weight_ids:
-                logger.info(
-                    "Background weight opt: marked %d screening branches stale for re-screening",
-                    len(stale_weight_ids),
-                )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to mark branches stale: %s", exc)
+    def _enqueue_event(self, event: WeightOptCompletionEvent) -> None:
+        with self._events_lock:
+            self._completed_events.append(event)
 
     # ------------------------------------------------------------------
     # Optimization loop body (formerly CampaignManager._run_weight_optimization)
@@ -293,6 +305,9 @@ class AsyncWeightOptCoordinator:
 
         # Collect baseline objectives for evaluate_weights comparisons
         baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
+        metric_specs = getattr(self._mgr._experiment_protocol, "_metric_specs", None)
+        if metric_specs is None:
+            metric_specs = getattr(self._mgr._experiment_protocol, "metric_specs", None)
 
         # Build search space
         search_space = ParameterSearchSpace(
@@ -313,6 +328,7 @@ class AsyncWeightOptCoordinator:
                 runner=runner,
                 time_limit_sec=time_limit,
                 baseline_objectives=baseline,
+                metric_specs=metric_specs,
             )
 
         optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)

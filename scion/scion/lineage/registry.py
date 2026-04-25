@@ -78,11 +78,29 @@ class LineageRegistry:
                     current_code_hash   TEXT,
                     last_clean_code_hash TEXT,
                     retry_count         INTEGER DEFAULT 0,
+                    screening_expand_count INTEGER DEFAULT 0,
+                    validation_expand_count INTEGER DEFAULT 0,
                     failure_codes       TEXT,
                     created_at          TEXT NOT NULL,
-                    updated_at          TEXT NOT NULL
+                    updated_at          TEXT NOT NULL,
+                    direction           TEXT,
+                    weight_revision     INTEGER DEFAULT 0,
+                    pending_retry       INTEGER DEFAULT 0,
+                    blocked_rounds      INTEGER DEFAULT 0,
+                    consecutive_llm_retries INTEGER DEFAULT 0,
+                    infra_block_count   INTEGER DEFAULT 0
                 )
             """)
+            self._ensure_columns(conn, "branches", {
+                "screening_expand_count": "INTEGER DEFAULT 0",
+                "validation_expand_count": "INTEGER DEFAULT 0",
+                "direction": "TEXT",
+                "weight_revision": "INTEGER DEFAULT 0",
+                "pending_retry": "INTEGER DEFAULT 0",
+                "blocked_rounds": "INTEGER DEFAULT 0",
+                "consecutive_llm_retries": "INTEGER DEFAULT 0",
+                "infra_block_count": "INTEGER DEFAULT 0",
+            })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS hypotheses (
                     hypothesis_id        TEXT PRIMARY KEY,
@@ -103,15 +121,20 @@ class LineageRegistry:
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS champions (
-                    version                  INTEGER PRIMARY KEY,
+                    version                  INTEGER NOT NULL,
+                    weight_revision          INTEGER NOT NULL DEFAULT 0,
                     operator_pool_json       TEXT NOT NULL,
                     solver_config_hash       TEXT NOT NULL,
                     code_snapshot_path       TEXT NOT NULL,
                     code_snapshot_hash       TEXT NOT NULL,
                     promotion_experiment_id  TEXT,
-                    promoted_at              TEXT
+                    promoted_at              TEXT,
+                    PRIMARY KEY (version, weight_revision)
                 )
             """)
+            self._ensure_columns(conn, "champions", {
+                "weight_revision": "INTEGER DEFAULT 0",
+            })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS weight_optimizations (
                     optimization_id        TEXT PRIMARY KEY,

@@ -281,7 +281,7 @@ def _split_code_context(
 
     # Block 1: Static role + quality rules + problem + interface (never changes)
     static_text = (
-        "You are a software engineer implementing a vehicle-assignment operator for a solver optimisation framework.\n"
+        "You are a software engineer implementing an operator for a combinatorial optimisation solver framework.\n"
         "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
         "- Write ONLY what the hypothesis requires. No extra features, helper functions, or abstractions.\n"
@@ -292,12 +292,7 @@ def _split_code_context(
         "- Do NOT add logging, print statements, or debug output.\n\n"
         "## Feasibility is Non-Negotiable\n"
         "An operator that produces infeasible solutions is WORSE than no operator. "
-        "Before returning, mentally verify:\n"
-        "1. Every order is assigned to exactly one vehicle\n"
-        "2. assignment dict and vehicle.order_ids are consistent\n"
-        "3. No vehicle exceeds capacity\n"
-        "4. Hazardous goods constraints satisfied\n"
-        "5. Region and category constraints hold\n\n"
+        "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"## Operator Interface Specification\n"
         f"All operator classes MUST conform to this interface exactly:\n\n"
@@ -344,11 +339,10 @@ def _split_code_context(
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
-        f"- Subclass `Operator` and implement `execute(self, solution, rng) -> Solution`\n"
-        f"- Deep-copy the solution: `new_sol = solution.deep_copy()`\n"
-        f"- Generate new vehicle IDs: `from operators.base import generate_vehicle_id` then `vid = generate_vehicle_id(rng)` (NEVER use uuid)\n"
-        f"- Skip locked orders (`order.locked_vehicle_id is not None`)\n"
-        f"- Use `rng` for all randomness, return new solution or original\n\n"
+        f"- Conform to the operator interface specification exactly\n"
+        f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
+        f"- Use the provided `rng` argument for all randomness; do not use system entropy\n"
+        f"- Return the new solution/artifact, or the original if no valid move is found\n\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"
         f"{{\n"
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
@@ -372,7 +366,7 @@ def _split_fix_context(
     D = _DefaultDict(context)
 
     system_text = (
-        "You are a software engineer fixing a vehicle-assignment operator that failed verification.\n"
+        "You are a software engineer fixing an optimisation operator that failed verification.\n"
         "Correct the code so it passes, while preserving the intended logic.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"## Operator Interface Specification\n"
@@ -397,7 +391,7 @@ def _split_fix_context(
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
-        f"- Preserve the operator interface: `def execute(self, solution, rng) -> Solution`\n"
+        f"- Preserve the operator interface described above exactly\n"
         f"- Make only the minimal changes needed to fix the reported failure\n"
     )
 

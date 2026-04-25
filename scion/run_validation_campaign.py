@@ -16,9 +16,10 @@ import random
 import sys
 import json
 import time
-import types
 from pathlib import Path
 from datetime import datetime
+
+import yaml
 
 parser = argparse.ArgumentParser(description="v0.3 Post-Optimization Validation")
 parser.add_argument("--model", required=True, help="LLM model ID")
@@ -77,35 +78,17 @@ from scion.runtime.subprocess_runner import LocalSubprocessRunner
 from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
 from scion.core.campaign import CampaignManager
 from scion.verification.gate import VerificationGate
+from scion.problem.loader import load_problem_adapter
+from scion.problem.spec import ProblemSpecV1
 
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
+with open(PROBLEM_DIR / "problem-v1.yaml", encoding="utf-8") as fh:
+    adapter_spec = ProblemSpecV1(**yaml.safe_load(fh))
+adapter = load_problem_adapter(adapter_spec)
 proto_cfg = ProtocolConfig.from_yaml(str(PROBLEM_DIR / "protocol.yaml"))
 split_manifest = SplitManifest.from_yaml(str(MANIFEST))
 seed_ledger = SeedLedgerConfig.from_yaml(str(PROBLEM_DIR / "seed_ledger.yaml"))
-
-# --- Build adapter (bridge old ProblemSpec → adapter interface) ---
-from scion.problems.warehouse_delivery.adapter import WarehouseDeliveryAdapter
-adapter_spec = types.SimpleNamespace(
-    root_dir=spec.root_dir,
-    oracle_path=spec.oracle_path,
-    display_name=spec.name,
-    description=spec.description,
-    search_space=spec.search_space,
-    operator_interface=types.SimpleNamespace(
-        categories=[
-            types.SimpleNamespace(name=cat) for cat in spec.operator_categories
-        ]
-    ),
-)
-adapter = WarehouseDeliveryAdapter(adapter_spec)
-
-# --- Metric specs for generic comparison ---
-from scion.problem.spec import ObjectiveMetricSpec
-metric_specs = [
-    ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
-    ObjectiveMetricSpec(name="total_cost", direction="minimize", priority=2),
-]
 
 # --- LLM client ---
 llm_client = LLMClient(model=args.model)
@@ -136,10 +119,17 @@ experiment_protocol = ExperimentProtocol(
     runner=runner,
     time_limit_sec=spec.solver.time_limit_sec if spec.solver else 300,
     metrics_dir=str(CAMPAIGN_DIR / "metrics"),
-    metric_specs=metric_specs,
+    metric_specs=adapter_spec.objectives,
 )
 
-verification_gate = VerificationGate(problem_spec=spec, runner=runner, adapter=adapter)
+verification_gate = VerificationGate(
+    problem_spec=spec,
+    runner=runner,
+    adapter=adapter,
+    strict_runtime_checks=True,
+    require_adapter_for_runtime=True,
+    operator_execute_signature=adapter_spec.operator_interface.execute_signature,
+)
 
 # --- Campaign Manager (with adapter + lower bounds) ---
 mgr = CampaignManager(
@@ -153,6 +143,7 @@ mgr = CampaignManager(
     experiment_protocol=experiment_protocol,
     verification_gate=verification_gate,
     adapter=adapter,
+    operator_execute_signature=adapter_spec.operator_interface.execute_signature,
     objective_lower_bounds={"subcategory_splits": 0.0},
 )
 

@@ -22,8 +22,10 @@ from scion.core.campaign import CampaignManager
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, CheckResult,
     ContractResult, Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    HypothesisRecord, ProtocolResult, VerificationResult,
+    HypothesisRecord, OperatorConfig, ProtocolResult, VerificationResult,
+    WeightOptimizationResult,
 )
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
 
@@ -148,6 +150,17 @@ def _build_promoted_branch(cm: CampaignManager, tmp_path: Path) -> Branch:
     return branch
 
 
+def _write_registry(path: Path, weight: float = 1.0) -> None:
+    path.write_text(
+        "operators:\n"
+        "  - name: local_search\n"
+        "    file_path: operators/local_search.py\n"
+        "    category: local_search\n"
+        "    weight: %.1f\n"
+        "    class_name: LocalSearch\n" % weight
+    )
+
+
 # ---------------------------------------------------------------------------
 # R1: _on_promote returns immediately (non-blocking)
 # ---------------------------------------------------------------------------
@@ -217,6 +230,115 @@ class TestBgThreadLaunchedAndJoins:
             assert cm._champion.version == 2, "champion version should advance to 2"
 
 
+class TestWeightOptMetricSpecsAndPersistence:
+    def test_run_optimization_passes_metric_specs(self, tmp_path, monkeypatch):
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+        specs = [
+            ObjectiveMetricSpec(name="tour_cost", direction="minimize", priority=1),
+        ]
+        mock_protocol._metric_specs = specs
+        cm = _make_campaign(tmp_path, experiment_protocol=mock_protocol)
+
+        snapshot = tmp_path / "snapshot"
+        (snapshot / "operators").mkdir(parents=True)
+        (snapshot / "operators" / "local_search.py").write_text(_VALID_CODE)
+        _write_registry(snapshot / "registry.yaml")
+
+        from scion.parameter import evaluator as evaluator_mod
+        from scion.parameter import optimizer as optimizer_mod
+
+        seen = {}
+
+        def fake_collect_baseline(*args, **kwargs):
+            return {"case": {1: {"tour_cost": 10.0}}}
+
+        def fake_evaluate_weights(**kwargs):
+            seen["metric_specs"] = kwargs.get("metric_specs")
+            return 0.0
+
+        class FakeOptimizer:
+            def __init__(self, search_space, eval_fn, seed=0):
+                self._eval_fn = eval_fn
+
+            def optimize(self, current_weights, artifacts_dir=None):
+                self._eval_fn(current_weights)
+                return WeightOptimizationResult(
+                    baseline_weights=current_weights,
+                    best_weights=current_weights,
+                    baseline_score=0.0,
+                    best_score=0.0,
+                    improved=False,
+                    n_evaluations=1,
+                    elapsed_seconds=0.0,
+                    observations_ref="",
+                )
+
+        monkeypatch.setattr(evaluator_mod, "collect_baseline", fake_collect_baseline)
+        monkeypatch.setattr(evaluator_mod, "evaluate_weights", fake_evaluate_weights)
+        monkeypatch.setattr(optimizer_mod, "RandomLocalWeightOptimizer", FakeOptimizer)
+
+        cm._run_weight_optimization(str(snapshot), 2, {"local_search": 1.0})
+
+        assert seen["metric_specs"] is specs
+
+    def test_improved_weight_revision_persists_after_main_thread_drain(self, tmp_path):
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+        cm = _make_campaign(tmp_path, experiment_protocol=mock_protocol)
+
+        staging = tmp_path / "staging"
+        (staging / "operators").mkdir(parents=True)
+        (staging / "operators" / "local_search.py").write_text(_VALID_CODE)
+        _write_registry(staging / "registry.yaml")
+
+        cm._champion = ChampionState(
+            version=2,
+            operator_pool={
+                "local_search": OperatorConfig(
+                    name="local_search",
+                    file_path="operators/local_search.py",
+                    category="local_search",
+                    weight=1.0,
+                    class_name="LocalSearch",
+                )
+            },
+            solver_config_hash="abc123",
+            code_snapshot_path=str(staging),
+            code_snapshot_hash="hash_v2",
+            promoted_at="2026-01-01T00:00:00",
+            weight_revision=0,
+        )
+
+        def improved_weight_opt(staging_path, version, current_weights):
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights={"local_search": 2.0},
+                baseline_score=0.0,
+                best_score=1.0,
+                improved=True,
+                n_evaluations=2,
+                elapsed_seconds=0.1,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = improved_weight_opt
+        cm._weight_opt_coord._bg_weight_opt_task(
+            str(staging), 2, {"local_search": 1.0}
+        )
+
+        assert cm._champion.weight_revision == 0
+        assert cm._champion_store.get_by_version_revision(2, 1) is None
+
+        cm._drain_weight_opt_events()
+
+        persisted = cm._champion_store.get_by_version_revision(2, 1)
+        assert persisted is not None
+        assert persisted.weight_revision == 1
+        assert persisted.operator_pool["local_search"].weight == 2.0
+        assert cm._champion.weight_revision == 1
+
+
 # ---------------------------------------------------------------------------
 # R4: stale bg thread result is discarded
 # ---------------------------------------------------------------------------
@@ -273,6 +395,7 @@ class TestStaleBgThreadDiscarded:
         # Join all bg threads
         for t in cm._pending_weight_opt_threads:
             t.join(timeout=5.0)
+        cm._drain_weight_opt_events()
 
         # Champion version should remain 3 and pool NOT updated to 99.0
         with cm._champion_lock:

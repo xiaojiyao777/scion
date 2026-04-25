@@ -1,6 +1,7 @@
 """Tests for T20: CampaignManager — full pipeline with MockLLMClient."""
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -219,6 +220,24 @@ class TestCampaignBasics:
         assert state["n_experiments"] == 0
         assert state["n_active_branches"] == 0
         assert state["champion_version"] == 1
+        assert "campaign_id" in state
+
+    def test_run_writes_status_json(self, tmp_path):
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol([
+                _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="fail")
+            ]),
+        )
+
+        cm.run(max_rounds=1)
+
+        status_path = tmp_path / "campaign" / "status.json"
+        assert status_path.exists()
+        status = json.loads(status_path.read_text())
+        assert status["campaign_id"] == cm.get_state()["campaign_id"]
+        assert status["total_rounds"] >= 1
+        assert "last_result" in status
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)
@@ -230,6 +249,42 @@ class TestCampaignBasics:
             termination_config=TerminationConfig(max_experiments=0)
         )
         assert cm.should_stop()
+
+    def test_pending_evaluation_queue_delays_early_stop(self, tmp_path):
+        cm = _campaign(tmp_path)
+        active = [
+            Branch(
+                branch_id=str(uuid.uuid4()),
+                state=BranchState.READY_VALIDATE,
+                base_champion_id=1,
+                base_champion_hash="h",
+            )
+        ]
+        assert cm._has_pending_evaluation(active) is True
+
+    def test_stale_queue_delays_early_stop(self, tmp_path):
+        cm = _campaign(tmp_path)
+        active = [
+            Branch(
+                branch_id=str(uuid.uuid4()),
+                state=BranchState.STALE,
+                base_champion_id=1,
+                base_champion_hash="h",
+            )
+        ]
+        assert cm._has_pending_evaluation(active) is True
+
+    def test_explore_only_queue_does_not_delay_early_stop(self, tmp_path):
+        cm = _campaign(tmp_path)
+        active = [
+            Branch(
+                branch_id=str(uuid.uuid4()),
+                state=BranchState.EXPLORE,
+                base_champion_id=1,
+                base_champion_hash="h",
+            )
+        ]
+        assert cm._has_pending_evaluation(active) is False
 
     def test_run_one_step_creates_branch(self, tmp_path):
         cm = _campaign(tmp_path, experiment_protocol=MockExperimentProtocol(
@@ -457,6 +512,34 @@ class TestFullSuccessPath:
         branch_b_state = cm._branch_ctrl.get_branch(branch_b.branch_id)
         assert branch_b_state.state == BranchState.STALE
 
+    def test_promote_snapshot_failure_does_not_commit_state(self, tmp_path, monkeypatch):
+        """PROMOTE snapshot/freeze failure must not mark branch/hypothesis/champion promoted."""
+        protocol = MockExperimentProtocol(results=[
+            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+            _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        cm.run_one_step()
+
+        def fail_freeze(path):
+            raise OSError("freeze failed")
+
+        monkeypatch.setattr(cm._materializer, "freeze_snapshot", fail_freeze)
+        result = cm.run_one_step()
+
+        assert result.decision is None
+        assert result.reason.startswith("promote_prepare_failed")
+        assert cm._champion.version == 1
+        assert bid is not None
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.state == BranchState.BLOCKED_INFRA
+        assert cm._hyp_store.get_by_status("promoted") == []
+
 
 # ---------------------------------------------------------------------------
 # Contract failure routing
@@ -624,6 +707,34 @@ class TestStalePath:
         result = cm.run_one_step()
         assert result.action == "reconcile"
         assert result.branch_id == bid
+        assert result.decision == Decision.QUEUE_VALIDATE
+        assert cm._branch_ctrl.get_branch(bid).state == BranchState.READY_VALIDATE
+        assert cm._step_history[-1].branch_id == bid
+        assert cm._step_history[-1].decision == Decision.QUEUE_VALIDATE
+
+    def test_stale_branch_reconcile_expand_uses_decision_engine(self, tmp_path):
+        """STALE reconcile preserves screening expand instead of forcing validation."""
+        protocol = MockExperimentProtocol(results=[
+            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+            _make_protocol_result(
+                ExperimentStage.SCREENING,
+                gate_outcome="expand",
+                win_rate=0.55,
+                median_delta=0.001,
+            ),
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert r1.decision == Decision.QUEUE_VALIDATE
+
+        cm._branch_ctrl.mark_all_stale(new_champion_id=2)
+        result = cm.run_one_step()
+
+        assert result.action == "reconcile"
+        assert result.decision == Decision.EXPAND_SCREENING
+        assert cm._branch_ctrl.get_branch(bid).state == BranchState.EXPLORE_EXPAND
+        assert cm._step_history[-1].decision == Decision.EXPAND_SCREENING
 
     def test_stale_branch_reconcile_with_no_patch_abandons(self, tmp_path):
         """STALE branch with no stored patch → reconcile fails → ABANDONED."""

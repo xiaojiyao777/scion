@@ -247,6 +247,8 @@ def _features(
     ci_high=None,
     budget_ratio: float = 1.0,
     branch_id: str = None,
+    statistical_status=None,
+    statistical_metric=None,
 ):
     from scion.core.models import DecisionFeatures
     return DecisionFeatures(
@@ -265,6 +267,8 @@ def _features(
         recent_retry_count=0,
         recent_failure_codes=(),
         budget_remaining_ratio=budget_ratio,
+        statistical_status=statistical_status,
+        statistical_metric=statistical_metric,
     )
 
 
@@ -399,6 +403,20 @@ def test_decision_validation_pass_to_queue_frozen():
     assert out.decision == Decision.QUEUE_FROZEN
 
 
+def test_decision_validation_hierarchical_positive_to_queue_frozen():
+    f = _features(
+        stage="validation",
+        win_rate=1.0,
+        ci_low=1.0,
+        ci_high=2.0,
+        statistical_status="positive",
+        statistical_metric="subcategory_splits",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_FROZEN
+    assert "VALIDATION_PASS_HIERARCHICAL" in out.reason_codes
+
+
 def test_decision_validation_fail_ci_negative():
     f = _features(stage="validation", win_rate=0.4, ci_low=-0.02, ci_high=-0.001)
     out = _engine.decide(f)
@@ -482,13 +500,50 @@ def test_decision_frozen_promote():
     assert out.decision == Decision.PROMOTE
 
 
+def test_decision_frozen_hierarchical_positive_promotes():
+    f = _features(
+        stage="frozen",
+        ci_low=1.0,
+        ci_high=2.0,
+        statistical_status="positive",
+        statistical_metric="subcategory_splits",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.PROMOTE
+    assert "FROZEN_PASS_HIERARCHICAL" in out.reason_codes
+
+
+def test_decision_frozen_hierarchical_uncertain_fails_even_with_positive_legacy_ci():
+    f = _features(
+        stage="frozen",
+        ci_low=0.005,
+        ci_high=0.02,
+        statistical_status="uncertain",
+        statistical_metric="subcategory_splits",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "FROZEN_FAIL_HIERARCHICAL_UNCERTAIN" in out.reason_codes
+
+
 def test_decision_frozen_fail():
     f = _features(stage="frozen", ci_low=-0.01, ci_high=0.005)
     out = _engine.decide(f)
     assert out.decision == Decision.ABANDON
 
 
-def test_decision_budget_exhausted():
+def test_decision_budget_exhausted_does_not_veto_completed_result():
     f = _features(stage="screening", budget_ratio=0.0)
     out = _engine.decide(f)
-    assert out.decision == Decision.ABANDON
+    assert out.decision == Decision.CONTINUE_EXPLORE
+
+
+def test_decision_last_budget_frozen_pass_can_promote():
+    f = _features(
+        stage="frozen",
+        ci_low=0.005,
+        ci_high=0.02,
+        budget_ratio=0.0,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.PROMOTE

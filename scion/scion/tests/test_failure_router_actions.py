@@ -65,6 +65,8 @@ def _make_campaign_handle_failure():
             # Sprint H2 T1: failure counters required by _handle_failure
             self._failure_streak = {}
             self._total_failures = {}
+            self._recent_abandoned_count = 0
+            self._hard_abandon_counted_branches = set()
             self._campaign_id = "stub-campaign"
             _registry = MagicMock()
             _registry.record_event = MagicMock()
@@ -74,6 +76,7 @@ def _make_campaign_handle_failure():
         from scion.core.campaign import CampaignManager
         _handle_failure = CampaignManager._handle_failure
         _tick_blocked_branches = CampaignManager._tick_blocked_branches
+        _record_hard_abandon = CampaignManager._record_hard_abandon
 
     stub = _Stub()
     # Register a branch in the controller so block_infra / apply_decision work
@@ -163,6 +166,7 @@ class TestRetryInfra:
         # Second infra failure → permanent abandon
         stub._handle_failure(b, _failure("infra"))
         assert b.state == BranchState.ABANDONED
+        assert stub._recent_abandoned_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +198,18 @@ class TestDiscard:
         stub._handle_failure(b, _failure("verification_heavy"))
         assert b.pending_retry is False
         assert b.consecutive_llm_retries == 0
+        assert stub._recent_abandoned_count == 0
+
+    def test_abandon_fast_increments_hard_counter_once(self):
+        stub, ctrl = _make_campaign_handle_failure()
+        b = ctrl.create_branch(_champion())
+        stub._failure_streak["verification_heavy"] = 1
+
+        stub._handle_failure(b, _failure("verification_heavy"))
+        stub._handle_failure(b, _failure("verification_heavy"))
+
+        assert b.state == BranchState.ABANDONED
+        assert stub._recent_abandoned_count == 1
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import time
+import yaml
 from pathlib import Path
 from datetime import datetime
 
@@ -17,6 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger("scion.run_v3")
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig
+from scion.problem.loader import load_problem_adapter
+from scion.problem.spec import ProblemSpecV1
 from scion.proposal.llm_client import LLMClient
 from scion.core.models import ChampionState
 from scion.runtime.workspace import WorkspaceMaterializer
@@ -32,6 +35,9 @@ CAMPAIGN_DIR = Path(
 
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
+with open(PROBLEM_DIR / "problem-v1.yaml", encoding="utf-8") as f:
+    adapter_spec = ProblemSpecV1(**yaml.safe_load(f))
+adapter = load_problem_adapter(adapter_spec)
 proto_cfg = ProtocolConfig.from_yaml(
     os.environ.get("SCION_PROTOCOL", str(PROBLEM_DIR / "protocol.yaml"))
 )
@@ -70,10 +76,18 @@ experiment_protocol = ExperimentProtocol(
     runner=runner,
     time_limit_sec=spec.solver.time_limit_sec if spec.solver else 300,
     metrics_dir=str(CAMPAIGN_DIR / "metrics"),
+    metric_specs=adapter_spec.objectives,
 )
 
 # --- Verification Gate ---
-verification_gate = VerificationGate(problem_spec=spec, runner=runner)
+verification_gate = VerificationGate(
+    problem_spec=spec,
+    runner=runner,
+    adapter=adapter,
+    strict_runtime_checks=True,
+    require_adapter_for_runtime=True,
+    operator_execute_signature=adapter_spec.operator_interface.execute_signature,
+)
 
 # --- Campaign Manager ---
 mgr = CampaignManager(
@@ -86,6 +100,8 @@ mgr = CampaignManager(
     campaign_dir=str(CAMPAIGN_DIR),
     experiment_protocol=experiment_protocol,
     verification_gate=verification_gate,
+    adapter=adapter,
+    operator_execute_signature=adapter_spec.operator_interface.execute_signature,
 )
 
 # --- Run ---
