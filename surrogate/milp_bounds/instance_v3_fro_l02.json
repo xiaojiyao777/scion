@@ -3,5 +3,15 @@
   "total_cost": 262100,
   "status": "optimal",
   "gap": 0.0,
-  "solver_time_sec": 2102.81
+  "solver_time_sec": 1174.79,
+  "solver": "CPLEX",
+  "provider": "milp",
+  "source_package": "cplex-final-20260426",
+  "source_result": "cplex-final-20260426/synthetic/instance_v3_fro_l02.json",
+  "milp_status": "optimal",
+  "milp_exact": true,
+  "milp_verified": true,
+  "oracle_feasible": true,
+  "n_orders": 215,
+  "scale": "large"
 }

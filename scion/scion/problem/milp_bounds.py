@@ -7,9 +7,10 @@ Format:
     {
         "subcategory_splits": <int>,
         "total_cost": <int>,
-        "status": "optimal" | "feasible",
-        "gap": <float>,           # MIP gap (0.0 for optimal)
-        "solver_time_sec": <float>
+        "status": "optimal" | "feasible" | "timeout",
+        "gap": <float|null>,      # MIP gap when finite
+        "solver_time_sec": <float>,
+        "solver": "CPLEX"
     }
 
 The adapter's estimate_lower_bound() reads these files.

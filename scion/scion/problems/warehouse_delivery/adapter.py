@@ -300,7 +300,9 @@ Frozen files (do not modify): {frozen}"""
         """Load precomputed MILP bounds if available.
 
         Looks for a JSON file at <root_dir>/milp_bounds/<instance_stem>.json
-        containing {"subcategory_splits": ..., "total_cost": ..., "status": "optimal"|"bound"}.
+        containing {"subcategory_splits": ..., "total_cost": ..., "status": ...}.
+        CPLEX-generated non-optimal incumbents are report-only references and
+        therefore return kind="instance" rather than kind="exact".
         """
         bounds_dir = os.path.join(self._root, "milp_bounds")
         if not os.path.isdir(bounds_dir):

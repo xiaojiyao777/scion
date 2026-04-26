@@ -127,5 +127,7 @@ gap_f2_pct = (champion_f2 - milp_f2) / milp_f2 × 100
 
 - 所有实验结果存储在 `~/research/scion-experiments/v03-validation/`
 - Campaign summary JSON + SQLite lineage database 保存完整历史
-- MILP bounds 来自 `surrogate/milp_bounds/`，78 个文件已验证
+- MILP bounds 来自 `surrogate/milp_bounds/`。截至 2026-04-26，该目录由
+  `surrogate/cplex-final-20260426/` 重新生成：78 个非 infeasible 文件，
+  其中 77 个 verified incumbent，1 个 CPLEX timeout reference。
 - 代码分支: `v0.3-dev`，实验前打 tag `v0.3-Q1-prereg`

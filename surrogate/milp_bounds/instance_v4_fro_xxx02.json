@@ -2,6 +2,16 @@
   "subcategory_splits": 570,
   "total_cost": 1720900,
   "status": "feasible",
-  "gap": Infinity,
-  "solver_time_sec": 1409.92
+  "gap": 0.0,
+  "solver_time_sec": 1347.78,
+  "solver": "CPLEX",
+  "provider": "milp",
+  "source_package": "cplex-final-20260426",
+  "source_result": "cplex-final-20260426/synthetic/instance_v4_fro_xxx02.json",
+  "milp_status": "feasible",
+  "milp_exact": false,
+  "milp_verified": true,
+  "oracle_feasible": true,
+  "n_orders": 990,
+  "scale": "xlarge"
 }
