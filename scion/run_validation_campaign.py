@@ -4,8 +4,9 @@
 Usage:
     python run_validation_campaign.py --model claude-sonnet-4-6 --seed 11
     python run_validation_campaign.py --model gpt-5.4-mini --seed 11
+    python run_validation_campaign.py --model claude-sonnet-4-6 --variant production --seed 11
 
-Outputs to: ~/research/scion-experiments/v03-post-opt/<model>_synthetic_seed<N>/
+Outputs to: ~/research/scion-experiments/<base-dir>/<model>_<variant>_seed<N>/
 """
 from __future__ import annotations
 
@@ -23,6 +24,8 @@ import yaml
 
 parser = argparse.ArgumentParser(description="v0.3 Post-Optimization Validation")
 parser.add_argument("--model", required=True, help="LLM model ID")
+parser.add_argument("--variant", default="synthetic", choices=["synthetic", "production"],
+                    help="dataset variant / split manifest to use")
 parser.add_argument("--seed", required=True, type=int)
 parser.add_argument("--max-rounds", type=int, default=100)
 parser.add_argument("--splits-weight", type=int, default=1000)
@@ -38,7 +41,7 @@ PROBLEM_DIR = SCION_DIR / "problems" / "warehouse_delivery"
 EXP_BASE = Path.home() / "research" / "scion-experiments" / args.base_dir
 
 model_short = args.model.replace("claude-", "").replace(".", "")
-campaign_name = f"{model_short}_synthetic_seed{args.seed}"
+campaign_name = f"{model_short}_{args.variant}_seed{args.seed}"
 CAMPAIGN_DIR = EXP_BASE / campaign_name
 CAMPAIGN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -56,13 +59,17 @@ for _lib in ("httpcore", "httpx", "anthropic", "openai", "urllib3"):
     logging.getLogger(_lib).setLevel(logging.WARNING)
 logger = logging.getLogger("scion.validation")
 
-MANIFEST = PROBLEM_DIR / "split_manifest.yaml"
+MANIFEST_MAP = {
+    "synthetic": PROBLEM_DIR / "split_manifest.yaml",
+    "production": PROBLEM_DIR / "split_manifest_prod.yaml",
+}
+MANIFEST = MANIFEST_MAP[args.variant]
 
 logger.info("=" * 70)
 logger.info("v0.3 Post-Optimization Validation — %s", datetime.now().isoformat())
 logger.info("=" * 70)
 logger.info("  Model     : %s", args.model)
-logger.info("  Variant   : synthetic")
+logger.info("  Variant   : %s", args.variant)
 logger.info("  Seed      : %d", args.seed)
 logger.info("  Max rounds: %d", args.max_rounds)
 logger.info("  Splits wt : %d", args.splits_weight)
@@ -153,7 +160,7 @@ t_start = time.time()
 
 config = {
     "model": args.model,
-    "variant": "synthetic",
+    "variant": args.variant,
     "seed": args.seed,
     "max_rounds": args.max_rounds,
     "splits_weight": args.splits_weight,

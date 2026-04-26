@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Scion v0.3 closure validation — 6-campaign launcher.
 
-Runs `run_validation_campaign.py` × 6 (sonnet/gpt × synthetic × seed 11/29/47)
-with a concurrency limit (default 2, matching the server's 2 cores).
+Runs `run_validation_campaign.py` × 6
+(sonnet/gpt × one variant × seed 11/29/47) with a concurrency limit
+(default 2, matching the server's 2 cores).
 
 Each campaign is a fully independent subprocess launched in its own session
 (start_new_session=True = setsid equivalent) so terminal disconnection or
@@ -18,6 +19,7 @@ Typical invocation under nohup+setsid (survives terminal disconnect):
         --base-dir v03-closure-validation \
         --max-concurrent 2 \
         --max-rounds 100 \
+        --variant synthetic \
         > ~/research/scion-experiments/v03-closure-validation/launcher.log 2>&1 &
     disown
 
@@ -43,7 +45,7 @@ from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Fixed job matrix (v0.3 closure validation)
+# Fixed model/seed matrix (v0.3 closure validation)
 # ---------------------------------------------------------------------------
 
 JOBS = [
@@ -56,9 +58,9 @@ JOBS = [
 ]
 
 
-def job_name(job: dict) -> str:
+def job_name(job: dict, variant: str) -> str:
     m = job["model"].replace("claude-", "").replace(".", "")
-    return f"{m}_synthetic_seed{job['seed']}"
+    return f"{m}_{variant}_seed{job['seed']}"
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +74,9 @@ def main() -> int:
     parser.add_argument("--max-concurrent", type=int, default=2,
                         help="max parallel campaigns (server is 2-core)")
     parser.add_argument("--max-rounds", type=int, default=100)
+    parser.add_argument("--variant", default="synthetic",
+                        choices=["synthetic", "production"],
+                        help="dataset variant / split manifest to use")
     parser.add_argument("--splits-weight", type=int, default=1000)
     parser.add_argument("--poll-interval", type=int, default=30,
                         help="seconds between completion polls")
@@ -101,7 +106,7 @@ def main() -> int:
     pending: list[dict] = []
     skipped: list[str] = []
     for job in JOBS:
-        name = job_name(job)
+        name = job_name(job, args.variant)
         summary = out_base / name / "campaign_summary.json"
         if args.skip_existing and summary.exists():
             skipped.append(name)
@@ -121,7 +126,8 @@ def main() -> int:
     def write_status() -> None:
         status_file.write_text(json.dumps({
             "base_dir": str(out_base),
-            "pending": [job_name(j) for j in pending],
+            "variant": args.variant,
+            "pending": [job_name(j, args.variant) for j in pending],
             "running": [
                 {"name": name, "pid": p.pid}
                 for name, p in running.items()
@@ -161,6 +167,7 @@ def main() -> int:
     log(f"Scion v0.3 closure validation launcher")
     log(f"  base_dir       : {out_base}")
     log(f"  max_concurrent : {args.max_concurrent}")
+    log(f"  variant        : {args.variant}")
     log(f"  max_rounds     : {args.max_rounds}")
     log(f"  splits_weight  : {args.splits_weight}")
     log(f"  to_run         : {len(pending)} campaigns")
@@ -174,11 +181,12 @@ def main() -> int:
         # Fill free slots
         while pending and len(running) < args.max_concurrent:
             job = pending.pop(0)
-            name = job_name(job)
+            name = job_name(job, args.variant)
             cmd = [
                 "/home/clawd/miniconda3/envs/claw/bin/python",
                 str(script),
                 "--model", job["model"],
+                "--variant", args.variant,
                 "--seed", str(job["seed"]),
                 "--max-rounds", str(args.max_rounds),
                 "--splits-weight", str(args.splits_weight),
