@@ -280,6 +280,63 @@ class TestSyncWeightOptMode:
         assert len(rows) == 1
         assert rows[0]["improved"] == 0
 
+    def test_sync_mode_publishes_weight_opt_status(self, tmp_path):
+        """sync weight optimization refreshes status.json during the blocking phase."""
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+
+        cm = _make_campaign(
+            tmp_path,
+            experiment_protocol=mock_protocol,
+            weight_opt_execution="sync",
+        )
+
+        publish_count = 0
+        original_write_status = cm._write_status
+
+        def counting_write_status(*args, **kwargs):
+            nonlocal publish_count
+            publish_count += 1
+            return original_write_status(*args, **kwargs)
+
+        cm._write_status = counting_write_status
+
+        def instant_weight_opt(staging_path, version, current_weights):
+            cm._weight_opt_coord._set_status(
+                version,
+                phase="evaluating_weights",
+                total_evaluations=1,
+                completed_evaluations=0,
+            )
+            cm._weight_opt_coord._set_status(
+                version,
+                phase="evaluating_weights",
+                completed_evaluations=1,
+                last_score=0.0,
+            )
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights=current_weights,
+                baseline_score=0.0,
+                best_score=0.0,
+                improved=False,
+                n_evaluations=1,
+                elapsed_seconds=0.0,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = instant_weight_opt
+
+        branch = _build_promoted_branch(cm, tmp_path)
+        cm._on_promote(branch)
+
+        assert publish_count >= 3
+        state = cm.get_state()
+        runs = state["weight_optimization"]["runs"]
+        assert runs[0]["mode"] == "sync"
+        assert runs[0]["phase"] == "completed"
+        assert runs[0]["completed_evaluations"] == 1
+
 
 class TestWeightOptMetricSpecsAndPersistence:
     def test_run_optimization_passes_metric_specs(self, tmp_path, monkeypatch):

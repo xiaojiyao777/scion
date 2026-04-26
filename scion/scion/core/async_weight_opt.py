@@ -99,6 +99,7 @@ class AsyncWeightOptCoordinator:
             current.update(updates)
             current["version"] = version
             self._active_status[version] = current
+        self._publish_status()
 
     def _finish_status(self, version: int, **updates) -> None:
         with self._status_lock:
@@ -108,6 +109,17 @@ class AsyncWeightOptCoordinator:
             current["active"] = False
             current["finished_at"] = time.time()
             self._active_status[version] = current
+        self._publish_status()
+
+    def _publish_status(self) -> None:
+        """Best-effort status.json refresh while sync/async optimization runs."""
+        writer = getattr(self._mgr, "_write_status", None)
+        if not callable(writer):
+            return
+        try:
+            writer()
+        except Exception as exc:
+            logger.debug("Weight opt status refresh failed: %s", exc)
 
     def spawn_for_promoted_champion(
         self,
@@ -466,6 +478,7 @@ class AsyncWeightOptCoordinator:
                 current["last_score"] = score
                 current["last_progress_at"] = time.time()
                 self._active_status[version] = current
+            self._publish_status()
             return score
 
         optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
