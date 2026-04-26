@@ -1,84 +1,83 @@
 # Scion Documentation Index
 
-*Last updated: 2026-04-18*
+*Last updated: 2026-04-26*
 
-本目录是 Scion 项目的活跃文档区。历史版本归档在 `archive/` 下。
+This directory is the active documentation surface for Scion. Historical sprint notes, validation drafts, and intermediate analysis are archived under `archive/`.
 
----
+## Read First
 
-## 活跃文档（当前版本 v0.2 → v0.3 过渡期）
+- [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
+- [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
+- [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
+- [../design/scion-architecture-v3.md](../design/scion-architecture-v3.md) - project architecture blueprint.
+- [../design/scion-v0.3-design.md](../design/scion-v0.3-design.md) - v0.3 design.
+- [../reviews/v0.3-design-detail-plan.md](../reviews/v0.3-design-detail-plan.md) - v0.3 detailed implementation/review plan.
+- [../reviews/v0.3-design-review-report.md](../reviews/v0.3-design-review-report.md) - v0.3 design review findings.
 
-### 权威设计
-- **[design/scion-architecture-v3.md](../design/scion-architecture-v3.md)** — 基石架构，不随版本变化
-- **[design/scion-v0.3-draft.md](../design/scion-v0.3-draft.md)** — v0.3 设计草案（开发中）
+## Active Reference
 
-### 当前状态
-- **[v0.2-final-state.md](v0.2-final-state.md)** — v0.2 完成态代码考古（技术债 D01-D17，v0.3 开发参考）
+- [experiment-quickref.md](experiment-quickref.md) - campaign and experiment operations.
+- [experiment-baseline-management.md](experiment-baseline-management.md) - git tag and baseline management.
+- [metrics-guide.md](metrics-guide.md) - metric definitions and gate interpretation.
+- [milp-model.md](milp-model.md) - warehouse-delivery MILP model reference.
+- [milp-usage-strategy.md](milp-usage-strategy.md) - MILP as report-only comparison source.
+- [glossary.md](glossary.md) - project terms.
+- [v0.2-final-state.md](v0.2-final-state.md) - v0.2 code archaeology used by v0.3.
+- [v1.0-roadmap.md](v1.0-roadmap.md) - next-version planning input.
 
-### 常驻参考（不随版本归档）
-- **[milp-model.md](milp-model.md)** — 仓配协同 MILP 数学模型
-- **[metrics-guide.md](metrics-guide.md)** — win_rate / median_delta / splits 等指标说明
-- **[glossary.md](glossary.md)** — 项目术语表
-- **[experiment-quickref.md](experiment-quickref.md)** — 实验操作速查
-- **[experiment-baseline-management.md](experiment-baseline-management.md)** — 实验基线 tag 管理
-- **[figures/](figures/)** — 实验图表（含 sprint-f6/ 历史图）
+## Historical Documents
 
----
+### `archive/v0.3/`
 
-## 归档文档
+v0.3 development history and experiment analysis:
 
-### `archive/v0.1/`
-v0.1 MVP 时期的报告与调优记录。v0.2 之后不再更新。
+- W16 experiment records: `w16-results.md`, `w16-campaign-log.md`, `sprint-w16-optimization.md`
+- F1/F2 analysis: `v0.3-f1-analysis-and-a1-reflection.md`, `v0.3-f2-analysis.md`
+- Closure validation analysis and preregistration:
+  - `v0.3-closure-validation-20260425-analysis.md`
+  - `v0.3-closure-validation-20260425-deep-analysis.md`
+  - `v0.3-closure-validation-20260425-deep-analysis.zh.md`
+  - `v0.3-closure-validation-prereg.md`
+  - `v0.3-production-closure-validation-prereg.md`
+- Two-model validation: `v0.3-two-model-validation-analysis.md`
+- Historical state snapshots: `v0.3-current-state.md.pre-*`
+- Earlier plans and assessments:
+  - `v0.3-implementation-plan.md`
+  - `v0.3-optimization-design.md`
+  - `v0.3-engineering-assessment.md`
 
-- `v0.1-completion-report.md`、`v0.1-tuning-report.md`、`v0.1.1-changelog.md`
+### `../design/archive/`
 
-### `archive/v0.2/`
-v0.2 开发全周期（Sprint A→M）的设计、实验、审查产物。
-
-- **完工报告**：`v0.2-completion-report.md`
-- **开发日志**：`v0.2-mvp-development-log.md`、`v02-uuid-fix-validation-report.md`
-- **Sprint 记录**：`sprint-g-summary.md`、`sprint-h-plan.md`、`sprint-j-plan.md` 等
-- **实验分析**：`sprint-f2/f3/f4/f6-*.md`、`sprint-f-failure-analysis.md`、`sprint-j-v3-analysis.md`
-- **Prompt 工程**：`cc-prompt-engineering-analysis.md`、`prompt-improvement-plan.md`、`operator-quality-analysis.md`
-- **Campaign 产物**：`campaign_summary.json`、`v3_campaign.log`
-- **系统性理解文档**：`understanding/` 整组 freeze（v0.3 做完再逐个更新）
-
-### `../design/archive/v0.1/`
-- v0.1 MVP 设计：`scion-v0.1-design.md`、`scion-engineering-arch-v1.md`
-
-### `../design/archive/v0.2/`
-- v0.2 完整设计系列（13 份文档）：`scion-v0.2-*.md`、`sprint-ef-plan.md`、`sprint-f-design.md`、`cc-design-reference*.md`、`case-level-feedback-v1.md`、`v0.2-remediation-plan.md`
+Historical architecture/design documents for v0.1 and v0.2.
 
 ### `../reviews/archive/`
-- v0.2 时期的 GPT-5.4-Pro 架构审查：`scion-v02-review_result.md`、`SprintF前整改任务单.md`、`phase*-review.md`、`context-manager-gap-analysis.md` 等
 
----
+Historical review reports and remediation plans, mainly from v0.2.
 
-## 活跃路径速查
+## Directory Shape
 
-```
+```text
 scion/
-├── README.md                          # 项目入口
 ├── docs/
-│   ├── README.md                      # 本索引
-│   ├── v0.2-final-state.md            # v0.2 代码考古（v0.3 参考）
-│   ├── milp-model.md                  # MILP 模型
-│   ├── metrics-guide.md               # 指标说明
-│   ├── glossary.md                    # 术语表
-│   ├── experiment-quickref.md         # 实验操作
-│   ├── experiment-baseline-management.md
-│   ├── figures/                       # 图表
-│   └── archive/                       # v0.1/v0.2 归档
+│   ├── README.md
+│   ├── v0.3-current-state.md
+│   ├── v0.3-final-validation-checklist.md
+│   ├── v0.3-code-audit-dataflow.md
+│   ├── experiment-quickref.md
+│   ├── metrics-guide.md
+│   ├── milp-model.md
+│   ├── milp-usage-strategy.md
+│   ├── v1.0-roadmap.md
+│   └── archive/
+│       └── v0.3/
 ├── design/
-│   ├── scion-architecture-v3.md       # 基石架构
-│   ├── scion-v0.3-draft.md            # v0.3 设计（开发中）
-│   └── archive/                       # v0.1/v0.2 归档
-├── reviews/
-│   ├── sprint-review.py               # review 工具
-│   └── archive/                       # v0.2 审查归档
-└── postmortem/                        # 事故复盘（不归档）
+│   ├── scion-architecture-v3.md
+│   ├── scion-v0.3-design.md
+│   └── archive/
+└── reviews/
+    ├── v0.3-design-detail-plan.md
+    ├── v0.3-design-review-report.md
+    └── archive/
 ```
 
----
-
-*维护规则：版本发布完成后，该版本的 sprint/plan/analysis/review 类文档整组 `git mv` 到 `archive/vX.Y/`，保留活跃区只有基石架构、下一版本设计、常驻参考、当前版本状态快照。*
+Maintenance rule: keep the active docs directory small. Move sprint logs, pre-registration drafts, interim experiment analysis, and superseded state snapshots into the matching `archive/vX.Y/` directory once they are no longer the current operating source.
