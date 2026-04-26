@@ -16,6 +16,10 @@ class ToyTspAdapter:
     def __init__(self, spec: ProblemSpecV1) -> None:
         self._spec = spec
 
+    @property
+    def spec(self) -> ProblemSpecV1:
+        return self._spec
+
     def render_problem_summary(self) -> str:
         return (
             "Toy TSP: find the shortest Hamiltonian cycle through N cities "

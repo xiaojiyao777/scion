@@ -21,6 +21,7 @@ class ObjectiveMetricSpec(_Strict):
     direction: Literal["minimize", "maximize"]
     priority: int
     tie_tolerance: float = 0.0
+    weight: float | None = None
 
 
 class OperatorCategorySpec(_Strict):
@@ -117,12 +118,6 @@ class ProblemSpecV1(_Strict):
 
     @model_validator(mode="after")
     def _validate_objectives(self) -> ProblemSpecV1:
-        if self.objective_policy.mode == "weighted_sum":
-            raise ValueError(
-                "objective_policy.mode='weighted_sum' is not executable yet; "
-                "define a single weighted_score objective with mode='single' for now"
-            )
-
         names = [m.name for m in self.objectives]
         if len(names) != len(set(names)):
             raise ValueError("objective metric names must be unique")
@@ -133,6 +128,23 @@ class ProblemSpecV1(_Strict):
             raise ValueError(
                 f"objective priorities must be contiguous 1..N: got {priorities}"
             )
+
+        if self.objective_policy.mode == "weighted_sum":
+            missing_weights = [m.name for m in self.objectives if m.weight is None]
+            if missing_weights:
+                raise ValueError(
+                    "weighted_sum objective policy requires weight on every objective: "
+                    f"missing {missing_weights}"
+                )
+            non_positive = [
+                m.name for m in self.objectives
+                if m.weight is not None and m.weight <= 0
+            ]
+            if non_positive:
+                raise ValueError(
+                    "weighted_sum objective weights must be positive: "
+                    f"{non_positive}"
+                )
 
         module_part = self.adapter.import_path.split(":")[0]
         expected_prefix = f"scion.problems.{self.id}."

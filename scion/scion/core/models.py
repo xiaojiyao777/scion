@@ -55,6 +55,11 @@ class HypothesisProposal:
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
+    target_objectives: Tuple[str, ...] = ()
+    protected_objectives: Tuple[str, ...] = ()
+    objective_tradeoff_policy: str = ""
+    no_op_condition: str = ""
+    risk_to_higher_priority: str = ""
 
 @dataclass
 class PatchProposal:

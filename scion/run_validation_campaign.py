@@ -31,6 +31,8 @@ parser.add_argument("--max-rounds", type=int, default=100)
 parser.add_argument("--splits-weight", type=int, default=1000)
 parser.add_argument("--base-dir", default="v03-post-opt",
                     help="subdir under ~/research/scion-experiments/ (default: v03-post-opt)")
+parser.add_argument("--protocol", default=None,
+                    help="optional explicit protocol yaml path")
 args = parser.parse_args()
 
 random.seed(args.seed)
@@ -63,7 +65,14 @@ MANIFEST_MAP = {
     "synthetic": PROBLEM_DIR / "split_manifest.yaml",
     "production": PROBLEM_DIR / "split_manifest_prod.yaml",
 }
+PROTOCOL_MAP = {
+    "synthetic": PROBLEM_DIR / "protocol.yaml",
+    "production": PROBLEM_DIR / "protocol_prod.yaml",
+}
 MANIFEST = MANIFEST_MAP[args.variant]
+PROTOCOL = Path(args.protocol).expanduser() if args.protocol else PROTOCOL_MAP[args.variant]
+if not PROTOCOL.exists():
+    raise FileNotFoundError(f"protocol file not found: {PROTOCOL}")
 
 logger.info("=" * 70)
 logger.info("v0.3 Post-Optimization Validation — %s", datetime.now().isoformat())
@@ -73,6 +82,7 @@ logger.info("  Variant   : %s", args.variant)
 logger.info("  Seed      : %d", args.seed)
 logger.info("  Max rounds: %d", args.max_rounds)
 logger.info("  Splits wt : %d", args.splits_weight)
+logger.info("  Protocol  : %s", PROTOCOL)
 logger.info("  Output    : %s", CAMPAIGN_DIR)
 logger.info("=" * 70)
 
@@ -88,12 +98,38 @@ from scion.verification.gate import VerificationGate
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 
+
+def _assert_protocol_matches_variant(
+    variant: str,
+    protocol_path: Path,
+    protocol_config: ProtocolConfig,
+) -> None:
+    """Fail fast on split/protocol mismatch.
+
+    Production and synthetic experiments use different gate/sample policies.
+    Accidentally pairing a production split with the generic protocol silently
+    changes the experiment contract, so this runner rejects that configuration.
+    """
+    marker = f"{protocol_path.name} {protocol_config.version}".lower()
+    is_prod_protocol = "prod" in marker or "production" in marker
+    if variant == "production" and not is_prod_protocol:
+        raise ValueError(
+            "variant=production requires a production protocol. "
+            f"Got {protocol_path} (version={protocol_config.version!r})."
+        )
+    if variant == "synthetic" and is_prod_protocol:
+        raise ValueError(
+            "variant=synthetic must not use a production protocol. "
+            f"Got {protocol_path} (version={protocol_config.version!r})."
+        )
+
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
 with open(PROBLEM_DIR / "problem-v1.yaml", encoding="utf-8") as fh:
     adapter_spec = ProblemSpecV1(**yaml.safe_load(fh))
 adapter = load_problem_adapter(adapter_spec)
-proto_cfg = ProtocolConfig.from_yaml(str(PROBLEM_DIR / "protocol.yaml"))
+proto_cfg = ProtocolConfig.from_yaml(str(PROTOCOL))
+_assert_protocol_matches_variant(args.variant, PROTOCOL, proto_cfg)
 split_manifest = SplitManifest.from_yaml(str(MANIFEST))
 seed_ledger = SeedLedgerConfig.from_yaml(str(PROBLEM_DIR / "seed_ledger.yaml"))
 
@@ -127,6 +163,7 @@ experiment_protocol = ExperimentProtocol(
     time_limit_sec=spec.solver.time_limit_sec if spec.solver else 300,
     metrics_dir=str(CAMPAIGN_DIR / "metrics"),
     metric_specs=adapter_spec.objectives,
+    objective_policy=adapter_spec.objective_policy,
     require_metric_specs=True,
 )
 
@@ -165,6 +202,10 @@ config = {
     "max_rounds": args.max_rounds,
     "splits_weight": args.splits_weight,
     "manifest": str(MANIFEST),
+    "protocol": str(PROTOCOL),
+    "protocol_version": proto_cfg.version,
+    "objective_policy": adapter_spec.objective_policy.model_dump(),
+    "objectives": [m.model_dump() for m in adapter_spec.objectives],
     "started_at": datetime.now().isoformat(),
     "campaign_dir": str(CAMPAIGN_DIR),
     "post_opt": True,

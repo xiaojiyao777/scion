@@ -108,14 +108,27 @@ class TestProblemSpecV1:
         assert len(spec.objectives) == 2
         assert spec.objectives[0].priority == 1
 
-    def test_weighted_policy_rejected_until_execution_semantics_exist(self) -> None:
+    def test_weighted_policy_requires_objective_weights(self) -> None:
         data = _minimal_spec_data()
         data["objective_policy"] = {
             "mode": "weighted_sum",
             "expose_weights_to_llm": True,
         }
-        with pytest.raises(ValueError, match="weighted_sum"):
+        with pytest.raises(ValueError, match="requires weight"):
             ProblemSpecV1(**data)
+
+    def test_weighted_policy_accepts_positive_weights(self) -> None:
+        data = _minimal_spec_data()
+        data["objective_policy"] = {
+            "mode": "weighted_sum",
+            "expose_weights_to_llm": True,
+        }
+        data["objectives"] = [
+            {"name": "cost", "direction": "minimize", "priority": 1, "weight": 1.0},
+        ]
+        spec = ProblemSpecV1(**data)
+        assert spec.objective_policy.mode == "weighted_sum"
+        assert spec.objectives[0].weight == 1.0
 
     def test_operator_execute_signature_validated(self) -> None:
         data = _minimal_spec_data()

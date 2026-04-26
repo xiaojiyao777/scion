@@ -83,3 +83,75 @@ def compare_lexicographic(
         scalar_delta=total_delta,
         metrics=tuple(rows),
     )
+
+
+def compare_weighted_sum(
+    metric_specs: Sequence[ObjectiveMetricSpec],
+    candidate: Mapping[str, int | float],
+    champion: Mapping[str, int | float],
+) -> ObjectiveComparison:
+    """Weighted-sum comparison driven by metric_specs weights.
+
+    The weighted objective is treated as a single scalar decision objective:
+    any positive aggregate signed delta is a win, any negative aggregate signed
+    delta is a loss. Per-metric rows retain unweighted signed deltas for
+    diagnostics, while the first row exposes the aggregate as ``weighted_sum``.
+    """
+    component_rows: list[MetricComparison] = []
+    candidate_score = 0.0
+    champion_score = 0.0
+    scalar_delta = 0.0
+    tolerance = 0.0
+
+    for spec in sorted(metric_specs, key=lambda s: s.priority):
+        weight = float(spec.weight if spec.weight is not None else 1.0)
+        cand_val = float(candidate[spec.name])
+        champ_val = float(champion[spec.name])
+
+        if spec.direction == "minimize":
+            signed_delta = champ_val - cand_val
+            candidate_score += weight * cand_val
+            champion_score += weight * champ_val
+        else:
+            signed_delta = cand_val - champ_val
+            # Convert maximize components into a minimization-compatible score.
+            candidate_score -= weight * cand_val
+            champion_score -= weight * champ_val
+
+        scalar_delta += weight * signed_delta
+        tolerance += weight * spec.tie_tolerance
+        component_rows.append(MetricComparison(
+            name=spec.name,
+            candidate_value=cand_val,
+            champion_value=champ_val,
+            signed_delta=signed_delta,
+            relation="candidate" if signed_delta > spec.tie_tolerance
+            else ("champion" if signed_delta < -spec.tie_tolerance else "tie"),
+            decisive=False,
+        ))
+
+    if scalar_delta > tolerance:
+        outcome: Literal["win", "loss", "tie"] = "win"
+        relation: Literal["candidate", "champion", "tie"] = "candidate"
+    elif scalar_delta < -tolerance:
+        outcome = "loss"
+        relation = "champion"
+    else:
+        outcome = "tie"
+        relation = "tie"
+
+    aggregate = MetricComparison(
+        name="weighted_sum",
+        candidate_value=candidate_score,
+        champion_value=champion_score,
+        signed_delta=scalar_delta,
+        relation=relation,
+        decisive=outcome != "tie",
+    )
+
+    return ObjectiveComparison(
+        outcome=outcome,
+        decisive_metric="weighted_sum" if outcome != "tie" else None,
+        scalar_delta=scalar_delta,
+        metrics=(aggregate, *component_rows),
+    )

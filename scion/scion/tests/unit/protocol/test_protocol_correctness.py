@@ -27,6 +27,7 @@ from scion.core.models import (
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci
 from scion.protocol.experiment import (
     ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
+    _select_evenly_spaced_cases,
 )
 
 
@@ -182,6 +183,31 @@ def test_case_level_majority_vote_aggregation():
     assert by_case["c2"].comparison == "loss"
     # c3: wins=1, losses=1, ties=1 — no majority, should be "tie"
     assert by_case["c3"].comparison == "tie"
+
+
+def test_case_selection_uses_manifest_spread_not_prefix():
+    cases = [f"c{i}" for i in range(10)]
+    assert _select_evenly_spaced_cases(cases, 4) == ["c0", "c3", "c6", "c9"]
+
+
+def test_weighted_sum_comparison_uses_single_scalar_objective():
+    from scion.problem.objectives import compare_weighted_sum
+    from scion.problem.spec import ObjectiveMetricSpec
+
+    specs = [
+        ObjectiveMetricSpec(name="splits", direction="minimize", priority=1, weight=10.0),
+        ObjectiveMetricSpec(name="cost", direction="minimize", priority=2, weight=1.0),
+    ]
+    # Candidate worsens splits by 1 but improves cost by 20; weighted aggregate
+    # improves by +10, so weighted-sum semantics are a win.
+    cmp = compare_weighted_sum(
+        specs,
+        candidate={"splits": 2, "cost": 80},
+        champion={"splits": 1, "cost": 100},
+    )
+    assert cmp.outcome == "win"
+    assert cmp.decisive_metric == "weighted_sum"
+    assert cmp.scalar_delta == pytest.approx(10.0)
 
 
 def test_bootstrap_ci_on_case_level_deltas():

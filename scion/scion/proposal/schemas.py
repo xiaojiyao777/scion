@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -19,6 +19,11 @@ class HypothesisProposalInput(BaseModel):
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
+    target_objectives: list[str] = Field(default_factory=list)
+    protected_objectives: list[str] = Field(default_factory=list)
+    objective_tradeoff_policy: str = ""
+    no_op_condition: str = ""
+    risk_to_higher_priority: str = ""
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -89,6 +94,28 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": ["number", "null"],
             "description": "Operator weight (0.1-3.0). Use 0.5-1.0 for unproven new operators.",
         },
+        "target_objectives": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Objective component(s) this hypothesis is expected to improve.",
+        },
+        "protected_objectives": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Higher-priority or critical objectives this hypothesis must preserve.",
+        },
+        "objective_tradeoff_policy": {
+            "type": "string",
+            "description": "How the hypothesis handles lexicographic protection or weighted-sum tradeoffs.",
+        },
+        "no_op_condition": {
+            "type": "string",
+            "description": "Condition under which the operator should return the original solution instead of risking harm.",
+        },
+        "risk_to_higher_priority": {
+            "type": "string",
+            "description": "Main risk to protected objectives and how the mechanism mitigates it.",
+        },
     },
 }
 
@@ -118,6 +145,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "Quality criteria:\n"
         "- Target a specific, named weakness in the current pool (not vague 'improvements').\n"
         "- The mechanism of improvement must be concrete and testable.\n"
+        "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
         "- Consider the solver's execution model: your operator runs ~1000 times per solve, "
         "high variance is good, rare great outcomes beat frequent mediocre ones.\n"
         "- Prefer operators that provide a CAPABILITY the pool currently LACKS.\n\n"

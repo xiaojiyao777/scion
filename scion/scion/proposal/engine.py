@@ -1,6 +1,11 @@
 """CreativeLayer — LLM-backed proposal generation (Round 1 and Round 2)."""
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import uuid
+from datetime import datetime
 from typing import Any, Dict
 
 from pydantic import ValidationError
@@ -35,10 +40,17 @@ class CreativeLayer:
     propagate to the caller (CampaignManager → FailureRouter).
     """
 
-    def __init__(self, llm_client: Any, model: str | None = None) -> None:
+    def __init__(
+        self,
+        llm_client: Any,
+        model: str | None = None,
+        *,
+        trace_dir: str | None = None,
+    ) -> None:
         self._client = llm_client
         # Inherit model from LLMClient if not explicitly set
         self._model = model or getattr(llm_client, 'model', None) or "claude-opus-4-6"
+        self._trace_dir = trace_dir
 
     # ------------------------------------------------------------------
     # Round 1 — hypothesis proposal
@@ -47,9 +59,12 @@ class CreativeLayer:
     def generate_hypothesis(self, context: Dict[str, Any]) -> HypothesisProposal:
         """Generate a HypothesisProposal using tool_use."""
         system_blocks, user_prompt = _split_hypothesis_context(context)
-        raw = self._client.call_with_tool(
-            user_prompt, HYPOTHESIS_TOOL, self._model,
+        raw = self._call_with_trace(
+            request_kind="hypothesis",
+            prompt=user_prompt,
+            tool=HYPOTHESIS_TOOL,
             system_blocks=system_blocks,
+            context=context,
         )
         return _parse_hypothesis(raw)
 
@@ -60,9 +75,12 @@ class CreativeLayer:
     def generate_code(self, context: Dict[str, Any]) -> PatchProposal:
         """Generate a PatchProposal using tool_use (API handles JSON escape)."""
         system_blocks, user_prompt = _split_code_context(context)
-        raw = self._client.call_with_tool(
-            user_prompt, PATCH_TOOL, self._model,
+        raw = self._call_with_trace(
+            request_kind="code",
+            prompt=user_prompt,
+            tool=PATCH_TOOL,
             system_blocks=system_blocks,
+            context=context,
         )
         return _parse_patch(raw)
 
@@ -73,11 +91,125 @@ class CreativeLayer:
         JSON escape issues when code_content contains complex Python.
         """
         system_blocks, user_prompt = _split_fix_context(context)
-        raw = self._client.call_with_tool(
-            user_prompt, FIX_TOOL, self._model,
+        raw = self._call_with_trace(
+            request_kind="fix",
+            prompt=user_prompt,
+            tool=FIX_TOOL,
             system_blocks=system_blocks,
+            context=context,
         )
         return _parse_patch(raw)
+
+    def _call_with_trace(
+        self,
+        *,
+        request_kind: str,
+        prompt: str,
+        tool: Dict[str, Any],
+        system_blocks: "list[dict]",
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        trace = _TraceWriter(self._trace_dir)
+        trace_path = trace.write_start(
+            request_kind=request_kind,
+            model=self._model,
+            tool=tool,
+            prompt=prompt,
+            system_blocks=system_blocks,
+            context=context,
+        )
+        try:
+            raw = self._client.call_with_tool(
+                prompt, tool, self._model,
+                system_blocks=system_blocks,
+            )
+        except Exception as exc:
+            trace.write_finish(trace_path, ok=False, error=str(exc))
+            raise
+        trace.write_finish(trace_path, ok=True, response=raw)
+        return raw
+
+
+class _TraceWriter:
+    """Persist prompt/response artifacts for experiment auditability."""
+
+    def __init__(self, trace_dir: str | None) -> None:
+        self._trace_dir = trace_dir
+
+    def write_start(
+        self,
+        *,
+        request_kind: str,
+        model: str,
+        tool: Dict[str, Any],
+        prompt: str,
+        system_blocks: "list[dict]",
+        context: Dict[str, Any],
+    ) -> str | None:
+        if not self._trace_dir:
+            return None
+        os.makedirs(self._trace_dir, exist_ok=True)
+        digest = _prompt_hash(system_blocks, prompt)
+        trace_id = (
+            f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_"
+            f"{request_kind}_{digest[:10]}_{uuid.uuid4().hex[:8]}"
+        )
+        path = os.path.join(self._trace_dir, f"{trace_id}.json")
+        payload = {
+            "trace_id": trace_id,
+            "request_kind": request_kind,
+            "model": model,
+            "tool_name": tool.get("name"),
+            "prompt_hash": digest,
+            "created_at": datetime.now().isoformat(),
+            "branch_id": context.get("branch_id"),
+            "champion_version": context.get("champion_version"),
+            "system_blocks": system_blocks,
+            "user_prompt": prompt,
+            "tool_schema": tool.get("input_schema") or tool.get("function", {}).get("parameters"),
+            "ok": None,
+        }
+        _write_json(path, payload)
+        return path
+
+    def write_finish(
+        self,
+        path: str | None,
+        *,
+        ok: bool,
+        response: Dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        payload.update({
+            "finished_at": datetime.now().isoformat(),
+            "ok": ok,
+        })
+        if response is not None:
+            payload["response"] = response
+        if error is not None:
+            payload["error"] = error
+        _write_json(path, payload)
+
+
+def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
+    blob = json.dumps(
+        {"system_blocks": system_blocks, "user_prompt": prompt},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _write_json(path: str, payload: Dict[str, Any]) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, ensure_ascii=False, default=str)
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +231,11 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         target_weakness=validated.target_weakness,
         expected_effect=validated.expected_effect,
         suggested_weight=validated.suggested_weight,
+        target_objectives=tuple(validated.target_objectives or ()),
+        protected_objectives=tuple(validated.protected_objectives or ()),
+        objective_tradeoff_policy=validated.objective_tradeoff_policy,
+        no_op_condition=validated.no_op_condition,
+        risk_to_higher_priority=validated.risk_to_higher_priority,
     )
 
 
@@ -154,11 +291,12 @@ def _split_hypothesis_context(
         "You are a research agent optimising a combinatorial optimisation solver's operator pool.\n"
         "Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{D['objective_policy_guidance']}\n\n"
         f"## How the VNS Solver Uses Operators\n"
         f"- The solver maintains a pool of 40 candidate solutions, sorted by objective.\n"
         f"- Each iteration: for EACH solution in the pool, ONE operator is randomly selected (weighted) and applied.\n"
         f"- If the result is INFEASIBLE (violates any hard constraint), it is DISCARDED.\n"
-        f"- Pool update: new + old solutions merged, top 40 by lexicographic objective kept.\n"
+        f"- Pool update: new + old solutions merged, top 40 by the problem objective policy kept.\n"
         f"- Runs 200 iterations or until 30 consecutive no-improvement iterations.\n"
         f"- Total: ~8000 operator invocations per solve run.\n\n"
         f"Design implications for new operators:\n"
@@ -211,6 +349,8 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Strategy Guidance\n{D['strategy_guidance']}"
         )
+    if D["search_control_guidance"]:
+        branch_context_parts.append(D["search_control_guidance"])
     if D["champion_baselines"]:
         branch_context_parts.append(
             f"## Champion Baseline Hints\n{D['champion_baselines']}"
@@ -226,6 +366,8 @@ def _split_hypothesis_context(
     # L2: Objective improvement guidance (tendency-based)
     if D.get("objective_guidance"):
         branch_context_parts.append(D["objective_guidance"])
+    if D.get("objective_opportunity_profile"):
+        branch_context_parts.append(D["objective_opportunity_profile"])
     # J6: Weight optimization feedback
     if D["weight_opt_feedback"]:
         branch_context_parts.append(D["weight_opt_feedback"])
@@ -254,10 +396,12 @@ def _split_hypothesis_context(
         f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
-        f"1. Read EVERY champion operator. For each, note: what move type, what objective it targets, what it cannot improve.\n"
+        f"1. Read EVERY champion operator. For each, note: what move type, what objective(s) it improves or protects, what it cannot improve.\n"
         f"2. Identify specific GAPS \u2014 what improvements are IMPOSSIBLE with the current pool?\n"
         f"3. Check experiment history \u2014 which attempts at filling gaps failed, and WHY?\n"
-        f"4. Only then propose a hypothesis targeting an identified gap.\n\n"
+        f"4. Only then propose a hypothesis targeting an identified gap.\n"
+        f"5. In the hypothesis text, state target objective(s), protected objective(s), "
+        f"and the no-op condition that avoids harming protected objectives.\n\n"
         f"If your hypothesis duplicates an existing operator's capability (even partially), it will be REJECTED.\n\n"
         f"## Task\n"
         f"Propose ONE new hypothesis for improving the solver.\n"

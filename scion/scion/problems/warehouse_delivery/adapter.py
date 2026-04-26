@@ -24,6 +24,10 @@ class WarehouseDeliveryAdapter:
         self._oracle_mod: Any = None
         self._models_mod: Any = None
 
+    @property
+    def spec(self) -> ProblemSpecV1:
+        return self._spec
+
     # --- lazy import of surrogate modules ---
 
     def _ensure_modules(self) -> None:
@@ -43,21 +47,24 @@ class WarehouseDeliveryAdapter:
         ) if self._spec.operator_interface else "vehicle_level, order_level"
         editable = ", ".join(self._spec.search_space.editable)
         frozen = ", ".join(self._spec.search_space.frozen)
+        objective_policy = _render_objective_policy(self._spec)
+        objective_implication = _render_objective_implication(self._spec)
 
         return f"""\
 Name: {self._spec.display_name}
 Description: {self._spec.description or 'Warehouse Delivery Assignment'}
 
-### Objective Function (lexicographic — minimize all three in order):
-1. subcategory_splits: For each unique `vehicle_subcategory` value across all orders,
-   count how many distinct vehicles contain orders of that subcategory, subtract 1,
-   then sum. Formula: sum(len(vehicles_containing_subcat) - 1 for each subcategory)
-2. total_cost: sum(VEHICLE_TYPES[v.vehicle_type].cost for all non-empty vehicles)
-   Vehicle costs: T3=800, T5=1200, T10=1800, HQ40=3300, HQ40_DG=6600
-3. solve_time_ms: wall-clock time (external, not operator-controlled)
+### Objective Function
+{objective_policy}
 
-Key implication: ANY increase in subcategory_splits makes the solution strictly worse,
-regardless of cost improvement. Cost only matters when splits are equal.
+Metric definitions:
+- subcategory_splits: For each unique `vehicle_subcategory` value across all orders,
+  count how many distinct vehicles contain orders of that subcategory, subtract 1,
+  then sum. Formula: sum(len(vehicles_containing_subcat) - 1 for each subcategory)
+- total_cost: sum(VEHICLE_TYPES[v.vehicle_type].cost for all non-empty vehicles)
+  Vehicle costs: T3=800, T5=1200, T10=1800, HQ40=3300, HQ40_DG=6600
+
+{objective_implication}
 
 ### How the Initial Solution is Built (greedy_init)
 Orders are grouped by (vehicle_category, vehicle_subcategory, pickup_city).
@@ -66,10 +73,13 @@ When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the 
 Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.
 Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.
 
-To reduce splits, an operator must consolidate orders so a subcategory fits in fewer vehicles.
-This typically means: merging two partially-filled vehicles of the SAME vehicle_subcategory,
+To reduce splits, an operator typically consolidates orders so a subcategory fits in
+fewer vehicles: merging partially-filled vehicles of the SAME vehicle_subcategory,
 or moving orders between vehicles to free up space for same-subcategory consolidation.
-Random order moves between arbitrary vehicles are unlikely to improve splits.
+To reduce cost while preserving splits, an operator typically downsizes, merges
+under-filled compatible vehicles, or removes vehicles without spreading a subcategory
+across more vehicles. Random order moves between arbitrary vehicles are unlikely to
+improve either metric reliably.
 
 ### Worked Example (Small Instance)
 Instance: 6 orders, 2 subcategories, all Shenzhen region
@@ -124,7 +134,7 @@ Frozen files (do not modify): {frozen}"""
 - `Order` (complete field list — use these EXACT attribute names):
   - `order_id: str` — unique identifier
   - `vehicle_category: int` — large category (feasibility H4: same vehicle must have same category)
-  - `vehicle_subcategory: int` — sub-category (**PRIMARY optimization target**: minimize splits of this across vehicles)
+  - `vehicle_subcategory: int` — sub-category used by the priority-1 split metric
   - `urgent: bool` — urgency flag
   - `hazard_flag: bool` — True if order contains hazardous goods
   - `hazard_quantity: int` — hazardous goods quantity in pcs (>1800 requires HQ40_DG)
@@ -331,6 +341,66 @@ Frozen files (do not modify): {frozen}"""
             kind=kind,
             note=f"MILP {kind} from {len(values)} instances",
         )
+
+
+def _render_objective_policy(spec: ProblemSpecV1) -> str:
+    ordered = sorted(spec.objectives, key=lambda obj: obj.priority)
+    if spec.objective_policy.mode == "weighted_sum":
+        lines = [
+            "Policy: weighted_sum. The decision objective is one weighted scalar; "
+            "any positive weighted aggregate improvement is valuable."
+        ]
+        if spec.objective_policy.expose_weights_to_llm:
+            for obj in ordered:
+                lines.append(
+                    f"- {obj.name}: direction={obj.direction}, "
+                    f"weight={obj.weight}, tie_tolerance={obj.tie_tolerance}"
+                )
+        else:
+            for obj in ordered:
+                lines.append(
+                    f"- {obj.name}: direction={obj.direction}, "
+                    f"tie_tolerance={obj.tie_tolerance}"
+                )
+        return "\n".join(lines)
+
+    if spec.objective_policy.mode == "single":
+        obj = ordered[0]
+        return (
+            f"Policy: single objective. Decision metric is `{obj.name}` "
+            f"({obj.direction}, tie_tolerance={obj.tie_tolerance})."
+        )
+
+    lines = [
+        "Policy: lexicographic. Compare objectives in priority order; a lower-priority "
+        "objective matters only when all higher-priority objectives tie within tolerance."
+    ]
+    for obj in ordered:
+        lines.append(
+            f"- priority {obj.priority}: {obj.name} "
+            f"({obj.direction}, tie_tolerance={obj.tie_tolerance})"
+        )
+    return "\n".join(lines)
+
+
+def _render_objective_implication(spec: ProblemSpecV1) -> str:
+    if spec.objective_policy.mode == "weighted_sum":
+        return (
+            "Key implication for weighted-sum specs: an operator may improve any "
+            "component if the weighted aggregate improves. Higher-weight components "
+            "have larger marginal value, but feasibility constraints remain hard."
+        )
+    if spec.objective_policy.mode == "single":
+        return (
+            "Key implication for single-objective specs: an operator is useful when "
+            "it measurably improves the decision metric without violating hard constraints."
+        )
+    return (
+        "Key implication for lexicographic specs: an operator may improve any metric, "
+        "but lower-priority gains are only decision-relevant when all higher-priority "
+        "metrics are preserved within tolerance. Lower-priority moves should include "
+        "a guard that returns the original solution if they would harm a protected metric."
+    )
 
 
 # ---------------------------------------------------------------------------

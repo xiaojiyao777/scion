@@ -166,7 +166,10 @@ class CampaignManager:
         self._decision_engine = DecisionEngine(protocol_config)
         self._feature_extractor = SafeFeatureExtractor()
         self._failure_router = FailureRouter(retry_config or RetryConfig())
-        self._creative = CreativeLayer(llm_client)
+        self._creative = CreativeLayer(
+            llm_client,
+            trace_dir=f"{campaign_dir}/llm_traces",
+        )
         # _ctx_manager now backed by ProblemRuntime (see property below).
 
         # O1: Hypothesis family classifier (keyword-only if no LLM client)

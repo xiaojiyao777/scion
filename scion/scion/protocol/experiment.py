@@ -26,7 +26,7 @@ from scion.protocol.gates import (
 )
 
 if TYPE_CHECKING:
-    from scion.problem.spec import ObjectiveMetricSpec
+    from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +86,41 @@ class SeedLedger:
         return list(self._ledger.canary)
 
 
+def _select_evenly_spaced_cases(all_cases: Sequence[str], n: int) -> List[str]:
+    """Select a deterministic spread across the manifest instead of a prefix.
+
+    Split manifests are often ordered by generation family, size, or creation
+    time. Prefix selection can accidentally make screening blind to later
+    strata. Even spacing keeps runs reproducible while covering the full split.
+    """
+    cases = list(all_cases)
+    total = len(cases)
+    if n <= 0:
+        return []
+    if n >= total:
+        return cases
+    if n == 1:
+        return [cases[total // 2]]
+
+    indices = [round(i * (total - 1) / (n - 1)) for i in range(n)]
+    # ``round`` should be unique for n <= total, but keep a deterministic
+    # fill path for small edge cases and future Python behavior changes.
+    selected = []
+    seen: set[int] = set()
+    for idx in indices:
+        if idx not in seen:
+            selected.append(idx)
+            seen.add(idx)
+    for idx in range(total):
+        if len(selected) >= n:
+            break
+        if idx not in seen:
+            selected.append(idx)
+            seen.add(idx)
+
+    return [cases[i] for i in sorted(selected[:n])]
+
+
 # ---------------------------------------------------------------------------
 # ExperimentProtocol
 # ---------------------------------------------------------------------------
@@ -101,6 +136,7 @@ class ExperimentProtocol:
         metrics_dir: str = "/tmp/scion_metrics",
         *,
         metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
+        objective_policy: "ObjectivePolicySpec | None" = None,
         require_metric_specs: bool = False,
     ) -> None:
         self.config = protocol_config
@@ -110,6 +146,7 @@ class ExperimentProtocol:
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
         self._metric_specs = metric_specs
+        self._objective_policy = objective_policy
         self._require_metric_specs = require_metric_specs
         self._progress_callback: Optional[Callable[..., None]] = None
         if self._require_metric_specs and self._metric_specs is None:
@@ -144,10 +181,16 @@ class ExperimentProtocol:
     ) -> tuple:
         """Return (comparison_str, ObjectiveComparison)."""
         if self._metric_specs is not None:
-            from scion.problem.objectives import compare_lexicographic
-            result = compare_lexicographic(
-                self._metric_specs, candidate_objective, champion_objective,
-            )
+            if getattr(self._objective_policy, "mode", None) == "weighted_sum":
+                from scion.problem.objectives import compare_weighted_sum
+                result = compare_weighted_sum(
+                    self._metric_specs, candidate_objective, champion_objective,
+                )
+            else:
+                from scion.problem.objectives import compare_lexicographic
+                result = compare_lexicographic(
+                    self._metric_specs, candidate_objective, champion_objective,
+                )
             return result.outcome, result
         if self._require_metric_specs:
             raise RuntimeError("metric_specs are required for objective comparison")
@@ -188,10 +231,16 @@ class ExperimentProtocol:
         champion_objective: dict,
     ) -> float:
         if self._metric_specs is not None:
-            from scion.problem.objectives import compare_lexicographic
-            result = compare_lexicographic(
-                self._metric_specs, candidate_objective, champion_objective,
-            )
+            if getattr(self._objective_policy, "mode", None) == "weighted_sum":
+                from scion.problem.objectives import compare_weighted_sum
+                result = compare_weighted_sum(
+                    self._metric_specs, candidate_objective, champion_objective,
+                )
+            else:
+                from scion.problem.objectives import compare_lexicographic
+                result = compare_lexicographic(
+                    self._metric_specs, candidate_objective, champion_objective,
+                )
             return result.scalar_delta
         if self._require_metric_specs:
             raise RuntimeError("metric_specs are required for objective delta")
@@ -303,7 +352,7 @@ class ExperimentProtocol:
         else:
             return all_cases
 
-        return all_cases[:n]
+        return _select_evenly_spaced_cases(all_cases, n)
 
     def _select_seeds(self, stage: ExperimentStage) -> List[int]:
         """Return the fixed seed list for the stage (T4: seeds never expanded)."""
@@ -475,10 +524,16 @@ class ExperimentProtocol:
             # T2: stats computed on case-level comparisons/deltas.
             # F3: when metric_specs are present, gate CI is computed
             # hierarchically by objective priority instead of one raw scalar.
-            metric_order = (
-                [m.name for m in sorted(self._metric_specs, key=lambda s: s.priority)]
-                if self._metric_specs is not None else None
-            )
+            if (
+                self._metric_specs is not None
+                and getattr(self._objective_policy, "mode", None) == "weighted_sum"
+            ):
+                metric_order = ["weighted_sum"]
+            else:
+                metric_order = (
+                    [m.name for m in sorted(self._metric_specs, key=lambda s: s.priority)]
+                    if self._metric_specs is not None else None
+                )
             stats = compute_eval_stats(
                 case_comparisons,
                 case_deltas,
