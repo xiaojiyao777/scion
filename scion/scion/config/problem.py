@@ -38,6 +38,8 @@ class ParameterSearchConfig(_StrictBase):
     trigger: Literal["on_promote"] = "on_promote"
     target: Literal["operator_weights"] = "operator_weights"
     strategy: Literal["random_local", "bayesian"] = "random_local"
+    execution: Literal["async", "sync"] = "async"
+    final_wait_timeout_sec: Optional[float] = 600.0
     n_initial_random: int = 8
     n_iterations: int = 16
     n_eval_seeds: int = 2

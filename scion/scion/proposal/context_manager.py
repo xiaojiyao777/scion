@@ -497,6 +497,7 @@ def _build_objective_opportunity_profile(
         "Recent screening gates: "
         + ", ".join(f"{k}={v}" for k, v in sorted(gate_counts.items()))
     )
+    objective_stats: dict[str, dict[str, float]] = {}
     for name in ordered_names:
         vals = values_by_metric.get(name, [])
         if not vals:
@@ -505,6 +506,16 @@ def _build_objective_opportunity_profile(
         neg = sum(1 for v in vals if v < 0)
         tie = len(vals) - pos - neg
         med = _median(vals)
+        objective_stats[name] = {
+            "n": float(len(vals)),
+            "pos": float(pos),
+            "neg": float(neg),
+            "tie": float(tie),
+            "median": float(med),
+            "decisive_wins": float(decisive_wins.get(name, 0)),
+            "decisive_losses": float(decisive_losses.get(name, 0)),
+            "targeted_recently": float(target_counts.get(name, 0)),
+        }
         spec = spec_by_name.get(name)
         descriptor = ""
         if spec is not None:
@@ -522,6 +533,13 @@ def _build_objective_opportunity_profile(
 
     if not values_by_metric:
         return ""
+    steering = _build_objective_steering(
+        objective_specs=objective_specs,
+        objective_stats=objective_stats,
+        mode=mode,
+    )
+    if steering:
+        lines.append(steering)
     lines.append(
         "Interpretation: positive deltas are observed marginal gains; negative "
         "deltas identify protected objectives or mechanisms that need no-op guards. "
@@ -529,6 +547,62 @@ def _build_objective_opportunity_profile(
         "under-tested objective/locus combinations."
     )
     return "\n".join(lines)
+
+
+def _build_objective_steering(
+    *,
+    objective_specs: List[Any],
+    objective_stats: dict[str, dict[str, float]],
+    mode: str,
+) -> str:
+    """Render generic target/protect guidance from observed marginal movement."""
+    if not objective_specs:
+        return ""
+
+    if mode == "lexicographic":
+        protected: list[str] = []
+        recommended = ""
+        for obj in objective_specs:
+            stats = objective_stats.get(obj.name)
+            if not stats:
+                continue
+            n = max(stats.get("n", 0.0), 1.0)
+            moved = (
+                stats.get("pos", 0.0)
+                + stats.get("neg", 0.0)
+                + stats.get("decisive_wins", 0.0)
+                + stats.get("decisive_losses", 0.0)
+            )
+            tie_ratio = stats.get("tie", 0.0) / n
+            is_stable = tie_ratio >= 0.8 and moved == 0.0
+            if is_stable:
+                protected.append(obj.name)
+                continue
+            if protected:
+                recommended = obj.name
+                break
+            recommended = obj.name
+            break
+        if protected and recommended:
+            return (
+                "Objective Steering: recent screening suggests "
+                f"{', '.join(protected)} is acting like a protected/stable "
+                f"higher-priority dimension. Prefer hypotheses targeting "
+                f"{recommended} while preserving {', '.join(protected)}; avoid "
+                "more direct protected-objective mechanisms unless they introduce "
+                "a genuinely new capability."
+            )
+
+    if mode == "weighted_sum":
+        weighted = objective_stats.get("weighted_sum")
+        if weighted and weighted.get("n", 0.0) > 0:
+            return (
+                "Objective Steering: optimize the weighted aggregate directly. "
+                "A component-level change is valuable only when it improves the "
+                "aggregate score after tradeoffs."
+            )
+
+    return ""
 
 
 def _build_search_control_guidance(

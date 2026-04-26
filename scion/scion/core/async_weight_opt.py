@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List, Optional
 
@@ -57,6 +58,8 @@ class AsyncWeightOptCoordinator:
         self._pending_threads: List[threading.Thread] = []
         self._completed_events: List[WeightOptCompletionEvent] = []
         self._events_lock = threading.Lock()
+        self._status_lock = threading.Lock()
+        self._active_status: dict[int, dict] = {}
         self._latest_result: Optional[Any] = None
 
     # ------------------------------------------------------------------
@@ -80,6 +83,32 @@ class AsyncWeightOptCoordinator:
     def pending_count(self) -> int:
         return len(self._pending_threads)
 
+    def status_snapshot(self) -> dict:
+        """Return lightweight weight-optimization status for status.json."""
+        with self._status_lock:
+            runs = [dict(v) for v in self._active_status.values()]
+        return {
+            "pending_threads": sum(1 for t in self._pending_threads if t.is_alive()),
+            "active": [r for r in runs if r.get("active")],
+            "runs": runs,
+        }
+
+    def _set_status(self, version: int, **updates) -> None:
+        with self._status_lock:
+            current = dict(self._active_status.get(version, {}))
+            current.update(updates)
+            current["version"] = version
+            self._active_status[version] = current
+
+    def _finish_status(self, version: int, **updates) -> None:
+        with self._status_lock:
+            current = dict(self._active_status.get(version, {}))
+            current.update(updates)
+            current["version"] = version
+            current["active"] = False
+            current["finished_at"] = time.time()
+            self._active_status[version] = current
+
     def spawn_for_promoted_champion(
         self,
         staging_path: str,
@@ -95,6 +124,14 @@ class AsyncWeightOptCoordinator:
         param_cfg = self._mgr._spec.parameter_search
         if not (param_cfg.enabled and self._mgr._experiment_protocol is not None):
             return
+        self._set_status(
+            version,
+            mode="async",
+            phase="queued",
+            active=True,
+            started_at=time.time(),
+            base_weight_revision=base_weight_revision,
+        )
         t = threading.Thread(
             target=self._bg_weight_opt_task,
             args=(staging_path, version, current_weights, base_weight_revision),
@@ -118,6 +155,39 @@ class AsyncWeightOptCoordinator:
             )
         for t in self._pending_threads:
             t.join(timeout=timeout)
+        still_alive = [t for t in self._pending_threads if t.is_alive()]
+        if still_alive:
+            logger.warning(
+                "%d background weight opt thread(s) still running after wait timeout",
+                len(still_alive),
+            )
+
+    def run_for_promoted_champion_sync(
+        self,
+        staging_path: str,
+        version: int,
+        current_weights: dict,
+        base_weight_revision: int = 0,
+    ) -> None:
+        """Run weight optimization inline for resource-constrained campaigns."""
+        param_cfg = self._mgr._spec.parameter_search
+        if not (param_cfg.enabled and self._mgr._experiment_protocol is not None):
+            return
+        self._set_status(
+            version,
+            mode="sync",
+            phase="queued",
+            active=True,
+            started_at=time.time(),
+            base_weight_revision=base_weight_revision,
+        )
+        self._run_weight_opt_task(
+            staging_path,
+            version,
+            current_weights,
+            base_weight_revision=base_weight_revision,
+            mode="sync",
+        )
 
     def drain_completed_events(self) -> List[WeightOptCompletionEvent]:
         """Return and clear completed optimization events.
@@ -146,12 +216,38 @@ class AsyncWeightOptCoordinator:
         The worker may create immutable snapshot artifacts, but campaign state
         changes are committed later by CampaignManager on the main loop boundary.
         """
+        self._run_weight_opt_task(
+            staging_path,
+            version,
+            current_weights,
+            base_weight_revision=base_weight_revision,
+            mode="async",
+        )
+
+    def _run_weight_opt_task(
+        self,
+        staging_path: str,
+        version: int,
+        current_weights: dict,
+        base_weight_revision: int = 0,
+        mode: str = "async",
+    ) -> None:
+        """Run optimization and enqueue a main-thread commit event."""
         import os as _os
         import shutil as _shutil
         import time as _time
         from scion.runtime.workspace import _make_tree_writable
         from pathlib import Path as _Path
 
+        label = "Background" if mode == "async" else "Synchronous"
+        self._set_status(
+            version,
+            mode=mode,
+            phase="running",
+            active=True,
+            started_at=time.time(),
+            base_weight_revision=base_weight_revision,
+        )
         t0 = _time.monotonic()
         try:
             # Call through the manager so that test monkey-patches of
@@ -160,18 +256,20 @@ class AsyncWeightOptCoordinator:
                 staging_path, version, current_weights
             )
         except Exception as exc:
-            logger.error("Background weight opt failed for champion v%d: %s", version, exc)
+            logger.error("%s weight opt failed for champion v%d: %s", label, version, exc)
+            self._finish_status(version, phase="failed", error=str(exc))
             return
 
         elapsed_min = (_time.monotonic() - t0) / 60.0
 
         if opt_result is None:
+            self._finish_status(version, phase="skipped", elapsed_minutes=elapsed_min)
             return
 
         if not opt_result.improved:
             logger.info(
-                "Background weight opt complete for champion v%d (%.1f min) — no improvement",
-                version, elapsed_min,
+                "%s weight opt complete for champion v%d (%.1f min) — no improvement",
+                label, version, elapsed_min,
             )
             self._enqueue_event(WeightOptCompletionEvent(
                 version=version,
@@ -180,6 +278,13 @@ class AsyncWeightOptCoordinator:
                 elapsed_minutes=elapsed_min,
                 improved=False,
             ))
+            self._finish_status(
+                version,
+                phase="completed",
+                improved=False,
+                elapsed_minutes=elapsed_min,
+                n_evaluations=opt_result.n_evaluations,
+            )
             return
 
         new_revision = base_weight_revision + 1
@@ -202,9 +307,10 @@ class AsyncWeightOptCoordinator:
             self._mgr._materializer.freeze_snapshot(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "Background weight opt: failed to create snapshot for champion v%d_r%d: %s",
-                version, new_revision, exc,
+                "%s weight opt: failed to create snapshot for champion v%d_r%d: %s",
+                label, version, new_revision, exc,
             )
+            self._finish_status(version, phase="failed", error=str(exc))
             return
 
         # Recompute hash and read updated pool
@@ -214,14 +320,15 @@ class AsyncWeightOptCoordinator:
             new_hash = self._mgr._materializer.compute_snapshot_hash(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "Background weight opt: failed to recompute hash for champion v%d_r%d: %s",
-                version, new_revision, exc,
+                "%s weight opt: failed to recompute hash for champion v%d_r%d: %s",
+                label, version, new_revision, exc,
             )
+            self._finish_status(version, phase="failed", error=str(exc))
             return
 
         logger.info(
-            "Background weight opt prepared champion v%d_r%d (%.1f min)",
-            version, new_revision, elapsed_min,
+            "%s weight opt prepared champion v%d_r%d (%.1f min)",
+            label, version, new_revision, elapsed_min,
         )
         self._enqueue_event(WeightOptCompletionEvent(
             version=version,
@@ -234,6 +341,14 @@ class AsyncWeightOptCoordinator:
             snapshot_hash=new_hash,
             operator_pool=new_pool,
         ))
+        self._finish_status(
+            version,
+            phase="completed",
+            improved=True,
+            elapsed_minutes=elapsed_min,
+            n_evaluations=opt_result.n_evaluations,
+            new_revision=new_revision,
+        )
 
     def _enqueue_event(self, event: WeightOptCompletionEvent) -> None:
         with self._events_lock:
@@ -263,18 +378,21 @@ class AsyncWeightOptCoordinator:
         from scion.parameter.search_space import ParameterSearchSpace
 
         param_cfg = self._mgr._spec.parameter_search
+        self._set_status(version, phase="preparing_workspace")
 
         # Locate runner
         runner = getattr(self._mgr._experiment_protocol, 'runner',
                          getattr(self._mgr._experiment_protocol, '_runner', None))
         if runner is None:
             logger.warning("No runner available for weight optimization")
+            self._finish_status(version, phase="skipped", reason="missing_runner")
             return None
 
         # Require a registry.yaml in the snapshot
         registry_path = _os.path.join(champion_snapshot, "registry.yaml")
         if not _os.path.exists(registry_path):
             logger.warning("No registry.yaml in snapshot %s; skipping weight opt", champion_snapshot)
+            self._finish_status(version, phase="skipped", reason="missing_registry")
             return None
 
         # Create evaluation workspace (isolated copy of champion snapshot)
@@ -302,6 +420,17 @@ class AsyncWeightOptCoordinator:
         time_limit = getattr(getattr(self._mgr._spec, 'solver', None), 'time_limit_sec', 300)
 
         operator_names = tuple(current_weights.keys())
+        total_evaluations = 1 + param_cfg.n_initial_random + param_cfg.n_iterations
+        self._set_status(
+            version,
+            phase="baseline",
+            n_cases=len(resolved_cases),
+            n_seeds=len(seeds),
+            n_operators=len(operator_names),
+            total_evaluations=total_evaluations,
+            completed_evaluations=0,
+            estimated_solver_runs=len(resolved_cases) * len(seeds) * (1 + total_evaluations),
+        )
 
         # Collect baseline objectives for evaluate_weights comparisons
         baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
@@ -320,7 +449,8 @@ class AsyncWeightOptCoordinator:
         )
 
         def eval_fn(weights):
-            return evaluate_weights(
+            self._set_status(version, phase="evaluating_weights")
+            score = evaluate_weights(
                 weights=weights,
                 workspace=eval_ws,
                 cases=resolved_cases,
@@ -330,6 +460,13 @@ class AsyncWeightOptCoordinator:
                 baseline_objectives=baseline,
                 metric_specs=metric_specs,
             )
+            with self._status_lock:
+                current = dict(self._active_status.get(version, {}))
+                current["completed_evaluations"] = current.get("completed_evaluations", 0) + 1
+                current["last_score"] = score
+                current["last_progress_at"] = time.time()
+                self._active_status[version] = current
+            return score
 
         optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
         if getattr(param_cfg, 'strategy', 'random_local') == 'bayesian':
@@ -340,6 +477,7 @@ class AsyncWeightOptCoordinator:
         _os.makedirs(artifacts_dir, exist_ok=True)
 
         # T1: pass current_weights so optimizer evaluates true baseline first
+        self._set_status(version, phase="optimizing")
         result = optimizer.optimize(current_weights, artifacts_dir=artifacts_dir)
 
         try:

@@ -426,8 +426,15 @@ class CampaignManager:
             final_reason = "max_rounds_exhausted"
         self._last_stop_reason = final_reason
         self._write_campaign_summary()
-        # R5: join all pending weight opt threads (up to 10 min each)
-        self._weight_opt_coord.wait_all(timeout=600)
+        # R5: join pending async weight opt threads according to campaign config.
+        # In formal sync mode this is normally a no-op; in async mode this is
+        # the finalization guard that prevents half-closed champion lineage.
+        final_wait_timeout = getattr(
+            self._spec.parameter_search,
+            "final_wait_timeout_sec",
+            600.0,
+        )
+        self._weight_opt_coord.wait_all(timeout=final_wait_timeout)
         self._drain_weight_opt_events()
         self._write_campaign_summary()
         self._write_status(stopped_reason=final_reason or "run_complete")
@@ -651,6 +658,13 @@ class CampaignManager:
                 for b in branches
             ],
         }
+        weight_opt_status = self._weight_opt_coord.status_snapshot()
+        if (
+            weight_opt_status["pending_threads"]
+            or weight_opt_status["active"]
+            or weight_opt_status["runs"]
+        ):
+            state["weight_optimization"] = weight_opt_status
         if self._current_status_progress is not None:
             state["current_progress"] = self._current_status_progress
         return state
@@ -2139,16 +2153,29 @@ class CampaignManager:
         except Exception as exc:
             logger.warning("Failed to persist champion v%d to store: %s", new_version, exc)
 
-        # Launch background weight optimization (R2)
+        # Launch or run weight optimization (R2). Async is kept as the framework
+        # default; sync gives resource-constrained formal experiments a closed
+        # champion state before the next structure-search round.
         try:
-            self._weight_opt_coord.spawn_for_promoted_champion(
-                plan.snapshot_path,
-                new_version,
-                plan.current_weights,
-                base_weight_revision=new_champion.weight_revision,
-            )
+            execution = getattr(self._spec.parameter_search, "execution", "async")
+            if execution == "sync":
+                logger.info("Champion v%d: running weight optimization synchronously", new_version)
+                self._weight_opt_coord.run_for_promoted_champion_sync(
+                    plan.snapshot_path,
+                    new_version,
+                    plan.current_weights,
+                    base_weight_revision=new_champion.weight_revision,
+                )
+                self._drain_weight_opt_events()
+            else:
+                self._weight_opt_coord.spawn_for_promoted_champion(
+                    plan.snapshot_path,
+                    new_version,
+                    plan.current_weights,
+                    base_weight_revision=new_champion.weight_revision,
+                )
         except Exception as exc:
-            logger.warning("Failed to spawn weight optimization for champion v%d: %s", new_version, exc)
+            logger.warning("Failed to run weight optimization for champion v%d: %s", new_version, exc)
 
     def _drain_weight_opt_events(self) -> None:
         """Apply completed weight-optimization events on the campaign thread."""

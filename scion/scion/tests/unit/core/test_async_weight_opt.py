@@ -68,9 +68,16 @@ class _AlwaysPassVerification:
         )
 
 
-def _make_spec(root_dir: str, weight_opt_enabled: bool = True) -> ProblemSpec:
+def _make_spec(
+    root_dir: str,
+    weight_opt_enabled: bool = True,
+    weight_opt_execution: str = "async",
+) -> ProblemSpec:
     from scion.config.problem import ParameterSearchConfig
-    param = ParameterSearchConfig(enabled=weight_opt_enabled)
+    param = ParameterSearchConfig(
+        enabled=weight_opt_enabled,
+        execution=weight_opt_execution,
+    )
     return ProblemSpec(
         name="test_vrp",
         root_dir=root_dir,
@@ -95,13 +102,18 @@ def _make_champion(code_dir: Path) -> ChampionState:
 
 
 def _make_campaign(tmp_path: Path, experiment_protocol: Any = None,
-                   weight_opt_enabled: bool = True) -> CampaignManager:
+                   weight_opt_enabled: bool = True,
+                   weight_opt_execution: str = "async") -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
     (code_dir / "operators" / "local_search.py").write_text(_VALID_CODE)
 
     campaign_dir = str(tmp_path / "campaign")
-    spec = _make_spec(str(code_dir), weight_opt_enabled=weight_opt_enabled)
+    spec = _make_spec(
+        str(code_dir),
+        weight_opt_enabled=weight_opt_enabled,
+        weight_opt_execution=weight_opt_execution,
+    )
     champion = _make_champion(code_dir)
 
     return CampaignManager(
@@ -228,6 +240,45 @@ class TestBgThreadLaunchedAndJoins:
 
         with cm._champion_lock:
             assert cm._champion.version == 2, "champion version should advance to 2"
+
+
+class TestSyncWeightOptMode:
+    def test_sync_mode_blocks_and_records_without_bg_thread(self, tmp_path):
+        """execution=sync runs weight optimization inline and drains the result."""
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+
+        cm = _make_campaign(
+            tmp_path,
+            experiment_protocol=mock_protocol,
+            weight_opt_execution="sync",
+        )
+
+        call_log = []
+
+        def instant_weight_opt(staging_path, version, current_weights):
+            call_log.append(version)
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights=current_weights,
+                baseline_score=0.0,
+                best_score=0.0,
+                improved=False,
+                n_evaluations=1,
+                elapsed_seconds=0.0,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = instant_weight_opt
+
+        branch = _build_promoted_branch(cm, tmp_path)
+        cm._on_promote(branch)
+
+        assert call_log == [2]
+        assert len(cm._pending_weight_opt_threads) == 0
+        rows = cm._registry.query_weight_optimizations(champion_version=2)
+        assert len(rows) == 1
+        assert rows[0]["improved"] == 0
 
 
 class TestWeightOptMetricSpecsAndPersistence:

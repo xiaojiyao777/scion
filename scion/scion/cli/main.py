@@ -174,15 +174,15 @@ def run(
         proto_cfg, split_manager, seed_ledger_obj, runner,
         metrics_dir=metrics_dir,
         metric_specs=metric_specs,
-        require_metric_specs=True,
+        require_metric_specs=metric_specs is not None,
     )
     verification_gate = VerificationGate(
         spec,
         runner,
         metrics_dir=metrics_dir,
         adapter=adapter,
-        strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
+        strict_runtime_checks=adapter is not None,
+        require_adapter_for_runtime=adapter is not None,
         operator_execute_signature=operator_execute_signature,
     )
 

@@ -33,6 +33,10 @@ parser.add_argument("--base-dir", default="v03-post-opt",
                     help="subdir under ~/research/scion-experiments/ (default: v03-post-opt)")
 parser.add_argument("--protocol", default=None,
                     help="optional explicit protocol yaml path")
+parser.add_argument("--weight-opt-execution", choices=["sync", "async"], default="sync",
+                    help="weight optimization execution mode (default: sync for 2-core validation hosts)")
+parser.add_argument("--weight-opt-final-wait", type=float, default=None,
+                    help="async final wait timeout in seconds; omit for config default")
 args = parser.parse_args()
 
 random.seed(args.seed)
@@ -125,6 +129,9 @@ def _assert_protocol_matches_variant(
 
 # --- Load configs ---
 spec = ProblemSpec.from_yaml(str(PROBLEM_DIR / "problem.yaml"))
+spec.parameter_search.execution = args.weight_opt_execution
+if args.weight_opt_final_wait is not None:
+    spec.parameter_search.final_wait_timeout_sec = args.weight_opt_final_wait
 with open(PROBLEM_DIR / "problem-v1.yaml", encoding="utf-8") as fh:
     adapter_spec = ProblemSpecV1(**yaml.safe_load(fh))
 adapter = load_problem_adapter(adapter_spec)
@@ -209,6 +216,9 @@ config = {
     "started_at": datetime.now().isoformat(),
     "campaign_dir": str(CAMPAIGN_DIR),
     "post_opt": True,
+    "weight_opt_execution": spec.parameter_search.execution,
+    "weight_opt_final_wait_timeout_sec": spec.parameter_search.final_wait_timeout_sec,
+    "parameter_search": spec.parameter_search.model_dump(),
     "changes": [
         "tendency-based context (no MANDATORY CONSTRAINT)",
         "early-stop: budget_efficiency (idle>60%) + diminishing_returns",
