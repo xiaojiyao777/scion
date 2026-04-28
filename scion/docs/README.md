@@ -7,11 +7,13 @@ This directory is the active documentation surface for Scion. Historical sprint 
 ## Read First
 
 - [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
+- [evidence-manifest.md](evidence-manifest.md) - active map from claims to experiment artifacts, including superseded outputs.
 - [v0.3-final-visual-report.md](v0.3-final-visual-report.md) - visual summary of final v0.3 results.
 - [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
 - [v0.3-production-timeout-fix-analysis.md](v0.3-production-timeout-fix-analysis.md) - production-only rerun after incomplete-evidence/runtime fixes.
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
 - [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
+- [v0.4-cvrp-plan.md](v0.4-cvrp-plan.md) - CVRP second-problem plan for v0.4 generalization.
 - [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
 - [../design/scion-architecture-v3.md](../design/scion-architecture-v3.md) - project architecture blueprint.
 - [../design/scion-v0.3-design.md](../design/scion-v0.3-design.md) - v0.3 design.
@@ -27,7 +29,7 @@ This directory is the active documentation surface for Scion. Historical sprint 
 - [milp-usage-strategy.md](milp-usage-strategy.md) - MILP as report-only comparison source.
 - [glossary.md](glossary.md) - project terms.
 - [v0.2-final-state.md](v0.2-final-state.md) - v0.2 code archaeology used by v0.3.
-- [v1.0-roadmap.md](v1.0-roadmap.md) - next-version planning input.
+- [v1.0-roadmap.md](v1.0-roadmap.md) - post-v0.4 roadmap for warehouse + CVRP evidence and framework hardening.
 
 ## Historical Documents
 
@@ -64,12 +66,14 @@ Historical review reports and remediation plans, mainly from v0.2.
 scion/
 ├── docs/
 │   ├── README.md
+│   ├── evidence-manifest.md
 │   ├── v0.3-current-state.md
 │   ├── v0.3-final-visual-report.md
 │   ├── v0.3-final-12campaign-analysis.md
 │   ├── v0.3-production-timeout-fix-analysis.md
 │   ├── v0.3-final-validation-checklist.md
 │   ├── v0.4-performance-aware-plan.md
+│   ├── v0.4-cvrp-plan.md
 │   ├── v0.3-code-audit-dataflow.md
 │   ├── experiment-quickref.md
 │   ├── metrics-guide.md

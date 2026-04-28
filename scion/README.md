@@ -43,10 +43,12 @@ median Δf1 = -17
 
 完整报告：
 
+- [evidence-manifest.md](docs/evidence-manifest.md)
 - [v0.3-final-visual-report.md](docs/v0.3-final-visual-report.md)
 - [v0.3-final-12campaign-analysis.md](docs/v0.3-final-12campaign-analysis.md)
 - [v0.3-production-timeout-fix-analysis.md](docs/v0.3-production-timeout-fix-analysis.md)
 - [v0.4-performance-aware-plan.md](docs/v0.4-performance-aware-plan.md)
+- [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)
 
 ## v0.2 实验结果
 
@@ -221,14 +223,22 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 - **目标函数**：字典序——业务聚合 > 物流总成本 > 求解效率
 - **生产数据**：引入真实生产统计特征生成的实例 + 真实日数据
 
+## v0.4：CVRP 第二问题
+
+v0.4 将把 **CVRP** 接入 Scion，作为第二个真实组合优化问题。这个选择替代了早期路线图中“优先接 FCMCNF + Benders”的安排；FCMCNF 会保留为后续 v1.x 的 lower-bound/decomposition track。
+
+CVRP 的价值在于它是标准 routing 问题，具有成熟 benchmark 和经典局部搜索算子族，而且它的 route-sequence 语义与当前 warehouse assignment/bin-packing 问题明显不同。它会直接检验 `ProblemAdapter`、operator interface、verification gate、quality/runtime harness 是否真的泛化。
+
+当前 CVRP baseline 已在本地完成并验证；接入 Scion 后，baseline 路径、benchmark split、最终 quality/runtime 结果会写入 [evidence-manifest.md](docs/evidence-manifest.md)。
+
 ## 开发路线
 
 - [x] **v0.1 MVP**：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1 调优**：ContextManager 重写、prompt caching、subprocess timeout ✅
 - [x] **v0.2 参数层**：Weight Optimization、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3 工程化框架**：adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4 性能感知优化**：runtime/complexity 作为公共优化维度
-- [ ] **v1.0 多问题泛化**：第二问题对象、结构级搜索、论文实验
+- [ ] **v0.4 性能感知优化 + CVRP 接入**：runtime/complexity 作为公共优化维度，并用 CVRP 检验第二问题泛化
+- [ ] **v1.0 多问题证据固化**：warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 实验历史
 
@@ -260,6 +270,7 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 - Synthetic 优化能力明确成立。
 - Production 在 Sonnet 下可产生完整证据的改进；GPT-mini 仍受代码生成质量限制。
 - 生产 timeout / incomplete evidence 问题已修复并记录到 v0.4 performance-aware plan。
+- v0.4 已确定引入 CVRP 作为第二真实问题，详见 [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)。
 
 ## 开源协议
 

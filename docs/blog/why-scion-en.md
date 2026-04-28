@@ -1,131 +1,210 @@
-# Why Scion: Rethinking How LLMs Improve Optimization Algorithms
+# Why Scion: From LLM-Written Code To OR Autoresearch
 
 *April 2026 · Xiao Jiyao*
 
 ---
 
-Everyone is talking about LLMs writing code. But can they **design better algorithms**?
+Everyone is talking about LLMs writing code. Scion asks a narrower and more
+useful question:
 
-That's the question behind Scion — a framework for automatically improving combinatorial optimization heuristics using LLM reasoning. This post explains the motivation, what makes Scion different from existing approaches, and what we learned from v0.1.
+> Can an LLM, inside a human-defined combinatorial-optimization sandbox, propose
+> hypotheses, modify heuristic operators, run experiments, and keep only changes
+> supported by auditable evidence?
 
-## The Problem with Current Approaches
+Scion is inspired by Andrej Karpathy's `autoresearch`: the human writes the
+research program and boundaries; agents run experiments inside those boundaries.
+Scion brings that idea to operations research and adds governance, statistical
+validation, and lineage.
 
-The past two years have seen an explosion of work using LLMs to improve optimization algorithms. Google's FunSearch, Evolution of Heuristics (EoH), ReEvo, AILS-AHD — all share a similar blueprint:
+## Why Not Just LLM + Evolutionary Search?
 
-1. Give the LLM an existing heuristic
-2. Ask it to mutate or rewrite
-3. Evaluate on benchmarks
-4. Select the best, repeat
+FunSearch, EoH, ReEvo, and related systems show that LLMs can generate useful
+algorithmic code. Many of these systems treat the LLM as a mutation operator:
 
-This is **evolutionary search with an LLM as the mutation operator**. It works — FunSearch found new constructions for the cap set problem, EoH discovered competitive bin-packing heuristics. But there's a fundamental limitation:
+1. provide an existing program;
+2. ask the LLM to mutate it;
+3. evaluate on benchmarks;
+4. select the best candidate;
+5. repeat.
 
-**The LLM is treated as a stochastic code generator, not as a reasoning agent.**
+That works, but it underuses what LLMs are good at: reasoning, explaining, and
+forming hypotheses from failure.
 
-It has no memory of what it tried before. It doesn't form hypotheses about *why* something might work. It doesn't learn from its failures within a run. Each generation is essentially independent — the LLM's reasoning capabilities are largely wasted.
+Scion takes a different route: **the LLM must propose an auditable hypothesis
+before it writes code**. Each candidate has to say:
 
-And there's a more practical concern: **nobody talks about safety**. When LLM-generated code runs inside a solver that handles real logistics, manufacturing, or scheduling, a silent bug can corrupt solutions without anyone noticing. State mutations, constraint violations, subtle changes to objective functions — these don't crash the program, they just produce wrong answers.
+- what weakness of the current champion it targets;
+- which operator family it changes;
+- which objective it expects to improve;
+- why it should preserve feasibility.
 
-## The Scion Approach
+Code is only the second step. The system records the whole chain:
 
-Scion takes a different path. Three core ideas:
-
-### 1. Hypothesis-Driven Search
-
-Instead of "here's the code, make it better," Scion asks the LLM to first articulate a **hypothesis** — a structured explanation of *what* it wants to change and *why* it expects improvement:
-
-```
-Round 1 (Hypothesis):
-"The current merge_vehicles operator only considers adjacent routes.
-Merging vehicles that share the same dominant subcategory should reduce
-splits more effectively, because..."
-
-Round 2 (Code):
-[Implementation based on the hypothesis above]
-```
-
-This two-round proposal process forces the LLM to reason before coding. More importantly, when a hypothesis fails, the framework feeds back *what* failed and *why* — enabling the LLM to refine its understanding across rounds.
-
-### 2. Three-Layer Governance
-
-Scion treats LLM output as **tainted by default**. Everything it produces passes through multiple gates before it can affect the algorithm pool:
-
-```
-Creative Layer (LLM)      → produces code (tainted)
-    ↓
-Contract Gate (static)     → syntax, interface, forbidden imports (C1-C10)
-    ↓
-Verification Gate (dynamic)→ state leak detection, constraint preservation
-    ↓
-Experiment Protocol        → Screening → Validation → Frozen Holdout
-    ↓
-Decision Layer (oracle)    → numerical features only, no LLM text influence
+```text
+hypothesis -> implementation -> verification -> evidence -> promote/abandon
 ```
 
-The **Decision Input Guard** is particularly important: the decision layer receives only numerical features (win rate, median delta, evaluation counts) — never free-form text from the LLM. This architecturally prevents the LLM from "talking its way" into promotion.
+## Core Architecture
 
-### 3. Statistical Rigor over Fitness Scores
+Scion treats LLM output as tainted data. The LLM cannot directly decide
+promotion and cannot persuade the decision layer with free-form text.
 
-Most LLM+evolution approaches use a single fitness score to decide what survives. Scion uses a three-stage experimental protocol inspired by clinical trials:
+```text
+Creative Layer (LLM)
+  -> Hypothesis
+  -> Code
+  -> Contract Gate
+  -> Verification Gate
+  -> Screening
+  -> Validation
+  -> Frozen Holdout
+  -> Decision Layer
+  -> Champion / Abandon
+```
 
-| Stage | Purpose | Data |
-|-------|---------|------|
-| Screening | Quick filter on small instances | N=20 pairs |
-| Validation | Confirm on medium instances | N=18 pairs |
-| Frozen Holdout | Final check on held-out large instances | N=12 pairs |
+The important constraints are:
 
-Each stage requires a statistical threshold (win rate ≥ 2/3 + median delta ≥ minimum practical significance). The frozen holdout instances are **never seen during earlier stages**, directly addressing the overfitting problem that plagues single-fitness approaches.
+- **Decision Input Guard**: the decision layer reads only numeric features and
+  closed-set enums, never LLM prose.
+- **Contract Gate**: checks files, imports, interfaces, and obvious complexity
+  hazards.
+- **Verification Gate**: checks feasibility, objective consistency, solution
+  state consistency, nondeterminism, and performance risk.
+- **Three-stage protocol**: screening filters quickly, validation confirms, and
+  frozen holdout tests unseen cases.
+- **Lineage**: hypotheses, patches, metrics, promotions, and weight revisions
+  are traceable.
 
-## What We Learned from v0.1
+The point is not to make the LLM more free. The point is to harden the boundary
+first, then let the LLM search inside it.
 
-We ran Scion on a real-world warehouse delivery VNS (Variable Neighborhood Search) problem with subcategory consolidation. 22 benchmark instances, 54–675 orders, 15 rounds of LLM interaction.
+## What v0.3 Achieved
 
-### The Learning Curve
+v0.3 is Scion's first real framework milestone.
 
-The most interesting finding wasn't the final result — it was watching the LLM learn:
+It separated the research object from the framework:
 
-- **Rounds 1-3**: The LLM generated code that modified the input solution's state (a common bug in VNS operators). All three were caught by the Verification Gate.
-- **Round 4**: The LLM's hypothesis explicitly stated: *"the KEY difference from the 3 failed attempts: deep_copy() immediately, build ALL new data structures from scratch."* It passed verification.
-- **Round 4's operator (SubcatMergeSafe)** went on to achieve 95% win rate in screening, 100% in validation, **100% in frozen holdout** — reducing subcategory splits by 50-58 across large instances.
+```text
+surrogate/      = warehouse-delivery VNS research object
+scion/scion/    = autoresearch framework
+```
 
-This wouldn't happen in a memoryless evolutionary framework. The LLM accumulated understanding across failures and applied it.
+It added:
 
-### The Gate Funnel
+- a ProblemAdapter boundary;
+- adapter-driven objective policy;
+- separate synthetic and production protocols;
+- synchronous weight optimization;
+- metrics lineage and LLM traces;
+- production incomplete-evidence and timeout fixes;
+- auditable `status.json`, `campaign_summary.json`, and SQLite lineage.
 
-Out of 10 operators generated:
-- 6 (60%) were caught by Verification Gate (state leak violations)
-- 3 passed verification but failed statistical significance
-- **1** survived all three stages and was promoted
+The active evidence map is:
 
-This 10% survival rate tells us two things: LLMs are creative but unreliable (60% produce bugs), and statistical gates are essential (3 more looked promising but weren't significant). Both findings validate the multi-layer architecture.
+- `scion/docs/evidence-manifest.md`
+- `scion/docs/v0.3-final-visual-report.md`
+- `scion/docs/v0.3-production-timeout-fix-analysis.md`
 
-### Honest Limitations
+Main results:
 
-- Only tested on one problem domain — generalization is unproven
-- Only 1 successful promotion — sample size is small
-- No head-to-head benchmark against FunSearch/EoH (planned for v0.2)
-- 60% V5_state_leak rate suggests prompt engineering has room to improve
-- No cross-campaign memory yet — each run starts fresh
+```text
+formal 12-campaign validation: 12/12 completed
+synthetic: 6/6 campaigns promoted, 10 total structural promotions
+production rerun after evidence/runtime fixes:
+  Sonnet: 3/3 promotions
+  GPT-mini: 0/3 promotions
+```
 
-## Acknowledgment
+Best synthetic champion:
 
-Scion is inspired by Andrej Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) vision — the idea that LLMs can autonomously conduct research within well-defined sandboxes. Scion takes this idea into the combinatorial optimization domain and adds formal governance to make it production-safe.
+```text
+campaign = sonnet-4-6_synthetic_seed29
+final champion = v5_r0
+vs v1 baseline on 47 comparable cases:
+  better = 45
+  equal  = 2
+  worse  = 0
+  median delta f1 = -17
+```
 
-## Where This Is Going
+After production evidence/runtime fixes, Sonnet produced three complete-evidence
+cost-improving promotions. GPT-mini remained 0/3, mainly due to code reliability
+and solution-consistency failures.
 
-Scion v0.1 is a proof of concept that **hypothesis-driven search with governance** is viable. The roadmap:
+## What This Proves
 
-- **v0.2**: Enhanced Verification Gate (deeper semantic checks), parameter-level search
-- **v0.3**: RAG memory module for cross-campaign knowledge transfer
-- **v1.0**: Multi-problem generalization, formal comparison with existing approaches, paper
+v0.3 proves:
 
-## Why Open Source It Now?
+- hypothesis-driven LLM search can improve a controlled warehouse-delivery
+  heuristic on synthetic frozen validation;
+- a strong model can produce complete-evidence cost improvements on
+  production-style warehouse instances;
+- Scion's full loop works end to end:
+  `hypothesis -> code -> verification -> protocol -> promote -> weight opt -> lineage`;
+- governance is necessary. Without evidence completeness and runtime guards,
+  production conclusions can be polluted by slow operators and skipped failures.
 
-Because the field is moving fast, and nobody is seriously working on the governance problem. Papers keep showing "LLM found a better heuristic!" without asking "how do you make sure it doesn't break things?" or "how do you prevent overfitting to your benchmark?"
+v0.3 does not prove:
 
-Scion is opinionated about these questions. The code is real (9,272 lines, 239 tests, complete campaign pipeline). If you're working on LLM-driven algorithm design and care about reliability, we'd love your feedback.
+- Scion is already a general OR autoresearch framework;
+- production success is stable across all model classes;
+- the current champion is close to optimal;
+- the LLM truly understands the problem rather than repeatedly making useful
+  moves under a statistical protocol;
+- Scion can beat specialized state-of-the-art OR solvers.
 
-**Repository**: [github.com/xiaojiyao777/scion](https://github.com/xiaojiyao777/scion)
+Those boundaries matter. Scion should tie every claim to auditable evidence.
 
----
+## Why v0.4 Moves To CVRP
 
-*Scion is a research project exploring LLM-driven algorithm improvement with formal governance. Contributions, criticism, and collaborations welcome.*
+The earlier roadmap considered FCMCNF + Benders as the second problem. That is
+still valuable, especially for lower bounds, optimum gaps, and
+decomposition-aware adapters.
+
+v0.4 will prioritize **CVRP** instead.
+
+The reason is simple:
+
+- CVRP is one of the standard combinatorial-optimization problems;
+- benchmarks and classical methods are mature;
+- it is a true routing problem, while the current warehouse problem is closer
+  to assignment/bin-packing;
+- it tests route sequences, distance objectives, capacity feasibility, and
+  route-local operators;
+- it naturally stresses runtime complexity, which is exactly what v0.4 needs
+  to harden.
+
+In short:
+
+```text
+warehouse delivery: orders -> vehicles
+CVRP: customers -> ordered routes
+```
+
+If Scion can improve a strong modular CVRP baseline under the same hypothesis,
+verification, promotion, and runtime-aware protocol, it becomes much closer to a
+real OR autoresearch framework.
+
+## What's Next
+
+v0.4 focuses on:
+
+- performance-aware promotion;
+- complete-evidence gates;
+- a CVRP ProblemAdapter;
+- CVRP baseline evidence in the manifest;
+- final quality/runtime reporting;
+- one shared report format across warehouse and CVRP.
+
+v1.0 should then focus on:
+
+- warehouse + CVRP evidence consolidation;
+- mechanism ablations;
+- stronger campaign operations;
+- stable problem-interface documentation.
+
+Scion is not yet a general OR autoresearch framework. A more accurate statement
+is that it is an auditable agentic algorithm-optimization framework validated on
+warehouse delivery, now moving toward multi-problem generalization through CVRP.
+
+That is the most valuable place for the project to be right now.

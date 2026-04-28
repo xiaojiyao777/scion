@@ -48,11 +48,12 @@ best champion vs v1 baseline:
 
 完整报告：
 
+- [`scion/docs/evidence-manifest.md`](scion/docs/evidence-manifest.md)
 - [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
 - [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
 - [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
 
-v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization。
+v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization，并引入 **CVRP** 作为第二个真实问题来检验框架泛化。
 
 ---
 
@@ -151,6 +152,12 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 
 **Benchmark**：48 个实例（22→990 orders），覆盖合成数据 + 真实生产数据统计特征。
 
+### v0.4 第二问题：CVRP
+
+v0.4 将接入 **Capacitated Vehicle Routing Problem (CVRP)** 作为第二个真实问题。CVRP 是标准 routing 问题，解表示、目标函数、可行性检查和算子语义都不同于当前 warehouse assignment/bin-packing 问题，因此更适合检验 Scion 的 adapter boundary 是否真正泛化。
+
+CVRP baseline 已在本地完成并验证；后续接入 Scion 后，会把 baseline 路径、benchmark split、quality/runtime 结果加入 [`scion/docs/evidence-manifest.md`](scion/docs/evidence-manifest.md)。
+
 ---
 
 ## ⚙️ Scion Framework
@@ -206,7 +213,7 @@ Scion 在 v0.3 能证明的是：**在受控 synthetic frozen-gate 验证中，L
 2. production 成功可以跨所有模型稳定复现；GPT-mini 的结果说明模型能力和代码可靠性仍是边界。
 3. LLM “真的理解了问题”，统计证据只能说明它持续做对了，不能区分“真懂”与“碰对”。
 4. 当前 champion 就是最优算子设计，开放设计空间没有穷尽证明。
-5. Scion 已经泛化到第二个问题类别；这是 v1.0 的核心验证目标。
+5. Scion 已经泛化到第二个问题类别；CVRP 将在 v0.4 承担这个验证，v1.0 再做跨问题证据固化。
 
 统计证据已经是这类系统里最强的可操作保证，但它不是数学证明。
 
@@ -235,8 +242,8 @@ python run_validation_campaign.py --model claude-sonnet-4-6 --variant synthetic 
 - [x] **v0.1.1** — 调优：ContextManager 重写、prompt caching、subprocess 修复 ✅
 - [x] **v0.2** — 参数层搜索、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3** — 框架工程化、adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4** — Performance-aware optimization：runtime/complexity 作为公共优化维度
-- [ ] **v1.0** — 多问题泛化、第二问题对象、结构级搜索
+- [ ] **v0.4** — Performance-aware optimization + CVRP 第二问题接入
+- [ ] **v1.0** — warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 致谢
 
