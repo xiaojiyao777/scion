@@ -14,6 +14,7 @@ This directory is the active documentation surface for Scion. Historical sprint 
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
 - [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
 - [v0.4-cvrp-plan.md](v0.4-cvrp-plan.md) - CVRP second-problem plan for v0.4 generalization.
+- [v0.4-evidence-harness.md](v0.4-evidence-harness.md) - common promotion/final-quality/runtime evidence schema for v0.4.
 - [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
 - [../design/scion-architecture-v3.md](../design/scion-architecture-v3.md) - project architecture blueprint.
 - [../design/scion-v0.3-design.md](../design/scion-v0.3-design.md) - v0.3 design.
@@ -74,6 +75,7 @@ scion/
 │   ├── v0.3-final-validation-checklist.md
 │   ├── v0.4-performance-aware-plan.md
 │   ├── v0.4-cvrp-plan.md
+│   ├── v0.4-evidence-harness.md
 │   ├── v0.3-code-audit-dataflow.md
 │   ├── experiment-quickref.md
 │   ├── metrics-guide.md

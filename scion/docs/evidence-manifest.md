@@ -133,16 +133,65 @@ work, not as the final production quality conclusion.
 
 The final production conclusion is the production timeout/evidence rerun above.
 
-## v0.4 Evidence Placeholder
+## Current v0.4 CVRP Baseline Evidence
 
-v0.4 will add CVRP as the second real problem class. The CVRP baseline has been
-prepared and validated locally. A `vrp/` staging directory may exist in the
-working tree, but CVRP is not yet a tracked Scion problem package and its
-baseline artifacts are not yet part of this evidence manifest. Once imported,
-add:
+v0.4 will add CVRP as the second real problem class. The current CVRP baseline
+is staged in:
 
-- CVRP problem directory path;
-- baseline validation command and output artifact;
+```text
+vrp/
+```
+
+The local CVRPLIB instance data is intentionally excluded from git:
+
+```text
+vrp/cvrplib/
+```
+
+Use this evidence for the current CVRP baseline claim:
+
+```text
+attempted EUC_2D instances = 10330
+status=ok = 10330
+timeout = 0
+error = 0
+CVRP feasible = 10330
+benchmark_feasible = 10249
+```
+
+Primary baseline report:
+
+- [../../vrp/docs/experiment_results_seed0.md](../../vrp/docs/experiment_results_seed0.md)
+
+Primary artifacts:
+
+```text
+vrp/results/full_experiment_seed0_final.csv
+vrp/results/reference_validation_bad.csv
+vrp/results/analysis_full_seed0_final/summary_by_subset.csv
+vrp/results/analysis_full_seed0_final/per_instance.csv
+vrp/results/analysis_full_seed0_final/top_gaps.csv
+```
+
+Subset interpretation:
+
+- A/B/P/E are the most stable quick-regression candidates.
+- X is the most useful medium-scale optimization target: 48 comparable cases,
+  mean gap 5.857%, median gap 5.524%, and clear remaining improvement room.
+- XL/XML mostly lack local `.sol` files, so they currently support feasibility
+  and runtime checks rather than BKS gap claims.
+- CMT contains extended semantics such as `DISTANCE` and `SERVICE_TIME`; treat
+  negative gaps there as diagnostic, not strict CVRP optimality evidence.
+
+The current CVRP baseline is not yet integrated as a Scion `ProblemAdapter`
+under `scion/problems/cvrp`. When the adapter and campaigns land, add:
+
+- CVRP problem package path;
 - benchmark split manifest;
-- baseline quality/runtime summary;
-- Scion campaign matrix and final quality/runtime comparison.
+- adapter smoke and operator verification artifacts;
+- campaign matrix;
+- every campaign final champion vs baseline quality/runtime comparison.
+
+The required v0.4 evidence schema is tracked in:
+
+- [v0.4-evidence-harness.md](v0.4-evidence-harness.md)

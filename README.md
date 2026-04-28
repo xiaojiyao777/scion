@@ -12,6 +12,7 @@
 .
 ├── scion/               # Scion Framework — 核心自动改进框架
 ├── surrogate/           # Surrogate Solver — 仓配协同 VNS 求解器
+├── vrp/                 # CVRP baseline staging — v0.4 第二问题基线
 ├── docs/blog/           # 博客文章与致谢
 └── reviews/             # 架构审核报告
 ```
@@ -52,6 +53,7 @@ best champion vs v1 baseline:
 - [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
 - [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
 - [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
+- [`scion/docs/v0.4-evidence-harness.md`](scion/docs/v0.4-evidence-harness.md)
 
 v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization，并引入 **CVRP** 作为第二个真实问题来检验框架泛化。
 
@@ -156,7 +158,14 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 
 v0.4 将接入 **Capacitated Vehicle Routing Problem (CVRP)** 作为第二个真实问题。CVRP 是标准 routing 问题，解表示、目标函数、可行性检查和算子语义都不同于当前 warehouse assignment/bin-packing 问题，因此更适合检验 Scion 的 adapter boundary 是否真正泛化。
 
-CVRP baseline 已在本地完成并验证；后续接入 Scion 后，会把 baseline 路径、benchmark split、quality/runtime 结果加入 [`scion/docs/evidence-manifest.md`](scion/docs/evidence-manifest.md)。
+CVRP baseline 已作为 `vrp/` staging baseline 纳入仓库，`vrp/cvrplib/` benchmark 原始数据不跟踪。seed0 baseline 已跑完 10,330 个 EUC_2D 实例，全部返回 CVRP 可行解，无 timeout / crash；A/B/P/E 可作为快速回归集合，X 子集是 v0.4 首个中规模优化目标。
+
+CVRP baseline 报告：
+
+- [`vrp/README.md`](vrp/README.md)
+- [`vrp/docs/experiment_results_seed0.md`](vrp/docs/experiment_results_seed0.md)
+- [`scion/docs/v0.4-cvrp-plan.md`](scion/docs/v0.4-cvrp-plan.md)
+- [`scion/docs/v0.4-evidence-harness.md`](scion/docs/v0.4-evidence-harness.md)
 
 ---
 
