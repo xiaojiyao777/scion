@@ -13,7 +13,7 @@
 ├── scion/               # Scion Framework — 核心自动改进框架
 ├── surrogate/           # Surrogate Solver — 仓配协同 VNS 求解器
 ├── docs/blog/           # 博客文章与致谢
-└── reviews/             # GPT-5.4-Pro 架构审核报告
+└── reviews/             # 架构审核报告
 ```
 
 ---
