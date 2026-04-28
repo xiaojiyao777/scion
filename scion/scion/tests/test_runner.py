@@ -172,6 +172,20 @@ class TestRunnerTimeout:
         # Should finish not too long after the 1 s timeout
         assert result.elapsed_ms < 10_000  # <10 s
 
+    def test_per_call_time_limit_is_enforced(self, workdir: Path):
+        _write_solver(workdir, "import time; time.sleep(9999)")
+        runner = LocalSubprocessRunner(limits=ResourceLimits(timeout_sec=30))
+        result = runner.run_solver(
+            workdir=str(workdir),
+            instance_path=str(workdir / "instance.json"),
+            seed=42,
+            time_limit_sec=1,
+            registry_path=str(workdir / "registry.json"),
+        )
+        assert result.success is False
+        assert result.error_category == "timeout"
+        assert result.elapsed_ms < 10_000
+
 
 # ---------------------------------------------------------------------------
 # Tests: ResourceLimits dataclass

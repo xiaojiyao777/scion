@@ -508,6 +508,60 @@ class TestC9SensitiveApi:
 
 
 # ---------------------------------------------------------------------------
+# C9c: Complexity bound
+# ---------------------------------------------------------------------------
+
+
+class TestC9cComplexityBound:
+    def test_pairwise_combinations_with_constant_k_pass(self, gate: ContractGate):
+        code = (
+            "from itertools import combinations\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        for a, b in combinations(sorted(solution.vehicles), 2):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
+    def test_high_order_combinations_fail(self, gate: ContractGate):
+        code = (
+            "from itertools import combinations\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        for subset in combinations(sorted(solution.vehicles), 4):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert not result.passed
+        assert "high-order" in c9c.detail
+
+    def test_variable_size_combinations_fail(self, gate: ContractGate):
+        code = (
+            "from itertools import combinations\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        vids = sorted(solution.vehicles)\n"
+            "        for size in range(2, min(5, len(vids) + 1)):\n"
+            "            for subset in combinations(vids, size):\n"
+            "                pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "variable_k" in c9c.detail
+
+
+# ---------------------------------------------------------------------------
 # C10: Novelty
 # ---------------------------------------------------------------------------
 

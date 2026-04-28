@@ -12,6 +12,7 @@ from scion.verification.feasibility import _registry_path
 
 _PERF_SEED = 55
 _MAX_SLOWDOWN = 5  # candidate must not exceed champion × 5
+_DEFAULT_PERF_TIMEOUT_SEC = 60
 
 
 def check_perf(
@@ -23,24 +24,26 @@ def check_perf(
     """V9_perf_guard: candidate solve time ≤ champion × 5."""
     t0 = time.monotonic_ns()
 
-    canary = problem_spec.canary_case_path
-    if not canary:
+    perf_case = os.environ.get("SCION_PERF_GUARD_CASE") or problem_spec.canary_case_path
+    if not perf_case:
         return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
 
-    if not os.path.isfile(canary):
-        return _cr(True, "heavy", f"skipped: canary file not found: {canary}", t0)
+    if not os.path.isfile(perf_case):
+        return _cr(True, "heavy", f"skipped: perf case not found: {perf_case}", t0)
 
     if not champion_workspace or not os.path.isdir(champion_workspace):
         return _cr(True, "heavy", "skipped: champion workspace not available", t0)
+
+    timeout_sec = int(os.environ.get("SCION_PERF_GUARD_TIMEOUT", str(_DEFAULT_PERF_TIMEOUT_SEC)))
 
     def _run(workdir: str) -> int | None:
         """Return elapsed_ms or None on failure."""
         try:
             r = runner.run_solver(
                 workdir=workdir,
-                instance_path=canary,
+                instance_path=perf_case,
                 seed=_PERF_SEED,
-                time_limit_sec=60,
+                time_limit_sec=timeout_sec,
                 registry_path=_registry_path(workdir),
             )
         except Exception:
@@ -61,7 +64,10 @@ def check_perf(
         return _cr(True, "heavy", "skipped: champion time=0ms (degenerate)", t0)
 
     ratio = cand_ms / champ_ms
-    detail = f"candidate={cand_ms}ms champion={champ_ms}ms ratio={ratio:.2f}x"
+    detail = (
+        f"case={os.path.basename(perf_case)} candidate={cand_ms}ms "
+        f"champion={champ_ms}ms ratio={ratio:.2f}x timeout={timeout_sec}s"
+    )
     if ratio <= _MAX_SLOWDOWN:
         return _cr(True, "heavy", f"perf ok: {detail}", t0)
     return _cr(

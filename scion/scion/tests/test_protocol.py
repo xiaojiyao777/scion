@@ -1,5 +1,6 @@
 """Tests for scion/protocol/ — evaluation, stats, gates, experiment."""
 from __future__ import annotations
+import json
 import os
 import uuid
 import pytest
@@ -292,6 +293,19 @@ def _make_run_result(splits: int, cost: float, feasible: bool = True) -> RunResu
     )
 
 
+def _make_run_failure(category: str = "timeout", elapsed_ms: int = 1000) -> RunResult:
+    return RunResult(
+        success=False,
+        exit_code=-9,
+        stdout="",
+        stderr=category,
+        elapsed_ms=elapsed_ms,
+        output=None,
+        output_path=None,
+        error_category=category,
+    )
+
+
 def _make_protocol(runner, tmp_path) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=ProtocolConfig(),
@@ -332,6 +346,72 @@ def test_run_experiment_screening_fail(tmp_path):
         ExperimentStage.SCREENING, "/cand", "/champ", "modify"
     )
     assert result.gate_outcome == "fail"
+
+
+def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
+    runner = MagicMock()
+    pair = [_make_run_result(1, 900), _make_run_failure("timeout")]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.losses == 2
+    assert "failed_pairs=4" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["failed_pairs"] == 4
+    assert raw["candidate_failed_pairs"] == 4
+    assert len(raw["failures"]) == 4
+    assert all(p["comparison"] == "loss" for p in raw["pairs"])
+
+
+def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_path):
+    runner = MagicMock()
+    # First three pairs are strong wins; final candidate timeout must still
+    # force validation failure because validation evidence is incomplete.
+    side_effect = []
+    for _ in range(3):
+        side_effect.extend([_make_run_result(2, 1000), _make_run_result(1, 800)])
+    side_effect.extend([_make_run_result(2, 1000), _make_run_failure("timeout")])
+    runner.run_solver.side_effect = side_effect
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.VALIDATION, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "fail"
+    assert "INCOMPLETE_EVIDENCE" in result.reason_codes
+    assert "CANDIDATE_RUNTIME_FAILURE" in result.reason_codes
+    assert "failed_pairs=1" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["attempted_pairs"] == 4
+    assert raw["valid_pairs"] == 3
+    assert raw["failed_pairs"] == 1
+
+
+def test_frozen_fails_when_champion_runtime_failure_makes_pair_invalid(tmp_path):
+    runner = MagicMock()
+    side_effect = []
+    for _ in range(3):
+        side_effect.extend([_make_run_result(2, 1000), _make_run_result(1, 800)])
+    side_effect.extend([_make_run_failure("timeout"), _make_run_result(1, 800)])
+    runner.run_solver.side_effect = side_effect
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.FROZEN, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "fail"
+    assert "INCOMPLETE_EVIDENCE" in result.reason_codes
+    assert "CHAMPION_RUNTIME_FAILURE" in result.reason_codes
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["valid_pairs"] == 3
+    assert raw["champion_failed_pairs"] == 1
 
 
 def test_run_canary_pass(tmp_path):

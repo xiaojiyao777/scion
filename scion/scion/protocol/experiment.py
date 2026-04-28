@@ -394,6 +394,10 @@ class ExperimentProtocol:
         # Collect pair feedback grouped by case
         pairs_by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
         raw_pairs: List[dict] = []
+        raw_failures: List[dict] = []
+        failed_pairs = 0
+        candidate_failed_pairs = 0
+        champion_failed_pairs = 0
 
         def _write_metrics_snapshot(*, complete: bool) -> None:
             with open(raw_ref, "w") as f:
@@ -405,8 +409,12 @@ class ExperimentProtocol:
                         "total_pairs": total_pairs,
                         "attempted_pairs": attempted_pairs,
                         "valid_pairs": valid_pairs,
+                        "failed_pairs": failed_pairs,
+                        "candidate_failed_pairs": candidate_failed_pairs,
+                        "champion_failed_pairs": champion_failed_pairs,
                         "complete": complete,
                         "pairs": raw_pairs,
+                        "failures": raw_failures,
                     },
                     f,
                 )
@@ -450,11 +458,89 @@ class ExperimentProtocol:
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 )
 
-                if not cand_r.success or not champ_r.success:
+                if not cand_r.success:
+                    failed_pairs += 1
+                    candidate_failed_pairs += 1
+                    failure_record = {
+                        "case": case,
+                        "seed": seed,
+                        "side": "candidate",
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "error_category": cand_r.error_category or "unknown",
+                        "exit_code": cand_r.exit_code,
+                        "elapsed_ms": cand_r.elapsed_ms,
+                        "stderr_tail": (cand_r.stderr or "")[-1000:],
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "decisive_metric": "runtime_failure",
+                        "metric_deltas": {},
+                        "failure": failure_record,
+                    })
+                    pairs_by_case[os.path.basename(case)].append(
+                        PairwiseCaseFeedback(
+                            case_id=os.path.basename(case),
+                            seed=seed,
+                            comparison="loss",
+                            delta=-1.0,
+                            objective_comparison=None,
+                            case_features=case_features,
+                        )
+                    )
+                    logger.info(
+                        "Pair %s seed=%d: candidate solver failed category=%s elapsed_ms=%d → loss",
+                        os.path.basename(case), seed,
+                        cand_r.error_category or "unknown",
+                        cand_r.elapsed_ms,
+                    )
                     _write_metrics_snapshot(complete=False)
-                    continue  # Infra failure — skip pair
+                    self._emit_progress(
+                        stage=stage.value,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=valid_pairs,
+                        total_pairs=total_pairs,
+                        raw_metrics_ref=raw_ref,
+                    )
+                    continue
+
+                if not champ_r.success:
+                    failed_pairs += 1
+                    champion_failed_pairs += 1
+                    raw_failures.append({
+                        "case": case,
+                        "seed": seed,
+                        "side": "champion",
+                        "comparison": "invalid",
+                        "error_category": champ_r.error_category or "unknown",
+                        "exit_code": champ_r.exit_code,
+                        "elapsed_ms": champ_r.elapsed_ms,
+                        "stderr_tail": (champ_r.stderr or "")[-1000:],
+                    })
+                    logger.info(
+                        "Pair %s seed=%d: champion solver failed category=%s elapsed_ms=%d → invalid",
+                        os.path.basename(case), seed,
+                        champ_r.error_category or "unknown",
+                        champ_r.elapsed_ms,
+                    )
+                    _write_metrics_snapshot(complete=False)
+                    continue
 
                 if cand_r.output is None or champ_r.output is None:
+                    failed_pairs += 1
+                    raw_failures.append({
+                        "case": case,
+                        "seed": seed,
+                        "side": "unknown",
+                        "comparison": "invalid",
+                        "error_category": "missing_output",
+                    })
                     _write_metrics_snapshot(complete=False)
                     continue
 
@@ -547,6 +633,14 @@ class ExperimentProtocol:
             else:
                 gate = frozen_gate(stats, self.config)
 
+            if failed_pairs > 0 and stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN):
+                reason_codes = ["INCOMPLETE_EVIDENCE"]
+                if candidate_failed_pairs:
+                    reason_codes.append("CANDIDATE_RUNTIME_FAILURE")
+                if champion_failed_pairs:
+                    reason_codes.append("CHAMPION_RUNTIME_FAILURE")
+                gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
+
         # Persist final raw metrics snapshot.
         _write_metrics_snapshot(complete=True)
 
@@ -554,14 +648,17 @@ class ExperimentProtocol:
         if stage == ExperimentStage.SCREENING:
             exposed = (
                 f"stage={stage.value} win_rate={stats.win_rate:.2f} "
-                f"median_delta={stats.median_delta:.4f} outcome={gate.outcome}"
+                f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
+                f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs}"
             )
         else:
             # Validation / Frozen: aggregate summary only, no per-case data
             exposed = (
                 f"stage={stage.value} outcome={gate.outcome} "
                 f"stat={stats.statistical_status or 'legacy'} "
-                f"metric={stats.statistical_metric or 'scalar'}"
+                f"metric={stats.statistical_metric or 'scalar'} "
+                f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
+                f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs}"
             )
 
         # Build case-level feedback for screening only

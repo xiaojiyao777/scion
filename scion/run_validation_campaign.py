@@ -77,6 +77,12 @@ MANIFEST = MANIFEST_MAP[args.variant]
 PROTOCOL = Path(args.protocol).expanduser() if args.protocol else PROTOCOL_MAP[args.variant]
 if not PROTOCOL.exists():
     raise FileNotFoundError(f"protocol file not found: {PROTOCOL}")
+if args.variant == "production":
+    os.environ.setdefault(
+        "SCION_PERF_GUARD_CASE",
+        "/home/clawd/research/scion-data/production/generated/instance_prod_scr_m03.json",
+    )
+    os.environ.setdefault("SCION_PERF_GUARD_TIMEOUT", "90")
 
 logger.info("=" * 70)
 logger.info("v0.3 Post-Optimization Validation — %s", datetime.now().isoformat())

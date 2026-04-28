@@ -111,6 +111,7 @@ class ContractGate:
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
         checks.append(self._c9b_non_rng_random(patch))
+        checks.append(self._c9c_complexity_bound(patch))
 
         return _build_result(checks)
 
@@ -409,6 +410,55 @@ class ContractGate:
         return _cr("C9b_non_rng_random", passed, "heavy", detail, t0)
 
     # ------------------------------------------------------------------
+    # C9c: Complexity bound for generated neighborhood enumeration.
+    # ------------------------------------------------------------------
+
+    def _c9c_complexity_bound(self, patch: PatchProposal) -> CheckResult:
+        """Reject high-order or variable-size combinations in operator code.
+
+        Production instances can contain 100+ vehicles in one region. An LLM
+        operator that enumerates combinations of size 3/4 or a variable-size
+        loop over combinations can explode inside the VNS pool loop. Pairwise
+        combinations with a constant k<=2 are allowed; broader neighborhoods
+        must be implemented via capped top-k candidate lists or sampling.
+        """
+        t0 = time.monotonic_ns()
+        if patch.action == "delete":
+            return _cr("C9c_complexity_bound", True, "heavy", "delete action — no complexity check", t0)
+
+        try:
+            tree = ast.parse(patch.code_content)
+        except SyntaxError:
+            return _cr("C9c_complexity_bound", False, "heavy", "unparseable code", t0)
+
+        violations: List[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not _is_combinations_call(node):
+                continue
+            if len(node.args) < 2:
+                continue
+            k_arg = node.args[1]
+            if isinstance(k_arg, ast.Constant) and isinstance(k_arg.value, int):
+                if k_arg.value <= 2:
+                    continue
+                violations.append(f"combinations(..., {k_arg.value})")
+            else:
+                violations.append("combinations(..., variable_k)")
+
+        if not violations:
+            return _cr("C9c_complexity_bound", True, "heavy", "complexity ok", t0)
+        return _cr(
+            "C9c_complexity_bound",
+            False,
+            "heavy",
+            "unbounded/high-order combinations detected: "
+            f"{violations}. Use capped top-k candidate lists or sampling.",
+            t0,
+        )
+
+    # ------------------------------------------------------------------
     # C10: Novelty check
     # ------------------------------------------------------------------
 
@@ -513,3 +563,12 @@ def _open_has_write_mode(call_node: ast.Call) -> Optional[str]:
                 return kw.value.value
 
     return None
+
+
+def _is_combinations_call(call_node: ast.Call) -> bool:
+    func = call_node.func
+    if isinstance(func, ast.Name):
+        return func.id == "combinations"
+    if isinstance(func, ast.Attribute):
+        return func.attr == "combinations"
+    return False
