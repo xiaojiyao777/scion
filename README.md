@@ -176,55 +176,75 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 
 ## 🏆 实验结果
 
-### v0.2 标杆实验：F6 Group A（合成数据，100r，Opus）
+### v0.3 最终验证（2026-04-28）
 
-**3 次 Champion 晋升**，全部 Frozen wr=1.0 + **3/3 Weight Optimization 有效**：
+v0.3 的最终实验由三部分组成：正式 12-campaign 验证、production timeout / incomplete-evidence 修复后的重跑、以及最佳 synthetic champion 的质量对比。
 
-| 版本 | 算子 | Frozen wr | Frozen md | Weight Opt |
-|------|------|-----------|-----------|------------|
-| v1→v2 | ConsolidateSubcategory | **1.00** | 3,575,000 | improved ✅ |
-| v2→v3 | ChainConsolidate | **1.00** | 2,450,000 | improved ✅ |
-| v3→v4 | DestroyRebuild (subcat-aware) | **1.00** | 500,000 | improved ✅ |
+| 维度 | 结果 |
+|------|------|
+| 正式验证矩阵 | 2 models × 2 data variants × 3 seeds，**12/12 campaigns completed** |
+| Synthetic 结构搜索 | **6/6 campaigns promoted**，10 次 structural promotions |
+| Synthetic 权重优化 | 8/10 sync weight optimizations improved |
+| Production 修复后重跑 | Sonnet **3/3 promotions**；GPT-mini 0/3；bad metrics = 0 |
+| 审计闭环 | `campaign_summary.json`、`status.json`、`scion.db`、metrics artifacts、LLM traces 完整落盘 |
 
-**权重优化揭示算子贡献度**：
+![Promotions Overview](scion/docs/figures/v0.3-final/01_promotions_overview.png)
 
-```
-consolidate_subcategory  2.05  ★ 核心算子，权重最高
-change_vehicle_type      0.84
-move_order               0.55
-merge_vehicles           0.50
-swap_orders              0.35
-destroy_rebuild          0.23
-split_vehicle            0.14
-chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
-```
+### 结构搜索 vs 权重优化
 
-> **研究发现**：算子收益不仅来自"存在"，更来自"被高频调用"。Weight optimization 将 consolidate_subcategory 权重放大 30 倍。
+| Group | Promotions | Weight opts | Improved weight opts |
+|-------|-----------:|------------:|---------------------:|
+| Sonnet synthetic | 6 | 6 | 4 |
+| GPT-mini synthetic | 4 | 4 | 4 |
+| Sonnet production rerun | 3 | 3 | 0 |
+| GPT-mini production rerun | 0 | 0 | 0 |
 
-### 合成 vs 生产数据对比
+![Group Totals And Weight Optimization](scion/docs/figures/v0.3-final/02_group_totals_weightopt.png)
 
-| | Group A（合成） | Group B（生产） |
-|---|---|---|
-| Promotes | 3 | 1 |
-| Weight opt | **3/3 improved** | 0/1 |
-| Abandon wr mean | 0.129 | 0.002 |
+v0.3 的核心结论是：synthetic 的收益同时来自结构搜索和权重优化；production 的有效收益主要来自结构改进，且对模型能力更敏感。
 
-> 📖 v0.2 历史报告已归档到 [`scion/docs/archive/v0.2/`](scion/docs/archive/v0.2/)。
+### 最强 Synthetic Champion
+
+最强一次优化来自 `sonnet-4-6_synthetic_seed29`，最终 champion 为 `v5_r0`，共 4 次 promotion：
+
+| 版本 | 晋升算子 |
+|------|----------|
+| v2 | `subcategory_pair_merge.py` |
+| v3 | `subcategory_tail_drain.py` |
+| v4 | `drain_least_utilized.py` |
+| v5 | `subcategory_cost_rebalance.py` |
+
+| 对比对象 | Better | Equal | Worse | Sum Δf1 / gap | Median Δf1 / gap |
+|----------|-------:|------:|------:|-------------:|-----------------:|
+| v1 baseline | 45 | 2 | 0 | -2,899 | -17 |
+| CPLEX final reference | 28 | 3 | 16 | -2,710 | -9 |
+
+![Best Synthetic Champion Quality](scion/docs/figures/v0.3-final/04_best_synthetic_quality.png)
+
+CPLEX 对比是 report-only reference：部分行是 feasible / time-limit 参考，不是严格最优性证书。
+
+### Production 完整证据重跑
+
+production 重跑修复了旧协议中 timeout / failed pair 被跳过导致证据不完整的问题。修复后 6 个 production campaigns 的 `bad metrics = 0`，Sonnet 三个 seed 均在完整证据下 promoted：
+
+| Seed | 晋升算子 | Frozen wr | Frozen md |
+|------|----------|----------:|----------:|
+| 11 | `cross_subcat_merge.py` | 1.00 | 30,000 |
+| 29 | `upgrade_and_absorb.py` | 1.00 | 38,800 |
+| 47 | `absorb_to_eliminate.py` | 1.00 | 29,600 |
+
+![Production Rerun Fixed](scion/docs/figures/v0.3-final/05_production_rerun_fixed.png)
+
+完整报告：
+
+- [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
+- [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
+- [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
 
 <details>
-<summary>📊 展开查看 F6 实验图表</summary>
+<summary>📦 v0.2 历史实验归档</summary>
 
-#### Champion 演化时间线
-![Champion Evolution](scion/docs/figures/sprint-f6/01_champion_evolution.png)
-
-#### Weight Optimization 权重对比
-![Weight Optimization](scion/docs/figures/sprint-f6/02_weight_optimization.png)
-
-#### A/B/C 三组对比
-![ABC Comparison](scion/docs/figures/sprint-f6/03_abc_comparison.png)
-
-#### Frozen Holdout 结果
-![Frozen Results](scion/docs/figures/sprint-f6/04_frozen_results.png)
+v0.2 的 F6 Group A、weight optimization 和 frozen holdout 图表已归档到 [`scion/docs/archive/v0.2/`](scion/docs/archive/v0.2/)；旧图表仍保留在 [`scion/docs/figures/sprint-f6/`](scion/docs/figures/sprint-f6/)。
 
 </details>
 
@@ -253,13 +273,15 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 
 ### 局限性
 
-Scion 在 v0.2 能证明的是：**在受控实验协议下，LLM 可以产出可泛化的算法改进，并通过统计检验进入 champion pool。**
+Scion 在 v0.3 能证明的是：**在受控 synthetic frozen-gate 验证中，LLM 驱动框架可以持续产出可泛化的算法改进；在 production 数据上，强模型可以在完整证据 gate 下取得 cost 改进。**
 
 但它不能证明：
 
-1. 改进一定能无缝泛化到真实生产环境，生产落地仍需要 shadow deployment / 灰度验证。
-2. LLM “真的理解了问题”，统计证据只能说明它持续做对了，不能区分“真懂”与“碰对”。
-3. 当前 champion 就是最优算子设计，开放设计空间没有穷尽证明。
+1. 改进一定能无缝泛化到线上生产环境，生产落地仍需要 shadow deployment / 灰度验证。
+2. production 成功可以跨所有模型稳定复现；GPT-mini 的结果说明模型能力和代码可靠性仍是边界。
+3. LLM “真的理解了问题”，统计证据只能说明它持续做对了，不能区分“真懂”与“碰对”。
+4. 当前 champion 就是最优算子设计，开放设计空间没有穷尽证明。
+5. Scion 已经泛化到第二个问题类别；这是 v1.0 的核心验证目标。
 
 统计证据已经是这类系统里最强的可操作保证，但它不是数学证明。
 
