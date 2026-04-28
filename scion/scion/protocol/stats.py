@@ -1,8 +1,8 @@
 from __future__ import annotations
 import random
-from typing import List, Literal, Tuple
+from typing import Mapping, Sequence, List, Literal, Tuple
 
-from scion.core.models import EvalStats
+from scion.core.models import EvalStats, MetricEvalStats
 
 
 def compute_eval_stats(
@@ -10,8 +10,16 @@ def compute_eval_stats(
     deltas: List[float],
     n_boot: int = 1000,
     alpha: float = 0.05,
+    *,
+    metric_deltas: Sequence[Mapping[str, float]] | None = None,
+    metric_order: Sequence[str] | None = None,
 ) -> EvalStats:
-    """Compute EvalStats from per-case comparisons and deltas."""
+    """Compute EvalStats from per-case comparisons and deltas.
+
+    When ``metric_deltas`` and ``metric_order`` are provided, ``ci_low`` /
+    ``ci_high`` become the priority-aware hierarchical CI used by promotion
+    gates. Legacy callers without metric details keep the old scalar-delta CI.
+    """
     n = len(comparisons)
     wins = comparisons.count("win")
     losses = comparisons.count("loss")
@@ -29,6 +37,60 @@ def compute_eval_stats(
         median_delta = 0.0
 
     ci_low, ci_high = bootstrap_ci(deltas, n_boot=n_boot, alpha=alpha)
+    statistical_status = None
+    statistical_metric = None
+    metric_stats: tuple[MetricEvalStats, ...] = ()
+
+    if metric_deltas is not None and metric_order:
+        metric_stats_list: list[MetricEvalStats] = []
+        selected: MetricEvalStats | None = None
+        selected_status: Literal["positive", "negative", "uncertain", "tie"] = "tie"
+
+        for metric_name in metric_order:
+            vals = [
+                float(row[metric_name])
+                for row in metric_deltas
+                if metric_name in row
+            ]
+            if not vals:
+                continue
+            med = _median(vals)
+            lo, hi = bootstrap_ci(vals, n_boot=n_boot, alpha=alpha)
+            row = MetricEvalStats(
+                metric_name=metric_name,
+                median_delta=med,
+                ci_low=lo,
+                ci_high=hi,
+                n_cases=len(vals),
+            )
+            metric_stats_list.append(row)
+
+            if lo > 0:
+                selected = row
+                selected_status = "positive"
+                break
+            if hi < 0:
+                selected = row
+                selected_status = "negative"
+                break
+            if lo == 0 and hi == 0 and med == 0:
+                # Exact tie on this priority level; continue to the next metric.
+                continue
+            selected = row
+            selected_status = "uncertain"
+            break
+
+        metric_stats = tuple(metric_stats_list)
+        if selected is None:
+            statistical_status = "tie"
+            statistical_metric = metric_stats[-1].metric_name if metric_stats else None
+            ci_low, ci_high = 0.0, 0.0
+            median_delta = 0.0
+        else:
+            statistical_status = selected_status
+            statistical_metric = selected.metric_name
+            ci_low, ci_high = selected.ci_low, selected.ci_high
+            median_delta = selected.median_delta
 
     return EvalStats(
         n_cases=n,
@@ -39,7 +101,20 @@ def compute_eval_stats(
         median_delta=median_delta,
         ci_low=ci_low,
         ci_high=ci_high,
+        statistical_status=statistical_status,
+        statistical_metric=statistical_metric,
+        metric_stats=metric_stats,
     )
+
+
+def _median(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+    sorted_d = sorted(values)
+    mid = len(sorted_d) // 2
+    if len(sorted_d) % 2 == 0:
+        return (sorted_d[mid - 1] + sorted_d[mid]) / 2.0
+    return sorted_d[mid]
 
 
 def bootstrap_ci(

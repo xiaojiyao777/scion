@@ -7,6 +7,8 @@ import time
 from typing import List, Optional
 
 from scion.config.problem import ProblemSpec
+from scion.core.operator_interface import parse_execute_signature
+from scion.core.paths import normalize_relative_patch_path
 from scion.core.models import (
     CheckResult,
     ContractResult,
@@ -55,8 +57,14 @@ _NON_RNG_RANDOM_PATTERNS = frozenset(
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
 
-    def __init__(self, problem_spec: ProblemSpec) -> None:
+    def __init__(
+        self,
+        problem_spec: ProblemSpec,
+        *,
+        operator_execute_signature: str | None = None,
+    ) -> None:
         self._spec = problem_spec
+        self._operator_signature = parse_execute_signature(operator_execute_signature)
 
     # ------------------------------------------------------------------
     # Public API
@@ -103,6 +111,7 @@ class ContractGate:
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
         checks.append(self._c9b_non_rng_random(patch))
+        checks.append(self._c9c_complexity_bound(patch))
 
         return _build_result(checks)
 
@@ -169,7 +178,11 @@ class ContractGate:
 
     def _c4_file_whitelist(self, patch: PatchProposal) -> CheckResult:
         t0 = time.monotonic_ns()
-        file_rel = patch.file_path.lstrip("/")
+        try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError as exc:
+            return _cr("C4_file_whitelist", False, "heavy", str(exc), t0)
+
         editable = self._spec.search_space.editable
         passed = any(fnmatch.fnmatch(file_rel, pat) for pat in editable)
         detail = (
@@ -185,7 +198,11 @@ class ContractGate:
 
     def _c5_frozen_files(self, patch: PatchProposal) -> CheckResult:
         t0 = time.monotonic_ns()
-        file_rel = patch.file_path.lstrip("/")
+        try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError as exc:
+            return _cr("C5_frozen_files", False, "heavy", str(exc), t0)
+
         frozen = self._spec.search_space.frozen
         violated = [pat for pat in frozen if fnmatch.fnmatch(file_rel, pat)]
         passed = len(violated) == 0
@@ -207,8 +224,8 @@ class ContractGate:
             return _cr("C6_ast_syntax", False, "light", f"SyntaxError: {e}", t0)
 
     # ------------------------------------------------------------------
-    # C7: Interface signature — if file contains a class, it must have
-    #     execute(self, solution, rng)
+    # C7: Interface signature — if file contains a class, it must have the
+    #     problem-defined execute signature.
     # ------------------------------------------------------------------
 
     def _c7_interface_signature(self, patch: PatchProposal) -> CheckResult:
@@ -230,14 +247,15 @@ class ContractGate:
             for node in ast.walk(cls):
                 if isinstance(node, ast.FunctionDef) and node.name == "execute":
                     args = [a.arg for a in node.args.args]
-                    if args == ["self", "solution", "rng"]:
+                    if tuple(args) == self._operator_signature.args:
                         return _cr("C7_interface", True, "light", "execute signature ok", t0)
                     else:
                         return _cr(
                             "C7_interface",
                             False,
                             "light",
-                            f"execute signature wrong: {args}, expected ['self','solution','rng']",
+                            "execute signature wrong: "
+                            f"{args}, expected {self._operator_signature.expected_args_detail}",
                             t0,
                         )
 
@@ -392,6 +410,55 @@ class ContractGate:
         return _cr("C9b_non_rng_random", passed, "heavy", detail, t0)
 
     # ------------------------------------------------------------------
+    # C9c: Complexity bound for generated neighborhood enumeration.
+    # ------------------------------------------------------------------
+
+    def _c9c_complexity_bound(self, patch: PatchProposal) -> CheckResult:
+        """Reject high-order or variable-size combinations in operator code.
+
+        Production instances can contain 100+ vehicles in one region. An LLM
+        operator that enumerates combinations of size 3/4 or a variable-size
+        loop over combinations can explode inside the VNS pool loop. Pairwise
+        combinations with a constant k<=2 are allowed; broader neighborhoods
+        must be implemented via capped top-k candidate lists or sampling.
+        """
+        t0 = time.monotonic_ns()
+        if patch.action == "delete":
+            return _cr("C9c_complexity_bound", True, "heavy", "delete action — no complexity check", t0)
+
+        try:
+            tree = ast.parse(patch.code_content)
+        except SyntaxError:
+            return _cr("C9c_complexity_bound", False, "heavy", "unparseable code", t0)
+
+        violations: List[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not _is_combinations_call(node):
+                continue
+            if len(node.args) < 2:
+                continue
+            k_arg = node.args[1]
+            if isinstance(k_arg, ast.Constant) and isinstance(k_arg.value, int):
+                if k_arg.value <= 2:
+                    continue
+                violations.append(f"combinations(..., {k_arg.value})")
+            else:
+                violations.append("combinations(..., variable_k)")
+
+        if not violations:
+            return _cr("C9c_complexity_bound", True, "heavy", "complexity ok", t0)
+        return _cr(
+            "C9c_complexity_bound",
+            False,
+            "heavy",
+            "unbounded/high-order combinations detected: "
+            f"{violations}. Use capped top-k candidate lists or sampling.",
+            t0,
+        )
+
+    # ------------------------------------------------------------------
     # C10: Novelty check
     # ------------------------------------------------------------------
 
@@ -496,3 +563,12 @@ def _open_has_write_mode(call_node: ast.Call) -> Optional[str]:
                 return kw.value.value
 
     return None
+
+
+def _is_combinations_call(call_node: ast.Call) -> bool:
+    func = call_node.func
+    if isinstance(func, ast.Name):
+        return func.id == "combinations"
+    if isinstance(func, ast.Attribute):
+        return func.attr == "combinations"
+    return False

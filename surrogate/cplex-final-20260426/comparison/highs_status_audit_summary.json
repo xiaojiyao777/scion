@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-04-26 13:07:16",
+  "total_matched_rows": 83,
+  "highs_reported_optimal_count": 73,
+  "highs_reported_optimal_but_cplex_better_count": 16,
+  "highs_reported_optimal_near_time_limit_count": 57,
+  "audit_reason_counts": {
+    "highs_reported_optimal_with_phase_time_near_or_above_limit": 57,
+    "highs_reported_optimal_but_cplex_found_better_objective": 16
+  },
+  "recommendation": "Treat historical HiGHS milp_status=optimal as reported status only. For comparative claims, use objective values and verification flags; CPLEX better-objective rows prove at least those HiGHS optimal labels were not strict optimality certificates."
+}

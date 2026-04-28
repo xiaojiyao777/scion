@@ -1,0 +1,17 @@
+{
+  "subcategory_splits": 1,
+  "total_cost": 27100,
+  "status": "optimal",
+  "gap": 0.0,
+  "solver_time_sec": 1200.23,
+  "solver": "CPLEX",
+  "provider": "milp",
+  "source_package": "cplex-final-20260426",
+  "source_result": "cplex-final-20260426/production/instance_prod_scr_s03.json",
+  "milp_status": "optimal",
+  "milp_exact": true,
+  "milp_verified": true,
+  "oracle_feasible": true,
+  "n_orders": 76,
+  "scale": "medium"
+}

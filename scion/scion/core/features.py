@@ -9,11 +9,25 @@ from scion.core.models import (
 )
 
 
-KNOWN_FAILURE_CODES = frozenset({
+# Failure taxonomy — two layers, both allowed in branch.failure_codes / DecisionFeatures.
+#
+# Layer 1: raw failure category (what pipeline stage the failure happened in).
+# These are what campaign._handle_failure pushes (uppercased from FailureEvent.category).
+_RAW_CATEGORIES = frozenset({
+    "PROPOSAL", "CONTRACT",
+    "VERIFICATION_LIGHT", "VERIFICATION_HEAVY",
+    "EVALUATION", "INFRA", "SEARCH_GUIDANCE",
+})
+# Layer 2: normalized check / outcome codes. Used by some legacy lineage paths
+# and by protocol outcomes. Kept for backward compatibility — v0.3 doesn't push
+# these from _handle_failure, but lineage_store / tests may carry them.
+_NORMALIZED_CODES = frozenset({
     "SYNTAX", "INTERFACE", "UNIT_TEST", "REGRESSION",
-    "FEASIBILITY", "OBJECTIVE", "STATE_LEAK", "WALL_CLOCK",
+    "FEASIBILITY", "OBJECTIVE", "SOLUTION_CONSISTENCY", "STATE_LEAK",
+    "WALL_CLOCK", "NONDETERMINISM",
     "CANARY_FAIL", "SCREENING_FAIL", "VALIDATION_FAIL", "FROZEN_FAIL",
 })
+KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -65,6 +79,8 @@ class SafeFeatureExtractor:
         median_delta: Optional[float] = None
         ci_low: Optional[float] = None
         ci_high: Optional[float] = None
+        statistical_status = None
+        statistical_metric = None
         n_cases = 0
 
         if protocol is not None:
@@ -74,6 +90,8 @@ class SafeFeatureExtractor:
             median_delta = stats.median_delta
             ci_low = stats.ci_low
             ci_high = stats.ci_high
+            statistical_status = stats.statistical_status
+            statistical_metric = stats.statistical_metric
 
         recent_failure_codes: Tuple[str, ...] = tuple(
             c for c in branch.failure_codes if c in KNOWN_FAILURE_CODES
@@ -91,9 +109,12 @@ class SafeFeatureExtractor:
             median_delta=median_delta,
             ci_low=ci_low,
             ci_high=ci_high,
+            statistical_status=statistical_status,
+            statistical_metric=statistical_metric,
             stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
             recent_retry_count=branch.retry_count,
-            expand_count=branch.expand_count,
+            screening_expand_count=branch.screening_expand_count,
+            validation_expand_count=branch.validation_expand_count,
             recent_failure_codes=recent_failure_codes,
             budget_remaining_ratio=budget.remaining_ratio,
         )

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Dict, Optional, Literal, Set, Tuple
 import yaml
 import os
@@ -25,11 +25,21 @@ __all__ = [
 ]
 
 
-class ParameterSearchConfig(BaseModel):
+class _StrictBase(BaseModel):
+    """Pydantic base with strict schema — unknown YAML fields raise instead of being silently dropped.
+
+    v0.3 §11.2 tech debt: ProblemSpec strict mode.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+
+class ParameterSearchConfig(_StrictBase):
     enabled: bool = True
     trigger: Literal["on_promote"] = "on_promote"
     target: Literal["operator_weights"] = "operator_weights"
     strategy: Literal["random_local", "bayesian"] = "random_local"
+    execution: Literal["async", "sync"] = "async"
+    final_wait_timeout_sec: Optional[float] = 600.0
     n_initial_random: int = 8
     n_iterations: int = 16
     n_eval_seeds: int = 2
@@ -37,16 +47,16 @@ class ParameterSearchConfig(BaseModel):
     eval_cases: List[str] = Field(default_factory=list)
 
 
-class SolverConfig(BaseModel):
+class SolverConfig(_StrictBase):
     time_limit_sec: int = 300
     max_iter: int = 1000
 
-class SearchSpace(BaseModel):
+class SearchSpace(_StrictBase):
     editable: List[str]
     frozen: List[str]
     import_whitelist: List[str]
 
-class ProblemSpec(BaseModel):
+class ProblemSpec(_StrictBase):
     name: str
     root_dir: str
     description: str = ""

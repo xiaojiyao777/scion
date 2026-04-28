@@ -31,8 +31,9 @@ class CampaignDiagnosis:
 class StagnationDetector:
     """Detect multi-dimensional stagnation patterns in the campaign history."""
 
-    def __init__(self, window_size: int = 5) -> None:
+    def __init__(self, window_size: int = 5, *, taxonomy: Optional[List[str]] = None) -> None:
         self._window = window_size
+        self._taxonomy = taxonomy
 
     def check(
         self,
@@ -169,7 +170,7 @@ class StagnationDetector:
         # Collect mechanism labels from hypothesis texts
         from scion.proposal.context_manager import _extract_mechanism_label
         labels = [
-            _extract_mechanism_label(s.hypothesis.hypothesis_text or "")
+            _extract_mechanism_label(s.hypothesis.hypothesis_text or "", taxonomy=self._taxonomy)
             for s in recent
         ]
         if len(set(labels)) == 1:
@@ -226,7 +227,7 @@ class StagnationDetector:
         # Family distribution
         family_distribution: Dict[str, int] = {}
         for step in step_history:
-            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "")
+            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "", taxonomy=self._taxonomy)
             family_distribution[label] = family_distribution.get(label, 0) + 1
 
         # Failure pattern (last 10 steps)

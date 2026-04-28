@@ -1,18 +1,17 @@
-"""V5_state_mutation: verify operator does not modify the input solution.
+"""V5_solution_consistency: verify output solution is internally consistent.
 
-Runs the candidate operator once on a canary case, comparing the input
-solution before and after to detect in-place mutation (state pollution).
+Runs the candidate solver on a canary case and checks that the output
+solution has correct internal structure (assignment ↔ vehicle membership).
+Classifies failures as ENV / CANDIDATE / UNKNOWN for diagnosis.
 
-This is distinct from V7_nondeterminism (which checks solver-level
-determinism via double-run). V5 directly tests the operator contract:
-execute(solution, rng) must not modify `solution`.
+Semantic rename: was V5_solution_consistency in v0.2, now V5_solution_consistency (W11).
 """
 from __future__ import annotations
 
-import copy
 import json
 import os
 import time
+from typing import Literal
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
@@ -29,26 +28,7 @@ def check_state_mutation(
     candidate_workspace: str,
     metrics_dir: str | None = None,
 ) -> CheckResult:
-    """V5_state_mutation: operator must not modify the input solution.
-
-    Strategy:
-      1. Run solver once to get a solution (the "input snapshot")
-      2. Run solver again — if the solver internally calls the operator
-         and the operator mutates the input, the pool gets corrupted
-
-    Implementation: run solver once, capture full output including the
-    solution state. Then run again with same seed. If the operator mutates
-    the input solution, the pool corruption will cascade and produce
-    different results. But that's what V7 catches.
-
-    So V5's direct approach: we instrument the check by running the solver
-    with a special flag that deep-copies the solution before each operator
-    call and compares after. For MVP, we use a simpler proxy: run solver
-    once and check that the output solution is internally consistent
-    (assignment dict matches vehicle.order_ids, all orders accounted for).
-    This catches the most common mutation bugs where the operator corrupts
-    the solution's internal consistency.
-    """
+    """V5_solution_consistency: output must be internally consistent."""
     t0 = time.monotonic_ns()
 
     canary = problem_spec.canary_case_path
@@ -69,49 +49,68 @@ def check_state_mutation(
             registry_path=reg,
         )
     except Exception as exc:
-        return _cr(False, f"solver run failed: {exc}", t0)
+        return _cr(False, f"solver run failed: {exc}", t0, diagnosis="ENV")
 
     if not result.success or result.output_path is None:
         detail = "solver run failed or no output"
         if result.stderr:
             detail = f"solver run failed: {result.stderr.strip()}"
-        return _cr(False, detail, t0)
+        return _cr(False, detail, t0, diagnosis="ENV")
 
     try:
         with open(result.output_path, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception as exc:
-        return _cr(False, f"could not read output: {exc}", t0)
+        return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
 
-    # Check internal consistency of the output solution
     issues = _check_solution_consistency(raw)
     if issues:
+        diag = _classify_consistency_failure(issues)
         detail = json.dumps({
             "check": "solution_consistency",
+            "diagnosis": diag,
             "issues": issues,
         })
-        return _cr(False, detail, t0)
+        return _cr(False, detail, t0, diagnosis=diag)
 
     return _cr(True, "solution internally consistent after solver run", t0)
 
 
-def _check_solution_consistency(raw: dict) -> list[str]:
-    """Check that the output solution is internally consistent.
+def _classify_consistency_failure(
+    issues: list[str],
+) -> Literal["ENV", "CANDIDATE", "UNKNOWN"]:
+    """Classify consistency failure into ENV / CANDIDATE / UNKNOWN.
 
-    This catches common mutation bugs where operators corrupt the
-    solution's assignment/vehicle data structures.
+    - ENV: infrastructure issue (empty output, file read error)
+    - CANDIDATE: operator-induced corruption (duplicate orders, assignment mismatch)
+    - UNKNOWN: can't determine root cause
     """
+    candidate_patterns = ["multiple vehicles", "assignment says", "not in assignment", "not in any vehicle"]
+    for issue in issues:
+        if any(p in issue for p in candidate_patterns):
+            return "CANDIDATE"
+    env_patterns = ["empty vehicle"]
+    for issue in issues:
+        if any(p in issue for p in env_patterns):
+            return "ENV"
+    return "UNKNOWN"
+
+
+def _check_solution_consistency(raw: dict) -> list[str]:
+    """Check that the output solution is internally consistent."""
     issues: list[str] = []
 
-    solution = raw.get("solution", {})
+    solution = raw.get("solution")
+    if not isinstance(solution, dict) or not (
+        "assignment" in solution or "vehicles" in solution
+    ):
+        solution = raw
     assignment = solution.get("assignment", {})
     vehicles = solution.get("vehicles", {})
 
     if not assignment and not vehicles:
-        # No solution data in output — skip consistency check
         return issues
 
-    # Check 1: every assigned order appears in exactly one vehicle
     order_to_vehicle: dict[str, str] = {}
     for vid, vehicle in vehicles.items():
         for oid in vehicle.get("order_ids", []):
@@ -122,7 +121,6 @@ def _check_solution_consistency(raw: dict) -> list[str]:
                 )
             order_to_vehicle[oid] = vid
 
-    # Check 2: assignment dict matches vehicle membership
     for oid, vid in assignment.items():
         if oid not in order_to_vehicle:
             issues.append(f"order {oid} in assignment but not in any vehicle")
@@ -136,7 +134,6 @@ def _check_solution_consistency(raw: dict) -> list[str]:
         if oid not in assignment:
             issues.append(f"order {oid} in vehicle {vid} but not in assignment")
 
-    # Check 3: no empty vehicles
     for vid, vehicle in vehicles.items():
         if not vehicle.get("order_ids"):
             issues.append(f"empty vehicle {vid} in output")
@@ -144,10 +141,16 @@ def _check_solution_consistency(raw: dict) -> list[str]:
     return issues
 
 
-def _cr(passed: bool, detail: str, t0: int) -> CheckResult:
+def _cr(
+    passed: bool, detail: str, t0: int,
+    diagnosis: Literal["ENV", "CANDIDATE", "UNKNOWN"] | None = None,
+) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
+    name = "V5_solution_consistency"
+    if diagnosis and not passed:
+        detail = f"[{diagnosis}] {detail}"
     return CheckResult(
-        name="V5_state_mutation",
+        name=name,
         passed=passed,
         severity="heavy",
         detail=detail,

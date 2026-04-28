@@ -20,8 +20,10 @@ def test_parameter_search_config_defaults():
     assert cfg.trigger == "on_promote"
     assert cfg.target == "operator_weights"
     assert cfg.strategy == "random_local"
-    assert cfg.n_initial_random == 4
-    assert cfg.n_iterations == 4
+    assert cfg.execution == "async"
+    assert cfg.final_wait_timeout_sec == 600.0
+    assert cfg.n_initial_random == 8
+    assert cfg.n_iterations == 16
     assert cfg.n_eval_seeds == 2
     assert cfg.weight_bounds == (0.05, 5.0)
     assert cfg.eval_cases == []
@@ -31,6 +33,8 @@ def test_parameter_search_config_custom():
     cfg = ParameterSearchConfig(
         enabled=False,
         strategy="bayesian",
+        execution="sync",
+        final_wait_timeout_sec=None,
         n_initial_random=4,
         n_iterations=16,
         n_eval_seeds=3,
@@ -39,6 +43,8 @@ def test_parameter_search_config_custom():
     )
     assert cfg.enabled is False
     assert cfg.strategy == "bayesian"
+    assert cfg.execution == "sync"
+    assert cfg.final_wait_timeout_sec is None
     assert cfg.n_initial_random == 4
     assert cfg.n_iterations == 16
     assert cfg.n_eval_seeds == 3
@@ -496,4 +502,3 @@ def test_default_optimizer_unchanged():
     opt = RandomLocalWeightOptimizer(space, lambda w: 1.0, seed=0)
     result = opt.optimize({"op_a": 1.0, "op_b": 1.0})
     assert isinstance(result.best_weights, dict)
-

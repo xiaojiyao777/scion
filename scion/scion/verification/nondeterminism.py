@@ -10,7 +10,7 @@ Common sources of nondeterminism:
   - importing random module directly (use the rng parameter)
   - reading system time, file system state, or other external entropy
 
-This is distinct from V5_state_mutation (which checks that operators don't
+This is distinct from V5_solution_consistency (which checks that operators don't
 modify their input solution). An operator can pass V5 but fail V7 if it
 uses uuid or non-deterministic iteration patterns.
 """

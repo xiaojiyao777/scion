@@ -78,11 +78,29 @@ class LineageRegistry:
                     current_code_hash   TEXT,
                     last_clean_code_hash TEXT,
                     retry_count         INTEGER DEFAULT 0,
+                    screening_expand_count INTEGER DEFAULT 0,
+                    validation_expand_count INTEGER DEFAULT 0,
                     failure_codes       TEXT,
                     created_at          TEXT NOT NULL,
-                    updated_at          TEXT NOT NULL
+                    updated_at          TEXT NOT NULL,
+                    direction           TEXT,
+                    weight_revision     INTEGER DEFAULT 0,
+                    pending_retry       INTEGER DEFAULT 0,
+                    blocked_rounds      INTEGER DEFAULT 0,
+                    consecutive_llm_retries INTEGER DEFAULT 0,
+                    infra_block_count   INTEGER DEFAULT 0
                 )
             """)
+            self._ensure_columns(conn, "branches", {
+                "screening_expand_count": "INTEGER DEFAULT 0",
+                "validation_expand_count": "INTEGER DEFAULT 0",
+                "direction": "TEXT",
+                "weight_revision": "INTEGER DEFAULT 0",
+                "pending_retry": "INTEGER DEFAULT 0",
+                "blocked_rounds": "INTEGER DEFAULT 0",
+                "consecutive_llm_retries": "INTEGER DEFAULT 0",
+                "infra_block_count": "INTEGER DEFAULT 0",
+            })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS hypotheses (
                     hypothesis_id        TEXT PRIMARY KEY,
@@ -95,20 +113,28 @@ class LineageRegistry:
                     suggested_weight     REAL,
                     hypothesis_text      TEXT,
                     created_at           TEXT,
-                    base_champion_version INTEGER DEFAULT 0
+                    base_champion_version INTEGER DEFAULT 0,
+                    family_id            TEXT,
+                    family_source        TEXT,
+                    taxonomy_version     TEXT
                 )
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS champions (
-                    version                  INTEGER PRIMARY KEY,
+                    version                  INTEGER NOT NULL,
+                    weight_revision          INTEGER NOT NULL DEFAULT 0,
                     operator_pool_json       TEXT NOT NULL,
                     solver_config_hash       TEXT NOT NULL,
                     code_snapshot_path       TEXT NOT NULL,
                     code_snapshot_hash       TEXT NOT NULL,
                     promotion_experiment_id  TEXT,
-                    promoted_at              TEXT
+                    promoted_at              TEXT,
+                    PRIMARY KEY (version, weight_revision)
                 )
             """)
+            self._ensure_columns(conn, "champions", {
+                "weight_revision": "INTEGER DEFAULT 0",
+            })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS weight_optimizations (
                     optimization_id        TEXT PRIMARY KEY,
@@ -293,6 +319,81 @@ class LineageRegistry:
             "n_champions": n_champions,
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
+        }
+
+    # ------------------------------------------------------------------
+    # W8: Lineage-derived failure summary v2
+    # ------------------------------------------------------------------
+
+    def get_failure_summary_v2(self) -> Dict[str, Any]:
+        """Derive structured failure summary from lineage events.
+
+        Returns:
+            {
+                "by_stage": {"contract": N, "verification": N, ...},
+                "by_decision": {"abandon": N, "discard": N, ...},
+                "by_family": {"family_id": {"total": N, "failed": N}, ...},
+                "recent_failures": [last 10 failure events as dicts],
+            }
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+
+            by_stage: Dict[str, int] = {}
+            for row in conn.execute("""
+                SELECT
+                    CASE
+                        WHEN contract_result = 'failed' THEN 'contract'
+                        WHEN verification_result = 'failed' THEN 'verification'
+                        ELSE 'other'
+                    END as fail_stage,
+                    COUNT(*) as cnt
+                FROM experiment_events
+                WHERE event_kind = 'experiment'
+                  AND (contract_result = 'failed' OR verification_result = 'failed')
+                GROUP BY 1
+            """).fetchall():
+                by_stage[row["fail_stage"]] = row["cnt"]
+
+            by_decision: Dict[str, int] = {}
+            for row in conn.execute("""
+                SELECT decision, COUNT(*) as cnt
+                FROM experiment_events
+                WHERE event_kind = 'experiment' AND decision IS NOT NULL
+                GROUP BY decision
+            """).fetchall():
+                by_decision[row["decision"]] = row["cnt"]
+
+            # Family-level failure stats (joined with hypotheses table)
+            by_family: Dict[str, Dict[str, int]] = {}
+            for row in conn.execute("""
+                SELECT
+                    h.family_id,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN h.status IN ('rejected', 'abandoned', 'blacklisted') THEN 1 ELSE 0 END) as failed
+                FROM hypotheses h
+                WHERE h.family_id IS NOT NULL
+                GROUP BY h.family_id
+            """).fetchall():
+                by_family[row["family_id"]] = {
+                    "total": row["total"], "failed": row["failed"],
+                }
+
+            recent = [dict(r) for r in conn.execute("""
+                SELECT branch_id, hypothesis_id, contract_result, verification_result,
+                       decision, timestamp
+                FROM experiment_events
+                WHERE event_kind = 'experiment'
+                  AND (contract_result = 'failed' OR verification_result = 'failed')
+                ORDER BY timestamp DESC
+                LIMIT 10
+            """).fetchall()]
+
+        return {
+            "by_stage": by_stage,
+            "by_decision": by_decision,
+            "by_family": by_family,
+            "recent_failures": recent,
         }
 
     # ------------------------------------------------------------------

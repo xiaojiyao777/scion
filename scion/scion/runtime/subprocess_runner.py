@@ -99,6 +99,16 @@ class LocalSubprocessRunner:
         """
         solver_path = Path(workdir) / "solver.py"
         python_exe = sys.executable
+        effective_timeout = (
+            min(self._limits.timeout_sec, int(time_limit_sec))
+            if time_limit_sec and time_limit_sec > 0
+            else self._limits.timeout_sec
+        )
+        effective_limits = ResourceLimits(
+            timeout_sec=effective_timeout,
+            memory_mb=self._limits.memory_mb,
+            max_file_descriptors=self._limits.max_file_descriptors,
+        )
 
         # Create a temporary output file so the solver can write results
         out_fd, out_path = tempfile.mkstemp(suffix=".json", prefix="scion_run_")
@@ -130,12 +140,12 @@ class LocalSubprocessRunner:
                 stderr=subprocess.PIPE,
                 cwd=workdir,
                 env=env,
-                preexec_fn=_make_preexec_fn(self._limits),
+                preexec_fn=_make_preexec_fn(effective_limits),
             )
 
             try:
                 stdout_bytes, stderr_bytes = proc.communicate(
-                    timeout=self._limits.timeout_sec
+                    timeout=effective_timeout
                 )
             except subprocess.TimeoutExpired:
                 # Hard-kill the whole process group

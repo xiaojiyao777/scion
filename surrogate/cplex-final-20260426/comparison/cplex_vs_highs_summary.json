@@ -1,0 +1,42 @@
+{
+  "created_at": "2026-04-26 13:05:01",
+  "cplex_items": 83,
+  "highs_items": 83,
+  "matched_items": 83,
+  "cplex_status_counts": {
+    "optimal": 68,
+    "feasible": 9,
+    "infeasible": 5,
+    "timeout": 1
+  },
+  "highs_status_counts": {
+    "optimal": 73,
+    "infeasible": 5,
+    "feasible": 4,
+    "timeout": 1
+  },
+  "status_transitions_highs_to_cplex": {
+    "feasible->feasible": 1,
+    "feasible->optimal": 3,
+    "infeasible->infeasible": 5,
+    "optimal->feasible": 7,
+    "optimal->optimal": 65,
+    "optimal->timeout": 1,
+    "timeout->feasible": 1
+  },
+  "objective_comparison_counts": {
+    "same_objective": 62,
+    "not_comparable_objective": 5,
+    "cplex_better_f2": 9,
+    "cplex_better_f1": 7
+  },
+  "verification_transitions_highs_to_cplex": {
+    "False->False": 5,
+    "False->True": 1,
+    "True->False": 1,
+    "True->True": 76
+  },
+  "elapsed_ratio_cplex_over_highs_avg": 1.206392843982927,
+  "elapsed_ratio_cplex_over_highs_min": 0.03739317967637577,
+  "elapsed_ratio_cplex_over_highs_max": 10.1776509156681
+}

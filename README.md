@@ -1,9 +1,8 @@
 # Scion — LLM 驱动的组合优化算法自动改进框架
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests: 289 passed](https://img.shields.io/badge/tests-289%20passed-brightgreen.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version: v0.2](https://img.shields.io/badge/version-v0.2-blue.svg)](#)
+[![Version: v0.3](https://img.shields.io/badge/version-v0.3-blue.svg)](#)
 
 **Scion**（嫁接/分支）是一个研究项目，探索如何利用 LLM 的推理能力自动改进组合优化算法中的启发式算子。与传统的 LLM+进化算法方法不同，Scion 将 LLM 视为**推理主体**（而非随机变异算子），通过假设驱动的搜索、三级统计验证、契约式治理和参数层优化，在保证安全性的前提下实现算子自动发现与权重优化。
 
@@ -11,11 +10,48 @@
 
 ```
 .
-├── scion/               # Scion Framework — 核心自动改进框架（57 文件，~11,400 行）
+├── scion/               # Scion Framework — 核心自动改进框架
 ├── surrogate/           # Surrogate Solver — 仓配协同 VNS 求解器
 ├── docs/blog/           # 博客文章与致谢
 └── reviews/             # GPT-5.4-Pro 架构审核报告
 ```
+
+---
+
+## v0.3 最终结果
+
+v0.3 的目标是把 Scion 从仓配 VNS 原型推进到可审计、可扩展的工程化框架：研究对象保留在 `surrogate/`，框架能力沉淀在 `scion/scion/`，并支持 adapter-driven objective policy、production/synthetic protocol 分离、同步权重优化、完整 lineage 和实验证据。
+
+最终验证：
+
+```text
+formal 12-campaign validation: 12/12 completed
+synthetic: 6/6 campaigns promoted, 10 total structural promotions
+production rerun after timeout/evidence fixes:
+  Sonnet: 3/3 promotions
+  GPT-mini: 0/3 promotions
+```
+
+最强一次优化来自 `sonnet-4-6_synthetic_seed29`：
+
+```text
+final champion = v5_r0
+promotions = 4
+best champion vs v1 baseline:
+  better = 45 / 47 cases
+  equal  = 2 / 47 cases
+  worse  = 0 / 47 cases
+  median Δf1 = -17
+```
+
+![Best Synthetic Champion Quality](scion/docs/figures/v0.3-final/04_best_synthetic_quality.png)
+
+完整可视化报告：
+
+- [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
+- [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
+
+v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization。
 
 ---
 
@@ -118,7 +154,7 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 
 ## ⚙️ Scion Framework
 
-`scion/` 是核心框架实现。**57 个 Python 文件，~11,400 行代码，289 unit tests。**
+`scion/` 是核心框架实现，包含 campaign lifecycle、protocol gates、objective policy、lineage、runtime isolation、LLM context 和 parameter search。
 
 | 模块 | 职责 |
 |------|------|
@@ -134,7 +170,7 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 | `lineage/` | SQLite Registry、BranchStore、ChampionStore、HypothesisStore |
 | `cli/` | Typer CLI（init / run / inspect / report） |
 
-> 📖 模块深度指南：[`scion/docs/understanding/`](scion/docs/understanding/)（11 篇文档）
+> 📖 当前文档索引：[`scion/docs/README.md`](scion/docs/README.md)
 
 ---
 
@@ -173,7 +209,7 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 | Weight opt | **3/3 improved** | 0/1 |
 | Abandon wr mean | 0.129 | 0.002 |
 
-> 📖 完整实验报告：[`scion/docs/v0.2-completion-report.md`](scion/docs/v0.2-completion-report.md)
+> 📖 v0.2 历史报告已归档到 [`scion/docs/archive/v0.2/`](scion/docs/archive/v0.2/)。
 
 <details>
 <summary>📊 展开查看 F6 实验图表</summary>
@@ -237,12 +273,13 @@ git clone https://github.com/xiaojiyao777/scion.git
 cd scion/scion && pip install -e .
 
 # 运行测试
-python -m pytest tests/unit/ -q  # 289 passed ✅
+python -m pytest scion/scion/tests/test_protocol.py scion/scion/tests/test_contract.py -q
 
 # 运行 Campaign
 export SCION_API_KEY="your-api-key"
 export SCION_MODEL="claude-opus-4-6"
-python run_v3_campaign.py 30
+cd scion
+python run_validation_campaign.py --model claude-sonnet-4-6 --variant synthetic --seed 11 --max-rounds 30
 ```
 
 ## 开发路线
@@ -250,8 +287,9 @@ python run_v3_campaign.py 30
 - [x] **v0.1** — MVP：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1** — 调优：ContextManager 重写、prompt caching、subprocess 修复 ✅
 - [x] **v0.2** — 参数层搜索、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
-- [ ] **v0.3** — 异步 Weight Opt、自动早停、Scoring 独立化、MILP 精确对比
-- [ ] **v1.0** — 多问题泛化、结构级搜索、论文实验
+- [x] **v0.3** — 框架工程化、adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
+- [ ] **v0.4** — Performance-aware optimization：runtime/complexity 作为公共优化维度
+- [ ] **v1.0** — 多问题泛化、第二问题对象、结构级搜索
 
 ## 致谢
 
@@ -268,4 +306,4 @@ MIT
 
 ---
 
-*Built with ⚙️ precision — Scion Framework v0.2*
+*Built with precision — Scion Framework v0.3*

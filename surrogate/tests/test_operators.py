@@ -220,6 +220,24 @@ class TestMoveOrder:
         for oid, vid in result.assignment.items():
             assert oid in result.vehicles[vid].order_ids
 
+    def test_stale_assignment_source_is_repaired_or_noop(self):
+        """assignment 指向错误车辆时不应崩溃。"""
+        o1 = make_order("O1", spu_list=[SPU("整板", 1)])
+        o2 = make_order("O2", spu_list=[SPU("整板", 1)])
+        inst = make_instance([o1, o2])
+        sol = Solution(
+            vehicles={
+                "V1": Vehicle("V1", "HQ40", "东莞", []),
+                "V2": Vehicle("V2", "HQ40", "东莞", ["O1", "O2"]),
+            },
+            assignment={"O1": "V1", "O2": "V2"},
+        )
+        op = MoveOrder(inst)
+        result = op.execute(sol, Random(0))
+        assert isinstance(result, Solution)
+        for oid, vid in result.assignment.items():
+            assert oid in result.vehicles[vid].order_ids
+
 
 class TestMergeVehicles:
     def test_merge_reduces_vehicles(self):

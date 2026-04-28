@@ -53,6 +53,7 @@ def _make_context(**overrides):
         "failure_pattern_warning": "",
         "locus_constraint": "",
         "abs_min_constraint": "",
+        "objective_guidance": "",
         "search_memory": "",
         "saturation_signal": "",
         "weight_opt_feedback": "",
@@ -119,20 +120,31 @@ class TestC10NoveltyRoutedAsSearchGuidance:
 # ===========================================================================
 
 class TestAtAbsoluteMinimumDetection:
-    def test_low_baseline_splits_sets_at_absolute_minimum(self):
-        """baseline_splits=0.2 (<1.0) → at_absolute_minimum=True, level=high."""
+    def test_low_baseline_with_lower_bound_sets_at_absolute_minimum(self):
+        """baseline_splits=0.2 at lower_bound=0.0 → at_absolute_minimum=True, level=high."""
         analyzer = ChampionSaturationAnalyzer(
-            {"subcategory_splits": 0.2, "total_cost": 50000.0}
+            {"subcategory_splits": 0.2, "total_cost": 50000.0},
+            lower_bounds={"subcategory_splits": 0.0},
         )
         signals = analyzer.analyze({"subcategory_splits": 0.2, "total_cost": 49000.0})
         splits_sig = next(s for s in signals if s.objective == "subcategory_splits")
         assert splits_sig.at_absolute_minimum is True
         assert splits_sig.saturation_level == "high"
 
-    def test_normal_baseline_splits_not_at_minimum(self):
-        """baseline_splits=5.0 (>=1.0) → at_absolute_minimum=False, normal calc."""
+    def test_no_lower_bounds_no_hard_saturation(self):
+        """Without lower_bounds, no objective gets at_absolute_minimum=True."""
         analyzer = ChampionSaturationAnalyzer(
-            {"subcategory_splits": 5.0, "total_cost": 50000.0}
+            {"subcategory_splits": 0.2, "total_cost": 50000.0}
+        )
+        signals = analyzer.analyze({"subcategory_splits": 0.2, "total_cost": 49000.0})
+        for s in signals:
+            assert s.at_absolute_minimum is False
+
+    def test_normal_baseline_splits_not_at_minimum(self):
+        """baseline_splits=5.0 (far from lower bound) → at_absolute_minimum=False."""
+        analyzer = ChampionSaturationAnalyzer(
+            {"subcategory_splits": 5.0, "total_cost": 50000.0},
+            lower_bounds={"subcategory_splits": 0.0},
         )
         signals = analyzer.analyze({"subcategory_splits": 4.0, "total_cost": 49000.0})
         splits_sig = next(s for s in signals if s.objective == "subcategory_splits")
@@ -142,30 +154,45 @@ class TestAtAbsoluteMinimumDetection:
 
     def test_at_minimum_improvement_ratio_is_zero(self):
         """Absolute minimum signal always has improvement_ratio=0.0."""
-        analyzer = ChampionSaturationAnalyzer({"subcategory_splits": 0.5})
-        signals = analyzer.analyze({"subcategory_splits": 0.3})
+        analyzer = ChampionSaturationAnalyzer(
+            {"subcategory_splits": 0.3},
+            lower_bounds={"subcategory_splits": 0.0},
+        )
+        signals = analyzer.analyze({"subcategory_splits": 0.2})
         splits_sig = next(s for s in signals if s.objective == "subcategory_splits")
         assert splits_sig.improvement_ratio == pytest.approx(0.0)
 
+    def test_generic_lower_bound_any_objective(self):
+        """Any objective with lower_bounds triggers hard saturation when baseline at bound."""
+        analyzer = ChampionSaturationAnalyzer(
+            {"total_cost": 90.3},
+            lower_bounds={"total_cost": 90.0},
+        )
+        signals = analyzer.analyze({"total_cost": 90.0})
+        cost_sig = next(s for s in signals if s.objective == "total_cost")
+        assert cost_sig.at_absolute_minimum is True
+        assert cost_sig.saturation_type == "hard"
 
-class TestRenderSaturationSignalsMandatoryConstraint:
-    def test_at_minimum_generates_mandatory_constraint_text(self):
-        """render_saturation_signals with at_absolute_minimum → MANDATORY CONSTRAINT."""
+
+class TestRenderSaturationSignalsTendency:
+    def test_at_minimum_generates_tendency_text(self):
+        """render_saturation_signals with at_absolute_minimum → tendency note, not prohibition."""
         signals = [
             SaturationSignal(
                 objective="subcategory_splits",
                 improvement_ratio=0.0,
                 saturation_level="high",
-                opportunity_hint="已达绝对下界",
+                opportunity_hint="at theoretical lower bound (0)",
                 at_absolute_minimum=True,
             )
         ]
         text = render_saturation_signals(signals)
-        assert "MANDATORY CONSTRAINT" in text
-        assert "split" in text.lower() or "COST" in text
+        assert "strongly preferred" in text
+        assert "MANDATORY" not in text
+        assert "禁止" not in text
 
     def test_normal_signal_no_mandatory_constraint(self):
-        """render_saturation_signals without at_absolute_minimum → no MANDATORY."""
+        """render_saturation_signals without at_absolute_minimum → no constraint."""
         signals = [
             SaturationSignal(
                 objective="subcategory_splits",
@@ -179,22 +206,21 @@ class TestRenderSaturationSignalsMandatoryConstraint:
         assert "MANDATORY CONSTRAINT" not in text
 
 
-class TestAbsMinConstraintInPrompt:
-    def test_abs_min_constraint_injected_into_system_prompt(self):
-        """abs_min_constraint field → appears in system blocks."""
-        constraint_text = (
-            "\n## MANDATORY CONSTRAINT — SPLITS AT MINIMUM\n"
-            "Champion baseline splits ≈ 0. Splits CANNOT be reduced further.\n"
-            "DO NOT propose subcategory-aware, split-reduction, or consolidation operators.\n"
-            "ALL proposals MUST target COST reduction ONLY.\n"
+class TestObjectiveGuidanceInPrompt:
+    def test_objective_guidance_injected_into_system_prompt(self):
+        """objective_guidance field → appears in system blocks."""
+        guidance_text = (
+            "\n## Objective Improvement Guidance\n"
+            "- splits: at or near its theoretical minimum. "
+            "Focusing search effort on other objectives is strongly preferred."
         )
-        ctx = _make_context(abs_min_constraint=constraint_text)
+        ctx = _make_context(objective_guidance=guidance_text)
         text = _system_text(ctx)
-        assert "MANDATORY CONSTRAINT" in text
-        assert "COST reduction ONLY" in text
+        assert "Objective Improvement Guidance" in text
+        assert "strongly preferred" in text
 
-    def test_empty_abs_min_constraint_not_injected(self):
-        """Empty abs_min_constraint → no MANDATORY CONSTRAINT in prompt."""
-        ctx = _make_context(abs_min_constraint="")
+    def test_empty_objective_guidance_not_injected(self):
+        """Empty objective_guidance → no guidance block in prompt."""
+        ctx = _make_context(objective_guidance="")
         text = _system_text(ctx)
-        assert "MANDATORY CONSTRAINT" not in text
+        assert "Objective Improvement Guidance" not in text

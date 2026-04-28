@@ -24,8 +24,11 @@ class BranchStore:
                 INSERT OR REPLACE INTO branches
                 (branch_id, state, base_champion_id, base_champion_hash,
                  current_code_hash, last_clean_code_hash, retry_count,
-                 failure_codes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 screening_expand_count, validation_expand_count,
+                 failure_codes, created_at, updated_at, direction,
+                 weight_revision, pending_retry, blocked_rounds,
+                 consecutive_llm_retries, infra_block_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -35,9 +38,17 @@ class BranchStore:
                     branch.current_code_hash,
                     branch.last_clean_code_hash,
                     branch.retry_count,
+                    branch.screening_expand_count,
+                    branch.validation_expand_count,
                     json.dumps(branch.failure_codes),
                     branch.created_at.isoformat(),
                     branch.updated_at.isoformat(),
+                    branch.direction,
+                    branch.weight_revision,
+                    1 if branch.pending_retry else 0,
+                    branch.blocked_rounds,
+                    branch.consecutive_llm_retries,
+                    branch.infra_block_count,
                 ),
             )
 
@@ -73,9 +84,17 @@ class BranchStore:
             current_code_hash=d.get("current_code_hash"),
             last_clean_code_hash=d.get("last_clean_code_hash"),
             retry_count=d.get("retry_count", 0),
+            screening_expand_count=d.get("screening_expand_count") or 0,
+            validation_expand_count=d.get("validation_expand_count") or 0,
             failure_codes=json.loads(d["failure_codes"]) if d.get("failure_codes") else [],
             created_at=datetime.fromisoformat(d["created_at"]),
             updated_at=datetime.fromisoformat(d["updated_at"]),
+            direction=d.get("direction"),
+            weight_revision=d.get("weight_revision") or 0,
+            pending_retry=bool(d.get("pending_retry") or 0),
+            blocked_rounds=d.get("blocked_rounds") or 0,
+            consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,
+            infra_block_count=d.get("infra_block_count") or 0,
         )
 
 
@@ -90,8 +109,9 @@ class HypothesisStore:
                 INSERT OR REPLACE INTO hypotheses
                 (hypothesis_id, branch_id, change_locus, action, status,
                  target_file, parent_hypothesis_id, suggested_weight,
-                 hypothesis_text, created_at, base_champion_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 hypothesis_text, created_at, base_champion_version,
+                 family_id, family_source, taxonomy_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -105,6 +125,9 @@ class HypothesisStore:
                     hyp.hypothesis_text,
                     hyp.created_at.isoformat(),
                     hyp.base_champion_version,
+                    hyp.family_id,
+                    hyp.family_source,
+                    hyp.taxonomy_version,
                 ),
             )
 
@@ -192,6 +215,50 @@ class HypothesisStore:
             parent_hypothesis_id=d.get("parent_hypothesis_id"),
             suggested_weight=d.get("suggested_weight"),
             hypothesis_text=d.get("hypothesis_text"),
+            family_id=d.get("family_id"),
+            family_source=d.get("family_source"),
+            taxonomy_version=d.get("taxonomy_version"),
             created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
             base_champion_version=d.get("base_champion_version") or 0,
         )
+
+    # ---------------------------------------------------------------
+    # W5: Lineage-derived family views
+    # ---------------------------------------------------------------
+
+    def get_family_stats(self) -> List[dict]:
+        """Derive family statistics from lineage (persist facts, rebuild views).
+
+        Returns list of dicts with: family_id, total_attempts, statuses,
+        promoted_count, rejected_count, active_count.
+        """
+        with sqlite3.connect(self.registry.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT
+                    family_id,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'promoted' THEN 1 ELSE 0 END) as promoted,
+                    SUM(CASE WHEN status IN ('rejected', 'abandoned', 'blacklisted') THEN 1 ELSE 0 END) as rejected,
+                    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active
+                FROM hypotheses
+                WHERE family_id IS NOT NULL
+                GROUP BY family_id
+                ORDER BY total DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_failure_summary(self) -> List[dict]:
+        """Derive failure summary from hypothesis statuses in lineage.
+
+        Returns list of dicts with: status, count.
+        """
+        with sqlite3.connect(self.registry.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT status, COUNT(*) as count
+                FROM hypotheses
+                GROUP BY status
+                ORDER BY count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]

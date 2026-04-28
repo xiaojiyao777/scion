@@ -482,8 +482,9 @@ class TestT6BalanceExhaustedStop:
         import anthropic
 
         client = LLMClient.__new__(LLMClient)
-        client._client = None
-        client.model = "test"
+        client._anthropic_client = None
+        client._openai_client = None
+        client.model = "claude-test"
         client.max_tokens = 100
         client.timeout_sec = 10
 
@@ -492,7 +493,7 @@ class TestT6BalanceExhaustedStop:
         mock_anthropic.messages.create.side_effect = Exception(
             "403 Forbidden: balance is insufficient"
         )
-        client._client = mock_anthropic
+        client._anthropic_client = mock_anthropic
 
         with pytest.raises(_BalanceError):
-            client._call_once("test prompt", "test-model")
+            client._call_once("test prompt", "claude-test")

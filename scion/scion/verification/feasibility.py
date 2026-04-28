@@ -5,19 +5,24 @@ import json
 import os
 import sys
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.runner import Runner
+
+if TYPE_CHECKING:
+    from scion.problem.contracts import ProblemAdapter
 
 
 def check_feasibility(
     problem_spec: ProblemSpec,
     runner: Runner,
     candidate_workspace: str,
+    *,
+    adapter: Optional[ProblemAdapter] = None,
 ) -> CheckResult:
-    """V3_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
+    """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
 
     canary = problem_spec.canary_case_path
@@ -57,7 +62,11 @@ def check_feasibility(
     except Exception as exc:
         return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
-    # Import oracle + models from root_dir (surrogate directory).
+    # --- Adapter-based path (v0.3+) ---
+    if adapter is not None:
+        return _check_via_adapter(adapter, raw, canary, t0)
+
+    # --- Legacy path (direct oracle import) ---
     oracle_dir = os.path.dirname(os.path.abspath(
         os.path.join(problem_spec.root_dir, problem_spec.oracle_path)
     ))
@@ -77,6 +86,40 @@ def check_feasibility(
     return _cr(
         False, "heavy",
         f"infeasible: {'; '.join(feas.violations[:3])}",
+        t0,
+    )
+
+
+def _check_via_adapter(
+    adapter: ProblemAdapter, raw: dict, canary: str, t0: int,
+) -> CheckResult:
+    try:
+        instance = adapter.load_instance(canary)
+        artifact = adapter.deserialize_solver_output(raw, instance)
+    except Exception as exc:
+        return _cr(False, "heavy", f"adapter deserialize error: {exc}", t0)
+
+    try:
+        consistency = adapter.check_solution_consistency(artifact, instance)
+        if not consistency.passed:
+            return _cr(
+                False, "heavy",
+                f"consistency failed: {'; '.join(consistency.reasons[:3])}",
+                t0,
+            )
+    except Exception as exc:
+        return _cr(False, "heavy", f"consistency check error: {exc}", t0)
+
+    try:
+        feas = adapter.check_feasibility(artifact, instance)
+    except Exception as exc:
+        return _cr(False, "heavy", f"adapter.check_feasibility error: {exc}", t0)
+
+    if feas.passed:
+        return _cr(True, "heavy", "feasibility ok", t0)
+    return _cr(
+        False, "heavy",
+        f"infeasible: {'; '.join(feas.reasons[:3])}",
         t0,
     )
 
@@ -183,7 +226,7 @@ def _load_solution_and_instance(raw: dict, instance_path: str, oracle_dir: str):
 def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     return CheckResult(
-        name="V3_feasibility",
+        name="V6_feasibility",
         passed=passed,
         severity=severity,  # type: ignore[arg-type]
         detail=detail,

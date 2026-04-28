@@ -22,8 +22,10 @@ from scion.core.campaign import CampaignManager
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, CheckResult,
     ContractResult, Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    HypothesisRecord, ProtocolResult, VerificationResult,
+    HypothesisRecord, OperatorConfig, ProtocolResult, VerificationResult,
+    WeightOptimizationResult,
 )
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
 
@@ -66,9 +68,16 @@ class _AlwaysPassVerification:
         )
 
 
-def _make_spec(root_dir: str, weight_opt_enabled: bool = True) -> ProblemSpec:
+def _make_spec(
+    root_dir: str,
+    weight_opt_enabled: bool = True,
+    weight_opt_execution: str = "async",
+) -> ProblemSpec:
     from scion.config.problem import ParameterSearchConfig
-    param = ParameterSearchConfig(enabled=weight_opt_enabled)
+    param = ParameterSearchConfig(
+        enabled=weight_opt_enabled,
+        execution=weight_opt_execution,
+    )
     return ProblemSpec(
         name="test_vrp",
         root_dir=root_dir,
@@ -93,13 +102,18 @@ def _make_champion(code_dir: Path) -> ChampionState:
 
 
 def _make_campaign(tmp_path: Path, experiment_protocol: Any = None,
-                   weight_opt_enabled: bool = True) -> CampaignManager:
+                   weight_opt_enabled: bool = True,
+                   weight_opt_execution: str = "async") -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
     (code_dir / "operators" / "local_search.py").write_text(_VALID_CODE)
 
     campaign_dir = str(tmp_path / "campaign")
-    spec = _make_spec(str(code_dir), weight_opt_enabled=weight_opt_enabled)
+    spec = _make_spec(
+        str(code_dir),
+        weight_opt_enabled=weight_opt_enabled,
+        weight_opt_execution=weight_opt_execution,
+    )
     champion = _make_champion(code_dir)
 
     return CampaignManager(
@@ -146,6 +160,17 @@ def _build_promoted_branch(cm: CampaignManager, tmp_path: Path) -> Branch:
     )
     cm._branch_workspaces[bid] = str(ws)
     return branch
+
+
+def _write_registry(path: Path, weight: float = 1.0) -> None:
+    path.write_text(
+        "operators:\n"
+        "  - name: local_search\n"
+        "    file_path: operators/local_search.py\n"
+        "    category: local_search\n"
+        "    weight: %.1f\n"
+        "    class_name: LocalSearch\n" % weight
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +242,211 @@ class TestBgThreadLaunchedAndJoins:
             assert cm._champion.version == 2, "champion version should advance to 2"
 
 
+class TestSyncWeightOptMode:
+    def test_sync_mode_blocks_and_records_without_bg_thread(self, tmp_path):
+        """execution=sync runs weight optimization inline and drains the result."""
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+
+        cm = _make_campaign(
+            tmp_path,
+            experiment_protocol=mock_protocol,
+            weight_opt_execution="sync",
+        )
+
+        call_log = []
+
+        def instant_weight_opt(staging_path, version, current_weights):
+            call_log.append(version)
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights=current_weights,
+                baseline_score=0.0,
+                best_score=0.0,
+                improved=False,
+                n_evaluations=1,
+                elapsed_seconds=0.0,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = instant_weight_opt
+
+        branch = _build_promoted_branch(cm, tmp_path)
+        cm._on_promote(branch)
+
+        assert call_log == [2]
+        assert len(cm._pending_weight_opt_threads) == 0
+        rows = cm._registry.query_weight_optimizations(champion_version=2)
+        assert len(rows) == 1
+        assert rows[0]["improved"] == 0
+
+    def test_sync_mode_publishes_weight_opt_status(self, tmp_path):
+        """sync weight optimization refreshes status.json during the blocking phase."""
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+
+        cm = _make_campaign(
+            tmp_path,
+            experiment_protocol=mock_protocol,
+            weight_opt_execution="sync",
+        )
+
+        publish_count = 0
+        original_write_status = cm._write_status
+
+        def counting_write_status(*args, **kwargs):
+            nonlocal publish_count
+            publish_count += 1
+            return original_write_status(*args, **kwargs)
+
+        cm._write_status = counting_write_status
+
+        def instant_weight_opt(staging_path, version, current_weights):
+            cm._weight_opt_coord._set_status(
+                version,
+                phase="evaluating_weights",
+                total_evaluations=1,
+                completed_evaluations=0,
+            )
+            cm._weight_opt_coord._set_status(
+                version,
+                phase="evaluating_weights",
+                completed_evaluations=1,
+                last_score=0.0,
+            )
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights=current_weights,
+                baseline_score=0.0,
+                best_score=0.0,
+                improved=False,
+                n_evaluations=1,
+                elapsed_seconds=0.0,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = instant_weight_opt
+
+        branch = _build_promoted_branch(cm, tmp_path)
+        cm._on_promote(branch)
+
+        assert publish_count >= 3
+        state = cm.get_state()
+        runs = state["weight_optimization"]["runs"]
+        assert runs[0]["mode"] == "sync"
+        assert runs[0]["phase"] == "completed"
+        assert runs[0]["completed_evaluations"] == 1
+
+
+class TestWeightOptMetricSpecsAndPersistence:
+    def test_run_optimization_passes_metric_specs(self, tmp_path, monkeypatch):
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+        specs = [
+            ObjectiveMetricSpec(name="tour_cost", direction="minimize", priority=1),
+        ]
+        mock_protocol._metric_specs = specs
+        cm = _make_campaign(tmp_path, experiment_protocol=mock_protocol)
+
+        snapshot = tmp_path / "snapshot"
+        (snapshot / "operators").mkdir(parents=True)
+        (snapshot / "operators" / "local_search.py").write_text(_VALID_CODE)
+        _write_registry(snapshot / "registry.yaml")
+
+        from scion.parameter import evaluator as evaluator_mod
+        from scion.parameter import optimizer as optimizer_mod
+
+        seen = {}
+
+        def fake_collect_baseline(*args, **kwargs):
+            return {"case": {1: {"tour_cost": 10.0}}}
+
+        def fake_evaluate_weights(**kwargs):
+            seen["metric_specs"] = kwargs.get("metric_specs")
+            return 0.0
+
+        class FakeOptimizer:
+            def __init__(self, search_space, eval_fn, seed=0):
+                self._eval_fn = eval_fn
+
+            def optimize(self, current_weights, artifacts_dir=None):
+                self._eval_fn(current_weights)
+                return WeightOptimizationResult(
+                    baseline_weights=current_weights,
+                    best_weights=current_weights,
+                    baseline_score=0.0,
+                    best_score=0.0,
+                    improved=False,
+                    n_evaluations=1,
+                    elapsed_seconds=0.0,
+                    observations_ref="",
+                )
+
+        monkeypatch.setattr(evaluator_mod, "collect_baseline", fake_collect_baseline)
+        monkeypatch.setattr(evaluator_mod, "evaluate_weights", fake_evaluate_weights)
+        monkeypatch.setattr(optimizer_mod, "RandomLocalWeightOptimizer", FakeOptimizer)
+
+        cm._run_weight_optimization(str(snapshot), 2, {"local_search": 1.0})
+
+        assert seen["metric_specs"] is specs
+
+    def test_improved_weight_revision_persists_after_main_thread_drain(self, tmp_path):
+        mock_protocol = MagicMock()
+        mock_protocol.runner = MagicMock()
+        cm = _make_campaign(tmp_path, experiment_protocol=mock_protocol)
+
+        staging = tmp_path / "staging"
+        (staging / "operators").mkdir(parents=True)
+        (staging / "operators" / "local_search.py").write_text(_VALID_CODE)
+        _write_registry(staging / "registry.yaml")
+
+        cm._champion = ChampionState(
+            version=2,
+            operator_pool={
+                "local_search": OperatorConfig(
+                    name="local_search",
+                    file_path="operators/local_search.py",
+                    category="local_search",
+                    weight=1.0,
+                    class_name="LocalSearch",
+                )
+            },
+            solver_config_hash="abc123",
+            code_snapshot_path=str(staging),
+            code_snapshot_hash="hash_v2",
+            promoted_at="2026-01-01T00:00:00",
+            weight_revision=0,
+        )
+
+        def improved_weight_opt(staging_path, version, current_weights):
+            return WeightOptimizationResult(
+                baseline_weights=current_weights,
+                best_weights={"local_search": 2.0},
+                baseline_score=0.0,
+                best_score=1.0,
+                improved=True,
+                n_evaluations=2,
+                elapsed_seconds=0.1,
+                observations_ref="",
+            )
+
+        cm._run_weight_optimization = improved_weight_opt
+        cm._weight_opt_coord._bg_weight_opt_task(
+            str(staging), 2, {"local_search": 1.0}
+        )
+
+        assert cm._champion.weight_revision == 0
+        assert cm._champion_store.get_by_version_revision(2, 1) is None
+
+        cm._drain_weight_opt_events()
+
+        persisted = cm._champion_store.get_by_version_revision(2, 1)
+        assert persisted is not None
+        assert persisted.weight_revision == 1
+        assert persisted.operator_pool["local_search"].weight == 2.0
+        assert cm._champion.weight_revision == 1
+
+
 # ---------------------------------------------------------------------------
 # R4: stale bg thread result is discarded
 # ---------------------------------------------------------------------------
@@ -273,6 +503,7 @@ class TestStaleBgThreadDiscarded:
         # Join all bg threads
         for t in cm._pending_weight_opt_threads:
             t.join(timeout=5.0)
+        cm._drain_weight_opt_events()
 
         # Champion version should remain 3 and pool NOT updated to 99.0
         with cm._champion_lock:

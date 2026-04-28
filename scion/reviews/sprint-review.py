@@ -15,14 +15,14 @@ AIHUBMIX_API_KEY = os.environ.get("SCION_API_KEY")
 if not AIHUBMIX_API_KEY:
     raise Exception("需要KEY")
 
-INPUT_FILE = "sprint-e-review-prompt.md"
-OUTPUT_FILE = "scion-v02-review_result3.md"
+INPUT_FILE = "v0.3-design-review.md"
+OUTPUT_FILE = "v0.3-design-detail-plan.md"
 MODEL = "gpt-5.4-pro"
 REASONING_EFFORT = "high"       # 推理深度: medium / high / xhigh
 TEXT_VERBOSITY = "high"         # 输出篇幅: low / medium / high
 
 SYSTEM_PROMPT = (
-    "用户正在设计并开发Scion：是一个面向组合优化算法自动改进的研究执行框架；当前已经做完v0.2版本的设计和开发，并且进行了审核，现在需要你结合原始文档和脚本以及审计意见，给出详细完整的开发任务单"
+    "用户正在设计并开发Scion：是一个面向组合优化算法自动改进的研究执行框架；当前已经做完v0.3版本的设计和开发，并完成了完整深度审核，现在需要根据审核结果进行详细的工程设计"
 )
 
 # ============== 初始化客户端 ==============

@@ -1,10 +1,11 @@
-"""Sprint J5 unit tests: HypothesisFamilyClassifier."""
+"""Sprint J5 unit tests: HypothesisFamilyClassifier (updated for O0 API)."""
 from __future__ import annotations
 
 import pytest
 from unittest.mock import MagicMock
 
 from scion.proposal.classifier import (
+    ClassificationResult,
     HypothesisFamilyClassifier,
     TAXONOMY,
     _keyword_classify,
@@ -44,46 +45,45 @@ class TestKeywordClassify:
 
 class TestClassifierWithMock:
     def test_no_client_uses_keyword(self):
-        """Without LLM client, uses keyword fallback."""
         c = HypothesisFamilyClassifier(llm_client=None)
         result = c.classify("subcategory consolidation of orders")
-        assert result == "subcategory_merge_consolidate"
+        assert isinstance(result, ClassificationResult)
+        assert result.family_id == "subcategory_merge_consolidate"
+        assert result.source == "keyword"
 
     def test_llm_returns_valid_taxonomy(self):
-        """LLM returns a valid taxonomy label."""
         client = MagicMock()
-        client.call_simple.return_value = "intra_subcat_repack"
+        client.call_text.return_value = "intra_subcat_repack"
         c = HypothesisFamilyClassifier(llm_client=client)
         result = c.classify("drain orders from small vehicles")
-        assert result == "intra_subcat_repack"
+        assert result.family_id == "intra_subcat_repack"
+        assert result.source == "classifier"
 
     def test_llm_failure_fallback(self):
-        """LLM call fails → uses keyword fallback."""
         client = MagicMock()
-        client.call_simple.side_effect = RuntimeError("API error")
+        client.call_text.side_effect = RuntimeError("API error")
         c = HypothesisFamilyClassifier(llm_client=client)
         result = c.classify("drain orders from small vehicles")
-        assert result == "intra_subcat_repack"  # keyword fallback
+        assert result.family_id == "intra_subcat_repack"
+        assert result.source == "keyword"
 
     def test_llm_invalid_response_fallback(self):
-        """LLM returns non-taxonomy label → keyword fallback."""
         client = MagicMock()
-        client.call_simple.return_value = "nonsense_label"
+        client.call_text.return_value = "nonsense_label"
         c = HypothesisFamilyClassifier(llm_client=client)
         result = c.classify("subcategory merge")
-        assert result == "subcategory_merge_consolidate"  # keyword fallback
+        assert result.family_id == "subcategory_merge_consolidate"
 
     def test_taxonomy_has_expected_families(self):
-        """TAXONOMY includes key family types."""
         assert "subcategory_merge_consolidate" in TAXONOMY
         assert "intra_subcat_repack" in TAXONOMY
         assert "vehicle_elimination_cost" in TAXONOMY
         assert "NEW_FAMILY" in TAXONOMY
 
     def test_llm_partial_match(self):
-        """LLM returns taxonomy label with extra whitespace → still matches."""
         client = MagicMock()
-        client.call_simple.return_value = "  subcategory_merge_consolidate  "
+        client.call_text.return_value = "  subcategory_merge_consolidate  "
         c = HypothesisFamilyClassifier(llm_client=client)
         result = c.classify("merge subcategories")
-        assert result == "subcategory_merge_consolidate"
+        assert result.family_id == "subcategory_merge_consolidate"
+        assert result.source == "classifier"

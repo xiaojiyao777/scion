@@ -37,6 +37,7 @@ def check_feasibility(
     """按 spec §5 fail-fast 顺序检查 8 条硬约束。
 
     检查顺序：
+      0. C0a 所有订单分配了唯一一辆车（结构性完整性）
       1. H7 锁定订单未被移动
       2. H4 分车大类隔离（Phase 1）
       3. H2 片区一致
@@ -47,6 +48,51 @@ def check_feasibility(
       8. H6 装车基线（金额）
     """
     violations: list[str] = []
+
+    # -----------------------------------------------------------------
+    # C0a: every order must be assigned to exactly one vehicle, and every
+    # vehicle's order list must reference orders that exist in the instance.
+    # -----------------------------------------------------------------
+    all_order_ids = set(instance.orders.keys())
+    placed_in_vehicles: dict[str, str] = {}  # oid → vid
+    for vid, vehicle in solution.vehicles.items():
+        for oid in vehicle.order_ids:
+            if oid not in all_order_ids:
+                violations.append(
+                    f"C0a: vehicle {vid} references unknown order {oid}"
+                )
+                return FeasibilityResult(False, violations)
+            if oid in placed_in_vehicles:
+                violations.append(
+                    f"C0a: order {oid} placed on multiple vehicles "
+                    f"({placed_in_vehicles[oid]} and {vid})"
+                )
+                return FeasibilityResult(False, violations)
+            placed_in_vehicles[oid] = vid
+
+    missing = all_order_ids - set(placed_in_vehicles.keys())
+    if missing:
+        violations.append(
+            f"C0a: {len(missing)}/{len(all_order_ids)} orders unassigned "
+            f"(examples: {sorted(missing)[:5]})"
+        )
+        return FeasibilityResult(False, violations)
+
+    # Cross-check assignment dict consistency with vehicles.order_ids
+    assign_diff = set(solution.assignment.keys()) ^ set(placed_in_vehicles.keys())
+    if assign_diff:
+        violations.append(
+            f"C0a: solution.assignment inconsistent with vehicles.order_ids "
+            f"(diff size={len(assign_diff)})"
+        )
+        return FeasibilityResult(False, violations)
+    for oid, vid in placed_in_vehicles.items():
+        if solution.assignment.get(oid) != vid:
+            violations.append(
+                f"C0a: assignment[{oid}]={solution.assignment.get(oid)} "
+                f"but placed on vehicle {vid}"
+            )
+            return FeasibilityResult(False, violations)
 
     # -----------------------------------------------------------------
     # H7: 锁定组完整性 — 同一 locked_vehicle_id 的订单必须在同一辆车

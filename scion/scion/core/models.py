@@ -55,6 +55,11 @@ class HypothesisProposal:
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
+    target_objectives: Tuple[str, ...] = ()
+    protected_objectives: Tuple[str, ...] = ()
+    objective_tradeoff_policy: str = ""
+    no_op_condition: str = ""
+    risk_to_higher_priority: str = ""
 
 @dataclass
 class PatchProposal:
@@ -92,6 +97,15 @@ class CanaryResult:
     reason: Optional[str] = None
 
 @dataclass(frozen=True)
+class MetricEvalStats:
+    metric_name: str
+    median_delta: float
+    ci_low: float
+    ci_high: float
+    n_cases: int
+
+
+@dataclass(frozen=True)
 class EvalStats:
     n_cases: int
     wins: int
@@ -101,6 +115,11 @@ class EvalStats:
     median_delta: float
     ci_low: float
     ci_high: float
+    # v0.3 F3: priority-aware statistical decision summary.
+    # Backward-compatible callers may leave these unset and rely on ci_low/ci_high.
+    statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
+    statistical_metric: Optional[str] = None
+    metric_stats: Tuple[MetricEvalStats, ...] = ()
 
 @dataclass(frozen=True)
 class ProtocolResult:
@@ -110,28 +129,12 @@ class ProtocolResult:
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
     raw_metrics_ref: str  # Path to full JSON metrics
+    case_ids: Tuple[str, ...] = ()
+    seed_set: Tuple[int, ...] = ()
     # Case-level feedback (screening only; empty for validation/frozen)
     pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
     case_feedback: Tuple["CaseAggregateFeedback", ...] = ()
     pattern_summary: Optional["ScreeningPatternSummary"] = None
-
-
-# --- Case-level Feedback (for screening) ---
-
-@dataclass(frozen=True)
-class ObjectiveBreakdown:
-    """Per-pair breakdown of objectives with 'positive = candidate better' convention."""
-    candidate_subcategory_splits: Optional[float] = None
-    champion_subcategory_splits: Optional[float] = None
-    candidate_total_cost: Optional[float] = None
-    champion_total_cost: Optional[float] = None
-    # Deltas: positive = candidate is better
-    delta_subcategory_splits: Optional[float] = None  # champ - cand
-    delta_total_cost: Optional[float] = None           # champ - cand
-    # Which objective level decided win/loss
-    decisive_objective: Literal[
-        "business_aggregation", "cost", "efficiency", "tie"
-    ] = "tie"
 
 
 @dataclass(frozen=True)
@@ -140,8 +143,8 @@ class PairwiseCaseFeedback:
     case_id: str
     seed: int
     comparison: Literal["win", "loss", "tie"]
-    delta: float  # cost delta, positive = candidate better
-    objective_breakdown: ObjectiveBreakdown
+    delta: float  # scalar delta, positive = candidate better
+    objective_comparison: Any = None  # ObjectiveComparison from problem/objectives.py
     case_features: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -155,13 +158,14 @@ class CaseAggregateFeedback:
     ties: int
     win_rate: float
     dominant_result: Literal["win", "loss", "tie", "mixed"]
-    dominant_decisive_objective: Literal[
-        "business_aggregation", "cost", "efficiency", "mixed", "tie"
-    ]
-    median_delta_total_cost: Optional[float] = None
-    median_delta_subcategory_splits: Optional[float] = None
+    decisive_metric: str = "tie"  # generic metric name that decided majority of pairs
+    median_deltas: Dict[str, float] = field(default_factory=dict)  # {metric_name: median_delta}
     seed_consistency: float = 0.0  # max(win,loss,tie) / n_pairs
     case_features: Dict[str, Any] = field(default_factory=dict)
+    # DEPRECATED aliases for backward compat
+    dominant_decisive_objective: str = ""
+    median_delta_total_cost: Optional[float] = None
+    median_delta_subcategory_splits: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -198,7 +202,13 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
-    expand_count: int = 0  # Number of screening expands on this branch
+    statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
+    statistical_metric: Optional[str] = None
+    # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
+    # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
+    # hypothesis is generated for this branch.
+    screening_expand_count: int = 0
+    validation_expand_count: int = 0
 
 @dataclass(frozen=True)
 class DecisionOutcome:
@@ -225,6 +235,7 @@ class ChampionState:
     code_snapshot_hash: str
     promotion_experiment_id: Optional[str] = None
     promoted_at: Optional[str] = None
+    weight_revision: int = 0
 
 @dataclass
 class Branch:
@@ -235,11 +246,17 @@ class Branch:
     current_code_hash: Optional[str] = None
     last_clean_code_hash: Optional[str] = None
     retry_count: int = 0
-    expand_count: int = 0  # Tracks screening expand rounds
+    # Stage-specific expand counters. Per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
+    # are per-candidate budgets, not per-branch. campaign._run_explore_step resets both when a new
+    # hypothesis is generated on this branch. campaign._run_eval_step increments the corresponding
+    # counter based on branch.state (EXPLORE_EXPAND → screening; VALIDATING_EXPAND → validation).
+    screening_expand_count: int = 0
+    validation_expand_count: int = 0
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
+    weight_revision: int = 0  # weight revision this branch was last evaluated against
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
@@ -269,6 +286,8 @@ class HypothesisRecord:
     suggested_weight: Optional[float] = None
     hypothesis_text: Optional[str] = None
     family_id: Optional[str] = None
+    family_source: Optional[str] = None  # "classifier" | "keyword" | "manual"
+    taxonomy_version: Optional[str] = None  # e.g. "v1"
     created_at: datetime = field(default_factory=datetime.now)
     base_champion_version: int = 0      # champion version at hypothesis creation time
 

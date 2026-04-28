@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
+import yaml
 
 import typer
 
@@ -101,6 +102,22 @@ def run(
 
     spec = ProblemSpec.from_yaml(str(problem_yaml))
     problem_dir = problem_yaml.parent
+    adapter = None
+    metric_specs = None
+    operator_execute_signature = None
+    problem_v1_path = problem_dir / "problem-v1.yaml"
+    if problem_v1_path.exists():
+        try:
+            from scion.problem.loader import load_problem_adapter
+            from scion.problem.spec import ProblemSpecV1
+            with open(problem_v1_path, encoding="utf-8") as fh:
+                problem_v1 = ProblemSpecV1(**yaml.safe_load(fh))
+            adapter = load_problem_adapter(problem_v1)
+            metric_specs = problem_v1.objectives
+            operator_execute_signature = problem_v1.operator_interface.execute_signature
+        except Exception as exc:
+            typer.echo(f"ERROR: failed to load problem-v1 adapter: {exc}", err=True)
+            raise typer.Exit(code=1)
 
     # Protocol config
     if protocol:
@@ -156,8 +173,18 @@ def run(
     experiment_protocol = ExperimentProtocol(
         proto_cfg, split_manager, seed_ledger_obj, runner,
         metrics_dir=metrics_dir,
+        metric_specs=metric_specs,
+        require_metric_specs=metric_specs is not None,
     )
-    verification_gate = VerificationGate(spec, runner, metrics_dir=metrics_dir)
+    verification_gate = VerificationGate(
+        spec,
+        runner,
+        metrics_dir=metrics_dir,
+        adapter=adapter,
+        strict_runtime_checks=adapter is not None,
+        require_adapter_for_runtime=adapter is not None,
+        operator_execute_signature=operator_execute_signature,
+    )
 
     # Build initial champion — load operator_pool from registry.yaml if available
     from scion.core.models import ChampionState
@@ -200,6 +227,8 @@ def run(
         campaign_dir=str(campaign_path),
         verification_gate=verification_gate,
         experiment_protocol=experiment_protocol,
+        adapter=adapter,
+        operator_execute_signature=operator_execute_signature,
     )
 
     typer.echo(f"Starting campaign: {spec.name} (max_rounds={rounds}, mock_llm={mock_llm})")
@@ -320,6 +349,17 @@ def optimize_weights(
 
     spec = ProblemSpec.from_yaml(str(problem_yaml))
     problem_dir = problem_yaml.parent
+    metric_specs = None
+    problem_v1_path = problem_dir / "problem-v1.yaml"
+    if problem_v1_path.exists():
+        try:
+            from scion.problem.spec import ProblemSpecV1
+            with open(problem_v1_path, encoding="utf-8") as fh:
+                problem_v1 = ProblemSpecV1(**yaml.safe_load(fh))
+            metric_specs = problem_v1.objectives
+        except Exception as exc:
+            typer.echo(f"ERROR: failed to load problem-v1 objective specs: {exc}", err=True)
+            raise typer.Exit(code=1)
 
     if protocol:
         proto_cfg = ProtocolConfig.from_yaml(protocol)
@@ -348,7 +388,8 @@ def optimize_weights(
         try:
             with _sqlite3.connect(str(db_path)) as conn:
                 row = conn.execute(
-                    "SELECT version, code_snapshot_path FROM champions ORDER BY version DESC LIMIT 1"
+                    "SELECT version, code_snapshot_path FROM champions "
+                    "ORDER BY version DESC, weight_revision DESC LIMIT 1"
                 ).fetchone()
                 if row:
                     champion_version = row[0]
@@ -434,6 +475,7 @@ def optimize_weights(
             runner=runner,
             time_limit_sec=time_limit,
             baseline_objectives=baseline,
+            metric_specs=metric_specs,
         )
 
     optimizer = RandomLocalWeightOptimizer(search_space, _eval_fn, seed=champion_version)

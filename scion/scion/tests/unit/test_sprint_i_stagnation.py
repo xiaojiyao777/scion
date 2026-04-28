@@ -68,7 +68,7 @@ def _make_campaign(**overrides) -> CampaignManager:
     champion = _make_champion(tmpdir)
     spec = MagicMock()
     spec.search_space.frozen = []
-    spec.operator_categories = []
+    spec.operator_categories = ["vehicle_level", "order_level"]
     spec.parameter_search.enabled = False
 
     defaults = dict(

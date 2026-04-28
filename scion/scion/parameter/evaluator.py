@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import os
 import statistics
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence
 
 from scion.runtime.pool_manager import update_weights
-from scion.protocol.evaluation import compute_delta
+from scion.protocol.evaluation import compute_delta as legacy_compute_delta
+
+if TYPE_CHECKING:
+    from scion.problem.spec import ObjectiveMetricSpec
 
 
 def collect_baseline(
@@ -45,18 +48,13 @@ def evaluate_weights(
     runner,
     time_limit_sec: int,
     baseline_objectives: Optional[Dict[str, Dict[int, dict]]] = None,
+    *,
+    metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
 ) -> float:
     """Evaluate a weight configuration. Returns median delta (positive = better than baseline).
 
-    Steps:
-    1. Write weights to workspace's registry.yaml.
-    2. For each (case, seed), run solver with new weights.
-    3. Compute delta vs baseline using compute_delta().
-    4. Return median delta; 0.0 if no successful runs.
-
-    Note: modifies the workspace's registry.yaml in-place. The caller is
-    responsible for using a dedicated evaluation workspace, not the champion
-    snapshot directly.
+    When metric_specs is provided, uses the generic comparator's scalar_delta
+    instead of the legacy SCION_SPLITS_WEIGHT-based compute_delta.
     """
     registry_path = os.path.join(workspace, "registry.yaml")
     update_weights(registry_path, weights)
@@ -82,8 +80,25 @@ def evaluate_weights(
             if champ_obj is None:
                 continue
 
-            deltas.append(compute_delta(cand_obj, champ_obj))
+            deltas.append(_compute_delta(cand_obj, champ_obj, metric_specs))
 
     if not deltas:
         return 0.0
     return statistics.median(deltas)
+
+
+def _compute_delta(
+    candidate: dict,
+    champion: dict,
+    metric_specs: Optional[Sequence[ObjectiveMetricSpec]],
+) -> float:
+    if metric_specs is not None:
+        from scion.problem.objectives import compare_lexicographic
+        result = compare_lexicographic(metric_specs, candidate, champion)
+        # Use the decisive metric's delta for scoring, not scalar_delta (sum).
+        # This respects lexicographic ordering: splits improvement dominates cost.
+        for mc in result.metrics:
+            if mc.decisive:
+                return mc.signed_delta
+        return 0.0  # tie
+    return legacy_compute_delta(candidate, champion)

@@ -60,7 +60,7 @@ class TestGradedRetry:
             resp.usage = None
             return resp
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -77,7 +77,7 @@ class TestGradedRetry:
         def fake_create(**kwargs):
             raise LLMRateLimitError("429", retry_after=60.0)
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -104,7 +104,7 @@ class TestGradedRetry:
         def fake_create(**kwargs):
             raise Exception("HTTP 429 rate_limit exceeded")
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -134,7 +134,7 @@ class TestGradedRetry:
             resp.usage = None
             return resp
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -185,7 +185,7 @@ class TestTruncationRecovery:
                 return self._make_truncated_response("max_tokens")
             return good
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -206,7 +206,7 @@ class TestTruncationRecovery:
         def fake_create(**kwargs):
             return self._make_truncated_response("max_tokens")
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -227,7 +227,7 @@ class TestTruncationRecovery:
             call_count += 1
             return good
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client
@@ -254,7 +254,7 @@ class TestTruncationRecovery:
                 return self._make_truncated_response("max_tokens")
             return good
 
-        with patch.object(client, "_get_client") as mock_get:
+        with patch.object(client, "_get_anthropic_client") as mock_get:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = fake_create
             mock_get.return_value = mock_client

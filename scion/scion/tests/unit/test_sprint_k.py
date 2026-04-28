@@ -87,6 +87,7 @@ def _make_campaign_harness(
     patch: Optional[PatchProposal] = None,
 ) -> types.SimpleNamespace:
     """Build a minimal namespace that looks like CampaignManager from K1/K2's POV."""
+    from scion.core.campaign import CampaignManager
     champion = _make_champion()
     harness = types.SimpleNamespace()
     harness._branch_current_hypothesis = {bid: h_record} if h_record else {}
@@ -103,6 +104,13 @@ def _make_campaign_harness(
     harness._materializer = MagicMock()
     harness._registry = MagicMock()
     harness._experiment_protocol = None
+    harness._round_num = 0
+    harness._rounds_since_last_promote = 0
+    harness._recent_abandoned_count = 0
+    harness._hard_abandon_counted_branches = set()
+    harness._record_step = MagicMock()
+    harness._drain_weight_opt_events = MagicMock()
+    harness._record_hard_abandon = types.MethodType(CampaignManager._record_hard_abandon, harness)
     return harness
 
 
@@ -212,7 +220,7 @@ class TestK1ReconcileCleanup:
 
         harness._hyp_store.mark_status.assert_called_once_with(h_record.hypothesis_id, "rejected")
 
-    def test_canary_failed_calls_cleanup(self):
+    def test_canary_failed_uses_decision_finalizer(self):
         bid = "b1"
         h_record = _make_h_record(bid=bid)
         p = _make_patch()
@@ -225,17 +233,32 @@ class TestK1ReconcileCleanup:
         vresult = MagicMock()
         vresult.passed = True
         harness._vgate.run.return_value = vresult
-        proto = MagicMock()
-        proto.run_canary.return_value = CanaryResult(passed=False, reason="canary bad")
-        harness._experiment_protocol = proto
+        harness._experiment_protocol = MagicMock()
         harness._branch_hypotheses[bid] = _make_hypothesis()
+        reconciled_branch = _make_branch(state=BranchState.EXPLORE, bid=bid)
+        harness._branch_ctrl.get_branch.return_value = reconciled_branch
+        canary_result = CanaryResult(passed=False, reason="canary bad")
+        harness._evaluate = MagicMock(return_value=(Decision.ABANDON, None, canary_result))
+        from scion.core.campaign import StepResult
+        harness._apply_decision_and_finalize = MagicMock(
+            return_value=StepResult(
+                action="reconcile",
+                branch_id=bid,
+                decision=Decision.ABANDON,
+                reason="decision=abandon",
+            )
+        )
         branch = _make_branch(state=BranchState.STALE, bid=bid)
 
         self._call(harness, branch)
 
-        harness._hyp_store.mark_status.assert_called_once_with(h_record.hypothesis_id, "rejected")
+        harness._branch_ctrl.reconcile_stale.assert_called_once_with(
+            bid, success=True, new_champion=harness._champion
+        )
+        harness._apply_decision_and_finalize.assert_called_once()
+        harness._record_step.assert_called_once()
 
-    def test_rescreening_exception_calls_cleanup(self):
+    def test_evaluation_abandon_uses_decision_finalizer(self):
         bid = "b1"
         h_record = _make_h_record(bid=bid)
         p = _make_patch()
@@ -248,21 +271,29 @@ class TestK1ReconcileCleanup:
         vresult = MagicMock()
         vresult.passed = True
         harness._vgate.run.return_value = vresult
-        proto = MagicMock()
-        proto.run_canary.return_value = CanaryResult(passed=True, reason="ok")
-        proto.run_experiment.side_effect = RuntimeError("runner crashed")
-        harness._experiment_protocol = proto
+        harness._experiment_protocol = MagicMock()
         harness._branch_hypotheses[bid] = _make_hypothesis()
-        harness._n_experiments = 0
-        harness._budget = MagicMock()
-        harness._budget.used = 0
+        reconciled_branch = _make_branch(state=BranchState.EXPLORE, bid=bid)
+        harness._branch_ctrl.get_branch.return_value = reconciled_branch
+        canary_result = CanaryResult(passed=True, reason="ok")
+        harness._evaluate = MagicMock(return_value=(Decision.ABANDON, None, canary_result))
+        from scion.core.campaign import StepResult
+        harness._apply_decision_and_finalize = MagicMock(
+            return_value=StepResult(
+                action="reconcile",
+                branch_id=bid,
+                decision=Decision.ABANDON,
+                reason="decision=abandon",
+            )
+        )
         branch = _make_branch(state=BranchState.STALE, bid=bid)
 
         self._call(harness, branch)
 
-        harness._hyp_store.mark_status.assert_called_once_with(h_record.hypothesis_id, "rejected")
+        harness._apply_decision_and_finalize.assert_called_once()
+        harness._record_step.assert_called_once()
 
-    def test_rescreening_fail_outcome_calls_cleanup(self):
+    def test_rescreening_fail_outcome_uses_decision_finalizer(self):
         bid = "b1"
         h_record = _make_h_record(bid=bid)
         p = _make_patch()
@@ -275,21 +306,30 @@ class TestK1ReconcileCleanup:
         vresult = MagicMock()
         vresult.passed = True
         harness._vgate.run.return_value = vresult
-        screening_result = MagicMock()
-        screening_result.gate_outcome = "fail"
-        proto = MagicMock()
-        proto.run_canary.return_value = CanaryResult(passed=True, reason="ok")
-        proto.run_experiment.return_value = screening_result
-        harness._experiment_protocol = proto
+        protocol_result = MagicMock()
+        protocol_result.gate_outcome = "fail"
+        protocol_result.reason_codes = ("SCREENING_FAIL_WIN_RATE",)
+        harness._experiment_protocol = MagicMock()
         harness._branch_hypotheses[bid] = _make_hypothesis()
-        harness._n_experiments = 0
-        harness._budget = MagicMock()
-        harness._budget.used = 0
+        reconciled_branch = _make_branch(state=BranchState.EXPLORE, bid=bid)
+        harness._branch_ctrl.get_branch.return_value = reconciled_branch
+        canary_result = CanaryResult(passed=True, reason="ok")
+        harness._evaluate = MagicMock(return_value=(Decision.ABANDON, protocol_result, canary_result))
+        from scion.core.campaign import StepResult
+        harness._apply_decision_and_finalize = MagicMock(
+            return_value=StepResult(
+                action="reconcile",
+                branch_id=bid,
+                decision=Decision.ABANDON,
+                reason="decision=abandon",
+            )
+        )
         branch = _make_branch(state=BranchState.STALE, bid=bid)
 
         self._call(harness, branch)
 
-        harness._hyp_store.mark_status.assert_called_once_with(h_record.hypothesis_id, "rejected")
+        harness._apply_decision_and_finalize.assert_called_once()
+        harness._record_step.assert_called_once()
 
     def test_reconcile_success_does_not_call_mark_status(self):
         """Success path must NOT call mark_status — hypothesis stays active."""
@@ -305,24 +345,34 @@ class TestK1ReconcileCleanup:
         vresult = MagicMock()
         vresult.passed = True
         harness._vgate.run.return_value = vresult
-        screening_result = MagicMock()
-        screening_result.gate_outcome = "pass"
-        proto = MagicMock()
-        proto.run_canary.return_value = CanaryResult(passed=True, reason="ok")
-        proto.run_experiment.return_value = screening_result
-        harness._experiment_protocol = proto
+        protocol_result = MagicMock()
+        protocol_result.gate_outcome = "pass"
+        protocol_result.reason_codes = ("SCREENING_PASS",)
+        harness._experiment_protocol = MagicMock()
         harness._branch_hypotheses[bid] = _make_hypothesis()
-        harness._n_experiments = 0
-        harness._budget = MagicMock()
-        harness._budget.used = 0
         # Reconcile branch controller state
         reconciled_branch = _make_branch(state=BranchState.EXPLORE, bid=bid)
         harness._branch_ctrl.get_branch.return_value = reconciled_branch
+        canary_result = CanaryResult(passed=True, reason="ok")
+        harness._evaluate = MagicMock(
+            return_value=(Decision.QUEUE_VALIDATE, protocol_result, canary_result)
+        )
+        from scion.core.campaign import StepResult
+        harness._apply_decision_and_finalize = MagicMock(
+            return_value=StepResult(
+                action="reconcile",
+                branch_id=bid,
+                decision=Decision.QUEUE_VALIDATE,
+                reason="decision=queue_validate",
+            )
+        )
         branch = _make_branch(state=BranchState.STALE, bid=bid)
 
         self._call(harness, branch)
 
         harness._hyp_store.mark_status.assert_not_called()
+        harness._apply_decision_and_finalize.assert_called_once()
+        harness._record_step.assert_called_once()
 
     def test_no_h_record_no_error(self):
         """If there's no h_record, cleanup is a no-op (no AttributeError)."""

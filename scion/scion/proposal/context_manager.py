@@ -9,6 +9,7 @@ from scion.core.models import (
     Branch,
     ChampionState,
     Decision,
+    ExperimentStage,
     HypothesisFamily,
     HypothesisProposal,
     HypothesisRecord,
@@ -31,6 +32,9 @@ class ContextManager:
     │ fix_context             │ experiment stats, branch history        │
     └─────────────────────────┴─────────────────────────────────────────┘
     """
+
+    def __init__(self, *, adapter=None):
+        self._adapter = adapter
 
     # ------------------------------------------------------------------
     # Round 1 — hypothesis context
@@ -64,7 +68,7 @@ class ContextManager:
         If failure_streak is provided, injects a failure pattern warning when
         any failure code has a streak >= 2.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         champion_operators_code = _read_champion_operators(champion)
         experiment_history = _build_experiment_history(
             step_history or [], branch.branch_id
@@ -85,7 +89,7 @@ class ContextManager:
         exploration_coverage = build_exploration_coverage(families) if families else ""
 
         # T08: Build strategy guidance from family data (J-patch: global)
-        strategy_guidance = _build_strategy_guidance(families) if families else ""
+        strategy_guidance = _build_strategy_guidance(families, problem_spec) if families else ""
 
         # T10: Champion baseline hints from most recent screening experiment
         champion_baselines = _build_champion_baselines(step_history or [])
@@ -114,38 +118,28 @@ class ContextManager:
             from scion.proposal.saturation import render_saturation_signals
             saturation_block = render_saturation_signals(saturation_signals)
 
-        # L2: Absolute minimum constraint (splits at floor → force COST-only)
-        abs_min_constraint = ""
-        if saturation_signals:
-            abs_min_objs = [
-                s.objective for s in saturation_signals
-                if getattr(s, "at_absolute_minimum", False)
-            ]
-            if abs_min_objs and "subcategory_splits" in abs_min_objs:
-                abs_min_constraint = (
-                    "\n## MANDATORY CONSTRAINT — SPLITS AT MINIMUM\n"
-                    "Champion baseline splits ≈ 0. Splits CANNOT be reduced further.\n"
-                    "DO NOT propose subcategory-aware, split-reduction, or consolidation operators.\n"
-                    "ALL proposals MUST target COST reduction ONLY.\n"
-                )
+        # Objective policy/guidance is generic: lexicographic protection or
+        # weighted-sum scalar improvement, plus recent screening tendencies.
+        adapter_spec = _get_adapter_problem_spec(self._adapter)
+        objective_policy_guidance = _build_objective_policy_guidance(adapter_spec)
+        objective_feedback = _build_recent_objective_feedback(
+            step_history or [], branch.branch_id, adapter_spec
+        )
+        objective_opportunity_profile = _build_objective_opportunity_profile(
+            step_history or [], adapter_spec
+        )
+        objective_guidance = _build_objective_guidance(
+            saturation_signals, objective_feedback=objective_feedback
+        )
+        search_control_guidance = _build_search_control_guidance(
+            families, step_history or [], adapter_spec
+        )
 
-        # J6: Weight optimization result feedback
+        # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
-        if weight_opt_result is not None and hasattr(weight_opt_result, 'best_weights'):
-            lines = ["## 当前算子贡献估计（weight optimization 结果）"]
-            sorted_weights = sorted(
-                weight_opt_result.best_weights.items(),
-                key=lambda x: -x[1],
-            )
-            for name, w in sorted_weights:
-                if w >= 2.0:
-                    level = "高贡献"
-                elif w >= 0.5:
-                    level = "中等贡献"
-                else:
-                    level = "低贡献"
-                lines.append(f"  {name}: {level}（权重 {w:.2f}）")
-            weight_opt_block = "\n".join(lines)
+        if weight_opt_result is not None:
+            from scion.proposal.weight_feedback import render_weight_feedback
+            weight_opt_block = render_weight_feedback(weight_opt_result)
 
         # J-patch: Render research log (cross-branch trajectory)
         research_log_block = ""
@@ -154,6 +148,8 @@ class ContextManager:
 
         return {
             "problem_summary": problem_summary,
+            "branch_id": branch.branch_id,
+            "champion_version": champion.version,
             "operator_categories": ", ".join(problem_spec.operator_categories),
             "champion_operators_code": champion_operators_code,
             "champion_stats": champion_stats,
@@ -167,7 +163,10 @@ class ContextManager:
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
             "locus_constraint": locus_constraint,
-            "abs_min_constraint": abs_min_constraint,
+            "objective_policy_guidance": objective_policy_guidance,
+            "objective_opportunity_profile": objective_opportunity_profile,
+            "objective_guidance": objective_guidance,
+            "search_control_guidance": search_control_guidance,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
@@ -195,7 +194,7 @@ class ContextManager:
         If prior_failure is set, a previous code generation attempt failed for
         this hypothesis — the failure detail is included so the LLM can learn.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         hypothesis_detail = _format_hypothesis(hypothesis)
         if hypothesis.action == "create_new":
             target_file_code = "(new file — will be created)"
@@ -206,13 +205,15 @@ class ContextManager:
         reference_operators = _read_reference_operators(
             champion, hypothesis.change_locus, problem_spec
         )
-        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
 
         ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
+            "branch_id": branch.branch_id,
+            "champion_version": champion.version,
             "hypothesis_detail": hypothesis_detail,
             "target_file_code": target_file_code,
             "champion_operators_code": champion_operators_code,
@@ -244,7 +245,7 @@ class ContextManager:
         Does NOT contain experiment stats.
         If failure_streak is provided, injects a failure pattern warning.
         """
-        problem_summary = _build_problem_summary(problem_spec)
+        problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         failed_checks = [c for c in verification_result.checks if not c.passed]
         failure_detail = (
             f"Severity: {verification_result.failure_severity or 'unknown'}\n"
@@ -255,7 +256,7 @@ class ContextManager:
             )
         ) or "No detail available."
 
-        operator_interface_spec = _build_operator_interface_spec(problem_spec)
+        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
@@ -264,6 +265,7 @@ class ContextManager:
 
         ctx = {
             "problem_summary": problem_summary,
+            "branch_id": branch.branch_id,
             "original_code": (
                 f"File: {patch.file_path}\nAction: {patch.action}\n"
                 f"```python\n{patch.code_content}\n```"
@@ -283,6 +285,403 @@ class ContextManager:
 # Private helpers
 # ---------------------------------------------------------------------------
 
+def _build_objective_guidance(saturation_signals, *, objective_feedback: str = "") -> str:
+    """Build tendency-based objective guidance from signals and recent feedback."""
+    lines = []
+    if objective_feedback:
+        lines.append(objective_feedback)
+    if not saturation_signals:
+        return "\n\n".join(lines)
+    signal_lines = []
+    for s in saturation_signals:
+        if getattr(s, "at_absolute_minimum", False):
+            signal_lines.append(
+                f"- {s.objective}: at or near its theoretical minimum. "
+                f"Further direct improvement on this dimension is unlikely. "
+                f"Search can target other objectives when this objective is preserved."
+            )
+        elif s.saturation_level == "high":
+            pct = int(s.improvement_ratio * 100)
+            signal_lines.append(
+                f"- {s.objective}: improvement has reached high saturation ({pct}% from baseline). "
+                f"Exploring other objectives is valuable when {s.objective} is stable."
+            )
+        elif s.saturation_level == "low":
+            signal_lines.append(
+                f"- {s.objective}: has significant room for improvement. "
+                f"This is a promising search direction."
+            )
+    if signal_lines:
+        lines.append("\n## Objective Improvement Guidance\n" + "\n".join(signal_lines))
+    return "\n\n".join(lines)
+
+
+def _get_adapter_problem_spec(adapter) -> Any:
+    """Return optional ProblemSpecV1 exposed by an adapter."""
+    if adapter is None:
+        return None
+    spec = getattr(adapter, "spec", None)
+    if spec is not None:
+        return spec
+    return getattr(adapter, "_spec", None)
+
+
+def _build_objective_policy_guidance(adapter_spec: Any) -> str:
+    """Render generic objective semantics for hypothesis generation."""
+    if adapter_spec is None:
+        return ""
+
+    objectives = list(getattr(adapter_spec, "objectives", []) or [])
+    policy = getattr(adapter_spec, "objective_policy", None)
+    mode = getattr(policy, "mode", "lexicographic")
+    ordered = sorted(objectives, key=lambda s: getattr(s, "priority", 0))
+    if not ordered:
+        return ""
+
+    lines = ["## Objective Policy"]
+    if mode == "weighted_sum":
+        lines.append(
+            "Evaluation uses a single weighted aggregate objective. Any positive "
+            "weighted-score improvement is valuable, regardless of which component "
+            "created the gain."
+        )
+        if getattr(policy, "expose_weights_to_llm", False):
+            lines.append("Component weights exposed for marginal-value guidance:")
+            for obj in ordered:
+                lines.append(
+                    f"- {obj.name}: direction={obj.direction}, "
+                    f"weight={getattr(obj, 'weight', None)}, "
+                    f"tie_tolerance={obj.tie_tolerance}"
+                )
+        else:
+            lines.append(
+                "Component weights are hidden by policy; reason about measurable "
+                "aggregate improvement without assuming unlisted weights."
+            )
+        lines.append(
+            "A good hypothesis should state which component(s) it improves and why "
+            "the weighted aggregate should improve."
+        )
+    elif mode == "single":
+        obj = ordered[0]
+        lines.append(
+            f"Evaluation has one decision objective: {obj.name} "
+            f"({obj.direction}, tie_tolerance={obj.tie_tolerance}). "
+            "Any measurable improvement on this objective is valuable."
+        )
+    else:
+        lines.append(
+            "Evaluation is lexicographic by priority. A lower-priority gain is "
+            "valuable when all higher-priority objectives are preserved within "
+            "their tie tolerances."
+        )
+        for obj in ordered:
+            lines.append(
+                f"- priority {obj.priority}: {obj.name} "
+                f"({obj.direction}, tie_tolerance={obj.tie_tolerance})"
+            )
+        lines.append(
+            "A good hypothesis may target any objective, but must explicitly name "
+            "the higher-priority objectives it protects and its no-op condition "
+            "when that protection cannot be maintained."
+        )
+    return "\n".join(lines)
+
+
+def _build_recent_objective_feedback(
+    step_history: List[StepRecord],
+    branch_id: str,
+    adapter_spec: Any,
+) -> str:
+    """Summarize recent screening objective tendencies without exposing holdouts."""
+    branch_steps = [
+        s for s in step_history
+        if s.branch_id == branch_id
+        and s.protocol_result is not None
+        and s.protocol_result.stage == ExperimentStage.SCREENING
+    ]
+    if not branch_steps:
+        return ""
+
+    ordered_names = [
+        obj.name for obj in sorted(
+            list(getattr(adapter_spec, "objectives", []) or []),
+            key=lambda s: getattr(s, "priority", 0),
+        )
+    ]
+    last = branch_steps[-1].protocol_result
+    feedback = list(last.case_feedback or ())
+    if not feedback:
+        return ""
+
+    lines = ["## Recent Objective Feedback"]
+    lines.append(
+        f"Last screening outcome={last.gate_outcome}, "
+        f"win_rate={last.stats.win_rate:.2f}, "
+        f"median_delta={last.stats.median_delta:.4f}."
+    )
+
+    names = ordered_names or sorted({
+        name for cf in feedback for name in getattr(cf, "median_deltas", {}).keys()
+    })
+    for name in names:
+        vals = [
+            float(cf.median_deltas[name])
+            for cf in feedback
+            if getattr(cf, "median_deltas", None) and name in cf.median_deltas
+        ]
+        if not vals:
+            continue
+        pos = sum(1 for v in vals if v > 0)
+        neg = sum(1 for v in vals if v < 0)
+        tie = len(vals) - pos - neg
+        med = sorted(vals)[len(vals) // 2]
+        lines.append(
+            f"- {name}: positive_cases={pos}, negative_cases={neg}, "
+            f"tie_cases={tie}, median_case_delta={med:+.4f}"
+        )
+
+    lines.append(
+        "Use this as a tendency signal only: propose mechanisms that preserve "
+        "objectives already stable and address the weakest measurable component."
+    )
+    return "\n".join(lines)
+
+
+def _build_objective_opportunity_profile(
+    step_history: List[StepRecord],
+    adapter_spec: Any,
+) -> str:
+    """Aggregate recent screening signals across branches for objective guidance."""
+    screening_steps = [
+        s for s in step_history
+        if s.protocol_result is not None
+        and s.protocol_result.stage == ExperimentStage.SCREENING
+    ][-12:]
+    if not screening_steps:
+        return ""
+
+    objective_specs = sorted(
+        list(getattr(adapter_spec, "objectives", []) or []),
+        key=lambda s: getattr(s, "priority", 0),
+    )
+    policy = getattr(adapter_spec, "objective_policy", None)
+    mode = getattr(policy, "mode", "lexicographic")
+    expose_weights = bool(getattr(policy, "expose_weights_to_llm", False))
+    spec_by_name = {obj.name: obj for obj in objective_specs}
+
+    values_by_metric: dict[str, list[float]] = {}
+    decisive_wins: Counter[str] = Counter()
+    decisive_losses: Counter[str] = Counter()
+    gate_counts: Counter[str] = Counter()
+    target_counts: Counter[str] = Counter()
+
+    for step in screening_steps:
+        pr = step.protocol_result
+        gate_counts[pr.gate_outcome] += 1
+        for obj in getattr(step.hypothesis, "target_objectives", ()) or ():
+            target_counts[obj] += 1
+        if pr.pattern_summary is not None:
+            decisive_wins.update(pr.pattern_summary.wins_by_decisive_objective)
+            decisive_losses.update(pr.pattern_summary.losses_by_decisive_objective)
+        for cf in pr.case_feedback or ():
+            for name, val in (cf.median_deltas or {}).items():
+                values_by_metric.setdefault(name, []).append(float(val))
+
+    ordered_names = [obj.name for obj in objective_specs] or sorted(values_by_metric)
+    if mode == "weighted_sum" and "weighted_sum" in values_by_metric:
+        ordered_names = ["weighted_sum"] + [n for n in ordered_names if n != "weighted_sum"]
+
+    lines = ["## Objective Opportunity Profile (screening only)"]
+    lines.append(
+        "Recent screening gates: "
+        + ", ".join(f"{k}={v}" for k, v in sorted(gate_counts.items()))
+    )
+    objective_stats: dict[str, dict[str, float]] = {}
+    for name in ordered_names:
+        vals = values_by_metric.get(name, [])
+        if not vals:
+            continue
+        pos = sum(1 for v in vals if v > 0)
+        neg = sum(1 for v in vals if v < 0)
+        tie = len(vals) - pos - neg
+        med = _median(vals)
+        objective_stats[name] = {
+            "n": float(len(vals)),
+            "pos": float(pos),
+            "neg": float(neg),
+            "tie": float(tie),
+            "median": float(med),
+            "decisive_wins": float(decisive_wins.get(name, 0)),
+            "decisive_losses": float(decisive_losses.get(name, 0)),
+            "targeted_recently": float(target_counts.get(name, 0)),
+        }
+        spec = spec_by_name.get(name)
+        descriptor = ""
+        if spec is not None:
+            descriptor = f" priority={spec.priority}"
+            if mode == "weighted_sum" and expose_weights:
+                descriptor += f" weight={spec.weight}"
+        lines.append(
+            f"- {name}:{descriptor} positive_cases={pos} "
+            f"negative_cases={neg} tie_cases={tie} "
+            f"median_case_delta={med:+.4f} "
+            f"decisive_wins={decisive_wins.get(name, 0)} "
+            f"decisive_losses={decisive_losses.get(name, 0)} "
+            f"targeted_recently={target_counts.get(name, 0)}"
+        )
+
+    if not values_by_metric:
+        return ""
+    steering = _build_objective_steering(
+        objective_specs=objective_specs,
+        objective_stats=objective_stats,
+        mode=mode,
+    )
+    if steering:
+        lines.append(steering)
+    lines.append(
+        "Interpretation: positive deltas are observed marginal gains; negative "
+        "deltas identify protected objectives or mechanisms that need no-op guards. "
+        "Use this profile to balance exploiting proven signals with exploring "
+        "under-tested objective/locus combinations."
+    )
+    return "\n".join(lines)
+
+
+def _build_objective_steering(
+    *,
+    objective_specs: List[Any],
+    objective_stats: dict[str, dict[str, float]],
+    mode: str,
+) -> str:
+    """Render generic target/protect guidance from observed marginal movement."""
+    if not objective_specs:
+        return ""
+
+    if mode == "lexicographic":
+        protected: list[str] = []
+        recommended = ""
+        for obj in objective_specs:
+            stats = objective_stats.get(obj.name)
+            if not stats:
+                continue
+            n = max(stats.get("n", 0.0), 1.0)
+            moved = (
+                stats.get("pos", 0.0)
+                + stats.get("neg", 0.0)
+                + stats.get("decisive_wins", 0.0)
+                + stats.get("decisive_losses", 0.0)
+            )
+            tie_ratio = stats.get("tie", 0.0) / n
+            is_stable = tie_ratio >= 0.8 and moved == 0.0
+            if is_stable:
+                protected.append(obj.name)
+                continue
+            if protected:
+                recommended = obj.name
+                break
+            recommended = obj.name
+            break
+        if protected and recommended:
+            return (
+                "Objective Steering: recent screening suggests "
+                f"{', '.join(protected)} is acting like a protected/stable "
+                f"higher-priority dimension. Prefer hypotheses targeting "
+                f"{recommended} while preserving {', '.join(protected)}; avoid "
+                "more direct protected-objective mechanisms unless they introduce "
+                "a genuinely new capability."
+            )
+
+    if mode == "weighted_sum":
+        weighted = objective_stats.get("weighted_sum")
+        if weighted and weighted.get("n", 0.0) > 0:
+            return (
+                "Objective Steering: optimize the weighted aggregate directly. "
+                "A component-level change is valuable only when it improves the "
+                "aggregate score after tradeoffs."
+            )
+
+    return ""
+
+
+def _build_search_control_guidance(
+    families: List[HypothesisFamily],
+    step_history: List[StepRecord],
+    adapter_spec: Any,
+) -> str:
+    """Render generic exploration/exploitation guidance from campaign evidence."""
+    recent_screening = [
+        s for s in step_history[-12:]
+        if s.protocol_result is not None
+        and s.protocol_result.stage == ExperimentStage.SCREENING
+    ]
+    if not recent_screening and not families:
+        return ""
+
+    policy = getattr(adapter_spec, "objective_policy", None)
+    mode = getattr(policy, "mode", "lexicographic")
+    recent_pass_or_expand = sum(
+        1 for s in recent_screening
+        if s.protocol_result.gate_outcome in ("pass", "expand")
+    )
+    recent_fail = sum(
+        1 for s in recent_screening
+        if s.protocol_result.gate_outcome == "fail"
+    )
+    repeated_fail_families = [
+        fam.family_id for fam in families
+        if _count_trailing_failures(fam.statuses) >= 2
+    ][:4]
+
+    lines = ["## Exploration / Exploitation Control"]
+    if recent_pass_or_expand:
+        lines.append(
+            f"- Exploit: {recent_pass_or_expand} recent screening attempt(s) "
+            "were pass/expand. Prefer refinements that keep the same proven "
+            "mechanism but add tighter feasibility and protected-objective guards."
+        )
+    if recent_fail:
+        lines.append(
+            f"- Explore: {recent_fail} recent screening attempt(s) failed. "
+            "Avoid repeating the same mechanism without a new capability, target "
+            "condition, or objective tradeoff policy."
+        )
+    if repeated_fail_families:
+        lines.append(
+            "- Avoid saturated failure families: "
+            + ", ".join(repeated_fail_families)
+        )
+    if mode == "weighted_sum":
+        lines.append(
+            "- Weighted objective: exploit high-weight components when they offer "
+            "large aggregate gain; explore lower-weight components only when the "
+            "weighted aggregate still improves."
+        )
+    elif mode == "single":
+        lines.append(
+            "- Single objective: exploration should create a genuinely new move "
+            "type; exploitation should make the best observed move more reliable."
+        )
+    else:
+        lines.append(
+            "- Lexicographic objective: exploit high-priority gains when available. "
+            "When higher-priority objectives are tied or saturated, explore "
+            "lower-priority gains with explicit higher-priority protection."
+        )
+    return "\n".join(lines)
+
+
+def _median(values: List[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 0:
+        return (ordered[mid - 1] + ordered[mid]) / 2.0
+    return ordered[mid]
+
+
 def _build_branch_direction_prompt(branch: Branch) -> Optional[str]:
     """Build branch direction guidance if a direction has been established."""
     if not branch.direction:
@@ -297,60 +696,19 @@ def _build_branch_direction_prompt(branch: Branch) -> Optional[str]:
     )
 
 
-def _build_problem_summary(spec: ProblemSpec) -> str:
-    """Build a structured summary of the problem specification."""
-    lines = [
-        f"Name: {spec.name}",
-    ]
+def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
+    """Build a structured summary of the problem specification.
+
+    Delegates to adapter.render_problem_summary() when an adapter is available.
+    Falls back to a generic minimal summary for legacy ProblemSpec without adapter.
+    """
+    if adapter is not None and hasattr(adapter, 'render_problem_summary'):
+        return adapter.render_problem_summary()
+    # Legacy fallback: generic summary from ProblemSpec fields only
+    lines = [f"Name: {spec.name}"]
     if spec.description:
         lines.append(f"Description: {spec.description}")
     lines += [
-        "",
-        "### Objective Function (lexicographic — minimize all three in order):",
-        "1. subcategory_splits: For each unique `vehicle_subcategory` value across all orders,",
-        "   count how many distinct vehicles contain orders of that subcategory, subtract 1,",
-        "   then sum. Formula: sum(len(vehicles_containing_subcat) - 1 for each subcategory)",
-        "2. total_cost: sum(VEHICLE_TYPES[v.vehicle_type].cost for all non-empty vehicles)",
-        "   Vehicle costs: T3=800, T5=1200, T10=1800, HQ40=3300, HQ40_DG=6600",
-        "3. solve_time_ms: wall-clock time (external, not operator-controlled)",
-        "",
-        "Key implication: ANY increase in subcategory_splits makes the solution strictly worse,",
-        "regardless of cost improvement. Cost only matters when splits are equal.",
-        "",
-        "### How the Initial Solution is Built (greedy_init)",
-        "Orders are grouped by (vehicle_category, vehicle_subcategory, pickup_city).",
-        "Within each group, orders are packed sequentially into vehicles using first-fit.",
-        "When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the same group.",
-        "Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.",
-        "Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.",
-        "",
-        "To reduce splits, an operator must consolidate orders so a subcategory fits in fewer vehicles.",
-        "This typically means: merging two partially-filled vehicles of the SAME vehicle_subcategory,",
-        "or moving orders between vehicles to free up space for same-subcategory consolidation.",
-        "Random order moves between arbitrary vehicles are unlikely to improve splits.",
-        "",
-        "### Worked Example (Small Instance)",
-        "Instance: 6 orders, 2 subcategories, all Shenzhen region",
-        "  Orders: A1(subcat=1,8plt), A2(subcat=1,6plt), A3(subcat=1,10plt),",
-        "          A4(subcat=1,12plt), B1(subcat=2,5plt), B2(subcat=2,4plt)",
-        "  Vehicle types: T10(cap=14,cost=1800), HQ40(cap=40,cost=3300)",
-        "",
-        "Greedy init (groups by subcategory, first-fit):",
-        "  V1[T10]: A1(8)+A2(6)=14plt -> full",
-        "  V2[T10]: A3(10) -> 10plt (A4 won't fit: 10+12=22 > 14)",
-        "  V3[T10]: A4(12) -> 12plt",
-        "  V4[T10]: B1(5)+B2(4)=9plt",
-        "  Objective: splits=2 (subcat 1 in V1,V2,V3 -> split=2; subcat 2 in V4 -> split=0)",
-        "             cost=4*1800=7200",
-        "",
-        "Improved (merge subcat-1 vehicles into HQ40):",
-        "  V1[HQ40]: A1+A2+A3+A4=36plt",
-        "  V4[T10]: B1+B2=9plt",
-        "  Objective: splits=0, cost=3300+1800=5100 -> BETTER on both objectives",
-        "",
-        "The key move: merging V2+V3 orders into V1 (upgrading to HQ40).",
-        "This is what a good subcategory-consolidation operator should do.",
-        "",
         f"Operator categories: {', '.join(spec.operator_categories)}",
         f"Editable files: {', '.join(spec.search_space.editable)}",
         f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
@@ -492,28 +850,19 @@ def _render_case_feedback(cf) -> str:
     n_orders = cf.case_features.get("n_orders", "?")
     result_upper = cf.dominant_result.upper()
 
-    # Build directional description for the decisive objective
-    obj = cf.dominant_decisive_objective
-    splits_delta = cf.median_delta_subcategory_splits  # positive = candidate better (fewer splits)
-    cost_delta = cf.median_delta_total_cost            # positive = candidate better (lower cost)
+    # Build directional description using generic metric deltas
+    metric = cf.decisive_metric if hasattr(cf, 'decisive_metric') else getattr(cf, 'dominant_decisive_objective', 'tie')
+    deltas = cf.median_deltas if hasattr(cf, 'median_deltas') and cf.median_deltas else {}
 
-    if obj in ("business_aggregation", "mixed") and splits_delta is not None:
-        direction = "↓" if splits_delta > 0 else "↑"
-        abs_splits = abs(splits_delta)
-        decisive_str = f"Decisive: {obj} — candidate {direction}{abs_splits:.1f} splits (Δ={splits_delta:+.1f})"
-        if cost_delta is not None:
-            decisive_str += f", cost Δ={cost_delta:+.0f}"
-    elif obj == "cost" and cost_delta is not None:
-        direction = "↓" if cost_delta > 0 else "↑"
-        abs_cost = abs(cost_delta)
-        decisive_str = f"Decisive: {obj} — candidate cost {direction}{abs_cost:.0f} (Δ={cost_delta:+.0f})"
-        if splits_delta is not None:
-            decisive_str += f", splits Δ={splits_delta:+.1f}"
+    delta_parts = []
+    for name, val in sorted(deltas.items()):
+        direction = "↓" if val > 0 else "↑"
+        delta_parts.append(f"{name} {direction}{abs(val):.1f} (Δ={val:+.1f})")
+
+    if delta_parts:
+        decisive_str = f"Decisive: {metric} — " + ", ".join(delta_parts)
     else:
-        # Fallback: show raw deltas
-        splits_str = f"{splits_delta:+.1f}" if splits_delta is not None else "NA"
-        cost_str = f"{cost_delta:+.0f}" if cost_delta is not None else "NA"
-        decisive_str = f"Decisive: {obj}  splits Δ={splits_str}, cost Δ={cost_str}"
+        decisive_str = f"Decisive: {metric}"
 
     # Champion baseline hint from case_features if available
     champ_splits = cf.case_features.get("champion_splits")
@@ -543,37 +892,39 @@ def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
             score += 4
         if c.seed_consistency >= 0.99:
             score += 2
-        if c.dominant_decisive_objective == "business_aggregation":
+        # Boost cases where decisive metric is the highest-priority objective
+        dm = c.decisive_metric if hasattr(c, 'decisive_metric') else ""
+        if dm and dm != "tie":
             score += 2
         bucket = c.case_features.get("size_bucket", "unknown")
         if bucket not in seen_sizes:
             score += 2
             seen_sizes.add(bucket)
-        score += min(abs(c.median_delta_total_cost or 0) / 100, 3)
+        # Use largest absolute median delta across all metrics
+        deltas = c.median_deltas if hasattr(c, 'median_deltas') and c.median_deltas else {}
+        max_delta = max((abs(v) for v in deltas.values()), default=0)
+        score += min(max_delta / 100, 3)
         scored.append((score, c))
     scored.sort(key=lambda x: -x[0])
     return [c for _, c in scored[:max_cases]]
 
 
 _VERIFICATION_SUGGESTIONS: dict = {
-    "V3_feasibility": (
-        "确保 assignment dict 和 vehicle.order_ids 完全一致，不丢失/重复任何订单，"
-        "危险品必须在 HQ40_DG 车型"
+    "V6_feasibility": (
+        "检查 operator_interface_spec 中定义的可行性约束，确保输出满足问题适配器的 feasibility oracle。"
     ),
-    "V5_state_mutation": (
-        "算子修改了输入 solution（state 污染）。"
-        "确保先调用 solution.deep_copy() 再操作，不要引用原始 solution 的任何可变子对象（list、dict）。"
-        "检查 assignment dict 和 vehicle.order_ids 是否一致。"
+    "V5_solution_consistency": (
+        "检查 operator_interface_spec 中定义的解结构一致性约束，确保 solver 输出可被问题适配器正确反序列化和校验。"
     ),
     "V8_nondeterminism": (
         "同 seed 两次 solver run 产出了不同的 objective。常见非确定性来源："
-        "(1) 禁止使用 uuid.uuid4()，必须用 generate_vehicle_id(rng) 生成车辆 ID；"
+        "(1) 禁止使用 uuid.uuid4() 或系统熵；"
         "(2) 禁止 list(set(...)) 或遍历 set/dict 时依赖顺序，必须 sorted()；"
-        "(3) 所有随机性必须来自 rng 参数，不要 import random 或使用任何系统熵源；"
-        "(4) 确保只修改 deep_copy 后的对象"
+        "(3) 所有随机性必须来自 operator execute 的 rng 参数；"
+        "(4) 避免依赖文件系统、时间、全局状态或未排序容器顺序"
     ),
     "V2_interface": (
-        "确保类继承 Operator 基类，且有 execute(self, solution, rng) -> Solution 方法"
+        "确保类和 execute 方法签名严格符合 operator_interface_spec。"
     ),
     "V1_syntax": "检查 Python 语法是否正确",
 }
@@ -598,7 +949,7 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
     details: List[str] = []
     for s in streak_steps:
         fd = s.failure_detail or ""
-        # Extract V-code prefix like V3_feasibility
+        # Extract V-code prefix like V6_feasibility
         vcode = fd.split(":")[0].strip() if ":" in fd else fd.split()[0] if fd else ""
         failure_types.append(vcode)
         if s.verification_detail:
@@ -635,9 +986,13 @@ _MECHANISM_KEYWORDS: List[Tuple[List[str], str]] = [
 _DEFAULT_MECHANISM = "generic"
 
 
-def _extract_mechanism_label(hypothesis_text: str) -> str:
+def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[list] = None) -> str:
     """Extract mechanism label from hypothesis text using keyword matching."""
     text_lower = hypothesis_text.lower()
+    if taxonomy:
+        for label in taxonomy:
+            if label.lower() in text_lower:
+                return label
     for keywords, label in _MECHANISM_KEYWORDS:
         if any(kw in text_lower for kw in keywords):
             return label
@@ -733,7 +1088,7 @@ def _count_trailing_failures(statuses: List[str]) -> int:
     return count
 
 
-def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
+def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[ProblemSpec] = None) -> str:
     """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
     if not families:
         return ""
@@ -758,7 +1113,11 @@ def _build_strategy_guidance(families: List[HypothesisFamily]) -> str:
 
     # Rule 3: Unexplored locus → suggest
     explored_loci = {f.locus_pattern for f in families}
-    all_loci = {"vehicle_level", "order_level"}
+    all_loci = (
+        set(spec.operator_categories)
+        if spec and hasattr(spec, 'operator_categories') and spec.operator_categories
+        else set()
+    )
     unexplored = all_loci - explored_loci
     if unexplored:
         guidance_parts.append(
@@ -862,15 +1221,16 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
     if last_with_pairs is None:
         return ""
 
-    # Aggregate champion splits per case from pair_feedback
+    # Aggregate champion metrics per case from pair_feedback
     from collections import defaultdict as _defaultdict
-    case_champ_splits: dict = _defaultdict(list)
+    case_champ_metrics: dict = _defaultdict(lambda: _defaultdict(list))
     for pair in last_with_pairs.protocol_result.pair_feedback:
-        ob = pair.objective_breakdown
-        if ob.champion_subcategory_splits is not None:
-            case_champ_splits[pair.case_id].append(ob.champion_subcategory_splits)
+        oc = getattr(pair, 'objective_comparison', None)
+        if oc and hasattr(oc, 'metrics') and oc.metrics:
+            for m in oc.metrics:
+                case_champ_metrics[pair.case_id][m.name].append(m.champion_value)
 
-    if not case_champ_splits:
+    if not case_champ_metrics:
         # Fallback: use case_feedback if available but no per-pair breakdown
         if last_with_pairs.protocol_result.case_feedback:
             lines = ["## Champion Performance (screening cases)"]
@@ -882,21 +1242,12 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
         return ""
 
     lines = ["## Champion Performance (screening cases)"]
-    for case_id, champ_vals in sorted(case_champ_splits.items()):
-        min_val = min(champ_vals)
-        max_val = max(champ_vals)
-        if min_val == max_val:
-            splits_str = f"~{min_val:.0f} splits"
-        else:
-            splits_str = f"~{min_val:.0f}-{max_val:.0f} splits"
-        avg = sum(champ_vals) / len(champ_vals)
-        if avg <= 2:
-            note = "— splits already near optimal"
-        elif avg <= 10:
-            note = "— some room to improve"
-        else:
-            note = "— significant room on splits"
-        lines.append(f"- {case_id}: {splits_str} {note}")
+    for case_id, metrics in sorted(case_champ_metrics.items()):
+        parts = []
+        for metric_name, vals in sorted(metrics.items()):
+            avg = sum(vals) / len(vals)
+            parts.append(f"{metric_name}={avg:.1f}")
+        lines.append(f"- {case_id}: {', '.join(parts)}")
 
     return "\n".join(lines)
 
@@ -948,6 +1299,16 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
     ]
     if hypothesis.suggested_weight is not None:
         lines.append(f"suggested_weight: {hypothesis.suggested_weight}")
+    if hypothesis.target_objectives:
+        lines.append(f"target_objectives: {', '.join(hypothesis.target_objectives)}")
+    if hypothesis.protected_objectives:
+        lines.append(f"protected_objectives: {', '.join(hypothesis.protected_objectives)}")
+    if hypothesis.objective_tradeoff_policy:
+        lines.append(f"objective_tradeoff_policy: {hypothesis.objective_tradeoff_policy}")
+    if hypothesis.no_op_condition:
+        lines.append(f"no_op_condition: {hypothesis.no_op_condition}")
+    if hypothesis.risk_to_higher_priority:
+        lines.append(f"risk_to_higher_priority: {hypothesis.risk_to_higher_priority}")
     return "\n".join(lines)
 
 
@@ -1039,11 +1400,16 @@ def _read_branch_code(branch_workspace: str, champion: ChampionState) -> Optiona
     return "\n\n".join(sections) if sections else None
 
 
-def _build_operator_interface_spec(spec: ProblemSpec) -> str:
-    """Build the operator interface specification including base class and data models."""
-    # Try to read base.py from the problem's root_dir
+def _build_operator_interface_spec(spec: ProblemSpec, *, adapter=None) -> str:
+    """Build the operator interface specification.
+
+    Delegates to adapter.render_operator_interface() when an adapter is available.
+    Falls back to reading operators/base.py for legacy ProblemSpec without adapter.
+    """
+    if adapter is not None and hasattr(adapter, 'render_operator_interface'):
+        return adapter.render_operator_interface()
+    # Legacy fallback: read base.py only
     base_py_path = os.path.join(spec.root_dir, "operators", "base.py")
-    base_class_src = ""
     try:
         with open(base_py_path, encoding="utf-8") as fh:
             base_class_src = fh.read()
@@ -1054,52 +1420,4 @@ def _build_operator_interface_spec(spec: ProblemSpec) -> str:
             "    def execute(self, solution: Solution, rng: Random) -> Solution:\n"
             "        ..."
         )
-
-    return f"""\
-### Operator Base Class (from operators/base.py)
-```python
-{base_class_src}
-```
-
-### Key Data Structures (from models.py)
-- `Solution`: contains `vehicles: dict[str, Vehicle]` and `assignment: dict[str, str]` (order_id → vehicle_id)
-  - Call `solution.deep_copy()` to get a deep copy before modifying
-  - `solution.remove_empty_vehicles()` to clean up empty vehicles in-place
-- `Vehicle`: `vehicle_id`, `vehicle_type` (HQ40_DG|HQ40|T10|T5|T3), `region`, `order_ids: list[str]`
-- `Order` (complete field list — use these EXACT attribute names):
-  - `order_id: str` — unique identifier
-  - `vehicle_category: int` — large category (feasibility H4: same vehicle must have same category)
-  - `vehicle_subcategory: int` — sub-category (**PRIMARY optimization target**: minimize splits of this across vehicles)
-  - `urgent: bool` — urgency flag
-  - `hazard_flag: bool` — True if order contains hazardous goods
-  - `hazard_quantity: int` — hazardous goods quantity in pcs (>1800 requires HQ40_DG)
-  - `pickup_name: str` — pickup point name (constraint H3: max pickups per vehicle per region)
-  - `pickup_city: str` — "Dongguan" or "Shenzhen" (constraint H2: same region per vehicle)
-  - `declaration_amount: float` — customs declaration amount (constraint H6)
-  - `lsp: str` — logistics service provider
-  - `ship_method: str` — shipping method (H6 grouping key with destination_country)
-  - `destination_country: str` — destination country (H6 grouping key with ship_method)
-  - `spu_list: list[SPU]` — packing units; use `calc_pallets(order.spu_list)` from models.py
-  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle
-- `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
-- Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
-- Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
-
-### Critical Constraints
-1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
-2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
-3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
-4. **Determinism**: NEVER use `uuid.uuid4()` or any system entropy source. Generate vehicle IDs with `generate_vehicle_id(rng)` from `operators.base`. NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
-5. **Return value**: return the modified solution (or the original if no valid move was found)
-6. **Imports**: only use modules from the import whitelist; no external packages
-
-### Feasibility Constraints (MUST NOT violate — will cause immediate rejection)
-7. **Every order assigned**: every order in the instance MUST appear in exactly one vehicle's order_ids AND in the assignment dict. Never drop or duplicate orders.
-8. **Consistency**: `solution.assignment[order_id] == vehicle_id` must match `order_id in vehicle.order_ids` for ALL orders. After any modification, update BOTH.
-9. **Vehicle capacity**: total pallets in a vehicle must not exceed its type's capacity
-10. **Hazardous goods**: orders with `hazard_flag=True` and total hazard_quantity > 1800 MUST be in HQ40_DG
-11. **No empty vehicles**: after modifications, call `new_sol.remove_empty_vehicles()` to clean up
-12. **Same region**: all orders in a vehicle must have the same `pickup_city` region
-13. **Same category**: all orders in a vehicle must have the same `vehicle_category`
-14. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`\
-"""
+    return f"### Operator Base Class (from operators/base.py)\n```python\n{base_class_src}\n```"

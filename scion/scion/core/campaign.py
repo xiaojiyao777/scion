@@ -20,10 +20,10 @@ from scion.core.models import (
     PatchProposal, ProtocolResult, StepRecord, VerificationResult, CheckResult,
 )
 from scion.core.scheduler import Scheduler
+from scion.core.status_reporter import StatusReporter
 from scion.core.termination import CampaignState, TerminationChecker, TerminationConfig
 from scion.core.stagnation import StagnationDetector, StagnationSignal, CampaignDiagnosis
 from scion.failure.router import FailureRouter, RetryConfig
-from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.llm_client import LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError, LLMBalanceError
 from scion.proposal.engine import ProposalValidationError
@@ -86,6 +86,13 @@ class StepResult:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class _PromotePlan:
+    champion: ChampionState
+    snapshot_path: str
+    current_weights: Dict[str, float]
+
+
 # ---------------------------------------------------------------------------
 # Campaign Manager
 # ---------------------------------------------------------------------------
@@ -125,8 +132,16 @@ class CampaignManager:
         budget: Optional[BudgetState] = None,
         termination_config: Optional[TerminationConfig] = None,
         retry_config: Optional[RetryConfig] = None,
+        adapter: Optional[Any] = None,
+        operator_execute_signature: Optional[str] = None,
+        objective_lower_bounds: Optional[Dict[str, float]] = None,
+        use_objective_lower_bounds_for_early_stop: bool = False,
     ) -> None:
-        self._spec = problem_spec
+        # v0.3 B3: ProblemRuntime owns problem_spec + adapter + ContextManager.
+        # Instantiate FIRST so the backward-compat properties below (_spec,
+        # _adapter, _ctx_manager) can proxy to it.
+        from scion.core.problem_runtime import ProblemRuntime
+        self._problem_runtime = ProblemRuntime(problem_spec=problem_spec, adapter=adapter)
         self._protocol_config = protocol_config
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
@@ -134,16 +149,37 @@ class CampaignManager:
         self._champion = champion
         self._campaign_dir = campaign_dir
         self._campaign_id = str(uuid.uuid4())
+        self._status_reporter = StatusReporter(campaign_dir)
+        self._last_status_result: Dict[str, Any] | None = None
+        self._current_status_progress: Dict[str, Any] | None = None
+        self._last_stop_reason: str | None = None
+        self._objective_lower_bounds = objective_lower_bounds
+        self._use_objective_lower_bounds_for_early_stop = use_objective_lower_bounds_for_early_stop
 
         # Sub-modules
         self._branch_ctrl = BranchController()
         self._scheduler = Scheduler()
-        self._contract_gate = ContractGate(problem_spec)
+        self._contract_gate = ContractGate(
+            problem_spec,
+            operator_execute_signature=operator_execute_signature,
+        )
         self._decision_engine = DecisionEngine(protocol_config)
         self._feature_extractor = SafeFeatureExtractor()
         self._failure_router = FailureRouter(retry_config or RetryConfig())
-        self._creative = CreativeLayer(llm_client)
-        self._ctx_manager = ContextManager()
+        self._creative = CreativeLayer(
+            llm_client,
+            trace_dir=f"{campaign_dir}/llm_traces",
+        )
+        # _ctx_manager now backed by ProblemRuntime (see property below).
+
+        # O1: Hypothesis family classifier (keyword-only if no LLM client)
+        from scion.proposal.classifier import HypothesisFamilyClassifier
+        _family_taxonomy = getattr(self._spec, "family_taxonomy", None)
+        self._classifier = HypothesisFamilyClassifier(
+            llm_client=llm_client,
+            taxonomy=getattr(_family_taxonomy, "families", None),
+            taxonomy_version=getattr(_family_taxonomy, "version", "v1"),
+        )
         self._materializer = WorkspaceMaterializer(
             campaign_dir,
             frozen_patterns=frozenset(
@@ -152,8 +188,15 @@ class CampaignManager:
         )
         import os as _os2
         _os2.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
-        self._vgate = verification_gate or VerificationGate(problem_spec, metrics_dir=str(campaign_dir) + "/metrics")
+        self._vgate = verification_gate or VerificationGate(
+            problem_spec,
+            metrics_dir=str(campaign_dir) + "/metrics",
+            adapter=adapter,
+            operator_execute_signature=operator_execute_signature,
+        )
         self._experiment_protocol = experiment_protocol  # may be None (no runner)
+        if hasattr(self._experiment_protocol, "set_progress_callback"):
+            self._experiment_protocol.set_progress_callback(self._on_protocol_progress)
 
         # Lineage registry (SQLite, WAL mode)
         import os as _os
@@ -194,14 +237,17 @@ class CampaignManager:
         self._budget = budget or BudgetState(total=1000, used=0)
         self._n_experiments = 0
         self._recent_abandoned_count = 0
+        self._hard_abandon_counted_branches: set[str] = set()
         self._soft_abandon_streak: int = 0   # I1: T4 win_rate<0.3 consecutive count (independent of hard stagnation)
         self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
         self._start_time = datetime.now()
-        self._forced_next_locus: Optional[str] = None  # I3: set by soft-stagnation, consumed by branch creation
+        # _forced_next_locus / _rounds_since_last_promote now live in PlateauController;
+        # backward-compat properties defined below expose them as attributes.
         self._hard_stagnation_escape_used: bool = False  # I4: one-time escape before terminate
 
         # Stagnation / diagnosis (T25/T23)
-        self._stagnation_detector = StagnationDetector(window_size=5)
+        _taxonomy = getattr(getattr(self._spec, 'family_taxonomy', None), 'families', None)
+        self._stagnation_detector = StagnationDetector(window_size=5, taxonomy=_taxonomy)
         self._stagnation_signals: List[StagnationSignal] = []
         self._diagnostics: List[Dict[str, Any]] = []
 
@@ -220,16 +266,103 @@ class CampaignManager:
         self._saturation_analyzer: Optional[ChampionSaturationAnalyzer] = None
         self._baseline_metrics: Optional[Dict[str, float]] = None
 
-        # J6: Latest weight optimization result (for LLM feedback)
-        self._latest_weight_opt_result: Optional[Any] = None
+        # W3 / v0.3 B1: PlateauController — idle counter + early-stop + forced locus
+        from scion.core.plateau_controller import PlateauController
+        self._plateau = PlateauController()
+        # Legacy attribute names kept as thin passthroughs for now (branch_store
+        # and tests may still read them). Prefer self._plateau going forward.
+        self._early_stop = self._plateau.early_stop
+
+        # W9: Campaign journal (lineage-derived)
+        from scion.proposal.journal import CampaignJournal
+        self._journal = CampaignJournal(self._registry)
+
+        # W13: Token usage tracker
+        from scion.core.token_usage import TokenUsageTracker
+        self._token_tracker = TokenUsageTracker()
+        if hasattr(llm_client, 'set_token_tracker'):
+            llm_client.set_token_tracker(self._token_tracker)
 
         # Sprint H2 T1: Campaign-level failure counters
         self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
         self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
 
-        # Async weight optimization (R3/R5)
+        # Async weight optimization (R3/R5) — v0.3 B2 coordinator owns
+        # _pending_threads and _latest_result. Backward-compat properties
+        # below expose them as _pending_weight_opt_threads /
+        # _latest_weight_opt_result for tests and lineage paths.
         self._champion_lock = threading.Lock()
-        self._pending_weight_opt_threads: List[threading.Thread] = []
+        from scion.core.async_weight_opt import AsyncWeightOptCoordinator
+        self._weight_opt_coord = AsyncWeightOptCoordinator(self)
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by PlateauController.
+    # External callers (tests, branch_store) still read these by name.
+    # ------------------------------------------------------------------
+
+    @property
+    def _rounds_since_last_promote(self) -> int:
+        return self._plateau.rounds_since_last_promote
+
+    @_rounds_since_last_promote.setter
+    def _rounds_since_last_promote(self, value: int) -> None:
+        self._plateau._rounds_since_last_promote = value
+
+    @property
+    def _forced_next_locus(self) -> Optional[str]:
+        return self._plateau.forced_next_locus
+
+    @_forced_next_locus.setter
+    def _forced_next_locus(self, value: Optional[str]) -> None:
+        self._plateau._forced_next_locus = value
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by
+    # AsyncWeightOptCoordinator (v0.3 B2). Tests and lineage paths read
+    # these by name.
+    # ------------------------------------------------------------------
+
+    @property
+    def _pending_weight_opt_threads(self) -> List[threading.Thread]:
+        return self._weight_opt_coord.pending_threads
+
+    @property
+    def _latest_weight_opt_result(self) -> Optional[Any]:
+        return self._weight_opt_coord.latest_result
+
+    @_latest_weight_opt_result.setter
+    def _latest_weight_opt_result(self, value: Optional[Any]) -> None:
+        self._weight_opt_coord.latest_result = value
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties for attributes now owned by
+    # ProblemRuntime (v0.3 B3). Tests and internal code read these by
+    # name (e.g. ``cm._spec``, ``cm._ctx_manager``).
+    # ------------------------------------------------------------------
+
+    @property
+    def _spec(self):
+        return self._problem_runtime.spec
+
+    @_spec.setter
+    def _spec(self, value):
+        self._problem_runtime._spec = value
+
+    @property
+    def _adapter(self):
+        return self._problem_runtime.adapter
+
+    @_adapter.setter
+    def _adapter(self, value):
+        self._problem_runtime._adapter = value
+
+    @property
+    def _ctx_manager(self):
+        return self._problem_runtime.ctx_manager
+
+    @_ctx_manager.setter
+    def _ctx_manager(self, value):
+        self._problem_runtime._ctx_manager = value
 
     # ------------------------------------------------------------------
     # Public API
@@ -246,48 +379,75 @@ class CampaignManager:
             logger.info("[SATURATION DEBUG] R%d stage=%s pair_feedback_len=%d", step.round_num, step.protocol_result.stage, _pf_len)
             metrics = extract_champion_metrics_from_step(step)
             if metrics:
-                logger.info("[SATURATION] Baseline initialized: splits=%.1f cost=%.0f", metrics.get('subcategory_splits',0), metrics.get('total_cost',0))
+                logger.info("[SATURATION] Baseline initialized: metrics=%s", metrics)
                 self._baseline_metrics = metrics
-                self._saturation_analyzer = ChampionSaturationAnalyzer(metrics)
+                self._saturation_analyzer = ChampionSaturationAnalyzer(
+                    metrics,
+                    lower_bounds=(
+                        self._objective_lower_bounds
+                        if self._use_objective_lower_bounds_for_early_stop
+                        else None
+                    ),
+                )
             else:
                 logger.info("[SATURATION DEBUG] extract returned None for stage=%s", step.protocol_result.stage)
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
+        self._write_status()
+        final_reason: str | None = None
         for _ in range(max_rounds):
+            self._drain_weight_opt_events()
             if self.should_stop():
+                final_reason = self._last_stop_reason or "termination condition met"
                 logger.info("Campaign terminated.")
+                self._write_status(stopped_reason=final_reason)
                 break
             if self._circuit_breaker.is_tripped:
+                final_reason = "circuit_breaker"
                 logger.critical(
                     "Circuit breaker tripped after %d consecutive LLM failures; "
                     "stopping campaign. Last error: %s",
                     MAX_CONSECUTIVE_LLM_FAILURES,
                     self._circuit_breaker.last_failure_detail,
                 )
+                self._write_status(stopped_reason="circuit_breaker")
                 break
             result = self.run_one_step()
+            self._write_status(last_result=result)
             if result.stopped:
+                final_reason = result.reason or "stopped"
                 break
             # T25/T23: stagnation check after each round
             self._run_stagnation_check()
             # I3: soft-stagnation check (T4 abandon consecutive accumulation)
             self._check_soft_stagnation()
+        else:
+            final_reason = "max_rounds_exhausted"
+        self._last_stop_reason = final_reason
         self._write_campaign_summary()
-        # R5: join all pending weight opt threads (up to 10 min each)
-        pending = [t for t in self._pending_weight_opt_threads if t.is_alive()]
-        if pending:
-            logger.info(
-                "Waiting for %d background weight opt thread(s) to complete...",
-                len(pending),
-            )
-        for t in self._pending_weight_opt_threads:
-            t.join(timeout=600)
+        # R5: join pending async weight opt threads according to campaign config.
+        # In formal sync mode this is normally a no-op; in async mode this is
+        # the finalization guard that prevents half-closed champion lineage.
+        final_wait_timeout = getattr(
+            self._spec.parameter_search,
+            "final_wait_timeout_sec",
+            600.0,
+        )
+        self._weight_opt_coord.wait_all(timeout=final_wait_timeout)
+        self._drain_weight_opt_events()
+        self._write_campaign_summary()
+        self._write_status(stopped_reason=final_reason or "run_complete")
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
+        self._drain_weight_opt_events()
         if self.should_stop():
-            return StepResult(action="stopped", stopped=True, reason="termination condition met")
+            return StepResult(
+                action="stopped",
+                stopped=True,
+                reason=self._last_stop_reason or "termination condition met",
+            )
 
         # Tick blocked branches before scheduling (auto-unblock after 3 rounds)
         self._tick_blocked_branches()
@@ -327,6 +487,9 @@ class CampaignManager:
         ):
             try:
                 self._branch_ctrl.schedule_branch(branch.branch_id)
+                _persist = getattr(self, "_persist_branch_state", None)
+                if callable(_persist):
+                    _persist(branch.branch_id)
             except StateTransitionError as exc:
                 logger.error("schedule_branch failed: %s", exc)
                 return StepResult(
@@ -363,6 +526,10 @@ class CampaignManager:
                         pass
                     self._branch_current_hypothesis.pop(bid, None)
                 self._branch_ctrl.apply_decision(branch.branch_id, Decision.ABANDON)
+                _persist = getattr(self, "_persist_branch_state", None)
+                if callable(_persist):
+                    _persist(branch.branch_id)
+                self._record_hard_abandon(branch.branch_id, "eval_runtime_error")
                 return StepResult(
                     action="validate", branch_id=branch.branch_id, reason=str(exc)
                 )
@@ -377,12 +544,47 @@ class CampaignManager:
 
     def should_stop(self) -> bool:
         active = self._branch_ctrl.get_active_branches()
+        self._last_stop_reason = None
+
+        # W3: Check early-stop from saturation + stagnation signals
+        early_stop_detected = False
+        early_stop_reason = ""
+        sat_signals = []
+        if self._saturation_analyzer is not None and self._baseline_metrics:
+            from scion.proposal.saturation import extract_candidate_metrics_from_step
+            current_metrics = self._baseline_metrics
+            for s in reversed(self._step_history):
+                if s.decision is not None and s.decision.value == "promote":
+                    m = extract_candidate_metrics_from_step(s)
+                    if m:
+                        current_metrics = m
+                        break
+            if current_metrics:
+                sat_signals = self._saturation_analyzer.analyze(current_metrics)
+        es_decision = self._early_stop.should_early_stop(
+            sat_signals, self._stagnation_signals,
+            total_rounds=self._round_num,
+            rounds_since_last_promote=self._rounds_since_last_promote,
+        )
+        if es_decision.stop:
+            if self._has_pending_evaluation(active):
+                logger.info(
+                    "Early-stop delayed: %s (rule=%s) but validation/frozen queue is non-empty",
+                    es_decision.reason, es_decision.rule,
+                )
+            else:
+                early_stop_detected = True
+                early_stop_reason = es_decision.reason
+                logger.info("Early-stop triggered: %s (rule=%s)", es_decision.reason, es_decision.rule)
+
         cs = CampaignState(
             n_experiments=self._n_experiments,
             start_time=self._start_time,
             recent_abandoned_count=self._recent_abandoned_count,
             active_branches=active,
-            can_create_new=True,  # always can create new in MVP
+            can_create_new=True,
+            early_stop_detected=early_stop_detected,
+            early_stop_reason=early_stop_reason,
         )
         if not self._term_checker.should_stop(cs):
             return False
@@ -397,23 +599,153 @@ class CampaignManager:
             )
             self._hard_stagnation_escape_used = True
             self._recent_abandoned_count = 0  # reset counter to allow continuation
+            self._hard_abandon_counted_branches.clear()
             self._forced_next_locus = self._get_diversification_locus()
             return False  # don't stop yet — give one more chance
 
+        if early_stop_detected:
+            self._last_stop_reason = early_stop_reason or "early_stop"
+        elif self._term_checker._max_experiments_reached(cs):
+            self._last_stop_reason = "max_experiments_reached"
+        elif self._term_checker._wall_clock_exceeded(cs):
+            self._last_stop_reason = "max_wall_clock_exceeded"
+        elif stagnation_triggered:
+            self._last_stop_reason = "hard_stagnation"
+        elif self._term_checker._no_progress_possible(cs):
+            self._last_stop_reason = "no_progress_possible"
+        else:
+            self._last_stop_reason = "termination condition met"
         return True  # escape already used, or non-stagnation termination → truly stop
+
+    @staticmethod
+    def _has_pending_evaluation(branches: List[Branch]) -> bool:
+        """Return True when a candidate has earned validation/frozen budget.
+
+        Budget-efficiency early-stop is meant to stop idle exploration, not kill
+        a candidate that already passed screening or is in validation/frozen.
+        """
+        pending_states = {
+            BranchState.READY_VALIDATE,
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.READY_FROZEN,
+            BranchState.FROZEN_TESTING,
+            BranchState.STALE,
+            BranchState.STALE_WEIGHT_UPDATE,
+        }
+        return any(b.state in pending_states for b in branches)
 
     def get_state(self) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_active_branches()
-        return {
+        state = {
+            "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
+            "total_rounds": self._round_num,
+            "n_steps": len(self._step_history),
             "n_active_branches": len(branches),
             "champion_version": self._champion.version,
+            "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
             "budget_remaining": self._budget.remaining_ratio,
+            "balance_exhausted": self._balance_exhausted,
+            "circuit_breaker_tripped": self._circuit_breaker.is_tripped,
             "branches": [
-                {"id": b.branch_id, "state": b.state.value}
+                {
+                    "id": b.branch_id,
+                    "state": b.state.value,
+                    "base_champion_id": b.base_champion_id,
+                    "weight_revision": getattr(b, "weight_revision", 0),
+                }
                 for b in branches
             ],
         }
+        weight_opt_status = self._weight_opt_coord.status_snapshot()
+        if (
+            weight_opt_status["pending_threads"]
+            or weight_opt_status["active"]
+            or weight_opt_status["runs"]
+        ):
+            state["weight_optimization"] = weight_opt_status
+        if self._current_status_progress is not None:
+            state["current_progress"] = self._current_status_progress
+        return state
+
+    def _write_status(
+        self,
+        *,
+        last_result: StepResult | None = None,
+        stopped_reason: str | None = None,
+    ) -> None:
+        payload = self.get_state()
+        if last_result is not None:
+            self._last_status_result = {
+                "action": last_result.action,
+                "branch_id": last_result.branch_id,
+                "decision": (
+                    last_result.decision.value
+                    if last_result.decision is not None
+                    else None
+                ),
+                "stopped": last_result.stopped,
+                "reason": last_result.reason,
+            }
+        if self._last_status_result is not None:
+            payload["last_result"] = self._last_status_result
+        if stopped_reason is not None:
+            payload["stopped_reason"] = stopped_reason
+        try:
+            self._status_reporter.write(payload)
+        except Exception as exc:
+            logger.debug("Failed to write status.json: %s", exc)
+
+    def _on_protocol_progress(self, **payload: Any) -> None:
+        """Progress hook called by ExperimentProtocol during long stages."""
+        progress = dict(self._current_status_progress or {})
+        progress.update(payload)
+        progress["last_progress_at"] = datetime.now().isoformat()
+        self._current_status_progress = progress
+        self._write_status()
+
+    def _begin_status_progress(
+        self,
+        *,
+        branch: Branch,
+        stage: ExperimentStage,
+        hypothesis: HypothesisProposal,
+        expand: bool,
+        expand_round: int,
+    ) -> None:
+        self._current_status_progress = {
+            "branch_id": branch.branch_id,
+            "stage": stage.value,
+            "target_file": hypothesis.target_file,
+            "hypothesis_action": hypothesis.action,
+            "base_champion_id": branch.base_champion_id,
+            "branch_weight_revision": getattr(branch, "weight_revision", 0),
+            "champion_version": self._champion.version,
+            "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
+            "expand": expand,
+            "expand_round": expand_round,
+            "step_started_at": datetime.now().isoformat(),
+            "last_progress_at": datetime.now().isoformat(),
+        }
+        self._write_status()
+
+    def _end_status_progress(self) -> None:
+        self._current_status_progress = None
+        self._write_status()
+
+    def _persist_branch_state(self, branch_id: str) -> None:
+        try:
+            self._branch_store.save(self._branch_ctrl.get_branch(branch_id))
+        except Exception as exc:
+            logger.debug("BranchStore.save(%s) failed: %s", branch_id, exc)
+
+    def _persist_all_branch_states(self) -> None:
+        for branch in list(self._branch_ctrl._branches.values()):
+            try:
+                self._branch_store.save(branch)
+            except Exception as exc:
+                logger.debug("BranchStore.save(%s) failed: %s", branch.branch_id, exc)
 
     # ------------------------------------------------------------------
     # EXPLORE step (Round 1 + Round 2 + eval)
@@ -423,12 +755,21 @@ class CampaignManager:
         """Full 14-step flow for an EXPLORE/EXPLORE_EXPAND branch."""
         bid = branch.branch_id
         self._round_num += 1
+        self._rounds_since_last_promote += 1
         rnum = self._round_num
 
         # ---------- Check for pending hypothesis (code-retry path) ----------
         pending = self._pending_hypotheses.pop(bid, None)
         prior_failure: Optional[str] = None
 
+        if pending is None:
+            # New hypothesis: reset per-candidate expand counters (v3 §11.5 "expand
+            # 1 次" is per-candidate, not per-branch). Without this reset, a prior
+            # candidate's screening expand would wrongly block the next candidate's
+            # SPND path, and a prior candidate's screening expand would poison the
+            # next candidate's validation decision (VALIDATION_EXPAND_EXHAUSTED path).
+            branch.screening_expand_count = 0
+            branch.validation_expand_count = 0
         if pending is not None:
             # Retry code generation for a previously code-failed hypothesis (skip Round 1)
             hypothesis, h_record, prior_failure = pending
@@ -769,6 +1110,7 @@ class CampaignManager:
                     pass
                 self._branch_current_hypothesis.pop(bid, None)
             self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+            self._record_hard_abandon(bid, "eval_workspace_missing")
             return StepResult(action="validate", branch_id=bid, reason="workspace not found")
 
         hypothesis = self._branch_hypotheses.get(bid)
@@ -782,6 +1124,7 @@ class CampaignManager:
                     pass
                 self._branch_current_hypothesis.pop(bid, None)
             self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+            self._record_hard_abandon(bid, "eval_hypothesis_missing")
             return StepResult(action="validate", branch_id=bid, reason="hypothesis not found")
 
         patch = self._branch_patches.get(bid)
@@ -808,8 +1151,13 @@ class CampaignManager:
             )
 
         self._round_num += 1
+        # A2 (v0.3 post-opt regression fix): only count screening-expand self-loops as idle.
+        # Branches that reach VALIDATING / FROZEN_TESTING are productive activity even if they
+        # eventually fail — don't penalize them with idle accounting that would trigger
+        # budget_efficiency early-stop.
+        if action_label == "explore":
+            self._rounds_since_last_promote += 1
         rnum = self._round_num
-
         result = self._apply_decision_and_finalize(
             branch=branch,
             decision=decision,
@@ -864,29 +1212,32 @@ class CampaignManager:
                     pass
                 self._branch_current_hypothesis.pop(bid, None)
 
-        if patch is None:
-            logger.info("Branch %s: no patch to reconcile — abandoning stale branch", bid)
+        def _abandon_stale(reason: str) -> StepResult:
             _cleanup()
             self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason="no patch to reconcile")
+            _persist = getattr(self, "_persist_branch_state", None)
+            if callable(_persist):
+                _persist(bid)
+            self._record_hard_abandon(bid, reason)
+            return StepResult(action="reconcile", branch_id=bid, reason=reason)
+
+        if patch is None:
+            logger.info("Branch %s: no patch to reconcile — abandoning stale branch", bid)
+            return _abandon_stale("no patch to reconcile")
 
         hypothesis = self._branch_hypotheses.get(bid)
 
         # --- Step 1: fresh workspace from new champion ---
         workspace = self._setup_workspace(branch, force_champion=True)
         if workspace is None:
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason="workspace setup failed")
+            return _abandon_stale("workspace setup failed")
 
         # --- Step 2: reapply patch ---
         try:
             code_hash = self._materializer.apply_patch(workspace, patch)
         except Exception as exc:
             logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason=f"apply_patch failed: {exc}")
+            return _abandon_stale(f"apply_patch failed: {exc}")
 
         # T03: record candidate code hash (not yet verified)
         self._branch_ctrl.record_candidate_code(bid, code_hash)
@@ -898,11 +1249,8 @@ class CampaignManager:
                 "Branch %s: reconcile patch failed contract gate: %s",
                 bid, contract_result.failure_reason,
             )
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(
-                action="reconcile", branch_id=bid,
-                reason=f"reconcile contract failed: {contract_result.failure_reason}",
+            return _abandon_stale(
+                f"reconcile contract failed: {contract_result.failure_reason}"
             )
 
         # --- Step 4: Verification Gate ---
@@ -913,11 +1261,8 @@ class CampaignManager:
             logger.info(
                 "Branch %s: reconcile verification failed: %s", bid, vresult.first_failure
             )
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(
-                action="reconcile", branch_id=bid,
-                reason=f"reconcile verification failed: {vresult.first_failure}",
+            return _abandon_stale(
+                f"reconcile verification failed: {vresult.first_failure}"
             )
 
         # T03: verification passed — update last_clean_code_hash
@@ -930,82 +1275,56 @@ class CampaignManager:
             logger.info(
                 "Branch %s: no experiment protocol for reconcile re-screening — abandoning stale branch", bid
             )
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(
-                action="reconcile", branch_id=bid,
-                reason="no experiment protocol for re-screening",
-            )
+            return _abandon_stale("no experiment protocol for re-screening")
 
-        hypothesis_action = hypothesis.action if hypothesis else "modify"
-        champ_ws = self._champion.code_snapshot_path
-        try:
-            canary_result = self._experiment_protocol.run_canary(workspace, champ_ws)
-        except (ValueError, NotImplementedError) as exc:
-            logger.debug("reconcile run_canary skipped: %s", exc)
-            canary_result = CanaryResult(passed=True, reason=f"canary skipped: {exc}")
-        if not canary_result.passed:
-            logger.info("Branch %s: reconcile canary failed — abandoning stale branch", bid)
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason="reconcile canary failed")
-
-        try:
-            screening_result = self._experiment_protocol.run_experiment(
-                stage=ExperimentStage.SCREENING,
-                candidate_ws=workspace,
-                champion_ws=champ_ws,
-                hypothesis_action=hypothesis_action,
-                expand=False,
-                expand_round=1,
-            )
-            self._n_experiments += 1
-            self._budget.used += 1
-        except Exception as exc:
-            logger.error("Branch %s: reconcile re-screening failed: %s", bid, exc)
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            return StepResult(action="reconcile", branch_id=bid, reason=f"re-screening failed: {exc}")
-
-        # --- Step 6: routing based on screening result ---
-        if screening_result.gate_outcome in ("pass", "expand"):
-            # Positive signal — allow branch to continue (as READY_VALIDATE to re-enter eval)
-            self._branch_ctrl.reconcile_stale(bid, success=True, new_champion=self._champion)
-            # Put branch in READY_VALIDATE so it gets a full validation cycle against new champion
-            try:
-                b = self._branch_ctrl.get_branch(bid)
-                if b.state == BranchState.EXPLORE:
-                    self._branch_ctrl.apply_decision(bid, Decision.QUEUE_VALIDATE)
-            except Exception:
-                pass
+        h_record = self._branch_current_hypothesis.get(bid)
+        if hypothesis is None or h_record is None:
             logger.info(
-                "Branch %s: reconcile succeeded (screening gate_outcome=%s) → READY_VALIDATE",
-                bid, screening_result.gate_outcome,
+                "Branch %s: missing hypothesis metadata for reconcile — abandoning stale branch",
+                bid,
             )
-            try:
-                _b = self._branch_ctrl.get_branch(bid)
-                if _b:
-                    self._branch_store.save(_b)
-            except Exception as _exc:
-                logger.debug("BranchStore.save (reconcile ok) failed: %s", _exc)
-            return StepResult(action="reconcile", branch_id=bid, reason="reconcile succeeded — READY_VALIDATE")
-        else:
-            logger.info(
-                "Branch %s: reconcile re-screening failed (gate_outcome=%s) — abandoning",
-                bid, screening_result.gate_outcome,
-            )
-            _cleanup()
-            self._branch_ctrl.reconcile_stale(bid, success=False, new_champion=self._champion)
-            try:
-                _b = self._branch_ctrl.get_branch(bid)
-                if _b:
-                    self._branch_store.save(_b)
-            except Exception as _exc:
-                logger.debug("BranchStore.save (reconcile fail) failed: %s", _exc)
-            return StepResult(
-                action="reconcile", branch_id=bid,
-                reason=f"reconcile re-screening failed: gate_outcome={screening_result.gate_outcome}",
-            )
+            return _abandon_stale("missing hypothesis metadata for reconcile")
+
+        # --- Step 6: evaluate through the canonical decision path ---
+        # Reconcile changes the branch back to EXPLORE before _evaluate(), because
+        # BranchController.next_stage() intentionally does not accept STALE states.
+        self._branch_ctrl.reconcile_stale(bid, success=True, new_champion=self._champion)
+        _persist = getattr(self, "_persist_branch_state", None)
+        if callable(_persist):
+            _persist(bid)
+        branch = self._branch_ctrl.get_branch(bid)
+        if branch is None:
+            return StepResult(action="reconcile", branch_id=bid, reason="branch disappeared after reconcile")
+
+        self._round_num += 1
+        self._rounds_since_last_promote += 1
+        rnum = self._round_num
+
+        decision, protocol_result, canary_result = self._evaluate(branch, workspace, hypothesis)
+        result = self._apply_decision_and_finalize(
+            branch=branch,
+            decision=decision,
+            hypothesis=hypothesis,
+            h_record=h_record,
+            protocol_result=protocol_result,
+            canary_result=canary_result,
+            contract_result=contract_result,
+            verification_result=vresult,
+            action_label="reconcile",
+        )
+        self._record_step(StepRecord(
+            round_num=rnum, branch_id=bid,
+            hypothesis=hypothesis,
+            patch=self._branch_patches.get(bid, patch),
+            contract_passed=True, verification_passed=True,
+            protocol_result=protocol_result,
+            decision=result.decision,
+            failure_stage=None,
+            failure_detail=None,
+            hypothesis_id=h_record.hypothesis_id,
+            decision_reason_codes=protocol_result.reason_codes if protocol_result else None,
+        ))
+        return result
 
     # ------------------------------------------------------------------
     # Round 1: generate hypothesis
@@ -1038,10 +1357,9 @@ class CampaignManager:
             if current_metrics:
                 saturation_signals = self._saturation_analyzer.analyze(current_metrics)
 
-        context = self._ctx_manager.build_hypothesis_context(
+        context = self._problem_runtime.build_hypothesis_context(
             branch=branch,
             champion=champ_snapshot,
-            problem_spec=self._spec,
             active_hypotheses=self._hyp_store.get_by_status("active"),
             blacklist=self._hyp_store.get_by_status("blacklisted"),
             sibling_branches=siblings,
@@ -1069,6 +1387,8 @@ class CampaignManager:
             return None, None
 
         self._circuit_breaker.record_success()
+        # O1: classify hypothesis family
+        cls_result = self._classifier.classify(hypothesis.hypothesis_text or "")
         h_record = HypothesisRecord(
             hypothesis_id=str(uuid.uuid4()),
             branch_id=bid,
@@ -1078,6 +1398,9 @@ class CampaignManager:
             target_file=hypothesis.target_file,
             suggested_weight=hypothesis.suggested_weight,
             hypothesis_text=hypothesis.hypothesis_text,
+            family_id=cls_result.family_id,
+            family_source=cls_result.source,
+            taxonomy_version=cls_result.taxonomy_version,
         )
         return hypothesis, h_record
 
@@ -1092,11 +1415,10 @@ class CampaignManager:
         bid = branch.branch_id
         with self._champion_lock:
             champ_snapshot = self._champion
-        context = self._ctx_manager.build_code_context(
+        context = self._problem_runtime.build_code_context(
             branch=branch,
             hypothesis=hypothesis,
             champion=champ_snapshot,
-            problem_spec=self._spec,
             prior_failure=prior_failure,
         )
         try:
@@ -1122,15 +1444,28 @@ class CampaignManager:
     def _attempt_fix(
         self, branch: Branch, patch: PatchProposal, vresult: VerificationResult
     ) -> Optional[PatchProposal]:
-        context = self._ctx_manager.build_fix_context(
+        logger.info(
+            "Branch %s: attempting fix_code after %s light verification failure",
+            branch.branch_id,
+            vresult.first_failure or "unknown",
+        )
+        context = self._problem_runtime.build_fix_context(
             branch=branch,
             patch=patch,
             verification_result=vresult,
-            problem_spec=self._spec,
             failure_streak=dict(self._failure_streak),
         )
         try:
-            return self._creative.fix_code(context)
+            fixed = self._creative.fix_code(context)
+            if fixed is None:
+                logger.info("Branch %s: fix_code returned no patch", branch.branch_id)
+            else:
+                logger.info(
+                    "Branch %s: fix_code produced patch for %s",
+                    branch.branch_id,
+                    fixed.file_path,
+                )
+            return fixed
         except (LLMRetryExhaustedError, LLMFormatError, LLMTimeoutError) as exc:
             logger.warning("Branch %s: fix LLM error: %s", branch.branch_id, exc)
             return None
@@ -1186,7 +1521,13 @@ class CampaignManager:
         stage = self._branch_ctrl.next_stage(bid)
 
         # Champion workspace path
-        champ_ws = self._champion.code_snapshot_path
+        with self._champion_lock:
+            champion_for_eval = self._champion
+        champ_ws = champion_for_eval.code_snapshot_path
+        branch.weight_revision = getattr(champion_for_eval, "weight_revision", 0)
+        _persist = getattr(self, "_persist_branch_state", None)
+        if callable(_persist):
+            _persist(bid)
 
         # ---- Canary ----
         canary_result: CanaryResult
@@ -1207,17 +1548,35 @@ class CampaignManager:
                 BranchState.EXPLORE_EXPAND,
                 BranchState.VALIDATING_EXPAND,
             )
-            if expand:
-                branch.expand_count += 1
+            # Stage-specific expand counters (v3 §11.5): screening and validation
+            # have independent per-candidate budgets. `expand_round` reflects the
+            # N-th expansion for the active stage.
+            expand_round_val = 1
+            if branch.state == BranchState.EXPLORE_EXPAND:
+                branch.screening_expand_count += 1
+                expand_round_val = branch.screening_expand_count
+            elif branch.state == BranchState.VALIDATING_EXPAND:
+                branch.validation_expand_count += 1
+                expand_round_val = branch.validation_expand_count
             try:
-                protocol_result = self._experiment_protocol.run_experiment(
+                self._begin_status_progress(
+                    branch=branch,
                     stage=stage,
-                    candidate_ws=workspace,
-                    champion_ws=champ_ws,
-                    hypothesis_action=hypothesis.action,
+                    hypothesis=hypothesis,
                     expand=expand,
-                    expand_round=branch.expand_count if expand else 1,
+                    expand_round=expand_round_val,
                 )
+                try:
+                    protocol_result = self._experiment_protocol.run_experiment(
+                        stage=stage,
+                        candidate_ws=workspace,
+                        champion_ws=champ_ws,
+                        hypothesis_action=hypothesis.action,
+                        expand=expand,
+                        expand_round=expand_round_val,
+                    )
+                finally:
+                    self._end_status_progress()
                 self._n_experiments += 1
                 self._budget.used += 1
             except Exception as exc:
@@ -1320,6 +1679,24 @@ class CampaignManager:
             self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
         except StateTransitionError as exc:
             logger.debug("Branch %s: soft_abandon apply_decision failed: %s", bid, exc)
+        _persist = getattr(self, "_persist_branch_state", None)
+        if callable(_persist):
+            _persist(bid)
+
+    def _record_hard_abandon(self, branch_id: str, reason: str) -> None:
+        """Count a non-T4 branch abandonment once for hard-stagnation logic."""
+        counted = getattr(self, "_hard_abandon_counted_branches", None)
+        if counted is None:
+            counted = set()
+            self._hard_abandon_counted_branches = counted
+        if branch_id in counted:
+            return
+        counted.add(branch_id)
+        self._recent_abandoned_count += 1
+        logger.debug(
+            "Branch %s: hard abandon counted (%s); recent_abandoned_count=%d",
+            branch_id, reason, self._recent_abandoned_count,
+        )
 
     # ------------------------------------------------------------------
     # Pool/registry sync
@@ -1372,6 +1749,14 @@ class CampaignManager:
 
         bid = branch.branch_id
         stats = protocol_result.stats if protocol_result else None
+        evidence_metadata = {
+            "branch_state": branch.state.value,
+            "branch_base_champion_id": branch.base_champion_id,
+            "branch_weight_revision": getattr(branch, "weight_revision", 0),
+            "current_champion_version": self._champion.version,
+            "current_champion_weight_revision": getattr(self._champion, "weight_revision", 0),
+            "protocol_raw_metrics_ref": protocol_result.raw_metrics_ref if protocol_result else "",
+        }
         event: Dict[str, Any] = {
             "campaign_id": self._campaign_id,
             "branch_id": bid,
@@ -1387,11 +1772,15 @@ class CampaignManager:
             "verification_result": "passed" if verification_result.passed else "failed",
             "canary_result": "passed" if canary_result.passed else "failed",
             "stage": protocol_result.stage.value if protocol_result else "",
+            "case_ids": _json.dumps(list(protocol_result.case_ids)) if protocol_result else "[]",
+            "seed_set": _json.dumps(list(protocol_result.seed_set)) if protocol_result else "[]",
+            "raw_metrics_ref": protocol_result.raw_metrics_ref if protocol_result else "",
             "screening_n_cases": stats.n_cases if stats else 0,
             "screening_win_rate": stats.win_rate if stats else None,
             "screening_median_delta": stats.median_delta if stats else None,
             "screening_ci_low": stats.ci_low if stats else None,
             "screening_ci_high": stats.ci_high if stats else None,
+            "decision_features_json": _json.dumps(evidence_metadata),
             "decision": decision.value,
             "model_id": getattr(self._llm_client, "model", None),
             "protocol_version": getattr(self._protocol_config, "version", None),
@@ -1441,7 +1830,27 @@ class CampaignManager:
         bid = branch.branch_id
         logger.info("Branch %s: decision=%s", bid, decision.value)
 
-        # Record event + decision in lineage registry
+        promote_plan: _PromotePlan | None = None
+        if decision == Decision.PROMOTE:
+            try:
+                promote_plan = self._prepare_promoted_champion(branch)
+            except Exception as exc:
+                logger.error("Branch %s: promote prepare failed: %s", bid, exc)
+                self._handle_failure(
+                    branch,
+                    FailureEvent(category="infra", detail=f"promote_prepare: {exc}"),
+                    hypothesis_already_recorded=True,
+                )
+                return StepResult(
+                    action=action_label,  # type: ignore[arg-type]
+                    branch_id=bid,
+                    decision=None,
+                    reason=f"promote_prepare_failed: {exc}",
+                )
+
+        # Record event + decision in lineage registry only after PROMOTE has a
+        # completed champion snapshot plan. This avoids recording a committed
+        # promotion when snapshot preparation fails.
         self._record_step_lineage(
             branch=branch,
             hypothesis=hypothesis,
@@ -1502,7 +1911,8 @@ class CampaignManager:
             self._hyp_store.mark_status(h_record.hypothesis_id, "rejected")
             # For EXPLORE_EXPAND the branch is not already in EXPLORE — call apply_decision
             # so the transition map (EXPLORE_EXPAND → EXPLORE) fires correctly.
-            if branch.state != BranchState.EXPLORE:
+            # Skip STALE_WEIGHT_UPDATE: let it flow to reconcile unchanged.
+            if branch.state not in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE):
                 try:
                     self._branch_ctrl.apply_decision(bid, decision)
                 except StateTransitionError as exc:
@@ -1510,8 +1920,12 @@ class CampaignManager:
                         "Branch %s: apply_decision(CONTINUE_EXPLORE) from %s failed: %s",
                         bid, branch.state.value, exc,
                     )
-            # Otherwise branch stays EXPLORE — no apply_decision needed.
+            # Otherwise branch stays as-is — EXPLORE needs no transition,
+            # STALE_WEIGHT_UPDATE flows to reconcile on next step.
             self._recent_abandoned_count = 0
+            _persist = getattr(self, "_persist_branch_state", None)
+            if callable(_persist):
+                _persist(bid)
             return StepResult(
                 action=action_label,  # type: ignore[arg-type]
                 branch_id=bid,
@@ -1526,10 +1940,25 @@ class CampaignManager:
                 self._branch_ctrl.apply_decision(bid, decision)
             except StateTransitionError as exc:
                 logger.error("Branch %s: apply_decision(%s) failed: %s", bid, decision.value, exc)
+                self._handle_failure(
+                    branch,
+                    FailureEvent(category="infra", detail=f"promote_transition: {exc}"),
+                    hypothesis_already_recorded=True,
+                )
+                return StepResult(
+                    action=action_label,  # type: ignore[arg-type]
+                    branch_id=bid,
+                    decision=None,
+                    reason=f"promote_transition_failed: {exc}",
+                )
             # T04: mark the original hypothesis as promoted
             self._hyp_store.mark_status(h_record.hypothesis_id, "promoted")
             self._branch_current_hypothesis.pop(bid, None)
-            self._on_promote(branch)
+            assert promote_plan is not None
+            self._commit_promote_plan(branch, promote_plan)
+            _persist = getattr(self, "_persist_branch_state", None)
+            if callable(_persist):
+                _persist(bid)
             return StepResult(
                 action=action_label,  # type: ignore[arg-type]
                 branch_id=bid,
@@ -1550,7 +1979,7 @@ class CampaignManager:
                     decision=decision,
                     reason="T4: win_rate < 0.3",
                 )
-            self._recent_abandoned_count += 1
+            self._record_hard_abandon(bid, "decision_abandon")
             ws = self._branch_workspaces.pop(bid, None)
             if ws:
                 try:
@@ -1597,22 +2026,25 @@ class CampaignManager:
 
         R1: returns in seconds — weight optimization runs in a daemon thread.
         """
+        try:
+            plan = self._prepare_promoted_champion(branch)
+        except Exception as exc:
+            logger.error("Branch %s: promote prepare failed: %s", branch.branch_id, exc)
+            return
+        self._commit_promote_plan(branch, plan)
+
+    def _prepare_promoted_champion(self, branch: Branch) -> _PromotePlan:
+        """Build and freeze the champion snapshot before any promote state commit."""
         import os as _os
         import shutil as _shutil
         from scion.runtime.workspace import _make_tree_writable
         bid = branch.branch_id
 
-        # I2: Promotion resets stagnation counters — new champion establishes new baseline
-        self._recent_abandoned_count = 0
-        self._soft_abandon_streak = 0
-        # I4: Reset escape opportunity for the new champion cycle
-        self._hard_stagnation_escape_used = False
-        logger.debug("Branch %s promoted → stagnation counters reset", bid)
-
         ws = self._branch_workspaces.get(bid)
         if ws is None:
-            logger.warning("Branch %s promoted but no workspace found", bid)
-            return
+            raise FileNotFoundError(f"no workspace found for promoted branch {bid}")
+        if not _os.path.isdir(ws):
+            raise FileNotFoundError(f"workspace path not found for promoted branch {bid}: {ws}")
 
         with self._champion_lock:
             new_version = self._champion.version + 1
@@ -1630,8 +2062,7 @@ class CampaignManager:
             from pathlib import Path as _Path
             _make_tree_writable(_Path(staging_path))
         except Exception as exc:
-            logger.error("Branch %s: mutable staging failed: %s", bid, exc)
-            staging_path = ws  # fallback
+            raise RuntimeError(f"mutable staging failed: {exc}") from exc
 
         # Read current weights before freezing (bg thread will use these)
         param_cfg = self._spec.parameter_search
@@ -1648,7 +2079,7 @@ class CampaignManager:
         try:
             self._materializer.freeze_snapshot(staging_path)
         except Exception as exc:
-            logger.error("Failed to freeze staging %s: %s", staging_path, exc)
+            raise RuntimeError(f"freeze champion snapshot failed: {exc}") from exc
 
         snapshot_path = staging_path
 
@@ -1670,11 +2101,34 @@ class CampaignManager:
             code_snapshot_hash=code_hash,
             promoted_at=datetime.now().isoformat(),
         )
+        return _PromotePlan(
+            champion=new_champion,
+            snapshot_path=snapshot_path,
+            current_weights=current_weights,
+        )
+
+    def _commit_promote_plan(self, branch: Branch, plan: _PromotePlan) -> None:
+        """Commit an already prepared champion snapshot to in-memory state."""
+        bid = branch.branch_id
+        new_champion = plan.champion
+        new_version = new_champion.version
+
+        # I2: Promotion resets stagnation counters — new champion establishes new baseline
+        self._recent_abandoned_count = 0
+        self._hard_abandon_counted_branches.clear()
+        self._soft_abandon_streak = 0
+        # I4: Reset escape opportunity for the new champion cycle
+        self._hard_stagnation_escape_used = False
+        logger.debug("Branch %s promoted → stagnation counters reset", bid)
 
         # Update champion immediately with pre-optimized weights (R1)
         with self._champion_lock:
             self._champion = new_champion
+        self._rounds_since_last_promote = 0
         stale_ids = self._branch_ctrl.mark_all_stale(new_version)
+        _persist_all = getattr(self, "_persist_all_branch_states", None)
+        if callable(_persist_all):
+            _persist_all()
         logger.info("Promoted branch %s to champion v%d; marked %d branches stale",
                     bid, new_version, len(stale_ids))
 
@@ -1699,223 +2153,155 @@ class CampaignManager:
         except Exception as exc:
             logger.warning("Failed to persist champion v%d to store: %s", new_version, exc)
 
-        # Launch background weight optimization (R2)
-        if param_cfg.enabled and self._experiment_protocol is not None:
-            t = threading.Thread(
-                target=self._bg_weight_opt_task,
-                args=(staging_path, new_version, current_weights),
-                daemon=True,
-                name=f"weight-opt-v{new_version}",
-            )
-            self._pending_weight_opt_threads.append(t)
-            t.start()
-
-    def _bg_weight_opt_task(
-        self, staging_path: str, version: int, current_weights: dict
-    ) -> None:
-        """Background thread: run weight opt and update champion on success.
-
-        R2: Writes optimized weights back to the frozen snapshot, updates
-            self._champion.operator_pool and code_snapshot_hash.
-        R4: Checks version before updating; discards result if champion advanced.
-        """
-        import os as _os
-        import time as _time
-        from scion.runtime.workspace import _make_tree_writable
-        from pathlib import Path as _Path
-
-        t0 = _time.monotonic()
+        # Launch or run weight optimization (R2). Async is kept as the framework
+        # default; sync gives resource-constrained formal experiments a closed
+        # champion state before the next structure-search round.
         try:
-            opt_result = self._run_weight_optimization(staging_path, version, current_weights)
-        except Exception as exc:
-            logger.error("Background weight opt failed for champion v%d: %s", version, exc)
-            return
-
-        elapsed_min = (_time.monotonic() - t0) / 60.0
-
-        if opt_result is None:
-            return
-
-        # Record result regardless of improvement
-        # J6: Store latest weight opt result for LLM feedback
-        self._latest_weight_opt_result = opt_result
-        try:
-            self._registry.record_weight_optimization(
-                campaign_id=self._campaign_id,
-                champion_version=version,
-                result=opt_result,
-            )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to record result: %s", exc)
-
-        if not opt_result.improved:
-            logger.info(
-                "Background weight opt complete for champion v%d (%.1f min) — no improvement",
-                version, elapsed_min,
-            )
-            return
-
-        # Write optimized weights back to snapshot (temporarily make writable)
-        registry_path = _os.path.join(staging_path, "registry.yaml")
-        try:
-            from scion.runtime.pool_manager import update_weights, read_registry
-            _make_tree_writable(_Path(staging_path))
-            if _os.path.exists(registry_path):
-                update_weights(registry_path, opt_result.best_weights)
-            self._materializer.freeze_snapshot(staging_path)
-        except Exception as exc:
-            logger.error(
-                "Background weight opt: failed to write weights for champion v%d: %s",
-                version, exc,
-            )
-            return
-
-        # Recompute hash and read updated pool
-        try:
-            new_pool = read_registry(registry_path)
-            new_hash = self._materializer.compute_snapshot_hash(staging_path)
-        except Exception as exc:
-            logger.error(
-                "Background weight opt: failed to recompute hash for champion v%d: %s",
-                version, exc,
-            )
-            return
-
-        # R4: Only update champion if version is still current
-        with self._champion_lock:
-            if self._champion.version != version:
-                logger.warning(
-                    "Background weight opt for champion v%d discarded — "
-                    "champion has advanced to v%d",
-                    version, self._champion.version,
+            execution = getattr(self._spec.parameter_search, "execution", "async")
+            if execution == "sync":
+                logger.info("Champion v%d: running weight optimization synchronously", new_version)
+                self._weight_opt_coord.run_for_promoted_champion_sync(
+                    plan.snapshot_path,
+                    new_version,
+                    plan.current_weights,
+                    base_weight_revision=new_champion.weight_revision,
                 )
-                return
-            self._champion = ChampionState(
-                version=self._champion.version,
-                operator_pool=new_pool,
-                solver_config_hash=self._champion.solver_config_hash,
-                code_snapshot_path=self._champion.code_snapshot_path,
-                code_snapshot_hash=new_hash,
-                promoted_at=self._champion.promoted_at,
-            )
+                self._drain_weight_opt_events()
+            else:
+                self._weight_opt_coord.spawn_for_promoted_champion(
+                    plan.snapshot_path,
+                    new_version,
+                    plan.current_weights,
+                    base_weight_revision=new_champion.weight_revision,
+                )
+        except Exception as exc:
+            logger.warning("Failed to run weight optimization for champion v%d: %s", new_version, exc)
 
-        logger.info(
-            "Background weight opt complete for champion v%d (%.1f min)",
-            version, elapsed_min,
-        )
+    def _drain_weight_opt_events(self) -> None:
+        """Apply completed weight-optimization events on the campaign thread."""
+        events = self._weight_opt_coord.drain_completed_events()
+        for event in events:
+            self._latest_weight_opt_result = event.result
+            try:
+                self._registry.record_weight_optimization(
+                    campaign_id=self._campaign_id,
+                    champion_version=event.version,
+                    result=event.result,
+                )
+            except Exception as exc:
+                logger.warning("Weight opt: failed to record result: %s", exc)
 
-        # J4: Mark active branches as stale so they re-screen with new weights
-        try:
-            stale_weight_ids = self._branch_ctrl.mark_all_stale(version)
-            if stale_weight_ids:
+            if not event.improved:
                 logger.info(
-                    "Background weight opt: marked %d branches stale for re-screening",
-                    len(stale_weight_ids),
+                    "Weight opt complete for champion v%d (%.1f min) — no improvement",
+                    event.version, event.elapsed_minutes,
                 )
-        except Exception as exc:
-            logger.warning("Background weight opt: failed to mark branches stale: %s", exc)
+                continue
+
+            if (
+                event.new_revision is None
+                or event.snapshot_path is None
+                or event.snapshot_hash is None
+                or event.operator_pool is None
+            ):
+                logger.warning(
+                    "Weight opt event for champion v%d missing optimized snapshot data",
+                    event.version,
+                )
+                continue
+
+            with self._champion_lock:
+                current = self._champion
+                if (
+                    current.version != event.version
+                    or current.weight_revision != event.base_weight_revision
+                ):
+                    logger.warning(
+                        "Weight opt for champion v%d_r%d discarded — current champion is v%d_r%d",
+                        event.version,
+                        event.new_revision,
+                        current.version,
+                        current.weight_revision,
+                    )
+                    continue
+                optimized_champion = ChampionState(
+                    version=current.version,
+                    operator_pool=event.operator_pool,
+                    solver_config_hash=current.solver_config_hash,
+                    code_snapshot_path=event.snapshot_path,
+                    code_snapshot_hash=event.snapshot_hash,
+                    promoted_at=current.promoted_at,
+                    weight_revision=event.new_revision,
+                )
+                self._champion = optimized_champion
+
+            try:
+                self._champion_store.promote(optimized_champion)
+            except Exception as exc:
+                logger.warning(
+                    "Weight opt: failed to persist champion v%d_r%d: %s",
+                    event.version, event.new_revision, exc,
+                )
+
+            logger.info(
+                "Weight opt committed champion v%d_r%d (%.1f min)",
+                event.version, event.new_revision, event.elapsed_minutes,
+            )
+
+            # Stage-aware stale: do not interrupt in-flight frozen holdout, but
+            # reconcile all other active branches before more validation/frozen budget.
+            try:
+                active_before_stale = [
+                    {
+                        "branch_id": b.branch_id,
+                        "state": b.state.value,
+                        "base_champion_id": b.base_champion_id,
+                        "weight_revision": getattr(b, "weight_revision", 0),
+                    }
+                    for b in self._branch_ctrl.get_active_branches()
+                ]
+                stale_weight_ids = self._branch_ctrl.mark_stale_for_weight_update(event.version)
+                _persist_all = getattr(self, "_persist_all_branch_states", None)
+                if callable(_persist_all):
+                    _persist_all()
+                if stale_weight_ids:
+                    logger.info(
+                        "Weight opt: marked %d branches stale for re-screening",
+                        len(stale_weight_ids),
+                    )
+                try:
+                    import json as _json
+                    self._registry.record_event({
+                        "campaign_id": self._campaign_id,
+                        "branch_id": "__campaign__",
+                        "timestamp": datetime.now().isoformat(),
+                        "event_kind": "weight_update_invalidation",
+                        "stage": "weight_update",
+                        "decision_features_json": _json.dumps({
+                            "champion_version": event.version,
+                            "base_weight_revision": event.base_weight_revision,
+                            "new_weight_revision": event.new_revision,
+                            "active_branches_before_stale": active_before_stale,
+                            "stale_branch_ids": stale_weight_ids,
+                        }),
+                    })
+                except Exception as exc:
+                    logger.debug("Weight opt: failed to record invalidation audit: %s", exc)
+            except Exception as exc:
+                logger.warning("Weight opt: failed to mark branches stale: %s", exc)
 
     def _run_weight_optimization(
         self, champion_snapshot: str, version: int, current_weights: dict
     ):
-        """Run weight optimization on a copy of the champion snapshot.
+        """Delegate to AsyncWeightOptCoordinator (v0.3 B2).
 
-        Args:
-            champion_snapshot: Path to the mutable staging snapshot directory.
-            version: Champion version number (used for eval_ws naming and seed).
-            current_weights: Current champion weights — passed to optimizer as
-                true baseline (T1).
-
-        Returns WeightOptimizationResult or None if prerequisites are missing.
+        Kept as a method on CampaignManager so existing tests that monkey-patch
+        ``cm._run_weight_optimization`` continue to work — the coordinator's bg
+        thread calls back through ``self._mgr._run_weight_optimization(...)``.
         """
-        import os as _os
-        import shutil
-        from scion.parameter.optimizer import RandomLocalWeightOptimizer, BayesianWeightOptimizer
-        from scion.parameter.evaluator import collect_baseline, evaluate_weights
-        from scion.parameter.search_space import ParameterSearchSpace
-
-        param_cfg = self._spec.parameter_search
-
-        # Locate runner
-        runner = getattr(self._experiment_protocol, 'runner',
-                         getattr(self._experiment_protocol, '_runner', None))
-        if runner is None:
-            logger.warning("No runner available for weight optimization")
-            return None
-
-        # Require a registry.yaml in the snapshot
-        registry_path = _os.path.join(champion_snapshot, "registry.yaml")
-        if not _os.path.exists(registry_path):
-            logger.warning("No registry.yaml in snapshot %s; skipping weight opt", champion_snapshot)
-            return None
-
-        # Create evaluation workspace (isolated copy of champion snapshot)
-        eval_ws = _os.path.join(self._campaign_dir, f"weight_opt_v{version}")
-        if _os.path.exists(eval_ws):
-            shutil.rmtree(eval_ws)
-        shutil.copytree(champion_snapshot, eval_ws)
-        # Ensure eval workspace is writable
-        for _root, _dirs, _files in _os.walk(eval_ws):
-            for _d in _dirs:
-                _os.chmod(_os.path.join(_root, _d), 0o755)
-            for _f in _files:
-                _os.chmod(_os.path.join(_root, _f), 0o644)
-
-        # Determine eval cases (fall back to screening split)
-        eval_cases = list(param_cfg.eval_cases)
-        if not eval_cases:
-            eval_cases = list(self._split_manifest.screening)
-        resolved_cases = [
-            _os.path.join(self._spec.root_dir, c) if not _os.path.isabs(c) else c
-            for c in eval_cases
-        ]
-
-        seeds = list(self._seed_ledger.screening)[:param_cfg.n_eval_seeds]
-        time_limit = getattr(getattr(self._spec, 'solver', None), 'time_limit_sec', 300)
-
-        operator_names = tuple(current_weights.keys())
-
-        # Collect baseline objectives for evaluate_weights comparisons
-        baseline = collect_baseline(eval_ws, resolved_cases, seeds, runner, time_limit)
-
-        # Build search space
-        search_space = ParameterSearchSpace(
-            operator_names=operator_names,
-            weight_bounds=param_cfg.weight_bounds,
-            n_initial_random=param_cfg.n_initial_random,
-            n_iterations=param_cfg.n_iterations,
-            n_eval_seeds=param_cfg.n_eval_seeds,
-            eval_cases=tuple(resolved_cases),
+        return self._weight_opt_coord.run_optimization(
+            champion_snapshot, version, current_weights
         )
-
-        def eval_fn(weights):
-            return evaluate_weights(
-                weights=weights,
-                workspace=eval_ws,
-                cases=resolved_cases,
-                seeds=seeds,
-                runner=runner,
-                time_limit_sec=time_limit,
-                baseline_objectives=baseline,
-            )
-
-        optimizer = RandomLocalWeightOptimizer(search_space, eval_fn, seed=version)
-        if getattr(param_cfg, 'strategy', 'random_local') == 'bayesian':
-            optimizer = BayesianWeightOptimizer(search_space, eval_fn, seed=version)
-
-        # T2: artifacts dir for saving observations JSON
-        artifacts_dir = _os.path.join(self._campaign_dir, "artifacts")
-        _os.makedirs(artifacts_dir, exist_ok=True)
-
-        # T1: pass current_weights so optimizer evaluates true baseline first
-        result = optimizer.optimize(current_weights, artifacts_dir=artifacts_dir)
-
-        try:
-            shutil.rmtree(eval_ws)
-        except Exception:
-            pass
-
-        return result
 
     # ------------------------------------------------------------------
     # Stagnation detection (T25/T23)
@@ -1989,14 +2375,15 @@ class CampaignManager:
             if locus:
                 locus_counts[locus] = locus_counts.get(locus, 0) + 1
 
-        # Force the opposite locus on next branch creation
+        # Force a non-dominant locus on next branch creation
         dominant_locus = max(locus_counts, key=locus_counts.get) if locus_counts else ""
-        if dominant_locus == "vehicle_level":
-            self._forced_next_locus = "order_level"
-        elif dominant_locus == "order_level":
-            self._forced_next_locus = "vehicle_level"
-        else:
-            self._forced_next_locus = None  # unknown → no force
+        all_loci = set(getattr(self._spec, 'operator_categories', []))
+        if not all_loci:
+            logger.info("Soft stagnation: no operator categories available for forced locus")
+            self._soft_abandon_streak = 0
+            return
+        unexplored = all_loci - {dominant_locus}
+        self._forced_next_locus = next(iter(sorted(unexplored)), None)
 
         self._soft_abandon_streak = 0  # reset after acting
 
@@ -2007,9 +2394,8 @@ class CampaignManager:
 
     def _consume_forced_locus(self) -> Optional[str]:
         """Consume and return forced locus (set by soft/hard stagnation), or None."""
-        forced = self._forced_next_locus
+        forced = self._plateau.consume_forced_locus()
         if forced is not None:
-            self._forced_next_locus = None
             logger.info("Applying forced locus diversification: %s", forced)
         return forced
 
@@ -2027,11 +2413,11 @@ class CampaignManager:
             if locus:
                 locus_counts[locus] = locus_counts.get(locus, 0) + 1
         dominant = max(locus_counts, key=locus_counts.get) if locus_counts else ""
-        if dominant == "vehicle_level":
-            return "order_level"
-        elif dominant == "order_level":
-            return "vehicle_level"
-        return None
+        all_loci = set(getattr(self._spec, 'operator_categories', []))
+        if not all_loci:
+            return None
+        unexplored = all_loci - {dominant}
+        return next(iter(sorted(unexplored)), None)
 
     # ------------------------------------------------------------------
     # Failure handling
@@ -2117,6 +2503,7 @@ class CampaignManager:
                 )
                 try:
                     self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+                    self._record_hard_abandon(bid, "infra_permanent")
                 except StateTransitionError:
                     pass  # already in terminal state
             else:
@@ -2141,6 +2528,7 @@ class CampaignManager:
             branch.consecutive_llm_retries = 0
             try:
                 self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+                self._record_hard_abandon(bid, "failure_action_abandon")
             except StateTransitionError:
                 pass  # already in terminal state
 
@@ -2191,6 +2579,7 @@ class CampaignManager:
                 pass
             try:
                 self._branch_ctrl.apply_decision(bid, Decision.ABANDON)
+                self._record_hard_abandon(bid, "failure_action_abandon_fast")
             except StateTransitionError:
                 pass  # already in terminal state
 
@@ -2273,8 +2662,9 @@ class CampaignManager:
         # --- Family coverage (mechanism labels) ---
         family_counter: Dict[str, int] = {}
         from scion.proposal.context_manager import _extract_mechanism_label
+        _taxonomy = getattr(getattr(self._spec, 'family_taxonomy', None), 'families', None)
         for step in self._step_history:
-            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "")
+            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "", taxonomy=_taxonomy)
             family_counter[label] = family_counter.get(label, 0) + 1
 
         # --- Budget utilization ---
@@ -2284,9 +2674,13 @@ class CampaignManager:
             "campaign_id": self._campaign_id,
             "total_rounds": self._round_num,
             "champion_version": self._champion.version,
+            "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
             "stopped_reason": (
                 "api_balance_exhausted" if self._balance_exhausted
-                else ("circuit_breaker" if self._circuit_breaker.is_tripped else None)
+                else (
+                    "circuit_breaker" if self._circuit_breaker.is_tripped
+                    else self._last_stop_reason
+                )
             ),
             "cache_stats": {
                 "total_tokens": total_tokens,
@@ -2338,14 +2732,30 @@ class CampaignManager:
                     "median_delta": stats.median_delta,
                     "ci_low": stats.ci_low,
                     "ci_high": stats.ci_high,
+                    "statistical_status": stats.statistical_status,
+                    "statistical_metric": stats.statistical_metric,
+                    "metric_stats": [
+                        {
+                            "metric_name": m.metric_name,
+                            "median_delta": m.median_delta,
+                            "ci_low": m.ci_low,
+                            "ci_high": m.ci_high,
+                            "n_cases": m.n_cases,
+                        }
+                        for m in stats.metric_stats
+                    ],
                     "gate_outcome": pr.gate_outcome,
+                    "reason_codes": list(pr.reason_codes),
+                    "raw_metrics_ref": pr.raw_metrics_ref,
+                    "case_ids": list(pr.case_ids),
+                    "seed_set": list(pr.seed_set),
                 }
                 if pr.case_feedback:
                     step_data["case_feedback_summary"] = [
                         {
                             "case_id": cf.case_id,
                             "dominant_result": cf.dominant_result,
-                            "decisive": cf.dominant_decisive_objective,
+                            "decisive": cf.decisive_metric if hasattr(cf, 'decisive_metric') else getattr(cf, 'dominant_decisive_objective', ''),
                         }
                         for cf in pr.case_feedback[:20]
                     ]

@@ -200,6 +200,32 @@ class TestBranchStore:
         loaded = store.load("br_fc")
         assert loaded.failure_codes == ["CONTRACT", "VERIFICATION"]
 
+    def test_runtime_fields_roundtrip(self, tmp_path):
+        reg = LineageRegistry(str(tmp_path / "scion.db"))
+        store = BranchStore(reg)
+        b = _make_branch("br_runtime")
+        b.screening_expand_count = 2
+        b.validation_expand_count = 1
+        b.direction = "local_search: try 2-opt"
+        b.weight_revision = 3
+        b.pending_retry = True
+        b.blocked_rounds = 2
+        b.consecutive_llm_retries = 1
+        b.infra_block_count = 4
+
+        store.save(b)
+        loaded = store.load("br_runtime")
+
+        assert loaded is not None
+        assert loaded.screening_expand_count == 2
+        assert loaded.validation_expand_count == 1
+        assert loaded.direction == "local_search: try 2-opt"
+        assert loaded.weight_revision == 3
+        assert loaded.pending_retry is True
+        assert loaded.blocked_rounds == 2
+        assert loaded.consecutive_llm_retries == 1
+        assert loaded.infra_block_count == 4
+
 
 # ---------------------------------------------------------------------------
 # HypothesisStore
@@ -269,12 +295,61 @@ class TestChampionStore:
         assert [c.version for c in history] == [1, 2, 3]
 
     def test_promote_is_insert_only(self, tmp_path):
-        """Promoting same version twice should raise (integrity error)."""
+        """Promoting same version + same revision twice should raise."""
         store = ChampionStore(str(tmp_path / "scion.db"), str(tmp_path / "snaps"))
         store.promote(_make_champion_state(1))
         import sqlite3
         with pytest.raises(sqlite3.IntegrityError):
             store.promote(_make_champion_state(1))
+
+    def test_weight_revision_same_version_is_persisted(self, tmp_path):
+        store = ChampionStore(str(tmp_path / "scion.db"), str(tmp_path / "snaps"))
+        store.promote(_make_champion_state(2))
+        revised = _make_champion_state(2)
+        revised.weight_revision = 1
+        revised.code_snapshot_path = "/tmp/snap/v2_r1"
+        revised.code_snapshot_hash = "hash2_r1"
+        store.promote(revised)
+
+        current = store.get_current()
+        assert current is not None
+        assert current.version == 2
+        assert current.weight_revision == 1
+
+        history = store.get_history()
+        assert [(c.version, c.weight_revision) for c in history] == [(2, 0), (2, 1)]
+        assert store.get_by_version_revision(2, 0).weight_revision == 0
+
+    def test_legacy_champions_table_migrates_to_weight_revision_pk(self, tmp_path):
+        import sqlite3
+
+        db_path = tmp_path / "scion.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("""
+                CREATE TABLE champions (
+                    version INTEGER PRIMARY KEY,
+                    operator_pool_json TEXT NOT NULL,
+                    solver_config_hash TEXT NOT NULL,
+                    code_snapshot_path TEXT NOT NULL,
+                    code_snapshot_hash TEXT NOT NULL,
+                    promotion_experiment_id TEXT,
+                    promoted_at TEXT
+                )
+            """)
+            conn.execute("""
+                INSERT INTO champions (
+                    version, operator_pool_json, solver_config_hash,
+                    code_snapshot_path, code_snapshot_hash
+                ) VALUES (1, '{}', 'cfg', '/tmp/snap/v1', 'hash1')
+            """)
+
+        store = ChampionStore(str(db_path), str(tmp_path / "snaps"))
+        revised = _make_champion_state(1)
+        revised.weight_revision = 1
+        store.promote(revised)
+
+        assert store.get_by_version_revision(1, 0) is not None
+        assert store.get_by_version_revision(1, 1) is not None
 
     def test_get_by_version(self, tmp_path):
         store = ChampionStore(str(tmp_path / "scion.db"), str(tmp_path / "snaps"))

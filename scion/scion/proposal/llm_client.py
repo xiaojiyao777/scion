@@ -1,6 +1,7 @@
 """LLMClient — wraps LLM API calls with timeout + format-error retry logic.
 
-Supports Claude models via aihubmix Anthropic-compatible endpoint.
+Supports Claude models via Anthropic SDK and GPT/OpenAI models via OpenAI SDK,
+both through aihubmix proxy.
 """
 from __future__ import annotations
 
@@ -22,6 +23,13 @@ MAX_MAX_TOKENS = 16384
 # Default config — aihubmix Anthropic endpoint
 _DEFAULT_BASE_URL = "https://aihubmix.com"
 _DEFAULT_MODEL = "claude-opus-4-6"
+
+_ANTHROPIC_MODEL_PREFIXES = ("claude-",)
+
+
+def _is_openai_model(model: str) -> bool:
+    """Non-Anthropic models use the OpenAI-compatible API via aihubmix."""
+    return not any(model.startswith(p) for p in _ANTHROPIC_MODEL_PREFIXES)
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +117,13 @@ class LLMClient:
         self.max_retries = max_retries
         self.max_tokens = max_tokens
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
-        self._client: Any = None  # lazy-initialised
+        self._anthropic_client: Any = None
+        self._openai_client: Any = None
+        self._token_tracker: Any = None  # W13: set via set_token_tracker()
+
+    def set_token_tracker(self, tracker) -> None:
+        """W13: Attach a TokenUsageTracker for per-call recording."""
+        self._token_tracker = tracker
 
     # ------------------------------------------------------------------
     # Public API
@@ -205,15 +219,9 @@ class LLMClient:
     ) -> Dict[str, Any]:
         """Call LLM with tool_use and return the tool input dict directly.
 
-        Uses tool_choice={"type": "tool", "name": tool["name"]} to force
-        the model to call the specified tool.  The returned ``block.input``
-        is already a parsed dict — no JSON decode needed.
-
-        This is the same pattern Claude Code uses for FileWriteTool: the
-        API's constrained decoding handles all JSON escaping of code content.
+        Supports both Anthropic (Claude) and OpenAI (GPT) models.
         """
         effective_model = model or self.model
-        client = self._get_client()
         attempt = 0
         last_error: Exception | None = None
         current_max_tokens = self.max_tokens
@@ -221,93 +229,38 @@ class LLMClient:
 
         while attempt <= self.max_retries:
             try:
-                kwargs: Dict[str, Any] = {
-                    "model": effective_model,
-                    "max_tokens": current_max_tokens,
-                    "tools": [tool],
-                    "tool_choice": {"type": "tool", "name": tool["name"]},
-                    "messages": [{"role": "user", "content": prompt}],
-                    "timeout": self.timeout_sec,
-                }
-                if system_blocks:
-                    kwargs["system"] = system_blocks
-
-                response = client.messages.create(**kwargs)
-
-                # Log cache performance
-                usage = getattr(response, "usage", None)
-                if usage:
-                    cache_create = getattr(usage, "cache_creation_input_tokens", 0)
-                    cache_read = getattr(usage, "cache_read_input_tokens", 0)
-                    input_tokens = getattr(usage, "input_tokens", 0)
-                    if cache_create or cache_read:
-                        logger.info(
-                            "Cache: created=%d read=%d uncached=%d",
-                            cache_create, cache_read, input_tokens,
-                        )
-                    self._cache_stats["calls"] += 1
-                    self._cache_stats["cache_read_tokens"] += cache_read
-                    self._cache_stats["cache_create_tokens"] += cache_create
-                    self._cache_stats["uncached_tokens"] += input_tokens
-
-                # Extract tool_use block
-                stop_reason = getattr(response, 'stop_reason', None)
-                logger.debug(
-                    "Response: stop_reason=%s blocks=%d types=%s",
-                    stop_reason,
-                    len(response.content),
-                    [getattr(b, 'type', '?') for b in response.content],
+                result, truncated = self._tool_call_once(
+                    prompt, tool, effective_model, system_blocks, current_max_tokens,
                 )
-
-                # Truncation recovery: retry with doubled max_tokens
-                if stop_reason in ("max_tokens", "length"):
+                if truncated:
                     if truncation_retries < MAX_TRUNCATION_RETRIES:
                         new_max = min(current_max_tokens * 2, MAX_MAX_TOKENS)
                         logger.warning(
-                            "Response truncated (stop_reason=%s); retrying with max_tokens=%d→%d (truncation_retry %d/%d)",
-                            stop_reason, current_max_tokens, new_max,
-                            truncation_retries + 1, MAX_TRUNCATION_RETRIES,
+                            "Response truncated; retrying with max_tokens=%d→%d",
+                            current_max_tokens, new_max,
                         )
                         current_max_tokens = new_max
                         truncation_retries += 1
                         continue
-                    else:
-                        logger.warning(
-                            "Response still truncated after %d truncation retries; returning partial content",
-                            MAX_TRUNCATION_RETRIES,
-                        )
+                    logger.warning("Response still truncated after %d retries", MAX_TRUNCATION_RETRIES)
+                    if not result:
+                        raise LLMFormatError("Response truncated with no usable tool output")
 
-                for block in response.content:
-                    if hasattr(block, "type") and block.type == "tool_use":
-                        if block.name == tool["name"]:
-                            # block.input is already a dict, parsed by the API
-                            result = block.input
-                            # Validate required fields
-                            required = tool.get("input_schema", {}).get("required", [])
-                            missing = [k for k in required if k not in result]
-                            if missing:
-                                logger.warning(
-                                    "Tool input keys present: %s; missing: %s",
-                                    list(result.keys()), missing,
-                                )
-                                raise LLMFormatError(
-                                    f"Tool input missing required fields: {missing}"
-                                )
-                            return result
-
-                raise LLMFormatError(
-                    f"LLM did not call tool '{tool['name']}'. "
-                    f"Stop reason: {getattr(response, 'stop_reason', 'unknown')}"
-                )
+                required = tool.get("input_schema", {}).get("required", [])
+                if not required:
+                    required = (
+                        tool.get("function", {}).get("parameters", {}).get("required", [])
+                    )
+                missing = [k for k in required if k not in result]
+                if missing:
+                    raise LLMFormatError(f"Tool input missing required fields: {missing}")
+                return result
 
             except LLMFormatError as exc:
                 last_error = exc
                 if attempt < self.max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
-                    logger.warning(
-                        "Tool call format error (attempt %d/%d): %s",
-                        attempt + 1, self.max_retries, exc,
-                    )
+                    logger.warning("Tool call format error (attempt %d/%d): %s", attempt + 1, self.max_retries, exc)
                     time.sleep(delay)
                 attempt += 1
 
@@ -315,37 +268,33 @@ class LLMClient:
                 last_error = exc
                 if priority == "background":
                     raise
-                retry_after = exc.retry_after
-                logger.warning("Rate limited; waiting %.1fs", retry_after)
-                time.sleep(retry_after)
-                # Don't consume retry count for rate limits
+                logger.warning("Rate limited; waiting %.1fs", exc.retry_after)
+                time.sleep(exc.retry_after)
 
             except LLMTimeoutError as exc:
                 last_error = exc
                 if attempt < self.max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
-                    logger.warning(
-                        "Tool call timeout (attempt %d/%d); retrying in %.1fs",
-                        attempt + 1, self.max_retries, delay,
-                    )
+                    logger.warning("Tool call timeout (attempt %d/%d)", attempt + 1, self.max_retries)
                     time.sleep(delay)
                 attempt += 1
 
+            except (LLMBalanceError, LLMRetryExhaustedError):
+                raise
+
             except Exception as exc:
-                err_str = str(exc).lower()
-                if "timeout" in err_str or "timed out" in err_str:
-                    last_error = LLMTimeoutError(str(exc))
-                elif "429" in str(exc) or "rate_limit" in err_str:
-                    retry_after = _parse_retry_after(exc)
-                    last_error = LLMRateLimitError(str(exc), retry_after=retry_after)
+                try:
+                    self._raise_classified(exc)
+                except LLMRateLimitError as rle:
+                    last_error = rle
                     if priority == "background":
-                        raise last_error from exc
-                    time.sleep(retry_after)
-                    continue  # Don't consume retry
-                elif "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
-                    raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
-                else:
-                    last_error = LLMError(str(exc))
+                        raise
+                    time.sleep(rle.retry_after)
+                    continue
+                except LLMBalanceError:
+                    raise
+                except LLMError as le:
+                    last_error = le
                 if attempt < self.max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
                     time.sleep(delay)
@@ -355,6 +304,113 @@ class LLMClient:
             f"Tool call failed after {self.max_retries + 1} attempt(s). "
             f"Last error: {last_error}"
         ) from last_error
+
+    def _tool_call_once(
+        self,
+        prompt: str,
+        tool: Dict[str, Any],
+        model: str,
+        system_blocks: "list[dict] | None",
+        max_tokens: int,
+    ) -> tuple[Dict[str, Any], bool]:
+        """Execute one tool call. Returns (result_dict, was_truncated)."""
+        if _is_openai_model(model):
+            return self._tool_call_once_openai(prompt, tool, model, system_blocks, max_tokens)
+        return self._tool_call_once_anthropic(prompt, tool, model, system_blocks, max_tokens)
+
+    def _tool_call_once_anthropic(
+        self, prompt, tool, model, system_blocks, max_tokens,
+    ) -> tuple[Dict[str, Any], bool]:
+        client = self._get_anthropic_client()
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "tools": [tool],
+            "tool_choice": {"type": "tool", "name": tool["name"]},
+            "messages": [{"role": "user", "content": prompt}],
+            "timeout": self.timeout_sec,
+        }
+        if system_blocks:
+            kwargs["system"] = system_blocks
+
+        response = client.messages.create(**kwargs)
+
+        usage = getattr(response, "usage", None)
+        if usage:
+            cache_create = getattr(usage, "cache_creation_input_tokens", 0)
+            cache_read = getattr(usage, "cache_read_input_tokens", 0)
+            input_tokens = getattr(usage, "input_tokens", 0)
+            self._cache_stats["calls"] += 1
+            self._cache_stats["cache_read_tokens"] += cache_read
+            self._cache_stats["cache_create_tokens"] += cache_create
+            self._cache_stats["uncached_tokens"] += input_tokens
+
+        stop_reason = getattr(response, "stop_reason", None)
+        if stop_reason in ("max_tokens", "length"):
+            return {}, True
+
+        for block in response.content:
+            if hasattr(block, "type") and block.type == "tool_use":
+                if block.name == tool["name"]:
+                    return block.input, False
+
+        raise LLMFormatError(
+            f"LLM did not call tool '{tool['name']}'. Stop reason: {stop_reason}"
+        )
+
+    def _tool_call_once_openai(
+        self, prompt, tool, model, system_blocks, max_tokens,
+    ) -> tuple[Dict[str, Any], bool]:
+        client = self._get_openai_client()
+        # Merge system blocks into user prompt to avoid incompatibility
+        # (some models like minimax reject system messages + tool_use together)
+        user_content = prompt
+        if system_blocks:
+            sys_parts = []
+            for block in system_blocks:
+                text = block.get("text", "") if isinstance(block, dict) else str(block)
+                if text:
+                    sys_parts.append(text)
+            if sys_parts:
+                user_content = "\n\n".join(sys_parts) + "\n\n---\n\n" + prompt
+        messages: list[Dict[str, Any]] = [{"role": "user", "content": user_content}]
+
+        tool_name = tool["name"]
+        openai_tool = {
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "description": tool.get("description", ""),
+                "parameters": tool.get("input_schema", {}),
+            },
+        }
+
+        response = client.chat.completions.create(
+            model=model,
+            max_completion_tokens=max_tokens,            messages=messages,
+            tools=[openai_tool],
+            tool_choice={"type": "function", "function": {"name": tool_name}},
+            timeout=self.timeout_sec,
+        )
+
+        usage = response.usage
+        if usage:
+            self._cache_stats["calls"] += 1
+            self._cache_stats["uncached_tokens"] += usage.prompt_tokens or 0
+
+        choice = response.choices[0]
+        if choice.finish_reason in ("length",):
+            return {}, True
+
+        tool_calls = getattr(choice.message, "tool_calls", None)
+        if not tool_calls:
+            raise LLMFormatError(
+                f"LLM did not call tool '{tool_name}'. "
+                f"Finish reason: {choice.finish_reason}"
+            )
+
+        result = json.loads(tool_calls[0].function.arguments)
+        return result, False
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -366,13 +422,18 @@ class LLMClient:
         model: str,
         system_blocks: "list[dict] | None" = None,
     ) -> str:
-        """Make one API call; return raw text.
+        if _is_openai_model(model):
+            return self._call_once_openai(prompt, model, system_blocks)
+        return self._call_once_anthropic(prompt, model, system_blocks)
 
-        If *system_blocks* is provided, they are sent as structured system
-        messages with cache_control for prompt caching.  The *prompt* is
-        sent as the user message.
-        """
-        client = self._get_client()
+    def _call_once_anthropic(
+        self,
+        prompt: str,
+        model: str,
+        system_blocks: "list[dict] | None" = None,
+    ) -> str:
+        """Anthropic SDK path."""
+        client = self._get_anthropic_client()
         try:
             kwargs: Dict[str, Any] = {
                 "model": model,
@@ -383,28 +444,83 @@ class LLMClient:
             if system_blocks:
                 kwargs["system"] = system_blocks
             message = client.messages.create(**kwargs)
-            # Log cache performance
             usage = getattr(message, "usage", None)
             if usage:
                 cache_create = getattr(usage, "cache_creation_input_tokens", 0)
                 cache_read = getattr(usage, "cache_read_input_tokens", 0)
                 input_tokens = getattr(usage, "input_tokens", 0)
+                output_tokens = getattr(usage, "output_tokens", 0)
                 if cache_create or cache_read:
                     logger.info(
                         "Cache: created=%d read=%d uncached=%d",
                         cache_create, cache_read, input_tokens,
                     )
+                if self._token_tracker is not None:
+                    self._token_tracker.record(
+                        request_kind="llm_call",
+                        model_id=model,
+                        prompt_tokens=input_tokens,
+                        completion_tokens=output_tokens,
+                        cache_read_tokens=cache_read,
+                        cache_create_tokens=cache_create,
+                    )
             return message.content[0].text
         except Exception as exc:
-            err_str = str(exc).lower()
-            if "timeout" in err_str or "timed out" in err_str or "read timed out" in err_str:
-                raise LLMTimeoutError(f"Request timed out: {exc}") from exc
-            if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
-                retry_after = _parse_retry_after(exc)
-                raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
-            if "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
-                raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
-            raise LLMError(f"API error: {exc}") from exc
+            self._raise_classified(exc)
+
+    def _call_once_openai(
+        self,
+        prompt: str,
+        model: str,
+        system_blocks: "list[dict] | None" = None,
+    ) -> str:
+        """OpenAI SDK path (GPT models via aihubmix)."""
+        client = self._get_openai_client()
+        try:
+            messages: list[Dict[str, Any]] = []
+            if system_blocks:
+                for block in system_blocks:
+                    text = block.get("text", "") if isinstance(block, dict) else str(block)
+                    messages.append({"role": "system", "content": text})
+            messages.append({"role": "user", "content": prompt})
+
+            response = client.chat.completions.create(
+                model=model,
+                max_completion_tokens=self.max_tokens,
+                messages=messages,
+                timeout=self.timeout_sec,
+            )
+            usage = response.usage
+            if usage:
+                input_tokens = usage.prompt_tokens or 0
+                output_tokens = usage.completion_tokens or 0
+                self._cache_stats["calls"] += 1
+                self._cache_stats["uncached_tokens"] += input_tokens
+                if self._token_tracker is not None:
+                    self._token_tracker.record(
+                        request_kind="llm_call",
+                        model_id=model,
+                        prompt_tokens=input_tokens,
+                        completion_tokens=output_tokens,
+                        cache_read_tokens=0,
+                        cache_create_tokens=0,
+                    )
+            return response.choices[0].message.content
+        except Exception as exc:
+            self._raise_classified(exc)
+
+    @staticmethod
+    def _raise_classified(exc: Exception) -> None:
+        """Classify a raw SDK exception and re-raise as the appropriate LLM* type."""
+        err_str = str(exc).lower()
+        if "timeout" in err_str or "timed out" in err_str or "read timed out" in err_str:
+            raise LLMTimeoutError(f"Request timed out: {exc}") from exc
+        if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
+            retry_after = _parse_retry_after(exc)
+            raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
+        if "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
+            raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
+        raise LLMError(f"API error: {exc}") from exc
 
     def get_cache_stats(self) -> dict:
         """Return cache hit statistics."""
@@ -413,21 +529,58 @@ class LLMClient:
         hit_rate = s["cache_read_tokens"] / total_in if total_in > 0 else 0
         return {"hit_rate": f"{hit_rate:.1%}", **s}
 
-    def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
+    def call_text(
+        self,
+        prompt: str,
+        model: str | None = None,
+    ) -> str:
+        """Call LLM and return raw text response (no JSON parsing).
+
+        Single attempt with timeout handling. Used by classifier and other
+        lightweight calls that don't need structured output.
+        """
+        effective_model = model or self.model
+        try:
+            return self._call_once(prompt, effective_model)
+        except (LLMTimeoutError, LLMRateLimitError):
+            raise
+        except Exception as exc:
+            raise LLMError(f"call_text failed: {exc}") from exc
+
+    def _get_anthropic_client(self) -> Any:
+        if self._anthropic_client is not None:
+            return self._anthropic_client
         try:
             import anthropic
-            self._client = anthropic.Anthropic(
+            self._anthropic_client = anthropic.Anthropic(
                 api_key=self.api_key,
                 base_url=self.base_url,
             )
-            logger.info("LLMClient initialized: model=%s base_url=%s", self.model, self.base_url)
-            return self._client
+            logger.info("Anthropic client initialized: model=%s base_url=%s", self.model, self.base_url)
+            return self._anthropic_client
         except ImportError as exc:
             raise LLMError(
                 "The 'anthropic' package is not installed. "
                 "Use MockLLMClient for tests, or: pip install anthropic"
+            ) from exc
+
+    def _get_openai_client(self) -> Any:
+        if self._openai_client is not None:
+            return self._openai_client
+        try:
+            import openai
+            base = self.base_url.rstrip("/")
+            if not base.endswith("/v1"):
+                base += "/v1"
+            self._openai_client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url=base,
+            )
+            logger.info("OpenAI client initialized: model=%s base_url=%s", self.model, base)
+            return self._openai_client
+        except ImportError as exc:
+            raise LLMError(
+                "The 'openai' package is not installed. pip install openai"
             ) from exc
 
     def _parse_and_validate(

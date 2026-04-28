@@ -203,6 +203,7 @@ class TestV5IncludesStderrOnFailure:
         result = check_state_mutation(spec, runner, str(tmp_path))
 
         assert result.passed is False
+        assert result.severity == "heavy"
         assert "AttributeError" in result.detail, (
             f"Expected AttributeError in detail, got: {result.detail!r}"
         )

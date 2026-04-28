@@ -21,12 +21,13 @@ import pytest
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.config.protocol_config import ScreeningConfig, ValidationConfig, FrozenConfig
 from scion.core.models import (
-    ExperimentStage, EvalStats, RunResult, SolverOutput, ObjectiveBreakdown,
+    ExperimentStage, EvalStats, RunResult, SolverOutput,
     PairwiseCaseFeedback,
 )
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci
 from scion.protocol.experiment import (
     ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
+    _select_evenly_spaced_cases,
 )
 
 
@@ -112,19 +113,21 @@ def _champ_result() -> RunResult:
 
 
 def _make_pair_fb(case_id: str, seed: int, comparison: str, delta: float) -> PairwiseCaseFeedback:
-    bd = ObjectiveBreakdown(
-        decisive_objective="splits",
-        candidate_subcategory_splits=1,
-        champion_subcategory_splits=2,
-        candidate_total_cost=900.0,
-        champion_total_cost=1000.0,
-        delta_subcategory_splits=1.0,
-        delta_total_cost=100.0,
+    from scion.problem.objectives import ObjectiveComparison, MetricComparison
+    oc = ObjectiveComparison(
+        outcome=comparison, decisive_metric="subcategory_splits",
+        scalar_delta=delta,
+        metrics=(
+            MetricComparison(name="subcategory_splits", candidate_value=1, champion_value=2,
+                             signed_delta=1.0, relation="candidate", decisive=True),
+            MetricComparison(name="total_cost", candidate_value=900.0, champion_value=1000.0,
+                             signed_delta=100.0, relation="candidate"),
+        ),
     )
     return PairwiseCaseFeedback(
         case_id=case_id, seed=seed,
         comparison=comparison, delta=delta,
-        objective_breakdown=bd,
+        objective_comparison=oc,
         case_features={},
     )
 
@@ -180,6 +183,31 @@ def test_case_level_majority_vote_aggregation():
     assert by_case["c2"].comparison == "loss"
     # c3: wins=1, losses=1, ties=1 — no majority, should be "tie"
     assert by_case["c3"].comparison == "tie"
+
+
+def test_case_selection_uses_manifest_spread_not_prefix():
+    cases = [f"c{i}" for i in range(10)]
+    assert _select_evenly_spaced_cases(cases, 4) == ["c0", "c3", "c6", "c9"]
+
+
+def test_weighted_sum_comparison_uses_single_scalar_objective():
+    from scion.problem.objectives import compare_weighted_sum
+    from scion.problem.spec import ObjectiveMetricSpec
+
+    specs = [
+        ObjectiveMetricSpec(name="splits", direction="minimize", priority=1, weight=10.0),
+        ObjectiveMetricSpec(name="cost", direction="minimize", priority=2, weight=1.0),
+    ]
+    # Candidate worsens splits by 1 but improves cost by 20; weighted aggregate
+    # improves by +10, so weighted-sum semantics are a win.
+    cmp = compare_weighted_sum(
+        specs,
+        candidate={"splits": 2, "cost": 80},
+        champion={"splits": 1, "cost": 100},
+    )
+    assert cmp.outcome == "win"
+    assert cmp.decisive_metric == "weighted_sum"
+    assert cmp.scalar_delta == pytest.approx(10.0)
 
 
 def test_bootstrap_ci_on_case_level_deltas():

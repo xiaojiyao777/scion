@@ -1,6 +1,6 @@
 # Scion 实验流程速查手册
 
-*Date: 2026-04-11*
+*Date: 2026-04-26*
 *面向：需要理解 Scion 实验输出的读者*
 
 ---
@@ -101,7 +101,42 @@ delta 的计算：`splits_weight × Δsplits + Δcost`，其中 `splits_weight =
 
 ---
 
-## 7. 决策结果
+## 7. Weight Optimization
+
+Promotion 后可以执行算子权重优化。当前 v0.3 支持两种模式：
+
+| 模式 | 适用场景 | 语义 |
+|---|---|
+| `sync` | 当前 2-core 服务器、正式 v0.3 实验 | promote 后阻塞直到 weight optimization 完成并落表，再继续下一轮结构搜索 |
+| `async` | 核心数充足的机器 | promote 后后台优化权重，主搜索继续推进 |
+
+正式 v0.3 validation 使用：
+
+```bash
+--weight-opt-execution sync
+```
+
+`status.json` 中的 `weight_optimization.runs[]` 会记录：
+
+- `mode`
+- `phase`
+- `n_cases`
+- `n_seeds`
+- `n_operators`
+- `total_evaluations`
+- `completed_evaluations`
+- `estimated_solver_runs`
+- `improved`
+- `elapsed_minutes`
+
+SQLite 检查：
+
+```bash
+sqlite3 <campaign>/scion.db \
+  'select champion_version,n_evaluations,baseline_score,best_score,improved from weight_optimizations;'
+```
+
+## 8. 决策结果
 
 | 决策 | 含义 |
 |---|---|
@@ -113,7 +148,7 @@ delta 的计算：`splits_weight × Δsplits + Δcost`，其中 `splits_weight =
 
 ---
 
-## 8. 日志阅读指南
+## 9. 日志阅读指南
 
 典型日志条目：
 
@@ -133,6 +168,31 @@ Branch xxx: features wr=1.0 md=900000.0 stage=screening → decision=queue_valid
 
 # 晋升
 Promoted branch xxx to champion v2
+
+# 同步权重优化
+Champion v2: running weight optimization synchronously
+Synchronous weight opt complete for champion v2 (49.9 min) — no improvement
+```
+
+## 10. 当前正式实验
+
+v0.3 formal validation：
+
+```text
+~/research/scion-experiments/v03-final-sync-12campaign-20260426/
+```
+
+队列日志：
+
+```text
+~/research/scion-experiments/v03-final-sync-12campaign-20260426/formal_queue.runner.log
+```
+
+健康检查：
+
+```bash
+pgrep -af 'v03-final-sync-12campaign-20260426|run_validation_campaign.py'
+tail -n 40 ~/research/scion-experiments/v03-final-sync-12campaign-20260426/formal_queue.runner.log
 ```
 
 ---

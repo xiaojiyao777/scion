@@ -1,14 +1,19 @@
 # problem.yaml — Warehouse Delivery (surrogate solver integration)
 name: warehouse_delivery
 description: >-
-  Warehouse Delivery VRP: optimise vehicle routing for last-mile B2B logistics
-  from a warehouse to customer delivery points. Orders carry SPU (packing unit)
-  loads that determine pallet counts. A feasible solution assigns each order to
-  exactly one vehicle; vehicles must not exceed capacity. The objective is
-  lexicographic: minimise subcategory splits first, then total vehicle cost,
-  then solve time. Operators modify the solution (move, swap, merge, split,
-  destroy-rebuild) to improve the objective. Hazardous-goods orders require a
-  dedicated HQ40_DG vehicle type.
+  Warehouse Delivery Assignment: assign B2B orders to a fleet of vehicle slots
+  for last-mile logistics. Each order has SPU-determined pallet counts, a
+  pickup region (east/west/east-south), a subcategory, and a hazmat flag. Each
+  vehicle slot chooses one of 5 vehicle types (HQ40_DG/HQ40/T10/T5/T3) with
+  different capacities and costs. Constraints: capacity, region consolidation,
+  subcategory single-assignment, hazmat isolation (HQ40_DG), pickup-point
+  limits. Objective (lexicographic): minimise subcategory splits first, then
+  total vehicle cost, then solve time. Operators modify the assignment (move,
+  swap, merge, split, destroy-rebuild) to improve the objective.
+  NOTE: This is NOT a routing problem. There is no path, no distance matrix,
+  no TSP subproblem. Classical VRP heuristics (2-opt, Or-opt, savings, etc.)
+  do not apply. The problem is a multi-attribute generalised assignment /
+  bin-packing problem.
 root_dir: /home/clawd/research/or-autoresearch-agent/surrogate
 operators_dir: operators
 data_dir: data

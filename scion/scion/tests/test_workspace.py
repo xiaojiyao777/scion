@@ -127,6 +127,46 @@ class TestApplyPatch:
         with pytest.raises(FrozenFileError):
             mat.apply_patch(ws, patch)
 
+    def test_path_traversal_rejected(self, mat: WorkspaceMaterializer, code_base: Path):
+        ws = mat.create_branch_workspace("b-path", str(code_base))
+        outside = Path(ws).parent / "escaped.py"
+        patch = PatchProposal(
+            file_path="../escaped.py",
+            action="create",
+            code_content="x = 1\n",
+        )
+        with pytest.raises(ValueError):
+            mat.apply_patch(ws, patch)
+        assert not outside.exists()
+
+    def test_nested_path_traversal_rejected(
+        self, mat: WorkspaceMaterializer, code_base: Path
+    ):
+        ws = mat.create_branch_workspace("b-path-nested", str(code_base))
+        outside = Path(ws).parent / "escaped.py"
+        patch = PatchProposal(
+            file_path="operators/../../escaped.py",
+            action="create",
+            code_content="x = 1\n",
+        )
+        with pytest.raises(ValueError):
+            mat.apply_patch(ws, patch)
+        assert not outside.exists()
+
+    def test_absolute_path_rejected(
+        self, mat: WorkspaceMaterializer, code_base: Path, tmp_path: Path
+    ):
+        ws = mat.create_branch_workspace("b-absolute", str(code_base))
+        outside = tmp_path / "outside.py"
+        patch = PatchProposal(
+            file_path=str(outside),
+            action="create",
+            code_content="x = 1\n",
+        )
+        with pytest.raises(ValueError):
+            mat.apply_patch(ws, patch)
+        assert not outside.exists()
+
     def test_hash_changes_on_new_content(
         self, mat: WorkspaceMaterializer, code_base: Path
     ):

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from scion.core.models import ChampionState, PatchProposal
+from scion.core.paths import normalize_relative_patch_path
 
 
 # Frozen file patterns that can never be written via apply_patch
@@ -104,16 +105,18 @@ class WorkspaceMaterializer:
             FrozenFileError: If the patch targets a frozen file.
             ValueError: If patch.action is 'delete' (not yet supported here).
         """
-        ws = Path(workspace)
+        ws = Path(workspace).resolve()
 
         # Second-level frozen-file check (Contract Gate is the first)
-        file_rel = patch.file_path.lstrip("/")
+        file_rel = normalize_relative_patch_path(patch.file_path)
         if self._is_frozen(file_rel):
             raise FrozenFileError(
                 f"apply_patch refused: '{patch.file_path}' matches frozen patterns"
             )
 
-        target = ws / file_rel
+        target = (ws / file_rel).resolve()
+        if not _is_relative_to(target, ws):
+            raise ValueError(f"patch file_path escapes workspace: {patch.file_path}")
 
         if patch.action == "delete":
             if target.exists():
@@ -312,6 +315,14 @@ class WorkspaceMaterializer:
 # ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 def _update_registry(ws: Path, file_rel: str, code_content: str) -> None:

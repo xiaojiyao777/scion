@@ -27,20 +27,30 @@ _ACTIVE_STATES = frozenset({
 _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     Decision.CONTINUE_EXPLORE: {
         BranchState.EXPLORE: BranchState.EXPLORE,
+        BranchState.NEW: BranchState.EXPLORE,
         # Expand screening didn't yield a strong enough win_rate — fall back to
         # a fresh explore iteration on the same branch.
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
     },
     Decision.EXPAND_SCREENING: {
         BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,
+        BranchState.NEW: BranchState.EXPLORE_EXPAND,
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE_EXPAND,  # self-loop: keep expanding
     },
     Decision.QUEUE_VALIDATE: {
         BranchState.EXPLORE: BranchState.READY_VALIDATE,
+        BranchState.NEW: BranchState.READY_VALIDATE,
         BranchState.EXPLORE_EXPAND: BranchState.READY_VALIDATE,
     },
     Decision.EXPAND_VALIDATION: {
         BranchState.VALIDATING: BranchState.VALIDATING_EXPAND,
+        # Note: VALIDATING_EXPAND + EXPAND_VALIDATION is intentionally unmapped.
+        # DecisionEngine._decide_validation enforces validation_expand_count >= 1 →
+        # QUEUE_FROZEN (VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS) or ABANDON
+        # (VALIDATION_EXPAND_EXHAUSTED_FAIL), so this (state, decision) combination
+        # cannot be produced in practice. If the guard is ever loosened, add
+        # VALIDATING_EXPAND: VALIDATING_EXPAND here (self-loop, mirroring
+        # EXPLORE_EXPAND) and set a validation_expand_count cap elsewhere.
     },
     Decision.QUEUE_FROZEN: {
         BranchState.VALIDATING: BranchState.READY_FROZEN,
@@ -65,6 +75,7 @@ class BranchController:
             state=BranchState.EXPLORE,
             base_champion_id=champion.version,
             base_champion_hash=champion.code_snapshot_hash,
+            weight_revision=champion.weight_revision,
         )
         self._branches[branch_id] = branch
         return branch
@@ -124,6 +135,30 @@ class BranchController:
                 affected.append(branch.branch_id)
         return affected
 
+    def mark_stale_for_weight_update(self, champion_version: int) -> List[str]:
+        """Mark branches stale after a weight-opt update (stage-aware).
+
+        FROZEN_TESTING is not interrupted mid-holdout. Other non-terminal
+        branches are conservatively reconciled before they can spend more
+        validation/frozen budget against a changed champion weight revision.
+        """
+        _WEIGHT_STALE_STATES = frozenset({
+            BranchState.EXPLORE,
+            BranchState.EXPLORE_EXPAND,
+            BranchState.NEW,
+            BranchState.READY_VALIDATE,
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.READY_FROZEN,
+        })
+        affected: List[str] = []
+        for branch in self._branches.values():
+            if branch.state in _WEIGHT_STALE_STATES:
+                branch.state = BranchState.STALE_WEIGHT_UPDATE
+                branch.updated_at = datetime.now()
+                affected.append(branch.branch_id)
+        return affected
+
     def reconcile_stale(
         self, branch_id: str, success: bool, new_champion: ChampionState
     ) -> None:
@@ -140,6 +175,7 @@ class BranchController:
             branch.state = BranchState.EXPLORE
             branch.base_champion_id = new_champion.version
             branch.base_champion_hash = new_champion.code_snapshot_hash
+            branch.weight_revision = new_champion.weight_revision
         else:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()

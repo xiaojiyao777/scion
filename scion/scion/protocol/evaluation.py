@@ -1,52 +1,6 @@
 from __future__ import annotations
 import os
-from typing import Literal, Tuple
-from scion.core.models import SolverOutput, ObjectiveBreakdown
-
-
-def compare_with_breakdown(
-    candidate_objective: dict,
-    champion_objective: dict,
-) -> Tuple[Literal["win", "loss", "tie"], ObjectiveBreakdown]:
-    """Lexicographic compare with full per-objective breakdown.
-
-    Returns (comparison, breakdown) where breakdown records raw values,
-    deltas, and which objective level was decisive.
-    """
-    cand_splits = candidate_objective.get("subcategory_splits", 0)
-    champ_splits = champion_objective.get("subcategory_splits", 0)
-    cand_cost = candidate_objective.get("total_cost", float("inf"))
-    champ_cost = champion_objective.get("total_cost", float("inf"))
-
-    delta_splits = champ_splits - cand_splits  # positive = candidate better
-    delta_cost = champ_cost - cand_cost        # positive = candidate better
-
-    if cand_splits < champ_splits:
-        comparison = "win"
-        decisive = "business_aggregation"
-    elif cand_splits > champ_splits:
-        comparison = "loss"
-        decisive = "business_aggregation"
-    elif cand_cost < champ_cost:
-        comparison = "win"
-        decisive = "cost"
-    elif cand_cost > champ_cost:
-        comparison = "loss"
-        decisive = "cost"
-    else:
-        comparison = "tie"
-        decisive = "tie"
-
-    breakdown = ObjectiveBreakdown(
-        candidate_subcategory_splits=cand_splits,
-        champion_subcategory_splits=champ_splits,
-        candidate_total_cost=cand_cost,
-        champion_total_cost=champ_cost,
-        delta_subcategory_splits=delta_splits,
-        delta_total_cost=delta_cost,
-        decisive_objective=decisive,
-    )
-    return comparison, breakdown
+from typing import Literal
 
 
 def lexicographic_compare(
@@ -96,8 +50,8 @@ def compute_delta(candidate_objective: dict, champion_objective: dict) -> float:
     champ_cost = champion_objective.get("total_cost", float("inf"))
 
     if cand_splits != champ_splits:
-        # Splits are the decisive dimension.
-        # Use a large multiplier so split deltas dominate cost deltas in CI.
+        # DEPRECATED(v0.3): Use scion.problem.objectives.compare_lexicographic instead.
+        # This env var will be removed when all callers migrate to the generic comparator.
         SPLITS_WEIGHT = int(os.environ.get("SCION_SPLITS_WEIGHT", "100000"))
         return (champ_splits - cand_splits) * SPLITS_WEIGHT
     else:
