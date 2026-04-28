@@ -1,12 +1,13 @@
 # Scion Documentation Index
 
-*Last updated: 2026-04-26*
+*Last updated: 2026-04-28*
 
 This directory is the active documentation surface for Scion. Historical sprint notes, validation drafts, and intermediate analysis are archived under `archive/`.
 
 ## Read First
 
 - [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
+- [v0.3-final-visual-report.md](v0.3-final-visual-report.md) - visual summary of final v0.3 results.
 - [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
 - [v0.3-production-timeout-fix-analysis.md](v0.3-production-timeout-fix-analysis.md) - production-only rerun after incomplete-evidence/runtime fixes.
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
@@ -64,6 +65,7 @@ scion/
 ├── docs/
 │   ├── README.md
 │   ├── v0.3-current-state.md
+│   ├── v0.3-final-visual-report.md
 │   ├── v0.3-final-12campaign-analysis.md
 │   ├── v0.3-production-timeout-fix-analysis.md
 │   ├── v0.3-final-validation-checklist.md

@@ -2,8 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests: 289 passed](https://img.shields.io/badge/tests-289%20passed-brightgreen.svg)](#)
-[![Version: v0.2](https://img.shields.io/badge/version-v0.2-blue.svg)](#)
+[![Version: v0.3](https://img.shields.io/badge/version-v0.3-blue.svg)](#)
 
 **Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。它通过 LLM 的先验知识与推理能力，在人类定义的"算法沙盒"内自主探索、验证并迭代启发式算子，并通过参数层搜索优化算子配比。
 
@@ -15,6 +14,39 @@
 - **严格的实验协议**：三级过滤机制（Screening → Validation → Frozen Holdout）控制过拟合风险
 - **契约式治理**：通过静态 Contract Gate 与动态 Verification Gate 强制约束算法边界，抑制 LLM 幻觉
 - **两层嵌套搜索**（v0.2）：外层 LLM 搜索算子结构，内层优化算子权重配比
+
+## v0.3 最终结果
+
+v0.3 将 Scion 从仓配 VNS 原型推进到工程化框架：研究对象在 `surrogate/`，框架逻辑在 `scion/scion/`，并支持 adapter-driven objective policy、synthetic/production protocol 分离、sync weight optimization、完整 metrics lineage 和 LLM trace。
+
+最终验证：
+
+| 维度 | 结果 |
+|---|---|
+| Formal validation | 12/12 campaigns completed |
+| Synthetic | 6/6 campaigns promoted, 10 total promotions |
+| Production rerun | Sonnet 3/3 promotions, GPT-mini 0/3 |
+| Evidence gate | production rerun `bad metrics = 0` |
+| Best synthetic champion | `sonnet-4-6_synthetic_seed29`, final `v5_r0` |
+
+最强 synthetic champion 相比 v1 baseline：
+
+```text
+better = 45 / 47 cases
+equal  = 2 / 47 cases
+worse  = 0 / 47 cases
+sum Δf1 = -2899
+median Δf1 = -17
+```
+
+![Best Synthetic Champion Quality](docs/figures/v0.3-final/04_best_synthetic_quality.png)
+
+完整报告：
+
+- [v0.3-final-visual-report.md](docs/v0.3-final-visual-report.md)
+- [v0.3-final-12campaign-analysis.md](docs/v0.3-final-12campaign-analysis.md)
+- [v0.3-production-timeout-fix-analysis.md](docs/v0.3-production-timeout-fix-analysis.md)
+- [v0.4-performance-aware-plan.md](docs/v0.4-performance-aware-plan.md)
 
 ## v0.2 实验结果
 
@@ -149,7 +181,6 @@ python run_v3_campaign.py 100
 ```bash
 cd scion
 python -m pytest tests/unit/ -q
-# 289 passed
 ```
 
 ## 项目结构
@@ -168,17 +199,16 @@ scion/
 │   ├── failure/              # FailureRouter (四层分类 + escalation + infra detection)
 │   ├── lineage/              # SQLite Registry, BranchStore, ChampionStore, HypothesisStore
 │   ├── cli/                  # Typer CLI (init/run/inspect/report)
-│   └── tests/                # 289 unit tests
+│   └── tests/                # unit / integration tests
 ├── problems/                 # 问题配置 (YAML)
 │   └── warehouse_delivery/   # 仓配协同 VNS：protocol + split_manifest + instances
 ├── docs/                     # 实验文档、可视化、模块理解指南
-│   ├── understanding/        # 11 篇模块深度文档
 │   ├── figures/              # 实验结果图表
-│   ├── v0.2-completion-report.md
-│   └── sprint-f6-experiment-record.md
+│   ├── v0.3-final-visual-report.md
+│   └── archive/              # 历史实验与设计文档
 ├── design/                   # 架构设计文档
 │   ├── scion-architecture-v3.md  # 基石架构
-│   └── scion-v0.2-design.md     # v0.2 设计
+│   └── scion-v0.3-design.md      # v0.3 设计
 └── reviews/                  # GPT-5.4-Pro 审核报告
 ```
 
@@ -196,8 +226,9 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 - [x] **v0.1 MVP**：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1 调优**：ContextManager 重写、prompt caching、subprocess timeout ✅
 - [x] **v0.2 参数层**：Weight Optimization、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
-- [ ] **v0.3**：异步 Weight Opt、自动早停、Weight Opt Scoring 独立化、MILP 精确对比
-- [ ] **v1.0**：多问题泛化、结构级搜索、论文实验
+- [x] **v0.3 工程化框架**：adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
+- [ ] **v0.4 性能感知优化**：runtime/complexity 作为公共优化维度
+- [ ] **v1.0 多问题泛化**：第二问题对象、结构级搜索、论文实验
 
 ## 实验历史
 
@@ -223,13 +254,12 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 
 ## 当前状态
 
-**v0.2 归档** (2026-04-14)
+**v0.3 完成** (2026-04-28)
 
-- 57 个 Python 文件，~11,400 行代码
-- 289/289 tests passed
-- 14 个 Sprint (A→M)，6 轮正式实验
-- GPT-5.4-Pro 架构审查 9 项 P0 全部修复
-- Weight optimization 在合成数据上 3/3 找到有统计意义的改善
+- 框架闭环完成：hypothesis -> code -> verification -> protocol -> promote -> sync weight opt -> lineage。
+- Synthetic 优化能力明确成立。
+- Production 在 Sonnet 下可产生完整证据的改进；GPT-mini 仍受代码生成质量限制。
+- 生产 timeout / incomplete evidence 问题已修复并记录到 v0.4 performance-aware plan。
 
 ## 开源协议
 
@@ -237,4 +267,4 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 
 ---
 
-*Built with ⚙️ precision — Scion Framework v0.2*
+*Built with precision — Scion Framework v0.3*
