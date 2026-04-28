@@ -46,9 +46,10 @@ best champion vs v1 baseline:
 
 ![Best Synthetic Champion Quality](scion/docs/figures/v0.3-final/04_best_synthetic_quality.png)
 
-完整可视化报告：
+完整报告：
 
 - [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
+- [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
 - [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
 
 v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization。
@@ -171,82 +172,6 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 | `cli/` | Typer CLI（init / run / inspect / report） |
 
 > 📖 当前文档索引：[`scion/docs/README.md`](scion/docs/README.md)
-
----
-
-## 🏆 实验结果
-
-### v0.3 最终验证（2026-04-28）
-
-v0.3 的最终实验由三部分组成：正式 12-campaign 验证、production timeout / incomplete-evidence 修复后的重跑、以及最佳 synthetic champion 的质量对比。
-
-| 维度 | 结果 |
-|------|------|
-| 正式验证矩阵 | 2 models × 2 data variants × 3 seeds，**12/12 campaigns completed** |
-| Synthetic 结构搜索 | **6/6 campaigns promoted**，10 次 structural promotions |
-| Synthetic 权重优化 | 8/10 sync weight optimizations improved |
-| Production 修复后重跑 | Sonnet **3/3 promotions**；GPT-mini 0/3；bad metrics = 0 |
-| 审计闭环 | `campaign_summary.json`、`status.json`、`scion.db`、metrics artifacts、LLM traces 完整落盘 |
-
-![Promotions Overview](scion/docs/figures/v0.3-final/01_promotions_overview.png)
-
-### 结构搜索 vs 权重优化
-
-| Group | Promotions | Weight opts | Improved weight opts |
-|-------|-----------:|------------:|---------------------:|
-| Sonnet synthetic | 6 | 6 | 4 |
-| GPT-mini synthetic | 4 | 4 | 4 |
-| Sonnet production rerun | 3 | 3 | 0 |
-| GPT-mini production rerun | 0 | 0 | 0 |
-
-![Group Totals And Weight Optimization](scion/docs/figures/v0.3-final/02_group_totals_weightopt.png)
-
-v0.3 的核心结论是：synthetic 的收益同时来自结构搜索和权重优化；production 的有效收益主要来自结构改进，且对模型能力更敏感。
-
-### 最强 Synthetic Champion
-
-最强一次优化来自 `sonnet-4-6_synthetic_seed29`，最终 champion 为 `v5_r0`，共 4 次 promotion：
-
-| 版本 | 晋升算子 |
-|------|----------|
-| v2 | `subcategory_pair_merge.py` |
-| v3 | `subcategory_tail_drain.py` |
-| v4 | `drain_least_utilized.py` |
-| v5 | `subcategory_cost_rebalance.py` |
-
-| 对比对象 | Better | Equal | Worse | Sum Δf1 / gap | Median Δf1 / gap |
-|----------|-------:|------:|------:|-------------:|-----------------:|
-| v1 baseline | 45 | 2 | 0 | -2,899 | -17 |
-| CPLEX final reference | 28 | 3 | 16 | -2,710 | -9 |
-
-![Best Synthetic Champion Quality](scion/docs/figures/v0.3-final/04_best_synthetic_quality.png)
-
-CPLEX 对比是 report-only reference：部分行是 feasible / time-limit 参考，不是严格最优性证书。
-
-### Production 完整证据重跑
-
-production 重跑修复了旧协议中 timeout / failed pair 被跳过导致证据不完整的问题。修复后 6 个 production campaigns 的 `bad metrics = 0`，Sonnet 三个 seed 均在完整证据下 promoted：
-
-| Seed | 晋升算子 | Frozen wr | Frozen md |
-|------|----------|----------:|----------:|
-| 11 | `cross_subcat_merge.py` | 1.00 | 30,000 |
-| 29 | `upgrade_and_absorb.py` | 1.00 | 38,800 |
-| 47 | `absorb_to_eliminate.py` | 1.00 | 29,600 |
-
-![Production Rerun Fixed](scion/docs/figures/v0.3-final/05_production_rerun_fixed.png)
-
-完整报告：
-
-- [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
-- [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
-- [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
-
-<details>
-<summary>📦 v0.2 历史实验归档</summary>
-
-v0.2 的 F6 Group A、weight optimization 和 frozen holdout 图表已归档到 [`scion/docs/archive/v0.2/`](scion/docs/archive/v0.2/)；旧图表仍保留在 [`scion/docs/figures/sprint-f6/`](scion/docs/figures/sprint-f6/)。
-
-</details>
 
 ---
 
