@@ -8,6 +8,7 @@ This directory is the active documentation surface for Scion. Historical sprint 
 
 - [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
 - [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
+- [v0.3-production-timeout-fix-analysis.md](v0.3-production-timeout-fix-analysis.md) - production-only rerun after incomplete-evidence/runtime fixes.
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
 - [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
 - [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
@@ -64,6 +65,7 @@ scion/
 │   ├── README.md
 │   ├── v0.3-current-state.md
 │   ├── v0.3-final-12campaign-analysis.md
+│   ├── v0.3-production-timeout-fix-analysis.md
 │   ├── v0.3-final-validation-checklist.md
 │   ├── v0.4-performance-aware-plan.md
 │   ├── v0.3-code-audit-dataflow.md
