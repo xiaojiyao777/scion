@@ -25,21 +25,34 @@ class MoveOrder(Operator):
 
         目标车：从现有车辆中随机选（排除源车），或以 10% 概率新建一辆车。
         """
+        new_sol = solution.deep_copy()
+        self._repair_assignment_from_vehicles(new_sol)
+
         # 收集所有未锁定订单
         unlocked_oids = [
-            oid for oid, vid in solution.assignment.items()
+            oid for oid, vid in new_sol.assignment.items()
             if self.instance.orders[oid].locked_vehicle_id is None
         ]
 
         if not unlocked_oids:
             return solution
 
-        new_sol = solution.deep_copy()
-
         # 随机选一个未锁定订单
         oid = rng.choice(unlocked_oids)
-        src_vid = new_sol.assignment[oid]
+        src_vid = new_sol.assignment.get(oid)
         order = self.instance.orders[oid]
+        if src_vid not in new_sol.vehicles or oid not in new_sol.vehicles[src_vid].order_ids:
+            # Defensive repair: upstream operators may leave assignment and
+            # vehicle.order_ids temporarily inconsistent. Use the actual
+            # vehicle containing the order; if none exists, this move is unsafe.
+            actual_src = next(
+                (vid for vid, vehicle in new_sol.vehicles.items() if oid in vehicle.order_ids),
+                None,
+            )
+            if actual_src is None:
+                return solution
+            src_vid = actual_src
+            new_sol.assignment[oid] = src_vid
 
         # 决定目标车
         other_vehicles = [
@@ -63,6 +76,14 @@ class MoveOrder(Operator):
             dst_vid = rng.choice(other_vehicles)
 
         # 执行移动
+        if oid not in new_sol.vehicles[src_vid].order_ids:
+            actual_src = next(
+                (vid for vid, vehicle in new_sol.vehicles.items() if oid in vehicle.order_ids),
+                None,
+            )
+            if actual_src is None or actual_src == dst_vid:
+                return solution
+            src_vid = actual_src
         new_sol.vehicles[src_vid].order_ids.remove(oid)
         new_sol.vehicles[dst_vid].order_ids.append(oid)
         new_sol.assignment[oid] = dst_vid
@@ -71,3 +92,16 @@ class MoveOrder(Operator):
         new_sol.remove_empty_vehicles()
 
         return new_sol
+
+    @staticmethod
+    def _repair_assignment_from_vehicles(solution: Solution) -> None:
+        """Rebuild assignment from vehicle.order_ids when local state drifted."""
+        repaired = {}
+        for vid, vehicle in solution.vehicles.items():
+            for oid in vehicle.order_ids:
+                repaired[oid] = vid
+        # Preserve assignments for orders that are not present in any vehicle;
+        # later guards will no-op if such an order is selected.
+        for oid, vid in solution.assignment.items():
+            repaired.setdefault(oid, vid)
+        solution.assignment = repaired
