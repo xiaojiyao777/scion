@@ -7,6 +7,7 @@ This directory is the active documentation surface for Scion. Historical sprint 
 ## Read First
 
 - [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
+- [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
 - [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
 - [../design/scion-architecture-v3.md](../design/scion-architecture-v3.md) - project architecture blueprint.
@@ -61,6 +62,7 @@ scion/
 ├── docs/
 │   ├── README.md
 │   ├── v0.3-current-state.md
+│   ├── v0.3-final-12campaign-analysis.md
 │   ├── v0.3-final-validation-checklist.md
 │   ├── v0.3-code-audit-dataflow.md
 │   ├── experiment-quickref.md
