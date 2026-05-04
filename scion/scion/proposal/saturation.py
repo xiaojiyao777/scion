@@ -10,11 +10,11 @@ from scion.core.models import StepRecord
 @dataclass
 class SaturationSignal:
     """Saturation signal for one objective dimension."""
-    objective: str                    # e.g. "subcategory_splits", "total_cost"
+    objective: str                    # problem-defined objective name
     improvement_ratio: float          # (initial - current) / initial, positive = improved
     saturation_level: Literal["low", "medium", "high"]
     opportunity_hint: str             # human-readable improvement hint
-    at_absolute_minimum: bool = False  # baseline already at absolute minimum (e.g. splits ≈ 0)
+    at_absolute_minimum: bool = False  # baseline already at known lower bound
     saturation_type: Literal["hard", "soft", "none"] = "none"
 
 
@@ -38,7 +38,7 @@ class ChampionSaturationAnalyzer:
         *,
         lower_bounds: Optional[Dict[str, float]] = None,
     ) -> None:
-        self._baseline = baseline_metrics  # e.g. {"subcategory_splits": 10.0, "total_cost": 50000.0}
+        self._baseline = baseline_metrics
         self._lower_bounds = lower_bounds or {}
 
     def analyze(
@@ -48,7 +48,7 @@ class ChampionSaturationAnalyzer:
         """Compute saturation signals by comparing current champion to baseline.
 
         Args:
-            current_metrics: Current champion's metrics (e.g. from latest frozen experiment).
+            current_metrics: Current champion metrics from the latest experiment.
 
         Returns:
             List of SaturationSignal, one per objective dimension.
@@ -74,7 +74,7 @@ class ChampionSaturationAnalyzer:
                 ))
                 continue
 
-            # For minimization objectives (splits, cost): improvement = baseline - current
+            # For minimization objectives: improvement = baseline - current.
             improvement_ratio = (baseline_val - current_val) / abs(baseline_val)
             improvement_ratio = max(0.0, min(1.0, improvement_ratio))
 
@@ -143,8 +143,9 @@ def render_saturation_signals(signals: List[SaturationSignal]) -> str:
 def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, float]]:
     """Extract champion-side metrics from a step's protocol result.
 
-    Uses ObjectiveComparison.metrics when available (generic path),
-    falls back to case_features for legacy compatibility.
+    Uses ObjectiveComparison.metrics when available (generic path), and can
+    fall back to a generic ``case_features["champion_metrics"]`` mapping for
+    compatibility fixtures that do not expose pair-level comparisons.
     Returns averages across all pairs/cases, or None if no data.
     """
     if step.protocol_result is None:
@@ -163,25 +164,28 @@ def extract_champion_metrics_from_step(step: StepRecord) -> Optional[Dict[str, f
         if count > 0:
             return {name: total / count for name, total in metric_sums.items()}
 
-    # Method 2: from case_feedback.case_features (legacy fallback)
+    # Method 2: from generic case_feedback.case_features["champion_metrics"]
     if step.protocol_result.case_feedback:
-        splits_vals: list = []
-        cost_vals: list = []
+        metric_sums: Dict[str, float] = {}
+        count = 0
         for cf in step.protocol_result.case_feedback:
             feats = cf.case_features if hasattr(cf, "case_features") else None
             if not feats:
                 continue
-            s = feats.get("champion_splits")
-            c = feats.get("champion_cost")
-            if s is not None:
-                splits_vals.append(float(s))
-            if c is not None:
-                cost_vals.append(float(c))
-        if splits_vals:
-            return {
-                "subcategory_splits": sum(splits_vals) / len(splits_vals),
-                "total_cost": sum(cost_vals) / len(cost_vals) if cost_vals else 0.0,
-            }
+            champion_metrics = feats.get("champion_metrics")
+            if not isinstance(champion_metrics, dict):
+                continue
+            included = False
+            for name, value in champion_metrics.items():
+                try:
+                    metric_sums[str(name)] = metric_sums.get(str(name), 0.0) + float(value)
+                    included = True
+                except (TypeError, ValueError):
+                    continue
+            if included:
+                count += 1
+        if count > 0:
+            return {name: total / count for name, total in metric_sums.items()}
 
     return None
 

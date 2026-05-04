@@ -1,5 +1,6 @@
 """Tests for scion/protocol/ — evaluation, stats, gates, experiment."""
 from __future__ import annotations
+import inspect
 import json
 import os
 import uuid
@@ -54,6 +55,31 @@ def test_compute_delta_negative():
     cand = {"total_cost": 1100}
     champ = {"total_cost": 1000}
     assert compute_delta(cand, champ) == pytest.approx(-100.0)
+
+
+def test_legacy_evaluation_source_is_problem_agnostic():
+    import scion.protocol.evaluation as evaluation
+
+    src = inspect.getsource(evaluation)
+    assert "DEPRECATED" in src
+    for forbidden in ("subcategory_splits", "total_cost", "warehouse"):
+        assert forbidden not in src
+
+
+def test_lexicographic_compare_uses_generic_key_order():
+    cand = {"primary_metric": 2, "secondary_metric": 1000}
+    champ = {"primary_metric": 3, "secondary_metric": 10}
+    assert lexicographic_compare(cand, champ) == "win"
+
+    cand = {"primary_metric": 3, "secondary_metric": 5}
+    champ = {"primary_metric": 3, "secondary_metric": 10}
+    assert lexicographic_compare(cand, champ) == "win"
+
+
+def test_compute_delta_weights_first_decisive_generic_metric():
+    cand = {"primary_metric": 2, "secondary_metric": 1000}
+    champ = {"primary_metric": 3, "secondary_metric": 10}
+    assert compute_delta(cand, champ) == pytest.approx(100000.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -198,16 +198,16 @@ class TestResearchLogExhaustedThreshold:
 # ---------------------------------------------------------------------------
 
 class TestSaturationExtractFromCaseFeatures:
-    def test_case_features_champion_splits(self):
-        """case_features with champion_splits should be extracted as baseline."""
+    def test_case_features_champion_metrics(self):
+        """Generic champion_metrics case_features can seed the baseline."""
         step = _make_step_with_case_features([
-            {"champion_splits": 10.0, "champion_cost": 50000.0},
-            {"champion_splits": 12.0, "champion_cost": 48000.0},
+            {"champion_metrics": {"primary_metric": 10.0, "secondary_metric": 50000.0}},
+            {"champion_metrics": {"primary_metric": 12.0, "secondary_metric": 48000.0}},
         ])
         result = extract_champion_metrics_from_step(step)
         assert result is not None
-        assert abs(result["subcategory_splits"] - 11.0) < 0.01
-        assert abs(result["total_cost"] - 49000.0) < 0.01
+        assert abs(result["primary_metric"] - 11.0) < 0.01
+        assert abs(result["secondary_metric"] - 49000.0) < 0.01
 
     def test_empty_case_features_falls_through(self):
         """Empty case_features should fall through to pair_feedback path."""

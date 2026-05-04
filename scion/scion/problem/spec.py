@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from scion.core.operator_interface import parse_execute_signature
 
@@ -52,7 +52,8 @@ class LLMHintsSpec(_Strict):
 
 class FamilyTaxonomySpec(_Strict):
     version: str = "v1"
-    families: list[str] = []
+    families: list[str] = Field(default_factory=list)
+    aliases: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ProblemAdapterRef(_Strict):

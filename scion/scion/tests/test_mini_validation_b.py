@@ -11,7 +11,10 @@ from scion.core.termination import CampaignState, TerminationChecker
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import HypothesisStore
 from scion.proposal.classifier import HypothesisFamilyClassifier, ClassificationResult
+from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
 from scion.proposal.saturation import ChampionSaturationAnalyzer, SaturationSignal
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 
 
 # ---------------------------------------------------------------------------
@@ -23,22 +26,25 @@ class TestClassifierOnOffSmoke:
         c = HypothesisFamilyClassifier(llm_client=None)
         r = c.classify("destroy and rebuild vehicles")
         assert r.source == "keyword"
-        assert r.family_id == "subcat_rebuild_destroy"
+        assert r.family_id == "NEW_FAMILY"
 
     def test_on_with_mock(self) -> None:
         class MockLLM:
             def call_text(self, prompt, model=None):
                 return "vehicle_elimination_cost"
 
-        c = HypothesisFamilyClassifier(llm_client=MockLLM())
+        c = HypothesisFamilyClassifier(
+            llm_client=MockLLM(),
+            taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+        )
         r = c.classify("eliminate expensive vehicles")
         assert r.source == "classifier"
-        assert r.family_id == "vehicle_elimination_cost"
+        assert r.family_id == "vehicle_elimination"
 
     def test_classification_persists_to_lineage(self, tmp_path) -> None:
         registry = LineageRegistry(str(tmp_path / "test.db"))
         store = HypothesisStore(registry)
-        classifier = HypothesisFamilyClassifier()
+        classifier = HypothesisFamilyClassifier(taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
 
         for i, text in enumerate([
             "destroy and rebuild solution",
@@ -57,8 +63,8 @@ class TestClassifierOnOffSmoke:
         stats = store.get_family_stats()
         assert len(stats) == 3
         families = {s["family_id"] for s in stats}
-        assert "subcat_rebuild_destroy" in families
-        assert "subcategory_merge_consolidate" in families
+        assert "destroy_rebuild" in families
+        assert "subcategory_consolidation" in families
 
 
 # ---------------------------------------------------------------------------

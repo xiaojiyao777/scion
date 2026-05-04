@@ -15,9 +15,12 @@ from scion.core.models import (
 )
 from scion.contract.gate import ContractGate
 from scion.proposal.context_manager import ContextManager, _summarise_active_hypotheses
+from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
 from scion.proposal.search_memory import (
     CampaignSearchMemory, FamilyEntry, _make_family_key,
 )
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 
 
 # ---------------------------------------------------------------------------
@@ -856,7 +859,7 @@ class TestK7FamilyKey:
         """Two attempts on different files should create separate family entries."""
         from scion.core.models import EvalStats, ExperimentStage, HypothesisProposal, ProtocolResult, StepRecord
 
-        mem = CampaignSearchMemory()
+        mem = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
 
         def _make_step(text, file, wr=0.1, bid="b1", rnum=1):
             hyp = HypothesisProposal(

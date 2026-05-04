@@ -20,6 +20,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.config.problem import ProblemSpec
+from scion.proposal.mechanism_labels import extract_mechanism_label
 
 
 class ContextManager:
@@ -35,8 +36,9 @@ class ContextManager:
     └─────────────────────────┴─────────────────────────────────────────┘
     """
 
-    def __init__(self, *, adapter=None):
+    def __init__(self, *, adapter=None, runtime_slow_threshold: float = 2.0):
         self._adapter = adapter
+        self._runtime_slow_threshold = runtime_slow_threshold
 
     # ------------------------------------------------------------------
     # Round 1 — hypothesis context
@@ -73,8 +75,13 @@ class ContextManager:
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         champion_operators_code = _read_champion_operators(champion)
+        adapter_spec = _get_adapter_problem_spec(self._adapter)
+        family_taxonomy = (
+            _get_family_taxonomy(problem_spec)
+            or _get_family_taxonomy(adapter_spec)
+        )
         experiment_history = _build_experiment_history(
-            step_history or [], branch.branch_id
+            step_history or [], branch.branch_id, taxonomy=family_taxonomy
         )
         blacklist_summary = _summarise_blacklist(blacklist)
         sibling_summary = _summarise_siblings(sibling_branches or [])
@@ -88,7 +95,7 @@ class ContextManager:
 
         # T07: Build family tracking and coverage (J-patch: use global step_history)
         all_steps = step_history or []
-        families = _extract_families_from_steps(all_steps)
+        families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
         exploration_coverage = build_exploration_coverage(families) if families else ""
 
         # T08: Build strategy guidance from family data (J-patch: global)
@@ -123,7 +130,6 @@ class ContextManager:
 
         # Objective policy/guidance is generic: lexicographic protection or
         # weighted-sum scalar improvement, plus recent screening tendencies.
-        adapter_spec = _get_adapter_problem_spec(self._adapter)
         objective_policy_guidance = _build_objective_policy_guidance(adapter_spec)
         objective_feedback = _build_recent_objective_feedback(
             step_history or [], branch.branch_id, adapter_spec
@@ -137,7 +143,10 @@ class ContextManager:
         search_control_guidance = _build_search_control_guidance(
             families, step_history or [], adapter_spec
         )
-        runtime_feedback = _build_runtime_feedback(step_history or [])
+        runtime_feedback = _build_runtime_feedback(
+            step_history or [],
+            slow_case_threshold=self._runtime_slow_threshold,
+        )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -334,6 +343,14 @@ def _get_adapter_problem_spec(adapter) -> Any:
     if spec is not None:
         return spec
     return getattr(adapter, "_spec", None)
+
+
+def _get_family_taxonomy(spec: Any) -> Any | None:
+    taxonomy = getattr(spec, "family_taxonomy", None)
+    families = getattr(taxonomy, "families", taxonomy)
+    if not families:
+        return None
+    return taxonomy
 
 
 def _build_objective_policy_guidance(adapter_spec: Any) -> str:
@@ -778,7 +795,9 @@ def _build_champion_stats(champion: ChampionState) -> str:
 
 
 def _build_experiment_history(
-    step_history: List[StepRecord], branch_id: str
+    step_history: List[StepRecord],
+    branch_id: str,
+    taxonomy: Optional[list] = None,
 ) -> str:
     """Build structured experiment history with case-level feedback.
 
@@ -794,7 +813,7 @@ def _build_experiment_history(
         return "(no prior experiment rounds on this branch)"
 
     # T26: Build "What Worked" section from promoted steps
-    what_worked = _build_what_worked_section(branch_steps)
+    what_worked = _build_what_worked_section(branch_steps, taxonomy=taxonomy)
 
     recent = branch_steps[-8:]  # Last 8 rounds
     lines: List[str] = []
@@ -1004,29 +1023,9 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
 # T07: Hypothesis Family Tracking
 # ---------------------------------------------------------------------------
 
-# Keyword → mechanism_label mapping (ordered by specificity)
-_MECHANISM_KEYWORDS: List[Tuple[List[str], str]] = [
-    (["destroy", "rebuild"], "destroy_rebuild"),
-    (["subcategor", "consolidat", "merge"], "subcategory_consolidation"),
-    (["swap"], "order_swap"),
-    (["redistribute", "rebalance"], "rebalance"),
-    (["split"], "split_operator"),
-    (["cost", "downsize", "vehicle type", "upgrade"], "cost_reduction"),
-]
-_DEFAULT_MECHANISM = "generic"
-
-
 def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[list] = None) -> str:
-    """Extract mechanism label from hypothesis text using keyword matching."""
-    text_lower = hypothesis_text.lower()
-    if taxonomy:
-        for label in taxonomy:
-            if label.lower() in text_lower:
-                return label
-    for keywords, label in _MECHANISM_KEYWORDS:
-        if any(kw in text_lower for kw in keywords):
-            return label
-    return _DEFAULT_MECHANISM
+    """Extract mechanism label from hypothesis text using problem taxonomy."""
+    return extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
 
 
 def _make_family_id(mechanism_label: str, action_pattern: str, locus_pattern: str) -> str:
@@ -1044,12 +1043,15 @@ def _get_step_status(step: StepRecord) -> str:
     return step.decision.value
 
 
-def _extract_families_from_steps(steps: List[StepRecord]) -> List[HypothesisFamily]:
+def _extract_families_from_steps(
+    steps: List[StepRecord],
+    taxonomy: Optional[list] = None,
+) -> List[HypothesisFamily]:
     """Build the family list from step history (rebuilt each call — no persistence needed)."""
     family_map: Dict[str, HypothesisFamily] = {}
     for step in steps:
         h = step.hypothesis
-        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "", taxonomy=taxonomy)
         family_id = _make_family_id(mechanism, h.action, h.change_locus)
         status = _get_step_status(step)
         if family_id in family_map:
@@ -1075,9 +1077,14 @@ def _extract_families_from_steps(steps: List[StepRecord]) -> List[HypothesisFami
     return list(family_map.values())
 
 
-def assign_family_id(hypothesis_text: str, action: str, change_locus: str) -> str:
+def assign_family_id(
+    hypothesis_text: str,
+    action: str,
+    change_locus: str,
+    taxonomy: Optional[list] = None,
+) -> str:
     """Public helper: compute family_id for a hypothesis (for HypothesisRecord.family_id)."""
-    mechanism = _extract_mechanism_label(hypothesis_text)
+    mechanism = _extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
     return _make_family_id(mechanism, action, change_locus)
 
 
@@ -1190,7 +1197,12 @@ def _build_failure_pattern_warning(failure_streak: Dict[str, int]) -> str:
     return "\n".join(lines)
 
 
-def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
+def _build_runtime_feedback(
+    steps: List[StepRecord],
+    max_items: int = 4,
+    *,
+    slow_case_threshold: float = 2.0,
+) -> str:
     """Render bounded runtime-guard feedback for proposal context.
 
     This is proposal guidance only. It is intentionally derived from bounded
@@ -1244,6 +1256,7 @@ def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
                 step,
                 target=target,
                 max_items=max_items,
+                slow_case_threshold=slow_case_threshold,
             )
             for line in raw_failure_causes:
                 if len(failure_causes) < max_items:
@@ -1308,6 +1321,7 @@ def _extract_screening_runtime_raw_feedback(
     *,
     target: str,
     max_items: int,
+    slow_case_threshold: float = 2.0,
 ) -> tuple[list[str], list[str], list[str]]:
     """Extract bounded screening-only slow/failed runtime cases from raw metrics."""
     protocol = step.protocol_result
@@ -1348,7 +1362,7 @@ def _extract_screening_runtime_raw_feedback(
             ratio_value = float(ratio)
         except (TypeError, ValueError):
             continue
-        if ratio_value <= 2.0:
+        if ratio_value <= slow_case_threshold:
             continue
         case_id = os.path.basename(str(pair.get("case") or "unknown"))
         seed = pair.get("seed", "?")
@@ -1382,6 +1396,7 @@ def _build_screening_failure_cause_line(
         "candidate_runtime",
         "operator_invalid_outputs",
     )
+    stop_reasons = _operator_stop_reason_counts(payload)
     failed_pairs = _count_field(stats.failed_pairs, payload, "failed_pairs")
     candidate_failed = _count_field(
         stats.candidate_failed_pairs,
@@ -1417,14 +1432,44 @@ def _build_screening_failure_cause_line(
         if stats.runtime_ratio_median is not None
         else _runtime_stat(payload, "runtime_ratio_median")
     )
+    quality_notes: list[str] = []
+    if operator_attempts > 0 and operator_accepted == 0:
+        quality_notes.append("no accepted operator moves despite attempted moves")
+    if stats.ties > max(stats.wins, stats.losses) and stats.ties > 0:
+        quality_notes.append("tie-dominated screening evidence")
+    if stop_reasons:
+        reason_text = ",".join(
+            f"{reason}:{count}" for reason, count in sorted(stop_reasons.items())
+        )
+        quality_notes.append(f"operator_stop_reason={reason_text}")
+        if "no_improvement_round" in stop_reasons:
+            quality_notes.append(
+                "no_improvement_round indicates weak/no-op search behavior, not schema/runtime failure"
+            )
+    if (
+        quality_notes
+        and failed_pairs == 0
+        and candidate_failed == 0
+        and champion_failed == 0
+        and operator_errors == 0
+        and invalid_outputs == 0
+    ):
+        quality_notes.append("no schema/runtime failure detected")
+
+    quality_suffix = ""
+    if quality_notes:
+        quality_suffix = " quality_notes=" + "; ".join(quality_notes)
+
     return (
         f"- R{step.round_num} target={target}: gate={protocol.gate_outcome} "
         f"reasons={reason_codes} total_pairs={total_pairs} valid_pairs={valid_pairs} "
+        f"wins={stats.wins} losses={stats.losses} ties={stats.ties} "
         f"failed_pairs={failed_pairs} candidate_failed_pairs={candidate_failed} "
         f"champion_failed_pairs={champion_failed} "
         f"runtime_ratio_median={_fmt_runtime(runtime_ratio)}x "
         f"operator_attempts={operator_attempts} operator_accepted={operator_accepted} "
         f"operator_errors={operator_errors} invalid_outputs={invalid_outputs}"
+        f"{quality_suffix}"
     )
 
 
@@ -1448,6 +1493,21 @@ def _sum_runtime_field(payload: dict[str, Any], runtime_key: str, field: str) ->
             ):
                 total += _as_int(audit.get(field))
     return total
+
+
+def _operator_stop_reason_counts(payload: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for pair in payload.get("pairs", []) or []:
+        if not isinstance(pair, dict):
+            continue
+        runtime = pair.get("candidate_runtime")
+        if not isinstance(runtime, dict):
+            continue
+        reason = str(runtime.get("operator_stop_reason") or "").strip()
+        if not reason:
+            continue
+        counts[reason] = counts.get(reason, 0) + 1
+    return counts
 
 
 def _count_field(stats_value: int, payload: dict[str, Any], field: str) -> int:
@@ -1507,7 +1567,10 @@ def _extract_runtime_guard_line(detail: str) -> str:
 # T26: What Worked section for experiment history
 # ---------------------------------------------------------------------------
 
-def _build_what_worked_section(branch_steps: List[StepRecord]) -> str:
+def _build_what_worked_section(
+    branch_steps: List[StepRecord],
+    taxonomy: Optional[list] = None,
+) -> str:
     """Build 'What Worked' section from promoted steps (T26).
 
     Storing confirmations prevents the model from becoming overly conservative
@@ -1532,7 +1595,7 @@ def _build_what_worked_section(branch_steps: List[StepRecord]) -> str:
     lines = ["## What Worked (learn from these)"]
     for s in successes[:5]:  # Cap at 5 to avoid bloating context
         h = s.hypothesis
-        mechanism = _extract_mechanism_label(h.hypothesis_text or "")
+        mechanism = _extract_mechanism_label(h.hypothesis_text or "", taxonomy=taxonomy)
         tag = "(promoted)" if s.decision == Decision.PROMOTE else "(high win_rate)"
         wr_str = ""
         if s.protocol_result:

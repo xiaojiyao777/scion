@@ -18,7 +18,7 @@ from scion.core.models import (
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.runtime.runner import Runner
 from scion.protocol.evaluation import (
-    lexicographic_compare, compute_delta,
+    lexicographic_compare, compute_delta, metric_order_from_objectives,
 )
 from scion.protocol.stats import compute_eval_stats
 from scion.protocol.gates import (
@@ -198,33 +198,37 @@ class ExperimentProtocol:
             return result.outcome, result
         if self._require_metric_specs:
             raise RuntimeError("metric_specs are required for objective comparison")
-        # Legacy compatibility path: build an ObjectiveComparison from the
-        # historical two-metric comparator.
+        # Legacy compatibility path: build an ObjectiveComparison from generic
+        # lexicographic-minimize fallback semantics.
         from scion.problem.objectives import ObjectiveComparison, MetricComparison
-        cmp = lexicographic_compare(candidate_objective, champion_objective)
+        metric_order = metric_order_from_objectives(candidate_objective, champion_objective)
+        cmp = lexicographic_compare(
+            candidate_objective,
+            champion_objective,
+            metric_order=metric_order,
+        )
         metrics = []
-        for name in ["subcategory_splits", "total_cost"]:
+        decisive_seen = False
+        for name in metric_order:
             cv = candidate_objective.get(name, 0)
             hv = champion_objective.get(name, 0)
             sd = float(hv) - float(cv)
+            decisive = (not decisive_seen) and cv != hv
+            decisive_seen = decisive_seen or decisive
             metrics.append(MetricComparison(
                 name=name, candidate_value=cv, champion_value=hv,
                 signed_delta=sd, relation="candidate" if sd > 0 else ("champion" if sd < 0 else "tie"),
-                decisive=(
-                    (name == "subcategory_splits" and cv != hv)
-                    or (
-                        name == "total_cost"
-                        and candidate_objective.get("subcategory_splits", 0)
-                        == champion_objective.get("subcategory_splits", 0)
-                        and cv != hv
-                    )
-                ),
+                decisive=decisive,
             ))
         decisive_metric = next((m.name for m in metrics if m.decisive), None)
         result = ObjectiveComparison(
             outcome=cmp,
             decisive_metric=decisive_metric,
-            scalar_delta=sum(m.signed_delta for m in metrics),
+            scalar_delta=compute_delta(
+                candidate_objective,
+                champion_objective,
+                metric_order=metric_order,
+            ),
             metrics=tuple(metrics),
         )
         return cmp, result

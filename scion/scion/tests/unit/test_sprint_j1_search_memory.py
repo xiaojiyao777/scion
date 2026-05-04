@@ -10,6 +10,10 @@ from scion.core.models import (
 from scion.proposal.search_memory import (
     CampaignSearchMemory, FamilyEntry, _extract_mechanism_label, _make_family_key,
 )
+from scion.tests.taxonomy_helpers import cvrp_family_taxonomy, warehouse_family_taxonomy
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
+CVRP_FAMILY_TAXONOMY = cvrp_family_taxonomy()
 
 
 # ---------------------------------------------------------------------------
@@ -66,23 +70,50 @@ def _make_step(
 # ---------------------------------------------------------------------------
 
 class TestMechanismLabel:
-    def test_subcategory_swap(self):
-        assert _extract_mechanism_label("subcategory swap") == "subcategory_consolidation"
+    def test_default_does_not_emit_warehouse_label(self):
+        assert _extract_mechanism_label("subcategory swap") == "generic"
+
+    def test_warehouse_taxonomy_keeps_subcategory_swap(self):
+        assert (
+            _extract_mechanism_label(
+                "subcategory swap",
+                taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+            )
+            == "subcategory_consolidation"
+        )
 
     def test_destroy_rebuild(self):
-        assert _extract_mechanism_label("destroy and rebuild") == "destroy_rebuild"
+        assert (
+            _extract_mechanism_label(
+                "destroy and rebuild",
+                taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+            )
+            == "destroy_rebuild"
+        )
 
     def test_drain(self):
-        assert _extract_mechanism_label("drain vehicle orders") == "intra_subcat_repack"
+        assert (
+            _extract_mechanism_label(
+                "drain vehicle orders",
+                taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+            )
+            == "intra_subcat_repack"
+        )
 
     def test_cost_reduction(self):
-        assert _extract_mechanism_label("reduce cost by downsizing") == "cost_reduction"
+        assert (
+            _extract_mechanism_label(
+                "reduce cost by downsizing",
+                taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+            )
+            == "cost_reduction"
+        )
 
     def test_generic(self):
         assert _extract_mechanism_label("random perturbation") == "generic"
 
     def test_route_native_taxonomy_matches_hyphenated_labels(self):
-        taxonomy = ["route_local", "route_pair", "ruin_recreate"]
+        taxonomy = CVRP_FAMILY_TAXONOMY
 
         assert (
             _extract_mechanism_label(
@@ -110,7 +141,7 @@ class TestMechanismLabel:
 class TestSearchMemoryUpdate:
     def test_update_on_abandon(self):
         """Abandoned step increments total_attempts and consecutive_fails."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         step = _make_step(
             hyp_text="subcategory swap",
             failure_stage="verification",
@@ -126,7 +157,7 @@ class TestSearchMemoryUpdate:
 
     def test_update_on_screening_fail(self):
         """Low win_rate screening result increments consecutive_fails."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         step = _make_step(hyp_text="subcategory swap", win_rate=0.20)
         sm.update(step)
         key = _make_family_key("subcategory_consolidation", "create_new", "vehicle_level")
@@ -135,7 +166,7 @@ class TestSearchMemoryUpdate:
 
     def test_reset_on_promote(self):
         """Promote resets consecutive_fails."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         # First: 3 failures
         for _ in range(3):
             sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.10))
@@ -151,7 +182,7 @@ class TestSearchMemoryUpdate:
 
     def test_exhausted_detection(self):
         """≥5 fails with best_wr<0.35 → is_exhausted=True."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         for i in range(6):
             sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.10, round_num=i))
         key = _make_family_key("subcategory_consolidation", "create_new", "vehicle_level")
@@ -159,7 +190,7 @@ class TestSearchMemoryUpdate:
 
     def test_not_exhausted_if_good_wr(self):
         """5+ attempts but best_wr >= 0.35 → not exhausted."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         for i in range(4):
             sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.10, round_num=i))
         sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.40, round_num=5))
@@ -170,7 +201,7 @@ class TestSearchMemoryUpdate:
 
     def test_route_native_taxonomy_does_not_fall_back_to_order_swap(self):
         sm = CampaignSearchMemory(
-            family_taxonomy=["route_local", "route_pair", "ruin_recreate"]
+            family_taxonomy=CVRP_FAMILY_TAXONOMY
         )
         sm.update(_make_step(
             hyp_text="route-pair 2-opt swap between routes",
@@ -183,10 +214,26 @@ class TestSearchMemoryUpdate:
         assert key in sm.families
         assert "order_swap/create_new/route_pair" not in sm.families
 
+    def test_route_native_taxonomy_blocks_warehouse_cost_subcategory_labels(self):
+        sm = CampaignSearchMemory(
+            family_taxonomy=CVRP_FAMILY_TAXONOMY
+        )
+        sm.update(_make_step(
+            hyp_text="merge subcategory clusters and reduce cost",
+            locus="route_pair",
+            action="create_new",
+            win_rate=0.2,
+        ))
+
+        rendered = "\n".join(sm.families.keys())
+        assert "subcategory_consolidation" not in rendered
+        assert "cost_reduction" not in rendered
+        assert "NEW_FAMILY/create_new/route_pair" in sm.families
+
 
 class TestSearchMemoryRender:
     def test_render_empty(self):
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         assert sm.render() == ""
 
     def test_render_with_evolution(self):
@@ -227,7 +274,7 @@ class TestSearchMemoryRender:
 
     def test_exhausted_in_avoid_list(self):
         """Exhausted families appear in AVOID section."""
-        sm = CampaignSearchMemory()
+        sm = CampaignSearchMemory(family_taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
         for i in range(6):
             sm.update(_make_step(hyp_text="subcategory swap", win_rate=0.10, round_num=i))
         rendered = sm.render()

@@ -1,9 +1,8 @@
 """Tests for Sprint O0: family persistence + classifier API repair."""
 from __future__ import annotations
 
-import os
 import sqlite3
-import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +16,18 @@ from scion.proposal.classifier import (
     TAXONOMY_VERSION,
     _keyword_classify,
 )
+from scion.tests.taxonomy_helpers import cvrp_family_taxonomy, warehouse_family_taxonomy
+
+WAREHOUSE_LABELS = {
+    "destroy_rebuild",
+    "subcategory_consolidation",
+    "order_swap",
+    "rebalance",
+    "split_operator",
+    "cost_reduction",
+    "intra_subcat_repack",
+    "vehicle_elimination",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -79,17 +90,18 @@ class TestFamilyPersistence:
 
 
 class TestClassifier:
-    def test_keyword_fallback(self) -> None:
+    def test_default_keyword_fallback_is_domain_neutral(self) -> None:
         c = HypothesisFamilyClassifier()
         r = c.classify("destroy and rebuild vehicles to reduce cost")
         assert isinstance(r, ClassificationResult)
-        assert r.family_id == "subcat_rebuild_destroy"
+        assert r.family_id == "NEW_FAMILY"
+        assert r.family_id not in WAREHOUSE_LABELS
         assert r.source == "keyword"
         assert r.taxonomy_version == TAXONOMY_VERSION
 
-    def test_keyword_consolidate(self) -> None:
+    def test_keyword_default_does_not_emit_warehouse_label(self) -> None:
         r = _keyword_classify("merge subcategories for consolidation")
-        assert r == "subcategory_merge_consolidate"
+        assert r == "NEW_FAMILY"
 
     def test_keyword_unknown(self) -> None:
         r = _keyword_classify("something completely different")
@@ -100,6 +112,24 @@ class TestClassifier:
             assert isinstance(t, str)
             assert len(t) > 0
 
+    def test_mechanism_label_helper_has_no_problem_specific_labels(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "proposal"
+            / "mechanism_labels.py"
+        ).read_text(encoding="utf-8")
+        forbidden = (
+            "subcategory_consolidation",
+            "order_swap",
+            "cost_reduction",
+            "split_operator",
+            "route_local",
+            "route_pair",
+            "ruin_recreate",
+        )
+        for label in forbidden:
+            assert label not in source
+
     def test_classification_result_immutable(self) -> None:
         r = ClassificationResult(family_id="test", source="keyword")
         with pytest.raises(AttributeError):
@@ -109,27 +139,45 @@ class TestClassifier:
         c = HypothesisFamilyClassifier(llm_client=None)
         r = c.classify("reassign orders between vehicles")
         assert r.source == "keyword"
-        assert r.family_id == "order_level_reassign"
+        assert r.family_id == "NEW_FAMILY"
+        assert r.family_id not in WAREHOUSE_LABELS
 
-    def test_classifier_with_failing_client_falls_back(self) -> None:
+    def test_classifier_with_explicit_warehouse_taxonomy(self) -> None:
+        c = HypothesisFamilyClassifier(
+            llm_client=None,
+            taxonomy=warehouse_family_taxonomy(),
+            taxonomy_version="warehouse-delivery-v1",
+        )
+        r = c.classify("merge subcategories")
+        assert r.source == "keyword"
+        assert r.family_id == "subcategory_consolidation"
+        assert r.taxonomy_version == "warehouse-delivery-v1"
+
+    def test_classifier_with_failing_client_falls_back_to_explicit_taxonomy(self) -> None:
         class FailingClient:
             def call_text(self, prompt, model=None):
                 raise RuntimeError("API down")
 
-        c = HypothesisFamilyClassifier(llm_client=FailingClient())
+        c = HypothesisFamilyClassifier(
+            llm_client=FailingClient(),
+            taxonomy=warehouse_family_taxonomy(),
+        )
         r = c.classify("merge subcategories")
         assert r.source == "keyword"
-        assert r.family_id == "subcategory_merge_consolidate"
+        assert r.family_id == "subcategory_consolidation"
 
     def test_classifier_with_mock_client(self) -> None:
         class MockClient:
             def call_text(self, prompt, model=None):
-                return "vehicle_elimination_cost"
+                return "vehicle_elimination"
 
-        c = HypothesisFamilyClassifier(llm_client=MockClient())
+        c = HypothesisFamilyClassifier(
+            llm_client=MockClient(),
+            taxonomy=warehouse_family_taxonomy(),
+        )
         r = c.classify("eliminate expensive vehicles")
         assert r.source == "classifier"
-        assert r.family_id == "vehicle_elimination_cost"
+        assert r.family_id == "vehicle_elimination"
 
     def test_classifier_uses_problem_taxonomy_without_warehouse_keywords(self) -> None:
         c = HypothesisFamilyClassifier(
@@ -142,14 +190,38 @@ class TestClassifier:
         assert r.family_id == "two_opt_local_search"
         assert r.taxonomy_version == "tsp-v1"
 
-    def test_classifier_invalid_response_falls_back(self) -> None:
+    def test_classifier_custom_route_taxonomy_blocks_warehouse_labels(self) -> None:
+        c = HypothesisFamilyClassifier(
+            llm_client=None,
+            taxonomy=cvrp_family_taxonomy(),
+            taxonomy_version="cvrp-route-v1",
+        )
+
+        r = c.classify("Merge subcategory buckets to reduce cost")
+
+        assert r.source == "keyword"
+        assert r.family_id == "NEW_FAMILY"
+        assert r.taxonomy_version == "cvrp-route-v1"
+
+    def test_classifier_custom_route_taxonomy_maps_route_words_only(self) -> None:
+        c = HypothesisFamilyClassifier(
+            llm_client=None,
+            taxonomy=cvrp_family_taxonomy(),
+            taxonomy_version="cvrp-route-v1",
+        )
+
+        assert c.classify("Apply intra-route 2-opt cleanup").family_id == "route_local"
+        assert c.classify("Try a route-pair 2-opt* exchange").family_id == "route_pair"
+        assert c.classify("Use bounded ruin and recreate repair").family_id == "ruin_recreate"
+
+    def test_classifier_invalid_response_falls_back_to_default_neutral(self) -> None:
         class MockClient:
             def call_text(self, prompt, model=None):
                 return "not_a_valid_taxonomy_entry_at_all"
 
         c = HypothesisFamilyClassifier(llm_client=MockClient())
         r = c.classify("destroy and rebuild")
-        assert r.family_id == "subcat_rebuild_destroy"
+        assert r.family_id == "NEW_FAMILY"
 
 
 # ---------------------------------------------------------------------------

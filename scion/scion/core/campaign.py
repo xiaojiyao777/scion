@@ -3,15 +3,10 @@ from __future__ import annotations
 
 import logging
 import threading
-import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from scion.config.problem import ProtocolConfig, ProblemSpec, SplitManifest, SeedLedgerConfig
-from scion.verification.gate import VerificationGate
-from scion.contract.gate import ContractGate
-from scion.core.branch_step_runner import BranchStepRunner
-from scion.core.branch import BranchController
 from scion.core.campaign_adapters import (
     _branch_step_runner_for,
     _evaluation_orchestrator_for,
@@ -20,74 +15,25 @@ from scion.core.campaign_adapters import (
     _workspace_service_for,
 )
 from scion.core.campaign_governance import CampaignGovernanceService
-from scion.core.campaign_loop import CampaignLoop
-from scion.core.decision_coordinator import DecisionCoordinator
-from scion.core.decision_finalizer import DecisionFinalizer
-from scion.core.evidence_recorder import EvidenceRecorder
-from scion.core.evaluation_orchestrator import EvaluationOrchestrator
-from scion.core.explore_step_pipeline import ExploreStepPipeline, build_verification_detail
-from scion.core.features import SafeFeatureExtractor, BudgetState
-from scion.core.frozen_budget import FrozenBudgetLedger
+from scion.core.circuit_breaker import CircuitBreaker, MAX_CONSECUTIVE_LLM_FAILURES
+from scion.core.explore_step_pipeline import build_verification_detail
+from scion.core.features import BudgetState
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.models import (
-    Branch, BranchState, CanaryResult, ChampionState, ContractResult,
+    Branch, CanaryResult, ChampionState, ContractResult,
     Decision, ExperimentStage, FailureEvent, HypothesisProposal, HypothesisRecord,
     PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
-from scion.core.promotion_lifecycle import PromotionLifecycleService
-from scion.core.promotion_service import PromotionPlan, PromotionService
-from scion.core.proposal_pipeline import ProposalPipeline
-from scion.core.scheduler import Scheduler
+from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
-from scion.core.status_reporter import StatusReporter
-from scion.core.termination import TerminationChecker, TerminationConfig
-from scion.core.stagnation import StagnationDetector, StagnationSignal
-from scion.core.verification_factory import CampaignVerificationFactory
-from scion.core.weight_opt_committer import WeightOptCommitter
+from scion.core.termination import TerminationConfig
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
-from scion.failure.router import FailureRouter, RetryConfig
-from scion.proposal.engine import CreativeLayer
-from scion.proposal.search_memory import CampaignSearchMemory
-from scion.proposal.saturation import ChampionSaturationAnalyzer, render_saturation_signals
-from scion.runtime.workspace import WorkspaceMaterializer
-from scion.lineage.registry import LineageRegistry
-from scion.lineage.branch_store import BranchStore, HypothesisStore
-from scion.lineage.champion_store import ChampionStore
+from scion.failure.router import RetryConfig
+from scion.proposal.saturation import ChampionSaturationAnalyzer
+from scion.verification.gate import VerificationGate
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Circuit breaker
-# ---------------------------------------------------------------------------
-
-MAX_CONSECUTIVE_LLM_FAILURES = 3
-
-
-class CircuitBreaker:
-    """Trips after N consecutive LLM failures to prevent budget burn."""
-
-    def __init__(self, threshold: int = MAX_CONSECUTIVE_LLM_FAILURES) -> None:
-        self._threshold = threshold
-        self._consecutive_failures = 0
-        self._last_failure_detail = ""
-
-    def record_success(self) -> None:
-        self._consecutive_failures = 0
-
-    def record_failure(self, detail: str) -> bool:
-        """Record a failure. Returns True if the circuit has just tripped."""
-        self._consecutive_failures += 1
-        self._last_failure_detail = detail
-        return self._consecutive_failures >= self._threshold
-
-    @property
-    def is_tripped(self) -> bool:
-        return self._consecutive_failures >= self._threshold
-
-    @property
-    def last_failure_detail(self) -> str:
-        return self._last_failure_detail
 
 # ---------------------------------------------------------------------------
 # Campaign Manager
@@ -136,495 +82,28 @@ class CampaignManager:
         force_continue_early_stop: bool = False,
         allow_non_strict_runtime_verification: bool = False,
     ) -> None:
-        # v0.3 B3: ProblemRuntime owns problem_spec + adapter + ContextManager.
-        # Instantiate FIRST so the backward-compat properties below (_spec,
-        # _adapter, _ctx_manager) can proxy to it.
-        from scion.core.problem_runtime import ProblemRuntime
-        self._problem_runtime = ProblemRuntime(problem_spec=problem_spec, adapter=adapter)
-        self._protocol_config = protocol_config
-        self._split_manifest = split_manifest
-        self._seed_ledger = seed_ledger
-        self._llm_client = llm_client
-        self._champion = champion
-        self._campaign_dir = campaign_dir
-        self._campaign_id = str(uuid.uuid4())
-        self._status_reporter = StatusReporter(campaign_dir)
-        self._last_status_result: Dict[str, Any] | None = None
-        self._current_status_progress: Dict[str, Any] | None = None
-        self._last_stop_reason: str | None = None
-        self._objective_lower_bounds = objective_lower_bounds
-        self._use_objective_lower_bounds_for_early_stop = use_objective_lower_bounds_for_early_stop
+        from scion.core.campaign_composition import compose_campaign_services
 
-        # Sub-modules
-        self._branch_ctrl = BranchController()
-        self._scheduler = Scheduler()
-        self._contract_gate = ContractGate(
-            problem_spec,
-            operator_execute_signature=operator_execute_signature,
-        )
-        self._decision_coordinator = DecisionCoordinator(config=protocol_config)
-        self._feature_extractor = SafeFeatureExtractor()
-        self._failure_router = FailureRouter(retry_config or RetryConfig())
-        self._creative = CreativeLayer(
-            llm_client,
-            trace_dir=f"{campaign_dir}/llm_traces",
-        )
-        # _ctx_manager now backed by ProblemRuntime (see property below).
-
-        # O1: Hypothesis family classifier (keyword-only if no LLM client)
-        from scion.proposal.classifier import HypothesisFamilyClassifier
-        _family_taxonomy = getattr(self._spec, "family_taxonomy", None)
-        self._classifier = HypothesisFamilyClassifier(
-            llm_client=llm_client,
-            taxonomy=getattr(_family_taxonomy, "families", None),
-            taxonomy_version=getattr(_family_taxonomy, "version", "v1"),
-        )
-        self._materializer = WorkspaceMaterializer(
-            campaign_dir,
-            frozen_patterns=frozenset(
-                problem_spec.search_space.frozen
-            ) if problem_spec.search_space.frozen else None,
-        )
-        import os as _os2
-        self._experiment_protocol = experiment_protocol  # may be None (no runner)
-        _os2.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
-        self._vgate = CampaignVerificationFactory.build(
+        compose_campaign_services(
+            self,
             problem_spec=problem_spec,
+            protocol_config=protocol_config,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+            llm_client=llm_client,
+            champion=champion,
+            campaign_dir=campaign_dir,
             verification_gate=verification_gate,
             experiment_protocol=experiment_protocol,
-            campaign_dir=str(campaign_dir),
+            budget=budget,
+            termination_config=termination_config,
+            retry_config=retry_config,
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
+            objective_lower_bounds=objective_lower_bounds,
+            use_objective_lower_bounds_for_early_stop=use_objective_lower_bounds_for_early_stop,
+            force_continue_early_stop=force_continue_early_stop,
             allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
-        )
-        if hasattr(self._experiment_protocol, "set_progress_callback"):
-            self._experiment_protocol.set_progress_callback(self._on_protocol_progress)
-
-        def _read_promotion_weights(registry_path: str) -> Dict[str, float]:
-            if self._spec.parameter_search.enabled and self._experiment_protocol is not None:
-                from scion.runtime.pool_manager import read_weights
-                return read_weights(registry_path)
-            return {}
-
-        self._promotion_service = PromotionService(
-            snapshot_root=self._materializer._champions_dir,
-            materializer=self._materializer,
-            before_commit=self._begin_promotion_commit,
-            commit_champion=self._commit_promoted_champion_state,
-            persist_champion=self._persist_promoted_champion,
-            promote_branch=self._transition_promoted_branch,
-            mark_stale=self._branch_ctrl.mark_all_stale,
-            persist_branch_states=self._persist_all_branch_states,
-            on_promoted_branch=self._record_promoted_branch,
-            read_weights_fn=_read_promotion_weights,
-        )
-
-        # Lineage registry (SQLite, WAL mode)
-        import os as _os
-        _os.makedirs(campaign_dir, exist_ok=True)
-        self._registry = LineageRegistry(
-            _os.path.join(campaign_dir, "scion.db")
-        )
-        self._hyp_store = HypothesisStore(self._registry)
-        self._branch_store = BranchStore(self._registry)
-        self._evidence_recorder = EvidenceRecorder(
-            campaign_id=self._campaign_id,
-            campaign_dir=campaign_dir,
-            status_reporter=self._status_reporter,
-            registry=self._registry,
-            state_provider=self.get_state,
-            model_id=getattr(llm_client, "model", None),
-            protocol_version=getattr(protocol_config, "version", None),
-            family_taxonomy=getattr(_family_taxonomy, "families", None),
-        )
-        self._frozen_budget_ledger = FrozenBudgetLedger(
-            max_uses=protocol_config.frozen.max_uses_per_campaign,
-            registry=self._registry,
-            campaign_id=self._campaign_id,
-        )
-
-        # J6: Champion store for persistence
-        self._champion_store = ChampionStore(
-            _os.path.join(campaign_dir, "scion.db"),
-            _os.path.join(campaign_dir, "champions"),
-        )
-
-        # Per-branch transient state
-        self._branch_workspaces: Dict[str, str] = {}       # branch_id → workspace path
-        self._branch_hypotheses: Dict[str, HypothesisProposal] = {}
-        self._branch_patches: Dict[str, PatchProposal] = {}
-        self._decision_reason_codes: Dict[str, Tuple[str, ...]] = {}
-        # T04: branch_id → the canonical HypothesisRecord for the current screening cycle
-        # (screening → validation → frozen all share the same record)
-        self._branch_current_hypothesis: Dict[str, HypothesisRecord] = {}
-
-        # Pending hypotheses: branch_id → (hypothesis, h_record, failure_detail)
-        # A code-failed hypothesis gets ONE retry for code gen in the next round.
-        self._pending_hypotheses: Dict[str, Tuple[HypothesisProposal, HypothesisRecord, str]] = {}
-
-        # Hypothesis memory persisted to SQLite via HypothesisStore
-        # (replaces in-memory _active_hypotheses and _blacklist lists)
-
-        # Experiment history — full record of every completed explore step
-        self._step_history: List[StepRecord] = []
-        self._round_num: int = 0
-
-        # Budget / termination
-        self._term_checker = TerminationChecker(termination_config or TerminationConfig())
-        self._budget = budget or BudgetState(total=1000, used=0)
-        self._n_experiments = 0
-        self._recent_abandoned_count = 0
-        self._hard_abandon_counted_branches: set[str] = set()
-        self._soft_abandon_streak: int = 0   # I1: T4 win_rate<0.3 consecutive count (independent of hard stagnation)
-        self._branch_zero_win_streaks: Dict[str, int] = {}  # branch_id → consecutive 0-win-rate rounds
-        self._start_time = datetime.now()
-        # _forced_next_locus / _rounds_since_last_promote now live in PlateauController;
-        # backward-compat properties defined below expose them as attributes.
-        self._hard_stagnation_escape_used: bool = False  # I4: one-time escape before terminate
-
-        # Stagnation / diagnosis (T25/T23)
-        _taxonomy = getattr(getattr(self._spec, 'family_taxonomy', None), 'families', None)
-        self._stagnation_detector = StagnationDetector(window_size=5, taxonomy=_taxonomy)
-        self._stagnation_signals: List[StagnationSignal] = []
-        self._diagnostics: List[Dict[str, Any]] = []
-
-        # Circuit breaker (T29)
-        self._circuit_breaker = CircuitBreaker()
-        self._balance_exhausted: bool = False  # T6: set on 403 balance-exhausted errors
-
-        # J1: Campaign search memory (cross-branch)
-        self._search_memory = CampaignSearchMemory(family_taxonomy=_taxonomy)
-
-        # J-patch: Campaign research log (cross-branch trajectory from SQLite)
-        from scion.proposal.research_log import CampaignResearchLog
-        self._research_log = CampaignResearchLog(str(campaign_dir))
-
-        # J2: Saturation analyzer (initialized lazily after first screening with data)
-        self._saturation_analyzer: Optional[ChampionSaturationAnalyzer] = None
-        self._baseline_metrics: Optional[Dict[str, float]] = None
-
-        # W3 / v0.3 B1: PlateauController — idle counter + early-stop + forced locus
-        from scion.core.early_stop import EarlyStopController
-        from scion.core.plateau_controller import PlateauController
-        early_stop_controller = (
-            EarlyStopController(force_continue=True)
-            if force_continue_early_stop
-            else None
-        )
-        self._plateau = PlateauController(early_stop=early_stop_controller)
-        # Legacy attribute names kept as thin passthroughs for now (branch_store
-        # and tests may still read them). Prefer self._plateau going forward.
-        self._early_stop = self._plateau.early_stop
-
-        # W9: Campaign journal (lineage-derived)
-        from scion.proposal.journal import CampaignJournal
-        self._journal = CampaignJournal(self._registry)
-
-        # W13: Token usage tracker
-        from scion.core.token_usage import TokenUsageTracker
-        self._token_tracker = TokenUsageTracker()
-        if hasattr(llm_client, 'set_token_tracker'):
-            llm_client.set_token_tracker(self._token_tracker)
-
-        # Sprint H2 T1: Campaign-level failure counters
-        self._failure_streak: Dict[str, int] = {}   # failure_code → consecutive count
-        self._total_failures: Dict[str, int] = {}   # failure_code → cumulative count
-        self._failure_lifecycle = FailureLifecycleService(
-            failure_router=self._failure_router,
-            budget=self._budget,
-            failure_streak=self._failure_streak,
-            total_failures=self._total_failures,
-            branch_controller=self._branch_ctrl,
-            branch_hypotheses=self._branch_hypotheses,
-            branch_patches=self._branch_patches,
-            hypothesis_store=self._hyp_store,
-            branch_store=self._branch_store,
-            registry=self._registry,
-            campaign_id=self._campaign_id,
-            get_champion=lambda: self._champion,
-            record_hard_abandon=self._record_hard_abandon,
-        )
-
-        # Async weight optimization (R3/R5) — v0.3 B2 coordinator owns
-        # _pending_threads and _latest_result. Backward-compat properties
-        # below expose them as _pending_weight_opt_threads /
-        # _latest_weight_opt_result for tests and lineage paths.
-        self._champion_lock = threading.Lock()
-        self._workspace_lifecycle = WorkspaceLifecycleService(
-            materializer=self._materializer,
-            branch_controller=self._branch_ctrl,
-            branch_workspaces=self._branch_workspaces,
-            branch_patches=self._branch_patches,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-        )
-        from scion.core.async_weight_opt import AsyncWeightOptCoordinator
-        self._weight_opt_coord = AsyncWeightOptCoordinator(self)
-        self._weight_opt_committer = WeightOptCommitter(
-            event_source=self._weight_opt_coord,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-            set_champion=lambda champion: setattr(self, "_champion", champion),
-            champion_store=self._champion_store,
-            branch_controller=self._branch_ctrl,
-            persist_branch_states=self._persist_all_branch_states,
-            registry=self._registry,
-            campaign_id=self._campaign_id,
-        )
-        self._promotion_lifecycle = PromotionLifecycleService(
-            promotion_service=self._promotion_service,
-            branch_controller=self._branch_ctrl,
-            branch_workspaces=self._branch_workspaces,
-            branch_patches=self._branch_patches,
-            branch_current_hypothesis=self._branch_current_hypothesis,
-            step_history=self._step_history,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-            set_champion=lambda champion: setattr(self, "_champion", champion),
-            get_champion_store=lambda: self._champion_store,
-            hypothesis_store=self._hyp_store,
-            search_memory=self._search_memory,
-            get_weight_opt_coord=lambda: self._weight_opt_coord,
-            get_weight_opt_committer=lambda: self._weight_opt_committer,
-            get_parameter_search_execution=lambda: getattr(
-                self._spec.parameter_search,
-                "execution",
-                "async",
-            ),
-            get_round_num=lambda: self._round_num,
-            reset_promotion_counters=self._reset_promotion_counters,
-            set_rounds_since_last_promote=lambda value: setattr(
-                self,
-                "_rounds_since_last_promote",
-                value,
-            ),
-        )
-        self._decision_finalizer = DecisionFinalizer(
-            branch_controller=self._branch_ctrl,
-            branch_store=self._branch_store,
-            hypothesis_store=self._hyp_store,
-            branch_workspaces=self._branch_workspaces,
-            branch_hypotheses=self._branch_hypotheses,
-            branch_patches=self._branch_patches,
-            branch_current_hypothesis=self._branch_current_hypothesis,
-            branch_zero_win_streaks=self._branch_zero_win_streaks,
-            prepare_promoted_champion=self._prepare_promoted_champion,
-            require_promotable_branch=self._require_promotable_branch,
-            commit_promote_plan=self._commit_promote_plan,
-            handle_failure=self._handle_failure,
-            record_hard_abandon=self._record_hard_abandon,
-            record_step_lineage=self._record_step_lineage,
-            decision_reason_codes_for=self._decision_reason_codes_for,
-            discard_branch_workspace=lambda branch_id: _workspace_service_for(
-                self
-            ).discard_branch_workspace(branch_id),
-            archive_workspace=self._materializer.archive_workspace,
-            cleanup_workspace=self._materializer.cleanup,
-            persist_branch_state=self._persist_branch_state,
-            reset_recent_abandoned_count=lambda: setattr(
-                self,
-                "_recent_abandoned_count",
-                0,
-            ),
-        )
-        self._evaluation_orchestrator = EvaluationOrchestrator(
-            branch_controller=self._branch_ctrl,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-            branch_patches=self._branch_patches,
-            branch_workspaces=self._branch_workspaces,
-            branch_hypotheses=self._branch_hypotheses,
-            branch_current_hypothesis=self._branch_current_hypothesis,
-            experiment_protocol_provider=lambda: self._experiment_protocol,
-            feature_extractor=self._feature_extractor,
-            get_budget=lambda: self._budget,
-            decision_coordinator=self._decision_coordinator,
-            decision_reason_codes=self._decision_reason_codes,
-            campaign_id=self._campaign_id,
-            registry=self._registry,
-            materializer=self._materializer,
-            hypothesis_store=self._hyp_store,
-            persist_branch_state=self._persist_branch_state,
-            begin_status_progress=self._begin_status_progress,
-            end_status_progress=self._end_status_progress,
-            handle_failure=self._handle_failure,
-            increment_experiment_count=lambda: setattr(
-                self,
-                "_n_experiments",
-                self._n_experiments + 1,
-            ),
-            increment_budget_used=lambda: setattr(
-                self._budget,
-                "used",
-                self._budget.used + 1,
-            ),
-            increment_soft_abandon_streak=lambda: setattr(
-                self,
-                "_soft_abandon_streak",
-                self._soft_abandon_streak + 1,
-            ),
-            frozen_budget_ledger=self._frozen_budget_ledger,
-        )
-        self._explore_step_pipeline = ExploreStepPipeline(
-            branch_controller=self._branch_ctrl,
-            contract_gate=self._contract_gate,
-            verification_gate=self._vgate,
-            hypothesis_store=self._hyp_store,
-            registry=self._registry,
-            campaign_id=self._campaign_id,
-            get_champion=lambda: self._champion,
-            pending_hypotheses=self._pending_hypotheses,
-            branch_hypotheses=self._branch_hypotheses,
-            branch_patches=self._branch_patches,
-            branch_current_hypothesis=self._branch_current_hypothesis,
-            branch_workspaces=self._branch_workspaces,
-            failure_streak=self._failure_streak,
-            increment_round=self._increment_round,
-            increment_rounds_since_last_promote=self._increment_rounds_since_last_promote,
-            generate_hypothesis=self._round1_generate_hypothesis,
-            generate_code=self._round2_generate_code,
-            attempt_fix=self._attempt_fix,
-            handle_failure=self._handle_failure,
-            record_step=self._record_step,
-            setup_workspace=self._setup_workspace,
-            apply_patch=lambda branch, workspace, patch, **kwargs: _workspace_service_for(
-                self
-            ).apply_patch(branch, workspace, patch, **kwargs),
-            record_verification_pass=lambda branch, code_hash: _workspace_service_for(
-                self
-            ).record_verification_pass(branch, code_hash),
-            archive_failed_workspace=self._archive_failed_workspace,
-            evaluate=self._evaluate,
-            apply_decision_and_finalize=self._apply_decision_and_finalize,
-            decision_reason_codes_for=self._decision_reason_codes_for,
-            proposal_failure_detail_for=self._proposal_failure_detail_for,
-        )
-        self._branch_step_runner = BranchStepRunner(
-            branch_controller=self._branch_ctrl,
-            scheduler=self._scheduler,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-            branch_store=self._branch_store,
-            branch_workspaces=self._branch_workspaces,
-            branch_hypotheses=self._branch_hypotheses,
-            branch_patches=self._branch_patches,
-            branch_current_hypothesis=self._branch_current_hypothesis,
-            experiment_protocol_provider=lambda: self._experiment_protocol,
-            contract_gate=self._contract_gate,
-            verification_gate=self._vgate,
-            drain_weight_opt_events=self._drain_weight_opt_events,
-            should_stop=self.should_stop,
-            get_last_stop_reason=lambda: self._last_stop_reason,
-            tick_blocked_branches=self._tick_blocked_branches,
-            persist_branch_state=self._persist_branch_state,
-            record_hard_abandon=self._record_hard_abandon,
-            setup_workspace=self._setup_workspace,
-            apply_patch=lambda branch, workspace, patch, **kwargs: _workspace_service_for(
-                self
-            ).apply_patch(branch, workspace, patch, **kwargs),
-            record_verification_pass=lambda branch, code_hash: _workspace_service_for(
-                self
-            ).record_verification_pass(branch, code_hash),
-            evaluate=self._evaluate,
-            apply_decision_and_finalize=self._apply_decision_and_finalize,
-            record_step=self._record_step,
-            decision_reason_codes_for=self._decision_reason_codes_for,
-            run_explore_step=self._explore_step_pipeline.run,
-            run_eval_step_callback=self._run_eval_step,
-            run_reconcile_step_callback=self._run_reconcile_step,
-            increment_round=self._increment_round,
-            increment_rounds_since_last_promote=self._increment_rounds_since_last_promote,
-            hypothesis_store=self._hyp_store,
-        )
-        self._proposal_pipeline = ProposalPipeline(
-            creative=self._creative,
-            problem_runtime=self._problem_runtime,
-            classifier=self._classifier,
-            branch_controller=self._branch_ctrl,
-            hypothesis_store=self._hyp_store,
-            branch_workspaces=self._branch_workspaces,
-            champion_lock=self._champion_lock,
-            get_champion=lambda: self._champion,
-            step_history=self._step_history,
-            failure_streak=self._failure_streak,
-            consume_forced_locus=self._consume_forced_locus,
-            search_memory=self._search_memory,
-            get_saturation_analyzer=lambda: self._saturation_analyzer,
-            get_baseline_metrics=lambda: self._baseline_metrics,
-            get_latest_weight_opt_result=lambda: self._latest_weight_opt_result,
-            research_log=self._research_log,
-            handle_failure=self._handle_failure,
-            circuit_breaker=self._circuit_breaker,
-            mark_balance_exhausted=lambda: setattr(self, "_balance_exhausted", True),
-        )
-        self._governance = CampaignGovernanceService(
-            branch_controller=self._branch_ctrl,
-            termination_checker=self._term_checker,
-            plateau=self._plateau,
-            stagnation_detector=self._stagnation_detector,
-            get_step_history=lambda: self._step_history,
-            get_failure_streak=lambda: self._failure_streak,
-            diagnostics=self._diagnostics,
-            hard_abandon_counted_branches=lambda: self._hard_abandon_counted_branches,
-            get_saturation_analyzer=lambda: self._saturation_analyzer,
-            get_baseline_metrics=lambda: self._baseline_metrics,
-            get_stagnation_signals=lambda: self._stagnation_signals,
-            set_stagnation_signals=lambda signals: setattr(
-                self,
-                "_stagnation_signals",
-                signals,
-            ),
-            get_round_num=lambda: self._round_num,
-            get_rounds_since_last_promote=lambda: self._rounds_since_last_promote,
-            get_n_experiments=lambda: self._n_experiments,
-            get_start_time=lambda: self._start_time,
-            get_recent_abandoned_count=lambda: self._recent_abandoned_count,
-            set_recent_abandoned_count=lambda value: setattr(
-                self,
-                "_recent_abandoned_count",
-                value,
-            ),
-            get_hard_stagnation_escape_used=lambda: self._hard_stagnation_escape_used,
-            set_hard_stagnation_escape_used=lambda value: setattr(
-                self,
-                "_hard_stagnation_escape_used",
-                value,
-            ),
-            get_soft_abandon_streak=lambda: self._soft_abandon_streak,
-            set_soft_abandon_streak=lambda value: setattr(
-                self,
-                "_soft_abandon_streak",
-                value,
-            ),
-            get_operator_categories=lambda: list(
-                getattr(self._spec, "operator_categories", [])
-            ),
-            set_last_stop_reason=lambda reason: setattr(
-                self,
-                "_last_stop_reason",
-                reason,
-            ),
-        )
-        self._campaign_loop = CampaignLoop(
-            write_status=lambda **kwargs: self._write_status(**kwargs),
-            drain_weight_opt_events=lambda: self._drain_weight_opt_events(),
-            should_stop=lambda: self.should_stop(),
-            get_last_stop_reason=lambda: self._last_stop_reason,
-            set_last_stop_reason=lambda reason: setattr(self, "_last_stop_reason", reason),
-            get_circuit_breaker=lambda: self._circuit_breaker,
-            circuit_breaker_threshold=MAX_CONSECUTIVE_LLM_FAILURES,
-            run_one_step=lambda: self.run_one_step(),
-            run_stagnation_check=lambda: self._run_stagnation_check(),
-            check_soft_stagnation=lambda: self._check_soft_stagnation(),
-            write_campaign_summary=lambda: self._write_campaign_summary(),
-            get_final_wait_timeout=lambda: getattr(
-                self._spec.parameter_search,
-                "final_wait_timeout_sec",
-                600.0,
-            ),
-            wait_weight_opt_all=lambda timeout: self._weight_opt_coord.wait_all(
-                timeout=timeout
-            ),
         )
 
     # ------------------------------------------------------------------

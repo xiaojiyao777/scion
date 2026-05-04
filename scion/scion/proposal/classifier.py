@@ -4,22 +4,20 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Literal, Optional
+
+from scion.proposal.mechanism_labels import (
+    UNKNOWN_FAMILY_LABEL,
+    extract_mechanism_label,
+    taxonomy_family_labels,
+)
 
 logger = logging.getLogger(__name__)
 
 TAXONOMY_VERSION = "v1"
 
 TAXONOMY = [
-    "subcategory_merge_consolidate",
-    "subcategory_chain_rotation",
-    "intra_subcat_repack",
-    "cross_subcat_displacement",
-    "vehicle_elimination_cost",
-    "subcat_rebuild_destroy",
-    "order_level_reassign",
-    "generic_merge",
-    "NEW_FAMILY",
+    UNKNOWN_FAMILY_LABEL,
 ]
 
 _CLASSIFIER_PROMPT = """\
@@ -33,18 +31,6 @@ Respond with ONLY the category name, nothing else.
 Hypothesis: {hypothesis_text}
 """
 
-_FALLBACK_KEYWORDS = [
-    (["destroy", "rebuild"], "subcat_rebuild_destroy"),
-    (["subcategor", "consolidat", "merge"], "subcategory_merge_consolidate"),
-    (["chain", "rotat"], "subcategory_chain_rotation"),
-    (["drain", "evacuate", "evict", "purif", "repack"], "intra_subcat_repack"),
-    (["displace", "cross"], "cross_subcat_displacement"),
-    (["eliminat", "remove_vehicle", "kill", "cost", "downsize"], "vehicle_elimination_cost"),
-    (["reassign", "order_level"], "order_level_reassign"),
-    (["swap", "generic", "merge"], "generic_merge"),
-]
-
-
 @dataclass(frozen=True)
 class ClassificationResult:
     family_id: str
@@ -52,32 +38,28 @@ class ClassificationResult:
     taxonomy_version: str = TAXONOMY_VERSION
 
 
-def _normalise_taxonomy(taxonomy: Optional[Iterable[str]]) -> list[str]:
-    values = [str(t).strip() for t in (taxonomy or []) if str(t).strip()]
+def _normalise_taxonomy(taxonomy: Any = None) -> list[str]:
+    values = taxonomy_family_labels(taxonomy)
     return values or list(TAXONOMY)
 
 
 def _keyword_classify(
     hypothesis_text: str,
-    taxonomy: Optional[Iterable[str]] = None,
+    taxonomy: Any = None,
 ) -> str:
-    text_lower = hypothesis_text.lower()
-    custom_taxonomy = _normalise_taxonomy(taxonomy)
-    if taxonomy:
-        for label in custom_taxonomy:
-            tokens = [t for t in label.lower().replace("-", "_").split("_") if t]
-            if tokens and all(token in text_lower for token in tokens):
-                return label
-        return "NEW_FAMILY"
-
-    for keywords, label in _FALLBACK_KEYWORDS:
-        if any(kw in text_lower for kw in keywords):
-            return label
-    return "NEW_FAMILY"
+    candidate_labels = _normalise_taxonomy(taxonomy)
+    label = extract_mechanism_label(hypothesis_text, taxonomy=taxonomy or candidate_labels)
+    if label in candidate_labels:
+        return label
+    return UNKNOWN_FAMILY_LABEL
 
 
 class HypothesisFamilyClassifier:
     """Semantic hypothesis classifier using a lightweight LLM call.
+
+    The framework default taxonomy is intentionally domain-neutral. Problem
+    packages that want semantic families must pass an explicit taxonomy from
+    their problem spec.
 
     Falls back to keyword matching if the LLM call fails.
     Returns ClassificationResult with provenance (source + taxonomy_version).
@@ -87,14 +69,14 @@ class HypothesisFamilyClassifier:
         self,
         llm_client: Optional[Any] = None,
         *,
-        taxonomy: Optional[Iterable[str]] = None,
+        taxonomy: Any = None,
         taxonomy_version: str = TAXONOMY_VERSION,
     ) -> None:
         self._client = llm_client
         self._model = os.environ.get("SCION_CLASSIFIER_MODEL", "claude-sonnet-4-6")
-        custom_taxonomy = [str(t).strip() for t in (taxonomy or []) if str(t).strip()]
-        self._custom_taxonomy = custom_taxonomy or None
-        self._taxonomy = self._custom_taxonomy or list(TAXONOMY)
+        custom_taxonomy = taxonomy if taxonomy_family_labels(taxonomy) else None
+        self._custom_taxonomy = custom_taxonomy
+        self._taxonomy = taxonomy_family_labels(custom_taxonomy) or list(TAXONOMY)
         self._taxonomy_set = frozenset(self._taxonomy)
         self._taxonomy_version = taxonomy_version
 

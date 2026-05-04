@@ -80,6 +80,47 @@ family_taxonomy:
     - route_local
     - route_pair
     - ruin_recreate
+  aliases:
+    route_local:
+      - route local
+      - intra route
+      - intra-route
+      - within route
+      - same route
+      - 2 opt
+      - 2-opt
+      - or opt
+      - or-opt
+      - local search
+    route_pair:
+      - route pair
+      - route-pair
+      - inter route
+      - inter-route
+      - cross route
+      - cross-route
+      - between routes
+      - between route
+      - two route
+      - 2 opt exchange
+      - 2-opt exchange
+      - 2 opt star
+      - 2 opt*
+      - 2-opt*
+      - exchange
+      - relocate
+      - swap
+      - merge routes
+      - merge route
+      - combine routes
+      - combine route
+    ruin_recreate:
+      - ruin
+      - recreate
+      - destroy
+      - rebuild
+      - repair
+      - remove and insert
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"

@@ -87,6 +87,9 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "route_pair",
         "ruin_recreate",
     ]
+    assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
+    assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]
+    assert "ruin" in legacy.family_taxonomy.aliases["ruin_recreate"]
     assert legacy.search_space.frozen == [
         "adapter.py",
         "models.py",
@@ -105,6 +108,19 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         bridge.operator_execute_signature
         == "execute(self, solution, instance, rng) -> CvrpSolution"
     )
+
+
+def test_warehouse_problem_spec_declares_legacy_family_taxonomy() -> None:
+    warehouse_dir = PROBLEMS_DIR / "warehouse_delivery"
+    spec = _load_spec(warehouse_dir / "problem-v1.yaml")
+
+    assert spec.family_taxonomy is not None
+    assert "subcategory_consolidation" in spec.family_taxonomy.families
+    assert "order_swap" in spec.family_taxonomy.families
+    assert "cost_reduction" in spec.family_taxonomy.families
+    assert "subcategory swap" in spec.family_taxonomy.aliases["subcategory_consolidation"]
+    assert "swap orders" in spec.family_taxonomy.aliases["order_swap"]
+    assert "downsize" in spec.family_taxonomy.aliases["cost_reduction"]
 
 
 def test_load_problem_spec_v1_resolves_placeholder_root_dir() -> None:

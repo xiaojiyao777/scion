@@ -19,6 +19,9 @@ from scion.proposal.context_manager import (
     ContextManager, build_exploration_coverage, _extract_families_from_steps,
     _build_strategy_guidance,
 )
+from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 from scion.proposal.research_log import CampaignResearchLog, BranchSummary
 
 
@@ -114,7 +117,10 @@ class TestFamiliesGlobal:
             _make_step(hyp_text="subcategory swap", branch_id="b-other", round_num=3, win_rate=0.2),
         ]
         # Use _extract_families_from_steps with all_steps (simulating the fix)
-        families = _extract_families_from_steps(steps)
+        families = _extract_families_from_steps(
+            steps,
+            taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+        )
         coverage = build_exploration_coverage(families)
         # Coverage should include families from ALL branches
         assert "subcategory_consolidation" in coverage
@@ -128,7 +134,10 @@ class TestFamiliesGlobal:
             _make_step(hyp_text="subcategory swap", branch_id="b1", round_num=3, win_rate=0.1),
             _make_step(hyp_text="subcategory swap", branch_id="b2", round_num=4, win_rate=0.1),
         ]
-        families = _extract_families_from_steps(steps)
+        families = _extract_families_from_steps(
+            steps,
+            taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+        )
         guidance = _build_strategy_guidance(families)
         # With 4 total failures, strategy guidance should flag this direction
         assert guidance  # non-empty

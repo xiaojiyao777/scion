@@ -24,11 +24,20 @@ from typing import Any, Optional
 class ProblemRuntime:
     """Owns problem spec + adapter + ContextManager."""
 
-    def __init__(self, *, problem_spec: Any, adapter: Optional[Any] = None) -> None:
+    def __init__(
+        self,
+        *,
+        problem_spec: Any,
+        adapter: Optional[Any] = None,
+        runtime_slow_threshold: float = 2.0,
+    ) -> None:
         self._spec = problem_spec
         self._adapter = adapter
         from scion.proposal.context_manager import ContextManager
-        self._ctx_manager = ContextManager(adapter=adapter)
+        self._ctx_manager = ContextManager(
+            adapter=adapter,
+            runtime_slow_threshold=runtime_slow_threshold,
+        )
 
     # ------------------------------------------------------------------
     # Accessors

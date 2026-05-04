@@ -295,9 +295,9 @@ class Branch:
 class HypothesisFamily:
     """Tracks a mechanism-level family of hypotheses for diversity detection (T07)."""
     family_id: str
-    mechanism_label: str      # e.g. "subcategory_consolidation", "destroy_rebuild"
+    mechanism_label: str      # e.g. "local_refinement", "destroy_rebuild"
     action_pattern: str       # "create_new" / "modify" / "remove"
-    locus_pattern: str        # "vehicle_level" / "order_level"
+    locus_pattern: str        # problem-defined operator category
     evidence_count: int
     statuses: List[str]       # ["rejected", "promoted", ...]
 

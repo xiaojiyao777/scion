@@ -90,6 +90,64 @@ llm_hints:
     Operators subclass operators.base.Operator and implement
     execute(self, solution, rng) -> Solution.
 
+family_taxonomy:
+  version: "warehouse-delivery-v1"
+  families:
+    - destroy_rebuild
+    - subcategory_consolidation
+    - order_swap
+    - rebalance
+    - split_operator
+    - cost_reduction
+    - intra_subcat_repack
+    - vehicle_elimination
+  aliases:
+    destroy_rebuild:
+      - destroy
+      - rebuild
+      - destroy and rebuild
+    subcategory_consolidation:
+      - subcategory
+      - subcategories
+      - subcategor
+      - consolidate
+      - consolidation
+      - merge subcategory
+      - subcategory merge
+      - subcategory swap
+    order_swap:
+      - swap
+      - swap orders
+      - order swap
+      - reassign orders
+      - order level
+      - order_level
+      - exchange orders
+    rebalance:
+      - rebalance
+      - redistribute
+    split_operator:
+      - split
+    cost_reduction:
+      - cost
+      - reduce cost
+      - downsize
+      - downsizing
+      - vehicle type
+      - upgrade
+    intra_subcat_repack:
+      - drain
+      - evacuate
+      - evict
+      - purify
+      - repack
+    vehicle_elimination:
+      - eliminate vehicle
+      - eliminate weak vehicles
+      - remove vehicle
+      - remove_vehicle
+      - kill vehicle
+
 adapter:
   import_path: "scion.problems.warehouse_delivery.adapter:WarehouseDeliveryAdapter"
   api_version: "v1"

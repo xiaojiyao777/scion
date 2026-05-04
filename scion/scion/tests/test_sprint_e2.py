@@ -30,12 +30,17 @@ from scion.core.models import (
 )
 from scion.proposal.context_manager import (
     ContextManager,
+    _build_runtime_feedback,
     _build_strategy_guidance,
     _build_what_worked_section,
     _extract_families_from_steps,
     assign_family_id,
     build_exploration_coverage,
 )
+from scion.tests.taxonomy_helpers import cvrp_family_taxonomy, warehouse_family_taxonomy
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
+CVRP_FAMILY_TAXONOMY = cvrp_family_taxonomy()
 
 
 # ---------------------------------------------------------------------------
@@ -183,28 +188,81 @@ def test_t11_screening_has_40_percent_large():
 # ---------------------------------------------------------------------------
 
 def test_family_assignment_by_keywords_subcategory():
-    fid = assign_family_id("Merge subcategory vehicles to reduce splits", "create_new", "vehicle_level")
+    fid = assign_family_id(
+        "Merge subcategory vehicles to reduce splits",
+        "create_new",
+        "vehicle_level",
+        taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+    )
     assert "subcategory_consolidation" in fid
 
 
 def test_family_assignment_by_keywords_destroy():
-    fid = assign_family_id("Destroy and rebuild the vehicle assignment", "create_new", "vehicle_level")
+    fid = assign_family_id(
+        "Destroy and rebuild the vehicle assignment",
+        "create_new",
+        "vehicle_level",
+        taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+    )
     assert "destroy_rebuild" in fid
 
 
 def test_family_assignment_by_keywords_swap():
-    fid = assign_family_id("Swap orders between vehicles", "modify", "order_level")
+    fid = assign_family_id(
+        "Swap orders between vehicles",
+        "modify",
+        "order_level",
+        taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+    )
     assert "order_swap" in fid
 
 
 def test_family_assignment_by_keywords_cost():
-    fid = assign_family_id("Downsize vehicles to reduce total cost", "modify", "vehicle_level")
+    fid = assign_family_id(
+        "Downsize vehicles to reduce total cost",
+        "modify",
+        "vehicle_level",
+        taxonomy=WAREHOUSE_MECHANISM_TAXONOMY,
+    )
     assert "cost_reduction" in fid
 
 
 def test_family_assignment_default():
     fid = assign_family_id("Some unrecognised hypothesis text xyz", "modify", "vehicle_level")
     assert "generic" in fid
+
+
+def test_family_assignment_default_does_not_emit_warehouse_labels():
+    fid = assign_family_id("Merge subcategory vehicles to reduce splits", "create_new", "vehicle_level")
+    assert fid == "generic/create_new/vehicle_level"
+    assert "subcategory_consolidation" not in fid
+    assert "cost_reduction" not in fid
+
+
+def test_context_family_extraction_route_taxonomy_blocks_warehouse_labels():
+    steps = [
+        _make_step(
+            hypothesis_text="merge subcategory clusters and reduce cost",
+            action="create_new",
+            locus="route_pair",
+        ),
+        _make_step(
+            hypothesis_text="try route-pair 2-opt* exchange",
+            action="modify",
+            locus="route_pair",
+        ),
+    ]
+
+    families = _extract_families_from_steps(
+        steps,
+        taxonomy=CVRP_FAMILY_TAXONOMY,
+    )
+    family_ids = {f.family_id for f in families}
+
+    assert "NEW_FAMILY/create_new/route_pair" in family_ids
+    assert "route_pair/modify/route_pair" in family_ids
+    assert all("subcategory_consolidation" not in fid for fid in family_ids)
+    assert all("cost_reduction" not in fid for fid in family_ids)
 
 
 def test_family_id_includes_action_and_locus():
@@ -223,7 +281,7 @@ def test_coverage_report_format_shows_family_ids():
         _make_step(hypothesis_text="Merge subcategory vehicles", action="create_new", locus="vehicle_level"),
         _make_step(hypothesis_text="Swap orders between vehicles", action="modify", locus="order_level"),
     ]
-    families = _extract_families_from_steps(steps)
+    families = _extract_families_from_steps(steps, taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
     report = build_exploration_coverage(families)
     assert "Exploration Coverage" in report
     assert "subcategory_consolidation" in report
@@ -233,7 +291,7 @@ def test_coverage_report_format_shows_family_ids():
 def test_coverage_report_shows_unexplored_actions():
     """T07: Coverage report flags unexplored action types."""
     steps = [_make_step(action="modify", locus="vehicle_level")]
-    families = _extract_families_from_steps(steps)
+    families = _extract_families_from_steps(steps, taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
     report = build_exploration_coverage(families)
     assert "create_new" in report  # unexplored action should be flagged
 
@@ -253,7 +311,7 @@ def test_family_tracking_across_rounds():
         _make_step(round_num=2, hypothesis_text="Subcategory merge attempt"),
         _make_step(round_num=3, hypothesis_text="Subcategory consolidation improved"),
     ]
-    families = _extract_families_from_steps(steps)
+    families = _extract_families_from_steps(steps, taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
     subcat_families = [f for f in families if "subcategory_consolidation" in f.family_id]
     assert len(subcat_families) == 1, "Same mechanism should be one family"
     assert subcat_families[0].evidence_count == 3
@@ -265,7 +323,7 @@ def test_family_tracking_different_actions_are_different_families():
         _make_step(hypothesis_text="Merge subcategory vehicles", action="create_new", locus="vehicle_level"),
         _make_step(hypothesis_text="Subcategory merge refinement", action="modify", locus="vehicle_level"),
     ]
-    families = _extract_families_from_steps(steps)
+    families = _extract_families_from_steps(steps, taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
     subcat_families = [f for f in families if "subcategory_consolidation" in f.family_id]
     assert len(subcat_families) == 2, "Different actions = different families"
 
@@ -384,6 +442,74 @@ def test_build_hypothesis_context_includes_strategy_guidance(tmp_path):
     ctx = cm.build_hypothesis_context(branch, champion, spec, [], [], step_history=[])
     assert "strategy_guidance" in ctx
     assert "exploration_coverage" in ctx
+
+
+def test_build_hypothesis_context_uses_cvrp_family_taxonomy(tmp_path):
+    """CVRP-style taxonomies must not receive warehouse family labels."""
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1, operator_pool={},
+        solver_config_hash="abc", code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(branch_id="b1", state=BranchState.EXPLORE, base_champion_id=1, base_champion_hash="x")
+    from scion.config.problem import ProblemSpec, SearchSpace
+    spec = ProblemSpec(
+        name="cvrp", root_dir=str(code_dir),
+        operator_categories=["route_local", "route_pair", "ruin_recreate"],
+        search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
+    )
+    object.__setattr__(
+        spec,
+        "family_taxonomy",
+        CVRP_FAMILY_TAXONOMY,
+    )
+    steps = [
+        _make_step(
+            branch_id="b1",
+            round_num=1,
+            hypothesis_text="Swap customers between routes to reduce travel cost",
+            locus="route_pair",
+            win_rate=0.1,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=2,
+            hypothesis_text="Merge subcategory-shaped buckets with a cost guard",
+            locus="route_pair",
+            win_rate=0.1,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=3,
+            hypothesis_text="Split high-cost subcategory clusters with local cleanup",
+            locus="route_local",
+            win_rate=0.1,
+        ),
+    ]
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=steps
+    )
+    rendered = "\n".join(
+        str(ctx[key])
+        for key in (
+            "exploration_coverage",
+            "strategy_guidance",
+            "experiment_history",
+            "search_control_guidance",
+        )
+    )
+
+    assert "route_pair" in rendered or "route_local" in rendered or "generic" in rendered
+    for legacy_label in (
+        "order_swap",
+        "subcategory_consolidation",
+        "cost_reduction",
+        "split_operator",
+    ):
+        assert legacy_label not in rendered
 
 
 def test_build_hypothesis_context_includes_runtime_feedback(tmp_path):
@@ -548,6 +674,95 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
     assert "Recent slow screening cases" in ctx["runtime_feedback"]
     assert "slow-A.vrp" in ctx["runtime_feedback"]
     assert "runtime_ratio=3.25x" in ctx["runtime_feedback"]
+
+
+def test_runtime_feedback_uses_configurable_slow_case_threshold(tmp_path):
+    raw_metrics = tmp_path / "threshold_metrics.json"
+    raw_metrics.write_text(json.dumps({
+        "total_pairs": 2,
+        "valid_pairs": 2,
+        "pairs": [
+            {
+                "case": "/tmp/cases/slow-15.vrp",
+                "seed": 1,
+                "runtime_ratio": 1.5,
+                "candidate_elapsed_ms": 1500,
+                "champion_elapsed_ms": 1000,
+            },
+            {
+                "case": "/tmp/cases/slow-25.vrp",
+                "seed": 2,
+                "runtime_ratio": 2.5,
+                "candidate_elapsed_ms": 2500,
+                "champion_elapsed_ms": 1000,
+            },
+        ],
+    }))
+    step = _make_step(round_num=7, hypothesis_text="threshold feedback", win_rate=0.7)
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="pass",
+        reason_codes=("TEST",),
+        exposed_summary="test",
+        raw_metrics_ref=str(raw_metrics),
+    )
+
+    strict = _build_runtime_feedback([step], slow_case_threshold=1.25)
+    lenient = _build_runtime_feedback([step], slow_case_threshold=3.0)
+
+    assert "slow-15.vrp" in strict
+    assert "slow-25.vrp" in strict
+    assert "slow-25.vrp" not in lenient
+
+
+def test_runtime_feedback_distinguishes_noop_tie_dominated_operator(tmp_path):
+    raw_metrics = tmp_path / "noop_metrics.json"
+    raw_metrics.write_text(json.dumps({
+        "total_pairs": 4,
+        "valid_pairs": 4,
+        "failed_pairs": 0,
+        "candidate_failed_pairs": 0,
+        "champion_failed_pairs": 0,
+        "pairs": [
+            {
+                "case": f"/tmp/cases/tie-{i}.vrp",
+                "seed": i,
+                "candidate_runtime": {
+                    "operator_attempts": 10,
+                    "operator_accepted": 0,
+                    "operator_errors": 0,
+                    "operator_invalid_outputs": 0,
+                    "operator_stop_reason": "no_improvement_round",
+                },
+            }
+            for i in range(4)
+        ],
+    }))
+    step = _make_step(round_num=8, hypothesis_text="no accepted moves", win_rate=0.0)
+    stats = EvalStats(
+        n_cases=4, wins=0, losses=0, ties=4,
+        win_rate=0.0, median_delta=0.0, ci_low=0.0, ci_high=0.0,
+        total_pairs=4, attempted_pairs=4, valid_pairs=4,
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=stats,
+        gate_outcome="continue",
+        reason_codes=("tie_dominated",),
+        exposed_summary="test",
+        raw_metrics_ref=str(raw_metrics),
+    )
+
+    rendered = _build_runtime_feedback([step])
+
+    assert "no accepted operator moves" in rendered
+    assert "tie-dominated screening evidence" in rendered
+    assert "operator_stop_reason=no_improvement_round:4" in rendered
+    assert "not schema/runtime failure" in rendered
+    assert "no schema/runtime failure detected" in rendered
+    assert "candidate_failure=" not in rendered
+    assert "runtime guard failed" not in rendered
 
 
 def test_build_hypothesis_context_distinguishes_contract_failure(tmp_path):

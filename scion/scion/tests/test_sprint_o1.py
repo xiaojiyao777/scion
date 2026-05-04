@@ -12,6 +12,9 @@ from scion.proposal.classifier import (
     HypothesisFamilyClassifier,
     TAXONOMY_VERSION,
 )
+from scion.tests.taxonomy_helpers import warehouse_family_taxonomy
+
+WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +26,7 @@ class TestClassifierWiring:
     def test_classify_and_store(self, tmp_path) -> None:
         registry = LineageRegistry(str(tmp_path / "test.db"))
         store = HypothesisStore(registry)
-        classifier = HypothesisFamilyClassifier()
+        classifier = HypothesisFamilyClassifier(taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
 
         result = classifier.classify("destroy and rebuild all vehicles")
         h = HypothesisRecord(
@@ -39,14 +42,14 @@ class TestClassifierWiring:
         )
         store.save(h)
         loaded = store.get_one("h1")
-        assert loaded.family_id == "subcat_rebuild_destroy"
+        assert loaded.family_id == "destroy_rebuild"
         assert loaded.family_source == "keyword"
         assert loaded.taxonomy_version == TAXONOMY_VERSION
 
     def test_campaign_has_classifier(self) -> None:
-        from scion.core.campaign import CampaignManager
+        from scion.core import campaign_composition
         import inspect
-        src = inspect.getsource(CampaignManager.__init__)
+        src = inspect.getsource(campaign_composition.compose_campaign_services)
         assert "HypothesisFamilyClassifier" in src
 
 

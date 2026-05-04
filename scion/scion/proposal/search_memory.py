@@ -2,91 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from scion.core.models import StepRecord, HypothesisProposal
+from scion.proposal.mechanism_labels import extract_mechanism_label
 
 
-# ---------------------------------------------------------------------------
-# Mechanism label extraction (shared with context_manager.py)
-# ---------------------------------------------------------------------------
-
-_MECHANISM_KEYWORDS: List[tuple] = [
-    (["destroy", "rebuild"], "destroy_rebuild"),
-    (["subcategor", "consolidat", "merge"], "subcategory_consolidation"),
-    (["swap"], "order_swap"),
-    (["redistribute", "rebalance"], "rebalance"),
-    (["split"], "split_operator"),
-    (["cost", "downsize", "vehicle type", "upgrade"], "cost_reduction"),
-    (["drain", "evacuate", "evict", "purif"], "intra_subcat_repack"),
-    (["eliminate", "remove_vehicle", "kill"], "vehicle_elimination"),
-]
-_DEFAULT_MECHANISM = "generic"
-
-
-def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[List[str]] = None) -> str:
-    text_lower = hypothesis_text.lower()
-    if taxonomy:
-        normalized_text = _normalize_label_text(text_lower)
-        for label in taxonomy:
-            if _normalize_label_text(label) in normalized_text:
-                return label
-        route_label = _route_native_label(text_lower, taxonomy)
-        if route_label is not None:
-            return route_label
-    for keywords, label in _MECHANISM_KEYWORDS:
-        if any(kw in text_lower for kw in keywords):
-            return label
-    return _DEFAULT_MECHANISM
-
-
-def _normalize_label_text(value: str) -> str:
-    return (
-        value.lower()
-        .replace("_", " ")
-        .replace("-", " ")
-        .replace("*", " ")
-    )
-
-
-def _route_native_label(text_lower: str, taxonomy: List[str]) -> str | None:
-    taxonomy_set = set(taxonomy)
-    normalized = _normalize_label_text(text_lower)
-    if "route_pair" in taxonomy_set and any(
-        token in normalized
-        for token in (
-            "route pair",
-            "inter route",
-            "cross route",
-            "2 opt",
-            "exchange",
-            "relocate",
-            "swap",
-        )
-    ):
-        return "route_pair"
-    if "route_local" in taxonomy_set and any(
-        token in normalized
-        for token in (
-            "route local",
-            "intra route",
-            "2 opt",
-            "or opt",
-            "local search",
-        )
-    ):
-        return "route_local"
-    if "ruin_recreate" in taxonomy_set and any(
-        token in normalized
-        for token in (
-            "ruin",
-            "recreate",
-            "destroy",
-            "repair",
-        )
-    ):
-        return "ruin_recreate"
-    return None
+def _extract_mechanism_label(hypothesis_text: str, taxonomy: Any = None) -> str:
+    return extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
 
 
 def _make_family_key(mechanism_label: str, action: str, locus: str, target_file: str = "") -> str:
@@ -132,7 +55,7 @@ class CampaignSearchMemory:
     families: Dict[str, FamilyEntry] = field(default_factory=dict)
     coverage_counts: Dict[str, int] = field(default_factory=dict)  # locus/action → count
     recent_hypotheses: List[str] = field(default_factory=list)     # last N hypothesis texts for loop detection
-    family_taxonomy: Optional[List[str]] = None
+    family_taxonomy: Any = None
 
     # ---------------------------------------------------------------
     # Incremental update
