@@ -213,7 +213,11 @@ def test_registry_operator_can_improve_route_and_is_audited(
     }
     assert raw["runtime"]["operator_loaded"] == 1
     assert raw["runtime"]["operator_accepted"] == 1
-    assert raw["runtime"]["operator_attempts"] >= 1
+    assert raw["runtime"]["operator_attempts"] == 2
+    assert raw["runtime"]["operator_rounds"] == 2
+    assert raw["runtime"]["operator_rounds_with_acceptance"] == 1
+    assert raw["runtime"]["operator_no_improvement_rounds"] == 1
+    assert raw["runtime"]["operator_stop_reason"] == "no_improvement_round"
     assert {
         (event["operator"], event["status"])
         for event in raw["runtime"]["operator_events"]
@@ -223,6 +227,54 @@ def test_registry_operator_can_improve_route_and_is_audited(
     assert adapter.check_solution_consistency(artifact, instance).passed is True
     assert adapter.check_feasibility(artifact, instance).passed is True
     assert adapter.recompute_objective(artifact, instance) == raw["objective"]
+
+
+def test_noop_registry_operator_stops_after_one_no_improvement_round(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "operators" / "noop.py").write_text(
+        "\n".join(
+            [
+                "class NoopOperator:",
+                "    def execute(self, solution, instance, rng):",
+                "        return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "registry.yaml").write_text(
+        "\n".join(
+            [
+                "operators:",
+                "  - name: noop_operator",
+                "    file_path: operators/noop.py",
+                "    class_name: NoopOperator",
+                "    weight: 1.0",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+
+    assert raw["routes"] == [[1, 2, 3, 4, 5]]
+    assert raw["objective"]["total_distance"] == 16.0
+    assert raw["runtime"]["operator_loaded"] == 1
+    assert raw["runtime"]["operator_attempts"] == 1
+    assert raw["runtime"]["operator_accepted"] == 0
+    assert raw["runtime"]["operator_rounds"] == 1
+    assert raw["runtime"]["operator_rounds_with_acceptance"] == 0
+    assert raw["runtime"]["operator_no_improvement_rounds"] == 1
+    assert raw["runtime"]["operator_stop_reason"] == "no_improvement_round"
+    assert runtime_audit_failure_from_raw(raw) is None
 
 
 def test_workspace_local_cvrp_solution_is_coerced_and_can_improve(

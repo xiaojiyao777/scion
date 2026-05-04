@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, MutableMapping, Protocol
 
 from scion.core.models import (
@@ -101,12 +101,14 @@ class ProposalPipeline:
     handle_failure: Callable[[Branch, FailureEvent], None]
     circuit_breaker: CircuitBreakerLike
     mark_balance_exhausted: Callable[[], None]
+    hypothesis_failure_details: MutableMapping[str, str] = field(default_factory=dict)
 
     def generate_hypothesis(
         self,
         branch: Branch,
     ) -> tuple[HypothesisProposal | None, HypothesisRecord | None]:
         bid = branch.branch_id
+        self.hypothesis_failure_details.pop(bid, None)
         siblings = [
             b for b in self.branch_controller.get_active_branches()
             if b.branch_id != bid
@@ -136,6 +138,7 @@ class ProposalPipeline:
                 bid,
                 exc,
             )
+            self.hypothesis_failure_details[bid] = str(exc)
             self.mark_balance_exhausted()
             self.circuit_breaker.record_failure(str(exc))
             return None, None
@@ -146,6 +149,7 @@ class ProposalPipeline:
             ProposalValidationError,
         ) as exc:
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
+            self.hypothesis_failure_details[bid] = str(exc)
             self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
             self.circuit_breaker.record_failure(str(exc))
             return None, None
@@ -166,6 +170,9 @@ class ProposalPipeline:
             taxonomy_version=cls_result.taxonomy_version,
         )
         return hypothesis, record
+
+    def pop_hypothesis_failure_detail(self, branch_id: str) -> str | None:
+        return self.hypothesis_failure_details.pop(branch_id, None)
 
     def generate_code(
         self,

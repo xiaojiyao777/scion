@@ -476,6 +476,17 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
     )
     raw_metrics = tmp_path / "screening_metrics.json"
     raw_metrics.write_text(json.dumps({
+        "total_pairs": 3,
+        "valid_pairs": 1,
+        "failed_pairs": 2,
+        "candidate_failed_pairs": 1,
+        "champion_failed_pairs": 1,
+        "runtime_stats": {
+            "runtime_ratio_median": 3.25,
+            "runtime_delta_median_ms": 2250.0,
+            "runtime_regression_rate": 1.0,
+            "runtime_pairs": 1,
+        },
         "pairs": [
             {
                 "case": "/tmp/cases/slow-A.vrp",
@@ -483,6 +494,12 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
                 "runtime_ratio": 3.25,
                 "candidate_elapsed_ms": 3250,
                 "champion_elapsed_ms": 1000,
+                "candidate_runtime": {
+                    "operator_attempts": 20,
+                    "operator_accepted": 2,
+                    "operator_errors": 1,
+                    "operator_invalid_outputs": 1,
+                },
             }
         ],
         "failures": [
@@ -520,6 +537,45 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
     assert "Recent screening timeout/crash cases" in ctx["runtime_feedback"]
     assert "timeout-B.vrp" in ctx["runtime_feedback"]
     assert "candidate_failure=timeout" in ctx["runtime_feedback"]
+    assert "Recent screening failure causes" in ctx["runtime_feedback"]
+    assert "failed_pairs=2" in ctx["runtime_feedback"]
+    assert "candidate_failed_pairs=1" in ctx["runtime_feedback"]
+    assert "champion_failed_pairs=1" in ctx["runtime_feedback"]
+    assert "operator_attempts=20" in ctx["runtime_feedback"]
+    assert "operator_accepted=2" in ctx["runtime_feedback"]
+    assert "operator_errors=1" in ctx["runtime_feedback"]
+    assert "invalid_outputs=1" in ctx["runtime_feedback"]
     assert "Recent slow screening cases" in ctx["runtime_feedback"]
     assert "slow-A.vrp" in ctx["runtime_feedback"]
     assert "runtime_ratio=3.25x" in ctx["runtime_feedback"]
+
+
+def test_build_hypothesis_context_distinguishes_contract_failure(tmp_path):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1, operator_pool={},
+        solver_config_hash="abc", code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(branch_id="b1", state=BranchState.EXPLORE, base_champion_id=1, base_champion_hash="x")
+    from scion.config.problem import ProblemSpec, SearchSpace
+    spec = ProblemSpec(
+        name="test", root_dir=str(code_dir),
+        operator_categories=["vehicle_level", "order_level"],
+        search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
+    )
+    step = _make_step(
+        round_num=6,
+        hypothesis_text="invalid patch",
+        failure_stage="patch_contract",
+    )
+    step.failure_detail = "missing execute(self, solution, instance, rng)"
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[step]
+    )
+
+    assert "Recent contract failures" in ctx["runtime_feedback"]
+    assert "stage=patch_contract" in ctx["runtime_feedback"]
+    assert "missing execute" in ctx["runtime_feedback"]

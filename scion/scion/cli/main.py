@@ -75,6 +75,7 @@ def run(
     split: Optional[str] = typer.Option(None, "--split", help="Path to split_manifest.yaml"),
     seeds: Optional[str] = typer.Option(None, "--seeds", help="Path to seed_ledger.yaml"),
     time_limit_sec: Optional[int] = typer.Option(None, "--time-limit-sec", help="Per solver run time limit; defaults to problem solver.time_limit_sec"),
+    disable_early_stop: bool = typer.Option(False, "--disable-early-stop", help="Diagnostic mode: do not stop early on idle/stagnation signals"),
 ) -> None:
     """Run the Scion main loop.
 
@@ -239,9 +240,14 @@ def run(
         experiment_protocol=experiment_protocol,
         adapter=adapter,
         operator_execute_signature=operator_execute_signature,
+        force_continue_early_stop=disable_early_stop,
     )
 
-    typer.echo(f"Starting campaign: {spec.name} (max_rounds={rounds}, mock_llm={mock_llm})")
+    typer.echo(
+        f"Starting campaign: {spec.name} "
+        f"(max_rounds={rounds}, mock_llm={mock_llm}, "
+        f"disable_early_stop={disable_early_stop})"
+    )
     mgr.run(max_rounds=rounds)
 
     state_data = mgr.get_state()

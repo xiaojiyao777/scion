@@ -25,6 +25,18 @@ from scion.core.step_result import StepResult
 logger = logging.getLogger(__name__)
 
 
+def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text=f"Proposal generation failed: {detail}",
+        change_locus="proposal",
+        action="create_new",
+        target_file=None,
+        predicted_direction="exploratory",
+        target_weakness="proposal_generation",
+        expected_effect="no candidate generated",
+    )
+
+
 @dataclass(frozen=True)
 class _VerificationOutcome:
     step_result: Optional[StepResult]
@@ -72,6 +84,7 @@ class ExploreStepPipeline:
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
+    proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
@@ -129,6 +142,25 @@ class ExploreStepPipeline:
         else:
             hypothesis, h_record = self.generate_hypothesis(branch)
             if hypothesis is None:
+                failure_detail = (
+                    self.proposal_failure_detail_for(bid)
+                    or "hypothesis generation failed"
+                )
+                self._record_proposal_fail_event(bid, failure_detail)
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=_proposal_failure_hypothesis(failure_detail),
+                        patch=None,
+                        contract_passed=False,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="proposal",
+                        failure_detail=failure_detail,
+                    )
+                )
                 return StepResult(
                     action="explore",
                     branch_id=bid,
@@ -585,6 +617,25 @@ class ExploreStepPipeline:
                 action=hypothesis.action,
                 target_file=hypothesis.target_file,
                 failure_reason=failure_reason,
+            )
+        except Exception:
+            pass
+
+    def _record_proposal_fail_event(self, branch_id: str, failure_detail: str) -> None:
+        try:
+            self.registry.record_event(
+                {
+                    "campaign_id": self.campaign_id,
+                    "branch_id": branch_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "event_kind": "proposal_fail",
+                    "hypothesis_text": f"Proposal generation failed: {failure_detail}"[:500],
+                    "contract_result": "skipped",
+                    "verification_result": "skipped",
+                    "canary_result": "skipped",
+                    "stage": "proposal",
+                    "decision_reason": failure_detail[:500],
+                }
             )
         except Exception:
             pass

@@ -16,6 +16,13 @@ from scion.lineage.branch_store import BranchStore, HypothesisStore
 runner = CliRunner()
 
 
+def test_run_help_exposes_disable_early_stop_option() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--disable-early-stop" in result.output
+
+
 def _make_campaign(tmp_path: Path) -> Path:
     """Set up a minimal campaign dir with scion.db and .scion_state.json."""
     campaign_dir = tmp_path / "campaign"
@@ -295,4 +302,3 @@ class TestCliHelpText:
         result = runner.invoke(app, ["postmortem", "--help"])
         assert result.exit_code == 0
         assert "--json" in result.output
-

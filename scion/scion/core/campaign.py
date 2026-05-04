@@ -130,6 +130,7 @@ class CampaignManager:
         operator_execute_signature: Optional[str] = None,
         objective_lower_bounds: Optional[Dict[str, float]] = None,
         use_objective_lower_bounds_for_early_stop: bool = False,
+        force_continue_early_stop: bool = False,
     ) -> None:
         # v0.3 B3: ProblemRuntime owns problem_spec + adapter + ContextManager.
         # Instantiate FIRST so the backward-compat properties below (_spec,
@@ -293,8 +294,14 @@ class CampaignManager:
         self._baseline_metrics: Optional[Dict[str, float]] = None
 
         # W3 / v0.3 B1: PlateauController — idle counter + early-stop + forced locus
+        from scion.core.early_stop import EarlyStopController
         from scion.core.plateau_controller import PlateauController
-        self._plateau = PlateauController()
+        early_stop_controller = (
+            EarlyStopController(force_continue=True)
+            if force_continue_early_stop
+            else None
+        )
+        self._plateau = PlateauController(early_stop=early_stop_controller)
         # Legacy attribute names kept as thin passthroughs for now (branch_store
         # and tests may still read them). Prefer self._plateau going forward.
         self._early_stop = self._plateau.early_stop
@@ -479,6 +486,7 @@ class CampaignManager:
             evaluate=self._evaluate,
             apply_decision_and_finalize=self._apply_decision_and_finalize,
             decision_reason_codes_for=self._decision_reason_codes_for,
+            proposal_failure_detail_for=self._proposal_failure_detail_for,
         )
         self._branch_step_runner = BranchStepRunner(
             branch_controller=self._branch_ctrl,
@@ -862,6 +870,9 @@ class CampaignManager:
         self, branch: Branch
     ) -> Tuple[Optional[HypothesisProposal], Optional[HypothesisRecord]]:
         return self._proposal_pipeline.generate_hypothesis(branch)
+
+    def _proposal_failure_detail_for(self, branch_id: str) -> Optional[str]:
+        return self._proposal_pipeline.pop_hypothesis_failure_detail(branch_id)
 
     # ------------------------------------------------------------------
     # Round 2: generate code

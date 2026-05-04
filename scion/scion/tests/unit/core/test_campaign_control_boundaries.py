@@ -621,3 +621,24 @@ class TestContractFailStepRecord:
                 f"StepRecord.decision should be None for contract failure, "
                 f"but got {step.decision!r}"
             )
+
+    def test_hypothesis_proposal_failure_writes_step_record(self, tmp_path):
+        """Round-1 LLM/schema failures must appear in step history and summaries."""
+        cm = _campaign(tmp_path, llm_client=MockLLMClient(mode="format_error"))
+
+        result = cm.run_one_step()
+
+        proposal_steps = [
+            s for s in cm._step_history
+            if s.failure_stage == "proposal"
+        ]
+        assert result.reason == "hypothesis generation failed"
+        assert proposal_steps, "proposal failure should write a StepRecord"
+        step = proposal_steps[0]
+        assert step.round_num == 1
+        assert step.decision is None
+        assert step.protocol_result is None
+        assert "simulated format error" in (step.failure_detail or "")
+        assert step.hypothesis.change_locus == "proposal"
+        events = cm._registry.query_by_branch(result.branch_id)
+        assert any(e.get("event_kind") == "proposal_fail" for e in events)

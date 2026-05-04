@@ -71,10 +71,11 @@ def solve_baseline(
     smoke tests fall back to the deterministic Scion construction.
     """
 
-    resolved = Path(instance_path)
+    resolved = Path(instance_path).resolve(strict=False)
+    is_vrp = resolved.suffix.lower() == ".vrp"
     baseline_root = _find_vrp_baseline_root()
-    baseline_required = resolved.suffix.lower() == ".vrp" and baseline_root is not None
-    if resolved.suffix.lower() == ".vrp" and baseline_root is not None:
+    baseline_required = is_vrp and _baseline_required_for_instance(resolved)
+    if is_vrp and baseline_required and baseline_root is not None:
         budget = _baseline_time_budget(time_limit_sec)
         try:
             solution, audit = _solve_with_vrp_baseline(
@@ -87,10 +88,6 @@ def solve_baseline(
             )
             return solution, audit
         except Exception as exc:
-            # Synthetic fixtures and developer machines may not have the full
-            # baseline dependency path available. The audit keeps the fallback
-            # visible; formal runs should treat repeated fallback as a setup
-            # problem before interpreting quality.
             fallback = solve(instance, rng)
             return fallback, {
                 "baseline_mode": "scion_nearest_neighbor_fallback",
@@ -100,7 +97,7 @@ def solve_baseline(
                 "baseline_routes": len(fallback.routes),
                 "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
             }
-    if resolved.suffix.lower() == ".vrp" and baseline_required:
+    if is_vrp and baseline_required:
         fallback = solve(instance, rng)
         return fallback, {
             "baseline_mode": "scion_nearest_neighbor_fallback",
@@ -141,6 +138,9 @@ def improve_with_registry_operators(
         "operator_errors": 0,
         "operator_invalid_outputs": 0,
         "operator_rounds": 0,
+        "operator_no_improvement_rounds": 0,
+        "operator_rounds_with_acceptance": 0,
+        "operator_stop_reason": "",
         "operator_events": [],
     }
     operators = _load_registry_operators(
@@ -156,10 +156,15 @@ def improve_with_registry_operators(
     fatal_operator_failure = False
     for round_index in range(_MAX_OPERATOR_ROUNDS):
         if _time_exhausted(start_time, time_limit_sec):
+            audit["operator_stop_reason"] = "time_limit"
             break
+        round_accepted = 0
+        round_completed = True
         audit["operator_rounds"] = round_index + 1
         for operator in operators:
             if _time_exhausted(start_time, time_limit_sec):
+                audit["operator_stop_reason"] = "time_limit"
+                round_completed = False
                 break
             audit["operator_attempts"] += 1
             try:
@@ -193,12 +198,25 @@ def improve_with_registry_operators(
                 current = candidate_solution
                 current_objective = candidate_objective
                 audit["operator_accepted"] += 1
+                round_accepted += 1
                 _record_event(audit, operator.name, "accepted", "")
             else:
                 audit["operator_skipped"] += 1
                 _record_event(audit, operator.name, "skipped", "not an improvement")
+        if round_accepted > 0:
+            audit["operator_rounds_with_acceptance"] += 1
+        elif round_completed and not fatal_operator_failure:
+            audit["operator_no_improvement_rounds"] += 1
         if fatal_operator_failure:
+            audit["operator_stop_reason"] = "fatal_operator_failure"
             break
+        if audit["operator_stop_reason"] == "time_limit":
+            break
+        if round_completed and round_accepted == 0:
+            audit["operator_stop_reason"] = "no_improvement_round"
+            break
+    else:
+        audit["operator_stop_reason"] = "max_operator_rounds"
     return current, audit
 
 
@@ -348,12 +366,22 @@ def _find_vrp_baseline_root() -> Path | None:
     return None
 
 
+def _baseline_required_for_instance(instance_path: Path) -> bool:
+    for data_root in _configured_data_roots():
+        try:
+            instance_path.relative_to(data_root)
+        except ValueError:
+            continue
+        return True
+    return False
+
+
 def _configured_data_roots() -> tuple[Path, ...]:
     roots: list[Path] = []
     for name in ("SCION_PROBLEM_DATA_ROOT", "SCION_CVRP_DATA_ROOT"):
         value = os.environ.get(name, "").strip()
         if value:
-            roots.append(Path(value))
+            roots.append(Path(value).expanduser().resolve(strict=False))
     return tuple(roots)
 
 

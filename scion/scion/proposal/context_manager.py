@@ -1201,6 +1201,8 @@ def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
     summaries: list[str] = []
     slow_cases: list[str] = []
     failure_cases: list[str] = []
+    failure_causes: list[str] = []
+    contract_failures: list[str] = []
     for step in reversed(steps):
         detail = step.verification_detail or step.failure_detail or ""
         target = (
@@ -1209,6 +1211,15 @@ def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
             else step.hypothesis.target_file
             or step.hypothesis.change_locus
         )
+        if (
+            step.protocol_result is None
+            and step.failure_stage in {"hypothesis_contract", "patch_contract"}
+            and len(contract_failures) < max_items
+        ):
+            contract_failures.append(
+                f"- R{step.round_num} target={target}: "
+                f"stage={step.failure_stage} detail={_first_line(detail)}"
+            )
         if "V9_perf_guard" in detail and len(items) < max_items:
             check_line = _extract_runtime_guard_line(detail)
             items.append(f"- R{step.round_num} target={target}: {check_line}")
@@ -1225,23 +1236,52 @@ def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
                     f"regression_rate={_fmt_runtime(st.runtime_regression_rate)} "
                     f"pairs={st.runtime_pairs}"
                 )
-            raw_failures, raw_slow_cases = _extract_screening_runtime_raw_feedback(
+            (
+                raw_failures,
+                raw_slow_cases,
+                raw_failure_causes,
+            ) = _extract_screening_runtime_raw_feedback(
                 step,
                 target=target,
                 max_items=max_items,
             )
+            for line in raw_failure_causes:
+                if len(failure_causes) < max_items:
+                    failure_causes.append(line)
             for line in raw_failures:
                 if len(failure_cases) < max_items:
                     failure_cases.append(line)
             for line in raw_slow_cases:
                 if len(slow_cases) < max_items:
                     slow_cases.append(line)
-        if len(items) >= max_items and len(summaries) >= max_items:
-            if len(slow_cases) >= max_items and len(failure_cases) >= max_items:
-                break
-    if not items and not summaries:
+        if (
+            len(items) >= max_items
+            and len(summaries) >= max_items
+            and len(failure_causes) >= max_items
+            and len(contract_failures) >= max_items
+            and len(slow_cases) >= max_items
+            and len(failure_cases) >= max_items
+        ):
+            break
+    if (
+        not items
+        and not summaries
+        and not failure_cases
+        and not slow_cases
+        and not failure_causes
+        and not contract_failures
+    ):
         return ""
     sections: list[str] = []
+    if failure_causes:
+        sections.append(
+            "Recent screening failure causes:\n"
+            + "\n".join(reversed(failure_causes))
+        )
+    if contract_failures:
+        sections.append(
+            "Recent contract failures:\n" + "\n".join(reversed(contract_failures))
+        )
     if summaries:
         sections.append(
             "Recent screening runtime summary:\n" + "\n".join(reversed(summaries))
@@ -1268,20 +1308,24 @@ def _extract_screening_runtime_raw_feedback(
     *,
     target: str,
     max_items: int,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """Extract bounded screening-only slow/failed runtime cases from raw metrics."""
     protocol = step.protocol_result
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
-        return [], []
+        return [], [], []
     raw_ref = protocol.raw_metrics_ref
     if not raw_ref or not os.path.isfile(raw_ref):
-        return [], []
+        failure_cause = _build_screening_failure_cause_line(step, target, {})
+        return [], [], [failure_cause] if failure_cause else []
     try:
         with open(raw_ref, "r", encoding="utf-8") as fh:
             payload = json.load(fh)
     except Exception:
-        return [], []
+        failure_cause = _build_screening_failure_cause_line(step, target, {})
+        return [], [], [failure_cause] if failure_cause else []
 
+    failure_cause = _build_screening_failure_cause_line(step, target, payload)
+    failure_causes = [failure_cause] if failure_cause else []
     failure_lines: list[str] = []
     for failure in payload.get("failures", []) or []:
         if failure.get("side") != "candidate":
@@ -1318,7 +1362,128 @@ def _extract_screening_runtime_raw_feedback(
         slow_pairs.append((ratio_value, line))
 
     slow_pairs.sort(key=lambda item: item[0], reverse=True)
-    return failure_lines, [line for _, line in slow_pairs[:max_items]]
+    return failure_lines, [line for _, line in slow_pairs[:max_items]], failure_causes
+
+
+def _build_screening_failure_cause_line(
+    step: StepRecord,
+    target: str,
+    payload: dict[str, Any],
+) -> str:
+    protocol = step.protocol_result
+    if protocol is None:
+        return ""
+    stats = protocol.stats
+    operator_attempts = _sum_runtime_field(payload, "candidate_runtime", "operator_attempts")
+    operator_accepted = _sum_runtime_field(payload, "candidate_runtime", "operator_accepted")
+    operator_errors = _sum_runtime_field(payload, "candidate_runtime", "operator_errors")
+    invalid_outputs = _sum_runtime_field(
+        payload,
+        "candidate_runtime",
+        "operator_invalid_outputs",
+    )
+    failed_pairs = _count_field(stats.failed_pairs, payload, "failed_pairs")
+    candidate_failed = _count_field(
+        stats.candidate_failed_pairs,
+        payload,
+        "candidate_failed_pairs",
+    )
+    champion_failed = _count_field(
+        stats.champion_failed_pairs,
+        payload,
+        "champion_failed_pairs",
+    )
+    gate_failed = protocol.gate_outcome in {"fail", "unclear", "continue"}
+    has_runtime_or_operator_signal = any(
+        value > 0
+        for value in (
+            failed_pairs,
+            candidate_failed,
+            champion_failed,
+            operator_attempts,
+            operator_accepted,
+            operator_errors,
+            invalid_outputs,
+        )
+    )
+    if not gate_failed and not has_runtime_or_operator_signal:
+        return ""
+
+    reason_codes = ",".join(protocol.reason_codes) if protocol.reason_codes else "none"
+    total_pairs = _count_field(stats.total_pairs, payload, "total_pairs")
+    valid_pairs = _count_field(stats.valid_pairs, payload, "valid_pairs")
+    runtime_ratio = (
+        stats.runtime_ratio_median
+        if stats.runtime_ratio_median is not None
+        else _runtime_stat(payload, "runtime_ratio_median")
+    )
+    return (
+        f"- R{step.round_num} target={target}: gate={protocol.gate_outcome} "
+        f"reasons={reason_codes} total_pairs={total_pairs} valid_pairs={valid_pairs} "
+        f"failed_pairs={failed_pairs} candidate_failed_pairs={candidate_failed} "
+        f"champion_failed_pairs={champion_failed} "
+        f"runtime_ratio_median={_fmt_runtime(runtime_ratio)}x "
+        f"operator_attempts={operator_attempts} operator_accepted={operator_accepted} "
+        f"operator_errors={operator_errors} invalid_outputs={invalid_outputs}"
+    )
+
+
+def _sum_runtime_field(payload: dict[str, Any], runtime_key: str, field: str) -> int:
+    total = 0
+    for pair in payload.get("pairs", []) or []:
+        if not isinstance(pair, dict):
+            continue
+        counted_pair_runtime = False
+        runtime = pair.get(runtime_key)
+        if isinstance(runtime, dict):
+            total += _as_int(runtime.get(field))
+            counted_pair_runtime = True
+        failure = pair.get("failure")
+        if isinstance(failure, dict):
+            audit = failure.get("runtime_audit")
+            if (
+                isinstance(audit, dict)
+                and runtime_key.startswith("candidate")
+                and not counted_pair_runtime
+            ):
+                total += _as_int(audit.get(field))
+    return total
+
+
+def _count_field(stats_value: int, payload: dict[str, Any], field: str) -> int:
+    return stats_value if stats_value > 0 else _as_int(payload.get(field))
+
+
+def _runtime_stat(payload: dict[str, Any], field: str) -> float | None:
+    runtime_stats = payload.get("runtime_stats")
+    if not isinstance(runtime_stats, dict):
+        return None
+    value = runtime_stats.get(field)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _first_line(detail: str) -> str:
+    for line in detail.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:180]
+    return "contract gate failed"
 
 
 def _fmt_runtime(value: float | None) -> str:
