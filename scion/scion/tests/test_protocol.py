@@ -277,19 +277,38 @@ def test_seed_ledger_get_seeds():
     assert sl.get_seeds(ExperimentStage.FROZEN) == [5, 6]
 
 
-def _make_run_result(splits: int, cost: float, feasible: bool = True) -> RunResult:
+def _make_run_result(
+    splits: int,
+    cost: float,
+    feasible: bool = True,
+    elapsed_ms: int = 100,
+    runtime: dict | None = None,
+) -> RunResult:
     return RunResult(
         success=True,
         exit_code=0,
         stdout="",
         stderr="",
-        elapsed_ms=100,
+        elapsed_ms=elapsed_ms,
         output=SolverOutput(
             vehicles={},
             assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
+            runtime=runtime or {},
         ),
+    )
+
+
+def _make_missing_output(elapsed_ms: int = 100) -> RunResult:
+    return RunResult(
+        success=True,
+        exit_code=0,
+        stdout="",
+        stderr="",
+        elapsed_ms=elapsed_ms,
+        output=None,
+        output_path=None,
     )
 
 
@@ -334,6 +353,33 @@ def test_run_experiment_screening_pass(tmp_path):
     assert result.stats.wins == result.stats.n_cases
 
 
+def test_run_experiment_records_runtime_telemetry_for_successful_pairs(tmp_path):
+    runner = MagicMock()
+    pair = [_make_run_result(2, 1000, elapsed_ms=100), _make_run_result(1, 900, elapsed_ms=150)]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.runtime_pairs == 4
+    assert result.stats.runtime_ratio_median == pytest.approx(1.5)
+    assert result.stats.runtime_delta_median_ms == pytest.approx(50.0)
+    assert result.stats.runtime_regression_rate == pytest.approx(1.0)
+    assert result.stats.total_pairs == 4
+    assert result.stats.attempted_pairs == 4
+    assert result.stats.valid_pairs == 4
+    assert result.stats.failed_pairs == 0
+    assert "runtime_ratio_median=1.50" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["runtime_stats"]["runtime_pairs"] == 4
+    assert raw["runtime_stats"]["runtime_ratio_median"] == pytest.approx(1.5)
+    assert all(p["candidate_elapsed_ms"] == 150 for p in raw["pairs"])
+    assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
+    assert all(p["runtime_ratio"] == pytest.approx(1.5) for p in raw["pairs"])
+
+
 def test_run_experiment_screening_fail(tmp_path):
     """Candidate always loses → fail.
     champ=better(splits=1, cost=900), cand=worse(splits=3, cost=1500).
@@ -360,12 +406,101 @@ def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
 
     assert result.gate_outcome == "fail"
     assert result.stats.losses == 2
+    assert result.stats.total_pairs == 4
+    assert result.stats.attempted_pairs == 4
+    assert result.stats.valid_pairs == 0
+    assert result.stats.failed_pairs == 4
+    assert result.stats.candidate_failed_pairs == 4
     assert "failed_pairs=4" in result.exposed_summary
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["failed_pairs"] == 4
     assert raw["candidate_failed_pairs"] == 4
     assert len(raw["failures"]) == 4
     assert all(p["comparison"] == "loss" for p in raw["pairs"])
+    assert all(p["candidate_elapsed_ms"] == 1000 for p in raw["pairs"])
+    assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
+
+
+def test_candidate_operator_runtime_error_counts_as_screening_failure(tmp_path):
+    runner = MagicMock()
+    runtime = {
+        "operator_errors": 1,
+        "operator_loaded": 1,
+        "operator_attempts": 1,
+        "operator_accepted": 0,
+        "operator_events": [
+            {
+                "operator": "bad_cvrp_op",
+                "status": "error",
+                "detail": "'CvrpInstance' object has no attribute 'vehicle_capacity'",
+            }
+        ],
+    }
+    pair = [
+        _make_run_result(1, 900, elapsed_ms=100),
+        _make_run_result(1, 900, elapsed_ms=110, runtime=runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.valid_pairs == 0
+    assert result.stats.failed_pairs == 4
+    assert result.stats.candidate_failed_pairs == 4
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_failed_pairs"] == 4
+    assert raw["failures"][0]["error_category"] == "operator_runtime_error"
+    assert raw["pairs"][0]["decisive_metric"] == "operator_runtime_error"
+
+
+def test_candidate_required_baseline_error_counts_as_screening_failure(tmp_path):
+    runner = MagicMock()
+    runtime = {
+        "baseline_required": True,
+        "baseline_mode": "scion_nearest_neighbor_fallback",
+        "baseline_error": "vrp/src baseline not available",
+    }
+    pair = [
+        _make_run_result(1, 900, elapsed_ms=100),
+        _make_run_result(1, 900, elapsed_ms=110, runtime=runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.valid_pairs == 0
+    assert result.stats.failed_pairs == 4
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["failures"][0]["error_category"] == "baseline_runtime_error"
+    assert raw["pairs"][0]["decisive_metric"] == "baseline_runtime_error"
+
+
+def test_missing_output_records_both_elapsed_values(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000, elapsed_ms=80),
+        _make_missing_output(elapsed_ms=95),
+    ] * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["failed_pairs"] == 4
+    assert len(raw["failures"]) == 4
+    assert all(f["candidate_elapsed_ms"] == 95 for f in raw["failures"])
+    assert all(f["champion_elapsed_ms"] == 80 for f in raw["failures"])
+    assert all(p["runtime_delta_ms"] == 15 for p in raw["pairs"])
 
 
 def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_path):
@@ -386,6 +521,9 @@ def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_p
     assert result.gate_outcome == "fail"
     assert "INCOMPLETE_EVIDENCE" in result.reason_codes
     assert "CANDIDATE_RUNTIME_FAILURE" in result.reason_codes
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 1
     assert "failed_pairs=1" in result.exposed_summary
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["attempted_pairs"] == 4
@@ -449,3 +587,27 @@ def test_run_canary_fail_solver_crash(tmp_path):
     proto = _make_protocol(runner, tmp_path)
     result = proto.run_canary("/cand", "/champ")
     assert not result.passed
+
+
+def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(
+            2,
+            900,
+            feasible=True,
+            runtime={
+                "operator_errors": 1,
+                "operator_events": [
+                    {"operator": "bad_op", "status": "error", "detail": "boom"}
+                ],
+            },
+        ),
+        _make_run_result(2, 1000, feasible=True),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_canary("/cand", "/champ")
+
+    assert not result.passed
+    assert "runtime audit failed" in (result.reason or "")

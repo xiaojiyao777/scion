@@ -1,0 +1,12 @@
+version: 0.4-cvrp-formal-readiness
+screening:
+- 11
+- 29
+validation:
+- 47
+- 53
+frozen:
+- 61
+- 67
+canary:
+- 101

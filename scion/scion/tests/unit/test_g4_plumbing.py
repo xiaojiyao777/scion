@@ -60,7 +60,8 @@ def _champ_pool() -> Dict[str, OperatorConfig]:
 
 def _base_context(**overrides) -> Dict[str, Any]:
     defaults: Dict[str, Any] = {
-        "problem_summary": "Solve VRP",
+        "problem_summary": "Solve a combinatorial optimization problem",
+        "solver_mechanics": "",
         "champion_operators_code": "class ChampOp: pass",
         "champion_stats": "win_rate=0.5",
         "experiment_history": "no history",
@@ -98,6 +99,29 @@ def test_hypothesis_prompt_contains_strategy_guidance():
     all_text = " ".join(b["text"] for b in system_blocks)
     assert "Strategy Guidance" in all_text
     assert "route merging" in all_text
+
+
+def test_hypothesis_prompt_uses_adapter_solver_mechanics_without_legacy_vns_text():
+    ctx = _base_context(
+        solver_mechanics=(
+            "Operators are applied after a constructive baseline and accepted only "
+            "on strict adapter-defined objective improvement."
+        )
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    all_text = " ".join(b["text"] for b in system_blocks) + user_prompt
+    assert "Operators are applied after a constructive baseline" in all_text
+    assert "pool of 40" not in all_text
+    assert "~8000" not in all_text
+    assert "VNS pool loop" not in all_text
+
+
+def test_code_prompt_includes_adapter_solver_mechanics():
+    ctx = _base_context(solver_mechanics="Use bounded post-baseline improvement.")
+    system_blocks, _user = _split_code_context(ctx)
+    all_text = " ".join(b["text"] for b in system_blocks)
+    assert "Solver Execution Model" in all_text
+    assert "Use bounded post-baseline improvement" in all_text
 
 
 def test_hypothesis_prompt_contains_branch_code():

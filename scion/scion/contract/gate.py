@@ -431,11 +431,12 @@ class ContractGate:
         except SyntaxError:
             return _cr("C9c_complexity_bound", False, "heavy", "unparseable code", t0)
 
+        combinations_aliases = _collect_combinations_aliases(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            if not _is_combinations_call(node):
+            if not _is_combinations_call(node, combinations_aliases):
                 continue
             if len(node.args) < 2:
                 continue
@@ -565,10 +566,23 @@ def _open_has_write_mode(call_node: ast.Call) -> Optional[str]:
     return None
 
 
-def _is_combinations_call(call_node: ast.Call) -> bool:
+def _collect_combinations_aliases(tree: ast.AST) -> set[str]:
+    aliases = {"combinations"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module != "itertools":
+            continue
+        for alias in node.names:
+            if alias.name == "combinations":
+                aliases.add(alias.asname or alias.name)
+    return aliases
+
+
+def _is_combinations_call(call_node: ast.Call, combinations_aliases: set[str]) -> bool:
     func = call_node.func
     if isinstance(func, ast.Name):
-        return func.id == "combinations"
+        return func.id in combinations_aliases
     if isinstance(func, ast.Attribute):
         return func.attr == "combinations"
     return False

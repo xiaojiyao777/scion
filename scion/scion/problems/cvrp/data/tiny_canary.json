@@ -1,0 +1,17 @@
+{
+  "name": "tiny_canary",
+  "capacity": 4,
+  "depot": 0,
+  "allowed_routes": 2,
+  "bks": 8.0,
+  "bks_routes": 2,
+  "use_integer_cost": true,
+  "nodes": [
+    {"id": 0, "x": 0.0, "y": 0.0, "demand": 0},
+    {"id": 1, "x": 1.0, "y": 0.0, "demand": 2},
+    {"id": 2, "x": 2.0, "y": 0.0, "demand": 2},
+    {"id": 3, "x": 0.0, "y": 1.0, "demand": 2},
+    {"id": 4, "x": 0.0, "y": 2.0, "demand": 2}
+  ]
+}
+

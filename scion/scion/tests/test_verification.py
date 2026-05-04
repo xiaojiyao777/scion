@@ -21,6 +21,7 @@ from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
+from scion.problem.contracts import CheckReport, SolverArtifact
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 
@@ -143,6 +144,11 @@ def _mock_runner(
             assignment=data.get("assignment", {}),
             objective=data.get("objective", {}),
             feasible=data.get("feasible", False),
+            runtime=(
+                data.get("runtime", {})
+                if isinstance(data.get("runtime", {}), dict)
+                else {}
+            ),
         )
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
@@ -327,6 +333,58 @@ class TestSolutionConsistencyCheck:
         assert r.severity == "heavy"
         assert "assignment says" in r.detail
 
+    def test_adapter_consistency_failure_fails_closed(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        runner = _mock_runner(output_dict={"routes": [[1, 1]], "objective": {"cost": 1.0}})
+
+        class RejectingAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                return SolverArtifact(
+                    raw_output=raw_output,
+                    objective={"cost": 1.0},
+                    feasible=True,
+                    normalized_solution=raw_output,
+                )
+
+            def check_solution_consistency(self, artifact, instance):
+                return CheckReport(False, ("customer 1 appears twice",))
+
+        r = check_state_mutation(spec, runner, str(tmp_path), adapter=RejectingAdapter())
+
+        assert r.passed is False
+        assert r.name == "V5_solution_consistency"
+        assert "adapter consistency failed" in r.detail
+        assert "customer 1 appears twice" in r.detail
+
+    def test_solver_runtime_audit_failure_fails_closed(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        output = _solver_output_dict()
+        output["runtime"] = {
+            "operator_errors": 1,
+            "operator_events": [
+                {
+                    "operator": "bad_op",
+                    "status": "error",
+                    "detail": "'CvrpInstance' object has no attribute 'vehicle_capacity'",
+                }
+            ],
+        }
+        runner = _mock_runner(output_dict=output)
+
+        r = check_state_mutation(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.name == "V5_solution_consistency"
+        assert "solver runtime audit failed" in r.detail
+        assert "operator_errors=1" in r.detail
+
 
 # ---------------------------------------------------------------------------
 # V4: objective
@@ -355,6 +413,19 @@ class TestObjectiveCheck:
         r = check_objective(spec, runner, str(tmp_path))
         assert r.passed is False
         assert r.name == "V7_objective"
+
+    def test_solver_runtime_audit_failure_fails(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        output = _solver_output_dict()
+        output["runtime"] = {"operator_errors": 1}
+        runner = _mock_runner(output_dict=output)
+
+        r = check_objective(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert "solver runtime audit failed" in r.detail
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +538,10 @@ class TestPerfGuardCheck:
         r = check_perf(spec, runner, str(tmp_path), champ_ws)
         assert r.passed is True
         assert r.name == "V9_perf_guard"
+        assert r.metadata["candidate_ms"] == 500
+        assert r.metadata["champion_ms"] == 1000
+        assert r.metadata["ratio"] == pytest.approx(0.5)
+        assert r.metadata["candidate_timeout"] is False
 
     def test_slow_candidate_fails(self, tmp_path):
         canary = str(tmp_path / "small.json")
@@ -493,6 +568,34 @@ class TestPerfGuardCheck:
         r = check_perf(spec, runner, str(tmp_path), champ_ws)
         assert r.passed is False
         assert "too slow" in r.detail
+        assert r.metadata["ratio"] == pytest.approx(6.0)
+        assert r.metadata["limit_ratio"] == 5.0
+
+    def test_configured_slowdown_limit_is_used(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        champ_ws = str(tmp_path / "champ")
+        Path(champ_ws).mkdir()
+        spec = _make_spec(canary=canary)
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            ms = 3000 if workdir != champ_ws else 1000
+            fd, path = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            with open(path, "w") as f:
+                json.dump(_solver_output_dict(), f)
+            return RunResult(
+                success=True, exit_code=0, stdout="", stderr="",
+                elapsed_ms=ms, output=None, output_path=path, error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+        r = check_perf(spec, runner, str(tmp_path), champ_ws, max_slowdown=2.0)
+        assert r.passed is False
+        assert r.metadata["ratio"] == pytest.approx(3.0)
+        assert r.metadata["limit_ratio"] == 2.0
+        assert "limit=2x" in r.detail
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +682,20 @@ class TestVerificationGateIntegration:
         assert result.passed is False
         assert result.first_failure == "V_runtime_config"
         assert "champion workspace" in result.checks[-1].detail
+
+    def test_strict_runtime_config_resolves_problem_relative_canary(self, tmp_path):
+        from scion.verification.gate import _validate_runtime_config
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "small.json").write_text("{}")
+        spec = _make_spec(canary="data/small.json").model_copy(
+            update={"root_dir": str(tmp_path)}
+        )
+
+        result = _validate_runtime_config(spec, str(tmp_path))
+
+        assert result is None
 
     def test_strict_runtime_checks_can_require_adapter(self, tmp_path):
         canary = tmp_path / "small.json"

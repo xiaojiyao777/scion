@@ -1,4 +1,4 @@
-"""Feasibility check: run solver on canary case, verify output via oracle.check_feasibility."""
+"""Feasibility check: run solver on canary case and verify adapter feasibility."""
 from __future__ import annotations
 
 import json
@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
+from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.runtime.runner import Runner
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ def check_feasibility(
     """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
 
-    canary = problem_spec.canary_case_path
+    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
 
@@ -62,32 +63,50 @@ def check_feasibility(
     except Exception as exc:
         return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
+    audit_failure = runtime_audit_failure_from_raw(raw)
+    if audit_failure is not None:
+        return _cr(
+            False,
+            "heavy",
+            "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
+            t0,
+        )
+
     # --- Adapter-based path (v0.3+) ---
     if adapter is not None:
         return _check_via_adapter(adapter, raw, canary, t0)
 
     # --- Legacy path (direct oracle import) ---
+    # The framework does not know how to reconstruct problem-native objects.
+    # Legacy problems that do not use ProblemAdapter must provide a generic
+    # oracle hook instead of relying on framework-owned problem data models.
     oracle_dir = os.path.dirname(os.path.abspath(
         os.path.join(problem_spec.root_dir, problem_spec.oracle_path)
     ))
     try:
-        solution, instance = _load_solution_and_instance(raw, canary, oracle_dir)
+        oracle = _import_oracle(oracle_dir)
     except Exception as exc:
-        return _cr(False, "heavy", f"cannot reconstruct solution/instance: {exc}", t0)
+        return _cr(False, "heavy", f"cannot import legacy oracle: {exc}", t0)
+
+    legacy_check = getattr(oracle, "check_solver_output_feasibility", None)
+    if legacy_check is None:
+        return _cr(
+            False,
+            "heavy",
+            "problem adapter or oracle.check_solver_output_feasibility hook is required",
+            t0,
+        )
 
     try:
-        oracle = _import_oracle(oracle_dir)
-        feas = oracle.check_feasibility(solution, instance, phase=1)
+        legacy_result = legacy_check(raw, canary)
     except Exception as exc:
-        return _cr(False, "heavy", f"oracle.check_feasibility error: {exc}", t0)
-
-    if feas.is_feasible:
+        return _cr(False, "heavy", f"legacy feasibility hook error: {exc}", t0)
+    passed = bool(getattr(legacy_result, "passed", legacy_result))
+    if passed:
         return _cr(True, "heavy", "feasibility ok", t0)
-    return _cr(
-        False, "heavy",
-        f"infeasible: {'; '.join(feas.violations[:3])}",
-        t0,
-    )
+    reasons = getattr(legacy_result, "reasons", None) or getattr(legacy_result, "violations", None) or ()
+    detail = "; ".join(str(reason) for reason in list(reasons)[:3]) or "legacy feasibility hook failed"
+    return _cr(False, "heavy", f"infeasible: {detail}", t0)
 
 
 def _check_via_adapter(
@@ -134,6 +153,40 @@ def _registry_path(workspace: str) -> str:
     return rp if os.path.isfile(rp) else ""
 
 
+def resolve_problem_path(problem_spec: ProblemSpec, path: str) -> str:
+    """Resolve problem-relative runtime paths for in-process verification."""
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+
+    candidates: list[str] = []
+    root_dir = getattr(problem_spec, "root_dir", "") or ""
+    if root_dir:
+        candidates.append(os.path.join(root_dir, path))
+    candidates.append(path)
+
+    for data_root in _problem_data_roots_from_env():
+        candidates.append(os.path.join(data_root, path))
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return candidates[0] if candidates else path
+
+
+def _problem_data_roots_from_env() -> list[str]:
+    """Return adapter/runtime data roots without naming a research object here."""
+    roots: list[str] = []
+    for key, value in sorted(os.environ.items()):
+        if not key.startswith("SCION_") or not key.endswith("_DATA_ROOT"):
+            continue
+        root = value.strip()
+        if root:
+            roots.append(root)
+    return roots
+
+
 def _import_oracle(oracle_dir: str) -> Any:
     """Import oracle module from oracle_dir, temporarily adjusting sys.path."""
     import importlib.util
@@ -150,75 +203,6 @@ def _import_oracle(oracle_dir: str) -> Any:
         sys.modules["_scion_oracle"] = mod  # Required for dataclass introspection
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         return mod
-    finally:
-        sys.path[:] = saved
-
-
-def _load_solution_and_instance(raw: dict, instance_path: str, oracle_dir: str):
-    """Reconstruct Solution and Instance from solver output JSON and instance file."""
-    import importlib.util
-
-    saved = list(sys.path)
-    if oracle_dir not in sys.path:
-        sys.path.insert(0, oracle_dir)
-    try:
-        models_path = os.path.join(oracle_dir, "models.py")
-        if not os.path.isfile(models_path):
-            raise FileNotFoundError(f"models.py not found at {models_path}")
-
-        spec = importlib.util.spec_from_file_location("_scion_models", models_path)
-        models = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-        sys.modules["_scion_models"] = models  # Required for dataclass introspection
-        spec.loader.exec_module(models)  # type: ignore[union-attr]
-
-        # Reconstruct vehicles.
-        vehicles = {}
-        for vid, vdata in raw.get("vehicles", {}).items():
-            vehicles[vid] = models.Vehicle(
-                vehicle_id=vdata["vehicle_id"],
-                vehicle_type=vdata["vehicle_type"],
-                region=vdata["region"],
-                order_ids=list(vdata["order_ids"]),
-            )
-        solution = models.Solution(
-            vehicles=vehicles,
-            assignment=dict(raw.get("assignment", {})),
-        )
-
-        # Load instance from JSON.
-        with open(instance_path, encoding="utf-8") as f:
-            idata = json.load(f)
-        orders = {}
-        for o in idata["orders"]:
-            spu_list = [
-                models.SPU(packing_type=s["packing_type"], quantity=s["quantity"])
-                for s in o["spu_list"]
-            ]
-            order = models.Order(
-                order_id=o["order_id"],
-                vehicle_category=o["vehicle_category"],
-                vehicle_subcategory=o["vehicle_subcategory"],
-                urgent=o["urgent"],
-                hazard_flag=o["hazard_flag"],
-                hazard_quantity=o["hazard_quantity"],
-                pickup_name=o["pickup_name"],
-                pickup_province=o["pickup_province"],
-                pickup_city=o["pickup_city"],
-                declaration_amount=o["declaration_amount"],
-                lsp=o["lsp"],
-                ship_method=o["ship_method"],
-                destination_country=o["destination_country"],
-                spu_list=spu_list,
-                locked_vehicle_id=o.get("locked_vehicle_id"),
-            )
-            orders[order.order_id] = order
-        amount_limits = idata.get("amount_limits", {})
-        instance = models.Instance(
-            orders=orders,
-            amount_limits=amount_limits,
-            phase=1,
-        )
-        return solution, instance
     finally:
         sys.path[:] = saved
 

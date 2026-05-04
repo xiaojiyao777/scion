@@ -106,3 +106,20 @@ def test_protocol_config_from_yaml(tmp_path):
     assert config.frozen.max_uses_per_campaign == 2
     assert config.screening_win_rate_threshold == pytest.approx(0.6)
     assert config.validation_win_rate_threshold == pytest.approx(0.7)
+
+def test_protocol_config_runtime_governance_from_yaml(tmp_path):
+    """Runtime governance is protocol-level, with a default and YAML override."""
+    default_config = ProtocolConfig()
+    assert default_config.max_runtime_ratio == pytest.approx(2.0)
+
+    p_file = tmp_path / "protocol.yaml"
+    p_file.write_text(yaml.dump({
+        "version": "runtime-test",
+        "runtime": {
+            "max_runtime_ratio": 1.5,
+        },
+    }))
+
+    config = ProtocolConfig.from_yaml(str(p_file))
+    assert config.runtime.max_runtime_ratio == pytest.approx(1.5)
+    assert config.max_runtime_ratio == pytest.approx(1.5)

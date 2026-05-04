@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-_repo_root = Path(__file__).parent.parent.parent.parent.parent
+_repo_root = Path(__file__).resolve().parents[2]
 _surrogate_path = str(_repo_root / "surrogate")
 if _surrogate_path not in sys.path:
     sys.path.insert(0, _surrogate_path)
@@ -102,6 +102,7 @@ print('STATUS:', res.status)
 # T2: phase 1 solution satisfies f1 <= f1* for phase 2 eps-constraint
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_phase2_warmstart_feasible_for_eps_constraint():
     """Phase 1 sol has f1 == f1*, so f1 <= f1* holds — safe for phase 2 warm start."""
     inst = _load("s01")

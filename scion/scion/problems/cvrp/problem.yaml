@@ -1,0 +1,43 @@
+name: cvrp
+description: >-
+  Capacitated Vehicle Routing Problem runtime for Scion v0.4 formal campaign
+  readiness. ProblemSpecV1 remains the authoritative adapter/objective schema;
+  this legacy file exists for the current CLI entrypoint.
+
+operators_dir: operators
+data_dir: data
+oracle_path: ""
+solver_path: solver.py
+canary_case_path: controlled/data/synthetic_controlled_canary_5.vrp
+unit_test_path: ""
+regression_test_path: ""
+
+operator_categories:
+  - route_local
+  - route_pair
+  - ruin_recreate
+
+search_space:
+  editable:
+    - "operators/*.py"
+  frozen:
+    - "adapter.py"
+    - "models.py"
+    - "solver.py"
+    - "operators/base.py"
+  import_whitelist:
+    - __future__
+    - copy
+    - dataclasses
+    - itertools
+    - math
+    - models
+    - random
+    - typing
+
+solver:
+  time_limit_sec: 30
+  max_iter: 1000
+
+parameter_search:
+  enabled: false

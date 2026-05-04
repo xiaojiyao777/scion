@@ -11,12 +11,16 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.runner import Runner
-from scion.verification.feasibility import _registry_path
+from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
+from scion.verification.feasibility import _registry_path, resolve_problem_path
+
+if TYPE_CHECKING:
+    from scion.problem.contracts import ProblemAdapter
 
 
 _CANARY_SEED = 77
@@ -27,11 +31,13 @@ def check_state_mutation(
     runner: Runner,
     candidate_workspace: str,
     metrics_dir: str | None = None,
+    *,
+    adapter: Optional[ProblemAdapter] = None,
 ) -> CheckResult:
     """V5_solution_consistency: output must be internally consistent."""
     t0 = time.monotonic_ns()
 
-    canary = problem_spec.canary_case_path
+    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _cr(True, "skipped: no canary_case_path configured", t0)
 
@@ -63,6 +69,18 @@ def check_state_mutation(
     except Exception as exc:
         return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
 
+    audit_failure = runtime_audit_failure_from_raw(raw)
+    if audit_failure is not None:
+        return _cr(
+            False,
+            "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
+            t0,
+            diagnosis="CANDIDATE",
+        )
+
+    if adapter is not None:
+        return _check_via_adapter(adapter, raw, canary, t0)
+
     issues = _check_solution_consistency(raw)
     if issues:
         diag = _classify_consistency_failure(issues)
@@ -76,13 +94,41 @@ def check_state_mutation(
     return _cr(True, "solution internally consistent after solver run", t0)
 
 
+def _check_via_adapter(
+    adapter: "ProblemAdapter",
+    raw: dict,
+    canary: str,
+    t0: int,
+) -> CheckResult:
+    try:
+        instance = adapter.load_instance(canary)
+        artifact = adapter.deserialize_solver_output(raw, instance)
+    except Exception as exc:
+        return _cr(False, f"adapter deserialize error: {exc}", t0, diagnosis="CANDIDATE")
+
+    try:
+        consistency = adapter.check_solution_consistency(artifact, instance)
+    except Exception as exc:
+        return _cr(False, f"adapter.check_solution_consistency error: {exc}", t0, diagnosis="UNKNOWN")
+
+    if consistency.passed:
+        return _cr(True, "adapter solution consistency ok", t0)
+
+    return _cr(
+        False,
+        "adapter consistency failed: " + "; ".join(consistency.reasons[:3]),
+        t0,
+        diagnosis="CANDIDATE",
+    )
+
+
 def _classify_consistency_failure(
     issues: list[str],
 ) -> Literal["ENV", "CANDIDATE", "UNKNOWN"]:
     """Classify consistency failure into ENV / CANDIDATE / UNKNOWN.
 
     - ENV: infrastructure issue (empty output, file read error)
-    - CANDIDATE: operator-induced corruption (duplicate orders, assignment mismatch)
+    - CANDIDATE: operator-induced corruption (duplicate assignments, consistency mismatch)
     - UNKNOWN: can't determine root cause
     """
     candidate_patterns = ["multiple vehicles", "assignment says", "not in assignment", "not in any vehicle"]

@@ -7,6 +7,7 @@ import os
 # Re-export authoritative schema — these are the ONLY authoritative implementations.
 # Old code that imported simplified versions from this module will get the real ones.
 from scion.config.protocol_config import ProtocolConfig
+from scion.config.protocol_config import RuntimeGovernanceConfig
 from scion.config.split_manifest import SplitManifest
 from scion.config.seed_ledger import SeedLedger
 
@@ -15,6 +16,7 @@ SeedLedgerConfig = SeedLedger
 
 __all__ = [
     "ProtocolConfig",
+    "RuntimeGovernanceConfig",
     "SplitManifest",
     "SeedLedger",
     "SeedLedgerConfig",

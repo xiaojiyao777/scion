@@ -1,0 +1,225 @@
+"""CVRP adapter tests for v0.4 route-native verification."""
+from __future__ import annotations
+
+import json
+import os
+import random
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from scion.config.problem import ProblemSpec, SearchSpace
+from scion.core.models import PatchProposal, RunResult, SolverOutput
+from scion.problem.contracts import ProblemAdapter
+from scion.problem.loader import load_problem_adapter
+from scion.problem.spec import ProblemSpecV1
+from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.solver import solve
+from scion.verification.gate import VerificationGate
+
+
+CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
+TINY_5 = CVRP_DIR / "data" / "tiny_5.json"
+
+
+@pytest.fixture
+def cvrp_spec() -> ProblemSpecV1:
+    with open(CVRP_DIR / "problem-v1.yaml", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    data["root_dir"] = str(CVRP_DIR)
+    data["canary_case_path"] = str(TINY_5)
+    return ProblemSpecV1(**data)
+
+
+@pytest.fixture
+def cvrp_adapter(cvrp_spec: ProblemSpecV1) -> ProblemAdapter:
+    return load_problem_adapter(cvrp_spec)
+
+
+def _raw(routes: list[list[int]], *, distance: float = 8.0, fleet: int = 0) -> dict[str, Any]:
+    return {
+        "routes": routes,
+        "objective": {
+            "fleet_violation": fleet,
+            "total_distance": distance,
+            "routes": len(routes),
+        },
+        "feasible": True,
+    }
+
+
+def test_cvrp_problem_spec_loads(cvrp_spec: ProblemSpecV1, cvrp_adapter: ProblemAdapter) -> None:
+    assert cvrp_spec.id == "cvrp"
+    assert [o.name for o in cvrp_spec.objectives] == ["fleet_violation", "total_distance"]
+    assert "fleet_violation" in cvrp_adapter.render_problem_summary()
+    assert "implicit depot" in cvrp_adapter.render_operator_interface()
+
+
+def test_valid_route_solution_passes_all_adapter_checks(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    artifact = cvrp_adapter.deserialize_solver_output(_raw([[1, 2], [3, 4]]), inst)
+
+    assert artifact.feasible is True
+    assert cvrp_adapter.check_solution_consistency(artifact, inst).passed is True
+    assert cvrp_adapter.check_feasibility(artifact, inst).passed is True
+    assert cvrp_adapter.recompute_objective(artifact, inst) == {
+        "fleet_violation": 0,
+        "total_distance": 8.0,
+        "routes": 2,
+    }
+
+
+def test_explicit_depot_route_boundaries_are_normalized(cvrp_adapter: ProblemAdapter) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    artifact = cvrp_adapter.deserialize_solver_output(_raw([[0, 1, 2, 0], [0, 3, 4, 0]]), inst)
+
+    assert artifact.normalized_solution == CvrpSolution(routes=((1, 2), (3, 4)))
+    assert cvrp_adapter.check_solution_consistency(artifact, inst).passed is True
+
+
+@pytest.mark.parametrize(
+    ("routes", "expected"),
+    [
+        ([[1, 2], [2, 3, 4]], "appears in multiple routes"),
+        ([[1, 2], [3]], "missing customers"),
+        ([[1, 2], [3, 99]], "unknown customer 99"),
+        ([[1, 0, 2], [3, 4]], "contains depot inside customer route"),
+        ([[1, 2], [3, 4]], "objective field total_distance missing"),
+    ],
+)
+def test_consistency_rejects_bad_route_shapes(
+    cvrp_adapter: ProblemAdapter,
+    routes: list[list[int]],
+    expected: str,
+) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    raw = _raw(routes)
+    if expected.startswith("objective field"):
+        raw["objective"].pop("total_distance")
+    artifact = cvrp_adapter.deserialize_solver_output(raw, inst)
+
+    report = cvrp_adapter.check_solution_consistency(artifact, inst)
+
+    assert report.passed is False
+    assert expected in "; ".join(report.reasons)
+
+
+def test_feasibility_rejects_over_capacity_route(cvrp_adapter: ProblemAdapter) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    artifact = cvrp_adapter.deserialize_solver_output(_raw([[1, 2, 3], [4]], distance=10.0), inst)
+
+    consistency = cvrp_adapter.check_solution_consistency(artifact, inst)
+    feasibility = cvrp_adapter.check_feasibility(artifact, inst)
+
+    assert consistency.passed is True
+    assert feasibility.passed is False
+    assert "exceeds capacity" in "; ".join(feasibility.reasons)
+
+
+def test_recompute_objective_catches_reported_cost_mismatch(cvrp_adapter: ProblemAdapter) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    artifact = cvrp_adapter.deserialize_solver_output(_raw([[1, 2], [3, 4]], distance=999.0), inst)
+
+    recomputed = cvrp_adapter.recompute_objective(artifact, inst)
+
+    assert artifact.objective["total_distance"] == 999.0
+    assert recomputed["total_distance"] == 8.0
+
+
+def test_fleet_violation_uses_allowed_routes(cvrp_adapter: ProblemAdapter) -> None:
+    inst = cvrp_adapter.load_instance(str(TINY_5))
+    artifact = cvrp_adapter.deserialize_solver_output(
+        _raw([[1], [2], [3], [4]], distance=8.0, fleet=2),
+        inst,
+    )
+
+    recomputed = cvrp_adapter.recompute_objective(artifact, inst)
+
+    assert recomputed["fleet_violation"] == 2
+    assert recomputed["routes"] == 4
+
+
+def test_tiny_solver_output_is_adapter_valid(cvrp_adapter: ProblemAdapter) -> None:
+    inst: CvrpInstance = cvrp_adapter.load_instance(str(TINY_5))
+    sol = solve(inst, random.Random(42))
+    raw = {"routes": [list(route) for route in sol.routes], "feasible": True}
+    artifact = cvrp_adapter.deserialize_solver_output(raw, inst)
+    raw["objective"] = dict(cvrp_adapter.recompute_objective(artifact, inst))
+    artifact = cvrp_adapter.deserialize_solver_output(raw, inst)
+
+    assert cvrp_adapter.check_solution_consistency(artifact, inst).passed is True
+    assert cvrp_adapter.check_feasibility(artifact, inst).passed is True
+
+
+def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    canary = str(TINY_5)
+    raw = _raw([[1, 2], [3, 4]])
+
+    class StaticRunner:
+        def run_solver(self, workdir, instance_path, seed, time_limit_sec, registry_path):
+            fd, output_path = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(raw, f)
+            return RunResult(
+                success=True,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                elapsed_ms=100,
+                output=SolverOutput(
+                    vehicles={},
+                    assignment={},
+                    objective=raw["objective"],
+                    feasible=True,
+                ),
+                output_path=output_path,
+                error_category=None,
+            )
+
+    spec = ProblemSpec(
+        name="cvrp",
+        root_dir=str(CVRP_DIR),
+        canary_case_path=canary,
+        operator_categories=["route_local", "route_pair", "ruin_recreate"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=["solver.py", "models.py", "adapter.py", "operators/base.py"],
+            import_whitelist=["__future__", "math", "random", "typing"],
+        ),
+    )
+    gate = VerificationGate(
+        problem_spec=spec,
+        runner=StaticRunner(),
+        adapter=cvrp_adapter,
+        strict_runtime_checks=True,
+        require_adapter_for_runtime=True,
+        operator_execute_signature="execute(self, solution, instance, rng) -> CvrpSolution",
+    )
+    patch = PatchProposal(
+        file_path="operators/noop.py",
+        action="create",
+        code_content=(
+            "class NoOp:\n"
+            "    def execute(self, solution, instance, rng):\n"
+            "        return solution\n"
+        ),
+    )
+
+    result = gate.run(str(CVRP_DIR), str(CVRP_DIR), patch)
+
+    assert result.passed is True
+    assert [check.name for check in result.checks][-5:] == [
+        "V5_solution_consistency",
+        "V6_feasibility",
+        "V7_objective",
+        "V8_nondeterminism",
+        "V9_perf_guard",
+    ]

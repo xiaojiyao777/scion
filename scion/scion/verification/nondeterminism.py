@@ -24,8 +24,9 @@ import uuid
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
+from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.runtime.runner import Runner
-from scion.verification.feasibility import _registry_path
+from scion.verification.feasibility import _registry_path, resolve_problem_path
 
 
 _CANARY_SEED = 77  # fixed seed used for both runs
@@ -40,7 +41,7 @@ def check_nondeterminism(
     """V8_nondeterminism: two runs with identical seed must produce identical objectives."""
     t0 = time.monotonic_ns()
 
-    canary = problem_spec.canary_case_path
+    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _cr(True, "skipped: no canary_case_path configured", t0)
 
@@ -73,11 +74,27 @@ def check_nondeterminism(
     if raw1 is None:
         detail = f"first run failed: {err1}" if err1 else "first run failed"
         return _cr(False, detail, t0)
+    audit_failure = runtime_audit_failure_from_raw(raw1)
+    if audit_failure is not None:
+        return _cr(
+            False,
+            "first run runtime audit failed: "
+            + format_runtime_audit_failure(audit_failure),
+            t0,
+        )
 
     raw2, err2 = _run()
     if raw2 is None:
         detail = f"second run failed: {err2}" if err2 else "second run failed"
         return _cr(False, detail, t0)
+    audit_failure = runtime_audit_failure_from_raw(raw2)
+    if audit_failure is not None:
+        return _cr(
+            False,
+            "second run runtime audit failed: "
+            + format_runtime_audit_failure(audit_failure),
+            t0,
+        )
 
     # Save run outputs to metrics_dir if provided
     short_id = uuid.uuid4().hex[:8]

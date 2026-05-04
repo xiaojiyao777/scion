@@ -8,7 +8,9 @@ T26: Context manager memory classification — What Worked / What Failed section
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import List, Optional
 
 import pytest
@@ -65,6 +67,10 @@ def _make_step(
     decision: Decision = Decision.CONTINUE_EXPLORE,
     failure_stage: Optional[str] = None,
     win_rate: float = 0.0,
+    runtime_ratio_median=None,
+    runtime_delta_median_ms=None,
+    runtime_regression_rate=None,
+    runtime_pairs: int = 0,
 ) -> StepRecord:
     protocol_result = None
     if failure_stage is None:
@@ -77,6 +83,10 @@ def _make_step(
             median_delta=0.01 if win_rate > 0 else 0.0,
             ci_low=0.0,
             ci_high=0.02,
+            runtime_ratio_median=runtime_ratio_median,
+            runtime_delta_median_ms=runtime_delta_median_ms,
+            runtime_regression_rate=runtime_regression_rate,
+            runtime_pairs=runtime_pairs,
         )
         protocol_result = ProtocolResult(
             stage=ExperimentStage.SCREENING,
@@ -290,7 +300,8 @@ def test_guidance_highlights_unexplored_locus():
         _make_family("subcategory_consolidation", locus_pattern="vehicle_level", statuses=["promoted"]),
         _make_family("destroy_rebuild", locus_pattern="vehicle_level", statuses=["gate_fail"]),
     ]
-    guidance = _build_strategy_guidance(families)
+    spec = SimpleNamespace(operator_categories=["vehicle_level", "order_level"])
+    guidance = _build_strategy_guidance(families, spec)
     assert "order_level" in guidance
 
 
@@ -373,3 +384,142 @@ def test_build_hypothesis_context_includes_strategy_guidance(tmp_path):
     ctx = cm.build_hypothesis_context(branch, champion, spec, [], [], step_history=[])
     assert "strategy_guidance" in ctx
     assert "exploration_coverage" in ctx
+
+
+def test_build_hypothesis_context_includes_runtime_feedback(tmp_path):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1, operator_pool={},
+        solver_config_hash="abc", code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(branch_id="b1", state=BranchState.EXPLORE, base_champion_id=1, base_champion_hash="x")
+    from scion.config.problem import ProblemSpec, SearchSpace
+    spec = ProblemSpec(
+        name="test", root_dir=str(code_dir),
+        operator_categories=["vehicle_level", "order_level"],
+        search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
+    )
+    step = _make_step(
+        round_num=3,
+        hypothesis_text="Try unbounded route-pair scan",
+        failure_stage="verification",
+    )
+    step.verification_detail = (
+        "severity=heavy  first_failure=V9_perf_guard\n"
+        "  [V9_perf_guard] (heavy) too slow: case=x.json candidate=6000ms "
+        "champion=1000ms ratio=6.00x timeout=60s"
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[step]
+    )
+
+    assert "runtime_feedback" in ctx
+    assert "route-pair" not in ctx["runtime_feedback"]
+    assert "V9_perf_guard" not in ctx["runtime_feedback"]
+    assert "ratio=6.00x" in ctx["runtime_feedback"]
+    assert "bounded neighborhoods" in ctx["runtime_feedback"]
+
+
+def test_build_hypothesis_context_includes_screening_runtime_summary(tmp_path):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1, operator_pool={},
+        solver_config_hash="abc", code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(branch_id="b1", state=BranchState.EXPLORE, base_champion_id=1, base_champion_hash="x")
+    from scion.config.problem import ProblemSpec, SearchSpace
+    spec = ProblemSpec(
+        name="test", root_dir=str(code_dir),
+        operator_categories=["vehicle_level", "order_level"],
+        search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
+    )
+    step = _make_step(
+        round_num=4,
+        hypothesis_text="bounded screening runtime",
+        win_rate=0.7,
+        runtime_ratio_median=1.35,
+        runtime_delta_median_ms=42.0,
+        runtime_regression_rate=0.5,
+        runtime_pairs=6,
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[step]
+    )
+
+    assert "Recent screening runtime summary" in ctx["runtime_feedback"]
+    assert "median_ratio=1.35x" in ctx["runtime_feedback"]
+    assert "median_delta_ms=42.00" in ctx["runtime_feedback"]
+    assert "regression_rate=0.50" in ctx["runtime_feedback"]
+    assert "pairs=6" in ctx["runtime_feedback"]
+
+
+def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    champion = ChampionState(
+        version=1, operator_pool={},
+        solver_config_hash="abc", code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(branch_id="b1", state=BranchState.EXPLORE, base_champion_id=1, base_champion_hash="x")
+    from scion.config.problem import ProblemSpec, SearchSpace
+    spec = ProblemSpec(
+        name="test", root_dir=str(code_dir),
+        operator_categories=["vehicle_level", "order_level"],
+        search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
+    )
+    raw_metrics = tmp_path / "screening_metrics.json"
+    raw_metrics.write_text(json.dumps({
+        "pairs": [
+            {
+                "case": "/tmp/cases/slow-A.vrp",
+                "seed": 7,
+                "runtime_ratio": 3.25,
+                "candidate_elapsed_ms": 3250,
+                "champion_elapsed_ms": 1000,
+            }
+        ],
+        "failures": [
+            {
+                "case": "/tmp/cases/timeout-B.vrp",
+                "seed": 9,
+                "side": "candidate",
+                "error_category": "timeout",
+                "elapsed_ms": 2000,
+            }
+        ],
+    }))
+    step = _make_step(
+        round_num=5,
+        hypothesis_text="raw runtime feedback",
+        win_rate=0.7,
+        runtime_ratio_median=3.25,
+        runtime_delta_median_ms=2250.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=1,
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="pass",
+        reason_codes=("TEST",),
+        exposed_summary="test",
+        raw_metrics_ref=str(raw_metrics),
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[step]
+    )
+
+    assert "Recent screening timeout/crash cases" in ctx["runtime_feedback"]
+    assert "timeout-B.vrp" in ctx["runtime_feedback"]
+    assert "candidate_failure=timeout" in ctx["runtime_feedback"]
+    assert "Recent slow screening cases" in ctx["runtime_feedback"]
+    assert "slow-A.vrp" in ctx["runtime_feedback"]
+    assert "runtime_ratio=3.25x" in ctx["runtime_feedback"]

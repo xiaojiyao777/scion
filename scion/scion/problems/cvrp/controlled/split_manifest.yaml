@@ -1,0 +1,16 @@
+version: "0.4-cvrp-controlled-smoke"
+
+screening:
+  - controlled/data/synthetic_screening_micro_5.vrp
+  - controlled/data/synthetic_screening_split_6.vrp
+
+validation:
+  - controlled/data/synthetic_validation_micro_5.vrp
+  - controlled/data/synthetic_validation_split_6.vrp
+
+frozen:
+  - controlled/data/synthetic_frozen_micro_5.vrp
+  - controlled/data/synthetic_frozen_split_6.vrp
+
+canary:
+  - controlled/data/synthetic_controlled_canary_5.vrp

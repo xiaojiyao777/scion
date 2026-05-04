@@ -107,7 +107,7 @@ class ProblemSpecV1(_Strict):
     family_taxonomy: FamilyTaxonomySpec | None = None
     adapter: ProblemAdapterRef
 
-    # Legacy compat fields (optional, for warehouse migration in N1)
+    # Legacy compatibility fields for pre-ProblemSpecV1 problem packages.
     operators_dir: str = "operators"
     data_dir: str = "data"
     oracle_path: str = "oracle.py"

@@ -76,6 +76,13 @@ class CanaryProtocolConfig(BaseModel):
     """canary seed 列表。"""
 
 
+class RuntimeGovernanceConfig(BaseModel):
+    """Runtime/algorithm-efficiency promotion governance."""
+
+    max_runtime_ratio: float = Field(gt=0.0, default=2.0)
+    """Maximum accepted candidate/champion median runtime ratio."""
+
+
 class RetryConfig(BaseModel):
     """重试配置。"""
 
@@ -155,6 +162,9 @@ class ProtocolConfig(BaseModel):
     gates: GatesConfig = Field(default_factory=GatesConfig)
     """门控阈值配置。"""
 
+    runtime: RuntimeGovernanceConfig = Field(default_factory=RuntimeGovernanceConfig)
+    """Runtime and algorithm-efficiency governance."""
+
     # ------------------------------------------------------------------
     # Backward-compatibility properties (used by gates.py and old tests)
     # ------------------------------------------------------------------
@@ -173,6 +183,11 @@ class ProtocolConfig(BaseModel):
     def min_practical_delta(self) -> float:
         """Numeric practical delta threshold (default 0.001)."""
         return 0.001
+
+    @property
+    def max_runtime_ratio(self) -> float:
+        """Alias for runtime.max_runtime_ratio."""
+        return self.runtime.max_runtime_ratio
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "ProtocolConfig":

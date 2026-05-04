@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "bks": 524.611,
+      "bks_routes": 5,
+      "case_id": "CMT1",
+      "dimension": 51,
+      "source_path": "cvrplib/CMT/CMT1.vrp",
+      "subset": "CMT"
+    },
+    {
+      "bks": 826.137,
+      "bks_routes": 8,
+      "case_id": "CMT3",
+      "dimension": 101,
+      "source_path": "cvrplib/CMT/CMT3.vrp",
+      "subset": "CMT"
+    },
+    {
+      "bks": 1395.85,
+      "bks_routes": 18,
+      "case_id": "CMT10",
+      "dimension": 200,
+      "source_path": "cvrplib/CMT/CMT10.vrp",
+      "subset": "CMT"
+    },
+    {
+      "bks": 724.0,
+      "bks_routes": 4,
+      "case_id": "F-n45-k4",
+      "dimension": 45,
+      "source_path": "cvrplib/F/F-n45-k4.vrp",
+      "subset": "F"
+    },
+    {
+      "bks": 237.0,
+      "bks_routes": 4,
+      "case_id": "F-n72-k4",
+      "dimension": 72,
+      "source_path": "cvrplib/F/F-n72-k4.vrp",
+      "subset": "F"
+    },
+    {
+      "bks": 1162.0,
+      "bks_routes": 7,
+      "case_id": "F-n135-k7",
+      "dimension": 135,
+      "source_path": "cvrplib/F/F-n135-k7.vrp",
+      "subset": "F"
+    },
+    {
+      "bks": 820.0,
+      "bks_routes": 10,
+      "case_id": "M-n101-k10",
+      "dimension": 101,
+      "source_path": "cvrplib/M/M-n101-k10.vrp",
+      "subset": "M"
+    },
+    {
+      "bks": 1015.0,
+      "bks_routes": 12,
+      "case_id": "M-n151-k12",
+      "dimension": 151,
+      "source_path": "cvrplib/M/M-n151-k12.vrp",
+      "subset": "M"
+    },
+    {
+      "bks": 1275.0,
+      "bks_routes": 17,
+      "case_id": "M-n200-k17",
+      "dimension": 200,
+      "source_path": "cvrplib/M/M-n200-k17.vrp",
+      "subset": "M"
+    },
+    {
+      "bks": 1618.36,
+      "bks_routes": 10,
+      "case_id": "Tai75a",
+      "dimension": 76,
+      "source_path": "cvrplib/tai/tai75a.vrp",
+      "subset": "tai"
+    },
+    {
+      "bks": 1939.9,
+      "bks_routes": 11,
+      "case_id": "Tai100b",
+      "dimension": 101,
+      "source_path": "cvrplib/tai/tai100b.vrp",
+      "subset": "tai"
+    },
+    {
+      "bks": 2358.66,
+      "bks_routes": 15,
+      "case_id": "Tai150c",
+      "dimension": 151,
+      "source_path": "cvrplib/tai/tai150c.vrp",
+      "subset": "tai"
+    }
+  ],
+  "config": {
+    "max_cases_per_subset": null,
+    "max_cases_total": 12,
+    "require_benchmark_feasible": true,
+    "require_bks": true,
+    "require_bks_routes": true,
+    "seeds": [
+      47,
+      53
+    ],
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "subsets": [
+      "CMT",
+      "F",
+      "M",
+      "tai"
+    ]
+  },
+  "metadata": {
+    "n_eligible_rows": 149,
+    "n_input_rows": 149,
+    "n_rejected_rows": 0,
+    "n_selected_cases": 12,
+    "rejection_counts_by_reason": {
+      "benchmark": 0,
+      "bks": 0,
+      "bks_routes": 0,
+      "feasible": 0,
+      "missing_path": 0,
+      "status": 0,
+      "subset": 0
+    },
+    "seed_list": [
+      47,
+      53
+    ],
+    "selection_policy": "eligible benchmark-feasible rows with BKS and BKS routes; deterministic dimension-spread per subset",
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "source_path": "vrp/results/full_experiment_seed0_final.csv",
+    "stage": "validation",
+    "subset_filters": [
+      "CMT",
+      "F",
+      "M",
+      "tai"
+    ],
+    "time_limit_sec": 5
+  },
+  "problem_id": "cvrp",
+  "schema": "scion.cvrp_case_manifest.v1"
+}

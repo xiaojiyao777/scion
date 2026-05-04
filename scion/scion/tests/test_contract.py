@@ -560,6 +560,22 @@ class TestC9cComplexityBound:
         assert not c9c.passed
         assert "variable_k" in c9c.detail
 
+    def test_aliased_high_order_combinations_fail(self, gate: ContractGate):
+        code = (
+            "from itertools import combinations as combos\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        routes = sorted(solution.vehicles)\n"
+            "        for subset in combos(routes, 3):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "combinations(..., 3)" in c9c.detail
+
 
 # ---------------------------------------------------------------------------
 # C10: Novelty

@@ -1,0 +1,182 @@
+{
+  "cases": [
+    {
+      "bks": 784.0,
+      "bks_routes": 5,
+      "case_id": "A-n32-k5",
+      "dimension": 32,
+      "source_path": "cvrplib/A/A-n32-k5.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 822.0,
+      "bks_routes": 5,
+      "case_id": "A-n39-k5",
+      "dimension": 39,
+      "source_path": "cvrplib/A/A-n39-k5.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 1167.0,
+      "bks_routes": 7,
+      "case_id": "A-n54-k7",
+      "dimension": 54,
+      "source_path": "cvrplib/A/A-n54-k7.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 1763.0,
+      "bks_routes": 10,
+      "case_id": "A-n80-k10",
+      "dimension": 80,
+      "source_path": "cvrplib/A/A-n80-k10.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 672.0,
+      "bks_routes": 5,
+      "case_id": "B-n31-k5",
+      "dimension": 31,
+      "source_path": "cvrplib/B/B-n31-k5.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 742.0,
+      "bks_routes": 6,
+      "case_id": "B-n43-k6",
+      "dimension": 43,
+      "source_path": "cvrplib/B/B-n43-k6.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 747.0,
+      "bks_routes": 7,
+      "case_id": "B-n52-k7",
+      "dimension": 52,
+      "source_path": "cvrplib/B/B-n52-k7.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 1272.0,
+      "bks_routes": 9,
+      "case_id": "B-n68-k9",
+      "dimension": 68,
+      "source_path": "cvrplib/B/B-n68-k9.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 375.0,
+      "bks_routes": 4,
+      "case_id": "E-n22-k4",
+      "dimension": 22,
+      "source_path": "cvrplib/E/E-n22-k4.vrp",
+      "subset": "E"
+    },
+    {
+      "bks": 835.0,
+      "bks_routes": 4,
+      "case_id": "E-n33-k4",
+      "dimension": 33,
+      "source_path": "cvrplib/E/E-n33-k4.vrp",
+      "subset": "E"
+    },
+    {
+      "bks": 735.0,
+      "bks_routes": 8,
+      "case_id": "E-n76-k8",
+      "dimension": 76,
+      "source_path": "cvrplib/E/E-n76-k8.vrp",
+      "subset": "E"
+    },
+    {
+      "bks": 815.0,
+      "bks_routes": 8,
+      "case_id": "E-n101-k8",
+      "dimension": 101,
+      "source_path": "cvrplib/E/E-n101-k8.vrp",
+      "subset": "E"
+    },
+    {
+      "bks": 450.0,
+      "bks_routes": 8,
+      "case_id": "P-n16-k8",
+      "dimension": 16,
+      "source_path": "cvrplib/P/P-n16-k8.vrp",
+      "subset": "P"
+    },
+    {
+      "bks": 458.0,
+      "bks_routes": 5,
+      "case_id": "P-n40-k5",
+      "dimension": 40,
+      "source_path": "cvrplib/P/P-n40-k5.vrp",
+      "subset": "P"
+    },
+    {
+      "bks": 744.0,
+      "bks_routes": 10,
+      "case_id": "P-n60-k10",
+      "dimension": 60,
+      "source_path": "cvrplib/P/P-n60-k10.vrp",
+      "subset": "P"
+    },
+    {
+      "bks": 681.0,
+      "bks_routes": 4,
+      "case_id": "P-n101-k4",
+      "dimension": 101,
+      "source_path": "cvrplib/P/P-n101-k4.vrp",
+      "subset": "P"
+    }
+  ],
+  "config": {
+    "max_cases_per_subset": null,
+    "max_cases_total": 16,
+    "require_benchmark_feasible": true,
+    "require_bks": true,
+    "require_bks_routes": true,
+    "seeds": [
+      11,
+      29
+    ],
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "subsets": [
+      "A",
+      "B",
+      "E",
+      "P"
+    ]
+  },
+  "metadata": {
+    "n_eligible_rows": 149,
+    "n_input_rows": 149,
+    "n_rejected_rows": 0,
+    "n_selected_cases": 16,
+    "rejection_counts_by_reason": {
+      "benchmark": 0,
+      "bks": 0,
+      "bks_routes": 0,
+      "feasible": 0,
+      "missing_path": 0,
+      "status": 0,
+      "subset": 0
+    },
+    "seed_list": [
+      11,
+      29
+    ],
+    "selection_policy": "eligible benchmark-feasible rows with BKS and BKS routes; deterministic dimension-spread per subset",
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "source_path": "vrp/results/full_experiment_seed0_final.csv",
+    "stage": "screening",
+    "subset_filters": [
+      "A",
+      "B",
+      "E",
+      "P"
+    ],
+    "time_limit_sec": 3
+  },
+  "problem_id": "cvrp",
+  "schema": "scion.cvrp_case_manifest.v1"
+}

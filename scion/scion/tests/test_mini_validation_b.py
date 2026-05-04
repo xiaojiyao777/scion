@@ -83,15 +83,15 @@ class TestAsyncWeightStress:
             branches.append((state, b))
         return ctrl, branches
 
-    def test_weight_update_only_marks_screening(self) -> None:
+    def test_weight_update_marks_non_frozen_active_branches(self) -> None:
         ctrl, branches = self._setup()
         affected = ctrl.mark_stale_for_weight_update(1)
-        assert len(affected) == 2
+        assert len(affected) == 5
         for orig_state, b in branches:
-            if orig_state in (BranchState.EXPLORE, BranchState.EXPLORE_EXPAND):
-                assert b.state == BranchState.STALE_WEIGHT_UPDATE
-            else:
+            if orig_state == BranchState.FROZEN_TESTING:
                 assert b.state == orig_state
+            else:
+                assert b.state == BranchState.STALE_WEIGHT_UPDATE
 
     def test_champion_promotion_marks_broader(self) -> None:
         ctrl, branches = self._setup()

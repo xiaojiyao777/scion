@@ -6,8 +6,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
-import yaml
-
 import typer
 
 app = typer.Typer(
@@ -76,6 +74,7 @@ def run(
     protocol: Optional[str] = typer.Option(None, "--protocol", help="Path to protocol.yaml"),
     split: Optional[str] = typer.Option(None, "--split", help="Path to split_manifest.yaml"),
     seeds: Optional[str] = typer.Option(None, "--seeds", help="Path to seed_ledger.yaml"),
+    time_limit_sec: Optional[int] = typer.Option(None, "--time-limit-sec", help="Per solver run time limit; defaults to problem solver.time_limit_sec"),
 ) -> None:
     """Run the Scion main loop.
 
@@ -108,13 +107,17 @@ def run(
     problem_v1_path = problem_dir / "problem-v1.yaml"
     if problem_v1_path.exists():
         try:
+            from scion.problem.bridge import (
+                bridge_problem_spec_v1,
+                load_problem_spec_v1_from_yaml,
+            )
             from scion.problem.loader import load_problem_adapter
-            from scion.problem.spec import ProblemSpecV1
-            with open(problem_v1_path, encoding="utf-8") as fh:
-                problem_v1 = ProblemSpecV1(**yaml.safe_load(fh))
+            problem_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
+            bridge = bridge_problem_spec_v1(problem_v1)
+            spec = bridge.problem_spec
             adapter = load_problem_adapter(problem_v1)
-            metric_specs = problem_v1.objectives
-            operator_execute_signature = problem_v1.operator_interface.execute_signature
+            metric_specs = bridge.metric_specs
+            operator_execute_signature = bridge.operator_execute_signature
         except Exception as exc:
             typer.echo(f"ERROR: failed to load problem-v1 adapter: {exc}", err=True)
             raise typer.Exit(code=1)
@@ -170,8 +173,14 @@ def run(
     runner = LocalSubprocessRunner()
     split_manager = SplitManager(split_manifest)
     seed_ledger_obj = SeedLedger(seed_ledger)
+    effective_time_limit = (
+        time_limit_sec
+        if time_limit_sec is not None
+        else getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
+    )
     experiment_protocol = ExperimentProtocol(
         proto_cfg, split_manager, seed_ledger_obj, runner,
+        time_limit_sec=effective_time_limit,
         metrics_dir=metrics_dir,
         metric_specs=metric_specs,
         require_metric_specs=metric_specs is not None,
@@ -184,6 +193,7 @@ def run(
         strict_runtime_checks=adapter is not None,
         require_adapter_for_runtime=adapter is not None,
         operator_execute_signature=operator_execute_signature,
+        max_runtime_ratio=proto_cfg.runtime.max_runtime_ratio,
     )
 
     # Build initial champion — load operator_pool from registry.yaml if available
@@ -353,10 +363,14 @@ def optimize_weights(
     problem_v1_path = problem_dir / "problem-v1.yaml"
     if problem_v1_path.exists():
         try:
-            from scion.problem.spec import ProblemSpecV1
-            with open(problem_v1_path, encoding="utf-8") as fh:
-                problem_v1 = ProblemSpecV1(**yaml.safe_load(fh))
-            metric_specs = problem_v1.objectives
+            from scion.problem.bridge import (
+                bridge_problem_spec_v1,
+                load_problem_spec_v1_from_yaml,
+            )
+            problem_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
+            bridge = bridge_problem_spec_v1(problem_v1)
+            spec = bridge.problem_spec
+            metric_specs = bridge.metric_specs
         except Exception as exc:
             typer.echo(f"ERROR: failed to load problem-v1 objective specs: {exc}", err=True)
             raise typer.Exit(code=1)

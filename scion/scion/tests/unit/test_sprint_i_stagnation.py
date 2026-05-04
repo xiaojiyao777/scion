@@ -161,6 +161,7 @@ class TestI2PromoteReset:
 
         # Register branch and give it a workspace
         branch = _register_branch(cm, "bp")
+        branch.state = BranchState.FROZEN_TESTING
         ws = tempfile.mkdtemp()
         cm._branch_workspaces["bp"] = ws
         return cm
@@ -282,6 +283,7 @@ class TestI4HardStagnationEscape:
         cm._hard_stagnation_escape_used = True
 
         branch = _register_branch(cm, "bp")
+        branch.state = BranchState.FROZEN_TESTING
         ws = tempfile.mkdtemp()
         cm._branch_workspaces["bp"] = ws
 

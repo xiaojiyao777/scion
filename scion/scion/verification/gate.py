@@ -37,6 +37,7 @@ from scion.runtime.runner import Runner
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
 from scion.verification.tests import check_unit_tests, check_regression_tests
+from scion.verification.feasibility import resolve_problem_path
 from scion.verification.state_mutation import check_state_mutation
 from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
@@ -70,6 +71,7 @@ class VerificationGate:
         strict_runtime_checks: bool = False,
         require_adapter_for_runtime: bool = False,
         operator_execute_signature: str | None = None,
+        max_runtime_ratio: float | None = None,
     ) -> None:
         self._spec = problem_spec
         self._runner = runner
@@ -78,6 +80,7 @@ class VerificationGate:
         self._strict_runtime_checks = strict_runtime_checks
         self._require_adapter_for_runtime = require_adapter_for_runtime
         self._operator_execute_signature = operator_execute_signature
+        self._max_runtime_ratio = max_runtime_ratio
 
     def run(
         self,
@@ -147,7 +150,12 @@ class VerificationGate:
         # V5_solution_consistency: solution consistency after solver run.
         # NOTE: Current implementation is a proxy consistency check (not a true
         # input-mutation harness). Rename target: V5_solution_consistency in v0.3.
-        r = check_state_mutation(self._spec, self._runner, candidate_workspace)
+        r = check_state_mutation(
+            self._spec,
+            self._runner,
+            candidate_workspace,
+            adapter=self._adapter,
+        )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -174,7 +182,11 @@ class VerificationGate:
 
         # --- V9: perf_guard (heavy) ---
         r = check_perf(
-            self._spec, self._runner, candidate_workspace, champion_workspace
+            self._spec,
+            self._runner,
+            candidate_workspace,
+            champion_workspace,
+            max_slowdown=self._max_runtime_ratio or 5.0,
         )
         checks.append(r)
         if not r.passed:
@@ -201,7 +213,7 @@ def _validate_runtime_config(
 ) -> CheckResult | None:
     if require_adapter_for_runtime and adapter is None:
         return _runtime_config_failure("problem adapter is required for runtime verification")
-    canary = problem_spec.canary_case_path
+    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _runtime_config_failure("canary_case_path is required")
     if not os.path.isfile(canary):

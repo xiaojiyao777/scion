@@ -33,9 +33,10 @@ from scion.runtime.workspace import WorkspaceMaterializer
 # Paths
 # ---------------------------------------------------------------------------
 
-_SCION_ROOT = Path(__file__).parent.parent.parent  # scion/
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCION_ROOT = _REPO_ROOT / "scion"
 _PROBLEM_DIR = _SCION_ROOT / "problems" / "warehouse_delivery"
-_SURROGATE_DIR = _SCION_ROOT.parent / "surrogate"
+_SURROGATE_DIR = _REPO_ROOT / "surrogate"
 
 
 def _surrogate_available() -> bool:
@@ -191,6 +192,7 @@ def _build_real_campaign(
 # ===========================================================================
 
 @skip_no_surrogate
+@pytest.mark.integration
 class TestSolverSubprocess:
     """Verify LocalSubprocessRunner can execute real solver.py."""
 
@@ -250,6 +252,7 @@ class TestSolverSubprocess:
 # ===========================================================================
 
 @skip_no_surrogate
+@pytest.mark.integration
 class TestContractGateRealCode:
     """Verify ContractGate passes real warehouse_delivery operator code."""
 
@@ -318,6 +321,8 @@ class TestContractGateRealCode:
 # ===========================================================================
 
 @skip_no_surrogate
+@pytest.mark.integration
+@pytest.mark.slow
 class TestFullPipelineRealSolver:
     """End-to-end: MockLLM + real ContractGate + real solver + real ExperimentProtocol."""
 
@@ -407,6 +412,7 @@ class TestFullPipelineRealSolver:
 # ===========================================================================
 
 @skip_no_surrogate
+@pytest.mark.integration
 class TestConfigConsistency:
     """Verify problem.yaml config is consistent with actual operator code."""
 

@@ -1,0 +1,46 @@
+version: 0.4-cvrp-formal-readiness
+screening:
+- cvrplib/A/A-n32-k5.vrp
+- cvrplib/A/A-n39-k5.vrp
+- cvrplib/A/A-n54-k7.vrp
+- cvrplib/A/A-n80-k10.vrp
+- cvrplib/B/B-n31-k5.vrp
+- cvrplib/B/B-n43-k6.vrp
+- cvrplib/B/B-n52-k7.vrp
+- cvrplib/B/B-n68-k9.vrp
+- cvrplib/E/E-n22-k4.vrp
+- cvrplib/E/E-n33-k4.vrp
+- cvrplib/E/E-n76-k8.vrp
+- cvrplib/E/E-n101-k8.vrp
+- cvrplib/P/P-n16-k8.vrp
+- cvrplib/P/P-n40-k5.vrp
+- cvrplib/P/P-n60-k10.vrp
+- cvrplib/P/P-n101-k4.vrp
+validation:
+- cvrplib/CMT/CMT1.vrp
+- cvrplib/CMT/CMT3.vrp
+- cvrplib/CMT/CMT10.vrp
+- cvrplib/F/F-n45-k4.vrp
+- cvrplib/F/F-n72-k4.vrp
+- cvrplib/F/F-n135-k7.vrp
+- cvrplib/M/M-n101-k10.vrp
+- cvrplib/M/M-n151-k12.vrp
+- cvrplib/M/M-n200-k17.vrp
+- cvrplib/tai/tai75a.vrp
+- cvrplib/tai/tai100b.vrp
+- cvrplib/tai/tai150c.vrp
+frozen:
+- cvrplib/X/X-n106-k14.vrp
+- cvrplib/X/X-n139-k10.vrp
+- cvrplib/X/X-n167-k10.vrp
+- cvrplib/X/X-n204-k19.vrp
+- cvrplib/X/X-n237-k14.vrp
+- cvrplib/X/X-n280-k17.vrp
+- cvrplib/X/X-n327-k20.vrp
+- cvrplib/X/X-n401-k29.vrp
+- cvrplib/X/X-n513-k21.vrp
+- cvrplib/X/X-n641-k35.vrp
+- cvrplib/X/X-n856-k95.vrp
+- cvrplib/X/X-n1001-k43.vrp
+canary:
+- controlled/data/synthetic_controlled_canary_5.vrp

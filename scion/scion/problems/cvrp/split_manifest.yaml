@@ -1,0 +1,14 @@
+version: "0.4-cvrp-smoke"
+
+screening:
+  - data/tiny_5.json
+  - data/tiny_6.json
+
+validation:
+  - data/tiny_6.json
+
+frozen:
+  - data/tiny_frozen.json
+
+canary:
+  - data/tiny_canary.json

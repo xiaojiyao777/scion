@@ -578,6 +578,23 @@ class TestContractFailure:
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert branch.state == BranchState.EXPLORE  # can still be retried
 
+    def test_workspace_creation_failure_routes_as_infra(self, tmp_path):
+        """Workspace setup failures should enter failure lifecycle, not just record a step."""
+        cm = _campaign(tmp_path)
+
+        def fail_create_workspace(branch_id, source_snapshot):
+            raise OSError("disk unavailable")
+
+        cm._materializer.create_branch_workspace = fail_create_workspace
+
+        result = cm.run_one_step()
+
+        assert result.branch_id is not None
+        assert result.reason == "workspace setup failed"
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch.state == BranchState.BLOCKED_INFRA
+        assert cm._failure_streak["infra"] == 1
+
     def test_hypothesis_contract_fail_handled(self, tmp_path):
         """Invalid hypothesis (empty change_locus) routes as contract failure."""
         bad_hypothesis = {
@@ -1014,30 +1031,16 @@ def _setup_for_on_promote(tmp_path, with_registry=False):
 
     cm = _campaign(tmp_path)
     branch = cm._branch_ctrl.create_branch(cm._champion)
+    branch.state = BranchState.FROZEN_TESTING
     cm._branch_workspaces[branch.branch_id] = str(ws)
     return cm, branch, str(ws)
 
 
 class TestPromoteWeightOptimizationHook:
     def test_on_promote_runs_weight_optimization(self, tmp_path):
-        """promote → _run_weight_optimization is called when enabled + runner present."""
-        import types
-        from scion.core.models import WeightOptimizationResult
+        """promote → weight optimization coordinator is called when enabled + runner present."""
 
         call_log = []
-
-        def fake_run_opt(self_cm, snapshot, version, current_weights):
-            call_log.append(version)
-            return WeightOptimizationResult(
-                baseline_weights={},
-                best_weights={},
-                baseline_score=0.5,
-                best_score=0.8,
-                improved=True,
-                n_evaluations=8,
-                elapsed_seconds=1.0,
-                observations_ref="",
-            )
 
         cm, branch, _ = _setup_for_on_promote(tmp_path)
         # Attach a protocol with a runner attribute so the enabled-and-runner check passes
@@ -1046,11 +1049,17 @@ class TestPromoteWeightOptimizationHook:
         cm._experiment_protocol = protocol
         # spec.parameter_search.enabled is True by default
 
-        cm._run_weight_optimization = types.MethodType(fake_run_opt, cm)
+        class FakeWeightOptCoordinator:
+            def spawn_for_promoted_champion(
+                self, snapshot, version, current_weights, base_weight_revision=0
+            ):
+                call_log.append((snapshot, version, dict(current_weights), base_weight_revision))
+
+        cm._weight_opt_coord = FakeWeightOptCoordinator()
         cm._on_promote(branch)
 
-        assert len(call_log) == 1, "Expected _run_weight_optimization to be called once"
-        assert call_log[0] == 2  # champion version bumps from 1 → 2
+        assert len(call_log) == 1, "Expected weight opt coordinator to be called once"
+        assert call_log[0][1] == 2  # champion version bumps from 1 → 2
 
     def test_on_promote_rebuilds_operator_pool_from_registry(self, tmp_path):
         """After promote, champion.operator_pool comes from snapshot registry.yaml."""
@@ -1064,6 +1073,69 @@ class TestPromoteWeightOptimizationHook:
         assert cm._champion.version == 2
         # Registry had swap + move — pool should include them
         assert "swap" in pool and "move" in pool
+
+    def test_on_promote_transitions_promoted_branch_before_stale_marking(self, tmp_path):
+        """Direct compatibility helper must not leave the promoted branch stale."""
+        cm, branch, _ = _setup_for_on_promote(tmp_path)
+        cm._spec.parameter_search.enabled = False
+        cm._experiment_protocol = None
+        sibling = cm._branch_ctrl.create_branch(cm._champion)
+
+        cm._on_promote(branch)
+
+        assert cm._branch_ctrl.get_branch(branch.branch_id).state == BranchState.PROMOTED
+        assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.STALE
+
+    def test_promotion_store_failure_does_not_commit_side_effects(self, tmp_path):
+        """Champion store failure must not install champion, stale branches, or write PROMOTE."""
+
+        class FailingChampionStore:
+            def promote(self, champion):
+                raise OSError("store unavailable")
+
+        call_log = []
+
+        class FakeWeightOptCoordinator:
+            latest_result = None
+
+            def spawn_for_promoted_champion(
+                self, snapshot, version, current_weights, base_weight_revision=0
+            ):
+                call_log.append(("spawn", version))
+
+            def run_for_promoted_champion_sync(
+                self, snapshot, version, current_weights, base_weight_revision=0
+            ):
+                call_log.append(("sync", version))
+
+            def drain_completed_events(self):
+                return []
+
+            def status_snapshot(self):
+                return {"pending_threads": 0, "active": [], "runs": []}
+
+        cm = _campaign(tmp_path, experiment_protocol=_promote_protocol())
+        cm._champion_store = FailingChampionStore()
+        cm._weight_opt_coord = FakeWeightOptCoordinator()
+
+        r1 = cm.run_one_step()
+        bid = r1.branch_id
+        assert bid is not None
+        sibling = cm._branch_ctrl.create_branch(cm._champion)
+
+        cm.run_one_step()
+        result = cm.run_one_step()
+
+        assert result.branch_id == bid
+        assert result.decision is None
+        assert "promote_commit_failed" in result.reason
+        assert cm._champion.version == 1
+        assert cm._branch_ctrl.get_branch(bid).state != BranchState.PROMOTED
+        assert cm._branch_ctrl.get_branch(sibling.branch_id).state == BranchState.EXPLORE
+        assert call_log == []
+
+        rows = cm._registry.query_by_branch(bid)
+        assert not any(row.get("decision") == "promote" for row in rows)
 
     def test_on_promote_without_parameter_search(self, tmp_path):
         """parameter_search.enabled=False → _run_weight_optimization is NOT called."""
@@ -1164,12 +1236,17 @@ class TestCodeFailureRetry:
         bid = r1.branch_id
         # The hypothesis should now be in pending (not discarded)
         assert bid in cm._pending_hypotheses, "hypothesis should be queued for retry"
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.pending_retry is True
 
         # Step 2: retries code gen with pending hypothesis — should succeed
         r2 = cm.run_one_step()
         assert r2.branch_id == bid
         # Pending entry consumed
         assert bid not in cm._pending_hypotheses, "pending hypothesis should be cleared on success"
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.pending_retry is False
+        assert branch.consecutive_llm_retries == 0
         # Step 2 produced a valid decision (not just a failure skip)
         assert r2.decision is not None
 
@@ -1187,6 +1264,9 @@ class TestCodeFailureRetry:
         r2 = cm.run_one_step()
         assert r2.branch_id == bid
         assert bid not in cm._pending_hypotheses, "hypothesis must not be re-queued after retry failure"
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.pending_retry is False
+        assert branch.consecutive_llm_retries == 0
 
         # The step history should reflect both failures
         code_fail_steps = [
@@ -1270,6 +1350,7 @@ class TestNoFakeHypothesisRecordFallback:
 
         # Manually delete the canonical hypothesis record to simulate the lost-record scenario
         cm._branch_current_hypothesis.pop(bid, None)
+        budget_used_before = cm._budget.used
 
         # Run next step — the campaign will schedule READY_VALIDATE → VALIDATING
         # and call _run_eval_step, which should raise RuntimeError and abandon the branch
@@ -1281,3 +1362,6 @@ class TestNoFakeHypothesisRecordFallback:
         assert branch.state == BranchState.ABANDONED, (
             f"Expected ABANDONED but got {branch.state}; result={result}"
         )
+        assert protocol.canary_call_count == 1
+        assert protocol.experiment_call_count == 1
+        assert cm._budget.used == budget_used_before

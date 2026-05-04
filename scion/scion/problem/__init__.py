@@ -9,6 +9,11 @@ from scion.problem.contracts import (
     SolverArtifact,
 )
 from scion.problem.loader import ProblemAdapterLoadError, load_problem_adapter
+from scion.problem.bridge import (
+    ProblemSpecBridge,
+    bridge_problem_spec_v1,
+    legacy_problem_spec_from_v1,
+)
 from scion.problem.objectives import (
     MetricComparison,
     ObjectiveComparison,
@@ -28,9 +33,12 @@ __all__ = [
     "ProblemAdapter",
     "ProblemAdapterLoadError",
     "ProblemAdapterRef",
+    "ProblemSpecBridge",
     "ProblemSpecV1",
     "ObjectiveMetricSpec",
     "SolverArtifact",
     "compare_lexicographic",
+    "bridge_problem_spec_v1",
+    "legacy_problem_spec_from_v1",
     "load_problem_adapter",
 ]

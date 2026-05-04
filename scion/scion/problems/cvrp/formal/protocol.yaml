@@ -1,0 +1,34 @@
+version: 0.4-cvrp-formal-readiness
+screening:
+  n_cases_modify: 8
+  n_cases_create: 12
+  n_seeds: 2
+  expand_to_modify: 12
+  expand_to_create: 16
+validation:
+  n_cases: 8
+  n_seeds: 2
+  expand_to: 12
+frozen:
+  n_cases: 8
+  n_seeds: 2
+  max_uses_per_campaign: 2
+canary:
+  cases:
+  - controlled/data/synthetic_controlled_canary_5.vrp
+  seeds:
+  - 101
+runtime:
+  max_runtime_ratio: 2.0
+gates:
+  screening:
+    win_rate_min: 0.6
+    median_delta_min: practical_delta_screen
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: practical_delta_validate
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 1000
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true

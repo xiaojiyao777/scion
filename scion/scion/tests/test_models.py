@@ -43,7 +43,18 @@ def test_decision_features_no_free_text_guard():
         "stale": bool,
         "recent_retry_count": int,
         "recent_failure_codes": tuple,
-        "budget_remaining_ratio": float
+        "budget_remaining_ratio": float,
+        "runtime_ratio_median": (float, type(None)),
+        "runtime_delta_median_ms": (float, type(None)),
+        "runtime_regression_rate": (float, type(None)),
+        "runtime_pairs": int,
+        "protocol_gate_outcome": (str, type(None)),
+        "total_pairs": int,
+        "attempted_pairs": int,
+        "valid_pairs": int,
+        "failed_pairs": int,
+        "candidate_failed_pairs": int,
+        "champion_failed_pairs": int,
     }
     
     # 检查所有 DecisionFeatures 的字段是否都在允许列表中

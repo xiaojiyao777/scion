@@ -60,6 +60,9 @@ class HypothesisProposal:
     objective_tradeoff_policy: str = ""
     no_op_condition: str = ""
     risk_to_higher_priority: str = ""
+    target_runtime_effect: Optional[str] = None
+    complexity_claim: Optional[str] = None
+    runtime_budget_strategy: Optional[str] = None
 
 @dataclass
 class PatchProposal:
@@ -77,6 +80,7 @@ class CheckResult:
     severity: Literal["light", "heavy"]
     detail: str
     elapsed_ms: int
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class ContractResult:
@@ -120,12 +124,22 @@ class EvalStats:
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
     metric_stats: Tuple[MetricEvalStats, ...] = ()
+    runtime_ratio_median: Optional[float] = None
+    runtime_delta_median_ms: Optional[float] = None
+    runtime_regression_rate: Optional[float] = None
+    runtime_pairs: int = 0
+    total_pairs: int = 0
+    attempted_pairs: int = 0
+    valid_pairs: int = 0
+    failed_pairs: int = 0
+    candidate_failed_pairs: int = 0
+    champion_failed_pairs: int = 0
 
 @dataclass(frozen=True)
 class ProtocolResult:
     stage: ExperimentStage
     stats: EvalStats
-    gate_outcome: Literal["pass", "fail", "unclear", "expand"]
+    gate_outcome: Literal["pass", "fail", "unclear", "expand", "continue"]
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
     raw_metrics_ref: str  # Path to full JSON metrics
@@ -202,6 +216,20 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
+    runtime_guard_passed: Optional[bool] = None
+    runtime_guard_ratio: Optional[float] = None
+    runtime_guard_timeout: bool = False
+    runtime_ratio_median: Optional[float] = None
+    runtime_delta_median_ms: Optional[float] = None
+    runtime_regression_rate: Optional[float] = None
+    runtime_pairs: int = 0
+    protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
+    total_pairs: int = 0
+    attempted_pairs: int = 0
+    valid_pairs: int = 0
+    failed_pairs: int = 0
+    candidate_failed_pairs: int = 0
+    champion_failed_pairs: int = 0
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
     # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
@@ -300,6 +328,7 @@ class SolverOutput:
     assignment: Dict[str, str]
     objective: Dict[str, Any]
     feasible: bool
+    runtime: Dict[str, Any] = field(default_factory=dict)
 
 # --- Infrastructure ---
 

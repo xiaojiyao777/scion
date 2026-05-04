@@ -1,7 +1,9 @@
 """ContextManager — builds LLM input contexts with exposure control (§5.3)."""
 from __future__ import annotations
 
+import json
 import os
+import re
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -69,6 +71,7 @@ class ContextManager:
         any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         champion_operators_code = _read_champion_operators(champion)
         experiment_history = _build_experiment_history(
             step_history or [], branch.branch_id
@@ -134,6 +137,7 @@ class ContextManager:
         search_control_guidance = _build_search_control_guidance(
             families, step_history or [], adapter_spec
         )
+        runtime_feedback = _build_runtime_feedback(step_history or [])
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -148,6 +152,7 @@ class ContextManager:
 
         return {
             "problem_summary": problem_summary,
+            "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "operator_categories": ", ".join(problem_spec.operator_categories),
@@ -167,6 +172,7 @@ class ContextManager:
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
             "search_control_guidance": search_control_guidance,
+            "runtime_feedback": runtime_feedback,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
@@ -195,6 +201,7 @@ class ContextManager:
         this hypothesis — the failure detail is included so the LLM can learn.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         hypothesis_detail = _format_hypothesis(hypothesis)
         if hypothesis.action == "create_new":
             target_file_code = "(new file — will be created)"
@@ -212,6 +219,7 @@ class ContextManager:
 
         ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
+            "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "hypothesis_detail": hypothesis_detail,
@@ -246,6 +254,7 @@ class ContextManager:
         If failure_streak is provided, injects a failure pattern warning.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         failed_checks = [c for c in verification_result.checks if not c.passed]
         failure_detail = (
             f"Severity: {verification_result.failure_severity or 'unknown'}\n"
@@ -265,6 +274,7 @@ class ContextManager:
 
         ctx = {
             "problem_summary": problem_summary,
+            "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "original_code": (
                 f"File: {patch.file_path}\nAction: {patch.action}\n"
@@ -716,6 +726,13 @@ def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
     return "\n".join(lines)
 
 
+def _build_solver_mechanics(*, adapter=None) -> str:
+    """Render problem-specific solver mechanics through the adapter boundary."""
+    if adapter is not None and hasattr(adapter, "render_solver_mechanics"):
+        return adapter.render_solver_mechanics()
+    return ""
+
+
 def _read_champion_operators(champion: ChampionState) -> str:
     """Read all operator .py files from the champion snapshot directory."""
     operators_dir = os.path.join(champion.code_snapshot_path, "operators")
@@ -846,8 +863,7 @@ def _render_pattern_summary(pattern) -> str:
 
 def _render_case_feedback(cf) -> str:
     """Render a single CaseAggregateFeedback with directional language (T09)."""
-    size = cf.case_features.get("size_bucket", "?")
-    n_orders = cf.case_features.get("n_orders", "?")
+    feature_label = _render_case_feature_label(getattr(cf, "case_features", {}) or {})
     result_upper = cf.dominant_result.upper()
 
     # Build directional description using generic metric deltas
@@ -864,18 +880,32 @@ def _render_case_feedback(cf) -> str:
     else:
         decisive_str = f"Decisive: {metric}"
 
-    # Champion baseline hint from case_features if available
-    champ_splits = cf.case_features.get("champion_splits")
+    # Champion baseline hints from case_features if available.
     baseline_note = ""
-    if champ_splits is not None:
-        baseline_note = f"\n        Champion baseline: ~{champ_splits} splits on this case"
+    baseline_parts = [
+        f"{key}={value}"
+        for key, value in sorted((getattr(cf, "case_features", {}) or {}).items())
+        if str(key).startswith("champion_")
+    ]
+    if baseline_parts:
+        baseline_note = "\n        Champion baseline: " + ", ".join(baseline_parts)
 
     return (
-        f"      {cf.case_id} ({n_orders} orders, size={size}): {result_upper}"
+        f"      {cf.case_id} ({feature_label}): {result_upper}"
         f" (W/L/T={cf.wins}/{cf.losses}/{cf.ties}, consistency={cf.seed_consistency:.2f})"
         f"\n        {decisive_str}"
         f"{baseline_note}"
     )
+
+
+def _render_case_feature_label(features: dict) -> str:
+    if not features:
+        return "features=unknown"
+    preferred = ["size_bucket", "path_stem"]
+    keys = [key for key in preferred if key in features]
+    keys.extend(sorted(key for key in features if key not in keys and not str(key).startswith("champion_")))
+    parts = [f"{key}={features[key]}" for key in keys[:4]]
+    return ", ".join(parts) if parts else "features=unknown"
 
 
 def _select_cases_for_prompt(cases, max_cases: int = 4) -> list:
@@ -1157,7 +1187,158 @@ def _build_failure_pattern_warning(failure_streak: Dict[str, int]) -> str:
                 "  Common causes: solver crash, environment issues. "
                 "Ensure operator code is robust and handles edge cases."
             )
-    return "\n".join(lines)# ---------------------------------------------------------------------------
+    return "\n".join(lines)
+
+
+def _build_runtime_feedback(steps: List[StepRecord], max_items: int = 4) -> str:
+    """Render bounded runtime-guard feedback for proposal context.
+
+    This is proposal guidance only. It is intentionally derived from bounded
+    verification and screening aggregates. Validation/frozen per-case data is
+    never rendered here.
+    """
+    items: list[str] = []
+    summaries: list[str] = []
+    slow_cases: list[str] = []
+    failure_cases: list[str] = []
+    for step in reversed(steps):
+        detail = step.verification_detail or step.failure_detail or ""
+        target = (
+            step.patch.file_path
+            if step.patch is not None
+            else step.hypothesis.target_file
+            or step.hypothesis.change_locus
+        )
+        if "V9_perf_guard" in detail and len(items) < max_items:
+            check_line = _extract_runtime_guard_line(detail)
+            items.append(f"- R{step.round_num} target={target}: {check_line}")
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+        ):
+            if step.protocol_result.stats.runtime_pairs > 0 and len(summaries) < max_items:
+                st = step.protocol_result.stats
+                summaries.append(
+                    f"- R{step.round_num} target={target}: "
+                    f"median_ratio={_fmt_runtime(st.runtime_ratio_median)}x "
+                    f"median_delta_ms={_fmt_runtime(st.runtime_delta_median_ms)} "
+                    f"regression_rate={_fmt_runtime(st.runtime_regression_rate)} "
+                    f"pairs={st.runtime_pairs}"
+                )
+            raw_failures, raw_slow_cases = _extract_screening_runtime_raw_feedback(
+                step,
+                target=target,
+                max_items=max_items,
+            )
+            for line in raw_failures:
+                if len(failure_cases) < max_items:
+                    failure_cases.append(line)
+            for line in raw_slow_cases:
+                if len(slow_cases) < max_items:
+                    slow_cases.append(line)
+        if len(items) >= max_items and len(summaries) >= max_items:
+            if len(slow_cases) >= max_items and len(failure_cases) >= max_items:
+                break
+    if not items and not summaries:
+        return ""
+    sections: list[str] = []
+    if summaries:
+        sections.append(
+            "Recent screening runtime summary:\n" + "\n".join(reversed(summaries))
+        )
+    if failure_cases:
+        sections.append(
+            "Recent screening timeout/crash cases:\n"
+            + "\n".join(reversed(failure_cases))
+        )
+    if slow_cases:
+        sections.append(
+            "Recent slow screening cases:\n" + "\n".join(reversed(slow_cases))
+        )
+    if items:
+        sections.append("Recent runtime guard failures:\n" + "\n".join(reversed(items)))
+    sections.append(
+        "Prefer bounded neighborhoods, top-k candidate filters, and early no-op exits."
+    )
+    return "\n".join(sections)
+
+
+def _extract_screening_runtime_raw_feedback(
+    step: StepRecord,
+    *,
+    target: str,
+    max_items: int,
+) -> tuple[list[str], list[str]]:
+    """Extract bounded screening-only slow/failed runtime cases from raw metrics."""
+    protocol = step.protocol_result
+    if protocol is None or protocol.stage != ExperimentStage.SCREENING:
+        return [], []
+    raw_ref = protocol.raw_metrics_ref
+    if not raw_ref or not os.path.isfile(raw_ref):
+        return [], []
+    try:
+        with open(raw_ref, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except Exception:
+        return [], []
+
+    failure_lines: list[str] = []
+    for failure in payload.get("failures", []) or []:
+        if failure.get("side") != "candidate":
+            continue
+        case_id = os.path.basename(str(failure.get("case") or "unknown"))
+        seed = failure.get("seed", "?")
+        category = failure.get("error_category") or "unknown"
+        elapsed = failure.get("elapsed_ms")
+        failure_lines.append(
+            f"- R{step.round_num} target={target}: case={case_id} seed={seed} "
+            f"candidate_failure={category} elapsed_ms={elapsed}"
+        )
+        if len(failure_lines) >= max_items:
+            break
+
+    slow_pairs: list[tuple[float, str]] = []
+    for pair in payload.get("pairs", []) or []:
+        ratio = pair.get("runtime_ratio")
+        try:
+            ratio_value = float(ratio)
+        except (TypeError, ValueError):
+            continue
+        if ratio_value <= 2.0:
+            continue
+        case_id = os.path.basename(str(pair.get("case") or "unknown"))
+        seed = pair.get("seed", "?")
+        cand_ms = pair.get("candidate_elapsed_ms")
+        champ_ms = pair.get("champion_elapsed_ms")
+        line = (
+            f"- R{step.round_num} target={target}: case={case_id} seed={seed} "
+            f"runtime_ratio={ratio_value:.2f}x candidate_ms={cand_ms} "
+            f"champion_ms={champ_ms}"
+        )
+        slow_pairs.append((ratio_value, line))
+
+    slow_pairs.sort(key=lambda item: item[0], reverse=True)
+    return failure_lines, [line for _, line in slow_pairs[:max_items]]
+
+
+def _fmt_runtime(value: float | None) -> str:
+    if value is None:
+        return "NA"
+    return f"{value:.2f}"
+
+
+def _extract_runtime_guard_line(detail: str) -> str:
+    for line in detail.splitlines():
+        if "[V9_perf_guard]" in line:
+            cleaned = re.sub(r"^\s*\[V9_perf_guard\]\s*\(heavy\)\s*", "", line)
+            return cleaned.strip()
+    for line in detail.splitlines():
+        if "V9_perf_guard" in line:
+            return line.replace("V9_perf_guard", "runtime guard").strip()
+    return "runtime guard failed"
+
+
+# ---------------------------------------------------------------------------
 # T26: What Worked section for experiment history
 # ---------------------------------------------------------------------------
 
@@ -1235,9 +1416,11 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
         if last_with_pairs.protocol_result.case_feedback:
             lines = ["## Champion Performance (screening cases)"]
             for cf in last_with_pairs.protocol_result.case_feedback[:8]:
-                n_orders = cf.case_features.get("n_orders", "?")
-                size = cf.case_features.get("size_bucket", "?")
-                lines.append(f"- {cf.case_id} ({n_orders} orders, {size}): champion baseline not available in aggregate")
+                feature_label = _render_case_feature_label(getattr(cf, "case_features", {}) or {})
+                lines.append(
+                    f"- {cf.case_id} ({feature_label}): "
+                    "champion baseline not available in aggregate"
+                )
             return "\n".join(lines)
         return ""
 
@@ -1297,6 +1480,12 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
         f"target_weakness: {hypothesis.target_weakness}",
         f"expected_effect: {hypothesis.expected_effect}",
     ]
+    if hypothesis.target_runtime_effect:
+        lines.append(f"target_runtime_effect: {hypothesis.target_runtime_effect}")
+    if hypothesis.complexity_claim:
+        lines.append(f"complexity_claim: {hypothesis.complexity_claim}")
+    if hypothesis.runtime_budget_strategy:
+        lines.append(f"runtime_budget_strategy: {hypothesis.runtime_budget_strategy}")
     if hypothesis.suggested_weight is not None:
         lines.append(f"suggested_weight: {hypothesis.suggested_weight}")
     if hypothesis.target_objectives:

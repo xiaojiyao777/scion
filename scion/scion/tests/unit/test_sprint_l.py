@@ -57,6 +57,7 @@ def _make_context(**overrides):
         "search_memory": "",
         "saturation_signal": "",
         "weight_opt_feedback": "",
+        "runtime_feedback": "",
         "research_log": "",
         "active_hyp_summary": "",
     }
@@ -224,3 +225,15 @@ class TestObjectiveGuidanceInPrompt:
         ctx = _make_context(objective_guidance="")
         text = _system_text(ctx)
         assert "Objective Improvement Guidance" not in text
+
+    def test_runtime_feedback_injected_into_system_prompt(self):
+        ctx = _make_context(
+            runtime_feedback=(
+                "Recent runtime guard failures:\n"
+                "- R3 target=operators/route_swap.py: too slow ratio=6.00x"
+            )
+        )
+        text = _system_text(ctx)
+        assert "Runtime Feedback" in text
+        assert "route_swap.py" in text
+        assert "too slow" in text

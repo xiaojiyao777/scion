@@ -24,6 +24,9 @@ class HypothesisProposalInput(BaseModel):
     objective_tradeoff_policy: str = ""
     no_op_condition: str = ""
     risk_to_higher_priority: str = ""
+    target_runtime_effect: Optional[str] = None
+    complexity_claim: Optional[str] = None
+    runtime_budget_strategy: Optional[str] = None
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -116,6 +119,18 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "description": "Main risk to protected objectives and how the mechanism mitigates it.",
         },
+        "target_runtime_effect": {
+            "type": ["string", "null"],
+            "description": "Short expected runtime impact, e.g. improve, neutral, risk, unknown, or a brief free-text claim.",
+        },
+        "complexity_claim": {
+            "type": ["string", "null"],
+            "description": "Structured summary of expected complexity, candidate scale, loop bounds, or neighborhood size.",
+        },
+        "runtime_budget_strategy": {
+            "type": ["string", "null"],
+            "description": "How the implementation should bound solve time, e.g. top-k candidates, sampling, early exit, or bounded neighborhoods.",
+        },
     },
 }
 
@@ -137,7 +152,7 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
     "description": (
-        "Propose ONE novel hypothesis for improving the VNS solver's operator pool.\n\n"
+        "Propose ONE novel hypothesis for improving the solver's operator set.\n\n"
         "Usage:\n"
         "- Study ALL existing champion operators before proposing \u2014 avoid duplicating existing logic.\n"
         "- Check experiment history for approaches that already failed \u2014 do NOT repeat them.\n"
@@ -146,8 +161,9 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- Target a specific, named weakness in the current pool (not vague 'improvements').\n"
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
-        "- Consider the solver's execution model: your operator runs ~1000 times per solve, "
-        "high variance is good, rare great outcomes beat frequent mediocre ones.\n"
+        "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
+        "- Consider the problem-specific solver execution model provided in context; "
+        "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
         "- Prefer operators that provide a CAPABILITY the pool currently LACKS.\n\n"
         "Common mistakes to avoid:\n"
         "- Proposing random moves without a concrete objective mechanism.\n"
@@ -171,7 +187,7 @@ PATCH_TOOL: Dict[str, Any] = {
         "- NEVER use `list(set(...))` or iterate over set/dict in order-dependent ways \u2014 "
         "use `sorted()` for determinism.\n"
         "- Keep neighborhood enumeration bounded. Do NOT enumerate all 3/4-way "
-        "vehicle combinations; use top-k candidate caps, sampling, or pairwise "
+        "problem-entity combinations; use top-k candidate caps, sampling, or pairwise "
         "moves with explicit limits.\n"
         "- Return a valid solution/artifact according to the problem adapter contract.\n\n"
         "Common rejection causes:\n"
@@ -246,10 +262,13 @@ To avoid redundancy, these directions are already being explored:
 Propose ONE hypothesis for improving the solver's operator pool.
 - Set `change_locus` to one of: {operator_categories}
 - Set `action` to: "modify" (change existing), "create_new" (new operator), or "remove" (delete operator)
-- If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/swap_orders.py")
+- If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/local_move.py")
 - Write a detailed `hypothesis_text` explaining the idea, the expected mechanism, and why it should improve results
 - Set `target_weakness` to describe what current behaviour you are targeting
 - Set `expected_effect` to describe the measurable improvement you expect
+- Set `target_runtime_effect` to the expected runtime impact (improve/neutral/risk/unknown or short text)
+- Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
+- Set `runtime_budget_strategy` to how the operator will cap solve time (top-k, sampling, early exit, bounded neighborhood, etc.)
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{
@@ -260,7 +279,10 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
   "predicted_direction": "improve" | "tradeoff" | "exploratory",
   "target_weakness": "<what current weakness this addresses>",
   "expected_effect": "<expected measurable improvement>",
-  "suggested_weight": <sampling weight 0.0–1.0 or null>
+  "suggested_weight": <sampling weight 0.0–1.0 or null>,
+  "target_runtime_effect": "<expected runtime effect or null>",
+  "complexity_claim": "<complexity/candidate-bound claim or null>",
+  "runtime_budget_strategy": "<runtime budget strategy or null>"
 }}
 """
 

@@ -1,0 +1,44 @@
+{
+  "default_runtime_regression_threshold": 2.0,
+  "problem_id": "cvrp",
+  "schema": "scion.cvrp_controlled_budgets.v1",
+  "stages": {
+    "final": {
+      "csv": "final.csv",
+      "manifest": "manifests/final.json",
+      "max_cases": 2,
+      "seeds": [
+        0,
+        1
+      ],
+      "time_limit_sec": 2
+    },
+    "frozen": {
+      "csv": "frozen.csv",
+      "manifest": "manifests/frozen.json",
+      "max_cases": 2,
+      "seeds": [
+        0
+      ],
+      "time_limit_sec": 1
+    },
+    "screening": {
+      "csv": "screening.csv",
+      "manifest": "manifests/screening.json",
+      "max_cases": 2,
+      "seeds": [
+        0
+      ],
+      "time_limit_sec": 1
+    },
+    "validation": {
+      "csv": "validation.csv",
+      "manifest": "manifests/validation.json",
+      "max_cases": 2,
+      "seeds": [
+        0
+      ],
+      "time_limit_sec": 1
+    }
+  }
+}

@@ -26,6 +26,10 @@ class DecisionEngine:
         if not features.canary_passed:
             return self._out(features, Decision.ABANDON, ["CANARY_FAILED"])
 
+        runtime_veto = self._runtime_veto(features)
+        if runtime_veto is not None:
+            return runtime_veto
+
         stage = features.stage
         if stage == "screening":
             return self._decide_screening(features)
@@ -98,6 +102,9 @@ class DecisionEngine:
         stat = features.statistical_status
         threshold = self.config.validation_win_rate_threshold
 
+        if features.protocol_gate_outcome == "fail":
+            return self._out(features, Decision.ABANDON, ["VALIDATION_PROTOCOL_GATE_FAIL"])
+
         if wr is None or ci_low is None:
             return self._out(features, Decision.ABANDON, ["NO_VALIDATION_STATS"])
 
@@ -141,6 +148,12 @@ class DecisionEngine:
         ci_low = features.ci_low
         stat = features.statistical_status
 
+        if (
+            features.protocol_gate_outcome is not None
+            and features.protocol_gate_outcome != "pass"
+        ):
+            return self._out(features, Decision.ABANDON, ["FROZEN_PROTOCOL_GATE_NOT_PASS"])
+
         if ci_low is None:
             return self._out(features, Decision.ABANDON, ["NO_FROZEN_STATS"])
 
@@ -160,6 +173,37 @@ class DecisionEngine:
     # ------------------------------------------------------------------
     # Helper
     # ------------------------------------------------------------------
+
+    def _runtime_veto(self, features: DecisionFeatures) -> DecisionOutcome | None:
+        """Default framework-level algorithm-efficiency guard.
+
+        Runtime is a first-class optimization signal, not just evidence text.
+        Candidate timeouts/crashes always veto. Large median slowdowns veto at
+        every stage so objective-only improvements cannot consume validation or
+        frozen budget, and cannot promote.
+        """
+        if features.runtime_guard_timeout:
+            return self._out(features, Decision.ABANDON, ["RUNTIME_GUARD_TIMEOUT"])
+
+        if features.runtime_guard_passed is False:
+            return self._out(features, Decision.ABANDON, ["RUNTIME_GUARD_FAILED"])
+
+        if features.candidate_failed_pairs > 0:
+            return self._out(features, Decision.ABANDON, ["CANDIDATE_RUNTIME_FAILURE"])
+
+        if (
+            features.runtime_ratio_median is not None
+            and features.runtime_ratio_median > self.config.max_runtime_ratio
+        ):
+            return self._out(features, Decision.ABANDON, ["RUNTIME_REGRESSION"])
+
+        if (
+            features.stage in ("validation", "frozen")
+            and features.failed_pairs > 0
+        ):
+            return self._out(features, Decision.ABANDON, ["INCOMPLETE_RUNTIME_EVIDENCE"])
+
+        return None
 
     def _out(
         self,

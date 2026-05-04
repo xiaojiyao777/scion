@@ -236,6 +236,9 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         objective_tradeoff_policy=validated.objective_tradeoff_policy,
         no_op_condition=validated.no_op_condition,
         risk_to_higher_priority=validated.risk_to_higher_priority,
+        target_runtime_effect=validated.target_runtime_effect,
+        complexity_claim=validated.complexity_claim,
+        runtime_budget_strategy=validated.runtime_budget_strategy,
     )
 
 
@@ -285,6 +288,27 @@ def _split_hypothesis_context(
     User (dynamic): experiment history + blacklist + siblings + analysis steps + task
     """
     D = _DefaultDict(context)
+    solver_mechanics = str(D["solver_mechanics"]).strip()
+    if solver_mechanics:
+        solver_mechanics_text = (
+            f"## Solver Execution Model\n{solver_mechanics}\n\n"
+            f"Design implications for new operators:\n"
+            f"- Follow the problem-specific execution model above; do not assume a fixed invocation count.\n"
+            f"- Your operator MUST preserve feasibility and the adapter-defined solution contract.\n"
+            f"- State the capability gap it fills, the objective it targets, and the no-op condition that protects other objectives.\n"
+            f"- Runtime is part of the evidence: describe explicit bounds, filters, sampling, or early exits."
+        )
+    else:
+        solver_mechanics_text = (
+            "## Solver Execution Model\n"
+            "The exact operator execution model is problem-specific. Use the problem summary, "
+            "operator interface, current champion code, and runtime feedback as the source of truth.\n\n"
+            "Design implications for new operators:\n"
+            "- Do not assume a fixed invocation count, pool size, neighborhood structure, or acceptance rule.\n"
+            "- Your operator MUST preserve feasibility and the problem-specific solution contract.\n"
+            "- State the capability gap it fills, the objective it targets, and the no-op condition that protects other objectives.\n"
+            "- Runtime is part of the evidence: describe explicit bounds, filters, sampling, or early exits."
+        )
 
     # Block 1: Static role + problem spec + solver mechanics (never changes)
     static_text = (
@@ -292,19 +316,7 @@ def _split_hypothesis_context(
         "Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"{D['objective_policy_guidance']}\n\n"
-        f"## How the VNS Solver Uses Operators\n"
-        f"- The solver maintains a pool of 40 candidate solutions, sorted by objective.\n"
-        f"- Each iteration: for EACH solution in the pool, ONE operator is randomly selected (weighted) and applied.\n"
-        f"- If the result is INFEASIBLE (violates any hard constraint), it is DISCARDED.\n"
-        f"- Pool update: new + old solutions merged, top 40 by the problem objective policy kept.\n"
-        f"- Runs 200 iterations or until 30 consecutive no-improvement iterations.\n"
-        f"- Total: ~8000 operator invocations per solve run.\n\n"
-        f"Design implications for new operators:\n"
-        f"- Your operator will be called ~1000 times. It MUST produce feasible solutions.\n"
-        f"- High variance is good: the pool filters bad outcomes and keeps rare great ones.\n"
-        f"- A large improvement on 5% of calls is more valuable than a tiny improvement on 50%.\n"
-        f"- Your operator competes with existing operators for invocation share.\n"
-        f"- It must provide a capability the existing operators LACK, not duplicate them."
+        f"{solver_mechanics_text}"
     )
 
     # Block 2: Champion code + stats (changes only on champion promotion)
@@ -371,6 +383,10 @@ def _split_hypothesis_context(
     # J6: Weight optimization feedback
     if D["weight_opt_feedback"]:
         branch_context_parts.append(D["weight_opt_feedback"])
+    if D["runtime_feedback"]:
+        branch_context_parts.append(
+            f"## Runtime Feedback\n{D['runtime_feedback']}"
+        )
 
     system_blocks = [
         {
@@ -401,9 +417,12 @@ def _split_hypothesis_context(
         f"3. Check experiment history \u2014 which attempts at filling gaps failed, and WHY?\n"
         f"4. Only then propose a hypothesis targeting an identified gap.\n"
         f"5. In the hypothesis text, state target objective(s), protected objective(s), "
-        f"and the no-op condition that avoids harming protected objectives.\n\n"
-        f"Runtime constraint: proposed operators are called many times inside the VNS pool loop. "
-        f"Do not propose unbounded high-order enumeration over vehicles/orders; describe any top-k, "
+        f"and the no-op condition that avoids harming protected objectives.\n"
+        f"6. Fill the runtime intent fields: `target_runtime_effect`, `complexity_claim`, "
+        f"and `runtime_budget_strategy`.\n\n"
+        f"Runtime constraint: proposed operators are evaluated inside the problem solver and "
+        f"algorithmic efficiency is part of the evidence. Do not propose unbounded high-order "
+        f"enumeration over problem entities; describe any top-k, "
         f"sampling, or early-stop cap needed to keep runtime comparable to the champion.\n\n"
         f"If your hypothesis duplicates an existing operator's capability (even partially), it will be REJECTED.\n\n"
         f"## Task\n"
@@ -425,6 +444,12 @@ def _split_code_context(
     User (dynamic): hypothesis + target file + constraints
     """
     D = _DefaultDict(context)
+    solver_mechanics = str(D["solver_mechanics"]).strip()
+    solver_mechanics_section = (
+        f"## Solver Execution Model\n{solver_mechanics}\n\n"
+        if solver_mechanics
+        else ""
+    )
 
     # Block 1: Static role + quality rules + problem + interface (never changes)
     static_text = (
@@ -441,6 +466,7 @@ def _split_code_context(
         "An operator that produces infeasible solutions is WORSE than no operator. "
         "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{solver_mechanics_section}"
         f"## Operator Interface Specification\n"
         f"All operator classes MUST conform to this interface exactly:\n\n"
         f"{D['operator_interface_spec']}\n\n"
@@ -511,11 +537,18 @@ def _split_fix_context(
     User (dynamic): original code + failure details + task
     """
     D = _DefaultDict(context)
+    solver_mechanics = str(D["solver_mechanics"]).strip()
+    solver_mechanics_section = (
+        f"## Solver Execution Model\n{solver_mechanics}\n\n"
+        if solver_mechanics
+        else ""
+    )
 
     system_text = (
         "You are a software engineer fixing an optimisation operator that failed verification.\n"
         "Correct the code so it passes, while preserving the intended logic.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{solver_mechanics_section}"
         f"## Operator Interface Specification\n"
         f"All operator classes MUST conform to this interface exactly:\n\n"
         f"{D['operator_interface_spec']}\n\n"

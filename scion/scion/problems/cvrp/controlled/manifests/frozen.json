@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "bks": 11.0,
+      "bks_routes": 1,
+      "case_id": "synthetic_frozen_micro_5",
+      "dimension": 5,
+      "source_path": "controlled/data/synthetic_frozen_micro_5.vrp",
+      "subset": "frozen"
+    },
+    {
+      "bks": 15.0,
+      "bks_routes": 1,
+      "case_id": "synthetic_frozen_split_6",
+      "dimension": 6,
+      "source_path": "controlled/data/synthetic_frozen_split_6.vrp",
+      "subset": "frozen"
+    }
+  ],
+  "config": {
+    "max_cases_per_subset": null,
+    "max_cases_total": 2,
+    "require_benchmark_feasible": true,
+    "require_bks": true,
+    "require_bks_routes": true,
+    "seeds": [
+      0
+    ],
+    "source_label": "controlled_synthetic_csv",
+    "subsets": [
+      "frozen"
+    ]
+  },
+  "metadata": {
+    "n_eligible_cases": 2,
+    "n_eligible_rows": 2,
+    "n_input_rows": 2,
+    "n_rejected_rows": 0,
+    "n_selected_cases": 2,
+    "rejection_counts_by_reason": {
+      "benchmark": 0,
+      "bks": 0,
+      "bks_routes": 0,
+      "feasible": 0,
+      "missing_path": 0,
+      "status": 0,
+      "subset": 0
+    },
+    "seed_list": [
+      0
+    ],
+    "source_label": "controlled_synthetic_csv",
+    "source_path": "frozen.csv",
+    "stage": "frozen",
+    "subset_filters": [
+      "frozen"
+    ],
+    "time_limit_sec": 1
+  },
+  "problem_id": "cvrp",
+  "schema": "scion.cvrp_case_manifest.v1"
+}

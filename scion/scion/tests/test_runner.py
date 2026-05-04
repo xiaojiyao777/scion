@@ -211,8 +211,9 @@ class TestResourceLimits:
 
 
 class TestEnvSanitization:
-    def test_only_path_and_pythonpath_visible(self, workdir: Path, monkeypatch):
+    def test_only_whitelisted_environment_visible(self, workdir: Path, monkeypatch):
         monkeypatch.setenv("SECRET_TOKEN", "hunter2")
+        monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", "/tmp/scion-problem-data")
         _write_solver(
             workdir,
             """\
@@ -225,6 +226,9 @@ class TestEnvSanitization:
             if "SECRET_TOKEN" in os.environ:
                 print("LEAKED", file=sys.stderr)
                 sys.exit(1)
+            if os.environ.get("SCION_PROBLEM_DATA_ROOT") != "/tmp/scion-problem-data":
+                print("MISSING_DATA_ROOT", file=sys.stderr)
+                sys.exit(2)
             with open(args.output, 'w') as f:
                 json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
             sys.exit(0)
@@ -255,3 +259,8 @@ class TestBuildCleanEnv:
         monkeypatch.setenv("MY_SECRET", "abc")
         env = _build_clean_env()
         assert "MY_SECRET" not in env
+
+    def test_build_clean_env_allows_scion_problem_runtime_vars(self, monkeypatch):
+        monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", "/tmp/scion-problem-data")
+        env = _build_clean_env()
+        assert env["SCION_PROBLEM_DATA_ROOT"] == "/tmp/scion-problem-data"

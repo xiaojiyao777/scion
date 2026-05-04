@@ -151,13 +151,12 @@ def _make_campaign(tmp_path: Path, experiment_protocol: Any = None,
 def _build_promoted_branch(cm: CampaignManager, tmp_path: Path) -> Branch:
     """Create a branch with a workspace and registry.yaml, ready for promote."""
     branch = cm._branch_ctrl.create_branch(cm._champion)
+    branch.state = BranchState.FROZEN_TESTING
     bid = branch.branch_id
     ws = tmp_path / "branch_ws" / bid
     (ws / "operators").mkdir(parents=True)
     (ws / "operators" / "local_search.py").write_text(_VALID_CODE)
-    (ws / "registry.yaml").write_text(
-        'operators:\n  local_search:\n    weight: 1.0\n'
-    )
+    _write_registry(ws / "registry.yaml")
     cm._branch_workspaces[bid] = str(ws)
     return branch
 

@@ -1,6 +1,6 @@
 # Scion Documentation Index
 
-*Last updated: 2026-04-28*
+*Last updated: 2026-05-04*
 
 This directory is the active documentation surface for Scion. Historical sprint notes, validation drafts, and intermediate analysis are archived under `archive/`.
 
@@ -12,6 +12,26 @@ This directory is the active documentation surface for Scion. Historical sprint 
 - [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
 - [v0.3-production-timeout-fix-analysis.md](v0.3-production-timeout-fix-analysis.md) - production-only rerun after incomplete-evidence/runtime fixes.
 - [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
+- [v0.4-current-state.md](v0.4-current-state.md) - current v0.4 implementation status, validation result, and active Sonnet campaign paths.
+- [v0.4-design.md](v0.4-design.md) - v0.4 design baseline: performance-aware Scion, CVRP generalization, and campaign framework cleanup.
+- [v0.4-phase1-task-manifest.md](v0.4-phase1-task-manifest.md) - Phase 1 extraction task manifest and subagent development model.
+- [v0.4-phase1-worklog.md](v0.4-phase1-worklog.md) - Phase 1 execution notes, baseline test status, and worker dispatch log.
+- [v0.4-phase1-closeout.md](v0.4-phase1-closeout.md) - Phase 1 extraction closeout, test results, and remaining campaign responsibilities.
+- [v0.4-phase2-task-manifest.md](v0.4-phase2-task-manifest.md) - Phase 2 framework hardening manifest: adapter-native V5 and runtime evidence.
+- [v0.4-phase2-worklog.md](v0.4-phase2-worklog.md) - Phase 2 execution notes for runtime verification/evidence/context hardening.
+- [v0.4-phase2-closeout.md](v0.4-phase2-closeout.md) - Phase 2 closeout: adapter-native runtime verification, CVRP smoke, and ProblemSpecV1 bridge.
+- [v0.4-phase3-design.md](v0.4-phase3-design.md) - Phase 3 design: final quality evidence harness and CVRP benchmark reporting.
+- [v0.4-phase3-task-manifest.md](v0.4-phase3-task-manifest.md) - Phase 3 task manifest and first worker slice.
+- [v0.4-phase3-worklog.md](v0.4-phase3-worklog.md) - Phase 3 execution notes for final quality package writer and validation.
+- [v0.4-phase3-closeout.md](v0.4-phase3-closeout.md) - Phase 3 closeout: final evidence infrastructure and Phase 4 readiness.
+- [v0.4-phase4-design.md](v0.4-phase4-design.md) - Phase 4 design: controlled CVRP campaign readiness and first run path.
+- [v0.4-phase4-task-manifest.md](v0.4-phase4-task-manifest.md) - Phase 4 task manifest starting with CVRPLIB input support.
+- [v0.4-phase4-worklog.md](v0.4-phase4-worklog.md) - Phase 4 execution notes for CVRPLIB input/runtime readiness.
+- [v0.4-phase4-closeout.md](v0.4-phase4-closeout.md) - Phase 4 closeout: controlled CVRP promotion path and final evidence refs.
+- [v0.4-p4-05-matrix-readiness.md](v0.4-p4-05-matrix-readiness.md) - P4-05 formal CVRP matrix readiness assets, commands, and residual risks.
+- [v0.4-p0-promotion-integrity-design.md](v0.4-p0-promotion-integrity-design.md) - P0-C promotion commit, registry, and weight-opt integrity policy.
+- [v0.4-p0-campaign-controller-decomposition-design.md](v0.4-p0-campaign-controller-decomposition-design.md) - P0-D campaign controller decomposition plan aligned with v3.
+- [v0.4-p1-runtime-aware-optimization-design.md](v0.4-p1-runtime-aware-optimization-design.md) - P1 runtime-aware optimization design: efficiency as default Scion promotion governance.
 - [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
 - [v0.4-cvrp-plan.md](v0.4-cvrp-plan.md) - CVRP second-problem plan for v0.4 generalization.
 - [v0.4-evidence-harness.md](v0.4-evidence-harness.md) - common promotion/final-quality/runtime evidence schema for v0.4.
@@ -73,6 +93,26 @@ scion/
 │   ├── v0.3-final-12campaign-analysis.md
 │   ├── v0.3-production-timeout-fix-analysis.md
 │   ├── v0.3-final-validation-checklist.md
+│   ├── v0.4-current-state.md
+│   ├── v0.4-design.md
+│   ├── v0.4-phase1-task-manifest.md
+│   ├── v0.4-phase1-worklog.md
+│   ├── v0.4-phase1-closeout.md
+│   ├── v0.4-phase2-task-manifest.md
+│   ├── v0.4-phase2-worklog.md
+│   ├── v0.4-phase2-closeout.md
+│   ├── v0.4-phase3-design.md
+│   ├── v0.4-phase3-task-manifest.md
+│   ├── v0.4-phase3-worklog.md
+│   ├── v0.4-phase3-closeout.md
+│   ├── v0.4-phase4-design.md
+│   ├── v0.4-phase4-task-manifest.md
+│   ├── v0.4-phase4-worklog.md
+│   ├── v0.4-phase4-closeout.md
+│   ├── v0.4-p4-05-matrix-readiness.md
+│   ├── v0.4-p0-promotion-integrity-design.md
+│   ├── v0.4-p0-campaign-controller-decomposition-design.md
+│   ├── v0.4-p1-runtime-aware-optimization-design.md
 │   ├── v0.4-performance-aware-plan.md
 │   ├── v0.4-cvrp-plan.md
 │   ├── v0.4-evidence-harness.md

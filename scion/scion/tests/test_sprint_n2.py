@@ -63,7 +63,7 @@ class TestStageAwareStale:
             branches[state] = b
         return ctrl, branches
 
-    def test_mark_stale_only_screening(self) -> None:
+    def test_mark_stale_for_weight_update_excludes_frozen_holdout(self) -> None:
         ctrl, branches = self._make_ctrl_with_branches()
         affected = ctrl.mark_stale_for_weight_update(1)
 
@@ -75,11 +75,12 @@ class TestStageAwareStale:
 
         assert explore.state == BranchState.STALE_WEIGHT_UPDATE
         assert expand.state == BranchState.STALE_WEIGHT_UPDATE
-        # Validation and frozen are NOT affected
-        assert validate.state == BranchState.READY_VALIDATE
-        assert validating.state == BranchState.VALIDATING
+        # Validation branches must re-screen before spending more validation/frozen budget.
+        assert validate.state == BranchState.STALE_WEIGHT_UPDATE
+        assert validating.state == BranchState.STALE_WEIGHT_UPDATE
+        # Frozen holdout is already in the final evidence gate and is not interrupted.
         assert frozen.state == BranchState.FROZEN_TESTING
-        assert len(affected) == 2
+        assert len(affected) == 4
 
     def test_mark_all_stale_broader(self) -> None:
         ctrl, branches = self._make_ctrl_with_branches()

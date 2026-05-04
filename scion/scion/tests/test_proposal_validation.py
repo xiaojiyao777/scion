@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import pytest
 
+from scion.proposal.context_manager import _format_hypothesis
 from scion.proposal.engine import ProposalValidationError, _parse_hypothesis, _parse_patch
+from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +74,58 @@ def test_valid_hypothesis_passes_validation():
     assert result.change_locus == "local_search"
     assert result.action == "create_new"
     assert result.suggested_weight == 0.5
+
+
+def test_hypothesis_runtime_intent_fields_parse_and_format():
+    """Runtime intent fields should round-trip into HypothesisProposal context text."""
+    raw = {
+        "hypothesis_text": "Bound route-pair exploration with candidate filtering.",
+        "change_locus": "local_search",
+        "action": "create_new",
+        "target_runtime_effect": "neutral: same solve budget with fewer evaluated pairs",
+        "complexity_claim": "O(k * routes) candidates with k <= 8, no all-pairs scan",
+        "runtime_budget_strategy": "top-k route pairs, early exit after first feasible improvement",
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert result.target_runtime_effect == raw["target_runtime_effect"]
+    assert result.complexity_claim == raw["complexity_claim"]
+    assert result.runtime_budget_strategy == raw["runtime_budget_strategy"]
+
+    formatted = _format_hypothesis(result)
+    assert "target_runtime_effect: neutral" in formatted
+    assert "complexity_claim: O(k * routes)" in formatted
+    assert "runtime_budget_strategy: top-k route pairs" in formatted
+
+
+def test_hypothesis_runtime_intent_fields_default_when_missing():
+    """Old LLM outputs without runtime intent fields remain valid."""
+    result = _parse_hypothesis({
+        "hypothesis_text": "Improve the existing move operator.",
+        "change_locus": "vehicle_level",
+        "action": "modify",
+        "target_file": "operators/move.py",
+    })
+
+    assert result.target_runtime_effect is None
+    assert result.complexity_claim is None
+    assert result.runtime_budget_strategy is None
+    assert "target_runtime_effect" not in _format_hypothesis(result)
+
+
+def test_hypothesis_schema_exposes_optional_runtime_intent_fields():
+    """JSON schema advertises runtime intent fields without making them required."""
+    required = set(HYPOTHESIS_PROPOSAL_SCHEMA["required"])
+    properties = HYPOTHESIS_PROPOSAL_SCHEMA["properties"]
+
+    for field_name in (
+        "target_runtime_effect",
+        "complexity_claim",
+        "runtime_budget_strategy",
+    ):
+        assert field_name in properties
+        assert field_name not in required
 
 
 def test_valid_hypothesis_modify_action():

@@ -46,16 +46,37 @@ def _protocol(
     ci_low: float = 0.005,
     ci_high: float = 0.02,
     stage: ExperimentStage = ExperimentStage.SCREENING,
+    runtime_ratio_median=None,
+    runtime_delta_median_ms=None,
+    runtime_regression_rate=None,
+    runtime_pairs: int = 0,
+    total_pairs: int = 0,
+    attempted_pairs: int = 0,
+    valid_pairs: int = 0,
+    failed_pairs: int = 0,
+    candidate_failed_pairs: int = 0,
+    champion_failed_pairs: int = 0,
+    gate_outcome: str = "pass",
 ) -> ProtocolResult:
     stats = EvalStats(
         n_cases=10, wins=7, losses=2, ties=1,
         win_rate=win_rate, median_delta=median_delta,
         ci_low=ci_low, ci_high=ci_high,
+        runtime_ratio_median=runtime_ratio_median,
+        runtime_delta_median_ms=runtime_delta_median_ms,
+        runtime_regression_rate=runtime_regression_rate,
+        runtime_pairs=runtime_pairs,
+        total_pairs=total_pairs,
+        attempted_pairs=attempted_pairs,
+        valid_pairs=valid_pairs,
+        failed_pairs=failed_pairs,
+        candidate_failed_pairs=candidate_failed_pairs,
+        champion_failed_pairs=champion_failed_pairs,
     )
     return ProtocolResult(
         stage=stage,
         stats=stats,
-        gate_outcome="pass",
+        gate_outcome=gate_outcome,  # type: ignore[arg-type]
         reason_codes=("SCREENING_PASS",),
         exposed_summary="ok",
         raw_metrics_ref="/tmp/m.json",
@@ -150,6 +171,90 @@ def test_extract_expand_counters_propagate():
     )
     assert features.screening_expand_count == 2
     assert features.validation_expand_count == 1
+
+
+def test_extract_runtime_guard_facts_without_free_text():
+    branch = _branch()
+    verification = VerificationResult(
+        passed=True,
+        checks=(
+            CheckResult(
+                "V9_perf_guard",
+                True,
+                "heavy",
+                "perf ok",
+                3,
+                metadata={
+                    "ratio": 1.25,
+                    "candidate_timeout": False,
+                    "case_id": "case-a",
+                },
+            ),
+        ),
+    )
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=verification,
+        canary=_canary(),
+        protocol=None,
+        budget=BudgetState(total=100, used=0),
+    )
+    assert features.runtime_guard_passed is True
+    assert features.runtime_guard_ratio == pytest.approx(1.25)
+    assert features.runtime_guard_timeout is False
+    _validate_no_free_text(features)
+
+
+def test_extract_protocol_runtime_facts_without_free_text():
+    branch = _branch()
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=_protocol(
+            runtime_ratio_median=1.42,
+            runtime_delta_median_ms=37.5,
+            runtime_regression_rate=0.75,
+            runtime_pairs=8,
+            total_pairs=10,
+            attempted_pairs=10,
+            valid_pairs=8,
+            failed_pairs=2,
+            candidate_failed_pairs=1,
+            champion_failed_pairs=1,
+        ),
+        budget=BudgetState(total=100, used=0),
+    )
+    assert features.runtime_ratio_median == pytest.approx(1.42)
+    assert features.runtime_delta_median_ms == pytest.approx(37.5)
+    assert features.runtime_regression_rate == pytest.approx(0.75)
+    assert features.runtime_pairs == 8
+    assert features.protocol_gate_outcome == "pass"
+    assert features.total_pairs == 10
+    assert features.valid_pairs == 8
+    assert features.failed_pairs == 2
+    assert features.candidate_failed_pairs == 1
+    assert features.champion_failed_pairs == 1
+    _validate_no_free_text(features)
+
+
+def test_extract_legacy_continue_protocol_gate_outcome():
+    branch = _branch()
+    features = _extractor.extract(
+        branch=branch,
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=_protocol(win_rate=0.3, gate_outcome="continue"),
+        budget=BudgetState(total=100, used=0),
+    )
+    assert features.protocol_gate_outcome == "continue"
+    _validate_no_free_text(features)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +354,12 @@ def _features(
     branch_id: str = None,
     statistical_status=None,
     statistical_metric=None,
+    runtime_guard_passed=None,
+    runtime_guard_timeout=False,
+    runtime_ratio_median=None,
+    failed_pairs: int = 0,
+    candidate_failed_pairs: int = 0,
+    protocol_gate_outcome=None,
 ):
     from scion.core.models import DecisionFeatures
     return DecisionFeatures(
@@ -269,6 +380,12 @@ def _features(
         budget_remaining_ratio=budget_ratio,
         statistical_status=statistical_status,
         statistical_metric=statistical_metric,
+        runtime_guard_passed=runtime_guard_passed,
+        runtime_guard_timeout=runtime_guard_timeout,
+        runtime_ratio_median=runtime_ratio_median,
+        failed_pairs=failed_pairs,
+        candidate_failed_pairs=candidate_failed_pairs,
+        protocol_gate_outcome=protocol_gate_outcome,
     )
 
 
@@ -289,6 +406,64 @@ def test_decision_canary_fail():
     f = _features(canary_passed=False)
     out = _engine.decide(f)
     assert out.decision == Decision.ABANDON
+
+
+def test_decision_runtime_guard_timeout_vetoes_candidate():
+    f = _features(runtime_guard_passed=False, runtime_guard_timeout=True)
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "RUNTIME_GUARD_TIMEOUT" in out.reason_codes
+
+
+def test_decision_candidate_runtime_failure_vetoes_objective_win():
+    f = _features(
+        stage="screening",
+        win_rate=1.0,
+        median_delta=100.0,
+        candidate_failed_pairs=1,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "CANDIDATE_RUNTIME_FAILURE" in out.reason_codes
+
+
+def test_decision_runtime_regression_vetoes_objective_win():
+    f = _features(
+        stage="frozen",
+        ci_low=10.0,
+        ci_high=20.0,
+        protocol_gate_outcome="pass",
+        runtime_ratio_median=2.5,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "RUNTIME_REGRESSION" in out.reason_codes
+
+
+def test_decision_runtime_regression_threshold_comes_from_protocol_config():
+    f = _features(
+        stage="frozen",
+        ci_low=10.0,
+        ci_high=20.0,
+        protocol_gate_outcome="pass",
+        runtime_ratio_median=2.5,
+    )
+    engine = DecisionEngine(ProtocolConfig(runtime={"max_runtime_ratio": 3.0}))
+    out = engine.decide(f)
+    assert out.decision == Decision.PROMOTE
+    assert "FROZEN_PASS" in out.reason_codes
+
+
+def test_decision_frozen_protocol_gate_fail_cannot_promote():
+    f = _features(
+        stage="frozen",
+        ci_low=10.0,
+        ci_high=20.0,
+        protocol_gate_outcome="fail",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "FROZEN_PROTOCOL_GATE_NOT_PASS" in out.reason_codes
 
 
 def test_decision_screening_pass_to_queue_validate():

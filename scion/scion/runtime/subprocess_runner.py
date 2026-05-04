@@ -23,14 +23,24 @@ MAX_INLINE_OUTPUT_BYTES = 50_000
 _OFFLOAD_PREFIX = "__offloaded__:"
 
 
-# Environment variables passed through to the subprocess (whitelist)
+# Environment variables passed through to the subprocess (whitelist).
+#
+# Problem adapters may define their own SCION_* runtime variables. The runner
+# keeps the framework problem-agnostic by allowing the SCION_ namespace instead
+# of naming individual research-object variables here.
 _ENV_PASSTHROUGH = {"PATH", "PYTHONPATH"}
+_ENV_PREFIX_PASSTHROUGH = ("SCION_",)
 _ENV_FIXED = {"PYTHONHASHSEED": "0"}
 
 
 def _build_clean_env() -> dict[str, str]:
     """Return a sanitized environment containing only whitelisted variables."""
-    env = {k: v for k, v in os.environ.items() if k in _ENV_PASSTHROUGH}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k in _ENV_PASSTHROUGH
+        or any(k.startswith(prefix) for prefix in _ENV_PREFIX_PASSTHROUGH)
+    }
     env.update(_ENV_FIXED)
     return env
 
@@ -215,6 +225,11 @@ class LocalSubprocessRunner:
                     assignment=raw.get("assignment", {}),
                     objective=raw.get("objective", {}),
                     feasible=raw.get("feasible", False),
+                    runtime=(
+                        raw.get("runtime", {})
+                        if isinstance(raw.get("runtime", {}), dict)
+                        else {}
+                    ),
                 )
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 # JSON parse failure → treat as crash

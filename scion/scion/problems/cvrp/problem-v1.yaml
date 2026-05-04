@@ -1,0 +1,79 @@
+spec_version: "problem-v1"
+
+id: cvrp
+display_name: "Capacitated Vehicle Routing Problem"
+root_dir: PLACEHOLDER
+description: >-
+  CVRP adapter skeleton for v0.4 route-native verification and runtime
+  evidence hardening.
+
+search_space:
+  editable:
+    - "operators/*.py"
+  frozen:
+    - "adapter.py"
+    - "models.py"
+    - "solver.py"
+    - "operators/base.py"
+  import_whitelist:
+    - __future__
+    - copy
+    - dataclasses
+    - itertools
+    - math
+    - models
+    - random
+    - typing
+
+solver:
+  time_limit_sec: 30
+  max_iter: 1000
+
+parameter_search:
+  enabled: false
+
+canary_case_path: "data/tiny_canary.json"
+
+operator_interface:
+  base_class_import: "scion.problems.cvrp.operators.base:CvrpOperator"
+  execute_signature: "execute(self, solution, instance, rng) -> CvrpSolution"
+  categories:
+    - name: route_local
+      description: "Intra-route bounded operators such as 2-opt and Or-opt."
+    - name: route_pair
+      description: "Inter-route bounded relocate, swap, 2-opt*, and exchange operators."
+    - name: ruin_recreate
+      description: "Bounded destroy/repair operators with explicit customer and route caps."
+
+objective_policy:
+  mode: lexicographic
+  expose_weights_to_llm: false
+
+objectives:
+  - name: fleet_violation
+    direction: minimize
+    priority: 1
+    tie_tolerance: 0.0
+  - name: total_distance
+    direction: minimize
+    priority: 2
+    tie_tolerance: 0.001
+
+llm_hints:
+  problem_summary: >-
+    Build ordered capacity-feasible routes from the depot. Every customer must
+    appear exactly once. The first objective is fleet_violation; total distance
+    matters only after route-count comparability is protected.
+  operator_interface: >-
+    Operators receive CvrpSolution and CvrpInstance and must return a feasible
+    CvrpSolution. They must use bounded route-local or route-pair neighborhoods,
+    top-k filters, sampling, or early no-op exits. CvrpSolution.routes is a
+    tuple of implicit-depot customer routes. CvrpInstance exposes capacity,
+    depot, customer_ids, node_ids, demand(customer_id), distance(i, j),
+    route_load(route), and route_distance(route). Do not use nonexistent
+    attributes such as vehicle_capacity, demands, distance_matrix, customers,
+    or num_customers.
+
+adapter:
+  import_path: "scion.problems.cvrp.adapter:CvrpAdapter"
+  api_version: "v1"

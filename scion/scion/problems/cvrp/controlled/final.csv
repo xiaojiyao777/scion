@@ -1,0 +1,3 @@
+instance,subset,path,dimension,bks,bks_routes,cost,gap_pct,routes,route_gap,iterations,time,time_limit,seed,feasible,benchmark_feasible,mode,status,error,wall_time
+synthetic_final_micro_5,final,controlled/data/synthetic_final_micro_5.vrp,5,11,1,11,0.0,1,0,1,0.01,2,0,true,true,baseline_synthetic,ok,,0.01
+synthetic_final_split_6,final,controlled/data/synthetic_final_split_6.vrp,6,15,1,15,0.0,1,0,1,0.01,2,0,true,true,baseline_synthetic,ok,,0.01

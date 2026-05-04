@@ -370,10 +370,11 @@ class TestT4ChampionStorePersistence:
         # Directly call _on_promote with a mock branch to test persistence
         branch = Branch(
             branch_id=str(uuid.uuid4()),
-            state=BranchState.EXPLORE,
+            state=BranchState.FROZEN_TESTING,
             base_champion_id=1,
             base_champion_hash="abc",
         )
+        cm._branch_ctrl._branches[branch.branch_id] = branch
         # Set up a workspace for the branch (needed by _on_promote)
         code_dir = str(tmp_path / "champion_code")
         cm._branch_workspaces[branch.branch_id] = code_dir

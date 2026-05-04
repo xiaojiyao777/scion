@@ -1,0 +1,78 @@
+{
+  "campaign_rounds": 100,
+  "campaign_seeds": [
+    11,
+    29,
+    47
+  ],
+  "data_root_env": "SCION_PROBLEM_DATA_ROOT",
+  "data_root_expected_repo_relative": "vrp",
+  "final_evidence": {
+    "baseline_label": "cvrp-baseline-v0.4",
+    "candidate_label_template": "{campaign_id}-champion-v{version}",
+    "manifest": "manifests/final.json",
+    "requires_explicit_registry_paths": true,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "time_limit_sec": 10
+  },
+  "models": [
+    "sonnet",
+    "gpt-mini"
+  ],
+  "output_root_template": "~/research/scion-experiments/v04-cvrp-formal-{date}",
+  "problem_id": "cvrp",
+  "readiness_notes": [
+    "Manifests keep CSV case paths data-root-relative, e.g. cvrplib/A/A-n32-k5.vrp.",
+    "Set SCION_PROBLEM_DATA_ROOT to the repo-local vrp directory before running formal campaigns.",
+    "Do not use BKS/gap for promotion; BKS/gap remains final evidence only."
+  ],
+  "schema": "scion.cvrp_formal_readiness_budgets.v1",
+  "source_csv": "vrp/results/full_experiment_seed0_final.csv",
+  "stages": {
+    "final": {
+      "cases": 24,
+      "manifest": "manifests/final.json",
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "selected_by_protocol_cases": 24,
+      "time_limit_sec": 10
+    },
+    "frozen": {
+      "cases": 12,
+      "manifest": "manifests/frozen.json",
+      "seeds": [
+        61,
+        67
+      ],
+      "selected_by_protocol_cases": 8,
+      "time_limit_sec": 8
+    },
+    "screening": {
+      "cases": 16,
+      "manifest": "manifests/screening.json",
+      "seeds": [
+        11,
+        29
+      ],
+      "selected_by_protocol_cases": 12,
+      "time_limit_sec": 3
+    },
+    "validation": {
+      "cases": 12,
+      "manifest": "manifests/validation.json",
+      "seeds": [
+        47,
+        53
+      ],
+      "selected_by_protocol_cases": 8,
+      "time_limit_sec": 5
+    }
+  }
+}

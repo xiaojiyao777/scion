@@ -1,0 +1,13 @@
+version: "0.4-cvrp-controlled-smoke"
+
+screening:
+  - 0
+
+validation:
+  - 0
+
+frozen:
+  - 0
+
+canary:
+  - 0

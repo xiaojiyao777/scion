@@ -1,4 +1,4 @@
-"""Objective check: solver-reported objective must match oracle.recompute_objective."""
+"""Objective check: solver-reported objective must match adapter recomputation."""
 from __future__ import annotations
 
 import json
@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
+from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.runtime.runner import Runner
 from scion.verification.feasibility import (
     _import_oracle,
-    _load_solution_and_instance,
     _registry_path,
+    resolve_problem_path,
 )
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ def check_objective(
     """V7_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
 
-    canary = problem_spec.canary_case_path
+    canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _cr(True, "heavy", "skipped: no canary_case_path configured", t0)
 
@@ -61,38 +62,66 @@ def check_objective(
     except Exception as exc:
         return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
+    audit_failure = runtime_audit_failure_from_raw(raw)
+    if audit_failure is not None:
+        return _cr(
+            False,
+            "heavy",
+            "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
+            t0,
+        )
+
     # --- Adapter-based path (v0.3+) ---
     if adapter is not None:
         return _check_via_adapter(adapter, raw, canary, t0)
 
     # --- Legacy path (direct oracle import) ---
-    obj_raw = raw.get("objective", {})
-    solver_splits = obj_raw.get("subcategory_splits")
-    solver_cost = obj_raw.get("total_cost")
-
+    # Legacy problems that do not use ProblemAdapter must provide a generic
+    # solver-output objective hook. Scion framework does not reconstruct
+    # problem-native data models.
     oracle_dir = os.path.dirname(os.path.abspath(
         os.path.join(problem_spec.root_dir, problem_spec.oracle_path)
     ))
     try:
-        solution, instance = _load_solution_and_instance(raw, canary, oracle_dir)
         oracle_mod = _import_oracle(oracle_dir)
-        oracle_obj = oracle_mod.recompute_objective(solution, instance, solve_time_ms=0)
     except Exception as exc:
-        return _cr(False, "heavy", f"oracle error: {exc}", t0)
+        return _cr(False, "heavy", f"cannot import legacy oracle: {exc}", t0)
+
+    legacy_recompute = getattr(oracle_mod, "recompute_solver_output_objective", None)
+    if legacy_recompute is None:
+        return _cr(
+            False,
+            "heavy",
+            "problem adapter or oracle.recompute_solver_output_objective hook is required",
+            t0,
+        )
+
+    try:
+        oracle_obj = legacy_recompute(raw, canary)
+    except Exception as exc:
+        return _cr(False, "heavy", f"legacy objective hook error: {exc}", t0)
 
     mismatches = []
-    if solver_splits is not None and oracle_obj.subcategory_splits != solver_splits:
-        mismatches.append(
-            f"splits: solver={solver_splits} oracle={oracle_obj.subcategory_splits}"
-        )
-    if solver_cost is not None and oracle_obj.total_cost != solver_cost:
-        mismatches.append(
-            f"cost: solver={solver_cost} oracle={oracle_obj.total_cost}"
-        )
+    reported = raw.get("objective", {})
+    recomputed = _objective_mapping(oracle_obj)
+    for key, oracle_val in recomputed.items():
+        solver_val = reported.get(key) if isinstance(reported, dict) else None
+        if solver_val is not None and solver_val != oracle_val:
+            mismatches.append(f"{key}: solver={solver_val} oracle={oracle_val}")
 
     if mismatches:
         return _cr(False, "heavy", "objective mismatch: " + "; ".join(mismatches), t0)
     return _cr(True, "heavy", "objective matches oracle", t0)
+
+
+def _objective_mapping(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "_asdict"):
+        return dict(value._asdict())
+    if hasattr(value, "__dict__"):
+        return dict(value.__dict__)
+    raise TypeError("legacy objective hook must return a mapping-like object")
 
 
 def _check_via_adapter(

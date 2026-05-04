@@ -5,7 +5,7 @@ import os
 import statistics
 import uuid as _uuid_mod
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Optional, Sequence, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 from scion.core.models import (
     ExperimentStage, CanaryResult, ProtocolResult, EvalStats,
     PairwiseCaseFeedback, CaseAggregateFeedback,
-    ScreeningPatternSummary,
+    ScreeningPatternSummary, RunResult,
 )
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.runtime.runner import Runner
@@ -23,6 +23,10 @@ from scion.protocol.evaluation import (
 from scion.protocol.stats import compute_eval_stats
 from scion.protocol.gates import (
     GateResult, screening_gate, validation_gate, frozen_gate,
+)
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_result,
 )
 
 if TYPE_CHECKING:
@@ -154,7 +158,7 @@ class ExperimentProtocol:
         if self._metric_specs is None:
             logger.warning(
                 "ExperimentProtocol initialized without metric_specs; using legacy "
-                "warehouse objective fallback"
+                "objective fallback"
             )
         os.makedirs(metrics_dir, exist_ok=True)
 
@@ -195,7 +199,7 @@ class ExperimentProtocol:
         if self._require_metric_specs:
             raise RuntimeError("metric_specs are required for objective comparison")
         # Legacy compatibility path: build an ObjectiveComparison from the
-        # hardcoded warehouse comparator.
+        # historical two-metric comparator.
         from scion.problem.objectives import ObjectiveComparison, MetricComparison
         cmp = lexicographic_compare(candidate_objective, champion_objective)
         metrics = []
@@ -285,6 +289,15 @@ class ExperimentProtocol:
                         passed=False,
                         reason=f"Candidate solver failed on {case}: {cand_result.error_category}",
                     )
+                cand_audit_failure = runtime_audit_failure_from_result(cand_result)
+                if cand_audit_failure is not None:
+                    return CanaryResult(
+                        passed=False,
+                        reason=(
+                            f"Candidate runtime audit failed on {case}: "
+                            f"{format_runtime_audit_failure(cand_audit_failure)}"
+                        ),
+                    )
 
                 champ_result = self.runner.run_solver(
                     workdir=champion_ws,
@@ -295,6 +308,11 @@ class ExperimentProtocol:
                 )
                 if not champ_result.success:
                     # Infra issue on champion side — skip veto
+                    continue
+                if runtime_audit_failure_from_result(champ_result) is not None:
+                    # Existing champion-side runtime audit issues are not a
+                    # candidate veto in the canary gate; validation/frozen
+                    # evidence treats them as incomplete champion evidence.
                     continue
 
                 if (
@@ -398,6 +416,8 @@ class ExperimentProtocol:
         failed_pairs = 0
         candidate_failed_pairs = 0
         champion_failed_pairs = 0
+        runtime_ratios: list[float] = []
+        runtime_deltas_ms: list[float] = []
 
         def _write_metrics_snapshot(*, complete: bool) -> None:
             with open(raw_ref, "w") as f:
@@ -412,6 +432,10 @@ class ExperimentProtocol:
                         "failed_pairs": failed_pairs,
                         "candidate_failed_pairs": candidate_failed_pairs,
                         "champion_failed_pairs": champion_failed_pairs,
+                        "runtime_stats": _build_runtime_stats(
+                            runtime_ratios,
+                            runtime_deltas_ms,
+                        ),
                         "complete": complete,
                         "pairs": raw_pairs,
                         "failures": raw_failures,
@@ -457,6 +481,12 @@ class ExperimentProtocol:
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 )
+                runtime_fields = _runtime_fields(cand_r, champ_r)
+                _record_runtime_sample(
+                    runtime_fields,
+                    runtime_ratios,
+                    runtime_deltas_ms,
+                )
 
                 if not cand_r.success:
                     failed_pairs += 1
@@ -470,6 +500,7 @@ class ExperimentProtocol:
                         "error_category": cand_r.error_category or "unknown",
                         "exit_code": cand_r.exit_code,
                         "elapsed_ms": cand_r.elapsed_ms,
+                        **runtime_fields,
                         "stderr_tail": (cand_r.stderr or "")[-1000:],
                     }
                     raw_failures.append(failure_record)
@@ -480,6 +511,7 @@ class ExperimentProtocol:
                         "delta": -1.0,
                         "decisive_metric": "runtime_failure",
                         "metric_deltas": {},
+                        **runtime_fields,
                         "failure": failure_record,
                     })
                     pairs_by_case[os.path.basename(case)].append(
@@ -513,7 +545,7 @@ class ExperimentProtocol:
                 if not champ_r.success:
                     failed_pairs += 1
                     champion_failed_pairs += 1
-                    raw_failures.append({
+                    failure_record = {
                         "case": case,
                         "seed": seed,
                         "side": "champion",
@@ -521,7 +553,19 @@ class ExperimentProtocol:
                         "error_category": champ_r.error_category or "unknown",
                         "exit_code": champ_r.exit_code,
                         "elapsed_ms": champ_r.elapsed_ms,
+                        **runtime_fields,
                         "stderr_tail": (champ_r.stderr or "")[-1000:],
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": "champion_runtime_failure",
+                        "metric_deltas": {},
+                        **runtime_fields,
+                        "failure": failure_record,
                     })
                     logger.info(
                         "Pair %s seed=%d: champion solver failed category=%s elapsed_ms=%d → invalid",
@@ -534,13 +578,114 @@ class ExperimentProtocol:
 
                 if cand_r.output is None or champ_r.output is None:
                     failed_pairs += 1
-                    raw_failures.append({
+                    failure_record = {
                         "case": case,
                         "seed": seed,
                         "side": "unknown",
                         "comparison": "invalid",
                         "error_category": "missing_output",
+                        **runtime_fields,
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": "missing_output",
+                        "metric_deltas": {},
+                        **runtime_fields,
+                        "failure": failure_record,
                     })
+                    _write_metrics_snapshot(complete=False)
+                    continue
+
+                cand_audit_failure = runtime_audit_failure_from_result(cand_r)
+                if cand_audit_failure is not None:
+                    failed_pairs += 1
+                    candidate_failed_pairs += 1
+                    failure_record = {
+                        "case": case,
+                        "seed": seed,
+                        "side": "candidate",
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "error_category": cand_audit_failure["error_category"],
+                        "exit_code": cand_r.exit_code,
+                        "elapsed_ms": cand_r.elapsed_ms,
+                        **runtime_fields,
+                        "runtime_audit": cand_audit_failure,
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "loss",
+                        "delta": -1.0,
+                        "decisive_metric": cand_audit_failure["error_category"],
+                        "metric_deltas": {},
+                        **runtime_fields,
+                        "failure": failure_record,
+                    })
+                    pairs_by_case[os.path.basename(case)].append(
+                        PairwiseCaseFeedback(
+                            case_id=os.path.basename(case),
+                            seed=seed,
+                            comparison="loss",
+                            delta=-1.0,
+                            objective_comparison=None,
+                            case_features=case_features,
+                        )
+                    )
+                    logger.info(
+                        "Pair %s seed=%d: candidate runtime audit failed: %s",
+                        os.path.basename(case), seed,
+                        format_runtime_audit_failure(cand_audit_failure),
+                    )
+                    _write_metrics_snapshot(complete=False)
+                    self._emit_progress(
+                        stage=stage.value,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=valid_pairs,
+                        total_pairs=total_pairs,
+                        raw_metrics_ref=raw_ref,
+                    )
+                    continue
+
+                champ_audit_failure = runtime_audit_failure_from_result(champ_r)
+                if champ_audit_failure is not None:
+                    failed_pairs += 1
+                    champion_failed_pairs += 1
+                    failure_record = {
+                        "case": case,
+                        "seed": seed,
+                        "side": "champion",
+                        "comparison": "invalid",
+                        "delta": None,
+                        "error_category": champ_audit_failure["error_category"],
+                        "exit_code": champ_r.exit_code,
+                        "elapsed_ms": champ_r.elapsed_ms,
+                        **runtime_fields,
+                        "runtime_audit": champ_audit_failure,
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case,
+                        "seed": seed,
+                        "comparison": "invalid",
+                        "delta": None,
+                        "decisive_metric": f"champion_{champ_audit_failure['error_category']}",
+                        "metric_deltas": {},
+                        **runtime_fields,
+                        "failure": failure_record,
+                    })
+                    logger.info(
+                        "Pair %s seed=%d: champion runtime audit failed: %s",
+                        os.path.basename(case), seed,
+                        format_runtime_audit_failure(champ_audit_failure),
+                    )
                     _write_metrics_snapshot(complete=False)
                     continue
 
@@ -560,6 +705,7 @@ class ExperimentProtocol:
                         "metric_deltas": {
                             m.name: m.signed_delta for m in breakdown.metrics
                         } if breakdown.metrics else {},
+                        **runtime_fields,
                     }
                 )
                 valid_pairs += 1
@@ -641,15 +787,32 @@ class ExperimentProtocol:
                     reason_codes.append("CHAMPION_RUNTIME_FAILURE")
                 gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
 
+        runtime_stats = _build_runtime_stats(runtime_ratios, runtime_deltas_ms)
+        stats = replace(
+            stats,
+            runtime_ratio_median=runtime_stats["runtime_ratio_median"],
+            runtime_delta_median_ms=runtime_stats["runtime_delta_median_ms"],
+            runtime_regression_rate=runtime_stats["runtime_regression_rate"],
+            runtime_pairs=runtime_stats["runtime_pairs"],
+            total_pairs=total_pairs,
+            attempted_pairs=attempted_pairs,
+            valid_pairs=valid_pairs,
+            failed_pairs=failed_pairs,
+            candidate_failed_pairs=candidate_failed_pairs,
+            champion_failed_pairs=champion_failed_pairs,
+        )
+
         # Persist final raw metrics snapshot.
         _write_metrics_snapshot(complete=True)
+        runtime_summary = _format_runtime_summary(stats)
 
         # Exposure control
         if stage == ExperimentStage.SCREENING:
             exposed = (
                 f"stage={stage.value} win_rate={stats.win_rate:.2f} "
                 f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
-                f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs}"
+                f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
+                f"{runtime_summary}"
             )
         else:
             # Validation / Frozen: aggregate summary only, no per-case data
@@ -658,7 +821,8 @@ class ExperimentProtocol:
                 f"stat={stats.statistical_status or 'legacy'} "
                 f"metric={stats.statistical_metric or 'scalar'} "
                 f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
-                f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs}"
+                f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
+                f"{runtime_summary}"
             )
 
         # Build case-level feedback for screening only
@@ -686,6 +850,99 @@ class ExperimentProtocol:
 # ---------------------------------------------------------------------------
 # T2: Case-level aggregation helper
 # ---------------------------------------------------------------------------
+
+def _runtime_fields(cand_r: RunResult | None, champ_r: RunResult | None) -> dict:
+    candidate_elapsed = getattr(cand_r, "elapsed_ms", None)
+    champion_elapsed = getattr(champ_r, "elapsed_ms", None)
+    fields = {
+        "candidate_elapsed_ms": candidate_elapsed,
+        "champion_elapsed_ms": champion_elapsed,
+        "runtime_ratio": None,
+        "runtime_delta_ms": None,
+        "candidate_runtime": _runtime_audit_summary(cand_r),
+        "champion_runtime": _runtime_audit_summary(champ_r),
+    }
+    if candidate_elapsed is None or champion_elapsed is None:
+        return fields
+    fields["runtime_delta_ms"] = int(candidate_elapsed) - int(champion_elapsed)
+    if champion_elapsed > 0:
+        fields["runtime_ratio"] = float(candidate_elapsed) / float(champion_elapsed)
+    return fields
+
+
+def _runtime_audit_summary(result: RunResult | None) -> dict:
+    runtime = getattr(getattr(result, "output", None), "runtime", None)
+    if not isinstance(runtime, dict):
+        return {}
+    summary = {
+        key: value
+        for key, value in runtime.items()
+        if key.startswith(("baseline_", "operator_"))
+        and key != "operator_events"
+        and _is_json_scalar(value)
+    }
+    events = runtime.get("operator_events")
+    if isinstance(events, list):
+        summary["operator_events"] = events[:5]
+    return summary
+
+
+def _is_json_scalar(value: object) -> bool:
+    return value is None or isinstance(value, (bool, int, float, str))
+
+
+def _record_runtime_sample(
+    fields: dict,
+    ratios: list[float],
+    deltas_ms: list[float],
+) -> None:
+    ratio = fields.get("runtime_ratio")
+    delta = fields.get("runtime_delta_ms")
+    if ratio is not None:
+        ratios.append(float(ratio))
+    if delta is not None:
+        deltas_ms.append(float(delta))
+
+
+def _build_runtime_stats(
+    ratios: list[float],
+    deltas_ms: list[float],
+) -> dict:
+    runtime_pairs = len(deltas_ms)
+    regression_count = sum(1 for d in deltas_ms if d > 0)
+    return {
+        "runtime_ratio_median": statistics.median(ratios) if ratios else None,
+        "runtime_delta_median_ms": statistics.median(deltas_ms) if deltas_ms else None,
+        "runtime_regression_rate": (
+            regression_count / runtime_pairs if runtime_pairs else None
+        ),
+        "runtime_pairs": runtime_pairs,
+    }
+
+
+def _format_runtime_summary(stats: EvalStats) -> str:
+    ratio = (
+        f"{stats.runtime_ratio_median:.2f}"
+        if stats.runtime_ratio_median is not None
+        else "NA"
+    )
+    delta = (
+        f"{stats.runtime_delta_median_ms:.1f}"
+        if stats.runtime_delta_median_ms is not None
+        else "NA"
+    )
+    regression = (
+        f"{stats.runtime_regression_rate:.2f}"
+        if stats.runtime_regression_rate is not None
+        else "NA"
+    )
+    return (
+        f"runtime_pairs={stats.runtime_pairs} "
+        f"runtime_ratio_median={ratio} "
+        f"runtime_delta_median_ms={delta} "
+        f"runtime_regression_rate={regression}"
+    )
+
 
 def _aggregate_pairs_to_case_level(
     pairs: List[PairwiseCaseFeedback],
