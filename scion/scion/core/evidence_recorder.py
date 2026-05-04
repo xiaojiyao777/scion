@@ -25,6 +25,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.status_reporter import StatusReporter
+from scion.evidence.formal_readiness import validate_formal_readiness
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +338,7 @@ class EvidenceRecorder:
         stagnation_signals: Iterable[Any] = (),
         diagnostics: Any | None = None,
         final_evidence_refs: Mapping[str, Any] | None = None,
+        frozen_budget: Mapping[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Write ``campaign_summary.json`` with the current backward-compatible schema."""
         steps = list(step_history)
@@ -417,9 +419,16 @@ class EvidenceRecorder:
             "diagnostics": diagnostics if diagnostics is not None else [],
             "steps": [],
         }
+        if frozen_budget is not None:
+            summary["frozen_budget"] = dict(frozen_budget)
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))
+        readiness = validate_formal_readiness(refs)
+        summary["formal_readiness"] = {
+            "formal_ready": readiness.formal_ready,
+            "missing": list(readiness.missing),
+        }
         if refs:
             summary["final_evidence_refs"] = refs
 

@@ -45,6 +45,10 @@ from scion.evidence.final_evidence_refs import (
     attach_final_evidence_package,
     build_final_evidence_refs,
 )
+from scion.evidence.formal_readiness import (
+    FormalReadinessReport,
+    validate_formal_readiness,
+)
 
 __all__ = [
     "CvrpCsvResultRow",
@@ -58,6 +62,7 @@ __all__ = [
     "CvrpSideResult",
     "FinalQualityConfig",
     "FinalQualityPackage",
+    "FormalReadinessReport",
     "QualityCaseRecord",
     "attach_final_evidence_package",
     "build_cvrp_case_manifest_from_csv",
@@ -73,6 +78,7 @@ __all__ = [
     "load_cvrp_case_manifest",
     "load_cvrp_quality_records",
     "load_cvrp_result_rows",
+    "validate_formal_readiness",
     "write_cvrp_case_manifest",
     "write_cvrp_evidence_package_from_csv",
     "write_cvrp_final_evidence_package",

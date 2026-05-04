@@ -20,6 +20,7 @@ from scion.core.models import (
 )
 from scion.core.scheduler import Scheduler
 from scion.core.step_result import StepResult
+from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,7 @@ class BranchStepRunner:
             verification_result=verification_result,
             action_label=action_label,
         )
+        failure_stage, failure_detail = _eval_failure_detail(protocol_result)
         self.record_step(
             StepRecord(
                 round_num=round_num,
@@ -204,8 +206,8 @@ class BranchStepRunner:
                 verification_passed=True,
                 protocol_result=protocol_result,
                 decision=result.decision,
-                failure_stage=None,
-                failure_detail=None,
+                failure_stage=failure_stage,
+                failure_detail=failure_detail,
                 hypothesis_id=h_record.hypothesis_id,
                 decision_reason_codes=self.decision_reason_codes_for(
                     bid,
@@ -387,3 +389,17 @@ class BranchStepRunner:
         if branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
             return "validate"
         return "frozen"
+
+
+def _eval_failure_detail(
+    protocol_result: Any | None,
+) -> tuple[str | None, str | None]:
+    if protocol_result is None:
+        return None, None
+    reason_codes = {
+        str(code).lower()
+        for code in getattr(protocol_result, "reason_codes", ()) or ()
+    }
+    if FROZEN_BUDGET_EXHAUSTED in reason_codes:
+        return "frozen_budget", FROZEN_BUDGET_EXHAUSTED
+    return None, None

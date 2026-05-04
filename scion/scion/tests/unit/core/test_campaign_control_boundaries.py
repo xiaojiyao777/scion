@@ -20,11 +20,13 @@ from unittest.mock import MagicMock, patch as mock_patch
 import pytest
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
+from scion.config.protocol_config import FrozenConfig
 from scion.core.campaign import CampaignManager
+from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED, FrozenBudgetLedger
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, CheckResult,
     ContractResult, Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    HypothesisRecord, ProtocolResult, StepRecord, VerificationResult,
+    HypothesisRecord, PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
 from scion.core.termination import TerminationConfig
 from scion.proposal.mock_client import MockLLMClient
@@ -157,6 +159,7 @@ def _campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
+    protocol_config: ProtocolConfig | None = None,
 ) -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
@@ -168,7 +171,7 @@ def _campaign(
 
     return CampaignManager(
         problem_spec=spec,
-        protocol_config=ProtocolConfig(
+        protocol_config=protocol_config or ProtocolConfig(
             screening_n=6,
             screening_win_rate_threshold=0.66,
             validation_n=12,
@@ -196,6 +199,30 @@ def _campaign(
         experiment_protocol=experiment_protocol,
         termination_config=TerminationConfig(max_experiments=100, stagnation_limit=50),
     )
+
+
+def _install_frozen_ready_branch(cm: CampaignManager, workspace: str) -> str:
+    branch = cm._branch_ctrl.create_branch(cm._champion)
+    branch.state = BranchState.READY_FROZEN
+    cm._branch_workspaces[branch.branch_id] = workspace
+    hyp = HypothesisProposal(
+        hypothesis_text="Bounded route-local frozen test.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/local_search.py",
+    )
+    cm._branch_hypotheses[branch.branch_id] = hyp
+    cm._branch_current_hypothesis[branch.branch_id] = HypothesisRecord(
+        hypothesis_id=str(uuid.uuid4()),
+        branch_id=branch.branch_id,
+        change_locus=hyp.change_locus,
+        action=hyp.action,
+        status="active",
+        target_file=hyp.target_file,
+        hypothesis_text=hyp.hypothesis_text,
+        base_champion_version=cm._champion.version,
+    )
+    return branch.branch_id
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +547,148 @@ class TestEvalStepWritesStepRecord:
         assert val_steps, (
             "validation step must have verification_passed=True and failure_stage=None in step_history"
         )
+
+
+class TestFrozenBudgetLedger:
+    def test_frozen_budget_consumes_before_attempt_and_blocks_second_branch(
+        self,
+        tmp_path,
+    ):
+        proto = _MockProtocol(
+            results=[
+                _make_protocol_result(
+                    "fail",
+                    stage=ExperimentStage.FROZEN,
+                    win_rate=0.0,
+                )
+            ]
+        )
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=proto,
+            protocol_config=ProtocolConfig(
+                frozen=FrozenConfig(max_uses_per_campaign=1),
+            ),
+        )
+        workspace = str(tmp_path / "champion_code")
+        first_bid = _install_frozen_ready_branch(cm, workspace)
+        second_bid = _install_frozen_ready_branch(cm, workspace)
+
+        first = cm.run_one_step()
+        second = cm.run_one_step()
+
+        assert first.branch_id == first_bid
+        assert second.branch_id == second_bid
+        assert len(proto.experiment_calls) == 1
+        assert proto.experiment_calls[0][0] == ExperimentStage.FROZEN
+        assert len(proto.canary_calls) == 1
+        assert cm._frozen_budget_ledger.snapshot() == {
+            "used": 1,
+            "limit": 1,
+            "remaining": 0,
+        }
+
+        blocked_steps = [
+            step for step in cm._step_history
+            if step.branch_id == second_bid
+        ]
+        assert blocked_steps
+        blocked = blocked_steps[-1]
+        assert blocked.failure_stage == "frozen_budget"
+        assert blocked.failure_detail == FROZEN_BUDGET_EXHAUSTED
+        assert blocked.protocol_result is not None
+        assert blocked.protocol_result.reason_codes == (FROZEN_BUDGET_EXHAUSTED,)
+        assert blocked.decision == Decision.ABANDON
+
+        rebuilt = FrozenBudgetLedger(
+            max_uses=1,
+            registry=cm._registry,
+            campaign_id="fresh-process-campaign-id",
+        )
+        assert rebuilt.used == 1
+
+
+class TestProgrammaticRuntimeVerificationDefault:
+    def test_adapter_protocol_runner_builds_strict_verification_gate(self, tmp_path):
+        proto = _MockProtocol()
+        proto.runner = object()
+        proto.config = ProtocolConfig()
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=proto,
+            verification_gate=None,
+        )
+        cm_adapter = object()
+        cm = CampaignManager(
+            problem_spec=cm._spec,
+            protocol_config=ProtocolConfig(),
+            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
+            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=cm._champion,
+            campaign_dir=str(tmp_path / "strict-campaign"),
+            experiment_protocol=proto,
+            adapter=cm_adapter,
+        )
+
+        assert cm._vgate._runner is proto.runner
+        assert cm._vgate._adapter is cm_adapter
+        assert cm._vgate._strict_runtime_checks is True
+        assert cm._vgate._require_adapter_for_runtime is True
+
+    def test_adapter_without_runner_fails_closed_by_default(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        cm = CampaignManager(
+            problem_spec=base._spec,
+            protocol_config=ProtocolConfig(),
+            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
+            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "missing-runner-campaign"),
+            experiment_protocol=_MockProtocol(),
+            adapter=object(),
+        )
+        result = cm._vgate.run(
+            str(tmp_path / "champion_code"),
+            str(tmp_path / "champion_code"),
+            PatchProposal(**_VALID_PATCH),
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V_runtime_config"
+
+    def test_adapter_without_runner_compatibility_opt_in_is_non_strict(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        cm = CampaignManager(
+            problem_spec=base._spec,
+            protocol_config=ProtocolConfig(),
+            split_manifest=SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"]),
+            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "compat-campaign"),
+            experiment_protocol=_MockProtocol(),
+            adapter=object(),
+            allow_non_strict_runtime_verification=True,
+        )
+        result = cm._vgate.run(
+            str(tmp_path / "champion_code"),
+            str(tmp_path / "champion_code"),
+            PatchProposal(**_VALID_PATCH),
+        )
+
+        assert result.passed is True
+        assert cm._vgate._strict_runtime_checks is False
 
 
 # ---------------------------------------------------------------------------

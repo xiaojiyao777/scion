@@ -167,6 +167,10 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
         round_num=1,
         champion=_champion(),
     )
+    assert before["formal_readiness"] == {
+        "formal_ready": False,
+        "missing": ["final_evidence_refs"],
+    }
     before_step_keys = set(before["steps"][0])
 
     payload = attach_final_evidence_package(recorder, result)
@@ -177,6 +181,8 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
     )
 
     assert payload == {"final_quality": after["final_evidence_refs"]["final_quality"]}
+    assert after["formal_readiness"]["formal_ready"] is True
+    assert after["formal_readiness"]["missing"] == []
     assert set(after["steps"][0]) == before_step_keys
     assert "final_evidence_refs" not in after["steps"][0]
 

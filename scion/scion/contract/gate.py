@@ -53,6 +53,20 @@ _NON_RNG_RANDOM_PATTERNS = frozenset(
     }
 )
 
+_PROBLEM_SCALE_NAMES = frozenset(
+    {
+        "routes",
+        "route",
+        "customers",
+        "customer_ids",
+        "nodes",
+        "node_ids",
+        "orders",
+        "vehicles",
+        "vehicle_ids",
+    }
+)
+
 
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
@@ -431,22 +445,37 @@ class ContractGate:
         except SyntaxError:
             return _cr("C9c_complexity_bound", False, "heavy", "unparseable code", t0)
 
-        combinations_aliases = _collect_combinations_aliases(tree)
+        itertools_aliases = _collect_itertools_aliases(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            if not _is_combinations_call(node, combinations_aliases):
-                continue
-            if len(node.args) < 2:
-                continue
-            k_arg = node.args[1]
-            if isinstance(k_arg, ast.Constant) and isinstance(k_arg.value, int):
-                if k_arg.value <= 2:
+            call_kind = _itertools_call_kind(node, itertools_aliases)
+            if call_kind == "combinations":
+                if len(node.args) < 2:
                     continue
-                violations.append(f"combinations(..., {k_arg.value})")
-            else:
-                violations.append("combinations(..., variable_k)")
+                k_arg = node.args[1]
+                if isinstance(k_arg, ast.Constant) and isinstance(k_arg.value, int):
+                    if k_arg.value <= 2:
+                        continue
+                    violations.append(f"combinations(..., {k_arg.value})")
+                else:
+                    violations.append("combinations(..., variable_k)")
+            elif call_kind == "permutations":
+                violations.append("permutations(...)")
+            elif call_kind == "product":
+                scale_args = sum(1 for arg in node.args if _is_problem_scale_expr(arg))
+                repeat_scale = _constant_int_kwarg(node, "repeat")
+                if scale_args >= 2 or (scale_args == 1 and repeat_scale is not None and repeat_scale > 1):
+                    violations.append("product(... problem-scale iterables ...)")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.While) and not _is_bounded_while(node):
+                violations.append("uncapped while loop")
+
+        loop_guard = _ProblemScaleLoopGuard()
+        loop_guard.visit(tree)
+        violations.extend(loop_guard.violations)
 
         if not violations:
             return _cr("C9c_complexity_bound", True, "heavy", "complexity ok", t0)
@@ -454,7 +483,7 @@ class ContractGate:
             "C9c_complexity_bound",
             False,
             "heavy",
-            "unbounded/high-order combinations detected: "
+            "unbounded/high-order/high-risk enumeration detected: "
             f"{violations}. Use capped top-k candidate lists or sampling.",
             t0,
         )
@@ -566,23 +595,90 @@ def _open_has_write_mode(call_node: ast.Call) -> Optional[str]:
     return None
 
 
-def _collect_combinations_aliases(tree: ast.AST) -> set[str]:
-    aliases = {"combinations"}
+def _collect_itertools_aliases(tree: ast.AST) -> dict[str, str]:
+    aliases: dict[str, str] = {}
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.module != "itertools":
-            continue
-        for alias in node.names:
-            if alias.name == "combinations":
-                aliases.add(alias.asname or alias.name)
+        if isinstance(node, ast.ImportFrom) and node.module == "itertools":
+            for alias in node.names:
+                if alias.name in {"combinations", "permutations", "product"}:
+                    aliases[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "itertools":
+                    aliases[alias.asname or alias.name] = "itertools"
     return aliases
 
 
-def _is_combinations_call(call_node: ast.Call, combinations_aliases: set[str]) -> bool:
+def _itertools_call_kind(call_node: ast.Call, aliases: dict[str, str]) -> str | None:
     func = call_node.func
     if isinstance(func, ast.Name):
-        return func.id in combinations_aliases
+        return aliases.get(func.id)
     if isinstance(func, ast.Attribute):
-        return func.attr == "combinations"
+        if func.attr not in {"combinations", "permutations", "product"}:
+            return None
+        if isinstance(func.value, ast.Name):
+            resolved = aliases.get(func.value.id)
+            if resolved == "itertools":
+                return func.attr
+        return None
+    return None
+
+
+def _constant_int_kwarg(call_node: ast.Call, name: str) -> int | None:
+    for kw in call_node.keywords:
+        if kw.arg == name and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, int):
+            return kw.value.value
+    return None
+
+
+def _is_problem_scale_expr(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in _PROBLEM_SCALE_NAMES
+    if isinstance(node, ast.Attribute):
+        return node.attr in _PROBLEM_SCALE_NAMES or _is_problem_scale_expr(node.value)
+    if isinstance(node, ast.Subscript):
+        return _is_problem_scale_expr(node.value)
+    if isinstance(node, ast.Call):
+        return any(_is_problem_scale_expr(arg) for arg in node.args)
     return False
+
+
+def _is_bounded_while(node: ast.While) -> bool:
+    if isinstance(node.test, ast.Constant) and node.test.value is True:
+        return False
+    if isinstance(node.test, ast.BoolOp):
+        return any(_compare_has_small_constant(value) for value in node.test.values)
+    if isinstance(node.test, ast.Compare):
+        return _compare_has_small_constant(node.test)
+    return False
+
+
+def _compare_has_small_constant(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Compare):
+        return False
+    comparators = [node.left, *node.comparators]
+    return any(_is_small_constant(expr) for expr in comparators)
+
+
+def _is_small_constant(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and 0 <= node.value <= 1000
+    )
+
+
+class _ProblemScaleLoopGuard(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self._depth = 0
+        self.violations: List[str] = []
+
+    def visit_For(self, node: ast.For) -> None:
+        is_scale = _is_problem_scale_expr(node.iter)
+        if is_scale:
+            self._depth += 1
+            if self._depth >= 3:
+                self.violations.append("three-level problem-scale nested loops")
+        self.generic_visit(node)
+        if is_scale:
+            self._depth -= 1

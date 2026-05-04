@@ -81,6 +81,31 @@ class TestMechanismLabel:
     def test_generic(self):
         assert _extract_mechanism_label("random perturbation") == "generic"
 
+    def test_route_native_taxonomy_matches_hyphenated_labels(self):
+        taxonomy = ["route_local", "route_pair", "ruin_recreate"]
+
+        assert (
+            _extract_mechanism_label(
+                "Try a bounded route-pair 2-opt* exchange.",
+                taxonomy=taxonomy,
+            )
+            == "route_pair"
+        )
+        assert (
+            _extract_mechanism_label(
+                "Apply an intra-route Or-opt cleanup.",
+                taxonomy=taxonomy,
+            )
+            == "route_local"
+        )
+        assert (
+            _extract_mechanism_label(
+                "Use a bounded ruin and recreate repair.",
+                taxonomy=taxonomy,
+            )
+            == "ruin_recreate"
+        )
+
 
 class TestSearchMemoryUpdate:
     def test_update_on_abandon(self):
@@ -142,6 +167,21 @@ class TestSearchMemoryUpdate:
         key = _make_family_key("subcategory_consolidation", "create_new", "vehicle_level")
         assert sm.families[key].is_exhausted is False
         assert sm.families[key].best_wr == 0.40
+
+    def test_route_native_taxonomy_does_not_fall_back_to_order_swap(self):
+        sm = CampaignSearchMemory(
+            family_taxonomy=["route_local", "route_pair", "ruin_recreate"]
+        )
+        sm.update(_make_step(
+            hyp_text="route-pair 2-opt swap between routes",
+            locus="route_pair",
+            action="create_new",
+            win_rate=0.2,
+        ))
+
+        key = _make_family_key("route_pair", "create_new", "route_pair")
+        assert key in sm.families
+        assert "order_swap/create_new/route_pair" not in sm.families
 
 
 class TestSearchMemoryRender:

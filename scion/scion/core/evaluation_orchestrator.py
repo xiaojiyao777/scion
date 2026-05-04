@@ -10,12 +10,15 @@ from scion.core.branch import StateTransitionError
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
 from scion.core.features import BudgetState, SafeFeatureExtractor
+from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
 from scion.core.models import (
     Branch,
     BranchState,
     CanaryResult,
     ChampionState,
     Decision,
+    EvalStats,
+    ExperimentStage,
     FailureEvent,
     HypothesisProposal,
     HypothesisRecord,
@@ -53,6 +56,7 @@ class EvaluationOrchestrator:
     increment_experiment_count: Callable[[], None]
     increment_budget_used: Callable[[], None]
     increment_soft_abandon_streak: Callable[[], None]
+    frozen_budget_ledger: Any | None = None
 
     def evaluate(
         self,
@@ -70,6 +74,15 @@ class EvaluationOrchestrator:
         self.persist_branch_state(bid)
 
         protocol = self.experiment_protocol_provider()
+        if stage == ExperimentStage.FROZEN and self.frozen_budget_ledger is not None:
+            budget_decision = self.frozen_budget_ledger.try_consume(branch_id=bid)
+            if not budget_decision.allowed:
+                self.decision_reason_codes[bid] = ("FROZEN_BUDGET_EXHAUSTED",)
+                return Decision.ABANDON, _frozen_budget_protocol_result(
+                    used=budget_decision.used,
+                    limit=budget_decision.limit,
+                ), CanaryResult(passed=True, reason=FROZEN_BUDGET_EXHAUSTED)
+
         expand, expand_round = self._prepare_expand(branch, protocol)
         request = EvaluationRequest(
             branch_id=bid,
@@ -221,3 +234,26 @@ class EvaluationOrchestrator:
             )
         except Exception:
             pass
+
+
+def _frozen_budget_protocol_result(*, used: int, limit: int) -> ProtocolResult:
+    return ProtocolResult(
+        stage=ExperimentStage.FROZEN,
+        stats=EvalStats(
+            n_cases=0,
+            wins=0,
+            losses=0,
+            ties=0,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=(FROZEN_BUDGET_EXHAUSTED,),
+        exposed_summary=(
+            "stage=frozen blocked=true "
+            f"reason={FROZEN_BUDGET_EXHAUSTED} used={used} limit={limit}"
+        ),
+        raw_metrics_ref="",
+    )

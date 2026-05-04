@@ -74,6 +74,13 @@ llm_hints:
     attributes such as vehicle_capacity, demands, distance_matrix, customers,
     or num_customers.
 
+family_taxonomy:
+  version: "cvrp-route-v1"
+  families:
+    - route_local
+    - route_pair
+    - ruin_recreate
+
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"
   api_version: "v1"

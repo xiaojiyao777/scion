@@ -13,14 +13,20 @@ Completed in the first post-run repair pass:
 - Post-run proposal-stage `StepRecord` evidence for Round-1 LLM/schema
   failures.
 
-Still open:
+Completed in the governance hardening pass:
 
 - P0-2 frozen usage ledger.
 - P0-3 formal readiness validator for final evidence refs.
 - P1-1 strict runtime default for programmatic adapter campaigns.
-- P1-2 further `campaign.py` composition cleanup.
 - P1-3 broader static complexity guard.
-- P1-4 route-native taxonomy and legacy fallback isolation.
+- P1-4 route-native taxonomy/search-memory slice.
+
+Still open:
+
+- P1-2 further `campaign.py` composition cleanup.
+- broader legacy fallback isolation beyond the route-native search-memory fix.
+- optional CLI/readiness command for final evidence closeout.
+- CVRP research-surface decision beyond post-baseline registry operators.
 
 ## P0 Repairs
 

@@ -8,9 +8,11 @@ from typing import Any, Mapping
 __all__ = [
     "attach_final_evidence_package",
     "build_final_evidence_refs",
+    "FINAL_QUALITY_ARTIFACT_KEYS",
+    "MANIFEST_METADATA_KEYS",
 ]
 
-_FINAL_QUALITY_ARTIFACT_KEYS = (
+FINAL_QUALITY_ARTIFACT_KEYS = (
     "manifest",
     "final_quality_json",
     "final_quality_csv",
@@ -19,7 +21,7 @@ _FINAL_QUALITY_ARTIFACT_KEYS = (
     "failure_summary",
 )
 
-_MANIFEST_METADATA_KEYS = (
+MANIFEST_METADATA_KEYS = (
     "schema",
     "package_type",
     "problem_id",
@@ -52,7 +54,7 @@ def build_final_evidence_refs(
         raise TypeError("package_result.package.manifest must be a mapping")
 
     payload: dict[str, Any] = {
-        key: manifest.get(key) for key in _MANIFEST_METADATA_KEYS
+        key: manifest.get(key) for key in MANIFEST_METADATA_KEYS
     }
     payload["artifacts"] = _artifact_refs(artifacts)
     return {label: payload}
@@ -73,7 +75,7 @@ def attach_final_evidence_package(
 def _artifact_refs(artifacts: Mapping[str, Any]) -> dict[str, str | None]:
     refs = {
         key: _string_ref(artifacts.get(key))
-        for key in _FINAL_QUALITY_ARTIFACT_KEYS
+        for key in FINAL_QUALITY_ARTIFACT_KEYS
     }
     for key, value in artifacts.items():
         if key not in refs:

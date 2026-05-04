@@ -27,13 +27,66 @@ _DEFAULT_MECHANISM = "generic"
 def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[List[str]] = None) -> str:
     text_lower = hypothesis_text.lower()
     if taxonomy:
+        normalized_text = _normalize_label_text(text_lower)
         for label in taxonomy:
-            if label.lower() in text_lower:
+            if _normalize_label_text(label) in normalized_text:
                 return label
+        route_label = _route_native_label(text_lower, taxonomy)
+        if route_label is not None:
+            return route_label
     for keywords, label in _MECHANISM_KEYWORDS:
         if any(kw in text_lower for kw in keywords):
             return label
     return _DEFAULT_MECHANISM
+
+
+def _normalize_label_text(value: str) -> str:
+    return (
+        value.lower()
+        .replace("_", " ")
+        .replace("-", " ")
+        .replace("*", " ")
+    )
+
+
+def _route_native_label(text_lower: str, taxonomy: List[str]) -> str | None:
+    taxonomy_set = set(taxonomy)
+    normalized = _normalize_label_text(text_lower)
+    if "route_pair" in taxonomy_set and any(
+        token in normalized
+        for token in (
+            "route pair",
+            "inter route",
+            "cross route",
+            "2 opt",
+            "exchange",
+            "relocate",
+            "swap",
+        )
+    ):
+        return "route_pair"
+    if "route_local" in taxonomy_set and any(
+        token in normalized
+        for token in (
+            "route local",
+            "intra route",
+            "2 opt",
+            "or opt",
+            "local search",
+        )
+    ):
+        return "route_local"
+    if "ruin_recreate" in taxonomy_set and any(
+        token in normalized
+        for token in (
+            "ruin",
+            "recreate",
+            "destroy",
+            "repair",
+        )
+    ):
+        return "ruin_recreate"
+    return None
 
 
 def _make_family_key(mechanism_label: str, action: str, locus: str, target_file: str = "") -> str:
@@ -79,6 +132,7 @@ class CampaignSearchMemory:
     families: Dict[str, FamilyEntry] = field(default_factory=dict)
     coverage_counts: Dict[str, int] = field(default_factory=dict)  # locus/action → count
     recent_hypotheses: List[str] = field(default_factory=list)     # last N hypothesis texts for loop detection
+    family_taxonomy: Optional[List[str]] = None
 
     # ---------------------------------------------------------------
     # Incremental update
@@ -90,7 +144,10 @@ class CampaignSearchMemory:
         if hyp is None:
             return
 
-        mechanism = _extract_mechanism_label(hyp.hypothesis_text or "")
+        mechanism = _extract_mechanism_label(
+            hyp.hypothesis_text or "",
+            taxonomy=self.family_taxonomy,
+        )
         key = _make_family_key(mechanism, hyp.action, hyp.change_locus, hyp.target_file or "")
 
         # Update coverage counts

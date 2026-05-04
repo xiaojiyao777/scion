@@ -27,6 +27,7 @@ from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.explore_step_pipeline import ExploreStepPipeline, build_verification_detail
 from scion.core.features import SafeFeatureExtractor, BudgetState
+from scion.core.frozen_budget import FrozenBudgetLedger
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, ContractResult,
@@ -41,6 +42,7 @@ from scion.core.step_result import StepResult
 from scion.core.status_reporter import StatusReporter
 from scion.core.termination import TerminationChecker, TerminationConfig
 from scion.core.stagnation import StagnationDetector, StagnationSignal
+from scion.core.verification_factory import CampaignVerificationFactory
 from scion.core.weight_opt_committer import WeightOptCommitter
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 from scion.failure.router import FailureRouter, RetryConfig
@@ -104,7 +106,8 @@ class CampaignManager:
         campaign_dir       — root directory for workspaces/snapshots
 
     Optional overrides (useful for testing):
-        verification_gate  — custom VerificationGate; defaults to lightweight stub
+        verification_gate  — custom VerificationGate; otherwise built from
+                             problem/runtime configuration
         experiment_protocol — custom ExperimentProtocol; defaults to None (no runner)
         budget             — BudgetState; defaults to max_rounds budget
         termination_config — TerminationConfig; defaults to library defaults
@@ -131,6 +134,7 @@ class CampaignManager:
         objective_lower_bounds: Optional[Dict[str, float]] = None,
         use_objective_lower_bounds_for_early_stop: bool = False,
         force_continue_early_stop: bool = False,
+        allow_non_strict_runtime_verification: bool = False,
     ) -> None:
         # v0.3 B3: ProblemRuntime owns problem_spec + adapter + ContextManager.
         # Instantiate FIRST so the backward-compat properties below (_spec,
@@ -182,16 +186,17 @@ class CampaignManager:
             ) if problem_spec.search_space.frozen else None,
         )
         import os as _os2
+        self._experiment_protocol = experiment_protocol  # may be None (no runner)
         _os2.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
-        _runtime_cfg = getattr(getattr(experiment_protocol, "config", None), "runtime", None)
-        self._vgate = verification_gate or VerificationGate(
-            problem_spec,
-            metrics_dir=str(campaign_dir) + "/metrics",
+        self._vgate = CampaignVerificationFactory.build(
+            problem_spec=problem_spec,
+            verification_gate=verification_gate,
+            experiment_protocol=experiment_protocol,
+            campaign_dir=str(campaign_dir),
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
-            max_runtime_ratio=getattr(_runtime_cfg, "max_runtime_ratio", None),
+            allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
         )
-        self._experiment_protocol = experiment_protocol  # may be None (no runner)
         if hasattr(self._experiment_protocol, "set_progress_callback"):
             self._experiment_protocol.set_progress_callback(self._on_protocol_progress)
 
@@ -231,6 +236,11 @@ class CampaignManager:
             model_id=getattr(llm_client, "model", None),
             protocol_version=getattr(protocol_config, "version", None),
             family_taxonomy=getattr(_family_taxonomy, "families", None),
+        )
+        self._frozen_budget_ledger = FrozenBudgetLedger(
+            max_uses=protocol_config.frozen.max_uses_per_campaign,
+            registry=self._registry,
+            campaign_id=self._campaign_id,
         )
 
         # J6: Champion store for persistence
@@ -283,7 +293,7 @@ class CampaignManager:
         self._balance_exhausted: bool = False  # T6: set on 403 balance-exhausted errors
 
         # J1: Campaign search memory (cross-branch)
-        self._search_memory = CampaignSearchMemory()
+        self._search_memory = CampaignSearchMemory(family_taxonomy=_taxonomy)
 
         # J-patch: Campaign research log (cross-branch trajectory from SQLite)
         from scion.proposal.research_log import CampaignResearchLog
@@ -453,6 +463,7 @@ class CampaignManager:
                 "_soft_abandon_streak",
                 self._soft_abandon_streak + 1,
             ),
+            frozen_budget_ledger=self._frozen_budget_ledger,
         )
         self._explore_step_pipeline = ExploreStepPipeline(
             branch_controller=self._branch_ctrl,
@@ -745,6 +756,7 @@ class CampaignManager:
             "budget_remaining": self._budget.remaining_ratio,
             "balance_exhausted": self._balance_exhausted,
             "circuit_breaker_tripped": self._circuit_breaker.is_tripped,
+            "frozen_budget": self._frozen_budget_ledger.snapshot(),
             "branches": [
                 {
                     "id": b.branch_id,
@@ -1199,6 +1211,7 @@ class CampaignManager:
             circuit_breaker_tripped=self._circuit_breaker.is_tripped,
             stagnation_signals=self._stagnation_signals,
             diagnostics=self._diagnostics,
+            frozen_budget=self._frozen_budget_ledger.snapshot(),
         )
 
 

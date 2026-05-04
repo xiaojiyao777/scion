@@ -576,6 +576,121 @@ class TestC9cComplexityBound:
         assert not c9c.passed
         assert "combinations(..., 3)" in c9c.detail
 
+    def test_permutations_fail(self, gate: ContractGate):
+        code = (
+            "import itertools\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        for route_order in itertools.permutations(solution.routes):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "permutations" in c9c.detail
+
+    def test_product_over_two_problem_scale_iterables_fails(self, gate: ContractGate):
+        code = (
+            "from itertools import product\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        customers = solution.customer_ids\n"
+            "        for route, customer in product(solution.routes, customers):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "product" in c9c.detail
+
+    def test_non_itertools_object_methods_named_like_itertools_pass(self, gate: ContractGate):
+        code = (
+            "class Helper:\n"
+            "    def product(self, a, b):\n"
+            "        return []\n"
+            "    def permutations(self, a):\n"
+            "        return []\n"
+            "    def combinations(self, a, k):\n"
+            "        return []\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        helper = Helper()\n"
+            "        for item in helper.product(solution.routes, solution.customer_ids):\n"
+            "            pass\n"
+            "        for item in helper.permutations(solution.routes):\n"
+            "            pass\n"
+            "        for item in helper.combinations(solution.routes, 4):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
+    def test_itertools_module_alias_product_still_fails(self, gate: ContractGate):
+        code = (
+            "import itertools as it\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        for route, customer in it.product(solution.routes, solution.customer_ids):\n"
+            "            pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "product" in c9c.detail
+
+    def test_while_true_fails(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        while True:\n"
+            "            break\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "uncapped while" in c9c.detail
+
+    def test_bounded_counter_while_passes(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        i = 0\n"
+            "        while i < 10:\n"
+            "            i += 1\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
+    def test_three_level_problem_scale_nested_loops_fail(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        for route in solution.routes:\n"
+            "            for customer in route:\n"
+            "                for other in solution.customer_ids:\n"
+            "                    pass\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "three-level" in c9c.detail
+
 
 # ---------------------------------------------------------------------------
 # C10: Novelty

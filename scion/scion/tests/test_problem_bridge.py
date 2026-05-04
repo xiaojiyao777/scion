@@ -82,6 +82,11 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "route_pair",
         "ruin_recreate",
     ]
+    assert legacy.family_taxonomy.families == [
+        "route_local",
+        "route_pair",
+        "ruin_recreate",
+    ]
     assert legacy.search_space.frozen == [
         "adapter.py",
         "models.py",

@@ -68,7 +68,7 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
     """Convert ProblemSpecV1 to the legacy ProblemSpec used by campaign code."""
 
     root_dir = str(Path(spec.root_dir).expanduser().resolve())
-    return ProblemSpec(
+    legacy = ProblemSpec(
         name=spec.id,
         root_dir=root_dir,
         description=spec.description,
@@ -84,6 +84,9 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
         solver=SolverConfig(**spec.solver.model_dump()),
         parameter_search=_parameter_search_from_v1(spec),
     )
+    if spec.family_taxonomy is not None:
+        object.__setattr__(legacy, "family_taxonomy", spec.family_taxonomy)
+    return legacy
 
 
 def _parameter_search_from_v1(spec: ProblemSpecV1) -> ParameterSearchConfig:
