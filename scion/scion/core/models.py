@@ -297,7 +297,7 @@ class HypothesisFamily:
     family_id: str
     mechanism_label: str      # e.g. "local_refinement", "destroy_rebuild"
     action_pattern: str       # "create_new" / "modify" / "remove"
-    locus_pattern: str        # problem-defined operator category
+    locus_pattern: str        # problem-defined research locus
     evidence_count: int
     statuses: List[str]       # ["rejected", "promoted", ...]
 

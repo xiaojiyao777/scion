@@ -10,11 +10,15 @@ description: >-
 search_space:
   editable:
     - "operators/*.py"
+    - "policies/*.py"
   frozen:
     - "adapter.py"
+    - "cvrplib.py"
     - "models.py"
     - "solver.py"
     - "operators/base.py"
+    - "operators/__init__.py"
+    - "policies/__init__.py"
   import_whitelist:
     - __future__
     - copy
@@ -44,6 +48,48 @@ operator_interface:
       description: "Inter-route bounded relocate, swap, 2-opt*, and exchange operators."
     - name: ruin_recreate
       description: "Bounded destroy/repair operators with explicit customer and route caps."
+
+research_surfaces:
+  - name: route_local
+    kind: operator
+    description: "Intra-route bounded improvement operators."
+    target_files:
+      - "operators/*.py"
+    prompt_hint: "Use only bounded same-route neighborhoods."
+    create_new_allowed: true
+    modify_allowed: true
+    remove_allowed: true
+  - name: route_pair
+    kind: operator
+    description: "Inter-route bounded relocate, swap, 2-opt*, and exchange operators."
+    target_files:
+      - "operators/*.py"
+    prompt_hint: "Use bounded two-route neighborhoods with explicit candidate caps."
+    create_new_allowed: true
+    modify_allowed: true
+    remove_allowed: true
+  - name: ruin_recreate
+    kind: operator
+    description: "Bounded destroy/repair operators with explicit customer and route caps."
+    target_files:
+      - "operators/*.py"
+    prompt_hint: "Keep destroy size, repair candidates, and route scans explicitly bounded."
+    create_new_allowed: true
+    modify_allowed: true
+    remove_allowed: true
+  - name: search_policy
+    kind: policy
+    description: "Baseline/operator budget and scheduling policy."
+    target_files:
+      - "policies/search_policy.py"
+    prompt_hint: "Tune baseline time fraction and post-baseline operator budget."
+    required_functions:
+      - "baseline_time_fraction"
+      - "max_operator_rounds"
+      - "enable_post_baseline_operators"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
 
 objective_policy:
   mode: lexicographic
@@ -80,6 +126,7 @@ family_taxonomy:
     - route_local
     - route_pair
     - ruin_recreate
+    - search_policy
   aliases:
     route_local:
       - route local
@@ -125,6 +172,12 @@ family_taxonomy:
       - rebuild
       - repair
       - remove and insert
+    search_policy:
+      - search policy
+      - baseline budget
+      - operator budget
+      - post baseline
+      - scheduling policy
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"

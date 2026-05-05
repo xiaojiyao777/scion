@@ -68,6 +68,11 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
     """Convert ProblemSpecV1 to the legacy ProblemSpec used by campaign code."""
 
     root_dir = str(Path(spec.root_dir).expanduser().resolve())
+    surface_categories = (
+        [surface.name for surface in spec.research_surfaces]
+        if spec.research_surfaces is not None
+        else list(spec.operator_interface.category_names)
+    )
     legacy = ProblemSpec(
         name=spec.id,
         root_dir=root_dir,
@@ -79,7 +84,8 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
         canary_case_path=_resolve_optional_file(root_dir, spec.canary_case_path),
         unit_test_path=spec.unit_test_path,
         regression_test_path=spec.regression_test_path,
-        operator_categories=list(spec.operator_interface.category_names),
+        operator_categories=surface_categories,
+        research_surfaces=list(spec.research_surfaces or []),
         search_space=SearchSpace(**spec.search_space.model_dump()),
         solver=SolverConfig(**spec.solver.model_dump()),
         parameter_search=_parameter_search_from_v1(spec),

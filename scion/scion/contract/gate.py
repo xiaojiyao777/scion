@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.operator_interface import parse_execute_signature
@@ -152,7 +152,7 @@ class ContractGate:
         return _cr("C1_schema", passed, "heavy", detail, t0)
 
     # ------------------------------------------------------------------
-    # C2: change_locus must be a known operator category
+    # C2: change_locus must be a known research locus
     # ------------------------------------------------------------------
 
     def _c2_change_locus(self, h: HypothesisProposal) -> CheckResult:
@@ -162,7 +162,7 @@ class ContractGate:
         detail = (
             "change_locus ok"
             if passed
-            else f"change_locus '{h.change_locus}' not in {categories}"
+            else f"change_locus '{h.change_locus}' not in research loci {categories}"
         )
         return _cr("C2_change_locus", passed, "heavy", detail, t0)
 
@@ -175,14 +175,51 @@ class ContractGate:
         passed = True
         detail = "action-target ok"
 
+        surface = self._surface_by_name(h.change_locus)
+        if surface is not None:
+            allowed_attr = {
+                "create_new": "create_new_allowed",
+                "modify": "modify_allowed",
+                "remove": "remove_allowed",
+            }.get(h.action)
+            if allowed_attr is not None and not bool(
+                getattr(surface, allowed_attr, True)
+            ):
+                return _cr(
+                    "C3_action_target",
+                    False,
+                    "heavy",
+                    f"action='{h.action}' is not allowed for research surface "
+                    f"'{h.change_locus}'",
+                    t0,
+                )
+
         if h.action in ("modify", "remove"):
             if not h.target_file:
                 passed = False
                 detail = f"action='{h.action}' requires target_file"
+            elif surface is not None and not self._target_matches_surface(
+                h.target_file,
+                surface,
+            ):
+                passed = False
+                detail = (
+                    f"target_file '{h.target_file}' is not in target files "
+                    f"{list(getattr(surface, 'target_files', []) or [])}"
+                )
         elif h.action == "create_new":
             # create_new should NOT have a target_file pointing to an existing operator
             # (no hard rule in the spec, so we just require the action is known)
-            pass
+            if (
+                h.target_file
+                and surface is not None
+                and not self._target_matches_surface(h.target_file, surface)
+            ):
+                passed = False
+                detail = (
+                    f"target_file '{h.target_file}' is not in target files "
+                    f"{list(getattr(surface, 'target_files', []) or [])}"
+                )
 
         return _cr("C3_action_target", passed, "heavy", detail, t0)
 
@@ -238,8 +275,7 @@ class ContractGate:
             return _cr("C6_ast_syntax", False, "light", f"SyntaxError: {e}", t0)
 
     # ------------------------------------------------------------------
-    # C7: Interface signature — if file contains a class, it must have the
-    #     problem-defined execute signature.
+    # C7: Interface signature — validate the active research-surface interface.
     # ------------------------------------------------------------------
 
     def _c7_interface_signature(self, patch: PatchProposal) -> CheckResult:
@@ -248,13 +284,38 @@ class ContractGate:
             return _cr("C7_interface", True, "light", "delete action — no interface check", t0)
 
         try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError as exc:
+            return _cr("C7_interface", False, "light", str(exc), t0)
+
+        try:
             tree = ast.parse(patch.code_content)
         except SyntaxError:
             return _cr("C7_interface", False, "light", "unparseable code", t0)
 
+        surface = self._surface_for_patch_path(file_rel)
+        kind = getattr(surface, "kind", "operator") if surface is not None else None
+        if kind == "policy":
+            return self._c7_policy_interface(tree, surface, t0)
+        if kind == "config":
+            return _cr(
+                "C7_interface",
+                True,
+                "light",
+                "config surface interface check not implemented — skipped",
+                t0,
+            )
+
         classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
         if not classes:
-            # No class defined — not an operator file, skip check
+            if surface is not None and kind == "operator":
+                return _cr(
+                    "C7_interface",
+                    False,
+                    "light",
+                    "operator surface file must define an operator class",
+                    t0,
+                )
             return _cr("C7_interface", True, "light", "no class found — skipped", t0)
 
         for cls in classes:
@@ -280,6 +341,62 @@ class ContractGate:
             "class found but no execute method defined",
             t0,
         )
+
+    def _c7_policy_interface(
+        self,
+        tree: ast.AST,
+        surface: Any,
+        start_ns: int,
+    ) -> CheckResult:
+        classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        if classes:
+            return _cr(
+                "C7_interface",
+                False,
+                "light",
+                f"policy surface must use module-level functions, found classes {classes}",
+                start_ns,
+            )
+
+        required = tuple(getattr(surface, "required_functions", []) or [])
+        if not required:
+            return _cr(
+                "C7_interface",
+                True,
+                "light",
+                "policy surface has no required functions declared — skipped",
+                start_ns,
+            )
+
+        functions = {
+            node.name: [arg.arg for arg in node.args.args]
+            for node in getattr(tree, "body", [])
+            if isinstance(node, ast.FunctionDef)
+        }
+        missing = [name for name in required if name not in functions]
+        wrong_args = {
+            name: args
+            for name, args in functions.items()
+            if name in required and args != ["instance", "time_limit_sec"]
+        }
+        if missing or wrong_args:
+            detail_parts: list[str] = []
+            if missing:
+                detail_parts.append(f"missing required functions {missing}")
+            if wrong_args:
+                detail_parts.append(
+                    "wrong policy function args "
+                    f"{wrong_args}, expected ['instance', 'time_limit_sec']"
+                )
+            return _cr(
+                "C7_interface",
+                False,
+                "light",
+                "; ".join(detail_parts),
+                start_ns,
+            )
+
+        return _cr("C7_interface", True, "light", "policy interface ok", start_ns)
 
     # ------------------------------------------------------------------
     # C8: Import whitelist
@@ -534,6 +651,32 @@ class ContractGate:
                     t0,
                 )
         return _cr("C10_novelty", True, "light", "novel", t0)
+
+    def _research_surfaces(self) -> list[Any]:
+        return list(getattr(self._spec, "research_surfaces", []) or [])
+
+    def _surface_by_name(self, name: str) -> Any | None:
+        for surface in self._research_surfaces():
+            if getattr(surface, "name", None) == name:
+                return surface
+        return None
+
+    def _surface_for_patch_path(self, file_rel: str) -> Any | None:
+        for surface in self._research_surfaces():
+            if self._target_matches_surface(file_rel, surface):
+                return surface
+        return None
+
+    def _target_matches_surface(self, file_rel: str, surface: Any) -> bool:
+        try:
+            normalized = normalize_relative_patch_path(file_rel)
+        except ValueError:
+            return False
+        target_files = getattr(surface, "target_files", []) or []
+        return any(
+            fnmatch.fnmatch(normalized, str(pattern).lstrip("/"))
+            for pattern in target_files
+        )
 
 
 # ---------------------------------------------------------------------------

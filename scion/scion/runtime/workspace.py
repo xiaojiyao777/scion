@@ -213,7 +213,7 @@ class WorkspaceMaterializer:
         return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of operators/ .py files (sorted by relative path).
+        """Compute SHA-256 of editable research-surface .py files.
 
         Args:
             workspace: Absolute path to the workspace.
@@ -221,19 +221,26 @@ class WorkspaceMaterializer:
         Returns:
             Hex-encoded SHA-256 string.
         """
-        ops_dir = Path(workspace) / "operators"
         h = hashlib.sha256()
 
-        if ops_dir.exists():
-            py_files = sorted(ops_dir.rglob("*.py"), key=lambda p: str(p.relative_to(ops_dir)))
+        ws = Path(workspace)
+        for surface_dir_name in ("operators", "policies"):
+            surface_dir = ws / surface_dir_name
+            if not surface_dir.exists():
+                continue
+            py_files = sorted(
+                surface_dir.rglob("*.py"),
+                key=lambda p: str(p.relative_to(surface_dir)),
+            )
             for py_file in py_files:
-                h.update(str(py_file.relative_to(ops_dir)).encode())
+                rel = py_file.relative_to(ws)
+                h.update(str(rel).encode())
                 h.update(py_file.read_bytes())
 
         return h.hexdigest()
 
     def compute_snapshot_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of operators/**/*.py + registry.yaml.
+        """Compute SHA-256 of research-surface Python files + registry.yaml.
 
         Includes registry.yaml so weight changes affect the champion hash.
 
@@ -246,11 +253,17 @@ class WorkspaceMaterializer:
         ws = Path(workspace)
         h = hashlib.sha256()
 
-        ops_dir = ws / "operators"
-        if ops_dir.exists():
-            py_files = sorted(ops_dir.rglob("*.py"), key=lambda p: str(p.relative_to(ops_dir)))
+        for surface_dir_name in ("operators", "policies"):
+            surface_dir = ws / surface_dir_name
+            if not surface_dir.exists():
+                continue
+            py_files = sorted(
+                surface_dir.rglob("*.py"),
+                key=lambda p: str(p.relative_to(surface_dir)),
+            )
             for py_file in py_files:
-                h.update(str(py_file.relative_to(ops_dir)).encode())
+                rel = py_file.relative_to(ws)
+                h.update(str(rel).encode())
                 h.update(py_file.read_bytes())
 
         registry_path = ws / "registry.yaml"

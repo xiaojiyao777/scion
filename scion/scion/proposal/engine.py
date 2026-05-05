@@ -292,9 +292,9 @@ def _split_hypothesis_context(
     if solver_mechanics:
         solver_mechanics_text = (
             f"## Solver Execution Model\n{solver_mechanics}\n\n"
-            f"Design implications for new operators:\n"
+            f"Design implications for new research-surface changes:\n"
             f"- Follow the problem-specific execution model above; do not assume a fixed invocation count.\n"
-            f"- Your operator MUST preserve feasibility and the adapter-defined solution contract.\n"
+            f"- Operator surfaces MUST preserve feasibility and the adapter-defined solution contract.\n"
             f"- State the capability gap it fills, the objective it targets, and the no-op condition that protects other objectives.\n"
             f"- Runtime is part of the evidence: describe explicit bounds, filters, sampling, or early exits."
         )
@@ -303,26 +303,27 @@ def _split_hypothesis_context(
             "## Solver Execution Model\n"
             "The exact operator execution model is problem-specific. Use the problem summary, "
             "operator interface, current champion code, and runtime feedback as the source of truth.\n\n"
-            "Design implications for new operators:\n"
+            "Design implications for new research-surface changes:\n"
             "- Do not assume a fixed invocation count, pool size, neighborhood structure, or acceptance rule.\n"
-            "- Your operator MUST preserve feasibility and the problem-specific solution contract.\n"
+            "- Operator surfaces MUST preserve feasibility and the problem-specific solution contract.\n"
             "- State the capability gap it fills, the objective it targets, and the no-op condition that protects other objectives.\n"
             "- Runtime is part of the evidence: describe explicit bounds, filters, sampling, or early exits."
         )
 
     # Block 1: Static role + problem spec + solver mechanics (never changes)
     static_text = (
-        "You are a research agent optimising a combinatorial optimisation solver's operator pool.\n"
+        "You are a research agent optimising declared research surfaces of a combinatorial optimisation solver.\n"
         "Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{D['research_surfaces']}\n\n"
         f"{D['objective_policy_guidance']}\n\n"
         f"{solver_mechanics_text}"
     )
 
     # Block 2: Champion code + stats (changes only on champion promotion)
     champion_text = (
-        f"## Current Champion Operator Code\n"
-        f"Study these carefully before proposing anything \u2014 avoid duplicating existing logic.\n\n"
+        f"## Current Champion Research Code\n"
+        f"Study these carefully before proposing anything \u2014 avoid duplicating existing logic or policy choices.\n\n"
         f"{D['champion_operators_code']}\n\n"
         f"## Champion State\n{D['champion_stats']}"
     )
@@ -412,7 +413,7 @@ def _split_hypothesis_context(
         f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
-        f"1. Read EVERY champion operator. For each, note: what move type, what objective(s) it improves or protects, what it cannot improve.\n"
+        f"1. Read every relevant champion research-surface file. For operator files, note: what move type, what objective(s) it improves or protects, what it cannot improve. For policy files, note the budget or scheduling lever being changed.\n"
         f"2. Identify specific GAPS \u2014 what improvements are IMPOSSIBLE with the current pool?\n"
         f"3. Check experiment history \u2014 which attempts at filling gaps failed, and WHY?\n"
         f"4. Only then propose a hypothesis targeting an identified gap.\n"
@@ -420,16 +421,16 @@ def _split_hypothesis_context(
         f"and the no-op condition that avoids harming protected objectives.\n"
         f"6. Fill the runtime intent fields: `target_runtime_effect`, `complexity_claim`, "
         f"and `runtime_budget_strategy`.\n\n"
-        f"Runtime constraint: proposed operators are evaluated inside the problem solver and "
+        f"Runtime constraint: proposed research-surface changes are evaluated inside the problem solver and "
         f"algorithmic efficiency is part of the evidence. Do not propose unbounded high-order "
         f"enumeration over problem entities; describe any top-k, "
         f"sampling, or early-stop cap needed to keep runtime comparable to the champion.\n\n"
-        f"If your hypothesis duplicates an existing operator's capability (even partially), it will be REJECTED.\n\n"
+        f"If your hypothesis duplicates an existing surface's capability (even partially), it will be REJECTED.\n\n"
         f"## Task\n"
         f"Propose ONE new hypothesis for improving the solver.\n"
-        f"Choose a category from {D['operator_categories']} as `change_locus`.\n"
-        f"Set `action` to one of: \"modify\", \"create_new\", \"remove\".\n"
-        f"If action is \"modify\" or \"remove\", provide `target_file`.\n"
+        f"Choose a research surface from {D['operator_categories']} as `change_locus`.\n"
+        f"Set `action` to one of: {D['available_actions'] or 'create_new, modify, remove'}.\n"
+        f"If action is \"modify\" or \"remove\", provide `target_file` from the targetable files when available: {D['targetable_files']}.\n"
     )
 
     return system_blocks, user_prompt
@@ -451,24 +452,33 @@ def _split_code_context(
         else ""
     )
 
+    surface_name = str(D["research_surface_name"] or D["change_locus"]).strip()
+    surface_kind = str(D["research_surface_kind"] or "operator").strip()
+    surface_label = (
+        f"{surface_name} [{surface_kind}]"
+        if surface_name
+        else f"[{surface_kind}]"
+    )
+
     # Block 1: Static role + quality rules + problem + interface (never changes)
     static_text = (
-        "You are a software engineer implementing an operator for a combinatorial optimisation solver framework.\n"
+        "You are a software engineer implementing a declared research surface for a combinatorial optimisation solver framework.\n"
         "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
         "- Write ONLY what the hypothesis requires. No extra features, helper functions, or abstractions.\n"
         "- Do not add error handling for impossible cases. Trust the data model.\n"
         "- Do not add comments explaining WHAT the code does \u2014 only WHY for non-obvious choices.\n"
         "- Prefer simple, direct code over clever abstractions.\n"
-        "- Match the coding style of the existing champion operators EXACTLY.\n"
+        "- Match the coding style of the existing champion research-surface files.\n"
         "- Do NOT add logging, print statements, or debug output.\n\n"
         "## Feasibility is Non-Negotiable\n"
-        "An operator that produces infeasible solutions is WORSE than no operator. "
+        "An operator surface that produces infeasible solutions is worse than no change. "
         "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"{solver_mechanics_section}"
-        f"## Operator Interface Specification\n"
-        f"All operator classes MUST conform to this interface exactly:\n\n"
+        f"## Research Surface Interface Specification\n"
+        f"Active surface: {surface_label}\n"
+        f"Follow this interface exactly:\n\n"
         f"{D['operator_interface_spec']}\n\n"
         f"## Allowed Imports\n"
         f"Only use modules from this whitelist \u2014 any other import will be rejected:\n"
@@ -477,8 +487,8 @@ def _split_code_context(
 
     # Block 2: Champion code (changes only on champion promotion)
     champion_text = (
-        f"## Current Champion Operator Code\n"
-        f"Study these implementations for coding style, data model usage, and patterns:\n\n"
+        f"## Current Champion Research Code\n"
+        f"Study these files for coding style, data model usage, and patterns:\n\n"
         f"{D['champion_operators_code']}"
     )
 
@@ -508,14 +518,14 @@ def _split_code_context(
         f"{prior_failure_section}"
         f"## Hypothesis to Implement\n{D['hypothesis_detail']}\n\n"
         f"## Target File (current content)\n{D['target_file_code']}\n\n"
-        f"## Reference Operators\n{D['reference_operators']}\n\n"
+        f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
-        f"- Conform to the operator interface specification exactly\n"
+        f"- Conform to the active research-surface interface specification exactly\n"
         f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
-        f"- Use the provided `rng` argument for all randomness; do not use system entropy\n"
-        f"- Return the new solution/artifact, or the original if no valid move is found\n\n"
+        f"- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or the original if no valid move is found\n"
+        f"- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds\n\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"
         f"{{\n"
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
@@ -545,12 +555,12 @@ def _split_fix_context(
     )
 
     system_text = (
-        "You are a software engineer fixing an optimisation operator that failed verification.\n"
+        "You are a software engineer fixing an optimisation research-surface file that failed verification.\n"
         "Correct the code so it passes, while preserving the intended logic.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
         f"{solver_mechanics_section}"
-        f"## Operator Interface Specification\n"
-        f"All operator classes MUST conform to this interface exactly:\n\n"
+        f"## Research Surface Interface Specification\n"
+        f"Follow this interface exactly:\n\n"
         f"{D['operator_interface_spec']}\n\n"
         f"## Allowed Imports\n"
         f"Only use modules from this whitelist \u2014 any other import will be rejected:\n"
@@ -571,7 +581,7 @@ def _split_fix_context(
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
-        f"- Preserve the operator interface described above exactly\n"
+        f"- Preserve the research-surface interface described above exactly\n"
         f"- Make only the minimal changes needed to fix the reported failure\n"
     )
 

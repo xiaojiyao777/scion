@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import List, Dict, Optional, Literal, Set, Tuple
+from typing import Any, List, Dict, Optional, Literal, Set, Tuple
 import yaml
 import os
 
@@ -70,6 +70,7 @@ class ProblemSpec(_StrictBase):
     unit_test_path: str = ""   # path (relative to root_dir or absolute) to unit test file
     regression_test_path: str = ""  # path (relative to root_dir or absolute) to regression test file
     operator_categories: List[str]
+    research_surfaces: List[Any] = Field(default_factory=list)
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
     parameter_search: ParameterSearchConfig = Field(default_factory=ParameterSearchConfig)

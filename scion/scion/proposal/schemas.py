@@ -66,11 +66,11 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
     "properties": {
         "hypothesis_text": {
             "type": "string",
-            "description": "3-5 sentences. What the operator does, why it differs from existing ones, expected mechanism of improvement. No generic filler.",
+            "description": "3-5 sentences. What the research-surface change does, why it differs from existing ones, expected mechanism of improvement. No generic filler.",
         },
         "change_locus": {
             "type": "string",
-            "description": "Which operator category from the active problem specification.",
+            "description": "Which research surface from the active problem specification.",
         },
         "action": {
             "type": "string",
@@ -79,7 +79,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         },
         "target_file": {
             "type": ["string", "null"],
-            "description": "For modify/remove: the operator file path (e.g. operators/move_order.py). For create_new: the new file path.",
+            "description": "For modify/remove: the target research-surface file path (e.g. operators/move_order.py or policies/search_policy.py). For create_new: the new file path.",
         },
         "predicted_direction": {
             "type": "string",
@@ -95,7 +95,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         },
         "suggested_weight": {
             "type": ["number", "null"],
-            "description": "Operator weight (0.1-3.0). Use 0.5-1.0 for unproven new operators.",
+            "description": "Operator weight for operator surfaces (0.1-3.0). Use null for policy surfaces.",
         },
         "target_objectives": {
             "type": "array",
@@ -152,9 +152,9 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
     "description": (
-        "Propose ONE novel hypothesis for improving the solver's operator set.\n\n"
+        "Propose ONE novel hypothesis for improving a declared solver research surface.\n\n"
         "Usage:\n"
-        "- Study ALL existing champion operators before proposing \u2014 avoid duplicating existing logic.\n"
+        "- Study ALL existing champion research-surface files before proposing \u2014 avoid duplicating existing logic or policy choices.\n"
         "- Check experiment history for approaches that already failed \u2014 do NOT repeat them.\n"
         "- Check sibling branches to avoid redundant exploration.\n\n"
         "Quality criteria:\n"
@@ -164,10 +164,10 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
-        "- Prefer operators that provide a CAPABILITY the pool currently LACKS.\n\n"
+        "- Prefer surface changes that provide a capability the current solver currently lacks.\n\n"
         "Common mistakes to avoid:\n"
         "- Proposing random moves without a concrete objective mechanism.\n"
-        "- Ignoring feasibility constraints (your operator MUST produce feasible solutions).\n"
+        "- Ignoring feasibility constraints (operator surfaces MUST produce feasible solutions).\n"
         "- Reinventing logic already present in an existing operator with different variable names."
     ),
     "input_schema": HYPOTHESIS_PROPOSAL_SCHEMA,
@@ -179,24 +179,24 @@ PATCH_TOOL: Dict[str, Any] = {
         "Generate the complete file contents implementing an approved hypothesis.\n\n"
         "Usage:\n"
         "- Write the COMPLETE file \u2014 not a diff, not a snippet. The entire file content.\n"
-        "- Study the champion operator code for style, data model usage, and import patterns.\n"
-        "- Follow the problem-specific operator interface EXACTLY.\n\n"
+        "- Study the champion research-surface files for style, data model usage, and import patterns.\n"
+        "- Follow the problem-specific research-surface interface EXACTLY.\n\n"
         "Code quality requirements:\n"
         "- Preserve every feasibility and consistency invariant described in the interface spec.\n"
-        "- Use the provided `rng` argument for ALL randomness.\n"
+        "- For operator surfaces, use the provided `rng` argument for ALL randomness.\n"
         "- NEVER use `list(set(...))` or iterate over set/dict in order-dependent ways \u2014 "
         "use `sorted()` for determinism.\n"
         "- Keep neighborhood enumeration bounded. Do NOT enumerate all 3/4-way "
         "problem-entity combinations; use top-k candidate caps, sampling, or pairwise "
         "moves with explicit limits.\n"
-        "- Return a valid solution/artifact according to the problem adapter contract.\n\n"
+        "- Return a valid solution/artifact according to the problem adapter contract when implementing an operator surface.\n\n"
         "Common rejection causes:\n"
         "- Feasibility or solution consistency violation.\n"
         "- Unbounded/high-order combinations such as `combinations(..., size)` "
         "or `combinations(..., 4)`.\n"
         "- Non-determinism: iterating over sets without sorting.\n"
         "- Import violation: using modules not in the whitelist.\n"
-        "- Interface mismatch: wrong method signature or missing deep copy."
+        "- Interface mismatch: wrong method signature, missing module-level policy function, or missing deep copy."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
@@ -227,15 +227,15 @@ FIX_TOOL: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 HYPOTHESIS_PROMPT_TEMPLATE = """\
-You are a research agent optimising a combinatorial optimisation solver's operator pool.
+You are a research agent optimising declared research surfaces of a combinatorial optimisation solver.
 Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.
 
 ## Problem Summary
 {problem_summary}
 
-## Current Champion Operator Code
-The following operators make up the current champion solution.
-Study them carefully before proposing anything — avoid duplicating existing logic.
+## Current Champion Research Code
+The following research-surface files make up the current champion solution.
+Study them carefully before proposing anything — avoid duplicating existing logic or policy choices.
 
 {champion_operators_code}
 
@@ -259,10 +259,10 @@ To avoid redundancy, these directions are already being explored:
 {sibling_summary}
 
 ## Task
-Propose ONE hypothesis for improving the solver's operator pool.
+Propose ONE hypothesis for improving a declared research surface.
 - Set `change_locus` to one of: {operator_categories}
 - Set `action` to: "modify" (change existing), "create_new" (new operator), or "remove" (delete operator)
-- If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/local_move.py")
+- If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/local_move.py" or "policies/search_policy.py")
 - Write a detailed `hypothesis_text` explaining the idea, the expected mechanism, and why it should improve results
 - Set `target_weakness` to describe what current behaviour you are targeting
 - Set `expected_effect` to describe the measurable improvement you expect
@@ -273,7 +273,7 @@ Propose ONE hypothesis for improving the solver's operator pool.
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{
   "hypothesis_text": "<detailed explanation of the idea>",
-  "change_locus": "<one of the operator categories>",
+  "change_locus": "<one of the research surfaces>",
   "action": "modify" | "create_new" | "remove",
   "target_file": "<relative path or null>",
   "predicted_direction": "improve" | "tradeoff" | "exploratory",
@@ -287,7 +287,7 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
 """
 
 CODE_PROMPT_TEMPLATE = """\
-You are a software engineer implementing an operator for a combinatorial optimisation solver framework.
+You are a software engineer implementing a declared research surface for a combinatorial optimisation solver framework.
 Your task is to write the complete file contents that implement the approved hypothesis below.
 
 ## Problem Summary
@@ -296,7 +296,7 @@ Your task is to write the complete file contents that implement the approved hyp
 ## Hypothesis to Implement
 {hypothesis_detail}
 
-## Current Champion Operator Code
+## Current Champion Research Code
 Study these implementations for coding style, data model usage, and patterns:
 
 {champion_operators_code}
@@ -304,11 +304,11 @@ Study these implementations for coding style, data model usage, and patterns:
 ## Target File (current content — modify this if action is "modify")
 {target_file_code}
 
-## Reference Operators (same category — use as style guide)
+## Reference Surface Files
 {reference_operators}
 
-## Operator Interface Specification
-All operator classes MUST conform to this interface exactly:
+## Research Surface Interface Specification
+Follow this interface exactly:
 
 {operator_interface_spec}
 
@@ -324,10 +324,10 @@ Only use modules from this whitelist — any other import will be rejected:
 
 ## Task
 Produce the complete file content that implements the hypothesis.
-- Conform to the operator interface specification exactly
+- Conform to the research-surface interface specification exactly
 - Preserve all feasibility, consistency, and determinism invariants described there
-- Use the provided `rng` argument for all randomness
-- Return the new solution/artifact, or original if no valid move found
+- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
+- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - If action is "delete", set code_content to an empty string ""
 
 Respond with a single JSON object (no markdown fences, no extra text):
@@ -340,7 +340,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
 """
 
 FIX_PROMPT_TEMPLATE = """\
-You are a software engineer fixing an optimisation operator that failed verification.
+You are a software engineer fixing an optimisation research-surface file that failed verification.
 Correct the code so it passes, while preserving the intended logic.
 
 ## Problem Summary
@@ -352,7 +352,7 @@ Correct the code so it passes, while preserving the intended logic.
 ## Verification Failure Details
 {failure_detail}
 
-## Operator Interface Specification
+## Research Surface Interface Specification
 {operator_interface_spec}
 
 ## Allowed Imports
@@ -366,7 +366,7 @@ Correct the code so it passes, while preserving the intended logic.
 
 ## Task
 Fix the code so it passes verification.
-Preserve the operator interface specification exactly.
+Preserve the research-surface interface specification exactly.
 Make only the minimal changes needed to fix the reported failure.
 
 Respond with a single JSON object (no markdown fences, no extra text):

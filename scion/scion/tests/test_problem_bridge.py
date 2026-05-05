@@ -81,21 +81,33 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "route_local",
         "route_pair",
         "ruin_recreate",
+        "search_policy",
+    ]
+    assert [surface.name for surface in legacy.research_surfaces] == [
+        "route_local",
+        "route_pair",
+        "ruin_recreate",
+        "search_policy",
     ]
     assert legacy.family_taxonomy.families == [
         "route_local",
         "route_pair",
         "ruin_recreate",
+        "search_policy",
     ]
     assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
     assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]
     assert "ruin" in legacy.family_taxonomy.aliases["ruin_recreate"]
     assert legacy.search_space.frozen == [
         "adapter.py",
+        "cvrplib.py",
         "models.py",
         "solver.py",
         "operators/base.py",
+        "operators/__init__.py",
+        "policies/__init__.py",
     ]
+    assert "policies/*.py" in legacy.search_space.editable
     assert "dataclasses" in legacy.search_space.import_whitelist
     assert legacy.parameter_search.enabled is False
     assert legacy.canary_case_path == str((cvrp_dir / "data" / "tiny_canary.json").resolve())

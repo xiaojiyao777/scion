@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import random
@@ -24,6 +25,9 @@ from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
 _MAX_OPERATOR_ROUNDS = 20
 _OBJECTIVE_TOLERANCE = 1e-9
 _BASELINE_TIME_FRACTION = 0.8
+_MIN_BASELINE_TIME_FRACTION = 0.2
+_MAX_BASELINE_TIME_FRACTION = 0.95
+_SEARCH_POLICY_RELATIVE_PATH = "policies/search_policy.py"
 
 
 def solve(instance: CvrpInstance, rng: random.Random) -> CvrpSolution:
@@ -62,6 +66,7 @@ def solve_baseline(
     seed: int,
     rng: random.Random,
     time_limit_sec: float,
+    baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Return a baseline solution plus audit metadata.
 
@@ -76,7 +81,7 @@ def solve_baseline(
     baseline_root = _find_vrp_baseline_root()
     baseline_required = is_vrp and _baseline_required_for_instance(resolved)
     if is_vrp and baseline_required and baseline_root is not None:
-        budget = _baseline_time_budget(time_limit_sec)
+        budget = _baseline_time_budget(time_limit_sec, baseline_time_fraction)
         try:
             solution, audit = _solve_with_vrp_baseline(
                 instance=instance,
@@ -126,6 +131,8 @@ def improve_with_registry_operators(
     workspace_root: str | Path,
     time_limit_sec: float,
     start_time: float,
+    max_operator_rounds: int = _MAX_OPERATOR_ROUNDS,
+    post_baseline_operators_enabled: bool = True,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Apply registry operators with bounded, auditable acceptance."""
 
@@ -143,6 +150,10 @@ def improve_with_registry_operators(
         "operator_stop_reason": "",
         "operator_events": [],
     }
+    if not post_baseline_operators_enabled:
+        audit["operator_stop_reason"] = "disabled_by_policy"
+        return solution, audit
+
     operators = _load_registry_operators(
         registry_path=registry_path,
         workspace_root=workspace_root,
@@ -154,7 +165,7 @@ def improve_with_registry_operators(
     current = solution
     current_objective = _objective_for_solution(adapter, instance, current)
     fatal_operator_failure = False
-    for round_index in range(_MAX_OPERATOR_ROUNDS):
+    for round_index in range(max_operator_rounds):
         if _time_exhausted(start_time, time_limit_sec):
             audit["operator_stop_reason"] = "time_limit"
             break
@@ -238,12 +249,18 @@ def _main() -> None:
     instance_path = _resolve_instance_path(args.instance)
     instance = adapter.load_instance(instance_path)
     rng = random.Random(args.seed)
+    search_policy = _load_search_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     sol, baseline_audit = solve_baseline(
         instance=instance,
         instance_path=instance_path,
         seed=args.seed,
         rng=rng,
         time_limit_sec=args.time_limit,
+        baseline_time_fraction=search_policy["baseline_time_fraction"],
     )
     sol, operator_audit = improve_with_registry_operators(
         sol,
@@ -254,6 +271,10 @@ def _main() -> None:
         workspace_root=Path.cwd(),
         time_limit_sec=args.time_limit,
         start_time=start,
+        max_operator_rounds=search_policy["operator_round_limit"],
+        post_baseline_operators_enabled=search_policy[
+            "post_baseline_operators_enabled"
+        ],
     )
     raw = {"routes": [list(route) for route in sol.routes], "feasible": True}
     artifact = adapter.deserialize_solver_output(raw, instance)
@@ -262,6 +283,7 @@ def _main() -> None:
     raw["runtime"] = {
         "elapsed_s": time.perf_counter() - start,
         "time_limit_s": args.time_limit,
+        **search_policy,
         **baseline_audit,
         **operator_audit,
     }
@@ -385,10 +407,215 @@ def _configured_data_roots() -> tuple[Path, ...]:
     return tuple(roots)
 
 
-def _baseline_time_budget(time_limit_sec: float) -> float:
+def _load_search_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit: dict[str, Any] = {
+        "policy_path": _SEARCH_POLICY_RELATIVE_PATH,
+        "policy_loaded": False,
+        "policy_errors": 0,
+        "policy_events": [],
+        "baseline_time_fraction": _BASELINE_TIME_FRACTION,
+        "operator_round_limit": _MAX_OPERATOR_ROUNDS,
+        "post_baseline_operators_enabled": True,
+    }
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _SEARCH_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_policy_event(audit, "error", "policy path escapes workspace")
+        audit["policy_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["policy_errors"] += 1
+        _record_policy_event(audit, "error", f"policy load failed: {exc}")
+        return audit
+
+    audit["policy_loaded"] = True
+    audit["baseline_time_fraction"] = _policy_float(
+        module=module,
+        function_name="baseline_time_fraction",
+        default=_BASELINE_TIME_FRACTION,
+        minimum=_MIN_BASELINE_TIME_FRACTION,
+        maximum=_MAX_BASELINE_TIME_FRACTION,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    audit["operator_round_limit"] = _policy_int(
+        module=module,
+        function_name="max_operator_rounds",
+        default=_MAX_OPERATOR_ROUNDS,
+        minimum=0,
+        maximum=_MAX_OPERATOR_ROUNDS,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    audit["post_baseline_operators_enabled"] = _policy_bool(
+        module=module,
+        function_name="enable_post_baseline_operators",
+        default=True,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    return audit
+
+
+def _load_policy_module(path: Path) -> Any:
+    module_name = f"_scion_cvrp_search_policy_{abs(hash(str(path)))}_{time.time_ns()}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"could not load module spec for {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _policy_float(
+    *,
+    module: Any,
+    function_name: str,
+    default: float,
+    minimum: float,
+    maximum: float,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> float:
+    try:
+        value = _call_policy_function(module, function_name, instance, time_limit_sec)
+    except Exception as exc:
+        audit["policy_errors"] += 1
+        _record_policy_event(audit, "error", f"{function_name} failed: {exc}")
+        return default
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name} returned non-numeric value {value!r}",
+        )
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name} returned non-finite value {value!r}",
+        )
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _policy_int(
+    *,
+    module: Any,
+    function_name: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> int:
+    try:
+        value = _call_policy_function(module, function_name, instance, time_limit_sec)
+    except Exception as exc:
+        audit["policy_errors"] += 1
+        _record_policy_event(audit, "error", f"{function_name} failed: {exc}")
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name} returned non-integer value {value!r}",
+        )
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _policy_bool(
+    *,
+    module: Any,
+    function_name: str,
+    default: bool,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> bool:
+    try:
+        value = _call_policy_function(module, function_name, instance, time_limit_sec)
+    except Exception as exc:
+        audit["policy_errors"] += 1
+        _record_policy_event(audit, "error", f"{function_name} failed: {exc}")
+        return default
+    if not isinstance(value, bool):
+        audit["policy_errors"] += 1
+        _record_policy_event(
+            audit,
+            "error",
+            f"{function_name} returned non-bool value {value!r}",
+        )
+        return default
+    return value
+
+
+def _call_policy_function(
+    module: Any,
+    function_name: str,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> Any:
+    func = getattr(module, function_name, None)
+    if not callable(func):
+        raise ValueError(f"missing callable {function_name}")
+    return func(instance, time_limit_sec)
+
+
+def _record_policy_event(audit: dict[str, Any], status: str, detail: str) -> None:
+    events = audit["policy_events"]
+    if len(events) >= 10:
+        return
+    events.append({"policy": _SEARCH_POLICY_RELATIVE_PATH, "status": status, "detail": detail})
+
+
+def _baseline_time_budget(
+    time_limit_sec: float,
+    baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
+) -> float:
     if time_limit_sec <= 0:
         return 0.0
-    return max(0.05, float(time_limit_sec) * _BASELINE_TIME_FRACTION)
+    return max(0.05, float(time_limit_sec) * float(baseline_time_fraction))
 
 
 def _solve_with_vrp_baseline(

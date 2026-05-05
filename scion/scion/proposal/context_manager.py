@@ -63,19 +63,25 @@ class ContextManager:
     ) -> Dict[str, Any]:
         """Context for generate_hypothesis (Round 1).
 
-        Includes full problem summary, champion operator code, branch experiment
+        Includes full problem summary, champion research code, branch experiment
         history, and blacklist. Deliberately excludes validation/frozen data.
 
         If branch_workspace is provided and differs from the champion snapshot,
-        branch_code shows the modified operators so the LLM can build on them.
+        branch_code shows the modified research-surface files so the LLM can
+        build on them.
 
         If failure_streak is provided, injects a failure pattern warning when
         any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
-        champion_operators_code = _read_champion_operators(champion)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
+        research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
+        research_surfaces_block = _build_research_surfaces_block(research_surfaces)
+        champion_operators_code = _read_champion_research_code(
+            champion,
+            research_surfaces=research_surfaces,
+        )
         family_taxonomy = (
             _get_family_taxonomy(problem_spec)
             or _get_family_taxonomy(adapter_spec)
@@ -87,7 +93,11 @@ class ContextManager:
         sibling_summary = _summarise_siblings(sibling_branches or [])
         champion_stats = _build_champion_stats(champion)
         branch_code = (
-            _read_branch_code(branch_workspace, champion)
+            _read_branch_code(
+                branch_workspace,
+                champion,
+                research_surfaces=research_surfaces,
+            )
             if branch_workspace
             else None
         )
@@ -96,7 +106,14 @@ class ContextManager:
         # T07: Build family tracking and coverage (J-patch: use global step_history)
         all_steps = step_history or []
         targetable_operator_files = _list_champion_operator_files(champion)
-        available_actions = _available_hypothesis_actions(targetable_operator_files)
+        targetable_policy_files = _list_champion_policy_files(
+            champion,
+            research_surfaces=research_surfaces,
+        )
+        available_actions = _available_hypothesis_actions(
+            targetable_operator_files,
+            targetable_policy_files=targetable_policy_files,
+        )
         families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
         exploration_coverage = (
             build_exploration_coverage(families, available_actions=available_actions)
@@ -126,7 +143,7 @@ class ContextManager:
         if forced_locus:
             locus_constraint = (
                 f"\n## MANDATORY SEARCH CONSTRAINT\n"
-                f"Your hypothesis MUST target `{forced_locus}` operators.\n"
+                f"Your hypothesis MUST target research surface `{forced_locus}`.\n"
                 f"The campaign has detected saturation in the current search direction.\n"
                 f"Exploring `{forced_locus}` is required to find further improvements.\n"
             )
@@ -179,6 +196,11 @@ class ContextManager:
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "operator_categories": ", ".join(problem_spec.operator_categories),
+            "research_surfaces": research_surfaces_block,
+            "available_actions": ", ".join(sorted(available_actions)),
+            "targetable_files": ", ".join(
+                sorted(set(targetable_operator_files) | set(targetable_policy_files))
+            ),
             "champion_operators_code": champion_operators_code,
             "champion_stats": champion_stats,
             "experiment_history": experiment_history,
@@ -218,7 +240,7 @@ class ContextManager:
         """Context for generate_code (Round 2).
 
         Contains problem summary, hypothesis details, target file content,
-        operator interface spec, and import whitelist.
+        research-surface interface spec, and import whitelist.
         Does NOT contain experiment stats or branch history.
         If prior_failure is set, a previous code generation attempt failed for
         this hypothesis — the failure detail is included so the LLM can learn.
@@ -226,16 +248,29 @@ class ContextManager:
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         hypothesis_detail = _format_hypothesis(hypothesis)
+        adapter_spec = _get_adapter_problem_spec(self._adapter)
+        research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
+        surface = _find_research_surface(research_surfaces, hypothesis.change_locus)
         if hypothesis.action == "create_new":
             target_file_code = "(new file — will be created)"
         else:
             target_file_code = _read_target_file(champion, hypothesis.target_file)
-        champion_operators_code = _read_champion_operators(champion)
-        # Always provide reference operators as style/interface reference
-        reference_operators = _read_reference_operators(
-            champion, hypothesis.change_locus, problem_spec
+        champion_operators_code = _read_champion_research_code(
+            champion,
+            research_surfaces=research_surfaces,
         )
-        operator_interface_spec = _build_operator_interface_spec(problem_spec, adapter=self._adapter)
+        # Operator surfaces get reference operators as style/interface reference.
+        reference_operators = _read_reference_operators(
+            champion,
+            hypothesis.change_locus,
+            problem_spec,
+            research_surfaces=research_surfaces,
+        )
+        operator_interface_spec = _build_operator_interface_spec(
+            problem_spec,
+            adapter=self._adapter,
+            surface_name=hypothesis.change_locus,
+        )
         import_whitelist = "\n".join(
             f"  - {imp}" for imp in problem_spec.search_space.import_whitelist
         )
@@ -250,6 +285,8 @@ class ContextManager:
             "champion_operators_code": champion_operators_code,
             "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,
+            "research_surface_name": hypothesis.change_locus,
+            "research_surface_kind": getattr(surface, "kind", "operator"),
             "import_whitelist": import_whitelist,
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
@@ -357,6 +394,45 @@ def _get_adapter_problem_spec(adapter) -> Any:
     if spec is not None:
         return spec
     return getattr(adapter, "_spec", None)
+
+
+def _get_research_surfaces(problem_spec: Any, adapter_spec: Any = None) -> list[Any]:
+    for spec in (problem_spec, adapter_spec):
+        surfaces = getattr(spec, "research_surfaces", None)
+        if surfaces:
+            return list(surfaces)
+    return []
+
+
+def _find_research_surface(surfaces: list[Any], name: str) -> Any | None:
+    for surface in surfaces:
+        if getattr(surface, "name", None) == name:
+            return surface
+    return None
+
+
+def _build_research_surfaces_block(surfaces: list[Any]) -> str:
+    if not surfaces:
+        return ""
+    lines = ["## Research Surfaces"]
+    for surface in surfaces:
+        name = getattr(surface, "name", "")
+        kind = getattr(surface, "kind", "")
+        description = getattr(surface, "description", "")
+        targets = getattr(surface, "target_files", []) or []
+        prompt_hint = getattr(surface, "prompt_hint", "")
+        required_functions = getattr(surface, "required_functions", []) or []
+        lines.append(f"- {name} [{kind}]: {description}")
+        if targets:
+            lines.append(f"  targets: {', '.join(str(t) for t in targets)}")
+        if required_functions:
+            lines.append(
+                "  required functions: "
+                f"{', '.join(str(fn) for fn in required_functions)}"
+            )
+        if prompt_hint:
+            lines.append(f"  hint: {prompt_hint}")
+    return "\n".join(lines)
 
 
 def _get_family_taxonomy(spec: Any) -> Any | None:
@@ -750,7 +826,7 @@ def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
     if spec.description:
         lines.append(f"Description: {spec.description}")
     lines += [
-        f"Operator categories: {', '.join(spec.operator_categories)}",
+        f"Research loci: {', '.join(spec.operator_categories)}",
         f"Editable files: {', '.join(spec.search_space.editable)}",
         f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
     ]
@@ -789,6 +865,34 @@ def _read_champion_operators(champion: ChampionState) -> str:
             sections.append(f"### operators/{fname}\n(unreadable: {exc})")
 
     return "\n\n".join(sections) if sections else "(no operator files found)"
+
+
+def _read_champion_research_code(
+    champion: ChampionState,
+    *,
+    research_surfaces: list[Any],
+) -> str:
+    sections: list[str] = []
+    operator_code = _read_champion_operators(champion)
+    if operator_code:
+        sections.append(operator_code)
+
+    for file_rel in _list_champion_policy_files(
+        champion,
+        research_surfaces=research_surfaces,
+    ):
+        sections.append(_read_surface_file(champion, file_rel, label="policy surface"))
+    return "\n\n".join(sections) if sections else "(no research-surface files found)"
+
+
+def _read_surface_file(champion: ChampionState, file_rel: str, *, label: str) -> str:
+    fpath = os.path.join(champion.code_snapshot_path, file_rel)
+    try:
+        with open(fpath, encoding="utf-8") as fh:
+            content = fh.read()
+        return f"### {file_rel} ({label})\n```python\n{content}\n```"
+    except OSError as exc:
+        return f"### {file_rel}\n(unreadable: {exc})"
 
 
 def _build_champion_stats(champion: ChampionState) -> str:
@@ -1191,8 +1295,9 @@ def _build_strategy_guidance(
         elif recent_actions[0] == "create_new":
             guidance_parts.append(
                 "Do not force an action switch to modify/remove yet: no champion "
-                "operator file is available as a safe target. Continue create_new, "
-                "but change the mechanism, locus, or objective tradeoff policy."
+                "operator file is available as a removable target. Continue create_new "
+                "or modify a declared singleton policy file when one exists, but "
+                "change the mechanism, locus, or objective tradeoff policy."
             )
 
     # Rule 3: Unexplored locus → suggest
@@ -1205,7 +1310,7 @@ def _build_strategy_guidance(
     unexplored = all_loci - explored_loci
     if unexplored:
         guidance_parts.append(
-            f"Unexplored operator categories: {sorted(unexplored)}. Consider targeting these."
+            f"Unexplored research surfaces: {sorted(unexplored)}. Consider targeting these."
         )
 
     return "\n".join(guidance_parts)
@@ -1229,10 +1334,46 @@ def _list_champion_operator_files(champion: ChampionState) -> list[str]:
     return sorted(files)
 
 
-def _available_hypothesis_actions(targetable_operator_files: List[str]) -> set[str]:
+def _list_champion_policy_files(
+    champion: ChampionState,
+    *,
+    research_surfaces: list[Any],
+) -> list[str]:
+    files: set[str] = set()
+    for surface in research_surfaces:
+        if getattr(surface, "kind", None) != "policy":
+            continue
+        for target in getattr(surface, "target_files", []) or []:
+            if "*" in str(target):
+                continue
+            file_rel = str(target).lstrip("/")
+            if os.path.isfile(os.path.join(champion.code_snapshot_path, file_rel)):
+                files.add(file_rel)
+    return sorted(files)
+
+
+def _policy_surface_targets(research_surfaces: list[Any]) -> list[str]:
+    files: set[str] = set()
+    for surface in research_surfaces:
+        if getattr(surface, "kind", None) != "policy":
+            continue
+        for target in getattr(surface, "target_files", []) or []:
+            target = str(target)
+            if "*" not in target:
+                files.add(target.lstrip("/"))
+    return sorted(files)
+
+
+def _available_hypothesis_actions(
+    targetable_operator_files: List[str],
+    *,
+    targetable_policy_files: Optional[List[str]] = None,
+) -> set[str]:
     actions = {"create_new"}
+    if targetable_operator_files or targetable_policy_files:
+        actions.add("modify")
     if targetable_operator_files:
-        actions.update({"modify", "remove"})
+        actions.add("remove")
     return actions
 
 
@@ -1806,9 +1947,16 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
 
 
 def _read_reference_operators(
-    champion: ChampionState, change_locus: str, problem_spec: ProblemSpec
+    champion: ChampionState,
+    change_locus: str,
+    problem_spec: ProblemSpec,
+    *,
+    research_surfaces: Optional[list[Any]] = None,
 ) -> str:
-    """Read same-category operators as reference for create_new actions."""
+    """Read same-surface operators as reference for create_new actions."""
+    surface = _find_research_surface(research_surfaces or [], change_locus)
+    if surface is not None and getattr(surface, "kind", "operator") != "operator":
+        return ""
     operators_dir = os.path.join(champion.code_snapshot_path, "operators")
     if not os.path.isdir(operators_dir):
         return ""
@@ -1848,57 +1996,91 @@ def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> st
         return f"(could not read {target_file}: {exc})"
 
 
-def _read_branch_code(branch_workspace: str, champion: ChampionState) -> Optional[str]:
-    """Read branch operators that differ from champion, for Round 1 context (§4.9).
+def _read_branch_code(
+    branch_workspace: str,
+    champion: ChampionState,
+    *,
+    research_surfaces: Optional[list[Any]] = None,
+) -> Optional[str]:
+    """Read branch research-surface files that differ from champion.
 
-    Returns a formatted string showing the modified operator files, or None if
-    no differences are found or the workspace is unavailable.
+    Returns a formatted string showing modified files, or None if no
+    differences are found or the workspace is unavailable.
     """
     branch_ops_dir = os.path.join(branch_workspace, "operators")
     champ_ops_dir = os.path.join(champion.code_snapshot_path, "operators")
 
-    if not os.path.isdir(branch_ops_dir):
-        return None
-
-    try:
-        filenames = sorted(
-            f for f in os.listdir(branch_ops_dir)
-            if f.endswith(".py") and f not in ("__init__.py", "base.py")
-        )
-    except OSError:
-        return None
-
     sections: List[str] = []
-    for fname in filenames:
-        branch_path = os.path.join(branch_ops_dir, fname)
-        champ_path = os.path.join(champ_ops_dir, fname)
+    if os.path.isdir(branch_ops_dir):
+        try:
+            filenames = sorted(
+                f for f in os.listdir(branch_ops_dir)
+                if f.endswith(".py") and f not in ("__init__.py", "base.py")
+            )
+        except OSError:
+            filenames = []
 
+        for fname in filenames:
+            branch_path = os.path.join(branch_ops_dir, fname)
+            champ_path = os.path.join(champ_ops_dir, fname)
+
+            try:
+                with open(branch_path, encoding="utf-8") as fh:
+                    branch_content = fh.read()
+            except OSError:
+                continue
+
+            try:
+                with open(champ_path, encoding="utf-8") as fh:
+                    champ_content = fh.read()
+            except OSError:
+                champ_content = None
+
+            if champ_content is None or branch_content != champ_content:
+                sections.append(
+                    f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
+                )
+
+    for file_rel in _policy_surface_targets(research_surfaces or []):
+        branch_path = os.path.join(branch_workspace, file_rel)
+        champ_path = os.path.join(champion.code_snapshot_path, file_rel)
+        if not os.path.isfile(branch_path):
+            continue
         try:
             with open(branch_path, encoding="utf-8") as fh:
                 branch_content = fh.read()
         except OSError:
             continue
-
         try:
             with open(champ_path, encoding="utf-8") as fh:
                 champ_content = fh.read()
         except OSError:
             champ_content = None
-
         if champ_content is None or branch_content != champ_content:
             sections.append(
-                f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
+                f"### {file_rel} (branch policy version)\n```python\n{branch_content}\n```"
             )
 
     return "\n\n".join(sections) if sections else None
 
 
-def _build_operator_interface_spec(spec: ProblemSpec, *, adapter=None) -> str:
-    """Build the operator interface specification.
+def _build_operator_interface_spec(
+    spec: ProblemSpec,
+    *,
+    adapter=None,
+    surface_name: Optional[str] = None,
+) -> str:
+    """Build the active research-surface interface specification.
 
     Delegates to adapter.render_operator_interface() when an adapter is available.
     Falls back to reading operators/base.py for legacy ProblemSpec without adapter.
     """
+    if (
+        adapter is not None
+        and surface_name
+        and hasattr(adapter, "render_research_surface_interface")
+    ):
+        return adapter.render_research_surface_interface(surface_name)
     if adapter is not None and hasattr(adapter, 'render_operator_interface'):
         return adapter.render_operator_interface()
     # Legacy fallback: read base.py only

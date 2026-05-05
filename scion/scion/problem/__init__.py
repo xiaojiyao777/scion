@@ -23,6 +23,7 @@ from scion.problem.spec import (
     ObjectiveMetricSpec,
     ProblemAdapterRef,
     ProblemSpecV1,
+    ResearchSurfaceSpec,
 )
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "ProblemAdapterRef",
     "ProblemSpecBridge",
     "ProblemSpecV1",
+    "ResearchSurfaceSpec",
     "ObjectiveMetricSpec",
     "SolverArtifact",
     "compare_lexicographic",

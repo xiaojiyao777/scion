@@ -45,6 +45,18 @@ class OperatorInterfaceSpec(_Strict):
         return tuple(c.name for c in self.categories)
 
 
+class ResearchSurfaceSpec(_Strict):
+    name: str
+    kind: Literal["operator", "policy", "config"]
+    description: str = ""
+    target_files: list[str]
+    prompt_hint: str = ""
+    required_functions: list[str] = Field(default_factory=list)
+    create_new_allowed: bool = True
+    modify_allowed: bool = True
+    remove_allowed: bool = False
+
+
 class LLMHintsSpec(_Strict):
     problem_summary: str = ""
     operator_interface: str = ""
@@ -102,6 +114,7 @@ class ProblemSpecV1(_Strict):
     parameter_search: ParameterSearchSpec = ParameterSearchSpec()
 
     operator_interface: OperatorInterfaceSpec
+    research_surfaces: list[ResearchSurfaceSpec] | None = None
     objective_policy: ObjectivePolicySpec = ObjectivePolicySpec()
     objectives: list[ObjectiveMetricSpec]
     llm_hints: LLMHintsSpec = LLMHintsSpec()
@@ -122,6 +135,11 @@ class ProblemSpecV1(_Strict):
         names = [m.name for m in self.objectives]
         if len(names) != len(set(names)):
             raise ValueError("objective metric names must be unique")
+
+        if self.research_surfaces is not None:
+            surface_names = [surface.name for surface in self.research_surfaces]
+            if len(surface_names) != len(set(surface_names)):
+                raise ValueError("research surface names must be unique")
 
         priorities = sorted(m.priority for m in self.objectives)
         expected = list(range(1, len(priorities) + 1))

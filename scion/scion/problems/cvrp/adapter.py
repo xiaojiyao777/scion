@@ -33,19 +33,43 @@ class CvrpAdapter:
             "CVRPLIB .vrp cases, it uses the repo-local vrp/src ALNS+VNS baseline "
             "when SCION_PROBLEM_DATA_ROOT or SCION_CVRP_DATA_ROOT points at the vrp directory; JSON and "
             "synthetic smoke fixtures use a deterministic nearest-neighbor fallback.\n"
-            "- Generated registry operators are applied after the baseline in a "
-            "bounded improvement loop, up to 20 rounds or until the solver time "
-            "budget is exhausted.\n"
+            "- The `search_policy` research surface may tune the baseline time "
+            "fraction, post-baseline operator round limit, and whether "
+            "post-baseline operators run at all.\n"
+            "- Operator research surfaces are applied after the baseline in a "
+            "bounded improvement loop, up to the policy-controlled round limit "
+            "or until the solver time budget is exhausted.\n"
             "- In each operator round, loaded operators are tried in registry "
             "weight order. A returned solution is accepted only if it is feasible "
             "and strictly improves the lexicographic objective.\n"
-            "- Not-improving outputs are safe no-ops. Exceptions, infeasible "
-            "outputs, malformed outputs, and invalid solution structures are "
-            "runtime audit failures and cannot be treated as objective ties.\n"
+            "- Not-improving operator outputs are safe no-ops. Exceptions, "
+            "infeasible outputs, malformed outputs, invalid solution structures, "
+            "and invalid policy returns are runtime audit failures and cannot be "
+            "treated as objective ties.\n"
             "- BKS/gap is not used for operator acceptance. Route-count "
             "comparability enters only through fleet_violation when an explicit "
             "allowed route count or reference route count is available."
         )
+
+    def render_research_surface_interface(self, surface_name: str) -> str:
+        if surface_name == "search_policy":
+            return (
+                "policies/search_policy.py is a module-level policy file; no class "
+                "is required.\n\n"
+                "Required functions:\n"
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return a numeric fraction in [0.2, 0.95]\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return an int in [0, 20]\n\n"
+                "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                "    return a bool\n\n"
+                "The solver clamps out-of-range numeric values but records them as "
+                "policy_errors. Exceptions, missing functions, non-numeric budget "
+                "values, and non-bool enable flags are runtime audit failures. "
+                "Policy functions must be deterministic and must not read solver "
+                "outputs, benchmark answers, or external files."
+            )
+        return self.render_operator_interface()
 
     def render_operator_interface(self) -> str:
         return (

@@ -881,13 +881,16 @@ def _runtime_audit_summary(result: RunResult | None) -> dict:
     summary = {
         key: value
         for key, value in runtime.items()
-        if key.startswith(("baseline_", "operator_"))
-        and key != "operator_events"
+        if key.startswith(("baseline_", "operator_", "policy_"))
+        and key not in ("operator_events", "policy_events")
         and _is_json_scalar(value)
     }
     events = runtime.get("operator_events")
     if isinstance(events, list):
         summary["operator_events"] = events[:5]
+    policy_events = runtime.get("policy_events")
+    if isinstance(policy_events, list):
+        summary["policy_events"] = policy_events[:5]
     return summary
 
 

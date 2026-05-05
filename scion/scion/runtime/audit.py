@@ -35,10 +35,12 @@ def runtime_audit_failure_from_runtime(runtime: Mapping[str, Any]) -> dict[str, 
     """
 
     baseline_issue = _baseline_audit_failure(runtime)
+    policy_errors = _as_int(runtime.get("policy_errors"))
     operator_errors = _as_int(runtime.get("operator_errors"))
     operator_invalid_outputs = _as_int(runtime.get("operator_invalid_outputs"))
     if (
         baseline_issue is None
+        and policy_errors <= 0
         and operator_errors <= 0
         and operator_invalid_outputs <= 0
     ):
@@ -47,6 +49,9 @@ def runtime_audit_failure_from_runtime(runtime: Mapping[str, Any]) -> dict[str, 
     events = runtime.get("operator_events")
     if not isinstance(events, list):
         events = []
+    policy_events = runtime.get("policy_events")
+    if not isinstance(policy_events, list):
+        policy_events = []
 
     if baseline_issue is not None:
         return {
@@ -61,6 +66,23 @@ def runtime_audit_failure_from_runtime(runtime: Mapping[str, Any]) -> dict[str, 
             "operator_accepted": _as_int(runtime.get("operator_accepted")),
             "operator_events": events[:5],
             "detail": baseline_issue,
+        }
+
+    if policy_errors > 0:
+        return {
+            "error_category": "policy_runtime_error",
+            "policy_errors": policy_errors,
+            "policy_path": runtime.get("policy_path"),
+            "policy_loaded": bool(runtime.get("policy_loaded")),
+            "baseline_time_fraction": runtime.get("baseline_time_fraction"),
+            "operator_round_limit": runtime.get("operator_round_limit"),
+            "post_baseline_operators_enabled": runtime.get(
+                "post_baseline_operators_enabled"
+            ),
+            "policy_events": policy_events[:5],
+            "operator_errors": operator_errors,
+            "operator_invalid_outputs": operator_invalid_outputs,
+            "detail": f"solver runtime audit reported policy_errors={policy_errors}",
         }
 
     detail_parts = []
@@ -83,6 +105,13 @@ def runtime_audit_failure_from_runtime(runtime: Mapping[str, Any]) -> dict[str, 
 
 def format_runtime_audit_failure(issue: Mapping[str, Any]) -> str:
     detail = str(issue.get("detail") or "solver runtime audit failed")
+    policy_events = issue.get("policy_events")
+    if isinstance(policy_events, list) and policy_events:
+        first_policy = policy_events[0]
+        if isinstance(first_policy, Mapping):
+            event_detail = first_policy.get("detail")
+            if event_detail:
+                return f"{detail}: first_policy_event detail={event_detail}"
     events = issue.get("operator_events")
     if isinstance(events, list) and events:
         first = events[0]
