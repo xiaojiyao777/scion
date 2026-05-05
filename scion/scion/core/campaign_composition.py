@@ -517,6 +517,9 @@ def compose_campaign_services(
         run_stagnation_check=lambda: owner._run_stagnation_check(),
         check_soft_stagnation=lambda: owner._check_soft_stagnation(),
         write_campaign_summary=lambda: owner._write_campaign_summary(),
+        terminalize_active_branches=lambda reason: owner._terminalize_active_branches(
+            reason
+        ),
         get_final_wait_timeout=lambda: getattr(
             owner._spec.parameter_search,
             "final_wait_timeout_sec",

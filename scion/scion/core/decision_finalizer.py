@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, replace
 from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
@@ -47,6 +48,7 @@ LineageRecorder = Callable[
         Decision,
         str,
         Optional[tuple[str, ...]],
+        Optional[str],
     ],
     None,
 ]
@@ -231,6 +233,7 @@ class DecisionFinalizer:
         verification_result: VerificationResult,
         decision: Decision,
         decision_reason_codes: Optional[tuple[str, ...]],
+        event_id: Optional[str] = None,
     ) -> None:
         self.record_step_lineage(
             branch,
@@ -243,6 +246,7 @@ class DecisionFinalizer:
             decision,
             h_record.hypothesis_id,
             decision_reason_codes,
+            event_id,
         )
 
     def _continue_explore(
@@ -324,6 +328,12 @@ class DecisionFinalizer:
         decision_reason_codes: Optional[tuple[str, ...]],
     ) -> StepResult:
         bid = branch.branch_id
+        promotion_event_id = str(uuid.uuid4())
+        promoted_champion = replace(
+            promote_plan.champion,
+            promotion_experiment_id=promotion_event_id,
+        )
+        promote_plan = replace(promote_plan, champion=promoted_champion)
         try:
             self.commit_promote_plan(promote_plan)
         except Exception as exc:
@@ -349,6 +359,7 @@ class DecisionFinalizer:
             verification_result=verification_result,
             decision=Decision.PROMOTE,
             decision_reason_codes=decision_reason_codes,
+            event_id=promotion_event_id,
         )
         self.persist_branch_state(bid)
         return StepResult(

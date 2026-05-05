@@ -322,6 +322,21 @@ class CampaignManager:
             except Exception as exc:
                 logger.debug("BranchStore.save(%s) failed: %s", branch.branch_id, exc)
 
+    def _terminalize_active_branches(self, reason_code: str) -> None:
+        """Close residual active branches for budget-driven campaign closeout."""
+        for branch in list(self._branch_ctrl.get_active_branches()):
+            if reason_code not in branch.failure_codes:
+                branch.failure_codes.append(reason_code)
+            try:
+                self._branch_ctrl.apply_decision(branch.branch_id, Decision.ABANDON)
+            except Exception as exc:
+                logger.debug(
+                    "Branch %s: max-round terminalize skipped: %s",
+                    branch.branch_id,
+                    exc,
+                )
+        self._persist_all_branch_states()
+
     # ------------------------------------------------------------------
     # EXPLORE step (Round 1 + Round 2 + eval)
     # ------------------------------------------------------------------
@@ -475,6 +490,7 @@ class CampaignManager:
         decision: Decision,
         hypothesis_id: str = "",
         decision_reason_codes: Optional[tuple] = None,
+        event_id: Optional[str] = None,
     ) -> None:
         """Write one experiment_event + one decision row to the registry."""
         self._evidence_recorder.record_step_lineage(
@@ -489,6 +505,7 @@ class CampaignManager:
             champion=self._champion,
             hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
+            event_id=event_id,
         )
 
     def _decision_reason_codes_for(

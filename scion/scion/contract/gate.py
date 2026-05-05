@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import hashlib
+import re
 import time
 from typing import Any, List, Optional
 
@@ -617,31 +619,14 @@ class ContractGate:
         current_champion_version: int = 0,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
-        # create_new: keyed by (locus, action, target_file, text[:50]) to allow different intents
-        # modify / remove: keyed by (locus, action, target_file) — one attempt per file per champion
-        if h.action == "create_new":
-            key = (h.change_locus, h.action, h.target_file, (h.hypothesis_text or "")[:50])
-        else:
-            key = (h.change_locus, h.action, h.target_file)
+        key = self._novelty_key(h)
         for existing in active_hypotheses + blacklist:
             # Rejected hypotheses only block if they come from the same champion version;
             # a champion upgrade opens the door to retry previously rejected modify paths.
             if existing.status == "rejected":
                 if existing.base_champion_version != current_champion_version:
                     continue
-            if existing.action == "create_new":
-                existing_key = (
-                    existing.change_locus,
-                    existing.action,
-                    existing.target_file,
-                    (existing.hypothesis_text or "")[:50],
-                )
-            else:
-                existing_key = (
-                    existing.change_locus,
-                    existing.action,
-                    existing.target_file,
-                )
+            existing_key = self._novelty_key(existing)
             if key == existing_key:
                 return _cr(
                     "C10_novelty",
@@ -651,6 +636,58 @@ class ContractGate:
                     t0,
                 )
         return _cr("C10_novelty", True, "light", "novel", t0)
+
+    def _novelty_key(self, h: HypothesisProposal | HypothesisRecord) -> tuple[Any, ...]:
+        # create_new has no reliable singleton file identity, so keep intent in the key.
+        if h.action == "create_new":
+            return (
+                h.change_locus,
+                h.action,
+                h.target_file,
+                (h.hypothesis_text or "")[:50],
+            )
+
+        # Policy singleton files need semantic novelty: distinct policy hypotheses
+        # against the same target pass, while exact same intents still fail C10.
+        if h.action == "modify":
+            surface = self._surface_for_hypothesis(h)
+            if getattr(surface, "kind", None) == "policy":
+                return (
+                    h.change_locus,
+                    h.action,
+                    h.target_file,
+                    self._semantic_intent_fingerprint(h),
+                )
+
+        # Ordinary modify/remove remains strict by locus/action/target file.
+        return (h.change_locus, h.action, h.target_file)
+
+    def _surface_for_hypothesis(
+        self,
+        h: HypothesisProposal | HypothesisRecord,
+    ) -> Any | None:
+        surface = self._surface_by_name(h.change_locus)
+        if surface is not None:
+            return surface
+        if h.target_file:
+            return self._surface_for_patch_path(h.target_file)
+        return None
+
+    @staticmethod
+    def _semantic_intent_fingerprint(
+        h: HypothesisProposal | HypothesisRecord,
+    ) -> str:
+        parts = [
+            getattr(h, "hypothesis_text", None) or "",
+            getattr(h, "target_weakness", None) or "",
+            getattr(h, "expected_effect", None) or "",
+            getattr(h, "target_runtime_effect", None) or "",
+            getattr(h, "runtime_budget_strategy", None) or "",
+        ]
+        normalized = " ".join(parts).casefold()
+        normalized = re.sub(r"[^a-z0-9_.:/+-]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
     def _research_surfaces(self) -> list[Any]:
         return list(getattr(self._spec, "research_surfaces", []) or [])

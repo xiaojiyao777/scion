@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -238,6 +239,31 @@ class TestCampaignBasics:
         assert status["campaign_id"] == cm.get_state()["campaign_id"]
         assert status["total_rounds"] >= 1
         assert "last_result" in status
+
+    def test_max_rounds_exhausted_terminalizes_active_branches(self, tmp_path):
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol([
+                _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass")
+            ]),
+            termination_config=TerminationConfig(max_experiments=1000),
+        )
+
+        cm.run(max_rounds=1)
+
+        state = cm.get_state()
+        assert state["n_active_branches"] == 0
+        assert cm._last_stop_reason == "max_rounds_exhausted"
+        branch = next(iter(cm._branch_ctrl._branches.values()))
+        assert branch.state == BranchState.ABANDONED
+        assert "MAX_ROUNDS_EXHAUSTED" in branch.failure_codes
+
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        summary = json.loads((tmp_path / "campaign" / "campaign_summary.json").read_text())
+        assert status["stopped_reason"] == "max_rounds_exhausted"
+        assert status["n_active_branches"] == 0
+        assert summary["stopped_reason"] == "max_rounds_exhausted"
+        assert summary["n_active_branches"] == 0
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)
@@ -485,6 +511,32 @@ class TestFullSuccessPath:
         cm.run_one_step()
         cm.run_one_step()
         assert cm._champion.version == 2
+
+    def test_promoted_champion_records_promotion_experiment_id(self, tmp_path):
+        """Structural promotions persist the event id on the champion row."""
+        protocol = MockExperimentProtocol(results=[
+            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
+            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+            _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
+                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        cm.run_one_step()
+        cm.run_one_step()
+        cm.run_one_step()
+
+        promoted = cm._champion_store.get_by_version(2)
+        assert promoted is not None
+        assert promoted.promotion_experiment_id
+        assert promoted.promotion_experiment_id == cm._champion.promotion_experiment_id
+        with sqlite3.connect(Path(cm._campaign_dir) / "scion.db") as conn:
+            event = conn.execute(
+                "SELECT event_kind, decision FROM experiment_events WHERE event_id = ?",
+                (promoted.promotion_experiment_id,),
+            ).fetchone()
+        assert event == ("experiment", "promote")
 
     def test_promote_marks_other_branches_stale(self, tmp_path):
         """After PROMOTE, all sibling branches should be STALE."""

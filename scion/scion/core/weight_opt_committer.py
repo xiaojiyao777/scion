@@ -139,6 +139,7 @@ class WeightOptCommitter:
                 solver_config_hash=current.solver_config_hash,
                 code_snapshot_path=event.snapshot_path,
                 code_snapshot_hash=event.snapshot_hash,
+                promotion_experiment_id=current.promotion_experiment_id,
                 promoted_at=current.promoted_at,
                 weight_revision=event.new_revision,
             )

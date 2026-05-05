@@ -187,6 +187,7 @@ class EvidenceRecorder:
         champion: ChampionState,
         hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
+        event_id: str | None = None,
     ) -> Dict[str, Any]:
         """Build the experiment event payload currently written to lineage."""
         stats = protocol_result.stats if protocol_result else None
@@ -210,7 +211,7 @@ class EvidenceRecorder:
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
         }
-        return {
+        event = {
             "campaign_id": self.campaign_id,
             "branch_id": branch.branch_id,
             "timestamp": datetime.now().isoformat(),
@@ -238,6 +239,9 @@ class EvidenceRecorder:
             "model_id": self.model_id,
             "protocol_version": self.protocol_version,
         }
+        if event_id:
+            event["event_id"] = event_id
+        return event
 
     def build_decision_lineage_payload(
         self,
@@ -289,6 +293,7 @@ class EvidenceRecorder:
         champion: ChampionState,
         hypothesis_id: str = "",
         decision_reason_codes: Iterable[str] | None = None,
+        event_id: str | None = None,
     ) -> Dict[str, Any]:
         """Write experiment + decision lineage rows where a registry is configured."""
         event = self.build_step_lineage_event(
@@ -303,6 +308,7 @@ class EvidenceRecorder:
             champion=champion,
             hypothesis_id=hypothesis_id,
             decision_reason_codes=decision_reason_codes,
+            event_id=event_id,
         )
         if self.registry is not None:
             try:
@@ -432,6 +438,13 @@ class EvidenceRecorder:
         }
         if refs:
             summary["final_evidence_refs"] = refs
+        if self.state_provider is not None:
+            try:
+                state = dict(self.state_provider())
+                summary["n_active_branches"] = state.get("n_active_branches")
+                summary["branches"] = list(state.get("branches") or [])
+            except Exception as exc:  # pragma: no cover - summary is best-effort
+                logger.debug("state snapshot for campaign_summary failed: %s", exc)
 
         for step in steps:
             summary["steps"].append(self._build_summary_step(step))
@@ -449,10 +462,12 @@ class EvidenceRecorder:
 
     @staticmethod
     def _build_summary_step(step: StepRecord) -> Dict[str, Any]:
+        decision_reason_codes = list(step.decision_reason_codes or ())
         step_data: Dict[str, Any] = {
             "round": step.round_num,
             "branch_id": step.branch_id,
             "decision": step.decision.value if step.decision is not None else None,
+            "decision_reason_codes": decision_reason_codes,
             "contract_passed": step.contract_passed,
             "verification_passed": step.verification_passed,
             "failure_stage": step.failure_stage,
@@ -470,6 +485,8 @@ class EvidenceRecorder:
         if step.protocol_result and step.protocol_result.stats:
             stats = step.protocol_result.stats
             pr = step.protocol_result
+            protocol_reason_codes = list(pr.reason_codes)
+            effective_reason_codes = decision_reason_codes or protocol_reason_codes
             step_data["protocol_result"] = {
                 "stage": pr.stage.value if hasattr(pr.stage, "value") else str(pr.stage),
                 "win_rate": stats.win_rate,
@@ -500,6 +517,12 @@ class EvidenceRecorder:
                 "champion_failed_pairs": stats.champion_failed_pairs,
                 "gate_outcome": pr.gate_outcome,
                 "reason_codes": list(pr.reason_codes),
+                "protocol_reason_codes": protocol_reason_codes,
+                "decision_reason_codes": decision_reason_codes,
+                "effective_reason_codes": effective_reason_codes,
+                "effective_reason_source": (
+                    "decision_engine" if decision_reason_codes else "protocol_gate"
+                ),
                 "raw_metrics_ref": pr.raw_metrics_ref,
                 "case_ids": list(pr.case_ids),
                 "seed_set": list(pr.seed_set),

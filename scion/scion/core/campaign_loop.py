@@ -25,6 +25,7 @@ class CampaignLoop:
     run_stagnation_check: Callable[[], None]
     check_soft_stagnation: Callable[[], None]
     write_campaign_summary: Callable[[], None]
+    terminalize_active_branches: Callable[[str], None]
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
 
@@ -64,6 +65,8 @@ class CampaignLoop:
             final_reason = "max_rounds_exhausted"
 
         self.set_last_stop_reason(final_reason)
+        if final_reason == "max_rounds_exhausted":
+            self.terminalize_active_branches("MAX_ROUNDS_EXHAUSTED")
         self.write_campaign_summary()
         final_wait_timeout = self.get_final_wait_timeout()
         self.wait_weight_opt_all(final_wait_timeout)

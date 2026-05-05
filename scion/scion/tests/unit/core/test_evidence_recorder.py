@@ -119,7 +119,14 @@ def _branch() -> Branch:
 
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
-    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_active_branches": 0,
+            "branches": [],
+        },
+    )
     step_history: list[StepRecord] = []
 
     recorder.record_step(_step("/tmp/metrics-round-3.json"), step_history)
@@ -140,6 +147,7 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary["total_rounds"] == 3
     assert summary["champion_version"] == 7
     assert summary["champion_weight_revision"] == 2
+    assert summary["n_active_branches"] == 0
     assert summary["budget_utilization"] == 0.25
     assert summary["cache_stats"]["total_tokens"] == 100
     assert summary["cache_stats"]["cache_read_tokens"] == 25
@@ -154,10 +162,52 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
         "screening_positive",
         "runtime_ok",
     ]
+    assert summary_step["protocol_result"]["protocol_reason_codes"] == [
+        "screening_positive",
+        "runtime_ok",
+    ]
+    assert summary_step["protocol_result"]["decision_reason_codes"] == [
+        "screening_positive",
+    ]
+    assert summary_step["protocol_result"]["effective_reason_codes"] == [
+        "screening_positive",
+    ]
+    assert summary_step["protocol_result"]["effective_reason_source"] == (
+        "decision_engine"
+    )
     assert summary_step["protocol_result"]["runtime_ratio_median"] == 1.18
     assert summary_step["protocol_result"]["runtime_delta_median_ms"] == 24.0
     assert summary_step["protocol_result"]["runtime_regression_rate"] == 0.5
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
+
+
+def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/runtime-timeout.json",
+    )
+    step.decision = Decision.ABANDON
+    step.decision_reason_codes = ("CANDIDATE_RUNTIME_FAILURE",)
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["protocol_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
+    assert protocol["decision_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
+    assert protocol["effective_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
+    assert protocol["effective_reason_source"] == "decision_engine"
 
 
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ from scion.core.models import (
     BranchState,
     ChampionState,
     HypothesisProposal,
+    HypothesisRecord,
     PatchProposal,
 )
 from scion.problem.bridge import (
@@ -159,6 +161,102 @@ def test_cvrp_problem_v1_exposes_search_policy_surface() -> None:
     ]
     assert "policies/*.py" in legacy.search_space.editable
     assert "solver.py" in legacy.search_space.frozen
+
+
+def _surface_gate() -> ContractGate:
+    spec = ProblemSpec(
+        name="surface-demo",
+        root_dir="/tmp/surface-demo",
+        operator_categories=["local", "budget_policy"],
+        research_surfaces=[
+            SimpleNamespace(
+                name="local",
+                kind="operator",
+                target_files=["operators/*.py"],
+            ),
+            SimpleNamespace(
+                name="budget_policy",
+                kind="policy",
+                target_files=["policies/budget.py"],
+            ),
+        ],
+        search_space=SearchSpace(
+            editable=["operators/*.py", "policies/*.py"],
+            frozen=[],
+            import_whitelist=["math"],
+        ),
+    )
+    return ContractGate(spec)
+
+
+def test_policy_modify_distinct_semantic_intents_pass_c10() -> None:
+    gate = _surface_gate()
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="budget_policy",
+        action="modify",
+        status="active",
+        target_file="policies/budget.py",
+        hypothesis_text="Allocate more time to construction on large instances.",
+    )
+    hyp = HypothesisProposal(
+        hypothesis_text="Reduce construction time and reserve budget for repair.",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
+    )
+
+    result = gate._c10_novelty(hyp, [existing], [])
+
+    assert result.passed
+
+
+def test_policy_modify_identical_semantic_intent_fails_c10() -> None:
+    gate = _surface_gate()
+    text = "Allocate more time to construction on large instances."
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="budget_policy",
+        action="modify",
+        status="active",
+        target_file="policies/budget.py",
+        hypothesis_text=text,
+    )
+    hyp = HypothesisProposal(
+        hypothesis_text="  allocate MORE time to construction on large instances. ",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
+    )
+
+    result = gate._c10_novelty(hyp, [existing], [])
+
+    assert not result.passed
+
+
+def test_operator_modify_remains_strict_by_locus_action_target_file() -> None:
+    gate = _surface_gate()
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="local",
+        action="modify",
+        status="active",
+        target_file="operators/local.py",
+        hypothesis_text="Try nearest-neighbor relocation.",
+    )
+    hyp = HypothesisProposal(
+        hypothesis_text="Try regret-based relocation instead.",
+        change_locus="local",
+        action="modify",
+        target_file="operators/local.py",
+    )
+
+    result = gate._c10_novelty(hyp, [existing], [])
+
+    assert not result.passed
 
 
 def test_cvrp_solver_loads_workspace_search_policy_and_applies_bounds(

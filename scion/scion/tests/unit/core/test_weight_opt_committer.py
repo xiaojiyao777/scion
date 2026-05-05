@@ -123,8 +123,10 @@ def test_drain_commits_improved_weight_event_and_marks_branches_stale() -> None:
         snapshot_hash="hash-2-r1",
         operator_pool={"ls": _operator(weight=2.0)},
     )
+    champion = _champion()
+    champion.promotion_experiment_id = "promotion-event-1"
     committer, source, store, registry, persisted, state = _committer(
-        champion=_champion(),
+        champion=champion,
         events=[event],
         branch_controller=ctrl,
     )
@@ -133,6 +135,7 @@ def test_drain_commits_improved_weight_event_and_marks_branches_stale() -> None:
 
     assert source.latest_result == {"best_score": 1.0}
     assert state[0].weight_revision == 1
+    assert state[0].promotion_experiment_id == "promotion-event-1"
     assert state[0].code_snapshot_path == "/tmp/champion_v2_r1"
     assert state[0].operator_pool["ls"].weight == 2.0
     assert store.promoted == [state[0]]
