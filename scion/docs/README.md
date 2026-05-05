@@ -1,6 +1,6 @@
 # Scion Documentation Index
 
-*Last updated: 2026-05-04*
+*Last updated: 2026-05-05*
 
 This directory is the active documentation surface for Scion. Historical sprint notes, validation drafts, and intermediate analysis are archived under `archive/`.
 
@@ -32,6 +32,7 @@ This directory is the active documentation surface for Scion. Historical sprint 
 - [v0.4-p0-promotion-integrity-design.md](v0.4-p0-promotion-integrity-design.md) - P0-C promotion commit, registry, and weight-opt integrity policy.
 - [v0.4-p0-campaign-controller-decomposition-design.md](v0.4-p0-campaign-controller-decomposition-design.md) - P0-D campaign controller decomposition plan aligned with v3.
 - [v0.4-p1-runtime-aware-optimization-design.md](v0.4-p1-runtime-aware-optimization-design.md) - P1 runtime-aware optimization design: efficiency as default Scion promotion governance.
+- [v0.4-cvrp-research-surface-design.md](v0.4-cvrp-research-surface-design.md) - CVRP research-surface design: problem-owned heuristic surfaces beyond post-baseline operators.
 - [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
 - [v0.4-cvrp-plan.md](v0.4-cvrp-plan.md) - CVRP second-problem plan for v0.4 generalization.
 - [v0.4-evidence-harness.md](v0.4-evidence-harness.md) - common promotion/final-quality/runtime evidence schema for v0.4.
@@ -113,6 +114,7 @@ scion/
 │   ├── v0.4-p0-promotion-integrity-design.md
 │   ├── v0.4-p0-campaign-controller-decomposition-design.md
 │   ├── v0.4-p1-runtime-aware-optimization-design.md
+│   ├── v0.4-cvrp-research-surface-design.md
 │   ├── v0.4-performance-aware-plan.md
 │   ├── v0.4-cvrp-plan.md
 │   ├── v0.4-evidence-harness.md
