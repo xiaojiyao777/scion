@@ -95,11 +95,25 @@ class ContextManager:
 
         # T07: Build family tracking and coverage (J-patch: use global step_history)
         all_steps = step_history or []
+        targetable_operator_files = _list_champion_operator_files(champion)
+        available_actions = _available_hypothesis_actions(targetable_operator_files)
         families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
-        exploration_coverage = build_exploration_coverage(families) if families else ""
+        exploration_coverage = (
+            build_exploration_coverage(families, available_actions=available_actions)
+            if families
+            else ""
+        )
 
         # T08: Build strategy guidance from family data (J-patch: global)
-        strategy_guidance = _build_strategy_guidance(families, problem_spec) if families else ""
+        strategy_guidance = (
+            _build_strategy_guidance(
+                families,
+                problem_spec,
+                available_actions=available_actions,
+            )
+            if families
+            else ""
+        )
 
         # T10: Champion baseline hints from most recent screening experiment
         champion_baselines = _build_champion_baselines(step_history or [])
@@ -1023,9 +1037,17 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
 # T07: Hypothesis Family Tracking
 # ---------------------------------------------------------------------------
 
-def _extract_mechanism_label(hypothesis_text: str, taxonomy: Optional[list] = None) -> str:
+def _extract_mechanism_label(
+    hypothesis_text: str,
+    taxonomy: Optional[list] = None,
+    preferred_label: Optional[str] = None,
+) -> str:
     """Extract mechanism label from hypothesis text using problem taxonomy."""
-    return extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
+    return extract_mechanism_label(
+        hypothesis_text,
+        taxonomy=taxonomy,
+        preferred_label=preferred_label,
+    )
 
 
 def _make_family_id(mechanism_label: str, action_pattern: str, locus_pattern: str) -> str:
@@ -1051,7 +1073,11 @@ def _extract_families_from_steps(
     family_map: Dict[str, HypothesisFamily] = {}
     for step in steps:
         h = step.hypothesis
-        mechanism = _extract_mechanism_label(h.hypothesis_text or "", taxonomy=taxonomy)
+        mechanism = _extract_mechanism_label(
+            h.hypothesis_text or "",
+            taxonomy=taxonomy,
+            preferred_label=h.change_locus,
+        )
         family_id = _make_family_id(mechanism, h.action, h.change_locus)
         status = _get_step_status(step)
         if family_id in family_map:
@@ -1084,11 +1110,19 @@ def assign_family_id(
     taxonomy: Optional[list] = None,
 ) -> str:
     """Public helper: compute family_id for a hypothesis (for HypothesisRecord.family_id)."""
-    mechanism = _extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
+    mechanism = _extract_mechanism_label(
+        hypothesis_text,
+        taxonomy=taxonomy,
+        preferred_label=change_locus,
+    )
     return _make_family_id(mechanism, action, change_locus)
 
 
-def build_exploration_coverage(families: List[HypothesisFamily]) -> str:
+def build_exploration_coverage(
+    families: List[HypothesisFamily],
+    *,
+    available_actions: Optional[set[str]] = None,
+) -> str:
     """Return a formatted string showing family coverage across attempts (T07)."""
     if not families:
         return ""
@@ -1103,7 +1137,7 @@ def build_exploration_coverage(families: List[HypothesisFamily]) -> str:
         )
     # Show unexplored action/locus combos
     explored_actions = {f.action_pattern for f in families}
-    all_actions = {"create_new", "modify", "remove"}
+    all_actions = available_actions or {"create_new", "modify", "remove"}
     unexplored_actions = all_actions - explored_actions
     if unexplored_actions:
         lines.append(f"  Unexplored actions: {sorted(unexplored_actions)}")
@@ -1125,10 +1159,16 @@ def _count_trailing_failures(statuses: List[str]) -> int:
     return count
 
 
-def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[ProblemSpec] = None) -> str:
+def _build_strategy_guidance(
+    families: List[HypothesisFamily],
+    spec: Optional[ProblemSpec] = None,
+    *,
+    available_actions: Optional[set[str]] = None,
+) -> str:
     """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
     if not families:
         return ""
+    allowed_actions = available_actions or {"create_new", "modify", "remove"}
     guidance_parts: List[str] = []
 
     # Rule 1: Same family failed 3+ consecutive times → force switch
@@ -1144,9 +1184,16 @@ def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[Pr
     recent_actions = [f.action_pattern for f in families[-5:]]
     if len(set(recent_actions)) == 1 and len(recent_actions) >= 3:
         alt = "modify" if recent_actions[0] == "create_new" else "create_new"
-        guidance_parts.append(
-            f"Consider trying action='{alt}' — all recent attempts used '{recent_actions[0]}'."
-        )
+        if alt in allowed_actions:
+            guidance_parts.append(
+                f"Consider trying action='{alt}' — all recent attempts used '{recent_actions[0]}'."
+            )
+        elif recent_actions[0] == "create_new":
+            guidance_parts.append(
+                "Do not force an action switch to modify/remove yet: no champion "
+                "operator file is available as a safe target. Continue create_new, "
+                "but change the mechanism, locus, or objective tradeoff policy."
+            )
 
     # Rule 3: Unexplored locus → suggest
     explored_loci = {f.locus_pattern for f in families}
@@ -1162,6 +1209,31 @@ def _build_strategy_guidance(families: List[HypothesisFamily], spec: Optional[Pr
         )
 
     return "\n".join(guidance_parts)
+
+
+def _list_champion_operator_files(champion: ChampionState) -> list[str]:
+    files: set[str] = set()
+    for op in (champion.operator_pool or {}).values():
+        file_path = getattr(op, "file_path", "")
+        if file_path:
+            files.add(file_path)
+
+    operators_dir = os.path.join(champion.code_snapshot_path, "operators")
+    if os.path.isdir(operators_dir):
+        try:
+            for fname in os.listdir(operators_dir):
+                if fname.endswith(".py") and fname not in ("__init__.py", "base.py"):
+                    files.add(f"operators/{fname}")
+        except OSError:
+            pass
+    return sorted(files)
+
+
+def _available_hypothesis_actions(targetable_operator_files: List[str]) -> set[str]:
+    actions = {"create_new"}
+    if targetable_operator_files:
+        actions.update({"modify", "remove"})
+    return actions
 
 
 def _build_failure_pattern_warning(failure_streak: Dict[str, int]) -> str:
@@ -1595,7 +1667,11 @@ def _build_what_worked_section(
     lines = ["## What Worked (learn from these)"]
     for s in successes[:5]:  # Cap at 5 to avoid bloating context
         h = s.hypothesis
-        mechanism = _extract_mechanism_label(h.hypothesis_text or "", taxonomy=taxonomy)
+        mechanism = _extract_mechanism_label(
+            h.hypothesis_text or "",
+            taxonomy=taxonomy,
+            preferred_label=h.change_locus,
+        )
         tag = "(promoted)" if s.decision == Decision.PROMOTE else "(high win_rate)"
         wr_str = ""
         if s.protocol_result:

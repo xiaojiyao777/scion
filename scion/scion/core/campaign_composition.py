@@ -28,6 +28,7 @@ from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.features import BudgetState
 from scion.core.frozen_budget import FrozenBudgetLedger
+from scion.core.models import ChampionState, OperatorConfig
 from scion.core.plateau_controller import PlateauController
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.promotion_lifecycle import PromotionLifecycleService
@@ -181,6 +182,7 @@ def compose_campaign_services(
         os.path.join(campaign_dir, "scion.db"),
         os.path.join(campaign_dir, "champions"),
     )
+    _persist_initial_champion(owner)
 
     owner._branch_workspaces = {}
     owner._branch_hypotheses = {}
@@ -535,3 +537,71 @@ def required_service_names() -> tuple[str, ...]:
         "_proposal_pipeline",
         "_campaign_loop",
     )
+
+
+def _persist_initial_champion(owner: Any) -> None:
+    """Persist the base champion so campaign evidence has a real v1 anchor."""
+    if owner._champion_store.get_current() is not None:
+        return
+
+    champion = owner._champion
+    source_path = os.path.abspath(champion.code_snapshot_path)
+    champions_root = os.path.abspath(str(owner._materializer._champions_dir))
+    snapshot_path = source_path
+
+    # Avoid recursively copying a problem root into a campaign directory that
+    # lives inside that same root. The DB anchor is still useful in that layout.
+    if os.path.commonpath([source_path, champions_root]) != source_path:
+        snapshot_path = owner._materializer.create_champion_snapshot(
+            champion,
+            str(owner._materializer._champions_dir),
+        )
+
+    persisted = ChampionState(
+        version=champion.version,
+        operator_pool=_normalize_operator_pool(champion.operator_pool),
+        solver_config_hash=champion.solver_config_hash,
+        code_snapshot_path=snapshot_path,
+        code_snapshot_hash=owner._materializer.compute_snapshot_hash(snapshot_path),
+        promotion_experiment_id=champion.promotion_experiment_id,
+        promoted_at=champion.promoted_at,
+        weight_revision=champion.weight_revision,
+    )
+    owner._champion_store.promote(persisted)
+    owner._champion = persisted
+
+
+def _normalize_operator_pool(operator_pool: dict[str, Any]) -> dict[str, OperatorConfig]:
+    """Normalize legacy name->weight pools before persistence."""
+    normalized: dict[str, OperatorConfig] = {}
+    for name, cfg in (operator_pool or {}).items():
+        if isinstance(cfg, OperatorConfig):
+            normalized[name] = cfg
+            continue
+        required_attrs = ("name", "file_path", "category", "weight", "class_name")
+        if all(hasattr(cfg, attr) for attr in required_attrs):
+            normalized[name] = OperatorConfig(
+                name=cfg.name,
+                file_path=cfg.file_path,
+                category=cfg.category,
+                weight=float(cfg.weight),
+                class_name=cfg.class_name,
+            )
+            continue
+        if isinstance(cfg, dict):
+            normalized[name] = OperatorConfig(
+                name=str(cfg.get("name", name)),
+                file_path=str(cfg.get("file_path", f"operators/{name}.py")),
+                category=str(cfg.get("category", name)),
+                weight=float(cfg.get("weight", 1.0)),
+                class_name=str(cfg.get("class_name", name)),
+            )
+            continue
+        normalized[name] = OperatorConfig(
+            name=name,
+            file_path=f"operators/{name}.py",
+            category=name,
+            weight=float(cfg),
+            class_name=name,
+        )
+    return normalized

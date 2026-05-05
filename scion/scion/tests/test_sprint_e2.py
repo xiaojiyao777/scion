@@ -265,6 +265,54 @@ def test_context_family_extraction_route_taxonomy_blocks_warehouse_labels():
     assert all("cost_reduction" not in fid for fid in family_ids)
 
 
+def test_context_family_extraction_handles_prior_failed_family_mentions():
+    steps = [
+        _make_step(
+            hypothesis_text=(
+                "Implement a 2-opt intra-route local search operator that "
+                "reverses route segments when distance decreases."
+            ),
+            action="create_new",
+            locus="route_local",
+        ),
+        _make_step(
+            hypothesis_text=(
+                "Implement an Or-opt inter-route relocation operator. Unlike "
+                "the previously attempted intra-route 2-opt, this targets "
+                "cross-route distance reduction."
+            ),
+            action="create_new",
+            locus="route_pair",
+        ),
+        _make_step(
+            hypothesis_text=(
+                "Implement a ruin-and-recreate segment ruin strategy. This "
+                "differs from the failed intra-route 2-opt and inter-route "
+                "single-node relocation by rebuilding a cluster."
+            ),
+            action="create_new",
+            locus="ruin_recreate",
+        ),
+        _make_step(
+            hypothesis_text=(
+                "Implement a 3-opt segment move that relocates chains from "
+                "one route to another route rather than single nodes."
+            ),
+            action="create_new",
+            locus="route_pair",
+        ),
+    ]
+
+    families = _extract_families_from_steps(steps, taxonomy=CVRP_FAMILY_TAXONOMY)
+    counts = {fam.mechanism_label: fam.evidence_count for fam in families}
+
+    assert counts == {
+        "route_local": 1,
+        "route_pair": 2,
+        "ruin_recreate": 1,
+    }
+
+
 def test_family_id_includes_action_and_locus():
     fid = assign_family_id("Swap orders between vehicles", "modify", "order_level")
     assert "modify" in fid
@@ -294,6 +342,16 @@ def test_coverage_report_shows_unexplored_actions():
     families = _extract_families_from_steps(steps, taxonomy=WAREHOUSE_MECHANISM_TAXONOMY)
     report = build_exploration_coverage(families)
     assert "create_new" in report  # unexplored action should be flagged
+
+
+def test_coverage_report_respects_available_actions():
+    steps = [_make_step(action="create_new", locus="route_local")]
+    families = _extract_families_from_steps(steps, taxonomy=CVRP_FAMILY_TAXONOMY)
+
+    report = build_exploration_coverage(families, available_actions={"create_new"})
+
+    assert "modify" not in report
+    assert "remove" not in report
 
 
 def test_coverage_report_empty_for_no_steps():
@@ -350,6 +408,20 @@ def test_guidance_suggests_action_switch():
     ]
     guidance = _build_strategy_guidance(families)
     assert "modify" in guidance
+
+
+def test_guidance_does_not_suggest_modify_without_target_operator():
+    """T08: Empty champion operator pool should not push invalid modify/remove."""
+    families = [
+        _make_family("generic", action_pattern="create_new", statuses=["gate_fail"]),
+        _make_family("route_pair", action_pattern="create_new", statuses=["gate_fail"]),
+        _make_family("ruin_recreate", action_pattern="create_new", statuses=["gate_fail"]),
+    ]
+
+    guidance = _build_strategy_guidance(families, available_actions={"create_new"})
+
+    assert "action='modify'" not in guidance
+    assert "no champion operator file" in guidance
 
 
 def test_guidance_highlights_unexplored_locus():
@@ -510,6 +582,7 @@ def test_build_hypothesis_context_uses_cvrp_family_taxonomy(tmp_path):
         "split_operator",
     ):
         assert legacy_label not in rendered
+    assert "action='modify'" not in rendered
 
 
 def test_build_hypothesis_context_includes_runtime_feedback(tmp_path):

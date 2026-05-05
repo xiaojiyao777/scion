@@ -175,6 +175,30 @@ class TestThreeLayers:
         assert "### 所有实验 Branch 轨迹" in rendered
 
 
+class TestResearchSnapshotChampionVersion:
+    def test_base_champion_is_not_counted_as_promotion(self, tmp_path):
+        db_path = str(tmp_path)
+        v1_ops = tmp_path / "champions" / "v1" / "operators"
+        v1_ops.mkdir(parents=True)
+        (v1_ops / "__init__.py").write_text("# op")
+
+        _create_full_db(
+            os.path.join(db_path, "scion.db"),
+            rows=[
+                {"branch_id": "b1", "stage": "screening", "wr": 0.0,
+                 "decision": "abandon", "file": "operators/op.py",
+                 "hyp": "safe no-op"},
+            ],
+            champions=[
+                {"version": 1, "code_snapshot_path": str(tmp_path / "champions" / "v1")},
+            ],
+        )
+
+        rendered = CampaignResearchLog(db_path).render()
+
+        assert "Champion 当前版本：v1，共 0 次晋升" in rendered
+
+
 # ---------------------------------------------------------------------------
 # Test 2: snapshot_shows_coverage_gaps
 # ---------------------------------------------------------------------------

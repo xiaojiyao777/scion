@@ -104,6 +104,7 @@ def run(
     problem_dir = problem_yaml.parent
     adapter = None
     metric_specs = None
+    objective_policy = None
     operator_execute_signature = None
     problem_v1_path = problem_dir / "problem-v1.yaml"
     if problem_v1_path.exists():
@@ -118,6 +119,7 @@ def run(
             spec = bridge.problem_spec
             adapter = load_problem_adapter(problem_v1)
             metric_specs = bridge.metric_specs
+            objective_policy = bridge.objective_policy
             operator_execute_signature = bridge.operator_execute_signature
         except Exception as exc:
             typer.echo(f"ERROR: failed to load problem-v1 adapter: {exc}", err=True)
@@ -184,6 +186,7 @@ def run(
         time_limit_sec=effective_time_limit,
         metrics_dir=metrics_dir,
         metric_specs=metric_specs,
+        objective_policy=objective_policy,
         require_metric_specs=metric_specs is not None,
     )
     verification_gate = VerificationGate(

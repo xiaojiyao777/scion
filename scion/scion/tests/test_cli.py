@@ -23,6 +23,14 @@ def test_run_help_exposes_disable_early_stop_option() -> None:
     assert "--disable-early-stop" in result.output
 
 
+def test_run_threads_problem_v1_objective_policy_into_protocol() -> None:
+    source = Path(__file__).resolve().parents[1] / "cli" / "main.py"
+    text = source.read_text(encoding="utf-8")
+
+    assert "objective_policy = bridge.objective_policy" in text
+    assert "objective_policy=objective_policy" in text
+
+
 def _make_campaign(tmp_path: Path) -> Path:
     """Set up a minimal campaign dir with scion.db and .scion_state.json."""
     campaign_dir = tmp_path / "campaign"

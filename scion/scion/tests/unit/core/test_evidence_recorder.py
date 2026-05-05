@@ -21,6 +21,7 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.problem.spec import FamilyTaxonomySpec
 
 
 def _hypothesis(text: str = "Improve route insertion.") -> HypothesisProposal:
@@ -157,6 +158,40 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_delta_median_ms"] == 24.0
     assert summary_step["protocol_result"]["runtime_regression_rate"] == 0.5
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
+
+
+def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
+    tmp_path: Path,
+) -> None:
+    taxonomy = FamilyTaxonomySpec(
+        families=["alpha", "beta"],
+        aliases={
+            "alpha": ["alpha move", "previous alpha"],
+            "beta": ["beta move", "cross move"],
+        },
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        family_taxonomy=taxonomy,
+    )
+    alpha = _step()
+    alpha.hypothesis.hypothesis_text = "Implement alpha move."
+    alpha.hypothesis.change_locus = "alpha"
+    beta = _step()
+    beta.hypothesis.hypothesis_text = (
+        "Implement cross move. Unlike the previous alpha move, this changes "
+        "the active mechanism."
+    )
+    beta.hypothesis.change_locus = "beta"
+
+    summary = recorder.write_campaign_summary(
+        step_history=[alpha, beta],
+        round_num=2,
+        champion=_champion(),
+    )
+
+    assert summary["family_coverage"] == {"alpha": 1, "beta": 1}
 
 
 def test_protocol_progress_status_preserves_raw_metrics_ref(tmp_path: Path) -> None:

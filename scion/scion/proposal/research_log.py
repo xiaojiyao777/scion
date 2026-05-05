@@ -114,14 +114,25 @@ class CampaignResearchLog:
         """Layer 1: Research orientation snapshot. Computed from DB."""
         parts: List[str] = []
 
-        # Champion version count
+        # Champion version and promotion count. v1 is the base anchor, not a
+        # structural promotion; weight revisions must not inflate this count.
         try:
-            champ_row = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM champions"
-            ).fetchone()
-            champion_count = champ_row['cnt'] if champ_row else 0
+            champ_rows = conn.execute(
+                "SELECT DISTINCT version, promotion_experiment_id "
+                "FROM champions ORDER BY version ASC"
+            ).fetchall()
+            current_champion_version = (
+                max(row["version"] for row in champ_rows)
+                if champ_rows else 0
+            )
+            promotion_count = len({
+                row["version"]
+                for row in champ_rows
+                if row["version"] > 1
+            })
         except Exception:
-            champion_count = 0
+            current_champion_version = 0
+            promotion_count = 0
 
         # Total branches + experiments
         try:
@@ -137,9 +148,9 @@ class CampaignResearchLog:
             n_branches = 0
             n_experiments = 0
 
-        if champion_count > 0 or n_branches > 0:
+        if current_champion_version > 0 or n_branches > 0:
             parts.append(
-                f"Champion 当前版本：v{champion_count}，共 {champion_count} 次晋升\n"
+                f"Champion 当前版本：v{current_champion_version}，共 {promotion_count} 次晋升\n"
                 f"搜索进度：{n_branches} 个 branch，{n_experiments} 轮实验"
             )
 

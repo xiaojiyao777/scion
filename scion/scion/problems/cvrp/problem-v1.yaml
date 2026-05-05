@@ -89,9 +89,6 @@ family_taxonomy:
       - same route
       - 2 opt
       - 2-opt
-      - or opt
-      - or-opt
-      - local search
     route_pair:
       - route pair
       - route-pair
@@ -99,6 +96,10 @@ family_taxonomy:
       - inter-route
       - cross route
       - cross-route
+      - other route
+      - different route
+      - one route to another
+      - from one route to another
       - between routes
       - between route
       - two route
@@ -109,6 +110,9 @@ family_taxonomy:
       - 2-opt*
       - exchange
       - relocate
+      - relocation
+      - relocating
+      - relocates
       - swap
       - merge routes
       - merge route

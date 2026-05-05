@@ -170,7 +170,11 @@ class StagnationDetector:
         # Collect mechanism labels from hypothesis texts
         from scion.proposal.context_manager import _extract_mechanism_label
         labels = [
-            _extract_mechanism_label(s.hypothesis.hypothesis_text or "", taxonomy=self._taxonomy)
+            _extract_mechanism_label(
+                s.hypothesis.hypothesis_text or "",
+                taxonomy=self._taxonomy,
+                preferred_label=s.hypothesis.change_locus,
+            )
             for s in recent
         ]
         if len(set(labels)) == 1:
@@ -227,7 +231,11 @@ class StagnationDetector:
         # Family distribution
         family_distribution: Dict[str, int] = {}
         for step in step_history:
-            label = _extract_mechanism_label(step.hypothesis.hypothesis_text or "", taxonomy=self._taxonomy)
+            label = _extract_mechanism_label(
+                step.hypothesis.hypothesis_text or "",
+                taxonomy=self._taxonomy,
+                preferred_label=step.hypothesis.change_locus,
+            )
             family_distribution[label] = family_distribution.get(label, 0) + 1
 
         # Failure pattern (last 10 steps)

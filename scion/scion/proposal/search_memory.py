@@ -8,8 +8,16 @@ from scion.core.models import StepRecord, HypothesisProposal
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
 
-def _extract_mechanism_label(hypothesis_text: str, taxonomy: Any = None) -> str:
-    return extract_mechanism_label(hypothesis_text, taxonomy=taxonomy)
+def _extract_mechanism_label(
+    hypothesis_text: str,
+    taxonomy: Any = None,
+    preferred_label: str | None = None,
+) -> str:
+    return extract_mechanism_label(
+        hypothesis_text,
+        taxonomy=taxonomy,
+        preferred_label=preferred_label,
+    )
 
 
 def _make_family_key(mechanism_label: str, action: str, locus: str, target_file: str = "") -> str:
@@ -70,6 +78,7 @@ class CampaignSearchMemory:
         mechanism = _extract_mechanism_label(
             hyp.hypothesis_text or "",
             taxonomy=self.family_taxonomy,
+            preferred_label=hyp.change_locus,
         )
         key = _make_family_key(mechanism, hyp.action, hyp.change_locus, hyp.target_file or "")
 

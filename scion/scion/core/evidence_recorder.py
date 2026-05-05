@@ -378,6 +378,7 @@ class EvidenceRecorder:
                 label = _extract_mechanism_label(
                     step.hypothesis.hypothesis_text or "",
                     taxonomy=self.family_taxonomy,
+                    preferred_label=step.hypothesis.change_locus,
                 )
                 family_counter[label] = family_counter.get(label, 0) + 1
         except Exception as exc:  # pragma: no cover - defensive parity with artifact writing
