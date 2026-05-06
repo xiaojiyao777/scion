@@ -144,7 +144,7 @@ $$\text{gap} = \frac{f_{\text{champion}} - f_{\text{optimal}}}{f_{\text{optimal}
 
 观察 Scion 迭代过程中 gap 的收敛曲线。
 
-**MILP 模型**：已完成，见 `scion/docs/milp-model.md`（Opus 建模，两阶段 epsilon-constraint，$O(n^2)$ 复杂度，$n=40$ 时 Gurobi 分钟级可证最优）。
+**MILP 模型**：已完成，见 `scion/docs/reference/milp-model.md`（Opus 建模，两阶段 epsilon-constraint，$O(n^2)$ 复杂度，$n=40$ 时 Gurobi 分钟级可证最优）。
 
 **实现计划**：PuLP + CBC（无需商业 license），对接 v4_scr_s 系列实例，oracle 修复后统一实施。
 

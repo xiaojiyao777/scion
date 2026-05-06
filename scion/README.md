@@ -43,13 +43,14 @@ median Δf1 = -17
 
 完整报告：
 
-- [evidence-manifest.md](docs/evidence-manifest.md)
-- [v0.3-final-visual-report.md](docs/v0.3-final-visual-report.md)
-- [v0.3-final-12campaign-analysis.md](docs/v0.3-final-12campaign-analysis.md)
-- [v0.3-production-timeout-fix-analysis.md](docs/v0.3-production-timeout-fix-analysis.md)
-- [v0.4-performance-aware-plan.md](docs/v0.4-performance-aware-plan.md)
-- [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)
-- [v0.4-evidence-harness.md](docs/v0.4-evidence-harness.md)
+- [Agent onboarding](docs/AGENT_ONBOARDING.md)
+- [evidence manifest](docs/evidence/manifest.md)
+- [v0.3-final-visual-report.md](docs/archive/v0.3/v0.3-final-visual-report.md)
+- [v0.3-final-12campaign-analysis.md](docs/archive/v0.3/v0.3-final-12campaign-analysis.md)
+- [v0.3-production-timeout-fix-analysis.md](docs/archive/v0.3/v0.3-production-timeout-fix-analysis.md)
+- [v0.4-performance-aware-plan.md](design/v0.4/v0.4-performance-aware-plan.md)
+- [v0.4-cvrp-plan.md](design/v0.4/v0.4-cvrp-plan.md)
+- [v0.4-evidence-harness.md](design/v0.4/v0.4-evidence-harness.md)
 
 ## v0.2 实验结果
 
@@ -244,8 +245,8 @@ benchmark_feasible = 10249
 Baseline 报告：
 
 - [../vrp/docs/experiment_results_seed0.md](../vrp/docs/experiment_results_seed0.md)
-- [docs/evidence-manifest.md](docs/evidence-manifest.md)
-- [docs/v0.4-evidence-harness.md](docs/v0.4-evidence-harness.md)
+- [docs/evidence/manifest.md](docs/evidence/manifest.md)
+- [design/v0.4/v0.4-evidence-harness.md](design/v0.4/v0.4-evidence-harness.md)
 
 接入 Scion 后，v0.4 不只记录 promotion 次数，还会对每个 campaign final champion 做固定评估集上的 baseline quality/runtime 对比。
 
@@ -288,7 +289,7 @@ Baseline 报告：
 - Synthetic 优化能力明确成立。
 - Production 在 Sonnet 下可产生完整证据的改进；GPT-mini 仍受代码生成质量限制。
 - 生产 timeout / incomplete evidence 问题已修复并记录到 v0.4 performance-aware plan。
-- v0.4 已确定引入 CVRP 作为第二真实问题，详见 [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)。
+- v0.4 已确定引入 CVRP 作为第二真实问题，详见 [v0.4-cvrp-plan.md](design/v0.4/v0.4-cvrp-plan.md)。
 
 ## 开源协议
 

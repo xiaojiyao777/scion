@@ -745,7 +745,7 @@ MAX_STRUCTURED_OUTPUT_RETRIES = 5
 | operator-quality | ~/research/or-autoresearch-agent/scion/docs/operator-quality-analysis.md |
 | prompt-improvement | ~/research/or-autoresearch-agent/scion/docs/prompt-improvement-plan.md |
 | cc-prompt-analysis | ~/research/or-autoresearch-agent/scion/docs/cc-prompt-engineering-analysis.md |
-| metrics-guide | ~/research/or-autoresearch-agent/scion/docs/metrics-guide.md |
+| metrics-guide | ~/research/or-autoresearch-agent/scion/docs/reference/metrics-guide.md |
 | postmortem #001 | ~/research/or-autoresearch-agent/scion/postmortem/001-v5-uuid-nondeterminism.md |
 | arch-v3 | ~/research/or-autoresearch-agent/design/scion-architecture-v3.md |
 | eng-arch-v1 | ~/research/or-autoresearch-agent/design/scion-engineering-arch-v1.md |
