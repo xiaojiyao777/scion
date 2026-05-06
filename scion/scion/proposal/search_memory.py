@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Literal, Optional
 from scion.core.models import StepRecord, HypothesisProposal
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
+RenderView = Literal["hypothesis", "audit"]
+
 
 def _extract_mechanism_label(
     hypothesis_text: str,
@@ -25,6 +27,10 @@ def _make_family_key(mechanism_label: str, action: str, locus: str, target_file:
         fname = target_file.split("/")[-1].replace(".py", "")
         return f"{mechanism_label}/{action}/{locus}/{fname}"
     return f"{mechanism_label}/{action}/{locus}"
+
+
+def _stage_value(stage: Any) -> str:
+    return str(getattr(stage, "value", stage) or "")
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +88,20 @@ class CampaignSearchMemory:
         )
         key = _make_family_key(mechanism, hyp.action, hyp.change_locus, hyp.target_file or "")
 
+        # Proposal memory is allowed to learn from screening outcomes and
+        # pre-protocol failures only. Validation/frozen results remain in
+        # evidence/lineage but must not affect hypothesis-visible aggregates.
+        is_promoted = step.decision is not None and step.decision.value == "promote"
+        if (
+            step.protocol_result is not None
+            and _stage_value(step.protocol_result.stage) != "screening"
+        ):
+            fam = self.families.get(key)
+            if fam is not None and is_promoted:
+                fam.promoted = True
+                fam.consecutive_fails = 0
+            return
+
         # Update coverage counts
         coverage_key = f"{hyp.change_locus}/{hyp.action}"
         self.coverage_counts[coverage_key] = self.coverage_counts.get(coverage_key, 0) + 1
@@ -104,8 +124,6 @@ class CampaignSearchMemory:
         fam.total_attempts += 1
 
         # Determine outcome
-        is_promoted = step.decision is not None and step.decision.value == "promote"
-
         if is_promoted:
             fam.promoted = True
             fam.consecutive_fails = 0
@@ -115,6 +133,9 @@ class CampaignSearchMemory:
             fam.best_wr = max(fam.best_wr, wr)
             if wr < 0.35 and not is_promoted:
                 fam.consecutive_fails += 1
+                runtime_reason = _runtime_failure_reason(step)
+                if runtime_reason:
+                    fam.last_failure_reason = runtime_reason
             else:
                 fam.consecutive_fails = 0
         elif step.failure_stage is not None:
@@ -208,22 +229,32 @@ class CampaignSearchMemory:
                 gaps[key] = f"{count}次 ← 不足"
         return gaps
 
-    def render(self, available_tokens: Optional[int] = None) -> str:
+    def render(
+        self,
+        available_tokens: Optional[int] = None,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
         """Render search memory as text for LLM injection.
 
         Args:
             available_tokens: If None, render full. If int, compress to fit.
+            view: Exposure view. ``hypothesis`` hides promotion-derived champion
+                evolution; ``audit`` preserves promotion history for review.
 
         Compression priority (higher = harder to drop):
-            L0: champion evolution + AVOID labels
+            L0: AVOID labels
             L1: AVOID last_failure_reason
             L2: promising directions
             L3: coverage_gaps details
         """
+        if view not in ("hypothesis", "audit"):
+            return ""
+
         sections = []
 
-        # L0: Champion evolution (always included)
-        if self.champion_evolution:
+        # Champion evolution is promotion-derived and is therefore audit-only.
+        if view == "audit" and self.champion_evolution:
             sections.append(
                 "### Champion 演化\n" +
                 "\n".join(self.champion_evolution)
@@ -308,7 +339,7 @@ class CampaignSearchMemory:
             )
             # Rebuild sections with compact AVOID
             sections = []
-            if self.champion_evolution:
+            if view == "audit" and self.champion_evolution:
                 sections.append(
                     "### Champion 演化\n" +
                     "\n".join(self.champion_evolution)
@@ -321,10 +352,8 @@ class CampaignSearchMemory:
     def estimate_tokens(self, level: Literal["full", "compact", "minimal"] = "full") -> int:
         """Estimate token count for different compression levels."""
         if level == "minimal":
-            # L0 only
+            # Hypothesis-visible L0 only.
             parts = []
-            if self.champion_evolution:
-                parts.extend(self.champion_evolution)
             exhausted = self.exhausted_families
             for f in exhausted:
                 parts.append(f"{f.label}")
@@ -332,3 +361,22 @@ class CampaignSearchMemory:
 
         rendered = self.render(available_tokens=None)
         return len(rendered) // 4
+
+
+def _runtime_failure_reason(step: StepRecord) -> str:
+    protocol = step.protocol_result
+    if protocol is None:
+        return ""
+    categories = dict(getattr(protocol, "candidate_runtime_failure_categories", {}) or {})
+    if not categories:
+        categories = dict(getattr(step, "candidate_runtime_failure_categories", {}) or {})
+    if not categories:
+        return ""
+    parts = [
+        f"{category}:{count}"
+        for category, count in sorted(categories.items())
+        if int(count or 0) > 0
+    ]
+    if not parts:
+        return ""
+    return "candidate_runtime=" + ",".join(parts[:4])

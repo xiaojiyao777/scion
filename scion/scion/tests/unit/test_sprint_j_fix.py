@@ -151,7 +151,7 @@ class TestResearchLogExhaustedThreshold:
         log = CampaignResearchLog(db_path)
         rendered = log.render()
         assert "scr=0.15" in rendered
-        assert "abandoned" in rendered
+        assert "screening_summary" in rendered
 
     def test_no_warning_at_030(self, tmp_path):
         """max_wr=0.30 — branches rendered with scr values (v3: no pattern warnings)."""
@@ -177,7 +177,7 @@ class TestResearchLogExhaustedThreshold:
         log = CampaignResearchLog(db_path)
         rendered = log.render()
         assert "scr=0.25" in rendered
-        assert "abandoned" in rendered
+        assert "screening_summary" in rendered
 
     def test_no_warning_at_040(self, tmp_path):
         """max_wr=0.40 (>= 0.35) should not trigger any warning."""
@@ -249,7 +249,7 @@ class TestResearchLogCompactDisplay:
         log = CampaignResearchLog(db_path)
         rendered = log.render()
         # v3: all branches rendered individually, no batch
-        assert "abandoned" in rendered
+        assert "screening_summary" in rendered
         assert "subcat_op0" in rendered
 
     def test_normal_display_under_10(self, tmp_path):
@@ -265,4 +265,4 @@ class TestResearchLogCompactDisplay:
         rendered = log.render()
         # Individual branch format with scr= prefix
         assert "scr=0.20" in rendered
-        assert "abandoned" in rendered
+        assert "screening_summary" in rendered

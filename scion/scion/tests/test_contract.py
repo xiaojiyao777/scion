@@ -251,6 +251,17 @@ class TestC4FileWhitelist:
         assert "POSIX" in c4.detail
         assert not result.passed
 
+    def test_single_segment_wildcard_rejects_nested_path(self, gate: ContractGate):
+        patch = PatchProposal(
+            file_path="operators/archive/evil.py",
+            action="create",
+            code_content="x = 1",
+        )
+        result = gate.validate_patch(patch)
+        c4 = next(c for c in result.checks if c.name == "C4_file_whitelist")
+        assert not c4.passed
+        assert not result.passed
+
 
 # ---------------------------------------------------------------------------
 # C5: Frozen files

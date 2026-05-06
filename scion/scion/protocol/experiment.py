@@ -6,7 +6,7 @@ import statistics
 import uuid as _uuid_mod
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import Callable, Dict, List, Optional, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Sequence, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +422,18 @@ class ExperimentProtocol:
         champion_failed_pairs = 0
         runtime_ratios: list[float] = []
         runtime_deltas_ms: list[float] = []
+        candidate_runtime_categories: dict[str, int] = {}
+        candidate_first_runtime_failure: dict[str, Any] | None = None
+        candidate_runtime_counters: dict[str, int] = {
+            "operator_attempts": 0,
+            "operator_accepted": 0,
+            "operator_errors": 0,
+            "operator_invalid_outputs": 0,
+            "policy_errors": 0,
+            "construction_errors": 0,
+            "portfolio_errors": 0,
+        }
+        candidate_runtime_stop_reasons: dict[str, int] = {}
 
         def _write_metrics_snapshot(*, complete: bool) -> None:
             with open(raw_ref, "w") as f:
@@ -491,8 +503,30 @@ class ExperimentProtocol:
                     runtime_ratios,
                     runtime_deltas_ms,
                 )
+                runtime_observation = _candidate_runtime_observation(cand_r)
+                _merge_runtime_observation(
+                    runtime_observation,
+                    categories=candidate_runtime_categories,
+                    counters=candidate_runtime_counters,
+                    stop_reasons=candidate_runtime_stop_reasons,
+                )
+                if (
+                    candidate_first_runtime_failure is None
+                    and runtime_observation.get("first_failure") is not None
+                ):
+                    candidate_first_runtime_failure = runtime_observation["first_failure"]
 
                 if not cand_r.success:
+                    category = _candidate_process_failure_category(cand_r)
+                    _increment_category(candidate_runtime_categories, category)
+                    if candidate_first_runtime_failure is None:
+                        candidate_first_runtime_failure = _bounded_runtime_failure(
+                            category=category,
+                            code=str(cand_r.error_category or cand_r.exit_code or "process_failure"),
+                            surface=None,
+                            component="solver_process",
+                            detail_summary=cand_r.stderr or cand_r.stdout or "candidate solver process failed",
+                        )
                     failed_pairs += 1
                     candidate_failed_pairs += 1
                     failure_record = {
@@ -582,6 +616,16 @@ class ExperimentProtocol:
 
                 if cand_r.output is None or champ_r.output is None:
                     failed_pairs += 1
+                    if cand_r.output is None:
+                        _increment_category(candidate_runtime_categories, "invalid_output")
+                        if candidate_first_runtime_failure is None:
+                            candidate_first_runtime_failure = _bounded_runtime_failure(
+                                category="invalid_output",
+                                code="missing_output",
+                                surface=None,
+                                component="solver_output",
+                                detail_summary="candidate solver succeeded without parsed output",
+                            )
                     failure_record = {
                         "case": case,
                         "seed": seed,
@@ -606,6 +650,14 @@ class ExperimentProtocol:
 
                 cand_audit_failure = runtime_audit_failure_from_result(cand_r)
                 if cand_audit_failure is not None:
+                    audit_category = _candidate_audit_failure_category(cand_audit_failure)
+                    if audit_category not in (runtime_observation.get("categories") or {}):
+                        _increment_category(candidate_runtime_categories, audit_category)
+                    if candidate_first_runtime_failure is None:
+                        candidate_first_runtime_failure = _bounded_runtime_failure_from_audit(
+                            cand_audit_failure,
+                            category=audit_category,
+                        )
                     failed_pairs += 1
                     candidate_failed_pairs += 1
                     failure_record = {
@@ -809,6 +861,24 @@ class ExperimentProtocol:
         # Persist final raw metrics snapshot.
         _write_metrics_snapshot(complete=True)
         runtime_summary = _format_runtime_summary(stats)
+        failure_category_summary = _format_runtime_failure_categories(
+            candidate_runtime_categories
+        )
+        runtime_failure_summary = (
+            f" candidate_runtime_categories={failure_category_summary}"
+            if failure_category_summary
+            else ""
+        )
+        runtime_attempt_summary = (
+            " candidate_operator_attempts="
+            f"{candidate_runtime_counters['operator_attempts']}"
+            " candidate_operator_accepted="
+            f"{candidate_runtime_counters['operator_accepted']}"
+            " candidate_operator_errors="
+            f"{candidate_runtime_counters['operator_errors']}"
+            " candidate_invalid_outputs="
+            f"{candidate_runtime_counters['operator_invalid_outputs']}"
+        )
 
         # Exposure control
         if stage == ExperimentStage.SCREENING:
@@ -816,7 +886,7 @@ class ExperimentProtocol:
                 f"stage={stage.value} win_rate={stats.win_rate:.2f} "
                 f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
                 f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
-                f"{runtime_summary}"
+                f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             )
         else:
             # Validation / Frozen: aggregate summary only, no per-case data
@@ -826,7 +896,7 @@ class ExperimentProtocol:
                 f"metric={stats.statistical_metric or 'scalar'} "
                 f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
                 f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
-                f"{runtime_summary}"
+                f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             )
 
         # Build case-level feedback for screening only
@@ -848,12 +918,198 @@ class ExperimentProtocol:
             pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
             case_feedback=case_fb,
             pattern_summary=pattern,
+            candidate_runtime_failure_categories=dict(candidate_runtime_categories),
+            candidate_first_runtime_failure=candidate_first_runtime_failure,
+            candidate_operator_attempts=candidate_runtime_counters["operator_attempts"],
+            candidate_operator_accepted=candidate_runtime_counters["operator_accepted"],
+            candidate_operator_errors=candidate_runtime_counters["operator_errors"],
+            candidate_operator_invalid_outputs=(
+                candidate_runtime_counters["operator_invalid_outputs"]
+            ),
+            candidate_policy_errors=candidate_runtime_counters["policy_errors"],
+            candidate_construction_errors=(
+                candidate_runtime_counters["construction_errors"]
+            ),
+            candidate_portfolio_errors=candidate_runtime_counters["portfolio_errors"],
+            candidate_runtime_stop_reasons=dict(candidate_runtime_stop_reasons),
         )
 
 
 # ---------------------------------------------------------------------------
 # T2: Case-level aggregation helper
 # ---------------------------------------------------------------------------
+
+def _candidate_runtime_observation(result: RunResult) -> dict[str, Any]:
+    runtime = getattr(getattr(result, "output", None), "runtime", None)
+    if not isinstance(runtime, dict):
+        return {"categories": {}, "counters": {}, "stop_reasons": {}}
+
+    counters = {
+        "operator_attempts": _as_int(runtime.get("operator_attempts")),
+        "operator_accepted": _as_int(runtime.get("operator_accepted")),
+        "operator_errors": _as_int(runtime.get("operator_errors")),
+        "operator_invalid_outputs": _as_int(runtime.get("operator_invalid_outputs")),
+        "policy_errors": _as_int(runtime.get("policy_errors")),
+        "construction_errors": _as_int(runtime.get("construction_errors")),
+        "portfolio_errors": _as_int(runtime.get("portfolio_errors")),
+    }
+    categories: dict[str, int] = {}
+    first_failure: dict[str, Any] | None = None
+
+    for counter_name, category in (
+        ("construction_errors", "construction_error"),
+        ("portfolio_errors", "portfolio_error"),
+        ("policy_errors", "policy_error"),
+        ("operator_invalid_outputs", "invalid_output"),
+        ("operator_errors", "operator_error"),
+    ):
+        count = counters[counter_name]
+        if count <= 0:
+            continue
+        categories[category] = categories.get(category, 0) + count
+        if first_failure is None:
+            first_failure = _bounded_runtime_failure(
+                category=category,
+                code=counter_name,
+                surface=None,
+                component=counter_name.removesuffix("_errors"),
+                detail_summary=f"solver runtime reported {counter_name}={count}",
+            )
+
+    if counters["operator_attempts"] > 0 and counters["operator_accepted"] == 0:
+        categories["no_accepted_moves"] = categories.get("no_accepted_moves", 0) + 1
+
+    stop_reasons: dict[str, int] = {}
+    stop_reason = str(runtime.get("operator_stop_reason") or "").strip()
+    if stop_reason:
+        stop_reasons[stop_reason] = 1
+
+    return {
+        "categories": categories,
+        "counters": counters,
+        "stop_reasons": stop_reasons,
+        "first_failure": first_failure,
+    }
+
+
+def _merge_runtime_observation(
+    observation: dict[str, Any],
+    *,
+    categories: dict[str, int],
+    counters: dict[str, int],
+    stop_reasons: dict[str, int],
+) -> None:
+    for category, count in (observation.get("categories") or {}).items():
+        _increment_category(categories, str(category), _as_int(count))
+    for name, count in (observation.get("counters") or {}).items():
+        if name in counters:
+            counters[name] += _as_int(count)
+    for reason, count in (observation.get("stop_reasons") or {}).items():
+        reason_text = str(reason).strip()
+        if reason_text:
+            stop_reasons[reason_text] = stop_reasons.get(reason_text, 0) + _as_int(count)
+
+
+def _candidate_process_failure_category(result: RunResult) -> str:
+    category = str(result.error_category or "").strip().lower()
+    if category in {"timeout", "oom", "crash"}:
+        return category
+    return "process_error"
+
+
+def _candidate_audit_failure_category(issue: dict[str, Any]) -> str:
+    raw = str(issue.get("error_category") or "").strip().lower()
+    if raw == "operator_runtime_error":
+        if _as_int(issue.get("operator_invalid_outputs")) > 0:
+            return "invalid_output"
+        return "operator_error"
+    if raw == "policy_runtime_error":
+        return "policy_error"
+    if raw == "construction_runtime_error":
+        return "construction_error"
+    if raw == "portfolio_runtime_error":
+        return "portfolio_error"
+    if raw == "surface_runtime_contract_error":
+        return "surface_contract_error"
+    if raw == "baseline_runtime_error":
+        return "baseline_error"
+    return raw or "runtime_error"
+
+
+def _bounded_runtime_failure_from_audit(
+    issue: dict[str, Any],
+    *,
+    category: str,
+) -> dict[str, Any]:
+    component = "runtime_audit"
+    for candidate in ("component", "operator", "policy_path", "construction_policy_path", "portfolio_policy_path"):
+        value = issue.get(candidate)
+        if value:
+            component = str(value)
+            break
+    return _bounded_runtime_failure(
+        category=category,
+        code=str(issue.get("error_category") or category),
+        surface=issue.get("selected_surface"),
+        component=component,
+        detail_summary=str(issue.get("detail") or "solver runtime audit failed"),
+    )
+
+
+def _bounded_runtime_failure(
+    *,
+    category: str,
+    code: str,
+    surface: Any,
+    component: str,
+    detail_summary: str,
+) -> dict[str, Any]:
+    return {
+        "category": _bounded_text(category, 80),
+        "code": _bounded_text(code, 120),
+        "surface": _bounded_text(surface, 120),
+        "component": _bounded_text(component, 160),
+        "detail_summary": _bounded_text(detail_summary, 240),
+    }
+
+
+def _bounded_text(value: Any, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."
+
+
+def _as_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _increment_category(
+    categories: dict[str, int],
+    category: str,
+    count: int = 1,
+) -> None:
+    category = str(category or "runtime_error").strip() or "runtime_error"
+    categories[category] = categories.get(category, 0) + max(0, int(count))
+
+
+def _format_runtime_failure_categories(categories: dict[str, int]) -> str:
+    parts = [
+        f"{category}:{count}"
+        for category, count in sorted(categories.items())
+        if count > 0
+    ]
+    return ";".join(parts[:8])
+
 
 def _runtime_fields(cand_r: RunResult | None, champ_r: RunResult | None) -> dict:
     candidate_elapsed = getattr(cand_r, "elapsed_ms", None)
@@ -881,7 +1137,7 @@ def _runtime_audit_summary(result: RunResult | None) -> dict:
     summary = {
         key: value
         for key, value in runtime.items()
-        if key.startswith(("baseline_", "operator_", "policy_"))
+        if key.startswith(("baseline_", "operator_", "policy_", "construction_", "portfolio_"))
         and key not in ("operator_events", "policy_events")
         and _is_json_scalar(value)
     }

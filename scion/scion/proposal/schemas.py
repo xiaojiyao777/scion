@@ -1,9 +1,9 @@
 """JSON schemas and prompt templates for hypothesis and patch proposals."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -15,7 +15,7 @@ class HypothesisProposalInput(BaseModel):
     change_locus: str
     action: str
     target_file: Optional[str] = None
-    predicted_direction: str = "exploratory"
+    predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
@@ -55,6 +55,33 @@ class PatchProposalInput(BaseModel):
         if not v or not v.strip():
             raise ValueError("field must not be empty")
         return v
+
+    @field_validator("action")
+    @classmethod
+    def valid_action(cls, v: str) -> str:
+        if v not in ("modify", "create", "delete"):
+            raise ValueError(f"action must be modify/create/delete, got '{v}'")
+        return v
+
+
+class ToolSelectionInput(BaseModel):
+    """Model-side plan for the next proposal tool call.
+
+    This is a planning contract only. The model returns the intended tool name
+    and JSON arguments; APS remains the only component allowed to execute tools.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    intent: Literal["call_tool", "stop", "final"] = "call_tool"
+    tool_name: Optional[str] = None
+    args: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def call_tool_requires_name(self) -> "ToolSelectionInput":
+        if self.intent == "call_tool" and not (self.tool_name or "").strip():
+            raise ValueError("tool_name is required when intent is call_tool")
+        return self
 
 # ---------------------------------------------------------------------------
 # JSON Schemas
@@ -148,6 +175,31 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
     },
 }
 
+TOOL_SELECTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["intent"],
+    "properties": {
+        "intent": {
+            "type": "string",
+            "enum": ["call_tool", "stop", "final"],
+            "description": (
+                "call_tool to request exactly one allowed proposal tool; "
+                "stop/final when no more tool context is needed."
+            ),
+        },
+        "tool_name": {
+            "type": ["string", "null"],
+            "description": "Name of one tool from allowed_tools when intent is call_tool.",
+        },
+        "args": {
+            "type": "object",
+            "description": "JSON arguments matching the selected tool input schema.",
+            "additionalProperties": True,
+        },
+    },
+    "additionalProperties": False,
+}
+
 # Tool definitions for tool_use mode (avoids JSON escape issues)
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
@@ -218,6 +270,16 @@ FIX_TOOL: Dict[str, Any] = {
         "- V2_interface: missing Operator base class or wrong execute() signature."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
+}
+
+TOOL_SELECTION_TOOL: Dict[str, Any] = {
+    "name": "plan_proposal_tool_call",
+    "description": (
+        "Choose the next exposure-controlled proposal-context tool to call. "
+        "Return only an intent, one allowed tool name, and JSON arguments. "
+        "Do not execute tools or include private rationale."
+    ),
+    "input_schema": TOOL_SELECTION_SCHEMA,
 }
 
 # ---------------------------------------------------------------------------

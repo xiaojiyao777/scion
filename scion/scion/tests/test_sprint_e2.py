@@ -15,6 +15,7 @@ from typing import List, Optional
 
 import pytest
 
+from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.models import (
     Branch,
     BranchState,
@@ -31,12 +32,14 @@ from scion.core.models import (
 from scion.proposal.context_manager import (
     ContextManager,
     _build_runtime_feedback,
+    _build_runtime_failure_guidance,
     _build_strategy_guidance,
     _build_what_worked_section,
     _extract_families_from_steps,
     assign_family_id,
     build_exploration_coverage,
 )
+from scion.proposal.engine import _split_hypothesis_context
 from scion.tests.taxonomy_helpers import cvrp_family_taxonomy, warehouse_family_taxonomy
 
 WAREHOUSE_MECHANISM_TAXONOMY = warehouse_family_taxonomy()
@@ -76,6 +79,7 @@ def _make_step(
     runtime_delta_median_ms=None,
     runtime_regression_rate=None,
     runtime_pairs: int = 0,
+    protocol_stage: ExperimentStage = ExperimentStage.SCREENING,
 ) -> StepRecord:
     protocol_result = None
     if failure_stage is None:
@@ -94,7 +98,7 @@ def _make_step(
             runtime_pairs=runtime_pairs,
         )
         protocol_result = ProtocolResult(
-            stage=ExperimentStage.SCREENING,
+            stage=protocol_stage,
             stats=stats,
             gate_outcome="pass" if win_rate > 0.6 else "continue",
             reason_codes=("TEST",),
@@ -452,9 +456,9 @@ def test_no_guidance_when_diverse():
 # ---------------------------------------------------------------------------
 
 def test_history_includes_successes():
-    """T26: Promoted hypotheses appear in 'What Worked' section."""
+    """T26: Screening-derived successes appear in 'What Worked' section."""
     steps = [
-        _make_step(round_num=1, hypothesis_text="Subcategory merge", decision=Decision.PROMOTE, win_rate=1.0),
+        _make_step(round_num=1, hypothesis_text="Subcategory merge", win_rate=1.0),
         _make_step(round_num=2, hypothesis_text="Order swap", failure_stage="verification"),
     ]
     from scion.proposal.context_manager import _build_what_worked_section
@@ -474,15 +478,57 @@ def test_history_includes_failures_with_reasons():
 
 
 def test_history_balanced():
-    """T26: Both 'What Worked' and failure info present when data exists."""
+    """T26: Hypothesis history balances allowed screening wins and pre-protocol failures."""
     from scion.proposal.context_manager import _build_experiment_history
     steps = [
-        _make_step(branch_id="b1", round_num=1, hypothesis_text="Subcategory merge", decision=Decision.PROMOTE, win_rate=1.0),
-        _make_step(branch_id="b1", round_num=2, hypothesis_text="Order swap", failure_stage="verification"),
+        _make_step(
+            branch_id="b1",
+            round_num=1,
+            hypothesis_text="Screening-only success",
+            win_rate=1.0,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=2,
+            hypothesis_text="Pre-protocol failure",
+            failure_stage="verification",
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=3,
+            hypothesis_text="Promoted step hidden from hypothesis prompt",
+            decision=Decision.PROMOTE,
+            win_rate=1.0,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=4,
+            hypothesis_text="Validation step hidden from hypothesis prompt",
+            protocol_stage=ExperimentStage.VALIDATION,
+            decision=Decision.QUEUE_FROZEN,
+            win_rate=1.0,
+        ),
+        _make_step(
+            branch_id="b1",
+            round_num=5,
+            hypothesis_text="Frozen step hidden from hypothesis prompt",
+            protocol_stage=ExperimentStage.FROZEN,
+            decision=Decision.PROMOTE,
+            win_rate=1.0,
+        ),
     ]
     history = _build_experiment_history(steps, "b1")
     assert "What Worked" in history
+    assert "Screening-only success" in history
     assert "failed_at" in history
+    assert "Pre-protocol failure" in history
+    assert "Promoted step hidden from hypothesis prompt" not in history
+    assert "Validation step hidden from hypothesis prompt" not in history
+    assert "Frozen step hidden from hypothesis prompt" not in history
+    assert "QUEUE_FROZEN" not in history
+    assert "PROMOTE" not in history
+    assert "VALIDATION" not in history
+    assert "FROZEN" not in history
 
 
 def test_history_includes_high_win_rate_steps():
@@ -585,6 +631,70 @@ def test_build_hypothesis_context_uses_cvrp_family_taxonomy(tmp_path):
     assert "action='modify'" not in rendered
 
 
+def test_hypothesis_prompt_hides_champion_version_from_champion_stats(tmp_path):
+    code_dir = tmp_path / "code"
+    op_dir = code_dir / "operators"
+    op_dir.mkdir(parents=True)
+    (op_dir / "baseline.py").write_text(
+        "class BaselineOp:\n"
+        "    def execute(self, solution, rng):\n"
+        "        return solution\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=7,
+        operator_pool={
+            "baseline": SimpleNamespace(
+                weight=0.75,
+                category="route_local",
+                file_path="operators/baseline.py",
+            )
+        },
+        solver_config_hash="abc",
+        code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=7,
+        base_champion_hash="x",
+    )
+    spec = ProblemSpec(
+        name="test",
+        root_dir=str(code_dir),
+        operator_categories=["route_local"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=[],
+            import_whitelist=[],
+        ),
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[]
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    prompt_lower = prompt_text.lower()
+
+    assert ctx["champion_version"] == 7
+    assert "BaselineOp" in prompt_text
+    assert "Operator pool:" in prompt_text
+    assert "baseline [route_local] weight=0.75  file=operators/baseline.py" in prompt_text
+    assert "Champion version: 7" not in prompt_text
+    assert "version: 7" not in prompt_text
+    assert "v7" not in prompt_text
+    for forbidden in (
+        "promotion count",
+        "promotion depth",
+        "promoted count",
+        "last promoted",
+        "champion evolution",
+    ):
+        assert forbidden not in prompt_lower
+
+
 def test_build_hypothesis_context_includes_runtime_feedback(tmp_path):
     code_dir = tmp_path / "code"
     (code_dir / "operators").mkdir(parents=True)
@@ -658,7 +768,7 @@ def test_build_hypothesis_context_includes_screening_runtime_summary(tmp_path):
     assert "pairs=6" in ctx["runtime_feedback"]
 
 
-def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path):
+def test_build_hypothesis_context_includes_structured_runtime_summary(tmp_path):
     code_dir = tmp_path / "code"
     (code_dir / "operators").mkdir(parents=True)
     champion = ChampionState(
@@ -673,69 +783,66 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
         operator_categories=["vehicle_level", "order_level"],
         search_space=SearchSpace(editable=["operators/*.py"], frozen=[], import_whitelist=[]),
     )
-    raw_metrics = tmp_path / "screening_metrics.json"
-    raw_metrics.write_text(json.dumps({
-        "total_pairs": 3,
-        "valid_pairs": 1,
-        "failed_pairs": 2,
-        "candidate_failed_pairs": 1,
-        "champion_failed_pairs": 1,
-        "runtime_stats": {
-            "runtime_ratio_median": 3.25,
-            "runtime_delta_median_ms": 2250.0,
-            "runtime_regression_rate": 1.0,
-            "runtime_pairs": 1,
-        },
-        "pairs": [
-            {
-                "case": "/tmp/cases/slow-A.vrp",
-                "seed": 7,
-                "runtime_ratio": 3.25,
-                "candidate_elapsed_ms": 3250,
-                "champion_elapsed_ms": 1000,
-                "candidate_runtime": {
-                    "operator_attempts": 20,
-                    "operator_accepted": 2,
-                    "operator_errors": 1,
-                    "operator_invalid_outputs": 1,
-                },
-            }
-        ],
-        "failures": [
-            {
-                "case": "/tmp/cases/timeout-B.vrp",
-                "seed": 9,
-                "side": "candidate",
-                "error_category": "timeout",
-                "elapsed_ms": 2000,
-            }
-        ],
-    }))
     step = _make_step(
         round_num=5,
-        hypothesis_text="raw runtime feedback",
+        hypothesis_text="structured runtime feedback",
         win_rate=0.7,
         runtime_ratio_median=3.25,
         runtime_delta_median_ms=2250.0,
         runtime_regression_rate=1.0,
         runtime_pairs=1,
     )
+    stats = EvalStats(
+        n_cases=6,
+        wins=4,
+        losses=2,
+        ties=0,
+        win_rate=0.7,
+        median_delta=0.01,
+        ci_low=0.0,
+        ci_high=0.02,
+        runtime_ratio_median=3.25,
+        runtime_delta_median_ms=2250.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=1,
+        total_pairs=3,
+        attempted_pairs=3,
+        valid_pairs=1,
+        failed_pairs=2,
+        candidate_failed_pairs=1,
+        champion_failed_pairs=1,
+    )
     step.protocol_result = ProtocolResult(
         stage=ExperimentStage.SCREENING,
-        stats=step.protocol_result.stats,
+        stats=stats,
         gate_outcome="pass",
         reason_codes=("TEST",),
         exposed_summary="test",
-        raw_metrics_ref=str(raw_metrics),
+        raw_metrics_ref="/tmp/secret-screening-metrics.json",
+        candidate_runtime_failure_categories={
+            "timeout": 1,
+            "operator_error": 1,
+            "invalid_output": 1,
+        },
+        candidate_first_runtime_failure={
+            "category": "timeout",
+            "code": "timeout",
+            "surface": "",
+            "component": "solver_process",
+            "detail_summary": "candidate solver process failed",
+        },
+        candidate_operator_attempts=20,
+        candidate_operator_accepted=2,
+        candidate_operator_errors=1,
+        candidate_operator_invalid_outputs=1,
     )
 
     ctx = ContextManager().build_hypothesis_context(
         branch, champion, spec, [], [], step_history=[step]
     )
 
-    assert "Recent screening timeout/crash cases" in ctx["runtime_feedback"]
-    assert "timeout-B.vrp" in ctx["runtime_feedback"]
-    assert "candidate_failure=timeout" in ctx["runtime_feedback"]
+    assert "Recent screening runtime failure categories" in ctx["runtime_feedback"]
+    assert "candidate_failure_category=timeout" in ctx["runtime_feedback"]
     assert "Recent screening failure causes" in ctx["runtime_feedback"]
     assert "failed_pairs=2" in ctx["runtime_feedback"]
     assert "candidate_failed_pairs=1" in ctx["runtime_feedback"]
@@ -744,74 +851,39 @@ def test_build_hypothesis_context_includes_screening_runtime_raw_cases(tmp_path)
     assert "operator_accepted=2" in ctx["runtime_feedback"]
     assert "operator_errors=1" in ctx["runtime_feedback"]
     assert "invalid_outputs=1" in ctx["runtime_feedback"]
-    assert "Recent slow screening cases" in ctx["runtime_feedback"]
-    assert "slow-A.vrp" in ctx["runtime_feedback"]
-    assert "runtime_ratio=3.25x" in ctx["runtime_feedback"]
+    assert "secret-screening-metrics" not in ctx["runtime_feedback"]
+    assert "raw_metrics_ref" not in ctx["runtime_feedback"]
 
 
 def test_runtime_feedback_uses_configurable_slow_case_threshold(tmp_path):
-    raw_metrics = tmp_path / "threshold_metrics.json"
-    raw_metrics.write_text(json.dumps({
-        "total_pairs": 2,
-        "valid_pairs": 2,
-        "pairs": [
-            {
-                "case": "/tmp/cases/slow-15.vrp",
-                "seed": 1,
-                "runtime_ratio": 1.5,
-                "candidate_elapsed_ms": 1500,
-                "champion_elapsed_ms": 1000,
-            },
-            {
-                "case": "/tmp/cases/slow-25.vrp",
-                "seed": 2,
-                "runtime_ratio": 2.5,
-                "candidate_elapsed_ms": 2500,
-                "champion_elapsed_ms": 1000,
-            },
-        ],
-    }))
-    step = _make_step(round_num=7, hypothesis_text="threshold feedback", win_rate=0.7)
+    step = _make_step(
+        round_num=7,
+        hypothesis_text="threshold feedback",
+        win_rate=0.7,
+        runtime_ratio_median=2.5,
+        runtime_delta_median_ms=1500.0,
+        runtime_regression_rate=1.0,
+        runtime_pairs=2,
+    )
     step.protocol_result = ProtocolResult(
         stage=ExperimentStage.SCREENING,
         stats=step.protocol_result.stats,
         gate_outcome="pass",
         reason_codes=("TEST",),
         exposed_summary="test",
-        raw_metrics_ref=str(raw_metrics),
+        raw_metrics_ref="/tmp/secret-threshold-metrics.json",
     )
 
     strict = _build_runtime_feedback([step], slow_case_threshold=1.25)
     lenient = _build_runtime_feedback([step], slow_case_threshold=3.0)
 
-    assert "slow-15.vrp" in strict
-    assert "slow-25.vrp" in strict
-    assert "slow-25.vrp" not in lenient
+    assert "Recent screening runtime summary" in strict
+    assert "median_ratio=2.50x" in strict
+    assert "secret-threshold-metrics" not in strict
+    assert "secret-threshold-metrics" not in lenient
 
 
 def test_runtime_feedback_distinguishes_noop_tie_dominated_operator(tmp_path):
-    raw_metrics = tmp_path / "noop_metrics.json"
-    raw_metrics.write_text(json.dumps({
-        "total_pairs": 4,
-        "valid_pairs": 4,
-        "failed_pairs": 0,
-        "candidate_failed_pairs": 0,
-        "champion_failed_pairs": 0,
-        "pairs": [
-            {
-                "case": f"/tmp/cases/tie-{i}.vrp",
-                "seed": i,
-                "candidate_runtime": {
-                    "operator_attempts": 10,
-                    "operator_accepted": 0,
-                    "operator_errors": 0,
-                    "operator_invalid_outputs": 0,
-                    "operator_stop_reason": "no_improvement_round",
-                },
-            }
-            for i in range(4)
-        ],
-    }))
     step = _make_step(round_num=8, hypothesis_text="no accepted moves", win_rate=0.0)
     stats = EvalStats(
         n_cases=4, wins=0, losses=0, ties=4,
@@ -824,7 +896,11 @@ def test_runtime_feedback_distinguishes_noop_tie_dominated_operator(tmp_path):
         gate_outcome="continue",
         reason_codes=("tie_dominated",),
         exposed_summary="test",
-        raw_metrics_ref=str(raw_metrics),
+        raw_metrics_ref="/tmp/secret-noop-metrics.json",
+        candidate_runtime_failure_categories={"no_accepted_moves": 4},
+        candidate_operator_attempts=40,
+        candidate_operator_accepted=0,
+        candidate_runtime_stop_reasons={"no_improvement_round": 4},
     )
 
     rendered = _build_runtime_feedback([step])
@@ -834,8 +910,112 @@ def test_runtime_feedback_distinguishes_noop_tie_dominated_operator(tmp_path):
     assert "operator_stop_reason=no_improvement_round:4" in rendered
     assert "not schema/runtime failure" in rendered
     assert "no schema/runtime failure detected" in rendered
-    assert "candidate_failure=" not in rendered
+    assert "candidate_failure_category=no_accepted_moves" in rendered
+    assert "secret-noop-metrics" not in rendered
     assert "runtime guard failed" not in rendered
+
+
+def test_runtime_failure_guidance_uses_problem_declared_surface_names(tmp_path):
+    code_dir = tmp_path / "code"
+    (code_dir / "operators").mkdir(parents=True)
+    (code_dir / "policies").mkdir(parents=True)
+    spec = ProblemSpec(
+        name="toy_surface_problem",
+        root_dir=str(code_dir),
+        operator_categories=["alpha_moves", "beta_scheduler"],
+        research_surfaces=[
+            SimpleNamespace(
+                name="alpha_moves",
+                kind="operator",
+                description="arbitrary move surface",
+                target_files=["operators/*.py"],
+            ),
+            SimpleNamespace(
+                name="beta_scheduler",
+                kind="policy",
+                description="arbitrary scheduler surface",
+                target_files=["policies/beta_scheduler.py"],
+                create_new_allowed=False,
+                remove_allowed=False,
+            ),
+        ],
+        runtime_failure_guidance=[
+            SimpleNamespace(
+                failure_categories=["no_accepted_moves"],
+                applies_to_surface_kinds=["operator"],
+                min_category_fraction=0.5,
+                min_count=2,
+                recommended_surfaces=["beta_scheduler"],
+                discouraged_surfaces=["alpha_moves"],
+                guidance=(
+                    "Switch to the declared scheduler surface when arbitrary "
+                    "move attempts do not produce accepted moves."
+                ),
+            )
+        ],
+        search_space=SearchSpace(
+            editable=["operators/*.py", "policies/*.py"],
+            frozen=["solver.py"],
+            import_whitelist=[],
+        ),
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="abc",
+        code_snapshot_path=str(code_dir),
+        code_snapshot_hash="def",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="x",
+    )
+    step = _make_step(
+        round_num=9,
+        hypothesis_text="arbitrary move surface has no accepted moves",
+        locus="alpha_moves",
+        win_rate=0.0,
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+            total_pairs=4,
+            attempted_pairs=4,
+            valid_pairs=4,
+        ),
+        gate_outcome="continue",
+        reason_codes=("tie_dominated",),
+        exposed_summary="test",
+        raw_metrics_ref="/tmp/secret-runtime-guidance.json",
+        candidate_runtime_failure_categories={"no_accepted_moves": 4},
+        candidate_operator_attempts=24,
+        candidate_operator_accepted=0,
+    )
+
+    rendered = _build_runtime_failure_guidance([step], problem_spec=spec)
+    ctx = ContextManager().build_hypothesis_context(
+        branch, champion, spec, [], [], step_history=[step]
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "beta_scheduler" in rendered
+    assert "alpha_moves" in rendered
+    assert "declared scheduler surface" in rendered
+    assert "Runtime Failure Guidance" in prompt_text
+    assert "recommended_surfaces: beta_scheduler" in prompt_text
+    assert "secret-runtime-guidance" not in prompt_text
+    assert "raw_metrics_ref" not in prompt_text
 
 
 def test_build_hypothesis_context_distinguishes_contract_failure(tmp_path):

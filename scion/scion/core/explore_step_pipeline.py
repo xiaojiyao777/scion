@@ -21,6 +21,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.step_result import StepResult
+from scion.core.verification_call import run_verification_gate
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ class ExploreStepPipeline:
     apply_decision_and_finalize: Callable[..., StepResult]
     decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
     proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
+    proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
@@ -131,6 +133,7 @@ class ExploreStepPipeline:
                         failure_stage="hypothesis_contract",
                         failure_detail=c_result_pending.failure_reason,
                         hypothesis_id=h_record.hypothesis_id,
+                        proposal_session_ref=self.proposal_session_ref_for(bid),
                     )
                 )
                 return StepResult(
@@ -159,6 +162,7 @@ class ExploreStepPipeline:
                         decision=None,
                         failure_stage="proposal",
                         failure_detail=failure_detail,
+                        proposal_session_ref=self.proposal_session_ref_for(bid),
                     )
                 )
                 return StepResult(
@@ -203,6 +207,7 @@ class ExploreStepPipeline:
                         failure_stage="hypothesis_contract",
                         failure_detail=c_result.failure_reason,
                         hypothesis_id=h_record.hypothesis_id,
+                        proposal_session_ref=self.proposal_session_ref_for(bid),
                     )
                 )
                 return StepResult(
@@ -256,6 +261,7 @@ class ExploreStepPipeline:
                     failure_stage="code_generation",
                     failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=self.proposal_session_ref_for(bid),
                 )
             )
             return StepResult(
@@ -264,7 +270,10 @@ class ExploreStepPipeline:
                 reason="code generation failed",
             )
 
-        p_result = self.contract_gate.validate_patch(patch)
+        p_result = self.contract_gate.validate_patch(
+            patch,
+            approved_hypothesis=hypothesis,
+        )
         if not p_result.passed:
             logger.info(
                 "Branch %s: patch contract failed: %s",
@@ -289,6 +298,7 @@ class ExploreStepPipeline:
                     failure_stage="patch_contract",
                     failure_detail=p_result.failure_reason,
                     hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=self.proposal_session_ref_for(bid),
                 )
             )
             return StepResult(
@@ -318,6 +328,7 @@ class ExploreStepPipeline:
                     failure_stage="workspace",
                     failure_detail="workspace setup failed",
                     hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=self.proposal_session_ref_for(bid),
                 )
             )
             return StepResult(
@@ -356,6 +367,7 @@ class ExploreStepPipeline:
                     failure_stage="workspace",
                     failure_detail=f"apply_patch: {exc}",
                     hypothesis_id=h_record.hypothesis_id,
+                    proposal_session_ref=self.proposal_session_ref_for(bid),
                 )
             )
             return StepResult(
@@ -366,7 +378,13 @@ class ExploreStepPipeline:
 
         champion = self.get_champion()
         champ_ws = champion.code_snapshot_path if champion else ""
-        vresult = self.verification_gate.run(workspace, champ_ws, patch)
+        vresult = run_verification_gate(
+            self.verification_gate,
+            workspace,
+            champ_ws,
+            patch,
+            hypothesis=hypothesis,
+        )
         if not vresult.passed:
             verification_outcome = self._handle_verification_failure(
                 branch=branch,
@@ -440,6 +458,7 @@ class ExploreStepPipeline:
                     bid,
                     protocol_result,
                 ),
+                proposal_session_ref=self.proposal_session_ref_for(bid),
             )
         )
         return result
@@ -481,7 +500,10 @@ class ExploreStepPipeline:
         if severity == "light":
             fixed = self.attempt_fix(branch, patch, vresult)
             if fixed is not None:
-                fixed_contract = self.contract_gate.validate_patch(fixed)
+                fixed_contract = self.contract_gate.validate_patch(
+                    fixed,
+                    approved_hypothesis=hypothesis,
+                )
                 if not fixed_contract.passed:
                     logger.info(
                         "Branch %s: fix patch failed contract gate: %s",
@@ -498,10 +520,12 @@ class ExploreStepPipeline:
                             remember_patch=True,
                         )
                         code_hash = fixed_applied.code_hash
-                        vresult = self.verification_gate.run(
+                        vresult = run_verification_gate(
+                            self.verification_gate,
                             workspace,
                             champion_workspace,
                             fixed,
+                            hypothesis=hypothesis,
                         )
                     except Exception:
                         pass
@@ -600,6 +624,7 @@ class ExploreStepPipeline:
             verification_detail=build_verification_detail(vresult),
             code_archive_ref=archive_ref,
             hypothesis_id=h_record.hypothesis_id,
+            proposal_session_ref=self.proposal_session_ref_for(bid),
         )
 
     def _record_contract_failure(

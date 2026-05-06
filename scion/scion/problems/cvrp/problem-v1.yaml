@@ -36,6 +36,34 @@ solver:
 parameter_search:
   enabled: false
 
+runtime_dependencies:
+  required_python_modules:
+    - numpy
+
+runtime_failure_guidance:
+  - failure_categories:
+      - no_accepted_moves
+    applies_to_surface_kinds:
+      - operator
+    min_category_fraction: 0.5
+    min_count: 2
+    recommended_surfaces:
+      - construction_policy
+      - neighborhood_portfolio
+      - search_policy
+    discouraged_surfaces:
+      - route_local
+      - route_pair
+      - ruin_recreate
+    guidance: >-
+      Recent operator-like attempts are spending post-baseline budget without
+      accepting moves. Prefer algorithm-level surfaces that change initial
+      construction, component scheduling, or baseline/operator budget policy.
+      Discourage adding another post-baseline route_local, route_pair, or
+      ruin_recreate polish operator unless the hypothesis directly explains how
+      it will raise accepted move rate through bounded candidate generation,
+      tighter prefilters, or a materially different acceptance opportunity.
+
 canary_case_path: "data/tiny_canary.json"
 
 operator_interface:
@@ -53,33 +81,261 @@ research_surfaces:
   - name: route_local
     kind: operator
     description: "Intra-route bounded improvement operators."
+    algorithm:
+      role: intra_route_neighborhood_operator
+      invocation_point: post_baseline_operator_search
+      description: >-
+        Applies bounded same-route customer reorder moves to a copied route
+        representation and returns either an improved feasible solution or a
+        no-op copy.
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
     target_files:
       - "operators/*.py"
-    prompt_hint: "Use only bounded same-route neighborhoods."
+    interface:
+      return_contract: >-
+        Operator classes implement execute(self, solution, instance, rng) and
+        return a CvrpSolution with implicit-depot routes, every customer
+        preserved exactly once, capacity respected, and input routes left
+        unmutated. If no safe bounded move exists, return a no-op solution.
+    bounds:
+      allowed_components:
+        - same_route_2opt
+        - same_route_oropt
+        - same_route_reinsert
+      complexity_scale_terms:
+        - route_count
+        - customer_count
+        - route_length
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State which bounded same-route move shape should improve route distance
+        while preserving customer coverage and capacity.
+      implementation_guidance: >-
+        Copy routes before editing, keep depot implicit, preserve the multiset
+        of customers, validate route capacity before returning, and no-op when
+        a move would be unsafe.
+      anti_patterns: >-
+        Do not mutate solution.routes in place, add depot nodes inside routes,
+        drop or duplicate customers, scan unbounded neighborhoods, read
+        benchmark files, or use nonexistent instance attributes.
+    prompt_hint: >-
+      Use only bounded same-route neighborhoods; copy routes, preserve
+      customers, respect capacity, and no-op when no safe move exists.
     create_new_allowed: true
     modify_allowed: true
     remove_allowed: true
   - name: route_pair
     kind: operator
     description: "Inter-route bounded relocate, swap, 2-opt*, and exchange operators."
+    algorithm:
+      role: inter_route_neighborhood_operator
+      invocation_point: post_baseline_operator_search
+      description: >-
+        Applies bounded two-route customer exchange or segment transfer moves
+        to copied routes and returns an improved feasible solution or no-op.
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
     target_files:
       - "operators/*.py"
-    prompt_hint: "Use bounded two-route neighborhoods with explicit candidate caps."
+    interface:
+      return_contract: >-
+        Operator classes implement execute(self, solution, instance, rng) and
+        return a CvrpSolution with implicit-depot routes, every customer
+        preserved exactly once, both edited routes capacity-feasible, and input
+        routes left unmutated. If no safe bounded two-route move exists, return
+        a no-op solution.
+    bounds:
+      allowed_components:
+        - relocate
+        - swap
+        - two_opt_star
+        - cross_exchange
+      complexity_scale_terms:
+        - route_count
+        - customer_count
+        - route_length
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State which bounded two-route move shape should improve route balance
+        or distance while preserving feasibility.
+      implementation_guidance: >-
+        Copy both routes before editing, preserve every customer exactly once,
+        check capacity for each affected route, use small candidate caps, and
+        no-op when a move would be unsafe.
+      anti_patterns: >-
+        Do not merge routes without preserving customers, add depot nodes inside
+        routes, mutate the input solution, scan all route pairs without caps,
+        read benchmark files, or use nonexistent instance attributes.
+    prompt_hint: >-
+      Use bounded two-route neighborhoods with explicit candidate caps; copy
+      routes, preserve customers, respect capacity, and no-op on unsafe moves.
     create_new_allowed: true
     modify_allowed: true
     remove_allowed: true
   - name: ruin_recreate
     kind: operator
     description: "Bounded destroy/repair operators with explicit customer and route caps."
+    algorithm:
+      role: bounded_destroy_repair_operator
+      invocation_point: post_baseline_operator_search
+      description: >-
+        Removes a small capped set of customers from copied routes, reinserts
+        them through bounded repair candidates, and returns a feasible solution
+        or no-op.
+    targets:
+      files:
+        - "operators/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: true
     target_files:
       - "operators/*.py"
-    prompt_hint: "Keep destroy size, repair candidates, and route scans explicitly bounded."
+    interface:
+      return_contract: >-
+        Operator classes implement execute(self, solution, instance, rng) and
+        return a CvrpSolution with implicit-depot routes, all removed customers
+        reinserted exactly once, every route capacity-feasible, and input routes
+        left unmutated. If bounded repair cannot place every removed customer,
+        return a no-op solution.
+    bounds:
+      allowed_components:
+        - bounded_ruin
+        - greedy_repair
+        - regret_repair
+      numeric_ranges:
+        destroy_customers: [1, 12]
+        repair_candidates_per_customer: [1, 16]
+      complexity_scale_terms:
+        - route_count
+        - customer_count
+        - removed_customer_count
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how the bounded destroy and repair choice should escape local
+        route structure without widening runtime or feasibility risk.
+      implementation_guidance: >-
+        Copy routes before removing customers, cap the destroy set and repair
+        positions, preserve every customer exactly once, check capacity after
+        reinsertion, and no-op if repair is incomplete.
+      anti_patterns: >-
+        Do not leave customers unassigned, duplicate customers during repair,
+        mutate input routes, create unbounded insertion scans, read benchmark
+        files, or use nonexistent instance attributes.
+    prompt_hint: >-
+      Keep destroy size, repair candidates, and route scans explicitly bounded;
+      copy routes, preserve customers, respect capacity, and no-op on failed repair.
     create_new_allowed: true
     modify_allowed: true
     remove_allowed: true
   - name: search_policy
     kind: policy
     description: "Baseline/operator budget and scheduling policy."
+    algorithm:
+      role: post_baseline_search_scheduling
+      invocation_point: before_and_during_post_baseline_operator_search
+      description: >-
+        Controls baseline time allocation, whether post-baseline generated
+        operators run, and the bounded number of operator rounds.
+    targets:
+      files:
+        - "policies/search_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "baseline_time_fraction"
+        - "max_operator_rounds"
+        - "enable_post_baseline_operators"
+      function_signatures:
+        baseline_time_fraction:
+          - instance
+          - time_limit_sec
+        max_operator_rounds:
+          - instance
+          - time_limit_sec
+        enable_post_baseline_operators:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        baseline_time_fraction returns a float in [0.05, 0.95];
+        max_operator_rounds returns a small non-negative bounded integer;
+        enable_post_baseline_operators returns bool.
+      return_values:
+        baseline_time_fraction:
+          value_type: number
+          numeric_range: [0.05, 0.95]
+        max_operator_rounds:
+          value_type: int
+          numeric_range: [0, 20]
+        enable_post_baseline_operators:
+          value_type: bool
+    bounds:
+      allowed_components:
+        - baseline_time_fraction
+        - operator_round_limit
+        - post_baseline_operator_toggle
+      numeric_ranges:
+        baseline_time_fraction: [0.05, 0.95]
+        max_operator_rounds: [0, 20]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+    evidence:
+      required_runtime_fields:
+        - policy_loaded
+        - policy_errors
+        - baseline_time_fraction
+        - operator_round_limit
+        - post_baseline_operators_enabled
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how the budget policy should change the tradeoff between
+        baseline construction/improvement and generated operator search. Safe
+        modifications include reducing or disabling post-baseline operator
+        rounds when accepted move rate is low, reserving more time for the
+        baseline when operators are no-op dominated, or using instance size to
+        choose a small bounded round cap.
+      implementation_guidance: >-
+        Keep all policy functions deterministic, side-effect free, and bounded
+        by instance size and time_limit_sec. Return scalar policy values only;
+        let the solver execute the schedule.
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, mutate the
+        instance, return values outside the declared bounds, increase operator
+        rounds after no_accepted_moves evidence without a candidate-quality
+        rationale, or encode case-name-specific behavior.
     target_files:
       - "policies/search_policy.py"
     prompt_hint: "Tune baseline time fraction and post-baseline operator budget."
@@ -87,6 +343,226 @@ research_surfaces:
       - "baseline_time_fraction"
       - "max_operator_rounds"
       - "enable_post_baseline_operators"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: construction_policy
+    kind: construction
+    description: "Initial solution construction mode and bounded bias policy."
+    algorithm:
+      role: initial_solution_construction
+      invocation_point: before_baseline_or_post_baseline_operator_search
+      description: >-
+        Selects one of the CVRP package's predeclared safe construction modes
+        and an optional bounded demand bias before the baseline/operator phase.
+    targets:
+      files:
+        - "policies/construction_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "construction_mode"
+        - "construction_bias"
+      function_signatures:
+        construction_mode:
+          - instance
+          - time_limit_sec
+        construction_bias:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        construction_mode returns one of nearest_neighbor,
+        nearest_neighbor_demand_bias, demand_descending, or sequential;
+        construction_bias returns a finite float in [0.0, 1.0].
+      return_values:
+        construction_mode:
+          value_type: str
+          allowed_literals:
+            - nearest_neighbor
+            - nearest_neighbor_demand_bias
+            - demand_descending
+            - sequential
+        construction_bias:
+          value_type: number
+          numeric_range: [0.0, 1.0]
+    bounds:
+      allowed_components:
+        - nearest_neighbor
+        - nearest_neighbor_demand_bias
+        - demand_descending
+        - sequential
+      numeric_ranges:
+        construction_bias: [0.0, 1.0]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+    evidence:
+      required_runtime_fields:
+        - construction_surface_loaded
+        - construction_errors
+        - construction_mode
+        - construction_elapsed_ms
+        - construction_routes
+        - construction_distance
+        - construction_feasible
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how the construction mode or bounded demand bias should improve
+        initial route quality while preserving capacity feasibility. Safe
+        modifications include switching among declared construction modes by
+        instance size, using a small demand bias to reduce later infeasible or
+        no-op neighborhoods, or choosing sequential construction only as a
+        controlled contrast when it protects fleet_violation.
+      implementation_guidance: >-
+        Keep policy functions deterministic and side-effect free. Return only
+        predeclared mode strings and numeric bias values within the declared
+        range; the solver owns route construction and feasibility checks.
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, create routes
+        directly, mutate the instance, return undeclared modes, branch on raw
+        file paths, or simulate neighborhood search inside construction policy.
+    target_files:
+      - "policies/construction_policy.py"
+    prompt_hint: "Select a bounded initial construction mode and bias."
+    required_functions:
+      - "construction_mode"
+      - "construction_bias"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: neighborhood_portfolio
+    kind: portfolio
+    description: "Post-baseline neighborhood component portfolio policy."
+    algorithm:
+      role: post_baseline_neighborhood_portfolio
+      invocation_point: before_and_during_post_baseline_operator_search
+      description: >-
+        Selects which predeclared registry component families are scheduled
+        after the baseline, applies bounded component weight multipliers, and
+        caps rounds, top-k scheduled components, and attempt limits.
+    targets:
+      files:
+        - "policies/neighborhood_portfolio.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "enabled_components"
+        - "component_weights"
+        - "candidate_limits"
+      function_signatures:
+        enabled_components:
+          - instance
+          - time_limit_sec
+        component_weights:
+          - instance
+          - time_limit_sec
+        candidate_limits:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        enabled_components returns a non-empty sequence drawn from route_local,
+        route_pair, ruin_recreate, and registry_operator; component_weights
+        returns finite numeric multipliers in [0.0, 5.0] for known components;
+        candidate_limits returns small integer max_rounds in [0, 6], top_k in
+        [0, 32], total/per-component attempts in [0, 200].
+      return_values:
+        enabled_components:
+          value_type: sequence
+          allowed_literals:
+            - route_local
+            - route_pair
+            - ruin_recreate
+            - registry_operator
+        component_weights:
+          value_type: mapping
+          allowed_keys:
+            - route_local
+            - route_pair
+            - ruin_recreate
+            - registry_operator
+          value_numeric_range: [0.0, 5.0]
+        candidate_limits:
+          value_type: mapping
+          allowed_keys:
+            - max_rounds
+            - top_k
+            - total_attempts
+            - per_component_attempts
+            - route_local
+            - route_pair
+            - ruin_recreate
+            - registry_operator
+    bounds:
+      allowed_components:
+        - route_local
+        - route_pair
+        - ruin_recreate
+        - registry_operator
+      numeric_ranges:
+        component_weight: [0.0, 5.0]
+        max_rounds: [0, 6]
+        top_k: [0, 32]
+        total_attempts: [0, 200]
+        per_component_attempts: [0, 80]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+        - registry_operator_count
+    evidence:
+      required_runtime_fields:
+        - portfolio_surface_loaded
+        - portfolio_errors
+        - enabled_components
+        - component_weights
+        - candidate_limits
+        - component_attempts
+        - component_accepted
+        - component_runtime_ms
+        - portfolio_stop_reason
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State which bounded neighborhood families should receive more or less
+        schedule share, and why that portfolio should improve the selected CVRP
+        objective without widening the solver boundary. Safe modifications
+        include down-weighting components with zero accepted moves, shrinking
+        top_k or total attempts when no_improvement_round dominates, or
+        selecting a small component subset that matches the protected objective
+        tradeoff.
+      implementation_guidance: >-
+        Keep all functions deterministic and side-effect free. Return only
+        declared component names, finite bounded weights, and small bounded
+        integer limits; prefer small top_k, max_rounds, and attempt caps. The
+        solver owns all route edits and feasibility checks.
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, create routes,
+        mutate the instance, invent component names, or return broad top_k
+        values, unbounded loops, weights, candidate limits, or schedules that
+        spend more attempts on components with no accepted-move evidence.
+    target_files:
+      - "policies/neighborhood_portfolio.py"
+    prompt_hint: "Schedule bounded registry neighborhood component families."
+    required_functions:
+      - "enabled_components"
+      - "component_weights"
+      - "candidate_limits"
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false
@@ -127,6 +603,8 @@ family_taxonomy:
     - route_pair
     - ruin_recreate
     - search_policy
+    - construction_policy
+    - neighborhood_portfolio
   aliases:
     route_local:
       - route local
@@ -178,6 +656,22 @@ family_taxonomy:
       - operator budget
       - post baseline
       - scheduling policy
+    construction_policy:
+      - construction policy
+      - initial construction
+      - initial solution
+      - construction mode
+      - nearest neighbor
+      - demand bias
+      - demand descending
+      - sequential construction
+    neighborhood_portfolio:
+      - portfolio
+      - neighborhood portfolio
+      - neighborhood schedule
+      - component schedule
+      - component weights
+      - candidate limits
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"

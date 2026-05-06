@@ -110,8 +110,10 @@ class HypothesisStore:
                 (hypothesis_id, branch_id, change_locus, action, status,
                  target_file, parent_hypothesis_id, suggested_weight,
                  hypothesis_text, created_at, base_champion_version,
-                 family_id, family_source, taxonomy_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 family_id, family_source, taxonomy_version,
+                 predicted_direction, target_objectives_json,
+                 protected_objectives_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -128,6 +130,9 @@ class HypothesisStore:
                     hyp.family_id,
                     hyp.family_source,
                     hyp.taxonomy_version,
+                    hyp.predicted_direction,
+                    json.dumps(list(hyp.target_objectives)),
+                    json.dumps(list(hyp.protected_objectives)),
                 ),
             )
 
@@ -220,6 +225,9 @@ class HypothesisStore:
             taxonomy_version=d.get("taxonomy_version"),
             created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else datetime.now(),
             base_champion_version=d.get("base_champion_version") or 0,
+            predicted_direction=d.get("predicted_direction") or "exploratory",
+            target_objectives=tuple(json.loads(d.get("target_objectives_json") or "[]")),
+            protected_objectives=tuple(json.loads(d.get("protected_objectives_json") or "[]")),
         )
 
     # ---------------------------------------------------------------

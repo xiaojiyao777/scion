@@ -3,12 +3,42 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+import types
 from typing import Any, Mapping, Sequence
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
 from scion.problems.cvrp.cvrplib import load_cvrplib_instance
-from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
+
+
+_POLICY_PREVIEW_TIME_LIMIT_SEC = 1.0
+_ALLOWED_CONSTRUCTION_MODES = frozenset(
+    {
+        "nearest_neighbor",
+        "nearest_neighbor_demand_bias",
+        "demand_descending",
+        "sequential",
+    }
+)
+_ALLOWED_PORTFOLIO_COMPONENTS = frozenset(
+    {
+        "route_local",
+        "route_pair",
+        "ruin_recreate",
+        "registry_operator",
+    }
+)
+_PORTFOLIO_LIMIT_RANGES = {
+    "max_rounds": (0, 6),
+    "top_k": (0, 32),
+    "total_attempts": (0, 200),
+    "per_component_attempts": (0, 80),
+    "route_local": (0, 200),
+    "route_pair": (0, 200),
+    "ruin_recreate": (0, 200),
+    "registry_operator": (0, 200),
+}
 
 
 class CvrpAdapter:
@@ -33,9 +63,16 @@ class CvrpAdapter:
             "CVRPLIB .vrp cases, it uses the repo-local vrp/src ALNS+VNS baseline "
             "when SCION_PROBLEM_DATA_ROOT or SCION_CVRP_DATA_ROOT points at the vrp directory; JSON and "
             "synthetic smoke fixtures use a deterministic nearest-neighbor fallback.\n"
+            "- The `construction_policy` research surface may select a bounded "
+            "package-owned construction mode and numeric demand bias before the "
+            "baseline/operator phase.\n"
             "- The `search_policy` research surface may tune the baseline time "
             "fraction, post-baseline operator round limit, and whether "
             "post-baseline operators run at all.\n"
+            "- The `neighborhood_portfolio` research surface may select "
+            "predeclared registry component families, apply component weight "
+            "multipliers, and bound rounds, top-k scheduled operators, and "
+            "component attempt limits before the post-baseline operator loop.\n"
             "- Operator research surfaces are applied after the baseline in a "
             "bounded improvement loop, up to the policy-controlled round limit "
             "or until the solver time budget is exhausted.\n"
@@ -44,18 +81,42 @@ class CvrpAdapter:
             "and strictly improves the lexicographic objective.\n"
             "- Not-improving operator outputs are safe no-ops. Exceptions, "
             "infeasible outputs, malformed outputs, invalid solution structures, "
-            "and invalid policy returns are runtime audit failures and cannot be "
-            "treated as objective ties.\n"
+            "and invalid policy or construction-policy returns are runtime audit "
+            "failures and cannot be treated as objective ties.\n"
             "- BKS/gap is not used for operator acceptance. Route-count "
             "comparability enters only through fleet_violation when an explicit "
             "allowed route count or reference route count is available."
         )
 
     def render_research_surface_interface(self, surface_name: str) -> str:
+        if surface_name == "construction_policy":
+            return (
+                "policies/construction_policy.py is a module-level construction "
+                "policy file; no class is required.\n\n"
+                "Declared signatures:\n"
+                "construction_mode(instance, time_limit_sec)\n"
+                "construction_bias(instance, time_limit_sec)\n\n"
+                "Required functions:\n"
+                "def construction_mode(instance, time_limit_sec):\n"
+                "    return one of 'nearest_neighbor', "
+                "'nearest_neighbor_demand_bias', 'demand_descending', or "
+                "'sequential'\n\n"
+                "def construction_bias(instance, time_limit_sec):\n"
+                "    return a finite numeric value in [0.0, 1.0]\n\n"
+                "The solver clamps out-of-range bias values but records them as "
+                "construction_errors. Unknown modes, exceptions, missing "
+                "functions, and non-numeric bias values are runtime audit "
+                "failures. Policy functions must be deterministic and must not "
+                "read solver outputs, benchmark answers, or external files."
+            )
         if surface_name == "search_policy":
             return (
                 "policies/search_policy.py is a module-level policy file; no class "
                 "is required.\n\n"
+                "Declared signatures:\n"
+                "baseline_time_fraction(instance, time_limit_sec)\n"
+                "max_operator_rounds(instance, time_limit_sec)\n"
+                "enable_post_baseline_operators(instance, time_limit_sec)\n\n"
                 "Required functions:\n"
                 "def baseline_time_fraction(instance, time_limit_sec):\n"
                 "    return a numeric fraction in [0.2, 0.95]\n\n"
@@ -68,6 +129,31 @@ class CvrpAdapter:
                 "values, and non-bool enable flags are runtime audit failures. "
                 "Policy functions must be deterministic and must not read solver "
                 "outputs, benchmark answers, or external files."
+            )
+        if surface_name == "neighborhood_portfolio":
+            return (
+                "policies/neighborhood_portfolio.py is a module-level portfolio "
+                "policy file; no class is required.\n\n"
+                "Declared signatures:\n"
+                "enabled_components(instance, time_limit_sec)\n"
+                "component_weights(instance, time_limit_sec)\n"
+                "candidate_limits(instance, time_limit_sec)\n\n"
+                "Required functions:\n"
+                "def enabled_components(instance, time_limit_sec):\n"
+                "    return a non-empty sequence drawn from 'route_local', "
+                "'route_pair', 'ruin_recreate', and 'registry_operator'\n\n"
+                "def component_weights(instance, time_limit_sec):\n"
+                "    return a mapping from component name to a finite numeric "
+                "weight multiplier in [0.0, 5.0]\n\n"
+                "def candidate_limits(instance, time_limit_sec):\n"
+                "    return a mapping with small optional integer keys max_rounds, "
+                "top_k, total_attempts, per_component_attempts, or per-component "
+                "attempt caps. Keep defaults small: max_rounds around 3, top_k "
+                "around 16, and total attempts around 100.\n\n"
+                "Unknown components, non-finite weights, non-integer limits, and "
+                "out-of-range limits are portfolio_errors and runtime audit "
+                "failures. The solver owns route moves and uses this policy only "
+                "to schedule already-declared bounded components."
             )
         return self.render_operator_interface()
 
@@ -83,7 +169,11 @@ class CvrpAdapter:
             "Return CvrpSolution(routes=tuple_of_routes); do not mutate the input "
             "solution in place. Prefer solution.__class__(routes=...) when creating "
             "a new solution; workspace-local models.CvrpSolution is accepted only "
-            "when it has the same routes structure.\n\n"
+            "when it has the same routes structure. Start from "
+            "`routes = [list(route) for route in solution.routes]`, edit only the "
+            "copy, preserve every customer exactly once, check affected route "
+            "loads with instance.route_load(route), and return the original route "
+            "structure as a no-op when a move would break capacity or coverage.\n\n"
             "CvrpInstance API: instance.capacity, instance.depot, "
             "instance.customer_ids, instance.node_ids, instance.demand(customer_id), "
             "instance.distance(i, j), instance.route_load(route), and "
@@ -91,6 +181,66 @@ class CvrpAdapter:
             "as vehicle_capacity, demands, distance_matrix, customers, or "
             "num_customers."
         )
+
+    def preview_research_surface_patch(
+        self,
+        *,
+        patch: Any,
+        surface: Any | None = None,
+    ) -> Mapping[str, Any]:
+        """Problem-owned cheap policy sanity preview for tainted patch drafts.
+
+        This uses a synthetic in-memory instance and does not read CVRP data,
+        results, logs, metrics, or benchmark files.  It is advisory preview
+        only; ContractGate and VerificationGate remain authoritative.
+        """
+
+        surface_name = str(getattr(surface, "name", "") or "")
+        if not surface_name:
+            surface_name = _surface_name_from_policy_path(str(getattr(patch, "file_path", "")))
+        if surface_name not in {
+            "construction_policy",
+            "search_policy",
+            "neighborhood_portfolio",
+        }:
+            return {
+                "passed": True,
+                "surface": surface_name or None,
+                "checks": [],
+                "issues": [],
+                "skipped": True,
+                "workspace_materialized": False,
+            }
+
+        if str(getattr(patch, "action", "modify")) == "delete":
+            return _policy_preview_result(
+                surface_name,
+                [f"{surface_name} cannot be sanity-previewed for delete action"],
+                [],
+            )
+
+        issues: list[str] = []
+        checks: list[dict[str, Any]] = []
+        try:
+            module = _module_from_policy_code(
+                str(getattr(patch, "file_path", "<policy>")),
+                str(getattr(patch, "code_content", "")),
+            )
+        except Exception as exc:
+            return _policy_preview_result(
+                surface_name,
+                [f"policy module import failed: {exc}"],
+                checks,
+            )
+
+        instance = _synthetic_preview_instance()
+        if surface_name == "construction_policy":
+            _preview_construction_policy(module, instance, issues, checks)
+        elif surface_name == "search_policy":
+            _preview_search_policy(module, instance, issues, checks)
+        elif surface_name == "neighborhood_portfolio":
+            _preview_neighborhood_portfolio(module, instance, issues, checks)
+        return _policy_preview_result(surface_name, issues, checks)
 
     def load_instance(self, instance_path: str) -> Any:
         suffix = Path(instance_path).suffix.lower()
@@ -248,3 +398,233 @@ def _as_solution(artifact: SolverArtifact) -> CvrpSolution:
     if not isinstance(sol, CvrpSolution):
         raise TypeError("artifact.normalized_solution is not CvrpSolution")
     return sol
+
+
+def _surface_name_from_policy_path(path: str) -> str:
+    normalized = path.replace("\\", "/").lstrip("/")
+    return {
+        "policies/construction_policy.py": "construction_policy",
+        "policies/search_policy.py": "search_policy",
+        "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
+    }.get(normalized, "")
+
+
+def _module_from_policy_code(file_path: str, code: str) -> types.ModuleType:
+    module = types.ModuleType(f"_scion_cvrp_policy_preview_{abs(hash(file_path))}")
+    module.__dict__["__file__"] = f"<preview:{file_path}>"
+    module.__dict__["__name__"] = module.__name__
+    exec(compile(code, file_path, "exec"), module.__dict__)
+    return module
+
+
+def _synthetic_preview_instance() -> CvrpInstance:
+    return CvrpInstance(
+        name="synthetic_preview",
+        capacity=10,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            CvrpNode(id=1, x=1.0, y=0.0, demand=3),
+            CvrpNode(id=2, x=0.0, y=2.0, demand=4),
+            CvrpNode(id=3, x=2.0, y=2.0, demand=2),
+        ),
+        allowed_routes=2,
+        use_integer_cost=True,
+    )
+
+
+def _policy_preview_result(
+    surface: str,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "passed": not issues,
+        "surface": surface,
+        "checks": checks,
+        "issues": issues,
+        "synthetic_instance": {
+            "name": "synthetic_preview",
+            "customers": 3,
+            "capacity": 10,
+        },
+        "workspace_materialized": False,
+        "verification_run": False,
+    }
+
+
+def _preview_construction_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    mode = _call_preview_function(module, "construction_mode", instance, issues, checks)
+    if mode is not _PREVIEW_FAILED:
+        if not isinstance(mode, str):
+            issues.append(f"construction_mode returned non-string value {mode!r}")
+        elif mode.strip() not in _ALLOWED_CONSTRUCTION_MODES:
+            issues.append(f"construction_mode returned unknown mode {mode!r}")
+    bias = _call_preview_function(module, "construction_bias", instance, issues, checks)
+    if bias is not _PREVIEW_FAILED:
+        _check_number(
+            "construction_bias",
+            bias,
+            minimum=0.0,
+            maximum=1.0,
+            integral=False,
+            issues=issues,
+        )
+
+
+def _preview_search_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    baseline = _call_preview_function(module, "baseline_time_fraction", instance, issues, checks)
+    if baseline is not _PREVIEW_FAILED:
+        _check_number(
+            "baseline_time_fraction",
+            baseline,
+            minimum=0.2,
+            maximum=0.95,
+            integral=False,
+            issues=issues,
+        )
+    rounds = _call_preview_function(module, "max_operator_rounds", instance, issues, checks)
+    if rounds is not _PREVIEW_FAILED:
+        _check_number(
+            "max_operator_rounds",
+            rounds,
+            minimum=0,
+            maximum=20,
+            integral=True,
+            issues=issues,
+        )
+    enabled = _call_preview_function(
+        module,
+        "enable_post_baseline_operators",
+        instance,
+        issues,
+        checks,
+    )
+    if enabled is not _PREVIEW_FAILED and not isinstance(enabled, bool):
+        issues.append(
+            f"enable_post_baseline_operators returned non-bool value {enabled!r}"
+        )
+
+
+def _preview_neighborhood_portfolio(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    components = _call_preview_function(module, "enabled_components", instance, issues, checks)
+    if components is not _PREVIEW_FAILED:
+        if isinstance(components, str) or not isinstance(components, (list, tuple, set, frozenset)):
+            issues.append(f"enabled_components returned non-sequence value {components!r}")
+        else:
+            normalized = [str(item).strip() for item in components]
+            bad = [item for item in normalized if item not in _ALLOWED_PORTFOLIO_COMPONENTS]
+            if bad:
+                issues.append(f"enabled_components returned unknown components {bad}")
+            if not normalized:
+                issues.append("enabled_components returned an empty sequence")
+
+    weights = _call_preview_function(module, "component_weights", instance, issues, checks)
+    if weights is not _PREVIEW_FAILED:
+        if not isinstance(weights, Mapping):
+            issues.append(f"component_weights returned non-mapping value {weights!r}")
+        else:
+            for key, value in weights.items():
+                component = str(key).strip()
+                if component not in _ALLOWED_PORTFOLIO_COMPONENTS:
+                    issues.append(
+                        f"component_weights returned unknown component {component!r}"
+                    )
+                    continue
+                _check_number(
+                    f"component_weights[{component}]",
+                    value,
+                    minimum=0.0,
+                    maximum=5.0,
+                    integral=False,
+                    issues=issues,
+                )
+
+    limits = _call_preview_function(module, "candidate_limits", instance, issues, checks)
+    if limits is not _PREVIEW_FAILED:
+        if not isinstance(limits, Mapping):
+            issues.append(f"candidate_limits returned non-mapping value {limits!r}")
+        else:
+            for key, value in limits.items():
+                limit_name = str(key).strip()
+                if limit_name not in _PORTFOLIO_LIMIT_RANGES:
+                    issues.append(f"candidate_limits returned unknown key {limit_name!r}")
+                    continue
+                lo, hi = _PORTFOLIO_LIMIT_RANGES[limit_name]
+                _check_number(
+                    f"candidate_limits[{limit_name}]",
+                    value,
+                    minimum=lo,
+                    maximum=hi,
+                    integral=True,
+                    issues=issues,
+                )
+
+
+_PREVIEW_FAILED = object()
+
+
+def _call_preview_function(
+    module: types.ModuleType,
+    name: str,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> Any:
+    func = getattr(module, name, None)
+    if not callable(func):
+        issues.append(f"missing callable {name}")
+        checks.append({"name": name, "passed": False, "detail": "missing callable"})
+        return _PREVIEW_FAILED
+    try:
+        value = func(instance, _POLICY_PREVIEW_TIME_LIMIT_SEC)
+    except Exception as exc:
+        issues.append(f"{name} raised during synthetic preview: {exc}")
+        checks.append({"name": name, "passed": False, "detail": str(exc)})
+        return _PREVIEW_FAILED
+    checks.append({"name": name, "passed": True, "detail": repr(value)[:200]})
+    return value
+
+
+def _check_number(
+    field: str,
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    integral: bool,
+    issues: list[str],
+) -> None:
+    if isinstance(value, bool):
+        issues.append(f"{field} returned bool where numeric value is required")
+        return
+    if integral:
+        if not isinstance(value, int):
+            issues.append(f"{field} returned non-integer value {value!r}")
+            return
+        numeric = float(value)
+    else:
+        if not isinstance(value, (int, float)):
+            issues.append(f"{field} returned non-numeric value {value!r}")
+            return
+        numeric = float(value)
+    if not math.isfinite(numeric):
+        issues.append(f"{field} returned non-finite value {value!r}")
+        return
+    if numeric < minimum or numeric > maximum:
+        issues.append(f"{field}={value!r} outside [{minimum}, {maximum}]")

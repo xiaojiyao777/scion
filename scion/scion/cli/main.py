@@ -76,6 +76,9 @@ def run(
     seeds: Optional[str] = typer.Option(None, "--seeds", help="Path to seed_ledger.yaml"),
     time_limit_sec: Optional[int] = typer.Option(None, "--time-limit-sec", help="Per solver run time limit; defaults to problem solver.time_limit_sec"),
     disable_early_stop: bool = typer.Option(False, "--disable-early-stop", help="Diagnostic mode: do not stop early on idle/stagnation signals"),
+    agentic_proposal: bool = typer.Option(False, "--agentic-proposal", help="Enable AgenticProposalSession for proposal generation"),
+    agentic_artifact_dir: Optional[str] = typer.Option(None, "--agentic-artifact-dir", help="APS artifact directory; defaults to campaign_dir/agentic_sessions when --agentic-proposal is enabled"),
+    agentic_session_timeout_sec: Optional[float] = typer.Option(None, "--agentic-session-timeout-sec", help="APS max wall time per session in seconds"),
 ) -> None:
     """Run the Scion main loop.
 
@@ -108,6 +111,11 @@ def run(
     operator_execute_signature = None
     problem_v1_path = problem_dir / "problem-v1.yaml"
     if problem_v1_path.exists():
+        from scion.problem.preflight import (
+            RuntimeDependencyPreflightError,
+            run_runtime_preflight,
+        )
+
         try:
             from scion.problem.bridge import (
                 bridge_problem_spec_v1,
@@ -115,12 +123,17 @@ def run(
             )
             from scion.problem.loader import load_problem_adapter
             problem_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
+            run_runtime_preflight(problem_v1)
             bridge = bridge_problem_spec_v1(problem_v1)
             spec = bridge.problem_spec
             adapter = load_problem_adapter(problem_v1)
+            run_runtime_preflight(problem_v1, adapter=adapter)
             metric_specs = bridge.metric_specs
             objective_policy = bridge.objective_policy
             operator_execute_signature = bridge.operator_execute_signature
+        except RuntimeDependencyPreflightError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         except Exception as exc:
             typer.echo(f"ERROR: failed to load problem-v1 adapter: {exc}", err=True)
             raise typer.Exit(code=1)
@@ -230,6 +243,13 @@ def run(
     )
 
     from scion.core.campaign import CampaignManager
+    resolved_agentic_artifact_dir = (
+        str(Path(agentic_artifact_dir).resolve())
+        if agentic_artifact_dir is not None
+        else str(campaign_path / "agentic_sessions")
+        if agentic_proposal
+        else None
+    )
 
     mgr = CampaignManager(
         problem_spec=spec,
@@ -244,6 +264,9 @@ def run(
         adapter=adapter,
         operator_execute_signature=operator_execute_signature,
         force_continue_early_stop=disable_early_stop,
+        use_agentic_proposal=agentic_proposal,
+        agentic_artifact_dir=resolved_agentic_artifact_dir,
+        agentic_session_timeout_sec=agentic_session_timeout_sec,
     )
 
     typer.echo(
@@ -328,6 +351,78 @@ def inspect_weights(
     typer.echo(f"  {'-'*30} {'-'*8}  {'-'*20}  {'-'*40}")
     for name, op in sorted(pool.items(), key=lambda x: -x[1].weight):
         typer.echo(f"  {name:<30} {op.weight:>8.4f}  {(op.category or ''):<20}  {op.file_path}")
+
+
+@inspect_app.command("agentic-session")
+def inspect_agentic_session(
+    artifact: str = typer.Option(..., "--artifact", help="Path to APS output artifact JSON"),
+) -> None:
+    """Validate and summarize a compact agentic proposal-session artifact."""
+    from scion.proposal.agentic_session import inspect_agentic_session_artifact
+
+    try:
+        summary = inspect_agentic_session_artifact(Path(artifact).resolve())
+    except Exception as exc:
+        typer.echo(f"ERROR: failed to inspect agentic session artifact: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(json.dumps(summary, indent=2, sort_keys=True))
+    if not summary.get("validation", {}).get("ok"):
+        raise typer.Exit(code=1)
+
+
+@inspect_app.command("agentic-sessions")
+def inspect_agentic_sessions(
+    campaign_dir: str = typer.Option("campaign_out", "--campaign-dir", help="Campaign directory"),
+    artifact_dir: Optional[str] = typer.Option(None, "--artifact-dir", help="APS artifact directory; defaults to campaign_dir/artifacts/agentic_proposal_sessions"),
+) -> None:
+    """List persisted agentic proposal sessions from the recovery index."""
+    from scion.proposal.agentic_session import AgenticSessionStore
+
+    root = (
+        Path(artifact_dir).resolve()
+        if artifact_dir
+        else Path(campaign_dir).resolve() / "artifacts" / "agentic_proposal_sessions"
+    )
+    store = AgenticSessionStore(root)
+    sessions = store.list_sessions()
+
+    def _ops_validation_errors(errors):
+        cleaned = []
+        for error in errors:
+            text = str(error)
+            if text.startswith("raw ref marker found:"):
+                cleaned.append("raw ref marker found")
+            else:
+                cleaned.append(text)
+        return cleaned
+
+    output = {
+        "artifact_dir": str(root),
+        "index_path": str(store.index_path),
+        "sessions": [
+            {
+                "session_id": stored.entry.session_id,
+                "request_id": stored.entry.request_id,
+                "idempotency_key": stored.entry.idempotency_key,
+                "status": stored.entry.status,
+                "termination_reason": stored.entry.termination_reason,
+                "tool_budget_used": dict(stored.entry.tool_budget_used),
+                "tool_loop_config": dict(stored.entry.tool_loop_config),
+                "transcript_digest": stored.entry.transcript_digest,
+                "artifact_ref": stored.entry.artifact_ref,
+                "schema_version": stored.entry.schema_version,
+                "tainted": stored.entry.tainted,
+                "updated_at": stored.entry.updated_at,
+                "validation": {
+                    "ok": stored.validation.ok,
+                    "errors": _ops_validation_errors(stored.validation.errors),
+                },
+            }
+            for stored in sessions
+        ],
+    }
+    typer.echo(json.dumps(output, indent=2, sort_keys=True))
 
 
 # ---------------------------------------------------------------------------

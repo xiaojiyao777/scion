@@ -181,6 +181,9 @@ class TestK1ReconcileCleanup:
         self._call(harness, branch)
 
         harness._hyp_store.mark_status.assert_called_once_with(h_record.hypothesis_id, "rejected")
+        harness._setup_workspace.assert_not_called()
+        harness._materializer.apply_patch.assert_not_called()
+        harness._vgate.run.assert_not_called()
 
     def test_verification_failed_calls_cleanup(self):
         bid = "b1"
@@ -352,7 +355,8 @@ class TestK1ReconcileCleanup:
         protocol_result.gate_outcome = "pass"
         protocol_result.reason_codes = ("SCREENING_PASS",)
         harness._experiment_protocol = MagicMock()
-        harness._branch_hypotheses[bid] = _make_hypothesis()
+        hypothesis = _make_hypothesis()
+        harness._branch_hypotheses[bid] = hypothesis
         # Reconcile branch controller state
         reconciled_branch = _make_branch(state=BranchState.EXPLORE, bid=bid)
         harness._branch_ctrl.get_branch.return_value = reconciled_branch
@@ -374,6 +378,10 @@ class TestK1ReconcileCleanup:
         self._call(harness, branch)
 
         harness._hyp_store.mark_status.assert_not_called()
+        harness._contract_gate.validate_patch.assert_called_once_with(
+            p,
+            approved_hypothesis=hypothesis,
+        )
         harness._apply_decision_and_finalize.assert_called_once()
         harness._record_step.assert_called_once()
 

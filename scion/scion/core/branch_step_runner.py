@@ -21,6 +21,7 @@ from scion.core.models import (
 from scion.core.scheduler import Scheduler
 from scion.core.step_result import StepResult
 from scion.core.frozen_budget import FROZEN_BUDGET_EXHAUSTED
+from scion.core.verification_call import run_verification_gate
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,20 @@ class BranchStepRunner:
             return abandon_stale("no patch to reconcile")
 
         hypothesis = self.branch_hypotheses.get(bid)
+        contract_result = self.contract_gate.validate_patch(
+            patch,
+            approved_hypothesis=hypothesis,
+        )
+        if not contract_result.passed:
+            logger.info(
+                "Branch %s: reconcile patch failed contract gate: %s",
+                bid,
+                contract_result.failure_reason,
+            )
+            return abandon_stale(
+                f"reconcile contract failed: {contract_result.failure_reason}"
+            )
+
         workspace = self.setup_workspace(branch, force_champion=True)
         if workspace is None:
             return abandon_stale("workspace setup failed")
@@ -263,22 +278,13 @@ class BranchStepRunner:
             logger.info("Branch %s: reconcile apply_patch failed: %s", bid, exc)
             return abandon_stale(f"apply_patch failed: {exc}")
 
-        contract_result = self.contract_gate.validate_patch(patch)
-        if not contract_result.passed:
-            logger.info(
-                "Branch %s: reconcile patch failed contract gate: %s",
-                bid,
-                contract_result.failure_reason,
-            )
-            return abandon_stale(
-                f"reconcile contract failed: {contract_result.failure_reason}"
-            )
-
         champion_workspace = self.get_champion().code_snapshot_path
-        verification_result = self.verification_gate.run(
+        verification_result = run_verification_gate(
+            self.verification_gate,
             workspace,
             champion_workspace,
             patch,
+            hypothesis=hypothesis,
         )
         if not verification_result.passed:
             logger.info(

@@ -26,6 +26,7 @@ def check_objective(
     candidate_workspace: str,
     *,
     adapter: Optional[ProblemAdapter] = None,
+    selected_surface: str | None = None,
 ) -> CheckResult:
     """V7_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
@@ -62,7 +63,11 @@ def check_objective(
     except Exception as exc:
         return _cr(False, "heavy", f"cannot read solver output: {exc}", t0)
 
-    audit_failure = runtime_audit_failure_from_raw(raw)
+    audit_failure = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
     if audit_failure is not None:
         return _cr(
             False,

@@ -170,6 +170,9 @@ class FailureLifecycleService:
             target_file=hyp.target_file,
             hypothesis_text=hyp.hypothesis_text,
             base_champion_version=champion.version if champion else 0,
+            predicted_direction=hyp.predicted_direction,
+            target_objectives=hyp.target_objectives,
+            protected_objectives=hyp.protected_objectives,
         )
         self.hypothesis_store.save(record)
 

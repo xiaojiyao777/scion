@@ -210,6 +210,59 @@ def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
     assert protocol["effective_reason_source"] == "decision_engine"
 
 
+def test_campaign_summary_exposes_bounded_runtime_failure_summary(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/private-runtime.json",
+        candidate_runtime_failure_categories={
+            "operator_error": 2,
+            "invalid_output": 1,
+        },
+        candidate_first_runtime_failure={
+            "category": "operator_error",
+            "code": "operator_errors",
+            "surface": "local_search",
+            "component": "operator",
+            "detail_summary": "solver runtime reported operator_errors=2",
+        },
+        candidate_operator_attempts=8,
+        candidate_operator_accepted=0,
+        candidate_operator_errors=2,
+        candidate_operator_invalid_outputs=1,
+        candidate_policy_errors=3,
+        candidate_construction_errors=4,
+        candidate_portfolio_errors=5,
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["candidate_runtime_failure_categories"] == {
+        "operator_error": 2,
+        "invalid_output": 1,
+    }
+    assert protocol["candidate_first_runtime_failure"]["category"] == "operator_error"
+    assert protocol["candidate_operator_attempts"] == 8
+    assert protocol["candidate_operator_accepted"] == 0
+    assert protocol["candidate_operator_errors"] == 2
+    assert protocol["candidate_operator_invalid_outputs"] == 1
+    assert protocol["candidate_policy_errors"] == 3
+    assert protocol["candidate_construction_errors"] == 4
+    assert protocol["candidate_portfolio_errors"] == 5
+
+
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
     tmp_path: Path,
 ) -> None:

@@ -33,6 +33,7 @@ def check_state_mutation(
     metrics_dir: str | None = None,
     *,
     adapter: Optional[ProblemAdapter] = None,
+    selected_surface: str | None = None,
 ) -> CheckResult:
     """V5_solution_consistency: output must be internally consistent."""
     t0 = time.monotonic_ns()
@@ -69,7 +70,11 @@ def check_state_mutation(
     except Exception as exc:
         return _cr(False, f"could not read output: {exc}", t0, diagnosis="ENV")
 
-    audit_failure = runtime_audit_failure_from_raw(raw)
+    audit_failure = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
     if audit_failure is not None:
         return _cr(
             False,

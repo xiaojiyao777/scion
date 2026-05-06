@@ -68,6 +68,7 @@ class LineageRegistry:
                 "protocol_version":  "TEXT",
                 "prompt_tokens":     "INTEGER",
                 "completion_tokens": "INTEGER",
+                "audit_payload_json": "TEXT",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
@@ -116,7 +117,10 @@ class LineageRegistry:
                     base_champion_version INTEGER DEFAULT 0,
                     family_id            TEXT,
                     family_source        TEXT,
-                    taxonomy_version     TEXT
+                    taxonomy_version     TEXT,
+                    predicted_direction  TEXT,
+                    target_objectives_json TEXT,
+                    protected_objectives_json TEXT
                 )
             """)
             conn.execute("""
@@ -155,6 +159,9 @@ class LineageRegistry:
             # Migrate hypotheses table
             self._ensure_columns(conn, "hypotheses", {
                 "base_champion_version": "INTEGER DEFAULT 0",
+                "predicted_direction": "TEXT",
+                "target_objectives_json": "TEXT",
+                "protected_objectives_json": "TEXT",
             })
 
     # ------------------------------------------------------------------

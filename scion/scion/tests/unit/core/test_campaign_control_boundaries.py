@@ -29,6 +29,8 @@ from scion.core.models import (
     HypothesisRecord, PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
 from scion.core.termination import TerminationConfig
+from scion.problem.preflight import RuntimeDependencyPreflightError
+from scion.problem.spec import RuntimeDependencySpec
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -225,6 +227,25 @@ def _install_frozen_ready_branch(cm: CampaignManager, workspace: str) -> str:
     return branch.branch_id
 
 
+def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
+    tmp_path: Path,
+) -> None:
+    missing = "scion_missing_campaign_preflight_dependency_987654321"
+    cm = _campaign(tmp_path)
+    object.__setattr__(
+        cm._spec,
+        "runtime_dependencies",
+        RuntimeDependencySpec(required_python_modules=[missing]),
+    )
+
+    with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
+        cm.run(max_rounds=1)
+
+    assert missing in str(excinfo.value)
+    assert cm._round_num == 0
+    assert cm._step_history == []
+
+
 # ---------------------------------------------------------------------------
 # Gate bypass — fix patch (T1)
 # ---------------------------------------------------------------------------
@@ -245,12 +266,12 @@ class TestFixPatchContractGate:
         # Mock fix_code to return a valid patch (bypass LLM)
         cm._creative.fix_code = MagicMock(return_value=fix_patch_obj)
 
-        validate_patch_calls: List[Any] = []
+        validate_patch_calls: List[tuple[Any, Any]] = []
         original_validate = cm._contract_gate.validate_patch
 
-        def spy_validate_patch(patch):
-            validate_patch_calls.append(patch)
-            return original_validate(patch)
+        def spy_validate_patch(patch, *args, **kwargs):
+            validate_patch_calls.append((patch, kwargs.get("approved_hypothesis")))
+            return original_validate(patch, *args, **kwargs)
 
         cm._contract_gate.validate_patch = spy_validate_patch
         cm.run_one_step()
@@ -258,6 +279,10 @@ class TestFixPatchContractGate:
         assert len(validate_patch_calls) >= 2, (
             "fix patch should also be validated by ContractGate, "
             f"but validate_patch was only called {len(validate_patch_calls)} times"
+        )
+        assert all(
+            approved_hypothesis is not None
+            for _, approved_hypothesis in validate_patch_calls[:2]
         )
 
     def test_fix_patch_contract_fail_does_not_apply(self, tmp_path):
@@ -287,11 +312,11 @@ class TestFixPatchContractGate:
         call_count = [0]
         original_validate = cm._contract_gate.validate_patch
 
-        def fail_on_fix_validate(patch):
+        def fail_on_fix_validate(patch, *args, **kwargs):
             call_count[0] += 1
             if call_count[0] >= 2:
                 return ContractResult(passed=False, checks=(), failure_reason="fix rejected")
-            return original_validate(patch)
+            return original_validate(patch, *args, **kwargs)
 
         cm._contract_gate.validate_patch = fail_on_fix_validate
         cm.run_one_step()
@@ -696,6 +721,96 @@ class TestProgrammaticRuntimeVerificationDefault:
 # ---------------------------------------------------------------------------
 
 class TestStaleReconcile:
+    def test_reconcile_contract_failure_skips_workspace_and_materialization(self, tmp_path):
+        """Contract failure must happen before any stale workspace/code side effect."""
+        protocol = _MockProtocol(results=[
+            _make_protocol_result("pass"),  # initial screening
+            _make_protocol_result("pass"),  # would pass if reconcile reached screening
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        r = cm.run_one_step()
+        assert r.branch_id is not None
+        bid = r.branch_id
+
+        branch = cm._branch_ctrl.get_branch(bid)
+        branch.state = BranchState.STALE
+
+        runner = cm._branch_step_runner
+        runner.setup_workspace = MagicMock(return_value=str(tmp_path / "should-not-exist"))
+        runner.apply_patch = MagicMock()
+        cm._vgate.run = MagicMock(wraps=cm._vgate.run)
+        cm._contract_gate.validate_patch = MagicMock(
+            return_value=ContractResult(
+                passed=False,
+                checks=(),
+                failure_reason="forced reconcile contract failure",
+            )
+        )
+
+        result = cm.run_one_step()
+
+        assert result.action == "reconcile"
+        assert "reconcile contract failed" in (result.reason or "")
+        cm._contract_gate.validate_patch.assert_called_once_with(
+            cm._branch_patches[bid],
+            approved_hypothesis=cm._branch_hypotheses[bid],
+        )
+        runner.setup_workspace.assert_not_called()
+        runner.apply_patch.assert_not_called()
+        cm._vgate.run.assert_not_called()
+        assert len(protocol.experiment_calls) == 1, (
+            "contract failure must not proceed to reconcile re-screening"
+        )
+
+    def test_reconcile_contract_runs_before_workspace_and_apply_patch(self, tmp_path):
+        """Stale reconcile must run Contract Gate before materialization."""
+        order: List[str] = []
+        protocol = _MockProtocol(results=[
+            _make_protocol_result("pass"),  # initial screening
+            _make_protocol_result("pass"),  # re-screening
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        r = cm.run_one_step()
+        assert r.branch_id is not None
+        bid = r.branch_id
+
+        branch = cm._branch_ctrl.get_branch(bid)
+        branch.state = BranchState.STALE
+
+        runner = cm._branch_step_runner
+        original_validate_patch = cm._contract_gate.validate_patch
+        original_setup_workspace = runner.setup_workspace
+        original_apply_patch = runner.apply_patch
+
+        def spy_validate_patch(patch, *args, **kwargs):
+            order.append("contract")
+            return original_validate_patch(patch, *args, **kwargs)
+
+        def spy_setup_workspace(*args, **kwargs):
+            order.append("setup_workspace")
+            return original_setup_workspace(*args, **kwargs)
+
+        def spy_apply_patch(*args, **kwargs):
+            order.append("apply_patch")
+            return original_apply_patch(*args, **kwargs)
+
+        cm._contract_gate.validate_patch = spy_validate_patch
+        runner.setup_workspace = spy_setup_workspace
+        runner.apply_patch = spy_apply_patch
+
+        cm.run_one_step()
+
+        assert "contract" in order
+        assert "setup_workspace" in order
+        assert "apply_patch" in order
+        assert order.index("contract") < order.index("setup_workspace")
+        assert order.index("contract") < order.index("apply_patch")
+        assert len(protocol.experiment_calls) >= 2, (
+            "happy reconcile must still reach re-screening"
+        )
+
     def test_reconcile_reruns_contract_verification_screening(self, tmp_path):
         """_run_reconcile_step must call validate_patch, vgate.run, and run_experiment."""
         protocol = _MockProtocol(results=[
@@ -714,12 +829,12 @@ class TestStaleReconcile:
         from scion.core.branch import BranchController
         branch.state = BranchState.STALE
 
-        validate_patch_calls = [0]
+        validate_patch_calls: List[Tuple[PatchProposal, Any]] = []
         original_validate_patch = cm._contract_gate.validate_patch
 
-        def spy_validate_patch(patch):
-            validate_patch_calls[0] += 1
-            return original_validate_patch(patch)
+        def spy_validate_patch(patch, *args, **kwargs):
+            validate_patch_calls.append((patch, kwargs.get("approved_hypothesis")))
+            return original_validate_patch(patch, *args, **kwargs)
 
         vgate_calls = [0]
         original_vgate_run = cm._vgate.run
@@ -733,10 +848,53 @@ class TestStaleReconcile:
 
         cm.run_one_step()  # should be reconcile
 
-        assert validate_patch_calls[0] >= 1, "reconcile must call validate_patch"
+        expected_hypothesis = cm._branch_hypotheses[bid]
+        assert validate_patch_calls, "reconcile must call validate_patch"
+        assert all(
+            approved_hypothesis is expected_hypothesis
+            for _, approved_hypothesis in validate_patch_calls
+        ), "reconcile must pass the approved hypothesis to validate_patch"
         assert vgate_calls[0] >= 1, "reconcile must call VerificationGate.run"
         assert len(protocol.experiment_calls) >= 2, (
             "reconcile must call run_experiment for re-screening"
+        )
+
+    def test_reconcile_action_mismatch_fails_closed(self, tmp_path):
+        """A stale patch whose action no longer matches its hypothesis is abandoned."""
+        protocol = _MockProtocol(results=[
+            _make_protocol_result("pass"),  # initial screening
+            _make_protocol_result("pass"),  # would pass if reconcile reached screening
+        ])
+        cm = _campaign(tmp_path, experiment_protocol=protocol)
+
+        r = cm.run_one_step()
+        assert r.branch_id is not None
+        bid = r.branch_id
+
+        branch = cm._branch_ctrl.get_branch(bid)
+        branch.state = BranchState.STALE
+        cm._branch_hypotheses[bid] = HypothesisProposal(
+            hypothesis_text="Remove the local search operator.",
+            change_locus="local_search",
+            action="remove",
+            target_file="operators/local_search.py",
+        )
+        runner = cm._branch_step_runner
+        runner.setup_workspace = MagicMock(return_value=str(tmp_path / "should-not-exist"))
+        runner.apply_patch = MagicMock()
+        cm._vgate.run = MagicMock(wraps=cm._vgate.run)
+
+        result = cm.run_one_step()
+
+        final_state = cm._branch_ctrl.get_branch(bid).state
+        assert result.action == "reconcile"
+        assert "reconcile contract failed" in (result.reason or "")
+        assert final_state == BranchState.ABANDONED
+        runner.setup_workspace.assert_not_called()
+        runner.apply_patch.assert_not_called()
+        cm._vgate.run.assert_not_called()
+        assert len(protocol.experiment_calls) == 1, (
+            "contract failure must not proceed to reconcile re-screening"
         )
 
     def test_reconcile_fails_to_abandoned_when_rescreen_fails(self, tmp_path):

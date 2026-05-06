@@ -57,6 +57,19 @@ def test_hypothesis_validation_bad_action():
         _parse_hypothesis(raw)
 
 
+def test_hypothesis_validation_bad_predicted_direction():
+    """Free-form predicted_direction should fail at proposal parsing."""
+    raw = {
+        "hypothesis_text": "Some hypothesis text.",
+        "change_locus": "order_level",
+        "action": "modify",
+        "target_file": "operators/foo.py",
+        "predicted_direction": "cost-v2",
+    }
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(raw)
+
+
 def test_valid_hypothesis_passes_validation():
     """Valid hypothesis dict should return a HypothesisProposal."""
     raw = {

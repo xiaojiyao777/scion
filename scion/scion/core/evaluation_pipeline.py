@@ -182,7 +182,11 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"runtime_pairs={stats.runtime_pairs} "
         f"runtime_ratio_median={_fmt_optional(stats.runtime_ratio_median)} "
         f"runtime_delta_median_ms={_fmt_optional(stats.runtime_delta_median_ms)} "
-        f"runtime_regression_rate={_fmt_optional(stats.runtime_regression_rate)}"
+        f"runtime_regression_rate={_fmt_optional(stats.runtime_regression_rate)} "
+        f"candidate_runtime_categories="
+        f"{_fmt_category_counts(result.candidate_runtime_failure_categories)} "
+        f"candidate_operator_attempts={result.candidate_operator_attempts} "
+        f"candidate_operator_accepted={result.candidate_operator_accepted}"
     )
     return replace(
         result,
@@ -201,6 +205,16 @@ def _fmt_optional(value: float | None) -> str:
     if value is None:
         return "NA"
     return f"{value:.4f}"
+
+
+def _fmt_category_counts(categories: dict[str, int]) -> str:
+    if not categories:
+        return "none"
+    return ";".join(
+        f"{key}:{value}"
+        for key, value in sorted(categories.items())
+        if value > 0
+    ) or "none"
 
 
 def _default_verification_evaluator(request: EvaluationRequest) -> VerificationResult:

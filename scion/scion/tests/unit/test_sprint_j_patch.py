@@ -112,7 +112,7 @@ class TestFamiliesGlobal:
         """New branch generates hypothesis with exploration_coverage based on global step_history."""
         steps = [
             _make_step(hyp_text="subcategory consolidate", branch_id="b-old", round_num=1, win_rate=0.8,
-                       decision=Decision.PROMOTE),
+                       decision=Decision.QUEUE_VALIDATE),
             _make_step(hyp_text="destroy and rebuild", branch_id="b-old", round_num=2, win_rate=0.1),
             _make_step(hyp_text="subcategory swap", branch_id="b-other", round_num=3, win_rate=0.2),
         ]
@@ -311,7 +311,7 @@ class TestResearchLogRender:
              "file": "operators/subcat_consolidate.py", "hyp": "consolidate subcategories"},
         ])
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
         assert "promoted" in rendered
         assert "subcat_consolidate" in rendered
         assert "scr=1.00" in rendered
@@ -329,7 +329,7 @@ class TestResearchLogRender:
              "file": "operators/evict_consolidate.py", "hyp": "evict then consolidate"},
         ])
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
         assert "failed_frozen" in rendered
         assert "evict_consolidate" in rendered
         assert "frozen: FAIL" in rendered
@@ -371,7 +371,7 @@ class TestResearchLogRender:
         rendered = log.render()
         # v3: all branches rendered individually with trajectory
         assert "fail_op_0" in rendered
-        assert "abandoned" in rendered
+        assert "screening_summary" in rendered
         assert "scr=0.10" in rendered
 
     def test_research_log_empty_db(self, tmp_path):

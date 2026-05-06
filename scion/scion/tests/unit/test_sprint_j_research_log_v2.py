@@ -169,7 +169,7 @@ class TestThreeLayers:
             ],
         )
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
         assert "### 研究进展快照" in rendered
         assert "### Champion 演化轨迹" in rendered
         assert "### 所有实验 Branch 轨迹" in rendered
@@ -194,9 +194,33 @@ class TestResearchSnapshotChampionVersion:
             ],
         )
 
-        rendered = CampaignResearchLog(db_path).render()
+        rendered = CampaignResearchLog(db_path).render(view="audit")
 
         assert "Champion 当前版本：v1，共 0 次晋升" in rendered
+
+    def test_hypothesis_view_hides_champion_version_and_promotion_count(self, tmp_path):
+        db_path = str(tmp_path)
+        v1_ops = tmp_path / "champions" / "v1" / "operators"
+        v1_ops.mkdir(parents=True)
+        (v1_ops / "__init__.py").write_text("# op")
+
+        _create_full_db(
+            os.path.join(db_path, "scion.db"),
+            rows=[
+                {"branch_id": "b1", "stage": "screening", "wr": 0.0,
+                 "decision": "abandon", "file": "operators/op.py",
+                 "hyp": "safe no-op"},
+            ],
+            champions=[
+                {"version": 1, "code_snapshot_path": str(tmp_path / "champions" / "v1")},
+            ],
+        )
+
+        rendered = CampaignResearchLog(db_path).render()
+
+        assert "Champion 当前版本" not in rendered
+        assert "晋升" not in rendered
+        assert "搜索进度" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +356,7 @@ class TestBranchOrdering:
             ],
         )
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
         pos_promoted = rendered.index("promoted")
         pos_abandoned = rendered.index("abandoned")
         assert pos_promoted < pos_abandoned
@@ -358,13 +382,45 @@ class TestFrozenExposure:
             ],
         )
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
+        assert "validation: val=0.90" in rendered
         assert "frozen: PASS" in rendered
         # No numeric values near frozen
         assert "frozen=0" not in rendered
         assert "frozen_wr" not in rendered
         # Screening md should appear
         assert "[md=5000]" in rendered
+
+    def test_hypothesis_view_hides_validation_and_frozen_outcomes(self, tmp_path):
+        """Default render is hypothesis-safe: screening aggregate only."""
+        db_path = str(tmp_path)
+        _create_full_db(
+            os.path.join(db_path, "scion.db"),
+            rows=[
+                {"branch_id": "b1", "stage": "screening", "wr": 0.80, "md": 5000,
+                 "decision": "pass", "file": "operators/op.py", "hyp": "test"},
+                {"branch_id": "b1", "stage": "validation", "wr": 0.90,
+                 "decision": "pass", "file": "operators/op.py", "hyp": "test"},
+                {"branch_id": "b1", "stage": "frozen", "wr": 0.70, "md": 3000,
+                 "decision": "promote", "file": "operators/op.py", "hyp": "test"},
+                {"branch_id": "b2", "stage": "screening", "wr": 0.40, "md": 1000,
+                 "decision": "abandon", "file": "operators/screening_only.py",
+                 "hyp": "screening visible"},
+            ],
+        )
+        rendered = CampaignResearchLog(db_path).render()
+
+        assert "scr=0.40" in rendered
+        assert "[md=1000]" in rendered
+        assert "scr=0.80" not in rendered
+        assert "[md=5000]" not in rendered
+        assert "→ pass" not in rendered
+        assert "→ promote" not in rendered
+        assert "val=" not in rendered
+        assert "validation:" not in rendered
+        assert "frozen:" not in rendered
+        assert "frozen=PASS" not in rendered
+        assert "promoted" not in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -398,11 +454,63 @@ class TestChampionEvolutionHypothesis:
             ],
         )
         log = CampaignResearchLog(db_path)
-        rendered = log.render()
+        rendered = log.render(view="audit")
         # Full hypothesis must appear in evolution section
         evo_section = rendered.split("### Champion 演化轨迹")[1].split("###")[0]
         assert full_hyp in evo_section
         assert "v2 新增: subcat_consolidate" in rendered
+
+    def test_hypothesis_view_hides_promoted_hypothesis_and_audit_keeps_it(self, tmp_path):
+        """Promotion path details stay out of hypothesis view but remain auditable."""
+        db_path = str(tmp_path)
+        v1_ops = tmp_path / "champions" / "v1" / "operators"
+        v2_ops = tmp_path / "champions" / "v2" / "operators"
+        v1_ops.mkdir(parents=True)
+        v2_ops.mkdir(parents=True)
+        for name in ["move_order.py", "__init__.py"]:
+            (v1_ops / name).write_text("# op")
+        for name in ["move_order.py", "promoted_secret.py", "__init__.py"]:
+            (v2_ops / name).write_text("# op")
+
+        promoted_hyp = "PROMOTED_SECRET_HYPOTHESIS_TEXT should only be in audit"
+        _create_full_db(
+            os.path.join(db_path, "scion.db"),
+            rows=[
+                {"branch_id": "b-promoted", "stage": "screening", "wr": 1.0,
+                 "decision": "pass", "file": "operators/promoted_secret.py",
+                 "hyp": promoted_hyp},
+                {"branch_id": "b-promoted", "stage": "validation", "wr": 1.0,
+                 "decision": "pass", "file": "operators/promoted_secret.py",
+                 "hyp": promoted_hyp},
+                {"branch_id": "b-promoted", "stage": "frozen", "wr": 1.0,
+                 "decision": "promote", "file": "operators/promoted_secret.py",
+                 "hyp": promoted_hyp},
+                {"branch_id": "b-screening", "stage": "screening", "wr": 0.4,
+                 "decision": "abandon", "file": "operators/screening_only.py",
+                 "hyp": "SCREENING_ONLY_VISIBLE_TEXT"},
+            ],
+            champions=[
+                {"version": 1, "code_snapshot_path": str(tmp_path / "champions" / "v1")},
+                {"version": 2, "code_snapshot_path": str(tmp_path / "champions" / "v2"),
+                 "promotion_experiment_id": "evt-2"},
+            ],
+        )
+
+        hypothesis_rendered = CampaignResearchLog(db_path).render()
+        audit_rendered = CampaignResearchLog(db_path).render(view="audit")
+
+        assert "SCREENING_ONLY_VISIBLE_TEXT" in hypothesis_rendered
+        assert "scr=0.40" in hypothesis_rendered
+        assert "PROMOTED_SECRET_HYPOTHESIS_TEXT" not in hypothesis_rendered
+        assert "Champion 演化轨迹" not in hypothesis_rendered
+        assert "promotion" not in hypothesis_rendered.lower()
+        assert "promoted" not in hypothesis_rendered.lower()
+        assert "frozen: PASS" not in hypothesis_rendered
+        assert "validation: val=" not in hypothesis_rendered
+
+        assert "PROMOTED_SECRET_HYPOTHESIS_TEXT" in audit_rendered
+        assert "Champion 演化轨迹" in audit_rendered
+        assert "promoted" in audit_rendered
 
 
 # ---------------------------------------------------------------------------

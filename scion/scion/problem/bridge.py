@@ -86,12 +86,15 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
         regression_test_path=spec.regression_test_path,
         operator_categories=surface_categories,
         research_surfaces=list(spec.research_surfaces or []),
+        runtime_failure_guidance=list(spec.runtime_failure_guidance or []),
         search_space=SearchSpace(**spec.search_space.model_dump()),
         solver=SolverConfig(**spec.solver.model_dump()),
         parameter_search=_parameter_search_from_v1(spec),
     )
     if spec.family_taxonomy is not None:
         object.__setattr__(legacy, "family_taxonomy", spec.family_taxonomy)
+    object.__setattr__(legacy, "objectives", tuple(spec.objectives))
+    object.__setattr__(legacy, "runtime_dependencies", spec.runtime_dependencies)
     return legacy
 
 

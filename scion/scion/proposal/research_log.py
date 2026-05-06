@@ -10,10 +10,12 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 import json
 import os
 import sqlite3
+
+RenderView = Literal["hypothesis", "audit"]
 
 
 @dataclass
@@ -35,9 +37,10 @@ class CampaignResearchLog:
     """Reads from SQLite experiment_events to build a Campaign Research Journal.
 
     Exposure rules:
-    - Screening results: full (wr + median_delta)
-    - Validation results: aggregate wr only (no per-case)
-    - Frozen results: pass/fail only (NO wr, NO median_delta)
+    - hypothesis view (default): screening aggregate only; no validation/frozen
+      aggregate, gate outcome, case feedback, or pair feedback.
+    - audit view: screening, validation aggregate, and frozen pass/fail may be
+      rendered for non-LLM audit/review surfaces.
     """
 
     def __init__(self, campaign_dir: str) -> None:
@@ -47,12 +50,17 @@ class CampaignResearchLog:
     # Public API
     # ------------------------------------------------------------------
 
-    def render(self, available_tokens: Optional[int] = None) -> str:
-        """Render complete Campaign Research Journal for LLM context injection.
+    def render(
+        self,
+        available_tokens: Optional[int] = None,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
+        """Render Campaign Research Journal for the requested exposure view.
 
-        No character/token limits by default (available_tokens=None).
-        If available_tokens is set (future use), compress by dropping
-        low-wr abandoned branches first.
+        ``hypothesis`` is the safe default for Creative Layer prompt injection:
+        it includes screening-derived summaries only. ``audit`` preserves the
+        historical complete log rendering for non-prompt review surfaces.
 
         Structure:
           1. Research snapshot (Layer 1: where are we now)
@@ -61,6 +69,8 @@ class CampaignResearchLog:
         """
         if not os.path.exists(self._db_path):
             return ""
+        if view not in ("hypothesis", "audit"):
+            return ""
         try:
             conn = sqlite3.connect(self._db_path)
             conn.row_factory = sqlite3.Row
@@ -68,17 +78,18 @@ class CampaignResearchLog:
             sections: List[str] = ["## Campaign Research Journal\n"]
 
             # Layer 1: Research snapshot
-            snapshot = self._build_research_snapshot(conn)
+            snapshot = self._build_research_snapshot(conn, view=view)
             if snapshot:
                 sections.append(f"### 研究进展快照\n{snapshot}")
 
-            # Champion evolution
-            evolution = self._build_champion_evolution(conn)
-            if evolution:
-                sections.append(f"### Champion 演化轨迹\n{evolution}")
+            # Champion evolution is promotion-derived and audit-only.
+            if view == "audit":
+                evolution = self._build_champion_evolution(conn, view=view)
+                if evolution:
+                    sections.append(f"### Champion 演化轨迹\n{evolution}")
 
             # Layer 2: Full branch trajectories
-            trajectories = self._build_full_branch_trajectories(conn)
+            trajectories = self._build_full_branch_trajectories(conn, view=view)
             if trajectories:
                 sections.append(f"### 所有实验 Branch 轨迹\n{trajectories}")
 
@@ -110,37 +121,24 @@ class CampaignResearchLog:
     # Layer 1: Research Snapshot
     # ------------------------------------------------------------------
 
-    def _build_research_snapshot(self, conn: sqlite3.Connection) -> str:
+    def _build_research_snapshot(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
         """Layer 1: Research orientation snapshot. Computed from DB."""
         parts: List[str] = []
 
-        # Champion version and promotion count. v1 is the base anchor, not a
-        # structural promotion; weight revisions must not inflate this count.
-        try:
-            champ_rows = conn.execute(
-                "SELECT DISTINCT version, promotion_experiment_id "
-                "FROM champions ORDER BY version ASC"
-            ).fetchall()
-            current_champion_version = (
-                max(row["version"] for row in champ_rows)
-                if champ_rows else 0
-            )
-            promotion_count = len({
-                row["version"]
-                for row in champ_rows
-                if row["version"] > 1
-            })
-        except Exception:
-            current_champion_version = 0
-            promotion_count = 0
-
         # Total branches + experiments
         try:
-            stats_row = conn.execute("""
+            stage_filter = "AND stage = 'screening'" if view == "hypothesis" else ""
+            stats_row = conn.execute(f"""
                 SELECT COUNT(DISTINCT branch_id) AS n_branches,
                        COUNT(*) AS n_experiments
                 FROM experiment_events
                 WHERE event_kind = 'experiment'
+                  {stage_filter}
             """).fetchone()
             n_branches = stats_row['n_branches'] if stats_row else 0
             n_experiments = stats_row['n_experiments'] if stats_row else 0
@@ -148,11 +146,34 @@ class CampaignResearchLog:
             n_branches = 0
             n_experiments = 0
 
-        if current_champion_version > 0 or n_branches > 0:
-            parts.append(
-                f"Champion 当前版本：v{current_champion_version}，共 {promotion_count} 次晋升\n"
-                f"搜索进度：{n_branches} 个 branch，{n_experiments} 轮实验"
-            )
+        if view == "audit":
+            # Champion version and promotion count. v1 is the base anchor, not a
+            # structural promotion; weight revisions must not inflate this count.
+            try:
+                champ_rows = conn.execute(
+                    "SELECT DISTINCT version, promotion_experiment_id "
+                    "FROM champions ORDER BY version ASC"
+                ).fetchall()
+                current_champion_version = (
+                    max(row["version"] for row in champ_rows)
+                    if champ_rows else 0
+                )
+                promotion_count = len({
+                    row["version"]
+                    for row in champ_rows
+                    if row["version"] > 1
+                })
+            except Exception:
+                current_champion_version = 0
+                promotion_count = 0
+
+            if current_champion_version > 0 or n_branches > 0:
+                parts.append(
+                    f"Champion 当前版本：v{current_champion_version}，共 {promotion_count} 次晋升\n"
+                    f"搜索进度：{n_branches} 个 branch，{n_experiments} 轮实验"
+                )
+        elif n_branches > 0:
+            parts.append(f"搜索进度：{n_branches} 个 branch，{n_experiments} 轮 screening")
 
         # Operator weights from latest weight_optimizations
         weight_lines = self._build_weight_feedback(conn)
@@ -160,21 +181,28 @@ class CampaignResearchLog:
             parts.append("算子池权重（当前 champion）：\n" + "\n".join(weight_lines))
 
         # Coverage gaps: locus/action combinations with < 5 attempts
-        gap_lines = self._build_coverage_gaps(conn)
+        gap_lines = self._build_coverage_gaps(conn, view=view)
         if gap_lines:
             parts.append("尚未探索的方向：\n" + "\n".join(gap_lines))
 
         return "\n\n".join(parts)
 
-    def _build_coverage_gaps(self, conn: sqlite3.Connection) -> List[str]:
+    def _build_coverage_gaps(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> List[str]:
         """Find locus/action combinations with < 5 attempts."""
         lines: List[str] = []
         try:
-            rows = conn.execute("""
+            stage_filter = "AND e.stage = 'screening'" if view == "hypothesis" else ""
+            rows = conn.execute(f"""
                 SELECT h.change_locus, h.action, COUNT(*) AS cnt
                 FROM experiment_events e
                 JOIN hypotheses h ON e.hypothesis_id = h.hypothesis_id
                 WHERE e.event_kind = 'experiment'
+                  {stage_filter}
                   AND h.change_locus IS NOT NULL
                   AND h.action IS NOT NULL
                 GROUP BY h.change_locus, h.action
@@ -200,8 +228,16 @@ class CampaignResearchLog:
     # Champion Evolution
     # ------------------------------------------------------------------
 
-    def _build_champion_evolution(self, conn: sqlite3.Connection) -> str:
+    def _build_champion_evolution(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
         """Build champion evolution with hypothesis text for each promoted operator."""
+        if view != "audit":
+            return ""
+
         lines: List[str] = []
         try:
             rows = conn.execute(
@@ -236,7 +272,7 @@ class CampaignResearchLog:
                     for op in sorted(new_ops):
                         lines.append(f"v{version} 新增: {op}")
                         # Get promotion hypothesis + screening info
-                        promo_detail = self._get_promotion_detail(conn, op)
+                        promo_detail = self._get_promotion_detail(conn, op, view=view)
                         if promo_detail:
                             lines.append(promo_detail)
                 else:
@@ -247,7 +283,13 @@ class CampaignResearchLog:
 
         return "\n".join(lines)
 
-    def _get_promotion_detail(self, conn: sqlite3.Connection, operator_name: str) -> str:
+    def _get_promotion_detail(
+        self,
+        conn: sqlite3.Connection,
+        operator_name: str,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
         """Get full hypothesis text + screening wr + frozen result for a promoted operator."""
         try:
             row = conn.execute("""
@@ -271,8 +313,11 @@ class CampaignResearchLog:
 
             wr = row['screening_win_rate']
             if wr is not None:
-                parts.append(f"  → scr={wr:.2f} → frozen=PASS")
-            else:
+                line = f"  -> scr={wr:.2f}"
+                if view == "audit":
+                    line += " -> frozen=PASS"
+                parts.append(line)
+            elif view == "audit":
                 parts.append("  → frozen=PASS")
 
             return "\n".join(parts)
@@ -283,11 +328,34 @@ class CampaignResearchLog:
     # Layer 2: Full Branch Trajectories
     # ------------------------------------------------------------------
 
-    def _build_full_branch_trajectories(self, conn: sqlite3.Connection) -> str:
-        """Layer 2: All branch trajectories, ordered by outcome priority, untruncated."""
+    def _build_full_branch_trajectories(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> str:
+        """Layer 2: Branch trajectories for the requested exposure view."""
         trajectories = self._query_all_branches(conn)
         if not trajectories:
             return ""
+
+        if view == "hypothesis":
+            ordered = sorted(
+                trajectories,
+                key=lambda t: (
+                    -(t.best_screening_wr if t.best_screening_wr is not None else -1.0),
+                    t.branch_id,
+                ),
+            )
+            lines: List[str] = []
+            for idx, t in enumerate(ordered, start=1):
+                if t.outcome == "promoted":
+                    continue
+                rendered = self._render_branch(t, idx, view=view)
+                if rendered:
+                    lines.extend(rendered)
+                    lines.append("")
+            return "\n".join(lines).rstrip()
 
         # Categorise
         promoted = [t for t in trajectories if t.outcome == 'promoted']
@@ -306,7 +374,7 @@ class CampaignResearchLog:
 
         for group in [promoted, failed_frozen, failed_val, abandoned]:
             for t in group:
-                lines.extend(self._render_branch(t, idx))
+                lines.extend(self._render_branch(t, idx, view=view))
                 lines.append("")
                 idx += 1
 
@@ -413,17 +481,26 @@ class CampaignResearchLog:
 
         return trajectories
 
-    def _render_branch(self, t: BranchTrajectory, idx: int) -> List[str]:
+    def _render_branch(
+        self,
+        t: BranchTrajectory,
+        idx: int,
+        *,
+        view: RenderView = "hypothesis",
+    ) -> List[str]:
         """Render a single branch trajectory."""
         lines: List[str] = []
         bid_short = t.branch_id[:8]
 
         # Header
-        lines.append(f"--- Branch {idx} [{bid_short}] → {t.outcome} ---")
+        if view == "audit":
+            lines.append(f"--- Branch {idx} [{bid_short}] → {t.outcome} ---")
+        else:
+            lines.append(f"--- Branch {idx} [{bid_short}] -> screening_summary ---")
         lines.append(f"算子: {t.operator_name}")
 
         # Full hypothesis text
-        if t.hypothesis_text:
+        if t.hypothesis_text and not (view == "hypothesis" and t.outcome == "promoted"):
             lines.append(f'假设: "{t.hypothesis_text}"')
 
         # Stage trajectory
@@ -435,6 +512,8 @@ class CampaignResearchLog:
             if event_kind == 'contract_fail':
                 traj_parts.append("  [C10 blocked]")
             elif stage == 'frozen':
+                if view == "hypothesis":
+                    continue
                 # Only PASS/FAIL, no wr, no md
                 if s.get('decision') == 'promote':
                     traj_parts.append("  frozen: PASS")
@@ -444,13 +523,18 @@ class CampaignResearchLog:
                 screening_idx += 1
                 wr = s.get('wr')
                 md = s.get('md')
-                decision = s.get('decision', '')
                 wr_str = f"scr={wr:.2f}" if wr is not None else "scr=?"
                 md_str = f" [md={int(md)}]" if md is not None else ""
-                traj_parts.append(
-                    f"  Round {screening_idx}: {wr_str}{md_str} → {decision}"
-                )
+                if view == "audit":
+                    decision = s.get('decision', '')
+                    traj_parts.append(
+                        f"  Round {screening_idx}: {wr_str}{md_str} → {decision}"
+                    )
+                else:
+                    traj_parts.append(f"  Round {screening_idx}: {wr_str}{md_str}")
             elif stage == 'validation':
+                if view == "hypothesis":
+                    continue
                 wr = s.get('wr')
                 decision = s.get('decision', '')
                 wr_str = f"val={wr:.2f}" if wr is not None else "val=?"

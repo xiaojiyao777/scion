@@ -28,10 +28,56 @@ _BASELINE_TIME_FRACTION = 0.8
 _MIN_BASELINE_TIME_FRACTION = 0.2
 _MAX_BASELINE_TIME_FRACTION = 0.95
 _SEARCH_POLICY_RELATIVE_PATH = "policies/search_policy.py"
+_CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
+_NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
+_DEFAULT_CONSTRUCTION_MODE = "nearest_neighbor"
+_DEFAULT_CONSTRUCTION_BIAS = 0.0
+_MIN_CONSTRUCTION_BIAS = 0.0
+_MAX_CONSTRUCTION_BIAS = 1.0
+_MAX_COMPONENT_WEIGHT = 5.0
+_MAX_PORTFOLIO_TOP_K = 1000
+_MAX_PORTFOLIO_ATTEMPTS = 1_000_000
+_ALLOWED_PORTFOLIO_COMPONENTS = frozenset(
+    {
+        "route_local",
+        "route_pair",
+        "ruin_recreate",
+        "registry_operator",
+    }
+)
+_DEFAULT_ENABLED_COMPONENTS = tuple(sorted(_ALLOWED_PORTFOLIO_COMPONENTS))
+_DEFAULT_COMPONENT_WEIGHTS = {
+    component: 1.0 for component in _DEFAULT_ENABLED_COMPONENTS
+}
+_DEFAULT_CANDIDATE_LIMITS = {
+    "max_rounds": _MAX_OPERATOR_ROUNDS,
+    "top_k": _MAX_PORTFOLIO_TOP_K,
+    "total_attempts": _MAX_PORTFOLIO_ATTEMPTS,
+    "per_component_attempts": _MAX_PORTFOLIO_ATTEMPTS,
+}
+_ALLOWED_CONSTRUCTION_MODES = frozenset(
+    {
+        "nearest_neighbor",
+        "nearest_neighbor_demand_bias",
+        "demand_descending",
+        "sequential",
+    }
+)
 
 
-def solve(instance: CvrpInstance, rng: random.Random) -> CvrpSolution:
+def solve(
+    instance: CvrpInstance,
+    rng: random.Random,
+    *,
+    construction_mode: str = _DEFAULT_CONSTRUCTION_MODE,
+    construction_bias: float = _DEFAULT_CONSTRUCTION_BIAS,
+) -> CvrpSolution:
     """Capacity-aware nearest-neighbor construction for small fixtures."""
+    mode = construction_mode
+    if mode not in _ALLOWED_CONSTRUCTION_MODES:
+        mode = _DEFAULT_CONSTRUCTION_MODE
+    bias = min(max(float(construction_bias), _MIN_CONSTRUCTION_BIAS), _MAX_CONSTRUCTION_BIAS)
+    max_demand = max((instance.demand(c) for c in instance.customer_ids), default=1)
     unvisited = set(instance.customer_ids)
     routes: list[tuple[int, ...]] = []
     while unvisited:
@@ -45,9 +91,14 @@ def solve(instance: CvrpInstance, rng: random.Random) -> CvrpSolution:
             ]
             if not feasible:
                 break
-            nxt = min(
+            nxt = _select_construction_customer(
                 feasible,
-                key=lambda c: (instance.distance(current, c), rng.random()),
+                instance=instance,
+                current=current,
+                rng=rng,
+                mode=mode,
+                bias=bias,
+                max_demand=max_demand,
             )
             unvisited.remove(nxt)
             route.append(nxt)
@@ -59,6 +110,43 @@ def solve(instance: CvrpInstance, rng: random.Random) -> CvrpSolution:
     return CvrpSolution(routes=tuple(routes))
 
 
+def _select_construction_customer(
+    feasible: list[int],
+    *,
+    instance: CvrpInstance,
+    current: int,
+    rng: random.Random,
+    mode: str,
+    bias: float,
+    max_demand: int,
+) -> int:
+    if mode == "sequential":
+        return min(feasible)
+    if mode == "demand_descending":
+        return min(
+            feasible,
+            key=lambda c: (
+                -instance.demand(c),
+                instance.distance(current, c),
+                rng.random(),
+            ),
+        )
+    if mode == "nearest_neighbor_demand_bias":
+        demand_scale = max(float(max_demand), 1.0)
+        return min(
+            feasible,
+            key=lambda c: (
+                instance.distance(current, c)
+                - bias * (float(instance.demand(c)) / demand_scale),
+                rng.random(),
+            ),
+        )
+    return min(
+        feasible,
+        key=lambda c: (instance.distance(current, c), rng.random()),
+    )
+
+
 def solve_baseline(
     *,
     instance: CvrpInstance,
@@ -67,6 +155,7 @@ def solve_baseline(
     rng: random.Random,
     time_limit_sec: float,
     baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
+    construction_policy: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Return a baseline solution plus audit metadata.
 
@@ -76,6 +165,11 @@ def solve_baseline(
     smoke tests fall back to the deterministic Scion construction.
     """
 
+    construction_solution, construction_audit = _construct_with_policy_audit(
+        instance=instance,
+        rng=rng,
+        construction_policy=construction_policy,
+    )
     resolved = Path(instance_path).resolve(strict=False)
     is_vrp = resolved.suffix.lower() == ".vrp"
     baseline_root = _find_vrp_baseline_root()
@@ -91,10 +185,11 @@ def solve_baseline(
                 baseline_root=baseline_root,
                 baseline_required=baseline_required,
             )
-            return solution, audit
+            return solution, {**construction_audit, **audit}
         except Exception as exc:
-            fallback = solve(instance, rng)
+            fallback = construction_solution
             return fallback, {
+                **construction_audit,
                 "baseline_mode": "scion_nearest_neighbor_fallback",
                 "baseline_required": baseline_required,
                 "baseline_error": f"{type(exc).__name__}: {exc}",
@@ -103,8 +198,9 @@ def solve_baseline(
                 "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
             }
     if is_vrp and baseline_required:
-        fallback = solve(instance, rng)
+        fallback = construction_solution
         return fallback, {
+            **construction_audit,
             "baseline_mode": "scion_nearest_neighbor_fallback",
             "baseline_required": True,
             "baseline_error": "vrp/src baseline not available for configured CVRP data root",
@@ -112,8 +208,9 @@ def solve_baseline(
             "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
         }
 
-    fallback = solve(instance, rng)
+    fallback = construction_solution
     return fallback, {
+        **construction_audit,
         "baseline_mode": "scion_nearest_neighbor",
         "baseline_required": False,
         "baseline_routes": len(fallback.routes),
@@ -133,6 +230,7 @@ def improve_with_registry_operators(
     start_time: float,
     max_operator_rounds: int = _MAX_OPERATOR_ROUNDS,
     post_baseline_operators_enabled: bool = True,
+    neighborhood_portfolio: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Apply registry operators with bounded, auditable acceptance."""
 
@@ -150,8 +248,11 @@ def improve_with_registry_operators(
         "operator_stop_reason": "",
         "operator_events": [],
     }
+    portfolio_audit = _portfolio_audit_defaults(neighborhood_portfolio)
+    audit.update(portfolio_audit)
     if not post_baseline_operators_enabled:
         audit["operator_stop_reason"] = "disabled_by_policy"
+        audit["portfolio_stop_reason"] = "disabled_by_search_policy"
         return solution, audit
 
     operators = _load_registry_operators(
@@ -159,15 +260,27 @@ def improve_with_registry_operators(
         workspace_root=workspace_root,
         audit=audit,
     )
+    operators = _apply_neighborhood_portfolio(
+        operators,
+        audit=audit,
+        max_operator_rounds=max_operator_rounds,
+    )
     if not operators:
+        if not audit["portfolio_stop_reason"]:
+            if not registry_path or audit["operator_loaded"] == 0:
+                audit["portfolio_stop_reason"] = "no_registry_operators"
+            else:
+                audit["portfolio_stop_reason"] = "no_enabled_components"
         return solution, audit
 
     current = solution
     current_objective = _objective_for_solution(adapter, instance, current)
     fatal_operator_failure = False
+    max_operator_rounds = int(audit["portfolio_effective_round_limit"])
     for round_index in range(max_operator_rounds):
         if _time_exhausted(start_time, time_limit_sec):
             audit["operator_stop_reason"] = "time_limit"
+            audit["portfolio_stop_reason"] = "time_limit"
             break
         round_accepted = 0
         round_completed = True
@@ -175,16 +288,29 @@ def improve_with_registry_operators(
         for operator in operators:
             if _time_exhausted(start_time, time_limit_sec):
                 audit["operator_stop_reason"] = "time_limit"
+                audit["portfolio_stop_reason"] = "time_limit"
+                round_completed = False
+                break
+            if _portfolio_attempt_limit_reached(audit, operator.component):
+                audit["operator_stop_reason"] = "portfolio_attempt_limit"
+                audit["portfolio_stop_reason"] = "attempt_limit"
                 round_completed = False
                 break
             audit["operator_attempts"] += 1
+            component_attempts = audit["component_attempts"]
+            component_attempts[operator.component] = (
+                _as_nonnegative_int(component_attempts.get(operator.component)) + 1
+            )
+            op_start_ns = time.monotonic_ns()
             try:
                 candidate = operator.instance.execute(current, instance, rng)
             except Exception as exc:
+                _record_component_runtime(audit, operator.component, op_start_ns)
                 audit["operator_errors"] += 1
                 _record_event(audit, operator.name, "error", str(exc))
                 fatal_operator_failure = True
                 continue
+            _record_component_runtime(audit, operator.component, op_start_ns)
 
             candidate_solution = _coerce_solution(candidate)
             if candidate_solution is None:
@@ -209,6 +335,10 @@ def improve_with_registry_operators(
                 current = candidate_solution
                 current_objective = candidate_objective
                 audit["operator_accepted"] += 1
+                component_accepted = audit["component_accepted"]
+                component_accepted[operator.component] = (
+                    _as_nonnegative_int(component_accepted.get(operator.component)) + 1
+                )
                 round_accepted += 1
                 _record_event(audit, operator.name, "accepted", "")
             else:
@@ -220,14 +350,21 @@ def improve_with_registry_operators(
             audit["operator_no_improvement_rounds"] += 1
         if fatal_operator_failure:
             audit["operator_stop_reason"] = "fatal_operator_failure"
+            audit["portfolio_stop_reason"] = "fatal_operator_failure"
             break
         if audit["operator_stop_reason"] == "time_limit":
             break
+        if audit["operator_stop_reason"] == "portfolio_attempt_limit":
+            break
         if round_completed and round_accepted == 0:
             audit["operator_stop_reason"] = "no_improvement_round"
+            audit["portfolio_stop_reason"] = "no_improvement_round"
             break
     else:
         audit["operator_stop_reason"] = "max_operator_rounds"
+        audit["portfolio_stop_reason"] = "max_operator_rounds"
+    if not audit["portfolio_stop_reason"]:
+        audit["portfolio_stop_reason"] = audit["operator_stop_reason"] or "completed"
     return current, audit
 
 
@@ -254,6 +391,16 @@ def _main() -> None:
         instance=instance,
         time_limit_sec=args.time_limit,
     )
+    construction_policy = _load_construction_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
+    neighborhood_portfolio = _load_neighborhood_portfolio(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     sol, baseline_audit = solve_baseline(
         instance=instance,
         instance_path=instance_path,
@@ -261,6 +408,7 @@ def _main() -> None:
         rng=rng,
         time_limit_sec=args.time_limit,
         baseline_time_fraction=search_policy["baseline_time_fraction"],
+        construction_policy=construction_policy,
     )
     sol, operator_audit = improve_with_registry_operators(
         sol,
@@ -275,6 +423,7 @@ def _main() -> None:
         post_baseline_operators_enabled=search_policy[
             "post_baseline_operators_enabled"
         ],
+        neighborhood_portfolio=neighborhood_portfolio,
     )
     raw = {"routes": [list(route) for route in sol.routes], "feasible": True}
     artifact = adapter.deserialize_solver_output(raw, instance)
@@ -292,11 +441,19 @@ def _main() -> None:
 
 
 class _LoadedOperator:
-    def __init__(self, name: str, weight: float, instance: Any, order: int) -> None:
+    def __init__(
+        self,
+        name: str,
+        weight: float,
+        instance: Any,
+        order: int,
+        component: str,
+    ) -> None:
         self.name = name
         self.weight = weight
         self.instance = instance
         self.order = order
+        self.component = component
 
 
 def _load_registry_operators(
@@ -360,7 +517,16 @@ def _load_registry_operators(
             audit["operator_skipped"] += 1
             _record_event(audit, name, "skipped", "operator has no execute method")
             continue
-        loaded.append(_LoadedOperator(name=name, weight=weight, instance=instance, order=index))
+        component = _operator_component(entry, instance)
+        loaded.append(
+            _LoadedOperator(
+                name=name,
+                weight=weight,
+                instance=instance,
+                order=index,
+                component=component,
+            )
+        )
 
     loaded.sort(key=lambda op: (-op.weight, op.order))
     audit["operator_loaded"] = len(loaded)
@@ -405,6 +571,533 @@ def _configured_data_roots() -> tuple[Path, ...]:
         if value:
             roots.append(Path(value).expanduser().resolve(strict=False))
     return tuple(roots)
+
+
+def _load_construction_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit: dict[str, Any] = {
+        "construction_policy_path": _CONSTRUCTION_POLICY_RELATIVE_PATH,
+        "construction_surface_loaded": False,
+        "construction_errors": 0,
+        "construction_events": [],
+        "construction_mode": _DEFAULT_CONSTRUCTION_MODE,
+        "construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
+    }
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _CONSTRUCTION_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_construction_event(audit, "error", "construction policy path escapes workspace")
+        audit["construction_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction policy load failed: {exc}",
+        )
+        return audit
+
+    audit["construction_surface_loaded"] = True
+    audit["construction_mode"] = _construction_mode(
+        module=module,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    audit["construction_bias"] = _construction_bias(
+        module=module,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    return audit
+
+
+def _construct_with_policy_audit(
+    *,
+    instance: CvrpInstance,
+    rng: random.Random,
+    construction_policy: dict[str, Any] | None,
+) -> tuple[CvrpSolution, dict[str, Any]]:
+    audit = dict(construction_policy or {})
+    if not audit:
+        audit = {
+            "construction_policy_path": _CONSTRUCTION_POLICY_RELATIVE_PATH,
+            "construction_surface_loaded": False,
+            "construction_errors": 0,
+            "construction_events": [],
+            "construction_mode": _DEFAULT_CONSTRUCTION_MODE,
+            "construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
+        }
+    audit.setdefault("construction_errors", 0)
+    audit.setdefault("construction_events", [])
+    audit.setdefault("construction_mode", _DEFAULT_CONSTRUCTION_MODE)
+    audit.setdefault("construction_bias", _DEFAULT_CONSTRUCTION_BIAS)
+
+    start_ns = time.monotonic_ns()
+    try:
+        solution = solve(
+            instance,
+            rng,
+            construction_mode=str(audit["construction_mode"]),
+            construction_bias=float(audit["construction_bias"]),
+        )
+    except Exception as exc:
+        audit["construction_errors"] = _as_nonnegative_int(audit["construction_errors"]) + 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction failed for mode={audit['construction_mode']!r}: {exc}",
+        )
+        if audit["construction_mode"] == _DEFAULT_CONSTRUCTION_MODE:
+            raise
+        solution = solve(instance, rng)
+
+    audit["construction_elapsed_ms"] = int((time.monotonic_ns() - start_ns) / 1_000_000)
+    audit["construction_routes"] = len(solution.routes)
+    audit["construction_distance"] = sum(
+        instance.route_distance(route) for route in solution.routes
+    )
+    feasible, reason = _solution_is_valid(CvrpAdapter(object()), instance, solution)
+    audit["construction_feasible"] = feasible
+    if not feasible:
+        audit["construction_errors"] = _as_nonnegative_int(audit["construction_errors"]) + 1
+        _record_construction_event(audit, "error", f"construction infeasible: {reason}")
+    return solution, audit
+
+
+def _construction_mode(
+    *,
+    module: Any,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> str:
+    try:
+        value = _call_policy_function(module, "construction_mode", instance, time_limit_sec)
+    except Exception as exc:
+        audit["construction_errors"] += 1
+        _record_construction_event(audit, "error", f"construction_mode failed: {exc}")
+        return _DEFAULT_CONSTRUCTION_MODE
+    if not isinstance(value, str):
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction_mode returned non-string value {value!r}",
+        )
+        return _DEFAULT_CONSTRUCTION_MODE
+    mode = value.strip()
+    if mode not in _ALLOWED_CONSTRUCTION_MODES:
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction_mode={mode!r} is not allowed",
+        )
+        return _DEFAULT_CONSTRUCTION_MODE
+    return mode
+
+
+def _construction_bias(
+    *,
+    module: Any,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> float:
+    try:
+        value = _call_policy_function(module, "construction_bias", instance, time_limit_sec)
+    except Exception as exc:
+        audit["construction_errors"] += 1
+        _record_construction_event(audit, "error", f"construction_bias failed: {exc}")
+        return _DEFAULT_CONSTRUCTION_BIAS
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction_bias returned non-numeric value {value!r}",
+        )
+        return _DEFAULT_CONSTRUCTION_BIAS
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            f"construction_bias returned non-finite value {value!r}",
+        )
+        return _DEFAULT_CONSTRUCTION_BIAS
+    clamped = min(max(numeric, _MIN_CONSTRUCTION_BIAS), _MAX_CONSTRUCTION_BIAS)
+    if clamped != numeric:
+        audit["construction_errors"] += 1
+        _record_construction_event(
+            audit,
+            "error",
+            "construction_bias="
+            f"{numeric!r} outside [{_MIN_CONSTRUCTION_BIAS}, {_MAX_CONSTRUCTION_BIAS}], "
+            "clamped",
+        )
+    return clamped
+
+
+def _record_construction_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("construction_events", [])
+    if len(events) >= 10:
+        return
+    events.append(
+        {
+            "policy": _CONSTRUCTION_POLICY_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+
+def _as_nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _load_neighborhood_portfolio(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _portfolio_audit_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_portfolio_event(audit, "error", "portfolio policy path escapes workspace")
+        audit["portfolio_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(audit, "error", f"portfolio policy load failed: {exc}")
+        return audit
+
+    audit["portfolio_surface_loaded"] = True
+    audit["enabled_components"] = _portfolio_enabled_components(
+        module=module,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    audit["component_weights"] = _portfolio_component_weights(
+        module=module,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    audit["candidate_limits"] = _portfolio_candidate_limits(
+        module=module,
+        instance=instance,
+        time_limit_sec=time_limit_sec,
+        audit=audit,
+    )
+    return audit
+
+
+def _portfolio_audit_defaults(
+    portfolio: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    audit = dict(portfolio or {})
+    audit.setdefault("portfolio_policy_path", _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH)
+    audit.setdefault("portfolio_surface_loaded", False)
+    audit.setdefault("portfolio_errors", 0)
+    audit.setdefault("portfolio_events", [])
+    audit.setdefault("enabled_components", list(_DEFAULT_ENABLED_COMPONENTS))
+    audit.setdefault("component_weights", dict(_DEFAULT_COMPONENT_WEIGHTS))
+    audit.setdefault("candidate_limits", dict(_DEFAULT_CANDIDATE_LIMITS))
+    audit.setdefault(
+        "component_attempts",
+        {component: 0 for component in audit["enabled_components"]},
+    )
+    audit.setdefault(
+        "component_accepted",
+        {component: 0 for component in audit["enabled_components"]},
+    )
+    audit.setdefault(
+        "component_runtime_ms",
+        {component: 0 for component in audit["enabled_components"]},
+    )
+    audit.setdefault("portfolio_stop_reason", "")
+    audit.setdefault(
+        "portfolio_effective_round_limit",
+        int(audit["candidate_limits"].get("max_rounds", _MAX_OPERATOR_ROUNDS))
+        if isinstance(audit.get("candidate_limits"), Mapping)
+        else _MAX_OPERATOR_ROUNDS,
+    )
+    return audit
+
+
+def _portfolio_enabled_components(
+    *,
+    module: Any,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> list[str]:
+    try:
+        value = _call_policy_function(module, "enabled_components", instance, time_limit_sec)
+    except Exception as exc:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(audit, "error", f"enabled_components failed: {exc}")
+        return list(_DEFAULT_ENABLED_COMPONENTS)
+    if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"enabled_components returned non-sequence value {value!r}",
+        )
+        return list(_DEFAULT_ENABLED_COMPONENTS)
+
+    enabled: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        component = str(item).strip()
+        if component not in _ALLOWED_PORTFOLIO_COMPONENTS:
+            audit["portfolio_errors"] += 1
+            _record_portfolio_event(
+                audit,
+                "error",
+                f"enabled_components contains unknown component {component!r}",
+            )
+            continue
+        if component not in seen:
+            seen.add(component)
+            enabled.append(component)
+    if not enabled:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            "enabled_components produced no valid enabled components",
+        )
+        return list(_DEFAULT_ENABLED_COMPONENTS)
+    return enabled
+
+
+def _portfolio_component_weights(
+    *,
+    module: Any,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> dict[str, float]:
+    weights = dict(_DEFAULT_COMPONENT_WEIGHTS)
+    try:
+        value = _call_policy_function(module, "component_weights", instance, time_limit_sec)
+    except Exception as exc:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(audit, "error", f"component_weights failed: {exc}")
+        return weights
+    if not isinstance(value, Mapping):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"component_weights returned non-mapping value {value!r}",
+        )
+        return weights
+
+    for raw_component, raw_weight in value.items():
+        component = str(raw_component).strip()
+        if component not in _ALLOWED_PORTFOLIO_COMPONENTS:
+            audit["portfolio_errors"] += 1
+            _record_portfolio_event(
+                audit,
+                "error",
+                f"component_weights contains unknown component {component!r}",
+            )
+            continue
+        weight = _portfolio_float(
+            raw_weight,
+            default=weights[component],
+            minimum=0.0,
+            maximum=_MAX_COMPONENT_WEIGHT,
+            field_name=f"component_weights[{component}]",
+            audit=audit,
+        )
+        weights[component] = weight
+    return weights
+
+
+def _portfolio_candidate_limits(
+    *,
+    module: Any,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+    audit: dict[str, Any],
+) -> dict[str, int]:
+    limits = dict(_DEFAULT_CANDIDATE_LIMITS)
+    try:
+        value = _call_policy_function(module, "candidate_limits", instance, time_limit_sec)
+    except Exception as exc:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(audit, "error", f"candidate_limits failed: {exc}")
+        return limits
+    if not isinstance(value, Mapping):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"candidate_limits returned non-mapping value {value!r}",
+        )
+        return limits
+
+    known_limit_keys = {
+        "max_rounds",
+        "top_k",
+        "total_attempts",
+        "per_component_attempts",
+    }
+    for raw_key, raw_limit in value.items():
+        key = str(raw_key).strip()
+        if key in _ALLOWED_PORTFOLIO_COMPONENTS:
+            limits[key] = _portfolio_int(
+                raw_limit,
+                default=limits.get(key, limits["per_component_attempts"]),
+                minimum=0,
+                maximum=_MAX_PORTFOLIO_ATTEMPTS,
+                field_name=f"candidate_limits[{key}]",
+                audit=audit,
+            )
+            continue
+        if key not in known_limit_keys:
+            audit["portfolio_errors"] += 1
+            _record_portfolio_event(
+                audit,
+                "error",
+                f"candidate_limits contains unknown key {key!r}",
+            )
+            continue
+        maximum = _MAX_OPERATOR_ROUNDS if key == "max_rounds" else _MAX_PORTFOLIO_ATTEMPTS
+        if key == "top_k":
+            maximum = _MAX_PORTFOLIO_TOP_K
+        limits[key] = _portfolio_int(
+            raw_limit,
+            default=limits[key],
+            minimum=0,
+            maximum=maximum,
+            field_name=f"candidate_limits[{key}]",
+            audit=audit,
+        )
+    return limits
+
+
+def _portfolio_float(
+    value: Any,
+    *,
+    default: float,
+    minimum: float,
+    maximum: float,
+    field_name: str,
+    audit: dict[str, Any],
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"{field_name} returned non-numeric value {value!r}",
+        )
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"{field_name} returned non-finite value {value!r}",
+        )
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _portfolio_int(
+    value: Any,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+    field_name: str,
+    audit: dict[str, Any],
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"{field_name} returned non-integer value {value!r}",
+        )
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit["portfolio_errors"] += 1
+        _record_portfolio_event(
+            audit,
+            "error",
+            f"{field_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _record_portfolio_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("portfolio_events", [])
+    if len(events) >= 10:
+        return
+    events.append(
+        {
+            "policy": _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
 
 
 def _load_search_policy(
@@ -686,6 +1379,97 @@ def _map_vrp_customer_to_scion(customer: int, depot: int, dimension: int) -> int
             return scion_id
         scion_id += 1
     raise ValueError(f"unknown vrp customer id {customer}")
+
+
+def _apply_neighborhood_portfolio(
+    operators: tuple[_LoadedOperator, ...],
+    *,
+    audit: dict[str, Any],
+    max_operator_rounds: int,
+) -> tuple[_LoadedOperator, ...]:
+    enabled = {
+        str(component)
+        for component in audit.get("enabled_components", [])
+        if str(component) in _ALLOWED_PORTFOLIO_COMPONENTS
+    }
+    component_weights = audit.get("component_weights")
+    if not isinstance(component_weights, Mapping):
+        component_weights = _DEFAULT_COMPONENT_WEIGHTS
+    candidate_limits = audit.get("candidate_limits")
+    if not isinstance(candidate_limits, Mapping):
+        candidate_limits = _DEFAULT_CANDIDATE_LIMITS
+
+    for component in enabled:
+        audit["component_attempts"].setdefault(component, 0)
+        audit["component_accepted"].setdefault(component, 0)
+        audit["component_runtime_ms"].setdefault(component, 0)
+
+    effective_rounds = min(
+        max_operator_rounds,
+        int(candidate_limits.get("max_rounds", _MAX_OPERATOR_ROUNDS)),
+    )
+    audit["portfolio_effective_round_limit"] = max(0, effective_rounds)
+    top_k = max(0, int(candidate_limits.get("top_k", _MAX_PORTFOLIO_TOP_K)))
+
+    filtered = [operator for operator in operators if operator.component in enabled]
+    filtered.sort(
+        key=lambda op: (
+            -op.weight * float(component_weights.get(op.component, 1.0)),
+            op.order,
+        )
+    )
+    if top_k == 0:
+        audit["operator_loaded"] = 0
+        audit["portfolio_stop_reason"] = "top_k_zero"
+        return tuple()
+    scheduled = tuple(filtered[:top_k])
+    audit["operator_loaded"] = len(scheduled)
+    if operators and not scheduled and not audit["portfolio_stop_reason"]:
+        audit["portfolio_stop_reason"] = "no_enabled_components"
+    return scheduled
+
+
+def _portfolio_attempt_limit_reached(
+    audit: dict[str, Any],
+    component: str,
+) -> bool:
+    candidate_limits = audit.get("candidate_limits")
+    if not isinstance(candidate_limits, Mapping):
+        return False
+    component_attempts = audit.get("component_attempts")
+    if not isinstance(component_attempts, Mapping):
+        return False
+    total_limit = int(candidate_limits.get("total_attempts", _MAX_PORTFOLIO_ATTEMPTS))
+    total_attempts = sum(_as_nonnegative_int(value) for value in component_attempts.values())
+    if total_attempts >= total_limit:
+        return True
+    component_limit = int(
+        candidate_limits.get(
+            component,
+            candidate_limits.get("per_component_attempts", _MAX_PORTFOLIO_ATTEMPTS),
+        )
+    )
+    return _as_nonnegative_int(component_attempts.get(component)) >= component_limit
+
+
+def _record_component_runtime(
+    audit: dict[str, Any],
+    component: str,
+    start_ns: int,
+) -> None:
+    elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
+    runtime = audit["component_runtime_ms"]
+    runtime[component] = _as_nonnegative_int(runtime.get(component)) + elapsed_ms
+
+
+def _operator_component(entry: Mapping[str, Any], instance: Any) -> str:
+    raw = entry.get("category")
+    if not raw:
+        raw = getattr(instance, "category", "")
+    component = str(raw or "").strip()
+    if component in _ALLOWED_PORTFOLIO_COMPONENTS:
+        return component
+    return "registry_operator"
 
 
 def _operator_path(workspace: Path, file_path: str) -> Path | None:

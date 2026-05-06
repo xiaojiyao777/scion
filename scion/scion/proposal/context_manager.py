@@ -1,7 +1,6 @@
 """ContextManager — builds LLM input contexts with exposure control (§5.3)."""
 from __future__ import annotations
 
-import json
 import os
 import re
 from collections import Counter
@@ -10,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from scion.core.models import (
     Branch,
     ChampionState,
-    Decision,
     ExperimentStage,
     HypothesisFamily,
     HypothesisProposal,
@@ -86,8 +84,9 @@ class ContextManager:
             _get_family_taxonomy(problem_spec)
             or _get_family_taxonomy(adapter_spec)
         )
+        safe_hypothesis_steps = _filter_hypothesis_prompt_steps(step_history or [])
         experiment_history = _build_experiment_history(
-            step_history or [], branch.branch_id, taxonomy=family_taxonomy
+            safe_hypothesis_steps, branch.branch_id, taxonomy=family_taxonomy
         )
         blacklist_summary = _summarise_blacklist(blacklist)
         sibling_summary = _summarise_siblings(sibling_branches or [])
@@ -104,7 +103,7 @@ class ContextManager:
         branch_direction = _build_branch_direction_prompt(branch)
 
         # T07: Build family tracking and coverage (J-patch: use global step_history)
-        all_steps = step_history or []
+        all_steps = safe_hypothesis_steps
         targetable_operator_files = _list_champion_operator_files(champion)
         targetable_policy_files = _list_champion_policy_files(
             champion,
@@ -133,7 +132,7 @@ class ContextManager:
         )
 
         # T10: Champion baseline hints from most recent screening experiment
-        champion_baselines = _build_champion_baselines(step_history or [])
+        champion_baselines = _build_champion_baselines(safe_hypothesis_steps)
 
         # Sprint H2 T5: Failure pattern warning
         failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
@@ -151,7 +150,7 @@ class ContextManager:
         # J1: Render search memory (cross-branch search history)
         search_memory_block = ""
         if search_memory is not None:
-            search_memory_block = search_memory.render()
+            search_memory_block = search_memory.render(view="hypothesis")
 
         # J2: Render saturation signals
         saturation_block = ""
@@ -163,20 +162,25 @@ class ContextManager:
         # weighted-sum scalar improvement, plus recent screening tendencies.
         objective_policy_guidance = _build_objective_policy_guidance(adapter_spec)
         objective_feedback = _build_recent_objective_feedback(
-            step_history or [], branch.branch_id, adapter_spec
+            safe_hypothesis_steps, branch.branch_id, adapter_spec
         )
         objective_opportunity_profile = _build_objective_opportunity_profile(
-            step_history or [], adapter_spec
+            safe_hypothesis_steps, adapter_spec
         )
         objective_guidance = _build_objective_guidance(
             saturation_signals, objective_feedback=objective_feedback
         )
         search_control_guidance = _build_search_control_guidance(
-            families, step_history or [], adapter_spec
+            families, safe_hypothesis_steps, adapter_spec
         )
         runtime_feedback = _build_runtime_feedback(
-            step_history or [],
+            safe_hypothesis_steps,
             slow_case_threshold=self._runtime_slow_threshold,
+        )
+        runtime_failure_guidance = _build_runtime_failure_guidance(
+            safe_hypothesis_steps,
+            problem_spec=problem_spec,
+            adapter_spec=adapter_spec,
         )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
@@ -188,7 +192,7 @@ class ContextManager:
         # J-patch: Render research log (cross-branch trajectory)
         research_log_block = ""
         if research_log is not None:
-            research_log_block = research_log.render()
+            research_log_block = research_log.render(view="hypothesis")
 
         return {
             "problem_summary": problem_summary,
@@ -218,6 +222,7 @@ class ContextManager:
             "objective_guidance": objective_guidance,
             "search_control_guidance": search_control_guidance,
             "runtime_feedback": runtime_feedback,
+            "runtime_failure_guidance": runtime_failure_guidance,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
@@ -414,25 +419,276 @@ def _find_research_surface(surfaces: list[Any], name: str) -> Any | None:
 def _build_research_surfaces_block(surfaces: list[Any]) -> str:
     if not surfaces:
         return ""
-    lines = ["## Research Surfaces"]
+    lines = [
+        "## Research Surfaces",
+        (
+            "Metadata below is declared by the problem package. Framework core "
+            "treats algorithm roles, invocation points, bounds, scale terms, "
+            "runtime evidence, and novelty fields as problem-provided context."
+        ),
+    ]
     for surface in surfaces:
         name = getattr(surface, "name", "")
         kind = getattr(surface, "kind", "")
         description = getattr(surface, "description", "")
-        targets = getattr(surface, "target_files", []) or []
-        prompt_hint = getattr(surface, "prompt_hint", "")
-        required_functions = getattr(surface, "required_functions", []) or []
         lines.append(f"- {name} [{kind}]: {description}")
-        if targets:
-            lines.append(f"  targets: {', '.join(str(t) for t in targets)}")
-        if required_functions:
-            lines.append(
-                "  required functions: "
-                f"{', '.join(str(fn) for fn in required_functions)}"
-            )
-        if prompt_hint:
-            lines.append(f"  hint: {prompt_hint}")
+        _append_research_surface_metadata(lines, surface, prefix="  ")
     return "\n".join(lines)
+
+
+def _build_research_surface_interface_spec(surface: Any) -> str:
+    """Render a generic active-surface interface from declared metadata."""
+    name = getattr(surface, "name", "")
+    kind = getattr(surface, "kind", "")
+    description = getattr(surface, "description", "")
+    lines = [f"### Declared Research Surface: {name} [{kind}]"]
+    if description:
+        lines.append(description)
+    _append_research_surface_metadata(lines, surface, prefix="")
+    return "\n".join(lines)
+
+
+def _append_research_surface_metadata(
+    lines: list[str],
+    surface: Any,
+    *,
+    prefix: str,
+) -> None:
+    algorithm = getattr(surface, "algorithm", None)
+    if algorithm is not None:
+        _append_metadata_value(
+            lines, prefix, "algorithm.role", getattr(algorithm, "role", "")
+        )
+        _append_metadata_value(
+            lines,
+            prefix,
+            "algorithm.invocation_point",
+            getattr(algorithm, "invocation_point", ""),
+        )
+        _append_metadata_value(
+            lines,
+            prefix,
+            "algorithm.description",
+            getattr(algorithm, "description", ""),
+        )
+
+    targets = getattr(surface, "targets", None)
+    target_files = _coerce_text_list(
+        getattr(targets, "files", None) if targets is not None else None
+    ) or _coerce_text_list(getattr(surface, "target_files", None))
+    if target_files:
+        lines.append(f"{prefix}targets.files: {', '.join(target_files)}")
+
+    if targets is not None or _has_any_attr(
+        surface,
+        ("create_new_allowed", "modify_allowed", "remove_allowed"),
+    ):
+        create_new_allowed = _get_nested_or_legacy_bool(
+            targets, surface, "create_new_allowed"
+        )
+        modify_allowed = _get_nested_or_legacy_bool(targets, surface, "modify_allowed")
+        remove_allowed = _get_nested_or_legacy_bool(targets, surface, "remove_allowed")
+        lines.append(
+            f"{prefix}action permissions: "
+            f"create_new={_format_bool(create_new_allowed)}, "
+            f"modify={_format_bool(modify_allowed)}, "
+            f"remove={_format_bool(remove_allowed)}"
+        )
+
+    singleton = getattr(targets, "singleton", None) if targets is not None else None
+    if singleton is not None:
+        lines.append(f"{prefix}singleton: {_format_bool(bool(singleton))}")
+
+    interface = getattr(surface, "interface", None)
+    required_functions = _coerce_text_list(
+        getattr(interface, "required_functions", None)
+        if interface is not None
+        else None
+    ) or _coerce_text_list(getattr(surface, "required_functions", None))
+    if required_functions:
+        lines.append(
+            f"{prefix}interface.required_functions: "
+            f"{', '.join(required_functions)}"
+        )
+    if interface is not None:
+        formatted_signatures = _format_function_signatures(
+            getattr(interface, "function_signatures", None)
+        )
+        if formatted_signatures:
+            lines.append(
+                f"{prefix}interface.function_signatures: "
+                f"{formatted_signatures}"
+            )
+        _append_metadata_value(
+            lines,
+            prefix,
+            "interface.return_contract",
+            getattr(interface, "return_contract", ""),
+        )
+        formatted_return_values = _format_return_values(
+            getattr(interface, "return_values", None)
+        )
+        if formatted_return_values:
+            lines.append(
+                f"{prefix}interface.return_values: {formatted_return_values}"
+            )
+
+    bounds = getattr(surface, "bounds", None)
+    if bounds is not None:
+        allowed_components = _coerce_text_list(
+            getattr(bounds, "allowed_components", None)
+        )
+        if allowed_components:
+            lines.append(
+                f"{prefix}bounds.allowed_components: "
+                f"{', '.join(allowed_components)}"
+            )
+        numeric_ranges = getattr(bounds, "numeric_ranges", None) or {}
+        formatted_ranges = _format_numeric_ranges(numeric_ranges)
+        if formatted_ranges:
+            lines.append(f"{prefix}bounds.numeric_ranges: {formatted_ranges}")
+        complexity_terms = _coerce_text_list(
+            getattr(bounds, "complexity_scale_terms", None)
+        )
+        if complexity_terms:
+            lines.append(
+                f"{prefix}bounds.complexity_scale_terms: "
+                f"{', '.join(complexity_terms)}"
+            )
+
+    evidence = getattr(surface, "evidence", None)
+    if evidence is not None:
+        runtime_fields = _coerce_text_list(
+            getattr(evidence, "required_runtime_fields", None)
+        )
+        if runtime_fields:
+            lines.append(
+                f"{prefix}evidence.required_runtime_fields: "
+                f"{', '.join(runtime_fields)}"
+            )
+
+    novelty = getattr(surface, "novelty", None)
+    if novelty is not None:
+        _append_metadata_value(
+            lines, prefix, "novelty.strategy", getattr(novelty, "strategy", "")
+        )
+        signature_fields = _coerce_text_list(
+            getattr(novelty, "signature_fields", None)
+        )
+        if signature_fields:
+            lines.append(
+                f"{prefix}novelty.signature_fields: "
+                f"{', '.join(signature_fields)}"
+            )
+
+    prompt = getattr(surface, "prompt", None)
+    if prompt is not None:
+        _append_metadata_value(
+            lines,
+            prefix,
+            "prompt.hypothesis_guidance",
+            getattr(prompt, "hypothesis_guidance", ""),
+        )
+        _append_metadata_value(
+            lines,
+            prefix,
+            "prompt.implementation_guidance",
+            getattr(prompt, "implementation_guidance", ""),
+        )
+        _append_metadata_value(
+            lines,
+            prefix,
+            "prompt.anti_patterns",
+            getattr(prompt, "anti_patterns", ""),
+        )
+    elif getattr(surface, "prompt_hint", ""):
+        lines.append(f"{prefix}prompt.implementation_guidance: {surface.prompt_hint}")
+
+
+def _append_metadata_value(
+    lines: list[str],
+    prefix: str,
+    label: str,
+    value: Any,
+) -> None:
+    text = str(value).strip() if value is not None else ""
+    if text:
+        lines.append(f"{prefix}{label}: {text}")
+
+
+def _coerce_text_list(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values] if values else []
+    try:
+        return [str(value) for value in values if str(value)]
+    except TypeError:
+        return [str(values)] if str(values) else []
+
+
+def _format_numeric_ranges(ranges: Any) -> str:
+    if not isinstance(ranges, dict):
+        return ""
+    parts: list[str] = []
+    for key in sorted(ranges):
+        value = ranges[key]
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            parts.append(f"{key}=[{value[0]}, {value[1]}]")
+        else:
+            parts.append(f"{key}={value}")
+    return "; ".join(parts)
+
+
+def _format_function_signatures(signatures: Any) -> str:
+    if not isinstance(signatures, dict):
+        return ""
+    parts: list[str] = []
+    for name in sorted(signatures):
+        args = _coerce_text_list(signatures[name])
+        parts.append(f"{name}({', '.join(args)})")
+    return "; ".join(parts)
+
+
+def _format_return_values(return_values: Any) -> str:
+    if not isinstance(return_values, dict):
+        return ""
+    parts: list[str] = []
+    for name in sorted(return_values):
+        spec = return_values[name]
+        value_type = getattr(spec, "value_type", "")
+        fragments: list[str] = []
+        if value_type and value_type != "any":
+            fragments.append(f"type={value_type}")
+        allowed = _coerce_text_list(getattr(spec, "allowed_literals", None))
+        if allowed:
+            fragments.append("allowed=" + ",".join(allowed))
+        numeric_range = getattr(spec, "numeric_range", None)
+        if isinstance(numeric_range, (list, tuple)) and len(numeric_range) == 2:
+            fragments.append(f"range=[{numeric_range[0]}, {numeric_range[1]}]")
+        allowed_keys = _coerce_text_list(getattr(spec, "allowed_keys", None))
+        if allowed_keys:
+            fragments.append("keys=" + ",".join(allowed_keys))
+        value_range = getattr(spec, "value_numeric_range", None)
+        if isinstance(value_range, (list, tuple)) and len(value_range) == 2:
+            fragments.append(f"value_range=[{value_range[0]}, {value_range[1]}]")
+        if fragments:
+            parts.append(f"{name}({'; '.join(fragments)})")
+    return "; ".join(parts)
+
+
+def _has_any_attr(obj: Any, names: tuple[str, ...]) -> bool:
+    return any(hasattr(obj, name) for name in names)
+
+
+def _get_nested_or_legacy_bool(nested: Any, legacy: Any, name: str) -> bool:
+    if nested is not None and hasattr(nested, name):
+        return bool(getattr(nested, name))
+    return bool(getattr(legacy, name, False))
+
+
+def _format_bool(value: bool) -> str:
+    return "true" if value else "false"
 
 
 def _get_family_taxonomy(spec: Any) -> Any | None:
@@ -896,8 +1152,8 @@ def _read_surface_file(champion: ChampionState, file_rel: str, *, label: str) ->
 
 
 def _build_champion_stats(champion: ChampionState) -> str:
-    """Return champion version and pool summary."""
-    lines = [f"Champion version: {champion.version}"]
+    """Return hypothesis-facing champion baseline summary."""
+    lines = ["Champion baseline: current selected solver state"]
     if champion.operator_pool:
         lines.append("Operator pool:")
         for name, op in champion.operator_pool.items():
@@ -907,9 +1163,75 @@ def _build_champion_stats(champion: ChampionState) -> str:
             lines.append(f"  - {name} [{cat}] weight={w}  file={fp}")
     else:
         lines.append("Operator pool: (not yet loaded from registry)")
-    if champion.promoted_at:
-        lines.append(f"Last promoted: {champion.promoted_at}")
     return "\n".join(lines)
+
+
+_SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
+    "proposal",
+    "hypothesis_contract",
+    "code_generation",
+    "patch_contract",
+    "workspace",
+    "verification",
+}
+
+
+def _is_screening_protocol_step(step: StepRecord) -> bool:
+    return (
+        step.protocol_result is not None
+        and step.protocol_result.stage == ExperimentStage.SCREENING
+    )
+
+
+def _is_safe_pre_protocol_failure_step(step: StepRecord) -> bool:
+    return (
+        step.protocol_result is None
+        and step.failure_stage in _SAFE_PRE_PROTOCOL_FAILURE_STAGES
+    )
+
+
+def _is_promotion_path_step(step: StepRecord) -> bool:
+    decision = getattr(step.decision, "value", step.decision)
+    return str(decision or "").lower() == "promote"
+
+
+def _promotion_path_key(step: StepRecord) -> tuple[str, str, str, str, str]:
+    hypothesis = step.hypothesis
+    return (
+        step.branch_id,
+        hypothesis.hypothesis_text or "",
+        hypothesis.change_locus or "",
+        hypothesis.action or "",
+        hypothesis.target_file or "",
+    )
+
+
+def _filter_hypothesis_prompt_steps(
+    step_history: List[StepRecord],
+) -> List[StepRecord]:
+    """Keep only protocol facts allowed into hypothesis prompts."""
+    promotion_path_keys = {
+        _promotion_path_key(step)
+        for step in step_history
+        if _is_promotion_path_step(step)
+    }
+    return [
+        step
+        for step in step_history
+        if _promotion_path_key(step) not in promotion_path_keys
+        and (
+            _is_screening_protocol_step(step)
+            or _is_safe_pre_protocol_failure_step(step)
+        )
+    ]
+
+
+def _history_step_status(step: StepRecord) -> str:
+    if _is_screening_protocol_step(step):
+        return f"SCREENING_{step.protocol_result.gate_outcome.upper()}"
+    if _is_safe_pre_protocol_failure_step(step):
+        return f"FAILED_{str(step.failure_stage).upper()}"
+    return "HIDDEN"
 
 
 def _build_experiment_history(
@@ -926,11 +1248,14 @@ def _build_experiment_history(
     Older rounds (4-8): aggregate only.
     Consecutive 3+ same-type verification failures → inject diagnosis block.
     """
-    branch_steps = [s for s in step_history if s.branch_id == branch_id]
+    branch_steps = [
+        s for s in _filter_hypothesis_prompt_steps(step_history)
+        if s.branch_id == branch_id
+    ]
     if not branch_steps:
         return "(no prior experiment rounds on this branch)"
 
-    # T26: Build "What Worked" section from promoted steps
+    # T26: Build "What Worked" section from screening-only successes
     what_worked = _build_what_worked_section(branch_steps, taxonomy=taxonomy)
 
     recent = branch_steps[-8:]  # Last 8 rounds
@@ -943,7 +1268,7 @@ def _build_experiment_history(
 
     for idx, s in enumerate(recent):
         is_detailed = idx >= max(0, n_recent - 3)  # Last 3 get case detail
-        status = "FAILED" if s.failure_stage else s.decision.value.upper()
+        status = _history_step_status(s)
         line = f"  Round {s.round_num} [{status}]"
         line += f"  hypothesis: {s.hypothesis.change_locus}/{s.hypothesis.action}"
         if s.hypothesis.target_file:
@@ -957,7 +1282,10 @@ def _build_experiment_history(
                 line += f" — {detail_str}"
             elif s.failure_detail:
                 line += f" — {s.failure_detail[:120]}"
-        if s.protocol_result is not None:
+        if (
+            s.protocol_result is not None
+            and s.protocol_result.stage == ExperimentStage.SCREENING
+        ):
             pr = s.protocol_result
             st = pr.stats
             line += (
@@ -1160,13 +1488,14 @@ def _make_family_id(mechanism_label: str, action_pattern: str, locus_pattern: st
 
 def _get_step_status(step: StepRecord) -> str:
     """Derive a compact status string from a StepRecord."""
-    if step.failure_stage:
+    if (
+        step.protocol_result is not None
+        and step.protocol_result.stage == ExperimentStage.SCREENING
+    ):
+        return f"screening_{step.protocol_result.gate_outcome}"
+    if _is_safe_pre_protocol_failure_step(step):
         return f"failed_{step.failure_stage}"
-    if step.decision == Decision.PROMOTE:
-        return "promoted"
-    if step.protocol_result is not None:
-        return f"gate_{step.protocol_result.gate_outcome}"
-    return step.decision.value
+    return ""
 
 
 def _extract_families_from_steps(
@@ -1175,7 +1504,7 @@ def _extract_families_from_steps(
 ) -> List[HypothesisFamily]:
     """Build the family list from step history (rebuilt each call — no persistence needed)."""
     family_map: Dict[str, HypothesisFamily] = {}
-    for step in steps:
+    for step in _filter_hypothesis_prompt_steps(steps):
         h = step.hypothesis
         mechanism = _extract_mechanism_label(
             h.hypothesis_text or "",
@@ -1184,6 +1513,8 @@ def _extract_families_from_steps(
         )
         family_id = _make_family_id(mechanism, h.action, h.change_locus)
         status = _get_step_status(step)
+        if not status:
+            continue
         if family_id in family_map:
             existing = family_map[family_id]
             family_map[family_id] = HypothesisFamily(
@@ -1232,10 +1563,26 @@ def build_exploration_coverage(
         return ""
     lines = ["## Exploration Coverage"]
     for fam in families:
-        promoted = sum(1 for s in fam.statuses if s == "promoted")
-        failed = sum(1 for s in fam.statuses if s.startswith("failed_"))
-        passed = sum(1 for s in fam.statuses if "pass" in s)
-        status_summary = f"promoted={promoted} failed={failed} passed={passed}"
+        status_counts = Counter(fam.statuses)
+        parts: List[str] = []
+        for status in (
+            "screening_pass",
+            "screening_expand",
+            "screening_continue",
+            "screening_fail",
+            "screening_unclear",
+        ):
+            count = status_counts.get(status, 0)
+            if count:
+                parts.append(f"{status}={count}")
+        pre_protocol_failed = sum(
+            count
+            for status, count in status_counts.items()
+            if status.startswith("failed_")
+        )
+        if pre_protocol_failed:
+            parts.append(f"pre_protocol_failed={pre_protocol_failed}")
+        status_summary = " ".join(parts) if parts else "screening_seen=0"
         lines.append(
             f"  {fam.family_id}: n={fam.evidence_count} [{status_summary}]"
         )
@@ -1465,7 +1812,7 @@ def _build_runtime_feedback(
                 raw_failures,
                 raw_slow_cases,
                 raw_failure_causes,
-            ) = _extract_screening_runtime_raw_feedback(
+            ) = _extract_screening_runtime_structured_feedback(
                 step,
                 target=target,
                 max_items=max_items,
@@ -1514,7 +1861,7 @@ def _build_runtime_feedback(
         )
     if failure_cases:
         sections.append(
-            "Recent screening timeout/crash cases:\n"
+            "Recent screening runtime failure categories:\n"
             + "\n".join(reversed(failure_cases))
         )
     if slow_cases:
@@ -1529,67 +1876,182 @@ def _build_runtime_feedback(
     return "\n".join(sections)
 
 
-def _extract_screening_runtime_raw_feedback(
+def _build_runtime_failure_guidance(
+    steps: List[StepRecord],
+    *,
+    problem_spec: Any,
+    adapter_spec: Any = None,
+    max_items: int = 4,
+) -> str:
+    """Render problem-declared steering for structured runtime failure categories."""
+    guidance_specs = _get_runtime_failure_guidance_specs(problem_spec, adapter_spec)
+    if not guidance_specs:
+        return ""
+
+    safe_steps = [
+        step
+        for step in _filter_hypothesis_prompt_steps(steps)
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+        )
+    ][-12:]
+    if not safe_steps:
+        return ""
+
+    surfaces = _get_research_surfaces(problem_spec, adapter_spec)
+    kind_by_surface = {
+        str(getattr(surface, "name", "")): str(getattr(surface, "kind", ""))
+        for surface in surfaces
+    }
+    rendered: list[str] = []
+    for spec in guidance_specs:
+        categories = _coerce_text_list(getattr(spec, "failure_categories", None))
+        if not categories:
+            continue
+        profile = _runtime_guidance_profile(
+            safe_steps,
+            categories=categories,
+            applies_to_surfaces=_coerce_text_list(
+                getattr(spec, "applies_to_surfaces", None)
+            ),
+            applies_to_surface_kinds=_coerce_text_list(
+                getattr(spec, "applies_to_surface_kinds", None)
+            ),
+            kind_by_surface=kind_by_surface,
+        )
+        matched = profile["matched_count"]
+        total = profile["total_count"]
+        if total <= 0 or matched <= 0:
+            continue
+        min_count = max(1, _as_int(getattr(spec, "min_count", 1)))
+        try:
+            min_fraction = float(getattr(spec, "min_category_fraction", 0.5))
+        except (TypeError, ValueError):
+            min_fraction = 0.5
+        fraction = matched / total
+        if matched < min_count or fraction < min_fraction:
+            continue
+
+        lines = [
+            (
+                f"- Runtime categories {', '.join(categories)} dominate recent "
+                f"matching screening evidence ({matched}/{total}, "
+                f"fraction={fraction:.2f})."
+            )
+        ]
+        surfaces_seen = sorted(profile["surfaces"])[:max_items]
+        if surfaces_seen:
+            lines.append(f"  observed_surfaces: {', '.join(surfaces_seen)}")
+        recommended = _coerce_text_list(getattr(spec, "recommended_surfaces", None))
+        if recommended:
+            lines.append(f"  recommended_surfaces: {', '.join(recommended)}")
+        discouraged = _coerce_text_list(getattr(spec, "discouraged_surfaces", None))
+        if discouraged:
+            lines.append(f"  discouraged_surfaces: {', '.join(discouraged)}")
+        guidance = str(getattr(spec, "guidance", "") or "").strip()
+        if guidance:
+            lines.append(f"  guidance: {guidance}")
+        rendered.append("\n".join(lines))
+
+    if not rendered:
+        return ""
+    return (
+        "Problem-declared runtime-failure steering (screening only):\n"
+        + "\n".join(rendered[:max_items])
+    )
+
+
+def _get_runtime_failure_guidance_specs(
+    problem_spec: Any,
+    adapter_spec: Any = None,
+) -> list[Any]:
+    for spec in (problem_spec, adapter_spec):
+        hints = getattr(spec, "runtime_failure_guidance", None)
+        if hints:
+            return list(hints)
+        hints = getattr(spec, "failure_response_hints", None)
+        if hints:
+            return list(hints)
+    return []
+
+
+def _runtime_guidance_profile(
+    steps: list[StepRecord],
+    *,
+    categories: list[str],
+    applies_to_surfaces: list[str],
+    applies_to_surface_kinds: list[str],
+    kind_by_surface: dict[str, str],
+) -> dict[str, Any]:
+    category_set = set(categories)
+    surface_set = set(applies_to_surfaces)
+    kind_set = set(applies_to_surface_kinds)
+    matched_count = 0
+    total_count = 0
+    surfaces_seen: set[str] = set()
+    for step in steps:
+        surface = str(step.hypothesis.change_locus or "")
+        kind = kind_by_surface.get(surface, "")
+        if surface_set and surface not in surface_set:
+            continue
+        if kind_set and kind not in kind_set:
+            continue
+        counts = {
+            category: count
+            for category, count in _runtime_failure_categories(step).items()
+            if count > 0
+        }
+        if not counts:
+            continue
+        step_total = sum(counts.values())
+        total_count += step_total
+        matched_count += sum(
+            count for category, count in counts.items() if category in category_set
+        )
+        if surface:
+            surfaces_seen.add(surface)
+    return {
+        "matched_count": matched_count,
+        "total_count": total_count,
+        "surfaces": surfaces_seen,
+    }
+
+
+def _extract_screening_runtime_structured_feedback(
     step: StepRecord,
     *,
     target: str,
     max_items: int,
     slow_case_threshold: float = 2.0,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Extract bounded screening-only slow/failed runtime cases from raw metrics."""
+    """Extract bounded screening-only runtime feedback from structured summaries."""
     protocol = step.protocol_result
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
         return [], [], []
-    raw_ref = protocol.raw_metrics_ref
-    if not raw_ref or not os.path.isfile(raw_ref):
-        failure_cause = _build_screening_failure_cause_line(step, target, {})
-        return [], [], [failure_cause] if failure_cause else []
-    try:
-        with open(raw_ref, "r", encoding="utf-8") as fh:
-            payload = json.load(fh)
-    except Exception:
-        failure_cause = _build_screening_failure_cause_line(step, target, {})
-        return [], [], [failure_cause] if failure_cause else []
 
-    failure_cause = _build_screening_failure_cause_line(step, target, payload)
+    failure_cause = _build_screening_failure_cause_line(step, target, {})
     failure_causes = [failure_cause] if failure_cause else []
     failure_lines: list[str] = []
-    for failure in payload.get("failures", []) or []:
-        if failure.get("side") != "candidate":
+    categories = _runtime_failure_categories(step)
+    first = _first_runtime_failure(step)
+    for category, count in sorted(categories.items()):
+        if count <= 0:
             continue
-        case_id = os.path.basename(str(failure.get("case") or "unknown"))
-        seed = failure.get("seed", "?")
-        category = failure.get("error_category") or "unknown"
-        elapsed = failure.get("elapsed_ms")
+        detail = ""
+        if first and first.get("category") == category:
+            code = first.get("code") or "unknown"
+            component = first.get("component") or "unknown"
+            summary = first.get("detail_summary") or ""
+            detail = f" first_code={code} component={component} detail={_first_line(str(summary))}"
         failure_lines.append(
-            f"- R{step.round_num} target={target}: case={case_id} seed={seed} "
-            f"candidate_failure={category} elapsed_ms={elapsed}"
+            f"- R{step.round_num} target={target}: "
+            f"candidate_failure_category={category} count={count}{detail}"
         )
         if len(failure_lines) >= max_items:
             break
 
-    slow_pairs: list[tuple[float, str]] = []
-    for pair in payload.get("pairs", []) or []:
-        ratio = pair.get("runtime_ratio")
-        try:
-            ratio_value = float(ratio)
-        except (TypeError, ValueError):
-            continue
-        if ratio_value <= slow_case_threshold:
-            continue
-        case_id = os.path.basename(str(pair.get("case") or "unknown"))
-        seed = pair.get("seed", "?")
-        cand_ms = pair.get("candidate_elapsed_ms")
-        champ_ms = pair.get("champion_elapsed_ms")
-        line = (
-            f"- R{step.round_num} target={target}: case={case_id} seed={seed} "
-            f"runtime_ratio={ratio_value:.2f}x candidate_ms={cand_ms} "
-            f"champion_ms={champ_ms}"
-        )
-        slow_pairs.append((ratio_value, line))
-
-    slow_pairs.sort(key=lambda item: item[0], reverse=True)
-    return failure_lines, [line for _, line in slow_pairs[:max_items]], failure_causes
+    return failure_lines, [], failure_causes
 
 
 def _build_screening_failure_cause_line(
@@ -1601,15 +2063,35 @@ def _build_screening_failure_cause_line(
     if protocol is None:
         return ""
     stats = protocol.stats
-    operator_attempts = _sum_runtime_field(payload, "candidate_runtime", "operator_attempts")
-    operator_accepted = _sum_runtime_field(payload, "candidate_runtime", "operator_accepted")
-    operator_errors = _sum_runtime_field(payload, "candidate_runtime", "operator_errors")
-    invalid_outputs = _sum_runtime_field(
+    operator_attempts = _structured_runtime_count(
+        step,
+        "candidate_operator_attempts",
+        payload,
+        "candidate_runtime",
+        "operator_attempts",
+    )
+    operator_accepted = _structured_runtime_count(
+        step,
+        "candidate_operator_accepted",
+        payload,
+        "candidate_runtime",
+        "operator_accepted",
+    )
+    operator_errors = _structured_runtime_count(
+        step,
+        "candidate_operator_errors",
+        payload,
+        "candidate_runtime",
+        "operator_errors",
+    )
+    invalid_outputs = _structured_runtime_count(
+        step,
+        "candidate_operator_invalid_outputs",
         payload,
         "candidate_runtime",
         "operator_invalid_outputs",
     )
-    stop_reasons = _operator_stop_reason_counts(payload)
+    stop_reasons = _runtime_stop_reasons(step) or _operator_stop_reason_counts(payload)
     failed_pairs = _count_field(stats.failed_pairs, payload, "failed_pairs")
     candidate_failed = _count_field(
         stats.candidate_failed_pairs,
@@ -1684,6 +2166,49 @@ def _build_screening_failure_cause_line(
         f"operator_errors={operator_errors} invalid_outputs={invalid_outputs}"
         f"{quality_suffix}"
     )
+
+
+def _runtime_failure_categories(step: StepRecord) -> dict[str, int]:
+    categories = dict(getattr(step, "candidate_runtime_failure_categories", {}) or {})
+    protocol = step.protocol_result
+    if protocol is not None:
+        categories.update(
+            dict(getattr(protocol, "candidate_runtime_failure_categories", {}) or {})
+        )
+    return {str(key): _as_int(value) for key, value in categories.items()}
+
+
+def _first_runtime_failure(step: StepRecord) -> dict[str, Any]:
+    protocol = step.protocol_result
+    first = getattr(protocol, "candidate_first_runtime_failure", None) if protocol else None
+    if first is None:
+        first = getattr(step, "candidate_first_runtime_failure", None)
+    return dict(first or {})
+
+
+def _runtime_stop_reasons(step: StepRecord) -> dict[str, int]:
+    reasons = dict(getattr(step, "candidate_runtime_stop_reasons", {}) or {})
+    protocol = step.protocol_result
+    if protocol is not None:
+        reasons.update(dict(getattr(protocol, "candidate_runtime_stop_reasons", {}) or {}))
+    return {str(key): _as_int(value) for key, value in reasons.items()}
+
+
+def _structured_runtime_count(
+    step: StepRecord,
+    attr_name: str,
+    payload: dict[str, Any],
+    runtime_key: str,
+    field: str,
+) -> int:
+    protocol = step.protocol_result
+    value = getattr(protocol, attr_name, 0) if protocol is not None else 0
+    if _as_int(value) > 0:
+        return _as_int(value)
+    step_value = getattr(step, attr_name, 0)
+    if _as_int(step_value) > 0:
+        return _as_int(step_value)
+    return _sum_runtime_field(payload, runtime_key, field)
 
 
 def _sum_runtime_field(payload: dict[str, Any], runtime_key: str, field: str) -> int:
@@ -1784,24 +2309,20 @@ def _build_what_worked_section(
     branch_steps: List[StepRecord],
     taxonomy: Optional[list] = None,
 ) -> str:
-    """Build 'What Worked' section from promoted steps (T26).
+    """Build 'What Worked' section from screening-derived successes (T26).
 
     Storing confirmations prevents the model from becoming overly conservative
     after seeing many failures (CC analysis #12).
     """
-    promoted_steps = [
-        s for s in branch_steps
-        if s.decision == Decision.PROMOTE
-    ]
     high_wr_steps = [
         s for s in branch_steps
         if (
             s.protocol_result is not None
+            and s.protocol_result.stage == ExperimentStage.SCREENING
             and s.protocol_result.stats.win_rate >= 0.8
-            and s.decision != Decision.PROMOTE
         )
     ]
-    successes = promoted_steps + high_wr_steps
+    successes = high_wr_steps
     if not successes:
         return ""
 
@@ -1813,9 +2334,12 @@ def _build_what_worked_section(
             taxonomy=taxonomy,
             preferred_label=h.change_locus,
         )
-        tag = "(promoted)" if s.decision == Decision.PROMOTE else "(high win_rate)"
+        tag = "(high screening win_rate)"
         wr_str = ""
-        if s.protocol_result:
+        if (
+            s.protocol_result
+            and s.protocol_result.stage == ExperimentStage.SCREENING
+        ):
             wr_str = f", wr={s.protocol_result.stats.win_rate:.2f}"
         lines.append(
             f"- {mechanism} ({h.change_locus}/{h.action}) {tag}{wr_str}: "
@@ -1834,12 +2358,16 @@ def _build_champion_baselines(step_history: List[StepRecord]) -> str:
     Extracts per-case champion objective values from the last screening step's
     pair_feedback. If no experiment data exists, returns empty string.
     """
-    # Find most recent step with pair_feedback (screening results)
+    # Find most recent screening step with prompt-safe feedback.
     last_with_pairs = None
     for step in reversed(step_history):
         if (
             step.protocol_result is not None
-            and step.protocol_result.pair_feedback
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+            and (
+                step.protocol_result.pair_feedback
+                or step.protocol_result.case_feedback
+            )
         ):
             last_with_pairs = step
             break
@@ -2081,7 +2609,14 @@ def _build_operator_interface_spec(
         and hasattr(adapter, "render_research_surface_interface")
     ):
         return adapter.render_research_surface_interface(surface_name)
-    if adapter is not None and hasattr(adapter, 'render_operator_interface'):
+    surface = (
+        _find_research_surface(_get_research_surfaces(spec), surface_name)
+        if surface_name
+        else None
+    )
+    if surface is not None and getattr(surface, "kind", "operator") != "operator":
+        return _build_research_surface_interface_spec(surface)
+    if adapter is not None and hasattr(adapter, "render_operator_interface"):
         return adapter.render_operator_interface()
     # Legacy fallback: read base.py only
     base_py_path = os.path.join(spec.root_dir, "operators", "base.py")

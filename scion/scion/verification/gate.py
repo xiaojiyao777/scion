@@ -87,6 +87,9 @@ class VerificationGate:
         candidate_workspace: str,
         champion_workspace: str,
         patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+        hypothesis: object | None = None,
     ) -> VerificationResult:
         """Execute all checks in fail-fast order; return VerificationResult.
 
@@ -94,6 +97,10 @@ class VerificationGate:
         Heavy checks (V3–V9): not fixable; branch is abandoned or blacklisted.
         """
         checks: List[CheckResult] = []
+        surface_name = _selected_surface_name(
+            selected_surface=selected_surface,
+            hypothesis=hypothesis,
+        )
 
         # --- V1: syntax (light) ---
         # V1_syntax: AST parse of patch code
@@ -155,19 +162,32 @@ class VerificationGate:
             self._runner,
             candidate_workspace,
             adapter=self._adapter,
+            selected_surface=surface_name,
         )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
 
         # --- V6: feasibility (heavy) ---
-        r = check_feasibility(self._spec, self._runner, candidate_workspace, adapter=self._adapter)
+        r = check_feasibility(
+            self._spec,
+            self._runner,
+            candidate_workspace,
+            adapter=self._adapter,
+            selected_surface=surface_name,
+        )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
 
         # --- V7: objective (heavy) ---
-        r = check_objective(self._spec, self._runner, candidate_workspace, adapter=self._adapter)
+        r = check_objective(
+            self._spec,
+            self._runner,
+            candidate_workspace,
+            adapter=self._adapter,
+            selected_surface=surface_name,
+        )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -175,7 +195,13 @@ class VerificationGate:
         # --- V8: nondeterminism (heavy) ---
         # V8_nondeterminism: two identical-seed runs must produce identical output.
         # This is the authoritative determinism check (replaces deprecated state_leak.py).
-        r = check_nondeterminism(self._spec, self._runner, candidate_workspace, metrics_dir=self._metrics_dir)
+        r = check_nondeterminism(
+            self._spec,
+            self._runner,
+            candidate_workspace,
+            metrics_dir=self._metrics_dir,
+            selected_surface=surface_name,
+        )
         checks.append(r)
         if not r.passed:
             return _fail(checks, r)
@@ -187,6 +213,7 @@ class VerificationGate:
             candidate_workspace,
             champion_workspace,
             max_slowdown=self._max_runtime_ratio or 5.0,
+            selected_surface=surface_name,
         )
         checks.append(r)
         if not r.passed:
@@ -231,3 +258,20 @@ def _runtime_config_failure(detail: str) -> CheckResult:
         detail=detail,
         elapsed_ms=0,
     )
+
+
+def _selected_surface_name(
+    *,
+    selected_surface: str | None,
+    hypothesis: object | None,
+) -> str | None:
+    if selected_surface is not None:
+        surface = selected_surface.strip()
+        return surface or None
+    if hypothesis is None:
+        return None
+    surface = getattr(hypothesis, "change_locus", None)
+    if not isinstance(surface, str):
+        return None
+    surface = surface.strip()
+    return surface or None

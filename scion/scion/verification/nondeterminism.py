@@ -37,6 +37,8 @@ def check_nondeterminism(
     runner: Runner,
     candidate_workspace: str,
     metrics_dir: str | None = None,
+    *,
+    selected_surface: str | None = None,
 ) -> CheckResult:
     """V8_nondeterminism: two runs with identical seed must produce identical objectives."""
     t0 = time.monotonic_ns()
@@ -74,7 +76,11 @@ def check_nondeterminism(
     if raw1 is None:
         detail = f"first run failed: {err1}" if err1 else "first run failed"
         return _cr(False, detail, t0)
-    audit_failure = runtime_audit_failure_from_raw(raw1)
+    audit_failure = runtime_audit_failure_from_raw(
+        raw1,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
     if audit_failure is not None:
         return _cr(
             False,
@@ -87,7 +93,11 @@ def check_nondeterminism(
     if raw2 is None:
         detail = f"second run failed: {err2}" if err2 else "second run failed"
         return _cr(False, detail, t0)
-    audit_failure = runtime_audit_failure_from_raw(raw2)
+    audit_failure = runtime_audit_failure_from_raw(
+        raw2,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
     if audit_failure is not None:
         return _cr(
             False,

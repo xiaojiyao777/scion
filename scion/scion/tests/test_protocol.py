@@ -557,6 +557,52 @@ def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_p
     assert raw["failed_pairs"] == 1
 
 
+def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000, runtime={"operator_errors": 1}),
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000, runtime={"operator_invalid_outputs": 1}),
+        _make_run_result(1, 800),
+        _make_run_result(2, 1000, runtime={"policy_errors": 1}),
+        _make_run_result(1, 800),
+        _make_run_result(
+            2,
+            1000,
+            runtime={
+                "operator_attempts": 4,
+                "operator_accepted": 0,
+                "operator_stop_reason": "no_improvement_round",
+            },
+        ),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.candidate_runtime_failure_categories["operator_error"] == 1
+    assert result.candidate_runtime_failure_categories["invalid_output"] == 1
+    assert result.candidate_runtime_failure_categories["policy_error"] == 1
+    assert result.candidate_runtime_failure_categories["no_accepted_moves"] == 1
+    assert result.candidate_first_runtime_failure == {
+        "category": "operator_error",
+        "code": "operator_errors",
+        "surface": "",
+        "component": "operator",
+        "detail_summary": "solver runtime reported operator_errors=1",
+    }
+    assert result.candidate_operator_attempts == 4
+    assert result.candidate_operator_accepted == 0
+    assert result.candidate_operator_errors == 1
+    assert result.candidate_operator_invalid_outputs == 1
+    assert result.candidate_policy_errors == 1
+    assert result.candidate_runtime_stop_reasons == {"no_improvement_round": 1}
+    assert "candidate_runtime_categories=" in result.exposed_summary
+
+
 def test_frozen_fails_when_champion_runtime_failure_makes_pair_invalid(tmp_path):
     runner = MagicMock()
     side_effect = []

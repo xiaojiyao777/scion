@@ -17,11 +17,13 @@ from scion.proposal.schemas import (
     HYPOTHESIS_TOOL,
     PATCH_TOOL,
     FIX_TOOL,
+    TOOL_SELECTION_TOOL,
     HYPOTHESIS_PROMPT_TEMPLATE,
     CODE_PROMPT_TEMPLATE,
     FIX_PROMPT_TEMPLATE,
     HypothesisProposalInput,
     PatchProposalInput,
+    ToolSelectionInput,
 )
 
 
@@ -99,6 +101,32 @@ class CreativeLayer:
             context=context,
         )
         return _parse_patch(raw)
+
+    def plan_tool_call(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Ask the model to choose the next APS proposal tool.
+
+        The model only returns a plan. APS validates the selected tool against
+        its allowed list and executes through ProposalToolRegistry.
+        """
+        prompt = _build_tool_selection_prompt(context)
+        raw = self._call_with_trace(
+            request_kind="tool_selection",
+            prompt=prompt,
+            tool=TOOL_SELECTION_TOOL,
+            system_blocks=[],
+            context=context,
+        )
+        try:
+            validated = ToolSelectionInput(**raw)
+        except ValidationError as exc:
+            raise ProposalValidationError(str(exc)) from exc
+        if validated.intent in {"stop", "final"}:
+            return {"stop": True, "intent": validated.intent}
+        return {
+            "tool_name": validated.tool_name,
+            "args": dict(validated.args or {}),
+            "intent": validated.intent,
+        }
 
     def _call_with_trace(
         self,
@@ -210,6 +238,60 @@ def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False, default=str)
+
+
+def _build_tool_selection_prompt(context: Dict[str, Any]) -> str:
+    safe_context = _sanitize_tool_selection_context(context)
+    return (
+        "You are selecting the next read-only proposal-context tool for Scion.\n"
+        "Scion is a framework: use only the provided context and tool specs, "
+        "without assuming any particular problem domain.\n"
+        "Return exactly one plan_proposal_tool_call tool input. The selected "
+        "tool_name must be present in allowed_tools. Do not execute tools. "
+        "For context.read_surface, choose surface only from the current "
+        "context.list_surfaces observation values shown in tool_arg_guidance. "
+        "Do not include rationale, memory, private metric references, private "
+        "evaluation details, or workspace target file code.\n\n"
+        "## Tool Selection Context\n"
+        f"{json.dumps(safe_context, indent=2, sort_keys=True, default=str)}"
+    )
+
+
+def _sanitize_tool_selection_context(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if key_text in {
+                "raw_metrics_ref",
+                "case_ids",
+                "seed_set",
+                "pair_feedback",
+                "code",
+                "code_content",
+                "current_artifact",
+                "target_file_code",
+            }:
+                continue
+            cleaned[key_text] = _sanitize_tool_selection_context(item)
+        return cleaned
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_tool_selection_context(item) for item in value]
+    if isinstance(value, str):
+        forbidden_terms = (
+            "raw_metrics_ref",
+            "raw metrics",
+            "validation",
+            "frozen",
+            "holdout",
+        )
+        lines = [
+            line
+            for line in value.splitlines()
+            if not any(term in line.lower() for term in forbidden_terms)
+        ]
+        return "\n".join(lines)
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +469,10 @@ def _split_hypothesis_context(
     if D["runtime_feedback"]:
         branch_context_parts.append(
             f"## Runtime Feedback\n{D['runtime_feedback']}"
+        )
+    if D["runtime_failure_guidance"]:
+        branch_context_parts.append(
+            f"## Runtime Failure Guidance\n{D['runtime_failure_guidance']}"
         )
 
     system_blocks = [

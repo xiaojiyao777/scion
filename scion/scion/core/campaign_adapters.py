@@ -273,6 +273,11 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
                 protocol_result,
             ),
         ),
+        proposal_session_ref_for=getattr(
+            owner,
+            "_proposal_session_ref_for",
+            lambda branch_id: None,
+        ),
     )
 
 

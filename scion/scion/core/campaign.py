@@ -81,6 +81,9 @@ class CampaignManager:
         use_objective_lower_bounds_for_early_stop: bool = False,
         force_continue_early_stop: bool = False,
         allow_non_strict_runtime_verification: bool = False,
+        use_agentic_proposal: bool = False,
+        agentic_artifact_dir: Optional[str] = None,
+        agentic_session_timeout_sec: Optional[float] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -104,6 +107,9 @@ class CampaignManager:
             use_objective_lower_bounds_for_early_stop=use_objective_lower_bounds_for_early_stop,
             force_continue_early_stop=force_continue_early_stop,
             allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
+            use_agentic_proposal=use_agentic_proposal,
+            agentic_artifact_dir=agentic_artifact_dir,
+            agentic_session_timeout_sec=agentic_session_timeout_sec,
         )
 
     # ------------------------------------------------------------------
@@ -208,7 +214,17 @@ class CampaignManager:
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
+        self._run_runtime_preflight()
         self._campaign_loop.run(max_rounds=max_rounds)
+
+    def _run_runtime_preflight(self) -> None:
+        """Validate problem-owned runtime dependencies before proposal work."""
+        if getattr(self, "_runtime_preflight_checked", False):
+            return
+        from scion.problem.preflight import run_runtime_preflight
+
+        run_runtime_preflight(self._spec, adapter=self._adapter)
+        self._runtime_preflight_checked = True
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
@@ -379,6 +395,9 @@ class CampaignManager:
 
     def _proposal_failure_detail_for(self, branch_id: str) -> Optional[str]:
         return self._proposal_pipeline.pop_hypothesis_failure_detail(branch_id)
+
+    def _proposal_session_ref_for(self, branch_id: str) -> Optional[Dict[str, Any]]:
+        return self._proposal_pipeline.pop_agentic_session_ref(branch_id)
 
     # ------------------------------------------------------------------
     # Round 2: generate code

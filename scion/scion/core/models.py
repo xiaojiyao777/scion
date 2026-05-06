@@ -149,6 +149,16 @@ class ProtocolResult:
     pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
     case_feedback: Tuple["CaseAggregateFeedback", ...] = ()
     pattern_summary: Optional["ScreeningPatternSummary"] = None
+    candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
+    candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
+    candidate_operator_attempts: int = 0
+    candidate_operator_accepted: int = 0
+    candidate_operator_errors: int = 0
+    candidate_operator_invalid_outputs: int = 0
+    candidate_policy_errors: int = 0
+    candidate_construction_errors: int = 0
+    candidate_portfolio_errors: int = 0
+    candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -318,6 +328,9 @@ class HypothesisRecord:
     taxonomy_version: Optional[str] = None  # e.g. "v1"
     created_at: datetime = field(default_factory=datetime.now)
     base_champion_version: int = 0      # champion version at hypothesis creation time
+    predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
+    target_objectives: Tuple[str, ...] = ()
+    protected_objectives: Tuple[str, ...] = ()
 
 # --- Solver Output ---
 
@@ -406,3 +419,14 @@ class StepRecord:
     cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
     hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
     decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)
+    proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
+    candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
+    candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
+    candidate_operator_attempts: int = 0
+    candidate_operator_accepted: int = 0
+    candidate_operator_errors: int = 0
+    candidate_operator_invalid_outputs: int = 0
+    candidate_policy_errors: int = 0
+    candidate_construction_errors: int = 0
+    candidate_portfolio_errors: int = 0
+    candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)

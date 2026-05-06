@@ -74,6 +74,9 @@ def compose_campaign_services(
     use_objective_lower_bounds_for_early_stop: bool = False,
     force_continue_early_stop: bool = False,
     allow_non_strict_runtime_verification: bool = False,
+    use_agentic_proposal: bool = False,
+    agentic_artifact_dir: str | None = None,
+    agentic_session_timeout_sec: float | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     owner._problem_runtime = ProblemRuntime(
@@ -216,6 +219,7 @@ def compose_campaign_services(
     owner._research_log = CampaignResearchLog(str(campaign_dir))
     owner._saturation_analyzer = None
     owner._baseline_metrics = None
+    owner._runtime_preflight_checked = False
 
     early_stop_controller = None
     if force_continue_early_stop:
@@ -398,6 +402,7 @@ def compose_campaign_services(
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
         decision_reason_codes_for=owner._decision_reason_codes_for,
         proposal_failure_detail_for=owner._proposal_failure_detail_for,
+        proposal_session_ref_for=owner._proposal_session_ref_for,
     )
     owner._branch_step_runner = BranchStepRunner(
         branch_controller=owner._branch_ctrl,
@@ -456,6 +461,10 @@ def compose_campaign_services(
         handle_failure=owner._handle_failure,
         circuit_breaker=owner._circuit_breaker,
         mark_balance_exhausted=lambda: setattr(owner, "_balance_exhausted", True),
+        lineage_registry=owner._registry,
+        use_agentic_proposal=use_agentic_proposal,
+        agentic_artifact_dir=agentic_artifact_dir,
+        agentic_session_timeout_sec=agentic_session_timeout_sec,
     )
     owner._governance = CampaignGovernanceService(
         branch_controller=owner._branch_ctrl,

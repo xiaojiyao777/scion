@@ -82,18 +82,24 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "route_pair",
         "ruin_recreate",
         "search_policy",
+        "construction_policy",
+        "neighborhood_portfolio",
     ]
     assert [surface.name for surface in legacy.research_surfaces] == [
         "route_local",
         "route_pair",
         "ruin_recreate",
         "search_policy",
+        "construction_policy",
+        "neighborhood_portfolio",
     ]
     assert legacy.family_taxonomy.families == [
         "route_local",
         "route_pair",
         "ruin_recreate",
         "search_policy",
+        "construction_policy",
+        "neighborhood_portfolio",
     ]
     assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
     assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]
@@ -120,6 +126,8 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         bridge.operator_execute_signature
         == "execute(self, solution, instance, rng) -> CvrpSolution"
     )
+    assert spec.runtime_dependencies.required_python_modules == ["numpy"]
+    assert legacy.runtime_dependencies.required_python_modules == ["numpy"]
 
 
 def test_warehouse_problem_spec_declares_legacy_family_taxonomy() -> None:

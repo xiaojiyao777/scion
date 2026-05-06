@@ -23,6 +23,7 @@ def check_perf(
     champion_workspace: str,
     *,
     max_slowdown: float = _DEFAULT_MAX_SLOWDOWN,
+    selected_surface: str | None = None,
 ) -> CheckResult:
     """V9_perf_guard: candidate solve time must stay within configured slowdown."""
     t0 = time.monotonic_ns()
@@ -65,7 +66,11 @@ def check_perf(
                 "timeout": r.error_category == "timeout",
                 "error_category": r.error_category,
             }
-        audit_failure = runtime_audit_failure_from_result(r)
+        audit_failure = runtime_audit_failure_from_result(
+            r,
+            problem_spec=problem_spec,
+            selected_surface=selected_surface,
+        )
         if audit_failure is not None:
             return {
                 "success": False,

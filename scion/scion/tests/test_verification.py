@@ -11,7 +11,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from scion.config.problem import ProblemSpec, SearchSpace
-from scion.core.models import CheckResult, PatchProposal, RunResult, SolverOutput, VerificationResult
+from scion.core.models import (
+    CheckResult,
+    HypothesisProposal,
+    PatchProposal,
+    RunResult,
+    SolverOutput,
+    VerificationResult,
+)
+from scion.core.verification_call import run_verification_gate
+from scion.runtime.audit import runtime_audit_failure_from_runtime
 from scion.verification.gate import VerificationGate
 from scion.verification.syntax import check_syntax
 from scion.verification.interface import check_interface
@@ -71,6 +80,15 @@ def _make_toy_tsp_patch() -> PatchProposal:
     )
 
 
+def _make_hypothesis(change_locus: str = "search_policy") -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text="Tune the selected research surface.",
+        change_locus=change_locus,
+        action="modify",
+        target_file="policies/search_policy.py",
+    )
+
+
 def _make_spec(canary: str = "") -> ProblemSpec:
     return ProblemSpec(
         name="test",
@@ -82,6 +100,12 @@ def _make_spec(canary: str = "") -> ProblemSpec:
             frozen=["solver.py"],
             import_whitelist=["random", "math"],
         ),
+    )
+
+
+def _make_surface_spec(canary: str, surfaces: list[dict[str, Any]]) -> ProblemSpec:
+    return _make_spec(canary=canary).model_copy(
+        update={"research_surfaces": surfaces}
     )
 
 
@@ -384,6 +408,115 @@ class TestSolutionConsistencyCheck:
         assert r.name == "V5_solution_consistency"
         assert "solver runtime audit failed" in r.detail
         assert "operator_errors=1" in r.detail
+
+    def test_surface_runtime_contract_all_required_fields_present_passes(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_surface_spec(
+            canary,
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "policy_loaded",
+                            "policy_errors",
+                            "baseline_time_fraction",
+                        ],
+                    },
+                },
+            ],
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {
+            "policy_loaded": True,
+            "policy_errors": 0,
+            "baseline_time_fraction": 0.6,
+        }
+        runner = _mock_runner(output_dict=output)
+
+        r = check_state_mutation(
+            spec,
+            runner,
+            str(tmp_path),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is True
+
+    def test_surface_without_declared_evidence_keeps_legacy_behavior(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_surface_spec(
+            canary,
+            [{"name": "local_search", "evidence": {"required_runtime_fields": []}}],
+        )
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_state_mutation(
+            spec,
+            runner,
+            str(tmp_path),
+            selected_surface="local_search",
+        )
+
+        assert r.passed is True
+
+    def test_surface_runtime_contract_skips_when_no_surface_selected(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_surface_spec(
+            canary,
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": ["policy_loaded"],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_state_mutation(spec, runner, str(tmp_path))
+
+        assert r.passed is True
+
+    @pytest.mark.parametrize(
+        ("required_field", "runtime_value", "expected_detail"),
+        [
+            ("dispatch_loaded", False, "failed=dispatch_loaded"),
+            ("dispatch_executed", False, "failed=dispatch_executed"),
+            ("dispatch_errors", 1, "failed=dispatch_errors"),
+            ("dispatch_errors", "not-an-int", "failed=dispatch_errors"),
+        ],
+    )
+    def test_generic_surface_runtime_evidence_fields_fail_closed(
+        self,
+        required_field,
+        runtime_value,
+        expected_detail,
+    ):
+        spec = _make_surface_spec(
+            "",
+            [
+                {
+                    "name": "dispatch_policy",
+                    "evidence": {"required_runtime_fields": [required_field]},
+                },
+            ],
+        )
+
+        issue = runtime_audit_failure_from_runtime(
+            {required_field: runtime_value},
+            problem_spec=spec,
+            selected_surface="dispatch_policy",
+        )
+
+        assert issue is not None
+        assert issue["error_category"] == "surface_runtime_contract_error"
+        assert issue["failed_runtime_fields"] == (required_field,)
+        assert expected_detail in issue["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +884,159 @@ class TestVerificationGateIntegration:
         patch = _make_patch(action="delete")
         result = gate.run("/tmp", "", patch)
         assert result.passed is True
+
+    def test_selected_surface_missing_runtime_field_fails_closed(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "policy_loaded",
+                            "policy_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="search_policy",
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "failed runtime evidence contract" in result.checks[-1].detail
+        assert "missing=policy_errors" in result.checks[-1].detail
+
+    def test_unknown_selected_surface_fails_closed(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": ["policy_loaded"],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="not_declared",
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "is not declared" in result.checks[-1].detail
+
+    def test_hypothesis_change_locus_selects_surface_for_runtime_contract(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "policy_loaded",
+                            "policy_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            hypothesis=_make_hypothesis("search_policy"),
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "failed runtime evidence contract" in result.checks[-1].detail
+        assert "missing=policy_errors" in result.checks[-1].detail
+
+    def test_run_verification_gate_helper_forwards_hypothesis_surface(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "dispatch_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "dispatch_executed",
+                            "dispatch_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {
+                    "dispatch_executed": False,
+                    "dispatch_errors": 0,
+                },
+            }
+        )
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = run_verification_gate(
+            gate,
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            hypothesis=_make_hypothesis("dispatch_policy"),
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "failed=dispatch_executed" in result.checks[-1].detail
 
 
 # ---------------------------------------------------------------------------

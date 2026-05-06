@@ -482,6 +482,22 @@ class EvidenceRecorder:
                 "target_file": step.hypothesis.target_file,
             },
         }
+        if step.proposal_session_ref:
+            allowed_ref_fields = {
+                "schema_version",
+                "session_id",
+                "request_id",
+                "idempotency_key",
+                "artifact_ref",
+                "transcript_digest",
+                "termination_reason",
+                "status",
+            }
+            step_data["proposal_session_ref"] = {
+                key: value
+                for key, value in dict(step.proposal_session_ref).items()
+                if key in allowed_ref_fields
+            }
         if step.protocol_result and step.protocol_result.stats:
             stats = step.protocol_result.stats
             pr = step.protocol_result
@@ -526,6 +542,55 @@ class EvidenceRecorder:
                 "raw_metrics_ref": pr.raw_metrics_ref,
                 "case_ids": list(pr.case_ids),
                 "seed_set": list(pr.seed_set),
+                "candidate_runtime_failure_categories": dict(
+                    pr.candidate_runtime_failure_categories
+                    or step.candidate_runtime_failure_categories
+                    or {}
+                ),
+                "candidate_first_runtime_failure": (
+                    dict(
+                        pr.candidate_first_runtime_failure
+                        or step.candidate_first_runtime_failure
+                    )
+                    if (
+                        pr.candidate_first_runtime_failure
+                        or step.candidate_first_runtime_failure
+                    )
+                    else None
+                ),
+                "candidate_operator_attempts": (
+                    pr.candidate_operator_attempts
+                    or step.candidate_operator_attempts
+                ),
+                "candidate_operator_accepted": (
+                    pr.candidate_operator_accepted
+                    or step.candidate_operator_accepted
+                ),
+                "candidate_operator_errors": (
+                    pr.candidate_operator_errors
+                    or step.candidate_operator_errors
+                ),
+                "candidate_operator_invalid_outputs": (
+                    pr.candidate_operator_invalid_outputs
+                    or step.candidate_operator_invalid_outputs
+                ),
+                "candidate_policy_errors": (
+                    pr.candidate_policy_errors
+                    or step.candidate_policy_errors
+                ),
+                "candidate_construction_errors": (
+                    pr.candidate_construction_errors
+                    or step.candidate_construction_errors
+                ),
+                "candidate_portfolio_errors": (
+                    pr.candidate_portfolio_errors
+                    or step.candidate_portfolio_errors
+                ),
+                "candidate_runtime_stop_reasons": dict(
+                    pr.candidate_runtime_stop_reasons
+                    or step.candidate_runtime_stop_reasons
+                    or {}
+                ),
             }
             if pr.case_feedback:
                 step_data["case_feedback_summary"] = [
