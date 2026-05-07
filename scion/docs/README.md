@@ -67,6 +67,7 @@ For a new agent session, read in this order:
 ### Evidence, Operations, Reference
 
 - [Evidence manifest](evidence/manifest.md)
+- [Scion v0.4 本地实验运行、回溯与复现手册](operations/experiment-runbook.zh.md)
 - [Experiment quick reference](operations/experiment-quickref.md)
 - [Experiment baseline management](operations/experiment-baseline-management.md)
 - [Metrics guide](reference/metrics-guide.md)

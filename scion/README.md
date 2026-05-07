@@ -169,16 +169,27 @@ pip install -e .
 ### 运行 Campaign
 
 ```bash
-# Full campaign (需要 LLM API key)
+# v0.4 CLI campaign (需要 LLM API key)
 export SCION_API_KEY="your-api-key"
-export SCION_MODEL="claude-opus-4-6"
-cd scion && python run_v3_campaign.py 30
+export SCION_MODEL="claude-sonnet-4-6"
+cd scion
+python -m scion.cli.main run \
+  --problem scion/problems/cvrp/problem.yaml \
+  --protocol scion/problems/cvrp/formal/protocol.yaml \
+  --split scion/problems/cvrp/formal/split_manifest.yaml \
+  --seeds scion/problems/cvrp/formal/seed_ledger.yaml \
+  --campaign-dir /tmp/scion_v04_run \
+  --rounds 5 \
+  --time-limit-sec 10 \
+  --disable-early-stop \
+  --agentic-proposal
 
-# 指定生产数据协议
-export SCION_PROTOCOL="problems/warehouse_delivery/protocol_prod.yaml"
-export SCION_SPLIT_MANIFEST="problems/warehouse_delivery/split_manifest_prod.yaml"
-python run_v3_campaign.py 100
+# controlled CVRP E2E smoke (不需要 LLM API key)
+python run_cvrp_controlled_e2e.py --output-dir /tmp/scion_cvrp_controlled
 ```
+
+Historical v0.2/v0.3 launcher scripts are archived under
+`archive/run-scripts/`; they are not the current v0.4 entry point.
 
 ### 运行测试
 
