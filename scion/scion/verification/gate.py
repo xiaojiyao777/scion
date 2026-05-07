@@ -43,6 +43,7 @@ from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
+from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter
@@ -77,7 +78,7 @@ class VerificationGate:
         self._runner = runner
         self._metrics_dir = metrics_dir
         self._adapter = adapter
-        spec_requires_adapter = _problem_spec_requires_adapter(problem_spec)
+        spec_requires_adapter = requires_adapter_for_runtime(problem_spec)
         self._strict_runtime_checks = strict_runtime_checks or spec_requires_adapter
         self._require_adapter_for_runtime = (
             require_adapter_for_runtime
@@ -182,6 +183,7 @@ class VerificationGate:
             candidate_workspace,
             adapter=self._adapter,
             selected_surface=surface_name,
+            require_adapter_for_runtime=self._require_adapter_for_runtime,
         )
         checks.append(r)
         if not r.passed:
@@ -194,6 +196,7 @@ class VerificationGate:
             candidate_workspace,
             adapter=self._adapter,
             selected_surface=surface_name,
+            require_adapter_for_runtime=self._require_adapter_for_runtime,
         )
         checks.append(r)
         if not r.passed:
@@ -208,6 +211,8 @@ class VerificationGate:
             candidate_workspace,
             metrics_dir=self._metrics_dir,
             selected_surface=surface_name,
+            adapter=self._adapter,
+            require_adapter_for_runtime=self._require_adapter_for_runtime,
         )
         checks.append(r)
         if not r.passed:
@@ -262,17 +267,6 @@ def _runtime_config_failure(detail: str) -> CheckResult:
         severity="heavy",
         detail=detail,
         elapsed_ms=0,
-    )
-
-
-def _problem_spec_requires_adapter(problem_spec: ProblemSpec | None) -> bool:
-    if problem_spec is None:
-        return False
-    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
-        return True
-    return (
-        getattr(problem_spec, "spec_version", None) == "problem-v1"
-        and bool(getattr(problem_spec, "adapter_import_path", ""))
     )
 
 

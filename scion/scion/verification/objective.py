@@ -15,6 +15,10 @@ from scion.verification.feasibility import (
     _registry_path,
     resolve_problem_path,
 )
+from scion.verification.requirements import (
+    declared_objective_metric_names,
+    requires_adapter_for_runtime,
+)
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter
@@ -27,6 +31,7 @@ def check_objective(
     *,
     adapter: Optional[ProblemAdapter] = None,
     selected_surface: str | None = None,
+    require_adapter_for_runtime: bool = False,
 ) -> CheckResult:
     """V7_objective: oracle.recompute_objective must match solver-reported objective."""
     t0 = time.monotonic_ns()
@@ -76,9 +81,21 @@ def check_objective(
             t0,
         )
 
+    if adapter is None and requires_adapter_for_runtime(
+        problem_spec,
+        explicit=require_adapter_for_runtime,
+    ):
+        return _cr(
+            False,
+            "heavy",
+            "problem adapter is required for adapter-backed runtime verification; "
+            "legacy objective fallback disabled",
+            t0,
+        )
+
     # --- Adapter-based path (v0.3+) ---
     if adapter is not None:
-        return _check_via_adapter(adapter, raw, canary, t0)
+        return _check_via_adapter(adapter, raw, canary, t0, problem_spec)
 
     # --- Legacy path (direct oracle import) ---
     # Legacy problems that do not use ProblemAdapter must provide a generic
@@ -130,7 +147,11 @@ def _objective_mapping(value: object) -> dict:
 
 
 def _check_via_adapter(
-    adapter: ProblemAdapter, raw: dict, canary: str, t0: int,
+    adapter: ProblemAdapter,
+    raw: dict,
+    canary: str,
+    t0: int,
+    problem_spec: ProblemSpec,
 ) -> CheckResult:
     try:
         instance = adapter.load_instance(canary)
@@ -143,10 +164,46 @@ def _check_via_adapter(
     except Exception as exc:
         return _cr(False, "heavy", f"adapter.recompute_objective error: {exc}", t0)
 
+    reported = dict(artifact.objective)
+    recomputed = dict(recomputed)
+    declared_names = declared_objective_metric_names(problem_spec)
+    if declared_names:
+        missing_reported = [
+            name for name in declared_names
+            if name not in reported
+        ]
+        missing_recomputed = [
+            name for name in declared_names
+            if name not in recomputed
+        ]
+        if missing_reported or missing_recomputed:
+            parts: list[str] = []
+            if missing_reported:
+                parts.append(
+                    "solver objective missing declared metrics: "
+                    + ", ".join(missing_reported)
+                )
+            if missing_recomputed:
+                parts.append(
+                    "adapter recomputation missing declared metrics: "
+                    + ", ".join(missing_recomputed)
+                )
+            return _cr(False, "heavy", "; ".join(parts), t0)
+
+    compare_keys = list(declared_names)
+    seen = set(compare_keys)
+    for key in recomputed:
+        if key in seen:
+            continue
+        if key in reported:
+            compare_keys.append(key)
+            seen.add(key)
+
     mismatches = []
-    for key, oracle_val in recomputed.items():
-        solver_val = artifact.objective.get(key)
-        if solver_val is not None and solver_val != oracle_val:
+    for key in compare_keys:
+        solver_val = reported.get(key)
+        oracle_val = recomputed.get(key)
+        if solver_val != oracle_val:
             mismatches.append(f"{key}: solver={solver_val} oracle={oracle_val}")
 
     if mismatches:

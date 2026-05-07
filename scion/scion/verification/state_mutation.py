@@ -18,6 +18,7 @@ from scion.core.models import CheckResult
 from scion.runtime.runner import Runner
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.verification.feasibility import _registry_path, resolve_problem_path
+from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter
@@ -84,7 +85,7 @@ def check_state_mutation(
             diagnosis="CANDIDATE",
         )
 
-    if adapter is None and _requires_adapter_for_runtime(
+    if adapter is None and requires_adapter_for_runtime(
         problem_spec,
         explicit=require_adapter_for_runtime,
     ):
@@ -203,21 +204,6 @@ def _check_solution_consistency(raw: dict) -> list[str]:
             issues.append(f"empty vehicle {vid} in output")
 
     return issues
-
-
-def _requires_adapter_for_runtime(
-    problem_spec: ProblemSpec,
-    *,
-    explicit: bool = False,
-) -> bool:
-    if explicit:
-        return True
-    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
-        return True
-    return (
-        getattr(problem_spec, "spec_version", None) == "problem-v1"
-        and bool(getattr(problem_spec, "adapter_import_path", ""))
-    )
 
 
 def _cr(

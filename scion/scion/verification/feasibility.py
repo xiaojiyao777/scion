@@ -11,6 +11,7 @@ from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.runtime.runner import Runner
+from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter
@@ -23,6 +24,7 @@ def check_feasibility(
     *,
     adapter: Optional[ProblemAdapter] = None,
     selected_surface: str | None = None,
+    require_adapter_for_runtime: bool = False,
 ) -> CheckResult:
     """V6_feasibility: solver output must pass oracle.check_feasibility on the canary case."""
     t0 = time.monotonic_ns()
@@ -74,6 +76,18 @@ def check_feasibility(
             False,
             "heavy",
             "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
+            t0,
+        )
+
+    if adapter is None and requires_adapter_for_runtime(
+        problem_spec,
+        explicit=require_adapter_for_runtime,
+    ):
+        return _cr(
+            False,
+            "heavy",
+            "problem adapter is required for adapter-backed runtime verification; "
+            "legacy feasibility fallback disabled",
             t0,
         )
 

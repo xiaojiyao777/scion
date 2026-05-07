@@ -33,6 +33,21 @@ def _make_spec(canary: str) -> ProblemSpec:
     )
 
 
+def _make_surface_spec(canary: str) -> ProblemSpec:
+    return _make_spec(canary).model_copy(
+        update={
+            "research_surfaces": [
+                {
+                    "name": "search_policy",
+                    "kind": "policy",
+                    "target_files": ["policies/search_policy.py"],
+                    "evidence": {"required_runtime_fields": []},
+                }
+            ],
+        }
+    )
+
+
 def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
     return {
         "vehicles": {"V0": {"vehicle_id": "V0", "cost": cost}},
@@ -154,6 +169,39 @@ class TestStateleakDiagnostics:
         archive_ref = detail.get("candidate_archive_ref")
         assert archive_ref is not None
         assert Path(archive_ref).exists()
+
+    def test_v5_failure_archives_selected_surface_targets(self, tmp_path: Path):
+        """On failure, selected-surface target files are archived generically."""
+        canary = str(tmp_path / "canary.json")
+        Path(canary).write_text("{}")
+        spec = _make_surface_spec(canary)
+
+        workspace = tmp_path / "ws"
+        (workspace / "policies").mkdir(parents=True)
+        (workspace / "policies" / "search_policy.py").write_text(
+            "def baseline_time_fraction(instance, time_limit_sec):\n"
+            "    return 0.5\n"
+        )
+        (workspace / "operators").mkdir()
+        (workspace / "operators" / "my_op.py").write_text("class MyOp: pass\n")
+
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
+        runner = _make_nondeterministic_runner(tmp_path)
+
+        r = check_nondeterminism(
+            spec,
+            runner,
+            str(workspace),
+            metrics_dir=str(metrics_dir),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        detail = json.loads(r.detail)
+        archive_ref = detail.get("candidate_archive_ref")
+        assert archive_ref is not None
+        assert (Path(archive_ref) / "policies" / "search_policy.py").exists()
 
     def test_v5_no_metrics_dir_still_works(self, tmp_path: Path):
         """metrics_dir=None must not crash and check still returns result."""

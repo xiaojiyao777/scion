@@ -26,9 +26,10 @@ enough to continue, validate, freeze, promote, or abandon.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
 - Current bottleneck: CVRP surface steering and selected-surface runtime audit
-  now reach canary/protocol candidate runs, and V2/V5 gate modernization is
-  closed. The next gate risk is auditing the remaining V6/V7/V8 legacy
-  diagnostics while improving CVRP policy-surface correctness and efficacy.
+  now reach canary/protocol candidate runs, and V2/V5/V6/V7/V8 gate
+  modernization is closed. The next risk is improving CVRP policy-surface
+  correctness and efficacy while keeping legacy verification fallbacks
+  compatibility-only.
 
 ## Required Reading Order
 
@@ -110,8 +111,8 @@ For experiment analysis:
 
 Gate modernization follow-up:
 
-- V2/V5 modernization is complete as of 2026-05-07.
-- Audit remaining V6/V7/V8 legacy diagnostics and keep the
+- V2/V5/V6/V7/V8 modernization is complete as of 2026-05-07.
+- Keep remaining legacy verification fallbacks compatibility-only and keep the
   adapter-backed path authoritative for new problem-v1 packages.
 
 Near-term CVRP research-space work:

@@ -85,13 +85,19 @@ Problem packages can use `SCION_*` env vars to resolve external data roots witho
 
 ## Adapter-Backed Verification
 
-Verification checks V5/V6/V7 are where problem semantics should enter runtime validation:
+Verification checks V5/V6/V7/V8 are where problem semantics should enter runtime validation:
 
 - V5 solution consistency calls `adapter.deserialize_solver_output()` and `adapter.check_solution_consistency()`.
 - V6 feasibility calls adapter load/deserialize/consistency/feasibility.
-- V7 objective calls adapter load/deserialize/recompute and compares reported objective fields.
+- V7 objective calls adapter load/deserialize/recompute, requires declared
+  objective metric names to exist in reported and recomputed objective maps,
+  and compares auxiliary recomputed keys only when both sides report them.
+- V8 nondeterminism calls adapter load/deserialize for both same-seed canary
+  runs and compares a stable canonical artifact signature. The default
+  signature uses normalized solution, adapter-filtered objective, and feasible
+  flag; adapters may optionally expose a dynamic canonical fingerprint method.
 
-`VerificationGate` can enforce fail-closed behavior with `strict_runtime_checks=True` and `require_adapter_for_runtime=True`. For bridged `ProblemSpecV1` packages, adapter-required metadata now makes this fail-closed behavior automatic even if the adapter object is accidentally omitted: V5 returns a heavy `V5_solution_consistency` failure instead of using the legacy assignment/vehicles fallback.
+`VerificationGate` can enforce fail-closed behavior with `strict_runtime_checks=True` and `require_adapter_for_runtime=True`. For bridged `ProblemSpecV1` packages, adapter-required metadata now makes this fail-closed behavior automatic even if the adapter object is accidentally omitted: V5/V6/V7/V8 return heavy verification failures instead of using legacy fallback paths.
 
 Selected-surface runtime audit is enforced during verification when
 `VerificationGate.run()` receives selected-surface metadata, normally from
@@ -109,7 +115,7 @@ not rejected for lacking candidate-surface evidence fields.
 Avoid adding warehouse or CVRP-specific logic to these framework areas:
 
 - `ContractGate` research-surface validation should use `ProblemSpecV1.research_surfaces`, not fixed categories.
-- `VerificationGate` should call adapter methods for V5/V6/V7, not reconstruct problem-native objects.
+- `VerificationGate` should call adapter methods for V5/V6/V7/V8, not reconstruct problem-native objects.
 - `ExperimentProtocol` should use metric specs/objective policy, not fixed metric names.
 - `ContextManager` should render adapter/problem spec summaries and research surfaces, not domain text directly.
 - `SafeFeatureExtractor` and `DecisionEngine` should operate on generic stats/runtime fields, not problem-specific objective names.
@@ -120,6 +126,9 @@ Known current risk areas:
 - `scion/scion/verification/state_mutation.py` legacy fallback still assumes
   `assignment`/`vehicles` output structure, but bridged adapter-required
   problem-v1 specs are isolated from that fallback.
+- V6/V7 legacy oracle fallback and V8 objective-only comparison remain
+  compatibility paths only; bridged adapter-required problem-v1 specs are
+  isolated from them.
 - `scion/scion/contract/gate.py` complexity guard now prefers v2 surface
   `bounds.complexity_scale_terms`; route/customer/order/vehicle names remain as
   a legacy-only fallback when surface metadata is absent.

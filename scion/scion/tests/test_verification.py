@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional
 from unittest.mock import MagicMock
 
@@ -167,6 +168,15 @@ def _make_adapter_required_spec(canary: str) -> ProblemSpec:
     )
 
 
+def _with_objectives(spec: ProblemSpec, *names: str) -> ProblemSpec:
+    object.__setattr__(
+        spec,
+        "objectives",
+        tuple(SimpleNamespace(name=name) for name in names),
+    )
+    return spec
+
+
 def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
     return {
         "vehicles": {
@@ -235,6 +245,44 @@ def _mock_runner(
         return RunResult(
             success=True, exit_code=0, stdout="", stderr="",
             elapsed_ms=elapsed_ms, output=sol_out, output_path=path,
+            error_category=None,
+        )
+
+    runner.run_solver.side_effect = run_solver
+    return runner
+
+
+def _sequential_runner(outputs: list[dict]) -> Any:
+    """Create a mock runner that returns one output per solver call."""
+    runner = MagicMock()
+    call_count = [0]
+
+    def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+        index = min(call_count[0], len(outputs) - 1)
+        call_count[0] += 1
+        data = outputs[index]
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(path, "w") as f:
+            json.dump(data, f)
+        return RunResult(
+            success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            elapsed_ms=100,
+            output=SolverOutput(
+                vehicles=data.get("vehicles", {}),
+                assignment=data.get("assignment", {}),
+                objective=data.get("objective", {}),
+                feasible=data.get("feasible", False),
+                runtime=(
+                    data.get("runtime", {})
+                    if isinstance(data.get("runtime", {}), dict)
+                    else {}
+                ),
+            ),
+            output_path=path,
             error_category=None,
         )
 
@@ -496,6 +544,82 @@ class TestFeasibilityCheck:
         assert r.passed is False
         assert r.name == "V6_feasibility"
 
+    def test_adapter_required_spec_without_adapter_fails_before_legacy_fallback(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        (tmp_path / "oracle.py").write_text(
+            "def check_solver_output_feasibility(raw, canary):\n"
+            "    raise AssertionError('legacy oracle should not be called')\n"
+        )
+        spec = _make_adapter_required_spec(canary).model_copy(
+            update={"root_dir": str(tmp_path), "oracle_path": "oracle.py"}
+        )
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_feasibility(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.name == "V6_feasibility"
+        assert "problem adapter is required" in r.detail
+        assert "legacy feasibility fallback disabled" in r.detail
+
+    def test_legacy_oracle_fallback_remains_compatible(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        (tmp_path / "oracle.py").write_text(
+            "def check_solver_output_feasibility(raw, canary):\n"
+            "    return True\n"
+        )
+        spec = _make_spec(canary=canary).model_copy(
+            update={"root_dir": str(tmp_path), "oracle_path": "oracle.py"}
+        )
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_feasibility(spec, runner, str(tmp_path))
+
+        assert r.passed is True
+        assert r.name == "V6_feasibility"
+        assert "feasibility ok" in r.detail
+
+    def test_selected_surface_missing_runtime_field_preempts_adapter_required(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_adapter_required_spec(canary).model_copy(
+            update={
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "policy",
+                        "target_files": ["policies/search_policy.py"],
+                        "evidence": {
+                            "required_runtime_fields": ["policy_loaded"],
+                        },
+                    }
+                ],
+            }
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {}
+        runner = _mock_runner(output_dict=output)
+
+        r = check_feasibility(
+            spec,
+            runner,
+            str(tmp_path),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert "solver runtime audit failed" in r.detail
+        assert "missing=policy_loaded" in r.detail
+        assert "problem adapter is required" not in r.detail
+
 
 # ---------------------------------------------------------------------------
 # V5: solution consistency
@@ -736,6 +860,142 @@ class TestObjectiveCheck:
         assert r.passed is False
         assert "solver runtime audit failed" in r.detail
 
+    def test_adapter_required_spec_without_adapter_fails_before_legacy_fallback(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        (tmp_path / "oracle.py").write_text(
+            "def recompute_solver_output_objective(raw, canary):\n"
+            "    raise AssertionError('legacy oracle should not be called')\n"
+        )
+        spec = _make_adapter_required_spec(canary).model_copy(
+            update={"root_dir": str(tmp_path), "oracle_path": "oracle.py"}
+        )
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_objective(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.name == "V7_objective"
+        assert "problem adapter is required" in r.detail
+        assert "legacy objective fallback disabled" in r.detail
+
+    def test_adapter_declared_objective_missing_from_solver_output_fails(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _with_objectives(_make_spec(canary=canary), "cost", "penalty")
+        runner = _mock_runner(
+            output_dict={
+                "objective": {"penalty": 0},
+                "feasible": True,
+            }
+        )
+
+        class ObjectiveAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                return SolverArtifact(
+                    raw_output=raw_output,
+                    objective=dict(raw_output.get("objective", {})),
+                    feasible=True,
+                    normalized_solution={},
+                )
+
+            def recompute_objective(self, artifact, instance):
+                return {"cost": 10, "penalty": 0}
+
+        r = check_objective(
+            spec,
+            runner,
+            str(tmp_path),
+            adapter=ObjectiveAdapter(),
+        )
+
+        assert r.passed is False
+        assert "solver objective missing declared metrics: cost" in r.detail
+
+    def test_adapter_declared_objective_missing_from_recomputation_fails(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _with_objectives(_make_spec(canary=canary), "cost", "penalty")
+        runner = _mock_runner(
+            output_dict={
+                "objective": {"cost": 10, "penalty": 0},
+                "feasible": True,
+            }
+        )
+
+        class ObjectiveAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                return SolverArtifact(
+                    raw_output=raw_output,
+                    objective=dict(raw_output.get("objective", {})),
+                    feasible=True,
+                    normalized_solution={},
+                )
+
+            def recompute_objective(self, artifact, instance):
+                return {"cost": 10}
+
+        r = check_objective(
+            spec,
+            runner,
+            str(tmp_path),
+            adapter=ObjectiveAdapter(),
+        )
+
+        assert r.passed is False
+        assert "adapter recomputation missing declared metrics: penalty" in r.detail
+
+    def test_selected_surface_missing_runtime_field_preempts_adapter_required(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_adapter_required_spec(canary).model_copy(
+            update={
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "policy",
+                        "target_files": ["policies/search_policy.py"],
+                        "evidence": {
+                            "required_runtime_fields": ["policy_loaded"],
+                        },
+                    }
+                ],
+            }
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {}
+        runner = _mock_runner(output_dict=output)
+
+        r = check_objective(
+            spec,
+            runner,
+            str(tmp_path),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert "solver runtime audit failed" in r.detail
+        assert "missing=policy_loaded" in r.detail
+        assert "problem adapter is required" not in r.detail
+
 
 # ---------------------------------------------------------------------------
 # V8: nondeterminism
@@ -797,6 +1057,161 @@ class TestStateleakCheck:
         detail = json.loads(r.detail)
         assert "diff_keys" in detail
         assert len(detail["diff_keys"]) > 0
+
+    def test_adapter_required_spec_without_adapter_fails_closed(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_adapter_required_spec(canary)
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_nondeterminism(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.name == "V8_nondeterminism"
+        detail = json.loads(r.detail)
+        assert detail["comparison_mode"] == "adapter_required_missing"
+        assert detail["selected_surface"] is None
+        assert "problem adapter is required" in detail["error"]
+        assert "legacy nondeterminism fallback disabled" in detail["error"]
+
+    def test_adapter_backed_fails_when_normalized_artifacts_differ(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        runner = _sequential_runner(
+            [
+                {"routes": [[0, 1, 0]], "objective": {"cost": 10}, "feasible": True},
+                {"routes": [[0, 2, 0]], "objective": {"cost": 10}, "feasible": True},
+            ]
+        )
+
+        class RouteAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                return SolverArtifact(
+                    raw_output=raw_output,
+                    objective=dict(raw_output.get("objective", {})),
+                    feasible=bool(raw_output.get("feasible")),
+                    normalized_solution=raw_output.get("routes"),
+                )
+
+        r = check_nondeterminism(
+            spec,
+            runner,
+            str(tmp_path),
+            adapter=RouteAdapter(),
+        )
+
+        assert r.passed is False
+        detail = json.loads(r.detail)
+        assert detail["comparison_mode"] == "adapter_canonical_signature"
+        assert detail["diff_keys"] == ["normalized_solution"]
+        assert detail["run1_signature"]["objective"] == {"cost": 10}
+        assert detail["run2_signature"]["objective"] == {"cost": 10}
+
+    def test_adapter_backed_passes_when_raw_output_differs_but_signature_equal(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        runner = _sequential_runner(
+            [
+                {
+                    "routes": [[0, 1, 0]],
+                    "objective": {"cost": 10},
+                    "feasible": True,
+                    "diagnostics": {"nonce": "a"},
+                },
+                {
+                    "routes": [[0, 1, 0]],
+                    "objective": {"cost": 10},
+                    "feasible": True,
+                    "diagnostics": {"nonce": "b"},
+                },
+            ]
+        )
+
+        class RouteAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                return SolverArtifact(
+                    raw_output=raw_output,
+                    objective=dict(raw_output.get("objective", {})),
+                    feasible=bool(raw_output.get("feasible")),
+                    normalized_solution=raw_output.get("routes"),
+                )
+
+        r = check_nondeterminism(
+            spec,
+            runner,
+            str(tmp_path),
+            adapter=RouteAdapter(),
+        )
+
+        assert r.passed is True
+        assert "adapter_canonical_signature identical" in r.detail
+
+    @pytest.mark.parametrize(
+        ("bad_run", "expected_run"),
+        [
+            (0, "first"),
+            (1, "second"),
+        ],
+    )
+    def test_selected_surface_runtime_audit_fails_on_either_run(
+        self,
+        tmp_path,
+        bad_run,
+        expected_run,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_adapter_required_spec(canary).model_copy(
+            update={
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "policy",
+                        "target_files": ["policies/search_policy.py"],
+                        "evidence": {
+                            "required_runtime_fields": ["policy_loaded"],
+                        },
+                    }
+                ],
+            }
+        )
+        ok_output = _solver_output_dict()
+        ok_output["runtime"] = {"policy_loaded": True}
+        bad_output = _solver_output_dict()
+        bad_output["runtime"] = {}
+        outputs = [ok_output, ok_output]
+        outputs[bad_run] = bad_output
+        runner = _sequential_runner(outputs)
+
+        r = check_nondeterminism(
+            spec,
+            runner,
+            str(tmp_path),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        detail = json.loads(r.detail)
+        assert detail["comparison_mode"] == "runtime_audit"
+        assert detail["selected_surface"] == "search_policy"
+        assert detail["run"] == expected_run
+        assert f"{expected_run} run runtime audit failed" in detail["error"]
+        assert "missing=policy_loaded" in detail["error"]
+        assert "problem adapter is required" not in detail["error"]
 
 
 # ---------------------------------------------------------------------------

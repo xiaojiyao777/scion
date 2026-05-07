@@ -34,12 +34,6 @@ Use these framework extension points only when the behavior is truly problem-agn
 
 High-risk areas:
 
-- V6/V7 fallback paths still rely on legacy oracle hooks when no adapter is
-  provided. New problem packages should require adapter-backed runtime
-  verification and metric specs.
-- V8 nondeterminism is generic but still compares raw solver output; future
-  adapter-declared canonical fingerprints would reduce false diffs for
-  problem-native solution representations.
 - `ContractGate._c9c_complexity_bound()` now prefers v2 research-surface
   `bounds.complexity_scale_terms`. Route/customer/order/vehicle names remain
   only as a legacy fallback when no v2 bounds metadata is available.
@@ -54,9 +48,15 @@ High-risk areas:
 
 Medium-risk areas:
 
-- V2 and V5 risks are reduced as of 2026-05-07. V2 shares the C7 AST-only
-  research-surface interface validator, and bridged problem-v1 specs disable
-  the V5 legacy assignment/vehicles fallback when an adapter is missing.
+- V2/V5/V6/V7/V8 gate risks are reduced as of 2026-05-07. V2 shares the C7
+  AST-only research-surface interface validator, and bridged problem-v1 specs
+  disable legacy runtime fallbacks when an adapter is missing.
+- V6/V7 legacy oracle fallback and V8 objective-only nondeterminism comparison
+  remain for explicit legacy/no-adapter compatibility. New problem packages
+  should require adapter-backed runtime verification and metric specs.
+- Adapter-backed V8 has a generic canonical artifact signature and optional
+  dynamic adapter fingerprint hook, but legacy/no-adapter V8 still compares
+  objective maps only.
 - `ProblemSpecV1` and legacy `ProblemSpec` coexist. Any new field should define bridge behavior explicitly.
 - Legacy/v2 research-surface fields are intentionally conflict-checked at spec
   load. Keep both declarations identical when a problem package still emits

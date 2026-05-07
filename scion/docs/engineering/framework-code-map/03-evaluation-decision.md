@@ -77,7 +77,7 @@ function-signature prefixes, and static return constraints without importing
 tainted candidate code. If a selected surface is undeclared or the patch file is
 outside that surface's declared targets, V2 fails closed.
 
-For production adapter-backed runs, `VerificationGate` should be configured with `adapter`, `strict_runtime_checks=True`, and `require_adapter_for_runtime=True`. Bridged `ProblemSpecV1` packages now carry adapter-required metadata, so `VerificationGate` also treats those specs as adapter-required even if an adapter object is accidentally omitted. V5 fails closed before the legacy assignment/vehicles fallback can accept such a package. When an adapter is present, V5/V6/V7 use `ProblemAdapter` methods and fail closed when required runtime configuration is missing.
+For production adapter-backed runs, `VerificationGate` should be configured with `adapter`, `strict_runtime_checks=True`, and `require_adapter_for_runtime=True`. Bridged `ProblemSpecV1` packages now carry adapter-required metadata, so `VerificationGate` also treats those specs as adapter-required even if an adapter object is accidentally omitted. V5/V6/V7/V8 fail closed before legacy fallback paths can accept such a package. When an adapter is present, V5/V6/V7 use `ProblemAdapter` methods for consistency, feasibility, and objective recomputation, and V8 compares an adapter-canonical solver artifact signature rather than raw solver JSON.
 
 For `research_surfaces` v2, selected surface metadata is passed into
 `VerificationGate.run()` from `HypothesisProposal.change_locus` in the explore
@@ -91,7 +91,10 @@ surface are the legacy compatibility path.
 Legacy verification fallback still exists:
 
 - V5 fallback checks `assignment` and `vehicles` shape in `scion/scion/verification/state_mutation.py`, but only for legacy/no-adapter compatibility. It is disabled for bridged adapter-required `problem-v1` specs.
-- V6/V7 fallback require generic oracle hooks in `oracle.py`.
+- V6/V7 fallback require generic oracle hooks in `oracle.py`, but are disabled
+  for adapter-required specs when the adapter is missing.
+- V8 objective-only nondeterminism comparison remains a legacy/no-adapter
+  compatibility path; adapter-backed checks compare canonical artifacts.
 
 Do not extend these legacy fallbacks with new problem semantics. New problem support should go through `ProblemAdapter`.
 

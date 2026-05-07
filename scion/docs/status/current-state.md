@@ -154,7 +154,7 @@ cd scion
 Latest result:
 
 ```text
-1246 passed, 1 skipped in 40.82s
+1435 passed, 1 skipped in 44.87s
 ```
 
 CVRP synthetic baseline smoke with explicit repo `vrp` baseline:
@@ -799,11 +799,11 @@ Audit summary:
   remain generic framework controls.
 - V2 interface checking is still operator-class oriented and needs to be
   surface-aware for module-style policy/config/portfolio/construction surfaces.
-- V5/V6/V7 are generic when adapter-backed, but legacy warehouse fallbacks
-  should not apply to new problem-v1 packages.
-- V8 nondeterminism is conceptually generic but still has operator/warehouse
-  diagnostics and should eventually use adapter-declared canonical solution
-  fingerprints.
+- V5/V6/V7 are generic when adapter-backed, and adapter-required problem-v1
+  packages now fail closed before legacy fallback paths.
+- V8 nondeterminism remains generic: adapter-backed checks compare canonical
+  adapter artifacts, while objective-only comparison is legacy/no-adapter
+  compatibility.
 - Protocol/canary runtime audit should receive selected-surface context so
   problem-declared `evidence.required_runtime_fields` can fail closed outside
   the verification-only path.
@@ -861,9 +861,9 @@ Interpretation:
 - The construction-policy candidate passed contract and verification, reached
   screening, and failed only on `SCREENING_FAIL_WIN_RATE`.
 - The search-policy candidate still failed V5 solution consistency.
-- The next gate modernization slice should therefore make V2/V5
-  surface-aware through shared interface validators and adapter-declared policy
-  invariant previews, while preserving the v3 protocol gates unchanged.
+- The next gate modernization slices should therefore make Verification
+  surface-aware and adapter-authoritative while preserving the v3 protocol
+  gates unchanged.
 
 ## 2026-05-07 Protocol Surface Runtime Audit Gate Slice
 
@@ -930,6 +930,37 @@ Validation:
 
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 1422 passed, 1 skipped in 46.95s
+```
+
+## 2026-05-07 V6/V7/V8 Gate Modernization Closeout
+
+Completed the follow-up verification modernization slice:
+
+- Shared generic adapter-required metadata detection across V5/V6/V7/V8.
+- V6 feasibility and V7 objective now fail closed for adapter-required
+  problem-v1 specs when an adapter is missing, before legacy oracle fallback.
+- V7 adapter-backed checks require declared objective metrics to appear in
+  both the reported solver objective and adapter recomputation, while auxiliary
+  recomputed keys are compared only when both sides report them.
+- V8 now accepts an optional adapter and compares adapter-backed canonical
+  solver artifact signatures based on normalized solution, filtered objective,
+  and feasible flag, with an optional dynamic adapter fingerprint hook.
+- Legacy V6/V7 oracle fallback and V8 objective-only comparison remain
+  available only for legacy/no-adapter compatibility.
+- V8 failure archives now prefer selected-surface target files declared in
+  `problem_spec.research_surfaces`, falling back to `operators/`.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/test_state_leak.py scion/scion/tests/test_problem_bridge.py -q
+98 passed in 2.65s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+225 passed in 30.06s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1435 passed, 1 skipped in 44.87s
 ```
 
 ## Remaining Optimization Backlog
