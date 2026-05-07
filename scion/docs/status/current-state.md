@@ -963,6 +963,46 @@ Validation:
 1435 passed, 1 skipped in 44.87s
 ```
 
+## 2026-05-07 Sonnet CVRP Framework Smoke Launched
+
+A detached real Sonnet CVRP formal-path smoke was launched after the
+V2-V8 gate modernization commits to validate that the governed APS/protocol
+path still reaches real VRP evaluation.
+
+Run root:
+
+```text
+/home/clawd/research/scion-experiments/v04-v678-sonnet-vrp-20260507T035528Z
+```
+
+Configuration:
+
+```text
+scion_commit=a80bd60
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+protocol=scion/scion/problems/cvrp/formal/protocol.yaml
+split=scion/scion/problems/cvrp/formal/split_manifest.yaml
+seeds=scion/scion/problems/cvrp/formal/seed_ledger.yaml
+```
+
+Launch state:
+
+```text
+wrapper_pid=2160932
+scion_pid=2160933
+status=running
+```
+
+This is a framework/control smoke, not final solver-quality evidence. Raw run
+logs and metrics should be analyzed only through a delegated post-run audit.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
