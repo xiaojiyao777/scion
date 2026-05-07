@@ -21,7 +21,10 @@ The main in-memory evidence object is `StepRecord` in `scion/scion/core/models.p
 
 `decision=None` is meaningful: the step did not reach the decision engine. Contract/proposal/code/workspace/verification failures should keep `decision=None`.
 
-`ProtocolResult` contains stage, stats, gate outcome, reason codes, exposed summary, raw metrics ref, case ids, seed set, and screening-only feedback.
+`ProtocolResult` contains stage, stats, gate outcome, reason codes, exposed
+summary, raw metrics ref, case ids, seed set, selected surface, screening-only
+feedback, and an optional bounded candidate surface runtime summary derived
+from problem-declared required runtime fields.
 
 ## EvidenceRecorder Flow
 
@@ -51,6 +54,8 @@ The recorder intentionally preserves existing artifact shapes while moving artif
 `record_event()` inserts experiment-like events. `record_decision()` inserts a separate decision row. The design is append-only for experiment and decision events.
 
 `EvidenceRecorder.build_step_lineage_event()` writes event fields such as branch/champion versions, code hash, patch file/action, hypothesis text, contract/verification/canary result, stage, case ids, seeds, raw metrics ref, screening stats, model/protocol ids, and serialized decision metadata. Runtime guard evidence and protocol runtime stats are nested inside `decision_features_json`.
+The selected surface is included as bounded evidence metadata; selected-surface
+runtime field values remain reporting evidence and are not DecisionFeatures.
 
 ## ChampionStore and Promotion Evidence
 
@@ -86,7 +91,9 @@ This means champion state is not just a branch decision; it is a persisted snaps
 - active branch snapshot;
 - per-step summaries.
 
-Per-step summaries include protocol stats, runtime stats, reason codes, raw metrics refs, and screening case feedback summaries when present.
+Per-step summaries include protocol stats, runtime stats, reason codes, raw
+metrics refs, selected surface, bounded selected-surface runtime field
+summaries, and screening case feedback summaries when present.
 
 ## Final Evidence Refs and Readiness
 

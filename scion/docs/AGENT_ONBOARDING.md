@@ -29,12 +29,14 @@ enough to continue, validate, freeze, promote, or abandon.
   API guidance has been repaired, and the APS observation-budget/recovery fix
   after `af4ab5b` has been validated by a one-round forced
   `algorithm_blueprint` Sonnet CVRP formal smoke. APS is fixed enough to
-  unblock proposal work, though observation headroom is still low. The next
-  decision point is `algorithm_blueprint` audit/contract/reporting,
-  especially preserving and reporting required `algorithm_*` runtime fields
-  through formal screening metrics and campaign summaries before longer runs or
-  more compactness work. This remains control-path evidence, not solver-quality
-  evidence, and there has been no promotion.
+  unblock proposal work, though observation headroom is still low. The first
+  `algorithm_blueprint` reporting refinement is implemented: selected-surface
+  required runtime fields, including CVRP `algorithm_*` fields, are preserved
+  in protocol raw metrics and campaign summaries. The next decision point is a
+  documented five-round forced Sonnet CVRP formal VRP run to validate the real
+  artifact path before longer runs or more compactness work. This remains
+  control-path evidence, not solver-quality evidence, and there has been no
+  promotion.
 
 ## Required Reading Order
 
@@ -103,6 +105,9 @@ For experiment analysis:
   canary, and screening/validation/frozen candidate-side protocol runtime audit.
   Surface-declared `evidence.required_runtime_fields` fail closed outside
   verification as well as inside it.
+- Protocol pair metrics and campaign summaries now preserve and summarize
+  selected-surface required runtime fields with bounded representative values,
+  without adding those tainted runtime values to DecisionFeatures.
 - V2 interface validation shares the AST-only surface interface validator used
   by `ContractGate C7`; V5 disables the legacy assignment/vehicles fallback for
   bridged adapter-required `problem-v1` packages when an adapter is missing.
@@ -144,14 +149,21 @@ Near-term CVRP research-space work:
   `/home/clawd/research/scion-experiments/v04-forced-blueprint-budget-sonnet-20260507T133711Z`.
   The analysis is recorded in
   `docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md`.
-- Treat APS budget/recovery as unblocked for the next slice. The budget
-  headroom is low and may deserve later compaction, but the next work is not
-  another compactness fix or a longer run.
-- Refine `algorithm_blueprint` audit/contract/reporting so required
-  `algorithm_*` runtime fields survive through formal screening pair metrics
-  and campaign summaries.
-- Improve policy-surface efficacy only after the control-path reporting gap is
-  closed; do not treat the latest smoke as solver-quality evidence.
+- The post-reporting validation launch is documented in
+  `docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md`.
+  It is a five-round Sonnet CVRP formal VRP control-path run with
+  `--force-surface algorithm_blueprint`; use it to validate real campaign
+  artifacts for selected-surface runtime reporting.
+- Treat APS budget/recovery as unblocked. The budget headroom is low and may
+  deserve later compaction, but the next work is not another compactness fix or
+  a longer run.
+- Analyze the five-round forced `algorithm_blueprint` Sonnet VRP validation
+  after it completes, confirming that required `algorithm_*` runtime fields now
+  survive through formal screening pair metrics and campaign summaries in real
+  campaign artifacts.
+- Improve policy-surface efficacy only after the control-path reporting path is
+  validated in a fresh smoke; do not treat the latest smoke as solver-quality
+  evidence.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

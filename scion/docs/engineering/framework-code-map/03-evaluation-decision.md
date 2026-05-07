@@ -124,7 +124,12 @@ surface metadata. `ExperimentProtocol` stores the problem spec, accepts
 to candidate runs. This enforces surface-declared
 `evidence.required_runtime_fields` outside the verification-only path while
 leaving champion-side audit on the generic legacy/runtime-failure checks.
-Metrics snapshots record the selected surface as metadata.
+Metrics snapshots record the selected surface as metadata. For selected
+surfaces with declared `evidence.required_runtime_fields`, candidate-side pair
+metrics also preserve those required runtime fields with bounded JSON values,
+including non-scalar values such as structured plans or phase lists. The
+protocol result carries a bounded per-field surface runtime summary for
+reporting; `SafeFeatureExtractor` does not read those tainted runtime values.
 
 ## SafeFeatureExtractor
 

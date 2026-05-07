@@ -218,6 +218,21 @@ def runtime_audit_failure_from_runtime(
     }
 
 
+def declared_surface_required_runtime_fields(
+    problem_spec: Any | None,
+    selected_surface: str | None,
+) -> tuple[str, ...]:
+    """Return declared required runtime fields for a selected surface, if any."""
+
+    surface_name = (selected_surface or "").strip()
+    if not surface_name:
+        return ()
+    surface = _find_research_surface(problem_spec, surface_name)
+    if surface is None:
+        return ()
+    return _required_runtime_fields(surface)
+
+
 def format_runtime_audit_failure(issue: Mapping[str, Any]) -> str:
     detail = str(issue.get("detail") or "solver runtime audit failed")
     construction_events = issue.get("construction_events")

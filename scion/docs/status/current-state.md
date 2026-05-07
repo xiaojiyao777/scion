@@ -19,11 +19,15 @@ The v0.4 focus remains:
 
 Latest interpretation: APS observation-budget/recovery repair from `af4ab5b`
 has now passed a one-round forced `algorithm_blueprint` Sonnet CVRP formal
-smoke. APS is fixed enough to unblock the next control-path slice, but the
-budget headroom is low. The current bottleneck is `algorithm_blueprint`
-audit/contract/reporting, especially preserving and reporting required
-`algorithm_*` runtime fields through formal screening metrics and campaign
-summaries. This is not solver-quality evidence, and no candidate promoted.
+smoke. APS is fixed enough to unblock control-path work, but the budget
+headroom is low. The first `algorithm_blueprint` reporting refinement is now
+implemented: selected-surface `evidence.required_runtime_fields`, including
+the CVRP `algorithm_*` runtime fields, are preserved in formal protocol raw
+metrics and summarized in campaign summaries. The next check should rerun a
+forced `algorithm_blueprint` smoke to validate the real artifact path before
+longer runs; the five-round Sonnet CVRP formal VRP launch is now documented for
+that purpose. This is still not solver-quality evidence, and no candidate
+promoted.
 
 ## Current Engineering State
 
@@ -66,6 +70,13 @@ summaries. This is not solver-quality evidence, and no candidate promoted.
 - Screening runtime feedback is injected into proposal context with explicit
   failure causes: failed pairs, candidate/champion failures, runtime ratios,
   operator attempts/accepted moves, operator errors, and invalid outputs.
+- Selected-surface required runtime fields are copied into candidate-side
+  protocol pair metrics using the problem-declared field list, including
+  bounded non-scalar values such as `algorithm_plan` and executed phase lists.
+- Protocol results carry a bounded `candidate_surface_runtime_summary` with
+  per-required-field present/missing/empty/failed counts and representative
+  values. `campaign_summary.json` includes that summary with the selected
+  surface, without adding these tainted runtime values to DecisionFeatures.
 - Screening feedback distinguishes no-op/weak operators: no accepted moves,
   tie-dominated evidence, and `operator_stop_reason=no_improvement_round` are
   proposal-quality signals rather than schema/runtime failures.
@@ -175,14 +186,14 @@ summaries. This is not solver-quality evidence, and no candidate promoted.
 Full Scion test suite:
 
 ```text
-cwd: /home/clawd/research/or-autoresearch-agent/scion
-command: /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests -q
+cwd: /home/clawd/research/or-autoresearch-agent
+command: /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 ```
 
 Latest result:
 
 ```text
-1463 passed, 1 skipped in 48.27s
+1468 passed, 1 skipped in 55.42s
 ```
 
 Latest focused APS compactness/proposal validation:
@@ -196,14 +207,14 @@ cd scion
 101 passed in 0.94s
 ```
 
-Latest focused CVRP algorithm-blueprint validation:
+Latest focused CVRP algorithm-blueprint/reporting validation:
 
 ```bash
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_research_surfaces.py -q
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evidence_recorder.py scion/scion/tests/test_cvrp_protocol_smoke.py -q
 ```
 
 ```text
-98 passed in 6.96s
+160 passed in 18.90s
 ```
 
 Broader CVRP subset:
@@ -1266,9 +1277,10 @@ and no validation/frozen evidence.
 This is valid control-path evidence that the top-level CVRP
 `algorithm_blueprint` surface can be selected, patched, loaded, audited, and
 screened through Scion gates. It is not solver-quality evidence. Screening
-summaries still need full bounded `algorithm_*` audit fields, and
-`construction_keep_top_k=2` meant the declared `demand_descending` construction
-method was not actually tried.
+summaries from that run still lacked full bounded `algorithm_*` audit fields;
+that gap has since been addressed in protocol metrics and campaign summary
+reporting. `construction_keep_top_k=2` meant the declared `demand_descending`
+construction method was not actually tried.
 
 Follow-up APS recovery compactness repair is now in code. Tool observations are
 bounded before they are counted or persisted, optional planner
@@ -1375,8 +1387,9 @@ including `plan_loaded`, `construction_ensemble`, `baseline`, and
 
 This is valid control-path evidence only. Formal screening raw metrics showed
 indirect algorithm-blueprint effects such as `baseline_time_fraction=0.75` and
-construction-mode changes, but explicit `algorithm_*` fields were still missing
-from screening pair runtime metrics and the campaign screening summary.
+construction-mode changes, and motivated the reporting refinement that now
+copies selected-surface required runtime fields into pair metrics and campaign
+summaries.
 
 Detailed delegated analysis is recorded in:
 
@@ -1384,11 +1397,22 @@ Detailed delegated analysis is recorded in:
 scion/docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md
 ```
 
-The current bottleneck is now `algorithm_blueprint`
-audit/contract/reporting rather than APS compactness, gate modernization, or
-longer CVRP runs. The next CVRP slice should preserve and report the required
-`algorithm_*` runtime fields through formal screening pair metrics and campaign
-summaries before judging solver quality or broadening algorithm development.
+The current bottleneck is now validating the `algorithm_blueprint` reporting
+refinement on a fresh forced smoke rather than APS compactness, gate
+modernization, or longer CVRP runs. The next CVRP slice should confirm that
+required `algorithm_*` runtime fields appear in formal screening pair metrics
+and campaign summaries before judging solver quality or broadening algorithm
+development.
+
+The validation launch is documented in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md
+```
+
+Configuration: five-round Sonnet CVRP formal VRP, `--agentic-proposal`,
+`--disable-early-stop`, `--force-surface algorithm_blueprint`,
+`time_limit_sec=10`, and repo-local `SCION_PROBLEM_DATA_ROOT`.
 
 ## Remaining Optimization Backlog
 
@@ -1400,13 +1424,13 @@ P1:
 
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
-- CVRP formal research needs an `algorithm_blueprint`
-  audit/contract/reporting slice before longer runs or new algorithm surfaces.
-  Preserve and report required `algorithm_*` runtime fields through formal
-  screening pair metrics and campaign summaries. Future compactness work may
-  improve the very low APS budget headroom, but it is not the current blocker.
-  Destroy/repair and acceptance/restart surfaces remain later candidates once
-  the CVRP package can expose bounded hooks and runtime audit.
+- CVRP formal research needs analysis of the five-round forced
+  `algorithm_blueprint` Sonnet VRP validation once it completes. Required
+  `algorithm_*` runtime fields should now appear in formal screening pair
+  metrics and campaign summaries. Future compactness work may improve the very
+  low APS budget headroom, but it is not the current blocker. Destroy/repair
+  and acceptance/restart surfaces remain later candidates once the CVRP package
+  can expose bounded hooks and runtime audit.
 
 P2:
 

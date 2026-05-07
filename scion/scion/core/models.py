@@ -149,6 +149,8 @@ class ProtocolResult:
     pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
     case_feedback: Tuple["CaseAggregateFeedback", ...] = ()
     pattern_summary: Optional["ScreeningPatternSummary"] = None
+    selected_surface: Optional[str] = None
+    candidate_surface_runtime_summary: Dict[str, Any] = field(default_factory=dict)
     candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
     candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
     candidate_operator_attempts: int = 0

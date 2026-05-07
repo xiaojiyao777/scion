@@ -14,6 +14,7 @@ referenced, not copied into development prompts.
 - [Algorithm blueprint Sonnet smoke, 2026-05-07](v0.4-algorithm-blueprint-sonnet-smoke-20260507.md)
 - [Forced algorithm blueprint Sonnet smoke, 2026-05-07](v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md)
 - [Forced blueprint budget Sonnet smoke, 2026-05-07](v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md)
+- [Blueprint reporting Sonnet 5R VRP validation, 2026-05-07](v0.4-blueprint-reporting-sonnet-5r-20260507.md)
 
 ## Related
 

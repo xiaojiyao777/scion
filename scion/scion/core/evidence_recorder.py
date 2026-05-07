@@ -206,6 +206,9 @@ class EvidenceRecorder:
                     protocol_result.raw_metrics_ref if protocol_result else ""
                 ),
             },
+            "selected_surface": (
+                protocol_result.selected_surface if protocol_result else None
+            ),
             "verification_checks": _serialize_verification_checks(verification_result),
             "runtime_guard": _extract_runtime_guard_evidence(verification_result),
             "runtime_stats": runtime_stats,
@@ -542,6 +545,10 @@ class EvidenceRecorder:
                 "raw_metrics_ref": pr.raw_metrics_ref,
                 "case_ids": list(pr.case_ids),
                 "seed_set": list(pr.seed_set),
+                "selected_surface": pr.selected_surface,
+                "candidate_surface_runtime_summary": dict(
+                    pr.candidate_surface_runtime_summary or {}
+                ),
                 "candidate_runtime_failure_categories": dict(
                     pr.candidate_runtime_failure_categories
                     or step.candidate_runtime_failure_categories

@@ -25,6 +25,7 @@ from scion.protocol.gates import (
     GateResult, screening_gate, validation_gate, frozen_gate,
 )
 from scion.runtime.audit import (
+    declared_surface_required_runtime_fields,
     format_runtime_audit_failure,
     runtime_audit_failure_from_result,
 )
@@ -451,6 +452,14 @@ class ExperimentProtocol:
             "portfolio_errors": 0,
         }
         candidate_runtime_stop_reasons: dict[str, int] = {}
+        surface_required_runtime_fields = declared_surface_required_runtime_fields(
+            self._problem_spec,
+            selected_surface,
+        )
+        candidate_surface_runtime_summary = _surface_runtime_summary_template(
+            selected_surface=selected_surface,
+            required_fields=surface_required_runtime_fields,
+        )
 
         def _write_metrics_snapshot(*, complete: bool) -> None:
             with open(raw_ref, "w") as f:
@@ -469,6 +478,11 @@ class ExperimentProtocol:
                         "runtime_stats": _build_runtime_stats(
                             runtime_ratios,
                             runtime_deltas_ms,
+                        ),
+                        "candidate_surface_runtime_summary": (
+                            _finalize_surface_runtime_summary(
+                                candidate_surface_runtime_summary
+                            )
                         ),
                         "complete": complete,
                         "pairs": raw_pairs,
@@ -515,7 +529,15 @@ class ExperimentProtocol:
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 )
-                runtime_fields = _runtime_fields(cand_r, champ_r)
+                _record_surface_runtime_sample(
+                    cand_r,
+                    candidate_surface_runtime_summary,
+                )
+                runtime_fields = _runtime_fields(
+                    cand_r,
+                    champ_r,
+                    candidate_required_runtime_fields=surface_required_runtime_fields,
+                )
                 _record_runtime_sample(
                     runtime_fields,
                     runtime_ratios,
@@ -940,6 +962,10 @@ class ExperimentProtocol:
             pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
             case_feedback=case_fb,
             pattern_summary=pattern,
+            selected_surface=selected_surface,
+            candidate_surface_runtime_summary=_finalize_surface_runtime_summary(
+                candidate_surface_runtime_summary
+            ),
             candidate_runtime_failure_categories=dict(candidate_runtime_categories),
             candidate_first_runtime_failure=candidate_first_runtime_failure,
             candidate_operator_attempts=candidate_runtime_counters["operator_attempts"],
@@ -1133,7 +1159,12 @@ def _format_runtime_failure_categories(categories: dict[str, int]) -> str:
     return ";".join(parts[:8])
 
 
-def _runtime_fields(cand_r: RunResult | None, champ_r: RunResult | None) -> dict:
+def _runtime_fields(
+    cand_r: RunResult | None,
+    champ_r: RunResult | None,
+    *,
+    candidate_required_runtime_fields: Sequence[str] = (),
+) -> dict:
     candidate_elapsed = getattr(cand_r, "elapsed_ms", None)
     champion_elapsed = getattr(champ_r, "elapsed_ms", None)
     fields = {
@@ -1141,7 +1172,10 @@ def _runtime_fields(cand_r: RunResult | None, champ_r: RunResult | None) -> dict
         "champion_elapsed_ms": champion_elapsed,
         "runtime_ratio": None,
         "runtime_delta_ms": None,
-        "candidate_runtime": _runtime_audit_summary(cand_r),
+        "candidate_runtime": _runtime_audit_summary(
+            cand_r,
+            required_runtime_fields=candidate_required_runtime_fields,
+        ),
         "champion_runtime": _runtime_audit_summary(champ_r),
     }
     if candidate_elapsed is None or champion_elapsed is None:
@@ -1152,7 +1186,11 @@ def _runtime_fields(cand_r: RunResult | None, champ_r: RunResult | None) -> dict
     return fields
 
 
-def _runtime_audit_summary(result: RunResult | None) -> dict:
+def _runtime_audit_summary(
+    result: RunResult | None,
+    *,
+    required_runtime_fields: Sequence[str] = (),
+) -> dict:
     runtime = getattr(getattr(result, "output", None), "runtime", None)
     if not isinstance(runtime, dict):
         return {}
@@ -1163,6 +1201,9 @@ def _runtime_audit_summary(result: RunResult | None) -> dict:
         and key not in ("operator_events", "policy_events")
         and _is_json_scalar(value)
     }
+    for field in required_runtime_fields:
+        if field in runtime:
+            summary[field] = _bounded_json_value(runtime[field])
     events = runtime.get("operator_events")
     if isinstance(events, list):
         summary["operator_events"] = events[:5]
@@ -1174,6 +1215,174 @@ def _runtime_audit_summary(result: RunResult | None) -> dict:
 
 def _is_json_scalar(value: object) -> bool:
     return value is None or isinstance(value, (bool, int, float, str))
+
+
+def _bounded_json_value(value: Any, *, max_items: int = 20, max_chars: int = 500) -> Any:
+    if _is_json_scalar(value):
+        if isinstance(value, str) and len(value) > max_chars:
+            return value[: max(0, max_chars - 3)] + "..."
+        return value
+    if isinstance(value, (list, tuple)):
+        return [
+            _bounded_json_value(item, max_items=max_items, max_chars=max_chars)
+            for item in list(value)[:max_items]
+        ]
+    if isinstance(value, dict):
+        bounded: dict[str, Any] = {}
+        for key in sorted(value, key=str)[:max_items]:
+            bounded[str(key)] = _bounded_json_value(
+                value[key],
+                max_items=max_items,
+                max_chars=max_chars,
+            )
+        return bounded
+    return _bounded_text(value, max_chars)
+
+
+def _surface_runtime_summary_template(
+    *,
+    selected_surface: str | None,
+    required_fields: Sequence[str],
+) -> dict[str, Any]:
+    fields = tuple(str(field).strip() for field in required_fields if str(field).strip())
+    surface = (selected_surface or "").strip()
+    if not surface or not fields:
+        return {}
+    return {
+        "selected_surface": surface,
+        "required_runtime_fields": fields,
+        "candidate_pairs": 0,
+        "runtime_observed_pairs": 0,
+        "runtime_missing_pairs": 0,
+        "_fields": {
+            field: {
+                "present": 0,
+                "missing": 0,
+                "empty": 0,
+                "failed": 0,
+                "values": {},
+            }
+            for field in fields
+        },
+    }
+
+
+def _record_surface_runtime_sample(
+    result: RunResult,
+    summary: dict[str, Any],
+) -> None:
+    if not summary:
+        return
+    summary["candidate_pairs"] += 1
+    runtime = getattr(getattr(result, "output", None), "runtime", None)
+    fields: dict[str, dict[str, Any]] = summary["_fields"]
+    if not isinstance(runtime, dict):
+        summary["runtime_missing_pairs"] += 1
+        for field_summary in fields.values():
+            field_summary["missing"] += 1
+        return
+
+    summary["runtime_observed_pairs"] += 1
+    for field, field_summary in fields.items():
+        if field not in runtime:
+            field_summary["missing"] += 1
+            continue
+        value = runtime[field]
+        if _is_empty_runtime_evidence_value(value):
+            field_summary["empty"] += 1
+        if _is_runtime_error_count_field(field):
+            count = _parse_int(value)
+            if count is None or count > 0:
+                field_summary["failed"] += 1
+        elif _is_runtime_true_evidence_field(field) and not _as_truthy(value):
+            field_summary["failed"] += 1
+        field_summary["present"] += 1
+        value_key = _surface_runtime_value_key(value)
+        values = field_summary["values"]
+        values[value_key] = values.get(value_key, 0) + 1
+
+
+def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    if not summary:
+        return {}
+    fields: dict[str, dict[str, Any]] = summary.get("_fields") or {}
+    return {
+        "selected_surface": summary.get("selected_surface"),
+        "required_runtime_fields": list(summary.get("required_runtime_fields") or ()),
+        "candidate_pairs": summary.get("candidate_pairs", 0),
+        "runtime_observed_pairs": summary.get("runtime_observed_pairs", 0),
+        "runtime_missing_pairs": summary.get("runtime_missing_pairs", 0),
+        "fields": {
+            field: {
+                "present": field_summary.get("present", 0),
+                "missing": field_summary.get("missing", 0),
+                "empty": field_summary.get("empty", 0),
+                "failed": field_summary.get("failed", 0),
+                "values": [
+                    {"value": value, "count": count}
+                    for value, count in sorted(
+                        (field_summary.get("values") or {}).items(),
+                        key=lambda item: (-int(item[1]), item[0]),
+                    )[:5]
+                ],
+            }
+            for field, field_summary in fields.items()
+        },
+    }
+
+
+def _surface_runtime_value_key(value: Any) -> str:
+    bounded = _bounded_json_value(value, max_items=12, max_chars=240)
+    try:
+        text = json.dumps(bounded, sort_keys=True, separators=(",", ":"), default=str)
+    except TypeError:
+        text = str(bounded)
+    if len(text) <= 240:
+        return text
+    return text[:237] + "..."
+
+
+def _is_empty_runtime_evidence_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
+        return len(value) == 0
+    return False
+
+
+def _is_runtime_error_count_field(field_name: str) -> bool:
+    return field_name.endswith("_errors") or field_name.endswith("_error_count")
+
+
+def _is_runtime_true_evidence_field(field_name: str) -> bool:
+    return field_name.endswith("_loaded") or field_name.endswith("_executed")
+
+
+def _parse_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
 
 
 def _record_runtime_sample(

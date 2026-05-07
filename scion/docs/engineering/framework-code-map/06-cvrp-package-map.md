@@ -228,5 +228,8 @@ methods, baseline fraction, operator toggle/limit, local-search components,
 rounds, attempts, accepted moves, restart knobs/count, phase deltas, phase
 runtime, and stop reason. Selected-surface audit fails closed when
 `algorithm_blueprint_errors` is positive or those fields are missing/empty.
+When `algorithm_blueprint` is the selected surface, `ExperimentProtocol`
+preserves these required `algorithm_*` fields in candidate-side pair metrics
+and campaign summaries through the generic selected-surface runtime summary.
 
 `ExperimentProtocol`, `VerificationGate`, and final evidence builders treat these as failed evidence rather than objective ties.

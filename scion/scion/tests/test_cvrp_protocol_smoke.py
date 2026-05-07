@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import yaml
@@ -125,6 +126,63 @@ def test_cvrp_protocol_screening_runs_complete_with_metric_specs(tmp_path: Path)
         pair["decisive_metric"] in (None, "tie")
         for pair in raw_metrics["pairs"]
     )
+
+
+def test_cvrp_protocol_algorithm_blueprint_metrics_preserve_required_runtime_fields(
+    tmp_path: Path,
+) -> None:
+    candidate_ws = tmp_path / "cvrp_candidate"
+    shutil.copytree(CVRP_DIR, candidate_ws)
+    (candidate_ws / "policies" / "algorithm_blueprint.py").write_text(
+        "\n".join(
+            [
+                "def algorithm_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction_methods': ['nearest_neighbor', 'demand_descending'],",
+                "        'construction_keep_top_k': 2,",
+                "        'construction_bias': 0.0,",
+                "        'baseline_time_fraction': 0.75,",
+                "        'operator_round_limit': 0,",
+                "        'post_baseline_operators_enabled': False,",
+                "        'local_search': {",
+                "            'enabled_components': ['intra_route_2opt'],",
+                "            'rounds': 1,",
+                "            'top_k': 16,",
+                "        },",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0},",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    proto, _ = _make_protocol(tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        candidate_ws=str(candidate_ws),
+        champion_ws=str(CVRP_DIR),
+        hypothesis_action="modify",
+        selected_surface="algorithm_blueprint",
+    )
+
+    assert result.selected_surface == "algorithm_blueprint"
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["selected_surface"] == "algorithm_blueprint"
+    assert surface_summary["candidate_pairs"] == 4
+    assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
+    assert surface_summary["fields"]["algorithm_phases_executed"]["present"] == 4
+    assert surface_summary["fields"]["algorithm_blueprint_errors"]["failed"] == 0
+
+    raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
+    assert raw_metrics["candidate_surface_runtime_summary"] == surface_summary
+    pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
+    assert pair_runtime["algorithm_blueprint_active"] is True
+    assert pair_runtime["algorithm_plan"]["enabled"] is True
+    assert pair_runtime["algorithm_baseline_time_fraction"] == 0.75
+    assert pair_runtime["algorithm_phases_executed"]
+    assert pair_runtime["algorithm_local_search_components"] == ["intra_route_2opt"]
 
 
 def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Path) -> None:

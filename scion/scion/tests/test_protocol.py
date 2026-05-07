@@ -456,8 +456,119 @@ def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
     assert result.candidate_first_runtime_failure is not None
     assert result.candidate_first_runtime_failure["surface"] == "dispatch_policy"
     assert "dispatch_errors" in result.candidate_first_runtime_failure["detail_summary"]
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["candidate_pairs"] == 4
+    assert surface_summary["fields"]["dispatch_loaded"]["present"] == 4
+    assert surface_summary["fields"]["dispatch_errors"]["missing"] == 4
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["selected_surface"] == "dispatch_policy"
+    assert raw["candidate_surface_runtime_summary"] == surface_summary
+
+
+def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
+    tmp_path,
+):
+    runner = MagicMock()
+    required_fields = (
+        "algorithm_blueprint_loaded",
+        "algorithm_blueprint_active",
+        "algorithm_blueprint_errors",
+        "algorithm_plan",
+        "algorithm_phases_executed",
+        "algorithm_construction_methods",
+        "algorithm_baseline_time_fraction",
+        "algorithm_operator_round_limit",
+        "algorithm_post_baseline_operators_enabled",
+        "algorithm_local_search_components",
+        "algorithm_local_search_rounds",
+        "algorithm_local_search_attempts",
+        "algorithm_local_search_accepted",
+        "algorithm_restart_enabled",
+        "algorithm_restart_stagnation_rounds",
+        "algorithm_restart_count",
+        "algorithm_best_delta_by_phase",
+        "algorithm_phase_runtime_ms",
+        "algorithm_stop_reason",
+    )
+    candidate_runtime = {
+        "algorithm_blueprint_loaded": True,
+        "algorithm_blueprint_active": True,
+        "algorithm_blueprint_errors": 0,
+        "algorithm_plan": {
+            "enabled": True,
+            "baseline_time_fraction": 0.75,
+        },
+        "algorithm_phases_executed": [
+            "plan_loaded",
+            "construction_ensemble",
+            "baseline",
+            "local_search",
+        ],
+        "algorithm_construction_methods": ["nearest_neighbor", "demand_descending"],
+        "algorithm_baseline_time_fraction": 0.75,
+        "algorithm_operator_round_limit": 0,
+        "algorithm_post_baseline_operators_enabled": False,
+        "algorithm_local_search_components": [
+            "intra_route_2opt",
+            "inter_route_relocate",
+        ],
+        "algorithm_local_search_rounds": 2,
+        "algorithm_local_search_attempts": 12,
+        "algorithm_local_search_accepted": 1,
+        "algorithm_restart_enabled": True,
+        "algorithm_restart_stagnation_rounds": 8,
+        "algorithm_restart_count": 1,
+        "algorithm_best_delta_by_phase": {"local_search": 4.0},
+        "algorithm_phase_runtime_ms": {"local_search": 7},
+        "algorithm_stop_reason": "no_improvement_round",
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="algorithm_blueprint",
+            required_runtime_fields=required_fields,
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="algorithm_blueprint",
+    )
+
+    assert result.selected_surface == "algorithm_blueprint"
+    summary = result.candidate_surface_runtime_summary
+    assert summary["selected_surface"] == "algorithm_blueprint"
+    assert summary["candidate_pairs"] == 4
+    assert summary["fields"]["algorithm_plan"]["present"] == 4
+    assert summary["fields"]["algorithm_phases_executed"]["present"] == 4
+    assert summary["fields"]["algorithm_blueprint_errors"]["failed"] == 0
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"] == summary
+    candidate_runtime_metrics = raw["pairs"][0]["candidate_runtime"]
+    assert candidate_runtime_metrics["algorithm_plan"] == {
+        "baseline_time_fraction": 0.75,
+        "enabled": True,
+    }
+    assert candidate_runtime_metrics["algorithm_phases_executed"] == [
+        "plan_loaded",
+        "construction_ensemble",
+        "baseline",
+        "local_search",
+    ]
+    assert candidate_runtime_metrics["algorithm_local_search_components"] == [
+        "intra_route_2opt",
+        "inter_route_relocate",
+    ]
 
 
 def test_run_experiment_screening_fail(tmp_path):

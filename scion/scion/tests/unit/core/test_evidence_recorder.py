@@ -263,6 +263,66 @@ def test_campaign_summary_exposes_bounded_runtime_failure_summary(
     assert protocol["candidate_portfolio_errors"] == 5
 
 
+def test_campaign_summary_exposes_selected_surface_runtime_summary(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/algorithm-blueprint-runtime.json",
+        selected_surface="algorithm_blueprint",
+        candidate_surface_runtime_summary={
+            "selected_surface": "algorithm_blueprint",
+            "required_runtime_fields": [
+                "algorithm_blueprint_loaded",
+                "algorithm_plan",
+            ],
+            "candidate_pairs": 4,
+            "runtime_observed_pairs": 4,
+            "runtime_missing_pairs": 0,
+            "fields": {
+                "algorithm_blueprint_loaded": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                    "values": [{"value": "true", "count": 4}],
+                },
+                "algorithm_plan": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                    "values": [
+                        {
+                            "value": "{\"baseline_time_fraction\":0.75,\"enabled\":true}",
+                            "count": 4,
+                        }
+                    ],
+                },
+            },
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["selected_surface"] == "algorithm_blueprint"
+    surface_summary = protocol["candidate_surface_runtime_summary"]
+    assert surface_summary["candidate_pairs"] == 4
+    assert "algorithm_plan" in surface_summary["required_runtime_fields"]
+    assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
+
+
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
     tmp_path: Path,
 ) -> None:
