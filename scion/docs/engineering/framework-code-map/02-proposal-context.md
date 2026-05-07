@@ -72,7 +72,12 @@ planner-backed diagnosis is not considered complete after only
 screening, or runtime-feedback tools are available. If the planner stops there,
 APS falls back to the fixed read-only plan. After a hypothesis selects a surface,
 APS performs a deterministic `context.read_surface` before code generation or
-partial-session finalization, unless that exact surface was already read.
+partial-session finalization, unless that exact surface was already read. Surface
+tool observations are compact by default: `context.list_surfaces` exposes only
+selection-oriented metadata, and `context.read_surface` defaults to
+`detail="compact"` with bounded interface text and champion-code preview.
+`detail="full"` and `max_code_chars` are explicit opt-ins for debug or deep
+inspection.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

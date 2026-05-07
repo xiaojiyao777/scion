@@ -55,6 +55,8 @@ _COMPACT_FEEDBACK_TOOL_NAMES = {
     "feedback.query_screening",
     "feedback.query_runtime",
 }
+_SCION_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+_CVRP_ROOT = _SCION_PACKAGE_ROOT / "problems" / "cvrp"
 
 
 class FakeCreative:
@@ -447,9 +449,7 @@ def _context(
 
 
 def _cvrp_context(tmp_path: Path) -> ProposalToolContext:
-    spec = load_problem_spec_v1_from_yaml(
-        Path("scion/scion/problems/cvrp/problem-v1.yaml")
-    )
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     return ProposalToolContext(
         session_id="session-cvrp",
         campaign_id="camp-cvrp",
@@ -495,6 +495,147 @@ def test_list_and_read_surfaces_return_v2_metadata_without_domain_hardcoding(
         "max_operator_rounds",
     ]
     assert read.structured_payload["current_artifact"]["readable"] is True
+
+
+def test_list_surfaces_returns_compact_payload_for_large_surface_specs(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call("context.list_surfaces", {}, context)
+    rendered = json.dumps(observation.structured_payload, sort_keys=True, default=str)
+    surfaces = {
+        surface["name"]: surface
+        for surface in observation.structured_payload["surfaces"]
+    }
+
+    assert observation.is_error is False
+    assert observation.structured_payload["detail"] == "compact"
+    assert "algorithm_blueprint" in surfaces
+    assert surfaces["algorithm_blueprint"]["algorithm"]["role"] == (
+        "top_level_algorithm_lifecycle"
+    )
+    assert "prompt" not in rendered
+    assert len(rendered) < AgenticToolLoopConfig().max_observation_chars // 2
+
+
+def test_read_surface_defaults_to_compact_code_payload(tmp_path: Path) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    policy_file = (
+        Path(context.champion.code_snapshot_path) / "policies" / "search_policy.py"
+    )
+    policy_file.write_text(
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    return 0.50\n\n"
+        "def max_operator_rounds(instance, time_limit_sec):\n"
+        "    return 12\n\n"
+        + "\n".join(f"# filler {idx}" for idx in range(800)),
+        encoding="utf-8",
+    )
+
+    observation = registry.call(
+        "context.read_surface",
+        {"surface": "search_policy"},
+        context,
+    )
+    artifact = observation.structured_payload["current_artifact"]
+    rendered = json.dumps(observation.structured_payload, sort_keys=True, default=str)
+
+    assert observation.is_error is False
+    assert observation.structured_payload["detail"] == "compact"
+    assert artifact["readable"] is True
+    assert artifact["truncated"] is True
+    assert artifact["max_chars"] == 1200
+    assert len(artifact["content_preview"]) <= 1200
+    assert len(rendered) < AgenticToolLoopConfig().max_observation_chars // 2
+
+
+def test_read_surface_full_and_explicit_max_code_chars(tmp_path: Path) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    policy_file = (
+        Path(context.champion.code_snapshot_path) / "policies" / "search_policy.py"
+    )
+    full_code = (
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    return 0.50\n\n"
+        "def max_operator_rounds(instance, time_limit_sec):\n"
+        "    return 12\n\n"
+        + "\n".join(f"# full filler {idx}" for idx in range(240))
+    )
+    policy_file.write_text(full_code, encoding="utf-8")
+
+    full = registry.call(
+        "context.read_surface",
+        {"surface": "search_policy", "detail": "full"},
+        context,
+    )
+    capped = registry.call(
+        "context.read_surface",
+        {
+            "surface": "search_policy",
+            "detail": "full",
+            "max_code_chars": 80,
+        },
+        context,
+    )
+
+    full_artifact = full.structured_payload["current_artifact"]
+    capped_artifact = capped.structured_payload["current_artifact"]
+    assert full.is_error is False
+    assert full.structured_payload["detail"] == "full"
+    assert full_artifact["max_chars"] == 12000
+    assert full_artifact["truncated"] is False
+    assert full_artifact["content_preview"] == full_code
+    assert capped.is_error is False
+    assert capped_artifact["max_chars"] == 80
+    assert capped_artifact["truncated"] is True
+    assert len(capped_artifact["content_preview"]) <= 80
+
+
+def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    champion_root = tmp_path / "cvrp_champion"
+    (champion_root / "policies").mkdir(parents=True)
+    blueprint = _CVRP_ROOT / "policies" / "algorithm_blueprint.py"
+    (champion_root / "policies" / "algorithm_blueprint.py").write_text(
+        blueprint.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    context = replace(
+        context,
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(champion_root),
+            code_snapshot_hash="code-hash",
+        ),
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    read = registry.call(
+        "context.read_surface",
+        {"surface": "algorithm_blueprint"},
+        context,
+    )
+    rendered = json.dumps(
+        [listed.structured_payload, read.structured_payload],
+        sort_keys=True,
+        default=str,
+    )
+
+    assert listed.is_error is False
+    assert read.is_error is False
+    assert read.structured_payload["detail"] == "compact"
+    assert read.structured_payload["surface"]["name"] == "algorithm_blueprint"
+    assert read.structured_payload["current_artifact"]["readable"] is True
+    assert len(rendered) < AgenticToolLoopConfig().max_observation_chars
 
 
 def test_read_surface_target_not_declared_fails_permission(tmp_path: Path) -> None:
@@ -1021,22 +1162,22 @@ def test_cvrp_policy_preview_good_defaults_pass(tmp_path: Path) -> None:
         {
             "file_path": "policies/construction_policy.py",
             "action": "modify",
-            "code_content": Path(
-                "scion/scion/problems/cvrp/policies/construction_policy.py"
+            "code_content": (
+                _CVRP_ROOT / "policies" / "construction_policy.py"
             ).read_text(encoding="utf-8"),
         },
         {
             "file_path": "policies/search_policy.py",
             "action": "modify",
-            "code_content": Path(
-                "scion/scion/problems/cvrp/policies/search_policy.py"
+            "code_content": (
+                _CVRP_ROOT / "policies" / "search_policy.py"
             ).read_text(encoding="utf-8"),
         },
         {
             "file_path": "policies/neighborhood_portfolio.py",
             "action": "modify",
-            "code_content": Path(
-                "scion/scion/problems/cvrp/policies/neighborhood_portfolio.py"
+            "code_content": (
+                _CVRP_ROOT / "policies" / "neighborhood_portfolio.py"
             ).read_text(encoding="utf-8"),
         },
     ]
@@ -1886,6 +2027,8 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
     assert any(
         observation["tool_name"] == "context.read_surface"
         and observation["structured_payload"]["surface"]["name"] == "search_policy"
+        and observation["structured_payload"]["detail"] == "compact"
+        and observation["structured_payload"]["current_artifact"]["max_chars"] == 1200
         for observation in code_observations
     )
     assert any(

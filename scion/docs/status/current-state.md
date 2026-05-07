@@ -167,7 +167,18 @@ cd scion
 Latest result:
 
 ```text
-1435 passed, 1 skipped in 44.87s
+1457 passed, 1 skipped in 47.20s
+```
+
+Latest focused APS compactness/proposal validation:
+
+```bash
+cd scion
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/unit/test_agentic_proposal_tools.py scion/tests/unit/core/test_proposal_pipeline.py scion/tests/test_proposal_validation.py -q
+```
+
+```text
+101 passed in 0.94s
 ```
 
 Latest focused CVRP algorithm-blueprint validation:
@@ -487,6 +498,10 @@ Completed capabilities:
   they also read the selected surface before code generation or partial
   finalization. Static target/schema/contract preview payloads are compact and
   omit full surface payloads and patch `code_content`.
+- Surface context tools are compact by default: `context.list_surfaces` returns
+  selection-oriented surface metadata, while `context.read_surface` defaults to
+  `detail="compact"` with a bounded code preview. `detail="full"` and
+  `max_code_chars` remain available as explicit debug/deep-inspection opt-ins.
 - `AgenticSessionStore` maintains a file-backed recovery index with lookup by
   session id, idempotency key, and request. ProposalPipeline can inject sanitized
   resume context from prior valid artifacts without reusing patches or bypassing
@@ -1185,9 +1200,19 @@ Interpretation:
   ratio about `0.842`, median runtime delta about `-1312.5ms`, and mixed
   objective evidence of 2 wins, 1 loss, and 13 ties. It still failed the
   screening win-rate gate.
-- APS artifacts remained tainted, digest-backed, and compact enough to complete
-  proposal generation, but `context.read_surface` can still hit
-  `result_too_large`; APS surface-context compactness remains a follow-up.
+- APS artifacts remained tainted and digest-backed. A follow-up 3-round Sonnet
+  smoke after adding `algorithm_blueprint` showed that APS could list the new
+  surface and attempted `context.read_surface {"surface":"algorithm_blueprint"}`,
+  but the surface read exceeded the session observation budget, so the agent
+  retreated to `route_local` / `search_policy`. That short smoke is control-path
+  evidence only, not solver-quality evidence.
+
+The current APS repair closes that surface-context compactness gap: surface
+listing and `context.read_surface` compact reads are bounded by default, and the
+next algorithm-blueprint check should be a forced or strongly steered smoke that
+verifies the agent can actually inspect and select `algorithm_blueprint`. The
+focused APS/proposal regression set passed after the repair:
+`101 passed in 0.94s` from `scion/`.
 
 The current bottleneck is policy-surface efficacy and observability rather than
 gate modernization. The next CVRP slice should either make

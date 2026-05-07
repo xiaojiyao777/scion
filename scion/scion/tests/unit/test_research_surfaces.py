@@ -43,6 +43,9 @@ from scion.runtime.audit import (
     runtime_audit_failure_from_runtime,
 )
 
+_SCION_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+_CVRP_ROOT = _SCION_PACKAGE_ROOT / "problems" / "cvrp"
+
 
 def _problem_payload(root_dir: str) -> dict:
     return {
@@ -2347,9 +2350,7 @@ def test_contract_gate_validates_declared_static_return_values(
 
 
 def test_cvrp_construction_policy_static_return_constraints_fail_bad_values() -> None:
-    spec = load_problem_spec_v1_from_yaml(
-        Path("scion/scion/problems/cvrp/problem-v1.yaml")
-    )
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     gate = ContractGate(legacy_problem_spec_from_v1(spec))
 
     result = gate.validate_patch(

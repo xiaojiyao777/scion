@@ -1428,6 +1428,15 @@ class AgenticProposalSession:
                     "surface must exactly match one declared surface id/name "
                     "from context.list_surfaces"
                 ),
+                "detail_default": "compact",
+                "recommended_args": {
+                    "detail": "compact",
+                    "max_code_chars": 1200,
+                },
+                "full_detail_rule": (
+                    "request detail='full' only for explicit debugging after "
+                    "compact reads are insufficient"
+                ),
             }
         }
         if surface_names:
@@ -1506,7 +1515,11 @@ class AgenticProposalSession:
         if self._tool_loop_limit_reached(state):
             self._record_loop_stop(state, self._current_loop_stop_reason(state))
             return []
-        args: dict[str, Any] = {"surface": hypothesis.change_locus}
+        args: dict[str, Any] = {
+            "surface": hypothesis.change_locus,
+            "detail": "compact",
+            "max_code_chars": 1200,
+        }
         if hypothesis.target_file:
             args["target_file"] = hypothesis.target_file
         observation = self._call_tool(

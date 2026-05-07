@@ -252,8 +252,8 @@ Suggested MVP tool set:
 | Tool | Permission | Notes |
 |---|---|---|
 | `context.read_problem` | read_public_context | Adapter-rendered summary/mechanics/objectives. |
-| `context.list_surfaces` | read_public_context | From `ProblemSpecV1.research_surfaces`. |
-| `context.read_surface` | read_champion_artifact | Interface and current target file. |
+| `context.list_surfaces` | read_public_context | Compact selection metadata from `ProblemSpecV1.research_surfaces`. |
+| `context.read_surface` | read_champion_artifact | Compact-by-default interface and bounded current target-file preview; `detail="full"` / `max_code_chars` are explicit opt-ins. |
 | `memory.query` | read_tainted_memory | Search memory, research log, failed hypotheses. |
 | `feedback.query_screening` | read_tainted_memory | Screening-only detailed feedback. |
 | `feedback.query_holdout_summary` | read_tainted_memory | Validation aggregate, frozen pass/fail/budget only. |

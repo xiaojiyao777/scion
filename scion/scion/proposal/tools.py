@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping, Protocol
+from typing import Any, Literal, Mapping, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -42,6 +42,11 @@ from scion.proposal.context_manager import (
     _get_research_surfaces,
 )
 from scion.proposal.schemas import HypothesisProposalInput, PatchProposalInput
+
+_COMPACT_SURFACE_CODE_CHARS = 1200
+_FULL_SURFACE_CODE_CHARS = 12000
+_COMPACT_SURFACE_TEXT_CHARS = 600
+_COMPACT_SURFACE_INTERFACE_CHARS = 3600
 
 
 class ProposalToolPermission(str, Enum):
@@ -195,7 +200,9 @@ class ReadSurfaceInput(_StrictInput):
         )
     )
     target_file: str | None = None
+    detail: Literal["compact", "full"] = "compact"
     include_code: bool = True
+    max_code_chars: int | None = Field(default=None, ge=0, le=24000)
 
 
 class MemoryQueryInput(_StrictInput):
@@ -444,7 +451,8 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
             "surface_count": len(surfaces),
-            "surfaces": [_surface_payload(surface) for surface in surfaces],
+            "surfaces": [_surface_listing_payload(surface) for surface in surfaces],
+            "detail": "compact",
         }
         return self._observation(
             context,
@@ -587,6 +595,11 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
                 repair_hint="Read only files declared by the selected research surface.",
             )
 
+        detail = args.detail
+        code_char_limit = _surface_code_char_limit(
+            detail=detail,
+            requested_max=args.max_code_chars,
+        )
         code_payload: dict[str, Any] | None = None
         if args.include_code and target_file:
             if context.champion is None:
@@ -598,12 +611,13 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
             code_payload = _read_champion_file(
                 context.champion,
                 target_file,
-                max_chars=12000,
+                max_chars=code_char_limit,
             )
 
         payload = {
-            "surface": _surface_payload(surface),
-            "interface_summary": _build_research_surface_interface_spec(surface),
+            "surface": _surface_read_payload(surface, detail=detail),
+            "interface_summary": _surface_interface_summary(surface, detail=detail),
+            "detail": detail,
             "declared_targets": target_files,
             "target_file": target_file,
             "current_artifact": code_payload,
@@ -1699,6 +1713,364 @@ def _surface_payload(surface: Any) -> dict[str, Any]:
     return payload
 
 
+def _surface_listing_payload(surface: Any) -> dict[str, Any]:
+    target_files = _surface_target_files(surface)
+    algorithm = _attr(surface, "algorithm")
+    bounds = _attr(surface, "bounds")
+    targets = _attr(surface, "targets")
+    return _drop_empty_items(
+        {
+            "name": _attr(surface, "name"),
+            "kind": _attr(surface, "kind"),
+            "description": _compact_text(_attr(surface, "description", ""), 240),
+            "algorithm": _drop_empty_items(
+                {
+                    "role": _attr(algorithm, "role") if algorithm is not None else None,
+                    "invocation_point": (
+                        _attr(algorithm, "invocation_point")
+                        if algorithm is not None
+                        else None
+                    ),
+                }
+            ),
+            "targets": _drop_empty_items(
+                {
+                    "files": target_files,
+                    "allowed_actions": _surface_allowed_actions(surface),
+                    "singleton": _attr(targets, "singleton"),
+                }
+            ),
+            "target_files": target_files,
+            "interface": _drop_empty_items(
+                {"required_functions": _surface_required_functions(surface)}
+            ),
+            "bounds": _drop_empty_items(
+                {
+                    "allowed_components": _coerce_compact_list(
+                        _attr(bounds, "allowed_components", [])
+                        if bounds is not None
+                        else []
+                    ),
+                    "numeric_ranges": _model_payload(
+                        _attr(bounds, "numeric_ranges", {})
+                        if bounds is not None
+                        else {}
+                    ),
+                }
+            ),
+        }
+    )
+
+
+def _surface_read_payload(surface: Any, *, detail: str) -> dict[str, Any]:
+    if detail == "full":
+        return _surface_payload(surface)
+    return _surface_compact_payload(surface, include_prompt=True)
+
+
+def _surface_compact_payload(
+    surface: Any,
+    *,
+    include_prompt: bool,
+) -> dict[str, Any]:
+    target_files = _surface_target_files(surface)
+    payload: dict[str, Any] = {
+        "name": _attr(surface, "name"),
+        "kind": _attr(surface, "kind"),
+        "description": _compact_text(_attr(surface, "description", "")),
+        "algorithm": _compact_algorithm_payload(surface),
+        "targets": _compact_targets_payload(surface, target_files),
+        "target_files": target_files,
+        "interface": _compact_interface_payload(surface),
+        "bounds": _compact_bounds_payload(surface),
+        "evidence": _compact_evidence_payload(surface),
+        "novelty": _compact_novelty_payload(surface),
+    }
+    if include_prompt:
+        payload["prompt"] = _compact_prompt_payload(surface)
+        prompt_hint = _compact_text(_attr(surface, "prompt_hint", ""))
+        if prompt_hint:
+            payload["prompt_hint"] = prompt_hint
+    return _drop_empty_items(payload)
+
+
+def _compact_algorithm_payload(surface: Any) -> dict[str, Any]:
+    algorithm = _attr(surface, "algorithm")
+    if algorithm is None:
+        return {}
+    return _drop_empty_items(
+        {
+            "role": _attr(algorithm, "role"),
+            "invocation_point": _attr(algorithm, "invocation_point"),
+            "description": _compact_text(_attr(algorithm, "description", "")),
+        }
+    )
+
+
+def _compact_targets_payload(
+    surface: Any,
+    target_files: list[str],
+) -> dict[str, Any]:
+    targets = _attr(surface, "targets")
+    return _drop_empty_items(
+        {
+            "files": target_files,
+            "create_new_allowed": _attr(
+                targets,
+                "create_new_allowed",
+                _attr(surface, "create_new_allowed"),
+            ),
+            "modify_allowed": _attr(
+                targets,
+                "modify_allowed",
+                _attr(surface, "modify_allowed"),
+            ),
+            "remove_allowed": _attr(
+                targets,
+                "remove_allowed",
+                _attr(surface, "remove_allowed"),
+            ),
+            "singleton": _attr(targets, "singleton"),
+            "allowed_actions": _surface_allowed_actions(surface),
+        }
+    )
+
+
+def _compact_interface_payload(surface: Any) -> dict[str, Any]:
+    interface = _attr(surface, "interface")
+    return _drop_empty_items(
+        {
+            "required_functions": _surface_required_functions(surface),
+            "function_signatures": _surface_function_signatures(surface),
+            "return_contract": _compact_text(
+                _attr(interface, "return_contract", "")
+                if interface is not None
+                else ""
+            ),
+            "return_values": _surface_return_values(surface),
+        }
+    )
+
+
+def _compact_bounds_payload(surface: Any) -> dict[str, Any]:
+    bounds = _attr(surface, "bounds")
+    if bounds is None:
+        return {}
+    return _drop_empty_items(
+        {
+            "allowed_components": _coerce_compact_list(
+                _attr(bounds, "allowed_components", [])
+            ),
+            "numeric_ranges": _model_payload(_attr(bounds, "numeric_ranges", {})),
+            "complexity_scale_terms": _coerce_compact_list(
+                _attr(bounds, "complexity_scale_terms", [])
+            ),
+        }
+    )
+
+
+def _compact_evidence_payload(surface: Any) -> dict[str, Any]:
+    evidence = _attr(surface, "evidence")
+    if evidence is None:
+        return {}
+    return _drop_empty_items(
+        {
+            "required_runtime_fields": _coerce_compact_list(
+                _attr(evidence, "required_runtime_fields", [])
+            )
+        }
+    )
+
+
+def _compact_novelty_payload(surface: Any) -> dict[str, Any]:
+    novelty = _attr(surface, "novelty")
+    if novelty is None:
+        return {}
+    return _drop_empty_items(
+        {
+            "strategy": _attr(novelty, "strategy"),
+            "signature_fields": _coerce_compact_list(
+                _attr(novelty, "signature_fields", [])
+            ),
+        }
+    )
+
+
+def _compact_prompt_payload(surface: Any) -> dict[str, Any]:
+    prompt = _attr(surface, "prompt")
+    if prompt is None:
+        return {}
+    return _drop_empty_items(
+        {
+            "hypothesis_guidance": _compact_text(
+                _attr(prompt, "hypothesis_guidance", "")
+            ),
+            "implementation_guidance": _compact_text(
+                _attr(prompt, "implementation_guidance", "")
+            ),
+            "anti_patterns": _compact_text(_attr(prompt, "anti_patterns", "")),
+        }
+    )
+
+
+def _surface_interface_summary(surface: Any, *, detail: str) -> str:
+    if detail == "full":
+        return _build_research_surface_interface_spec(surface)
+    return _compact_surface_interface_summary(surface)
+
+
+def _compact_surface_interface_summary(surface: Any) -> str:
+    compact = _surface_compact_payload(surface, include_prompt=True)
+    lines = [
+        (
+            f"### Declared Research Surface: {compact.get('name', '')} "
+            f"[{compact.get('kind', '')}]"
+        )
+    ]
+    description = compact.get("description")
+    if description:
+        lines.append(str(description))
+    algorithm = compact.get("algorithm")
+    if isinstance(algorithm, Mapping):
+        _append_compact_summary_line(lines, "algorithm.role", algorithm.get("role"))
+        _append_compact_summary_line(
+            lines,
+            "algorithm.invocation_point",
+            algorithm.get("invocation_point"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "algorithm.description",
+            algorithm.get("description"),
+        )
+    targets = compact.get("targets")
+    if isinstance(targets, Mapping):
+        _append_compact_summary_line(lines, "targets.files", targets.get("files"))
+        _append_compact_summary_line(
+            lines,
+            "targets.allowed_actions",
+            targets.get("allowed_actions"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "targets.singleton",
+            targets.get("singleton"),
+        )
+    interface = compact.get("interface")
+    if isinstance(interface, Mapping):
+        _append_compact_summary_line(
+            lines,
+            "interface.required_functions",
+            interface.get("required_functions"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "interface.function_signatures",
+            interface.get("function_signatures"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "interface.return_contract",
+            interface.get("return_contract"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "interface.return_values",
+            interface.get("return_values"),
+        )
+    bounds = compact.get("bounds")
+    if isinstance(bounds, Mapping):
+        _append_compact_summary_line(
+            lines,
+            "bounds.allowed_components",
+            bounds.get("allowed_components"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "bounds.numeric_ranges",
+            bounds.get("numeric_ranges"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "bounds.complexity_scale_terms",
+            bounds.get("complexity_scale_terms"),
+        )
+    evidence = compact.get("evidence")
+    if isinstance(evidence, Mapping):
+        _append_compact_summary_line(
+            lines,
+            "evidence.required_runtime_fields",
+            evidence.get("required_runtime_fields"),
+        )
+    prompt = compact.get("prompt")
+    if isinstance(prompt, Mapping):
+        _append_compact_summary_line(
+            lines,
+            "prompt.hypothesis_guidance",
+            prompt.get("hypothesis_guidance"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "prompt.implementation_guidance",
+            prompt.get("implementation_guidance"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "prompt.anti_patterns",
+            prompt.get("anti_patterns"),
+        )
+    return _limit_text("\n".join(lines), _COMPACT_SURFACE_INTERFACE_CHARS)
+
+
+def _append_compact_summary_line(
+    lines: list[str],
+    label: str,
+    value: Any,
+) -> None:
+    if value in (None, "", [], {}):
+        return
+    if isinstance(value, (Mapping, list, tuple)):
+        rendered = json.dumps(_model_payload(value), sort_keys=True, default=str)
+    else:
+        rendered = str(value)
+    lines.append(f"{label}: {_compact_text(rendered)}")
+
+
+def _surface_code_char_limit(
+    *,
+    detail: str,
+    requested_max: int | None,
+) -> int:
+    if requested_max is not None:
+        return requested_max
+    if detail == "full":
+        return _FULL_SURFACE_CODE_CHARS
+    return _COMPACT_SURFACE_CODE_CHARS
+
+
+def _compact_text(value: Any, max_chars: int = _COMPACT_SURFACE_TEXT_CHARS) -> str:
+    text = str(value).strip() if value is not None else ""
+    return _limit_text(text, max_chars) if text else ""
+
+
+def _coerce_compact_list(values: Any, *, max_items: int = 32) -> list[str]:
+    if values is None:
+        return []
+    try:
+        items = [str(value) for value in values if str(value)]
+    except TypeError:
+        return []
+    return items[:max_items]
+
+
+def _drop_empty_items(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value
+        for key, value in payload.items()
+        if value not in (None, "", [], {})
+    }
+
+
 def _surface_target_files(surface: Any) -> list[str]:
     targets = _attr(surface, "targets")
     files = _attr(targets, "files", None) if targets is not None else None
@@ -1778,6 +2150,7 @@ def _read_champion_file(
         "content_preview": _limit_text(content, max_chars),
         "truncated": len(content) > max_chars,
         "size_chars": len(content),
+        "max_chars": max_chars,
     }
 
 
