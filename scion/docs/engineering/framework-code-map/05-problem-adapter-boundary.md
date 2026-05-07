@@ -28,6 +28,12 @@ Campaign core still consumes legacy `ProblemSpec` from `scion/scion/config/probl
 - `legacy_problem_spec_from_v1()` converts v1 fields to legacy `ProblemSpec`.
 - `bridge_problem_spec_v1()` returns a bundle containing legacy `ProblemSpec`, metric specs, objective policy, and operator execute signature.
 
+The bridged legacy `ProblemSpec` also carries generic adapter metadata:
+`spec_version="problem-v1"`, `adapter_import_path`, and
+`requires_adapter_for_runtime=True`. These fields are compatibility metadata
+for gate construction only; problem semantics still belong to the adapter and
+problem package.
+
 The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces it with bridged `problem-v1.yaml` data when present. It also loads the adapter and passes metric specs/objective policy to `ExperimentProtocol`.
 
 ## Adapter Contract
@@ -85,15 +91,18 @@ Verification checks V5/V6/V7 are where problem semantics should enter runtime va
 - V6 feasibility calls adapter load/deserialize/consistency/feasibility.
 - V7 objective calls adapter load/deserialize/recompute and compares reported objective fields.
 
-`VerificationGate` can enforce fail-closed behavior with `strict_runtime_checks=True` and `require_adapter_for_runtime=True`.
+`VerificationGate` can enforce fail-closed behavior with `strict_runtime_checks=True` and `require_adapter_for_runtime=True`. For bridged `ProblemSpecV1` packages, adapter-required metadata now makes this fail-closed behavior automatic even if the adapter object is accidentally omitted: V5 returns a heavy `V5_solution_consistency` failure instead of using the legacy assignment/vehicles fallback.
 
 Selected-surface runtime audit is enforced during verification when
 `VerificationGate.run()` receives selected-surface metadata, normally from
-`HypothesisProposal.change_locus`. `ExperimentProtocol` pair evaluation still
-uses the legacy runtime audit path because it currently receives action
-metadata but not selected surface metadata. In other words, selected-surface
-`evidence.required_runtime_fields` are fail-closed in the verification path, not
-yet in canary/screening/validation/frozen protocol pair execution.
+`HypothesisProposal.change_locus`. It is also enforced on candidate-side canary
+and screening/validation/frozen protocol runs when `ExperimentProtocol` is
+constructed with a problem spec that declares research surfaces. The protocol
+receives `selected_surface` through `EvaluationRequest`, passes the active
+problem spec and surface name into `scion.runtime.audit`, and fails closed when
+declared `evidence.required_runtime_fields` are missing, empty, or explicitly
+failed. Champion-side protocol audit remains generic so a champion workspace is
+not rejected for lacking candidate-surface evidence fields.
 
 ## Places Core Should Not Hardcode Problem Semantics
 
@@ -108,13 +117,15 @@ Avoid adding warehouse or CVRP-specific logic to these framework areas:
 
 Known current risk areas:
 
-- `scion/scion/verification/state_mutation.py` legacy fallback still assumes `assignment`/`vehicles` output structure.
+- `scion/scion/verification/state_mutation.py` legacy fallback still assumes
+  `assignment`/`vehicles` output structure, but bridged adapter-required
+  problem-v1 specs are isolated from that fallback.
 - `scion/scion/contract/gate.py` complexity guard now prefers v2 surface
   `bounds.complexity_scale_terms`; route/customer/order/vehicle names remain as
   a legacy-only fallback when surface metadata is absent.
-- `ExperimentProtocol` does not yet receive selected-surface metadata, so it
-  cannot enforce per-surface required runtime fields outside the verification
-  path.
+- Custom protocol stubs or legacy protocols that do not carry problem specs with
+  declared research surfaces remain on the compatibility path and do not receive
+  automatic selected-surface forwarding from `EvaluationPipeline`.
 - CVRP final evidence modules are correctly outside core, but any reuse by another problem should go through generic `final_quality.py` or a new problem-specific adapter.
 
 New problem packages should make adapter-backed verification mandatory and avoid relying on legacy oracle/output fallbacks.

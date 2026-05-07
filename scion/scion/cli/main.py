@@ -201,6 +201,7 @@ def run(
         metric_specs=metric_specs,
         objective_policy=objective_policy,
         require_metric_specs=metric_specs is not None,
+        problem_spec=spec,
     )
     verification_gate = VerificationGate(
         spec,

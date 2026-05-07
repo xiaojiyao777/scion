@@ -39,11 +39,13 @@ class CampaignVerificationFactory:
         runtime_cfg = getattr(getattr(experiment_protocol, "config", None), "runtime", None)
         max_runtime_ratio = getattr(runtime_cfg, "max_runtime_ratio", None)
 
-        adapter_backed = adapter is not None
-        strict_runtime_checks = adapter_backed and (
-            runner is not None or not allow_non_strict_runtime_verification
+        spec_requires_adapter = _problem_spec_requires_adapter(problem_spec)
+        adapter_backed = adapter is not None or spec_requires_adapter
+        strict_runtime_checks = spec_requires_adapter or (
+            adapter_backed
+            and (runner is not None or not allow_non_strict_runtime_verification)
         )
-        require_adapter_for_runtime = strict_runtime_checks
+        require_adapter_for_runtime = spec_requires_adapter or strict_runtime_checks
 
         return VerificationGate(
             problem_spec,
@@ -56,3 +58,13 @@ class CampaignVerificationFactory:
             max_runtime_ratio=max_runtime_ratio,
         )
 
+
+def _problem_spec_requires_adapter(problem_spec: Any | None) -> bool:
+    if problem_spec is None:
+        return False
+    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
+        return True
+    return (
+        getattr(problem_spec, "spec_version", None) == "problem-v1"
+        and bool(getattr(problem_spec, "adapter_import_path", ""))
+    )

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-07*
 
 ## Status
 
@@ -864,6 +864,73 @@ Interpretation:
 - The next gate modernization slice should therefore make V2/V5
   surface-aware through shared interface validators and adapter-declared policy
   invariant previews, while preserving the v3 protocol gates unchanged.
+
+## 2026-05-07 Protocol Surface Runtime Audit Gate Slice
+
+Implemented the first gate-modernization follow-up for selected-surface runtime
+audit outside Verification:
+
+- `ExperimentProtocol` now stores the active problem spec and accepts
+  `selected_surface` for canary and paired experiment execution.
+- `EvaluationOrchestrator` carries the active hypothesis locus into
+  `EvaluationRequest`; `EvaluationPipeline` forwards it only to protocol
+  implementations that both accept `selected_surface` and carry declared
+  research-surface metadata.
+- Candidate-side canary/screening/validation/frozen runtime audit now calls
+  `scion.runtime.audit` with `problem_spec` and `selected_surface`, so
+  surface-declared `evidence.required_runtime_fields` fail closed outside the
+  verification-only path.
+- Champion-side protocol audit remains generic, avoiding false failures when the
+  champion workspace does not emit candidate-surface evidence fields.
+- CLI and CVRP protocol/campaign smoke construction pass the problem spec into
+  `ExperimentProtocol`.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/test_protocol.py \
+  scion/scion/tests/unit/core/test_evaluation_pipeline.py \
+  scion/scion/tests/test_cvrp_protocol_smoke.py \
+  scion/scion/tests/test_cvrp_controlled_campaign.py \
+  scion/scion/tests/test_sprint_n1.py -q
+79 passed in 22.63s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1413 passed, 1 skipped in 45.21s
+```
+
+## 2026-05-07 V2/V5 Gate Modernization Closeout
+
+Completed the P0 V2/V5 modernization follow-up:
+
+- V2 interface validation now uses the same AST-only research-surface
+  interface validator as ContractGate C7 from the orchestrated
+  `VerificationGate` path.
+- `VerificationGate.run()` forwards `problem_spec` and explicit or
+  hypothesis-derived `selected_surface` into V2, so undeclared surfaces and
+  patch targets outside the selected surface fail at `V2_interface`.
+- Bridged `ProblemSpecV1` packages now carry generic adapter metadata on the
+  legacy runtime `ProblemSpec`: `spec_version`, `adapter_import_path`, and
+  `requires_adapter_for_runtime`.
+- Adapter-backed problem-v1 packages without an adapter now fail closed at
+  `V5_solution_consistency`; the legacy assignment/vehicles fallback remains
+  available only for explicit legacy/no-adapter compatibility.
+- The implementation stays problem-agnostic: no CVRP or warehouse semantics
+  were added to core V2/V5 checks.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_problem_bridge.py -q
+131 passed in 3.09s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/unit/core/test_campaign_control_boundaries.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py scion/scion/tests/test_sprint_n1.py -q
+305 passed in 32.75s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1422 passed, 1 skipped in 46.95s
+```
 
 ## Remaining Optimization Backlog
 

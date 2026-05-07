@@ -59,6 +59,9 @@ def test_bridge_exposes_runtime_fields_kept_out_of_legacy_spec() -> None:
 
     assert bridge.spec_v1 is spec
     assert bridge.problem_spec.name == "toy_tsp"
+    assert bridge.problem_spec.spec_version == "problem-v1"
+    assert bridge.problem_spec.adapter_import_path == spec.adapter.import_path
+    assert bridge.problem_spec.requires_adapter_for_runtime is True
     assert [metric.name for metric in bridge.metric_specs] == ["tour_cost"]
     assert bridge.objective_policy.mode == "single"
     assert (

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,6 +26,7 @@ def _request(
     action: str = "modify",
     expand: bool = False,
     expand_round: int = 0,
+    selected_surface: str | None = None,
 ) -> EvaluationRequest:
     return EvaluationRequest(
         branch_id=str(uuid.uuid4()),
@@ -34,6 +36,7 @@ def _request(
         hypothesis_action=action,
         expand=expand,
         expand_round=expand_round,
+        selected_surface=selected_surface,
     )
 
 
@@ -80,6 +83,35 @@ class RecordingProtocol:
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_calls.append((candidate_ws, champion_ws))
+        return CanaryResult(passed=True, reason=None)
+
+    def run_experiment(self, **kwargs: object) -> ProtocolResult:
+        self.experiment_calls.append(kwargs)
+        return self.result
+
+
+class SurfaceRecordingProtocol:
+    def __init__(self, result: ProtocolResult) -> None:
+        self.problem_spec = SimpleNamespace(
+            research_surfaces=[SimpleNamespace(name="dispatch_policy")]
+        )
+        self.result = result
+        self.canary_calls: list[dict[str, object]] = []
+        self.experiment_calls: list[dict[str, object]] = []
+
+    def run_canary(
+        self,
+        candidate_ws: str,
+        champion_ws: str,
+        **kwargs: object,
+    ) -> CanaryResult:
+        self.canary_calls.append(
+            {
+                "candidate_ws": candidate_ws,
+                "champion_ws": champion_ws,
+                **kwargs,
+            }
+        )
         return CanaryResult(passed=True, reason=None)
 
     def run_experiment(self, **kwargs: object) -> ProtocolResult:
@@ -139,6 +171,38 @@ def test_screening_pass_generates_expected_decision_features() -> None:
             "hypothesis_action": "modify",
             "expand": True,
             "expand_round": 1,
+        }
+    ]
+
+
+def test_selected_surface_forwards_to_surface_aware_protocol() -> None:
+    protocol = SurfaceRecordingProtocol(_protocol_result())
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(
+        _request(
+            state=BranchState.EXPLORE,
+            selected_surface="dispatch_policy",
+        )
+    )
+
+    assert outcome.canary_result.passed is True
+    assert protocol.canary_calls == [
+        {
+            "candidate_ws": "/tmp/candidate",
+            "champion_ws": "/tmp/champion",
+            "selected_surface": "dispatch_policy",
+        }
+    ]
+    assert protocol.experiment_calls == [
+        {
+            "stage": ExperimentStage.SCREENING,
+            "candidate_ws": "/tmp/candidate",
+            "champion_ws": "/tmp/champion",
+            "hypothesis_action": "modify",
+            "expand": False,
+            "expand_round": 0,
+            "selected_surface": "dispatch_policy",
         }
     ]
 

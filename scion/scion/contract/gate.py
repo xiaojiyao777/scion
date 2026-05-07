@@ -18,6 +18,7 @@ from scion.core.models import (
     HypothesisRecord,
     PatchProposal,
 )
+from scion.contract.surface_interface import check_surface_interface
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
 
 # Sensitive API calls that are forbidden in operator code
@@ -414,66 +415,12 @@ class ContractGate:
     # ------------------------------------------------------------------
 
     def _c7_interface_signature(self, patch: PatchProposal) -> CheckResult:
-        t0 = time.monotonic_ns()
-        if patch.action == "delete":
-            return _cr("C7_interface", True, "light", "delete action — no interface check", t0)
-
-        try:
-            file_rel = normalize_relative_patch_path(patch.file_path)
-        except ValueError as exc:
-            return _cr("C7_interface", False, "light", str(exc), t0)
-
-        try:
-            tree = ast.parse(patch.code_content)
-        except SyntaxError:
-            return _cr("C7_interface", False, "light", "unparseable code", t0)
-
-        surface = self._surface_for_patch_path(file_rel)
-        kind = getattr(surface, "kind", "operator") if surface is not None else None
-        kind_error = self._surface_kind_error(surface)
-        if kind_error is not None:
-            return _cr("C7_interface", False, "light", kind_error, t0)
-        if kind == "policy":
-            return self._c7_policy_interface(tree, surface, t0)
-        if kind == "config":
-            return self._c7_module_function_interface(tree, surface, t0)
-        if surface is not None and kind not in (None, "operator"):
-            return self._c7_module_function_interface(tree, surface, t0)
-
-        classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-        if not classes:
-            if surface is not None and kind == "operator":
-                return _cr(
-                    "C7_interface",
-                    False,
-                    "light",
-                    "operator surface file must define an operator class",
-                    t0,
-                )
-            return _cr("C7_interface", True, "light", "no class found — skipped", t0)
-
-        for cls in classes:
-            for node in ast.walk(cls):
-                if isinstance(node, ast.FunctionDef) and node.name == "execute":
-                    args = [a.arg for a in node.args.args]
-                    if tuple(args) == self._operator_signature.args:
-                        return _cr("C7_interface", True, "light", "execute signature ok", t0)
-                    else:
-                        return _cr(
-                            "C7_interface",
-                            False,
-                            "light",
-                            "execute signature wrong: "
-                            f"{args}, expected {self._operator_signature.expected_args_detail}",
-                            t0,
-                        )
-
-        return _cr(
-            "C7_interface",
-            False,
-            "light",
-            "class found but no execute method defined",
-            t0,
+        return check_surface_interface(
+            patch,
+            problem_spec=self._spec,
+            operator_execute_signature=self._operator_signature.display,
+            check_name="C7_interface",
+            severity="light",
         )
 
     def _c7_policy_interface(

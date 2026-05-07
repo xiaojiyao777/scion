@@ -77,8 +77,12 @@ class VerificationGate:
         self._runner = runner
         self._metrics_dir = metrics_dir
         self._adapter = adapter
-        self._strict_runtime_checks = strict_runtime_checks
-        self._require_adapter_for_runtime = require_adapter_for_runtime
+        spec_requires_adapter = _problem_spec_requires_adapter(problem_spec)
+        self._strict_runtime_checks = strict_runtime_checks or spec_requires_adapter
+        self._require_adapter_for_runtime = (
+            require_adapter_for_runtime
+            or spec_requires_adapter
+        )
         self._operator_execute_signature = operator_execute_signature
         self._max_runtime_ratio = max_runtime_ratio
 
@@ -114,6 +118,8 @@ class VerificationGate:
         r = check_interface(
             patch,
             candidate_workspace,
+            problem_spec=self._spec,
+            selected_surface=surface_name,
             operator_execute_signature=self._operator_execute_signature,
         )
         checks.append(r)
@@ -163,6 +169,7 @@ class VerificationGate:
             candidate_workspace,
             adapter=self._adapter,
             selected_surface=surface_name,
+            require_adapter_for_runtime=self._require_adapter_for_runtime,
         )
         checks.append(r)
         if not r.passed:
@@ -238,8 +245,6 @@ def _validate_runtime_config(
     adapter: ProblemAdapter | None = None,
     require_adapter_for_runtime: bool = False,
 ) -> CheckResult | None:
-    if require_adapter_for_runtime and adapter is None:
-        return _runtime_config_failure("problem adapter is required for runtime verification")
     canary = resolve_problem_path(problem_spec, problem_spec.canary_case_path)
     if not canary:
         return _runtime_config_failure("canary_case_path is required")
@@ -257,6 +262,17 @@ def _runtime_config_failure(detail: str) -> CheckResult:
         severity="heavy",
         detail=detail,
         elapsed_ms=0,
+    )
+
+
+def _problem_spec_requires_adapter(problem_spec: ProblemSpec | None) -> bool:
+    if problem_spec is None:
+        return False
+    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
+        return True
+    return (
+        getattr(problem_spec, "spec_version", None) == "problem-v1"
+        and bool(getattr(problem_spec, "adapter_import_path", ""))
     )
 
 

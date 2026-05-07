@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-07*
 
 This is the first document an agent or developer should read before working on
 Scion. It explains what the project is, where the current truth lives, what is
@@ -25,9 +25,10 @@ enough to continue, validate, freeze, promote, or abandon.
   - `surrogate` / warehouse delivery: original v0.3 research object.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
-- Current bottleneck: CVRP surface steering works, but gate implementations
-  still have operator-space or legacy fallback assumptions. The immediate P0 is
-  gate modernization.
+- Current bottleneck: CVRP surface steering and selected-surface runtime audit
+  now reach canary/protocol candidate runs, and V2/V5 gate modernization is
+  closed. The next gate risk is auditing the remaining V6/V7/V8 legacy
+  diagnostics while improving CVRP policy-surface correctness and efficacy.
 
 ## Required Reading Order
 
@@ -91,6 +92,13 @@ For experiment analysis:
   `construction_policy`, and `neighborhood_portfolio`.
 - `AgenticProposalSession` exists as a bounded Creative Layer path with proposal
   tools, exposure policy, compact session refs, and tainted artifacts.
+- Selected research surface metadata now propagates through Verification,
+  canary, and screening/validation/frozen candidate-side protocol runtime audit.
+  Surface-declared `evidence.required_runtime_fields` fail closed outside
+  verification as well as inside it.
+- V2 interface validation shares the AST-only surface interface validator used
+  by `ContractGate C7`; V5 disables the legacy assignment/vehicles fallback for
+  bridged adapter-required `problem-v1` packages when an adapter is missing.
 - Campaign orchestration has been decomposed; `CampaignManager` is mostly a
   facade over proposal, evaluation, promotion, evidence, failure lifecycle, and
   branch-step services.
@@ -100,14 +108,11 @@ For experiment analysis:
 
 ## Current Pending Work
 
-P0 gate modernization:
+Gate modernization follow-up:
 
-- Make V2 interface validation surface-aware by sharing or extracting the
-  surface interface validation used by `ContractGate C7`.
-- Ensure V5 solution consistency cannot fall back to warehouse-shaped legacy
-  checks for adapter-backed `problem-v1` packages.
-- Pass selected research surface metadata through canary/protocol runtime audit
-  so `evidence.required_runtime_fields` fails closed outside verification too.
+- V2/V5 modernization is complete as of 2026-05-07.
+- Audit remaining V6/V7/V8 legacy diagnostics and keep the
+  adapter-backed path authoritative for new problem-v1 packages.
 
 Near-term CVRP research-space work:
 

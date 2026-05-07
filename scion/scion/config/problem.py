@@ -59,9 +59,12 @@ class SearchSpace(_StrictBase):
     import_whitelist: List[str]
 
 class ProblemSpec(_StrictBase):
+    spec_version: str = "legacy"
     name: str
     root_dir: str
     description: str = ""
+    adapter_import_path: str = ""
+    requires_adapter_for_runtime: bool = False
     operators_dir: str = "operators"
     data_dir: str = "data"
     oracle_path: str = "oracle.py"

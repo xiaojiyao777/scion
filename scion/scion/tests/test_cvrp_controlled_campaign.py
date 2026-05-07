@@ -57,6 +57,7 @@ def _load_controlled_runtime(
         metric_specs=tuple(spec_v1.objectives),
         objective_policy=spec_v1.objective_policy,
         require_metric_specs=True,
+        problem_spec=spec_v1,
     )
     return protocol, spec_v1, protocol_config, split_manifest, seed_ledger
 

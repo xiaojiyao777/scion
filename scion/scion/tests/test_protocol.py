@@ -7,6 +7,7 @@ import uuid
 import pytest
 from unittest.mock import MagicMock
 from datetime import datetime
+from types import SimpleNamespace
 
 from scion.core.models import (
     ExperimentStage, EvalStats, ProtocolResult, RunResult, SolverOutput, CanaryResult,
@@ -351,7 +352,7 @@ def _make_run_failure(category: str = "timeout", elapsed_ms: int = 1000) -> RunR
     )
 
 
-def _make_protocol(runner, tmp_path) -> ExperimentProtocol:
+def _make_protocol(runner, tmp_path, problem_spec=None) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=ProtocolConfig(),
         split_manager=SplitManager(_make_manifest()),
@@ -359,6 +360,23 @@ def _make_protocol(runner, tmp_path) -> ExperimentProtocol:
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        problem_spec=problem_spec,
+    )
+
+
+def _surface_problem_spec(
+    name: str = "dispatch_policy",
+    required_runtime_fields: tuple[str, ...] = ("dispatch_loaded", "dispatch_errors"),
+):
+    return SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name=name,
+                evidence=SimpleNamespace(
+                    required_runtime_fields=list(required_runtime_fields)
+                ),
+            )
+        ]
     )
 
 
@@ -404,6 +422,42 @@ def test_run_experiment_records_runtime_telemetry_for_successful_pairs(tmp_path)
     assert all(p["candidate_elapsed_ms"] == 150 for p in raw["pairs"])
     assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
     assert all(p["runtime_ratio"] == pytest.approx(1.5) for p in raw["pairs"])
+
+
+def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
+    runner = MagicMock()
+    champ = _make_run_result(2, 1000, runtime={})
+    cand = _make_run_result(
+        1,
+        900,
+        runtime={"dispatch_loaded": True},
+    )
+    runner.run_solver.side_effect = [champ, cand] * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="dispatch_policy",
+    )
+
+    assert result.gate_outcome == "fail"
+    assert result.stats.failed_pairs == 4
+    assert result.stats.candidate_failed_pairs == 4
+    assert result.candidate_runtime_failure_categories == {
+        "surface_contract_error": 4,
+    }
+    assert result.candidate_first_runtime_failure is not None
+    assert result.candidate_first_runtime_failure["surface"] == "dispatch_policy"
+    assert "dispatch_errors" in result.candidate_first_runtime_failure["detail_summary"]
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["selected_surface"] == "dispatch_policy"
 
 
 def test_run_experiment_screening_fail(tmp_path):
@@ -683,3 +737,28 @@ def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):
 
     assert not result.passed
     assert "runtime audit failed" in (result.reason or "")
+
+
+def test_run_canary_selected_surface_runtime_fields_fail_closed(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.return_value = _make_run_result(
+        1,
+        900,
+        feasible=True,
+        runtime={"dispatch_loaded": True},
+    )
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(),
+    )
+
+    result = proto.run_canary(
+        "/cand",
+        "/champ",
+        selected_surface="dispatch_policy",
+    )
+
+    assert result.passed is False
+    assert "runtime audit failed" in (result.reason or "")
+    assert "dispatch_errors" in (result.reason or "")

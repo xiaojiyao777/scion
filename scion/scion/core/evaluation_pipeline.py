@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from scion.core.features import BudgetState, SafeFeatureExtractor
 from scion.core.models import (
@@ -26,6 +28,7 @@ class EvaluationRequest:
     hypothesis_action: str
     expand: bool = False
     expand_round: int = 0
+    selected_surface: str | None = None
     patch: Optional[PatchProposal] = None
     retry_count: int = 0
     screening_expand_count: int = 0
@@ -45,7 +48,13 @@ class EvaluationOutcome:
 
 
 class ExperimentProtocolLike(Protocol):
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
+    def run_canary(
+        self,
+        candidate_ws: str,
+        champion_ws: str,
+        *,
+        selected_surface: str | None = None,
+    ) -> CanaryResult:
         ...
 
     def run_experiment(
@@ -56,6 +65,7 @@ class ExperimentProtocolLike(Protocol):
         hypothesis_action: str,
         expand: bool = False,
         expand_round: int = 1,
+        selected_surface: str | None = None,
     ) -> ProtocolResult:
         ...
 
@@ -103,9 +113,11 @@ class EvaluationPipeline:
         if contract_result.passed and verification_result.passed:
             if self._experiment_protocol is not None:
                 try:
-                    canary_result = self._experiment_protocol.run_canary(
+                    canary_result = _run_protocol_canary(
+                        self._experiment_protocol,
                         request.candidate_workspace,
                         request.champion_workspace,
+                        selected_surface=request.selected_surface,
                     )
                 except (ValueError, NotImplementedError) as exc:
                     canary_result = CanaryResult(
@@ -114,13 +126,15 @@ class EvaluationPipeline:
                     )
 
                 if canary_result.passed:
-                    protocol_result = self._experiment_protocol.run_experiment(
+                    protocol_result = _run_protocol_experiment(
+                        self._experiment_protocol,
                         stage=_stage_for_state(request.branch_state),
                         candidate_ws=request.candidate_workspace,
                         champion_ws=request.champion_workspace,
                         hypothesis_action=request.hypothesis_action,
                         expand=request.expand,
                         expand_round=request.expand_round,
+                        selected_surface=request.selected_surface,
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
@@ -195,6 +209,80 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         case_feedback=(),
         pattern_summary=None,
     )
+
+
+def _run_protocol_canary(
+    protocol: ExperimentProtocolLike,
+    candidate_ws: str,
+    champion_ws: str,
+    *,
+    selected_surface: str | None,
+) -> CanaryResult:
+    if _should_forward_selected_surface(protocol, "run_canary", selected_surface):
+        return protocol.run_canary(
+            candidate_ws,
+            champion_ws,
+            selected_surface=selected_surface,
+        )
+    return protocol.run_canary(candidate_ws, champion_ws)
+
+
+def _run_protocol_experiment(
+    protocol: ExperimentProtocolLike,
+    **kwargs: object,
+) -> ProtocolResult:
+    selected_surface = kwargs.pop("selected_surface", None)
+    if _should_forward_selected_surface(
+        protocol,
+        "run_experiment",
+        selected_surface,
+    ):
+        kwargs["selected_surface"] = selected_surface
+    return protocol.run_experiment(**kwargs)
+
+
+def _should_forward_selected_surface(
+    protocol: ExperimentProtocolLike,
+    method_name: str,
+    selected_surface: object,
+) -> bool:
+    if not isinstance(selected_surface, str) or not selected_surface.strip():
+        return False
+    if not _method_accepts_keyword(protocol, method_name, "selected_surface"):
+        return False
+    return _protocol_has_research_surfaces(protocol)
+
+
+def _method_accepts_keyword(
+    protocol: ExperimentProtocolLike,
+    method_name: str,
+    keyword: str,
+) -> bool:
+    method = getattr(protocol, method_name, None)
+    if method is None:
+        return False
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return False
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ) or keyword in signature.parameters
+
+
+def _protocol_has_research_surfaces(protocol: ExperimentProtocolLike) -> bool:
+    problem_spec: Any = getattr(protocol, "problem_spec", None)
+    if problem_spec is None:
+        problem_spec = getattr(protocol, "_problem_spec", None)
+    surfaces = _get_field(problem_spec, "research_surfaces")
+    return isinstance(surfaces, (list, tuple)) and bool(surfaces)
+
+
+def _get_field(obj: Any, name: str) -> Any:
+    if isinstance(obj, Mapping):
+        return obj.get(name)
+    return getattr(obj, name, None)
 
 
 def _default_contract_evaluator(request: EvaluationRequest) -> ContractResult:

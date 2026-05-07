@@ -188,6 +188,7 @@ class TestExperimentGenericPath:
             metrics_dir=str(tmp_path / "metrics"),
             metric_specs=adapter_spec.objectives,
             require_metric_specs=True,
+            problem_spec=adapter_spec,
         )
         gate = VerificationGate(
             problem_spec=spec,

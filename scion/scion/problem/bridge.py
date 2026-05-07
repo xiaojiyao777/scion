@@ -74,9 +74,12 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
         else list(spec.operator_interface.category_names)
     )
     legacy = ProblemSpec(
+        spec_version=spec.spec_version,
         name=spec.id,
         root_dir=root_dir,
         description=spec.description,
+        adapter_import_path=spec.adapter.import_path,
+        requires_adapter_for_runtime=True,
         operators_dir=spec.operators_dir,
         data_dir=spec.data_dir,
         oracle_path=spec.oracle_path,

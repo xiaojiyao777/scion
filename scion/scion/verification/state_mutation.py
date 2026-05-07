@@ -34,6 +34,7 @@ def check_state_mutation(
     *,
     adapter: Optional[ProblemAdapter] = None,
     selected_surface: str | None = None,
+    require_adapter_for_runtime: bool = False,
 ) -> CheckResult:
     """V5_solution_consistency: output must be internally consistent."""
     t0 = time.monotonic_ns()
@@ -81,6 +82,18 @@ def check_state_mutation(
             "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
             t0,
             diagnosis="CANDIDATE",
+        )
+
+    if adapter is None and _requires_adapter_for_runtime(
+        problem_spec,
+        explicit=require_adapter_for_runtime,
+    ):
+        return _cr(
+            False,
+            "problem adapter is required for adapter-backed runtime verification; "
+            "legacy solution consistency fallback disabled",
+            t0,
+            diagnosis="ENV",
         )
 
     if adapter is not None:
@@ -190,6 +203,21 @@ def _check_solution_consistency(raw: dict) -> list[str]:
             issues.append(f"empty vehicle {vid} in output")
 
     return issues
+
+
+def _requires_adapter_for_runtime(
+    problem_spec: ProblemSpec,
+    *,
+    explicit: bool = False,
+) -> bool:
+    if explicit:
+        return True
+    if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
+        return True
+    return (
+        getattr(problem_spec, "spec_version", None) == "problem-v1"
+        and bool(getattr(problem_spec, "adapter_import_path", ""))
+    )
 
 
 def _cr(

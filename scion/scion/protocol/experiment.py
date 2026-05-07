@@ -142,6 +142,7 @@ class ExperimentProtocol:
         metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
         objective_policy: "ObjectivePolicySpec | None" = None,
         require_metric_specs: bool = False,
+        problem_spec: Any | None = None,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -152,6 +153,7 @@ class ExperimentProtocol:
         self._metric_specs = metric_specs
         self._objective_policy = objective_policy
         self._require_metric_specs = require_metric_specs
+        self._problem_spec = problem_spec
         self._progress_callback: Optional[Callable[..., None]] = None
         if self._require_metric_specs and self._metric_specs is None:
             raise ValueError("metric_specs are required for production ExperimentProtocol")
@@ -258,7 +260,17 @@ class ExperimentProtocol:
     # T3: Canary — uses independent canary split + canary seeds
     # ------------------------------------------------------------------
 
-    def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
+    @property
+    def problem_spec(self) -> Any | None:
+        return self._problem_spec
+
+    def run_canary(
+        self,
+        candidate_ws: str,
+        champion_ws: str,
+        *,
+        selected_surface: str | None = None,
+    ) -> CanaryResult:
         """
         Canary regression check using the dedicated canary split and seeds.
         Veto-only — blocks if candidate produces infeasible solutions or crashes.
@@ -293,7 +305,11 @@ class ExperimentProtocol:
                         passed=False,
                         reason=f"Candidate solver failed on {case}: {cand_result.error_category}",
                     )
-                cand_audit_failure = runtime_audit_failure_from_result(cand_result)
+                cand_audit_failure = runtime_audit_failure_from_result(
+                    cand_result,
+                    problem_spec=self._problem_spec,
+                    selected_surface=selected_surface,
+                )
                 if cand_audit_failure is not None:
                     return CanaryResult(
                         passed=False,
@@ -392,6 +408,7 @@ class ExperimentProtocol:
         hypothesis_action: str,
         expand: bool = False,
         expand_round: int = 1,
+        selected_surface: str | None = None,
     ) -> ProtocolResult:
         """Execute paired A/B evaluation for the given stage.
 
@@ -440,6 +457,7 @@ class ExperimentProtocol:
                 json.dump(
                     {
                         "stage": stage.value,
+                        "selected_surface": selected_surface,
                         "case_ids": cases,
                         "seed_set": seeds,
                         "total_pairs": total_pairs,
@@ -648,7 +666,11 @@ class ExperimentProtocol:
                     _write_metrics_snapshot(complete=False)
                     continue
 
-                cand_audit_failure = runtime_audit_failure_from_result(cand_r)
+                cand_audit_failure = runtime_audit_failure_from_result(
+                    cand_r,
+                    problem_spec=self._problem_spec,
+                    selected_surface=selected_surface,
+                )
                 if cand_audit_failure is not None:
                     audit_category = _candidate_audit_failure_category(cand_audit_failure)
                     if audit_category not in (runtime_observation.get("categories") or {}):

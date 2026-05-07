@@ -34,20 +34,29 @@ Use these framework extension points only when the behavior is truly problem-agn
 
 High-risk areas:
 
-- Legacy V5 fallback in `scion/scion/verification/state_mutation.py` still assumes assignment/vehicle structure. New problems should require adapter-backed runtime verification.
+- V6/V7 fallback paths still rely on legacy oracle hooks when no adapter is
+  provided. New problem packages should require adapter-backed runtime
+  verification and metric specs.
+- V8 nondeterminism is generic but still compares raw solver output; future
+  adapter-declared canonical fingerprints would reduce false diffs for
+  problem-native solution representations.
 - `ContractGate._c9c_complexity_bound()` now prefers v2 research-surface
   `bounds.complexity_scale_terms`. Route/customer/order/vehicle names remain
   only as a legacy fallback when no v2 bounds metadata is available.
 - `ContextManager` is large and mixes generic prompt assembly with some heuristic guidance. It is adapter-aware, but new prompt guidance can easily become problem-specific if not routed through adapter/spec fields.
 - `ExperimentProtocol` still has a legacy objective fallback. Production problem packages should pass metric specs and require them.
-- `ExperimentProtocol` still lacks selected-surface runtime audit propagation.
-  Verification can enforce surface-declared `evidence.required_runtime_fields`,
-  but canary/screening/validation/frozen pair execution currently consumes only
-  generic runtime audit failures.
+- `ExperimentProtocol` now receives selected-surface metadata through
+  `EvaluationRequest` for problem-spec-backed protocols and enforces
+  surface-declared `evidence.required_runtime_fields` on candidate-side canary
+  and paired experiment runs. Compatibility protocols without declared research
+  surfaces are intentionally not auto-forwarded selected-surface metadata.
 - CVRP final evidence code is correctly problem-specific, but importing it from core would violate the boundary.
 
 Medium-risk areas:
 
+- V2 and V5 risks are reduced as of 2026-05-07. V2 shares the C7 AST-only
+  research-surface interface validator, and bridged problem-v1 specs disable
+  the V5 legacy assignment/vehicles fallback when an adapter is missing.
 - `ProblemSpecV1` and legacy `ProblemSpec` coexist. Any new field should define bridge behavior explicitly.
 - Legacy/v2 research-surface fields are intentionally conflict-checked at spec
   load. Keep both declarations identical when a problem package still emits
@@ -86,7 +95,11 @@ For algorithm design space expansion, use a thin vertical slice:
 3. Update the problem solver wrapper to execute the surface and emit runtime audit fields.
 4. Update `ContractGate` only if the new surface requires a generic interface check pattern that can apply to other problems.
 5. Add adapter-backed verification coverage for consistency/feasibility/objective and selected-surface runtime audit.
-6. Propagate selected-surface metadata through protocol/canary pair execution when surface-declared runtime fields must be enforced outside verification.
+6. Propagate selected-surface metadata through protocol/canary pair execution
+   when surface-declared runtime fields must be enforced outside verification.
+   This generic protocol-audit plumbing is implemented for problem-spec-backed
+   `ExperimentProtocol`; future slices should keep custom protocol
+   implementations explicit about whether they support selected-surface audit.
 7. Add focused tests around bridge loading, context rendering, contract validation, solver runtime audit, and one campaign smoke.
 8. Add or update problem-specific final evidence only if final reporting needs new domain fields.
 
@@ -100,7 +113,8 @@ Before merging architecture changes, check:
 - Does the LLM see only screening detail and aggregate holdout facts?
 - Are objective semantics defined by metric specs, not metric-name conditionals?
 - Does verification fail closed when adapter/runtime config is missing?
-- Does selected-surface runtime audit fail closed when declared evidence fields are missing?
+- Does selected-surface runtime audit fail closed when declared evidence fields
+  are missing in both Verification and candidate-side Protocol/Canary runs?
 - Are raw metrics and final evidence represented as refs, not copied into step schemas?
 - Does promotion still snapshot immutable candidate code before stale-marking other branches?
 - Does stale/reconcile re-run contract, verification, and screening after champion changes?

@@ -48,6 +48,7 @@ def _make_protocol(tmp_path: Path) -> tuple[ExperimentProtocol, ProblemSpecV1]:
             metric_specs=tuple(spec_v1.objectives),
             objective_policy=spec_v1.objective_policy,
             require_metric_specs=True,
+            problem_spec=spec_v1,
         ),
         spec_v1,
     )

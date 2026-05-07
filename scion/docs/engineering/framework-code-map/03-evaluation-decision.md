@@ -68,7 +68,16 @@ surfaces without v2 bounds metadata.
 
 Light failures are fixable by `ProposalPipeline.attempt_fix()`. Heavy failures cause rejection/blacklist paths.
 
-For production adapter-backed runs, `VerificationGate` should be configured with `adapter`, `strict_runtime_checks=True`, and `require_adapter_for_runtime=True`. Then V5/V6/V7 use `ProblemAdapter` methods and fail closed when required runtime configuration is missing.
+V2 uses the shared AST-only research-surface interface validator from
+`scion/scion/contract/surface_interface.py`, the same validator used by
+ContractGate C7. `VerificationGate.run()` forwards the active problem spec and
+explicit or hypothesis-derived selected surface, so module-style policy/config/
+portfolio/construction surfaces validate declared required functions,
+function-signature prefixes, and static return constraints without importing
+tainted candidate code. If a selected surface is undeclared or the patch file is
+outside that surface's declared targets, V2 fails closed.
+
+For production adapter-backed runs, `VerificationGate` should be configured with `adapter`, `strict_runtime_checks=True`, and `require_adapter_for_runtime=True`. Bridged `ProblemSpecV1` packages now carry adapter-required metadata, so `VerificationGate` also treats those specs as adapter-required even if an adapter object is accidentally omitted. V5 fails closed before the legacy assignment/vehicles fallback can accept such a package. When an adapter is present, V5/V6/V7 use `ProblemAdapter` methods and fail closed when required runtime configuration is missing.
 
 For `research_surfaces` v2, selected surface metadata is passed into
 `VerificationGate.run()` from `HypothesisProposal.change_locus` in the explore
@@ -81,7 +90,7 @@ surface are the legacy compatibility path.
 
 Legacy verification fallback still exists:
 
-- V5 fallback checks `assignment` and `vehicles` shape in `scion/scion/verification/state_mutation.py`.
+- V5 fallback checks `assignment` and `vehicles` shape in `scion/scion/verification/state_mutation.py`, but only for legacy/no-adapter compatibility. It is disabled for bridged adapter-required `problem-v1` specs.
 - V6/V7 fallback require generic oracle hooks in `oracle.py`.
 
 Do not extend these legacy fallbacks with new problem semantics. New problem support should go through `ProblemAdapter`.
@@ -102,10 +111,17 @@ When metric specs are present, objective comparison uses `scion/scion/problem/ob
 
 Canary is veto-only. Validation/frozen incomplete evidence with failed pairs becomes protocol gate failure. Raw metrics are persisted to JSON refs but should not be injected directly into proposal context except through controlled screening feedback.
 
-Current gap: canary and paired experiment execution still receive action
-metadata but not the selected research surface. They consume generic runtime
-audit failures, but they do not yet enforce selected-surface
-`evidence.required_runtime_fields` in the way `VerificationGate` does.
+Canary and paired experiment execution can now receive the selected research
+surface. `EvaluationOrchestrator` carries `HypothesisProposal.change_locus`
+into `EvaluationRequest`, and `EvaluationPipeline` forwards it only to
+surface-aware protocol implementations that also carry declared research
+surface metadata. `ExperimentProtocol` stores the problem spec, accepts
+`selected_surface` on canary and experiment runs, and applies
+`runtime_audit_failure_from_result()` with `problem_spec` + `selected_surface`
+to candidate runs. This enforces surface-declared
+`evidence.required_runtime_fields` outside the verification-only path while
+leaving champion-side audit on the generic legacy/runtime-failure checks.
+Metrics snapshots record the selected surface as metadata.
 
 ## SafeFeatureExtractor
 

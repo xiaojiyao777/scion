@@ -92,6 +92,7 @@ class EvaluationOrchestrator:
             hypothesis_action=hypothesis.action,
             expand=expand,
             expand_round=expand_round,
+            selected_surface=hypothesis.change_locus,
             patch=self.branch_patches.get(bid),
             retry_count=branch.retry_count,
             screening_expand_count=branch.screening_expand_count,

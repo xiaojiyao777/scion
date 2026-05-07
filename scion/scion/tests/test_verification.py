@@ -104,8 +104,66 @@ def _make_spec(canary: str = "") -> ProblemSpec:
 
 
 def _make_surface_spec(canary: str, surfaces: list[dict[str, Any]]) -> ProblemSpec:
+    normalized_surfaces: list[dict[str, Any]] = []
+    for surface in surfaces:
+        item = dict(surface)
+        item.setdefault("kind", "operator")
+        if "target_files" not in item and "targets" not in item:
+            item["target_files"] = ["operators/*.py"]
+        normalized_surfaces.append(item)
     return _make_spec(canary=canary).model_copy(
-        update={"research_surfaces": surfaces}
+        update={"research_surfaces": normalized_surfaces}
+    )
+
+
+def _make_policy_interface_spec(canary: str = "") -> ProblemSpec:
+    return _make_spec(canary=canary).model_copy(
+        update={
+            "operator_categories": ["search_policy"],
+            "research_surfaces": [
+                {
+                    "name": "search_policy",
+                    "kind": "policy",
+                    "target_files": ["policies/search_policy.py"],
+                    "interface": {
+                        "required_functions": [
+                            "baseline_time_fraction",
+                            "max_operator_rounds",
+                        ],
+                        "function_signatures": {
+                            "baseline_time_fraction": [
+                                "instance",
+                                "time_limit_sec",
+                            ],
+                            "max_operator_rounds": [
+                                "instance",
+                                "time_limit_sec",
+                            ],
+                        },
+                        "return_values": {
+                            "baseline_time_fraction": {
+                                "value_type": "number",
+                                "numeric_range": [0.05, 0.95],
+                            },
+                            "max_operator_rounds": {
+                                "value_type": "int",
+                                "numeric_range": [0, 50],
+                            },
+                        },
+                    },
+                }
+            ],
+        }
+    )
+
+
+def _make_adapter_required_spec(canary: str) -> ProblemSpec:
+    return _make_spec(canary=canary).model_copy(
+        update={
+            "spec_version": "problem-v1",
+            "adapter_import_path": "scion.problems.demo.adapter:DemoAdapter",
+            "requires_adapter_for_runtime": True,
+        }
     )
 
 
@@ -307,6 +365,107 @@ class MyOp:
         assert r.passed is False
         assert "path segment" in r.detail
 
+    def test_surface_policy_missing_required_function_fails_ast(self, tmp_path):
+        patch = PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.5\n"
+            ),
+        )
+
+        r = check_interface(
+            patch,
+            str(tmp_path),
+            problem_spec=_make_policy_interface_spec(),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert r.name == "V2_interface"
+        assert "missing required functions ['max_operator_rounds']" in r.detail
+
+    def test_surface_policy_declared_signature_fails_ast(self, tmp_path):
+        patch = PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance):\n"
+                "    return 0.5\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 10\n"
+            ),
+        )
+
+        r = check_interface(
+            patch,
+            str(tmp_path),
+            problem_spec=_make_policy_interface_spec(),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert "do not match declared prefix" in r.detail
+
+    def test_surface_policy_static_return_constraint_fails_ast(self, tmp_path):
+        patch = PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 1.5\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 10\n"
+            ),
+        )
+
+        r = check_interface(
+            patch,
+            str(tmp_path),
+            problem_spec=_make_policy_interface_spec(),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert "outside declared range" in r.detail
+
+    def test_valid_surface_policy_module_without_class_passes_ast(self, tmp_path):
+        patch = PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.5\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 10\n"
+            ),
+        )
+
+        r = check_interface(
+            patch,
+            str(tmp_path),
+            problem_spec=_make_policy_interface_spec(),
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is True
+        assert r.name == "V2_interface"
+
+    def test_selected_surface_target_mismatch_fails_ast(self, tmp_path):
+        spec = _make_policy_interface_spec()
+        patch = _make_patch(_VALID_CODE)
+
+        r = check_interface(
+            patch,
+            str(tmp_path),
+            problem_spec=spec,
+            selected_surface="search_policy",
+        )
+
+        assert r.passed is False
+        assert "is not in target files" in r.detail
+
 
 # ---------------------------------------------------------------------------
 # V3: feasibility
@@ -384,6 +543,23 @@ class TestSolutionConsistencyCheck:
         assert r.name == "V5_solution_consistency"
         assert "adapter consistency failed" in r.detail
         assert "customer 1 appears twice" in r.detail
+
+    def test_adapter_required_spec_without_adapter_fails_before_legacy_fallback(
+        self,
+        tmp_path,
+    ):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_adapter_required_spec(canary)
+        runner = _mock_runner(output_dict=_solver_output_dict())
+
+        r = check_state_mutation(spec, runner, str(tmp_path))
+
+        assert r.passed is False
+        assert r.name == "V5_solution_consistency"
+        assert "problem adapter is required" in r.detail
+        assert "legacy solution consistency fallback disabled" in r.detail
+        assert runner.run_solver.called
 
     def test_solver_runtime_audit_failure_fails_closed(self, tmp_path):
         canary = str(tmp_path / "small.json")
@@ -846,8 +1022,66 @@ class TestVerificationGateIntegration:
         result = gate.run(str(tmp_path), str(tmp_path), patch)
 
         assert result.passed is False
-        assert result.first_failure == "V_runtime_config"
+        assert result.first_failure == "V5_solution_consistency"
         assert "problem adapter" in result.checks[-1].detail
+
+    def test_adapter_backed_problem_v1_without_adapter_fails_v5(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_adapter_required_spec(str(canary))
+        runner = _mock_runner(output_dict=_solver_output_dict())
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = gate.run(str(tmp_path), str(tmp_path), _make_patch(_VALID_CODE))
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "problem adapter is required" in result.checks[-1].detail
+        assert "legacy solution consistency fallback disabled" in result.checks[-1].detail
+
+    def test_selected_surface_runtime_fields_do_not_enable_legacy_v5_fallback(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_adapter_required_spec(str(canary)).model_copy(
+            update={
+                "operator_categories": ["search_policy"],
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "operator",
+                        "target_files": ["operators/*.py"],
+                        "evidence": {
+                            "required_runtime_fields": [
+                                "policy_loaded",
+                                "policy_errors",
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {
+            "policy_loaded": True,
+            "policy_errors": 0,
+        }
+        runner = _mock_runner(output_dict=output)
+        gate = VerificationGate(problem_spec=spec, runner=runner)
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="search_policy",
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V5_solution_consistency"
+        assert "problem adapter is required" in result.checks[-1].detail
+        assert "legacy solution consistency fallback disabled" in result.checks[-1].detail
 
     def test_strict_adapter_backed_runtime_passes_toy_tsp(self, tmp_path):
         spec_v1, adapter = _load_toy_tsp_adapter()
@@ -878,6 +1112,21 @@ class TestVerificationGateIntegration:
         result = gate.run(str(tmp_path), "", patch)
         assert result.passed is False
         assert result.first_failure == "V2_interface"
+
+    def test_gate_forwards_hypothesis_surface_to_v2_interface(self, tmp_path):
+        gate = VerificationGate(problem_spec=_make_policy_interface_spec())
+        patch = _make_patch(_VALID_CODE)
+
+        result = gate.run(
+            str(tmp_path),
+            "",
+            patch,
+            hypothesis=_make_hypothesis("search_policy"),
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V2_interface"
+        assert "is not in target files" in result.checks[-1].detail
 
     def test_delete_patch_passes_all(self):
         gate = VerificationGate()
@@ -922,7 +1171,7 @@ class TestVerificationGateIntegration:
         assert "failed runtime evidence contract" in result.checks[-1].detail
         assert "missing=policy_errors" in result.checks[-1].detail
 
-    def test_unknown_selected_surface_fails_closed(self, tmp_path):
+    def test_unknown_selected_surface_fails_at_v2_interface(self, tmp_path):
         canary = tmp_path / "small.json"
         canary.write_text("{}")
         spec = _make_surface_spec(
@@ -952,7 +1201,7 @@ class TestVerificationGateIntegration:
         )
 
         assert result.passed is False
-        assert result.first_failure == "V5_solution_consistency"
+        assert result.first_failure == "V2_interface"
         assert "is not declared" in result.checks[-1].detail
 
     def test_hypothesis_change_locus_selects_surface_for_runtime_contract(
