@@ -1567,6 +1567,34 @@ next step is a short forced or strongly steered Sonnet diagnostic for
 `baseline_policy`, followed by another 5-10 round CVRP diagnostic only if the
 surface shows nontrivial screening behavior.
 
+## 2026-05-07 Baseline Policy Sonnet Diagnostic Running
+
+A detached three-round Sonnet CVRP formal-path diagnostic is running to test
+the new `baseline_policy` surface:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-baseline-policy-sonnet-3r-20260507T153355Z
+pid=2216228
+scion_commit=605cfa5
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=3
+agentic_proposal=true
+disable_early_stop=true
+force_surface=baseline_policy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+started_utc=2026-05-07T15:33:55Z
+```
+
+The process was launched with `setsid`/`nohup` via the run-local
+`run_experiment.sh`, so it should remain independent of the interactive
+session. Initial bounded status at startup reported `total_rounds=0`,
+`n_experiments=0`, `champion_version=1`, frozen budget `0/2`, and
+`balance_exhausted=false`. No completion or solver-quality interpretation is
+recorded yet; analyze only bounded artifacts first after `exit.txt` appears.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
