@@ -26,14 +26,15 @@ enough to continue, validate, freeze, promote, or abandon.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
 - Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
-  API guidance and APS preview/planner compactness have been repaired, and the
-  post-repair five-round Sonnet CVRP smoke has been post-audited. The tested
-  policy surfaces now clear Verification and reach real VRP screening, but
-  screening signal remains weak/tie-dominated. The next decision point is
-  policy-surface efficacy and observability, especially making
-  `neighborhood_portfolio` meaningful without prior generated registry
-  operators or adding a bounded next surface such as destroy/repair or
-  acceptance/restart.
+  API guidance has been repaired, and the APS observation-budget/recovery fix
+  after `af4ab5b` has been validated by a one-round forced
+  `algorithm_blueprint` Sonnet CVRP formal smoke. APS is fixed enough to
+  unblock proposal work, though observation headroom is still low. The next
+  decision point is `algorithm_blueprint` audit/contract/reporting,
+  especially preserving and reporting required `algorithm_*` runtime fields
+  through formal screening metrics and campaign summaries before longer runs or
+  more compactness work. This remains control-path evidence, not solver-quality
+  evidence, and there has been no promotion.
 
 ## Required Reading Order
 
@@ -94,7 +95,8 @@ For experiment analysis:
   fields.
 - CVRP exposes multiple research surfaces:
   `route_local`, `route_pair`, `ruin_recreate`, `search_policy`,
-  `construction_policy`, and `neighborhood_portfolio`.
+  `construction_policy`, `neighborhood_portfolio`, and
+  `algorithm_blueprint`.
 - `AgenticProposalSession` exists as a bounded Creative Layer path with proposal
   tools, exposure policy, compact session refs, and tainted artifacts.
 - Selected research surface metadata now propagates through Verification,
@@ -113,6 +115,10 @@ For experiment analysis:
 - APS planner mode now reads compact feedback when available, reads the selected
   surface before code generation/partial finalization, and uses compact static
   preview payloads that omit patch code.
+- APS observation-budget/recovery behavior has been smoke-validated after
+  `af4ab5b`: partial and completed APS artifacts validated under the
+  24000-character observation cap, bounded `observation_budget_exhausted`
+  stops did not fail the sessions, and the completed session produced a patch.
 - Campaign orchestration has been decomposed; `CampaignManager` is mostly a
   facade over proposal, evaluation, promotion, evidence, failure lifecycle, and
   branch-step services.
@@ -134,8 +140,18 @@ Near-term CVRP research-space work:
   `/home/clawd/research/scion-experiments/v04-post-aps-cvrp-sonnet-20260507T083649Z`.
   The analysis is recorded in
   `docs/experiments/v0.4/v0.4-post-aps-cvrp-sonnet-20260507.md`.
-- Improve policy-surface efficacy rather than adding more post-baseline route
-  operators unless the post-run evidence shows accepted-move signal.
+- The forced `algorithm_blueprint` APS budget/recovery smoke has been analyzed:
+  `/home/clawd/research/scion-experiments/v04-forced-blueprint-budget-sonnet-20260507T133711Z`.
+  The analysis is recorded in
+  `docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md`.
+- Treat APS budget/recovery as unblocked for the next slice. The budget
+  headroom is low and may deserve later compaction, but the next work is not
+  another compactness fix or a longer run.
+- Refine `algorithm_blueprint` audit/contract/reporting so required
+  `algorithm_*` runtime fields survive through formal screening pair metrics
+  and campaign summaries.
+- Improve policy-surface efficacy only after the control-path reporting gap is
+  closed; do not treat the latest smoke as solver-quality evidence.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

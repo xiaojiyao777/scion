@@ -17,6 +17,14 @@ The v0.4 focus remains:
   services;
 - use CVRP as the second real problem class for adapter/protocol validation.
 
+Latest interpretation: APS observation-budget/recovery repair from `af4ab5b`
+has now passed a one-round forced `algorithm_blueprint` Sonnet CVRP formal
+smoke. APS is fixed enough to unblock the next control-path slice, but the
+budget headroom is low. The current bottleneck is `algorithm_blueprint`
+audit/contract/reporting, especially preserving and reporting required
+`algorithm_*` runtime fields through formal screening metrics and campaign
+summaries. This is not solver-quality evidence, and no candidate promoted.
+
 ## Current Engineering State
 
 ### Framework Boundary
@@ -1286,12 +1294,101 @@ Validation after the recovery compactness repair:
 1465 passed, 1 skipped in 49.41s
 ```
 
-The current bottleneck is policy-surface efficacy and observability rather than
-gate modernization. The next CVRP slice should either make
-`neighborhood_portfolio` observable when no generated registry operators exist
-or add the next bounded problem-owned surface, such as destroy/repair or
-acceptance/restart, only after defining its invocation point, runtime audit
-fields, and tests.
+## 2026-05-07 Forced Blueprint Budget Sonnet Smoke
+
+A detached one-round Sonnet CVRP formal-path smoke validated the APS
+observation-budget/recovery repair after `af4ab5b Bound APS observation budget
+artifacts`.
+
+Run root:
+
+```text
+/home/clawd/research/scion-experiments/v04-forced-blueprint-budget-sonnet-20260507T133711Z
+```
+
+Configuration:
+
+```text
+model=claude-sonnet-4-6
+rounds=1
+agentic_proposal=true
+disable_early_stop=true
+force_surface=algorithm_blueprint
+cvrp_time_limit_sec=10
+```
+
+Outcome:
+
+```text
+exit_code=0
+total_rounds=1
+n_experiments=1
+n_steps=1
+stop=max_rounds_exhausted
+champion=v1_r0
+active_branches=0
+promotions=0
+frozen_budget_used=0
+frozen_budget_limit=2
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+```
+
+The forced surface worked for the evaluated round:
+`change_locus=algorithm_blueprint`, `action=modify`, and
+`target_file=policies/algorithm_blueprint.py`. Surface coverage recorded
+`modify/algorithm_blueprint: 1`, with family coverage
+`algorithm_blueprint: 1`.
+
+APS budget/recovery is fixed enough to unblock. The delegated analysis found
+no `agentic recovery artifact invalid`,
+`tool budget exceeded: observation_chars`, or `result_too_large` matches. The
+partial APS session used `23502/24000` observation characters, the completed
+session used `23990/24000`, and CLI inspect validated both artifacts with
+`validation.ok=true` and `errors=[]`. Compact transcripts still contain
+bounded `observation_budget_exhausted` stops, but the sessions did not fail and
+the completed session produced a patch. Headroom is therefore very low, but
+more compaction is no longer the blocking item.
+
+The first session produced only a partial hypothesis. The second completed
+session used the same idempotency key and same hypothesis object, and included
+a patch. No explicit `resume_context` or `recovered_partial_hypothesis` was
+reported; the behavior was a new APS/code session over the approved
+hypothesis, not a semantically fresh proposal.
+
+Contract, Verification, and canary passed. Screening produced 16/16 valid
+pairs with 0 failures, `win_rate=0.125`, `median_delta=0.0`, and
+`statistical_status=tie`. The candidate was abandoned for
+`SCREENING_FAIL_WIN_RATE` / `T4 win_rate < 0.3`. No promotion occurred and no
+validation or frozen evidence was produced.
+
+The generated blueprint enabled the algorithm path with
+`nearest_neighbor`, `nearest_neighbor_demand_bias`, and `demand_descending`
+construction methods, `construction_keep_top_k=2`,
+`baseline_time_fraction=0.75`, local search
+`intra_route_2opt` / `inter_route_relocate` with `rounds=2` and `top_k=32`,
+and restart enabled with `stagnation=8`. The V8 tiny runtime audit showed
+`algorithm_blueprint_loaded=true`, `active=true`, `errors=0`, and phases
+including `plan_loaded`, `construction_ensemble`, `baseline`, and
+`local_search`.
+
+This is valid control-path evidence only. Formal screening raw metrics showed
+indirect algorithm-blueprint effects such as `baseline_time_fraction=0.75` and
+construction-mode changes, but explicit `algorithm_*` fields were still missing
+from screening pair runtime metrics and the campaign screening summary.
+
+Detailed delegated analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md
+```
+
+The current bottleneck is now `algorithm_blueprint`
+audit/contract/reporting rather than APS compactness, gate modernization, or
+longer CVRP runs. The next CVRP slice should preserve and report the required
+`algorithm_*` runtime fields through formal screening pair metrics and campaign
+summaries before judging solver quality or broadening algorithm development.
 
 ## Remaining Optimization Backlog
 
@@ -1303,12 +1400,13 @@ P1:
 
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
-- CVRP formal research needs implementation slices for problem-owned algorithm
-  surfaces beyond the current policy correctness pass. Next candidates are
-  destroy/repair and acceptance/restart policy surfaces once the CVRP package
-  can expose bounded hooks and runtime audit. A short follow-up CVRP APS smoke
-  should bias toward `construction_policy`, `search_policy`, and
-  `neighborhood_portfolio` before adding more post-baseline route operators.
+- CVRP formal research needs an `algorithm_blueprint`
+  audit/contract/reporting slice before longer runs or new algorithm surfaces.
+  Preserve and report required `algorithm_*` runtime fields through formal
+  screening pair metrics and campaign summaries. Future compactness work may
+  improve the very low APS budget headroom, but it is not the current blocker.
+  Destroy/repair and acceptance/restart surfaces remain later candidates once
+  the CVRP package can expose bounded hooks and runtime audit.
 
 P2:
 
@@ -1326,5 +1424,5 @@ P2:
 - Stale/reconcile semantics still need a dedicated v3-aligned review after this
   formal-readiness run.
 - Legacy/no-adapter V8 objective-only comparison remains intentionally
-  compatibility-only; optimize it only after the active Sonnet CVRP smoke is
-  post-audited.
+  compatibility-only; do not prioritize it ahead of the
+  `algorithm_blueprint` reporting slice.
