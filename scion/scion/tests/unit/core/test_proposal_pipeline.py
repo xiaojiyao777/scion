@@ -165,6 +165,10 @@ def _pipeline(
     agentic_session_timeout_sec: float | None = None,
     lineage_registry=None,
     branch_workspace: str = "/tmp/branch",
+    forced_locus: str | None = "local_search",
+    forced_surface_action: str | None = None,
+    forced_surface_target_file: str | None = None,
+    forced_surface_diagnostic: bool = False,
 ):
     branch = _branch()
     sibling = _branch("sibling")
@@ -189,7 +193,7 @@ def _pipeline(
         get_champion=_champion,
         step_history=[],
         failure_streak={"proposal": 1},
-        consume_forced_locus=lambda: "local_search",
+        consume_forced_locus=lambda: forced_locus,
         search_memory=SimpleNamespace(),
         get_saturation_analyzer=lambda: None,
         get_baseline_metrics=lambda: None,
@@ -206,6 +210,9 @@ def _pipeline(
         campaign_id="camp-1",
         problem_id="toy",
         problem_spec_hash="spec-hash",
+        forced_surface_action=forced_surface_action,
+        forced_surface_target_file=forced_surface_target_file,
+        forced_surface_diagnostic=forced_surface_diagnostic,
     )
     return pipeline, branch, runtime, circuit, failures, balance_exhausted
 
@@ -229,6 +236,30 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
         "sibling"
     ]
     assert pipeline.agentic_outputs == {}
+
+
+def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> None:
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        forced_locus="algorithm_blueprint",
+        forced_surface_action="modify",
+        forced_surface_target_file="policies/algorithm_blueprint.py",
+        forced_surface_diagnostic=True,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert runtime.hypothesis_kwargs["forced_locus"] == "algorithm_blueprint"
+    assert runtime.hypothesis_kwargs["forced_action"] == "modify"
+    assert (
+        runtime.hypothesis_kwargs["forced_target_file"]
+        == "policies/algorithm_blueprint.py"
+    )
+    assert runtime.hypothesis_kwargs["forced_surface_diagnostic"] is True
+    assert pipeline.forced_surface_action is None
+    assert pipeline.forced_surface_target_file is None
+    assert pipeline.forced_surface_diagnostic is False
 
 
 def test_generate_code_failure_routes_proposal_failure() -> None:

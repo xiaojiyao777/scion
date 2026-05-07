@@ -18,6 +18,11 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.config.problem import ProblemSpec
+from scion.core.forced_surface import (
+    surface_action_allowed,
+    surface_target_files,
+    validate_forced_surface_request,
+)
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
 
@@ -54,6 +59,9 @@ class ContextManager:
         branch_workspace: Optional[str] = None,
         failure_streak: Optional[Dict[str, int]] = None,
         forced_locus: Optional[str] = None,
+        forced_action: Optional[str] = None,
+        forced_target_file: Optional[str] = None,
+        forced_surface_diagnostic: bool = False,
         search_memory: Optional[Any] = None,
         saturation_signals: Optional[List[Any]] = None,
         weight_opt_result: Optional[Any] = None,
@@ -75,6 +83,17 @@ class ContextManager:
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
+        forced_request = (
+            validate_forced_surface_request(
+                problem_spec,
+                forced_locus,
+                action=forced_action,
+                target_file=forced_target_file,
+                adapter_spec=adapter_spec,
+            )
+            if forced_locus
+            else None
+        )
         research_surfaces_block = _build_research_surfaces_block(research_surfaces)
         champion_operators_code = _read_champion_research_code(
             champion,
@@ -105,13 +124,13 @@ class ContextManager:
         # T07: Build family tracking and coverage (J-patch: use global step_history)
         all_steps = safe_hypothesis_steps
         targetable_operator_files = _list_champion_operator_files(champion)
-        targetable_policy_files = _list_champion_policy_files(
+        targetable_surface_files = _list_champion_surface_files(
             champion,
             research_surfaces=research_surfaces,
         )
         available_actions = _available_hypothesis_actions(
             targetable_operator_files,
-            targetable_policy_files=targetable_policy_files,
+            targetable_policy_files=targetable_surface_files,
         )
         families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
         exploration_coverage = (
@@ -137,14 +156,19 @@ class ContextManager:
         # Sprint H2 T5: Failure pattern warning
         failure_pattern_warning = _build_failure_pattern_warning(failure_streak or {})
 
-        # I3: Forced locus diversification constraint
+        # I3: Forced locus diversification / diagnostic surface constraint
         locus_constraint = ""
-        if forced_locus:
-            locus_constraint = (
-                f"\n## MANDATORY SEARCH CONSTRAINT\n"
-                f"Your hypothesis MUST target research surface `{forced_locus}`.\n"
-                f"The campaign has detected saturation in the current search direction.\n"
-                f"Exploring `{forced_locus}` is required to find further improvements.\n"
+        if forced_request is not None:
+            surface = _find_research_surface(
+                research_surfaces,
+                forced_request.surface,
+            )
+            locus_constraint = _build_forced_surface_constraint(
+                surface=surface,
+                surface_name=forced_request.surface,
+                action=forced_request.action,
+                target_file=forced_request.target_file,
+                diagnostic=forced_surface_diagnostic,
             )
 
         # J1: Render search memory (cross-branch search history)
@@ -203,7 +227,7 @@ class ContextManager:
             "research_surfaces": research_surfaces_block,
             "available_actions": ", ".join(sorted(available_actions)),
             "targetable_files": ", ".join(
-                sorted(set(targetable_operator_files) | set(targetable_policy_files))
+                sorted(set(targetable_operator_files) | set(targetable_surface_files))
             ),
             "champion_operators_code": champion_operators_code,
             "champion_stats": champion_stats,
@@ -217,6 +241,11 @@ class ContextManager:
             "champion_baselines": champion_baselines,
             "failure_pattern_warning": failure_pattern_warning,
             "locus_constraint": locus_constraint,
+            "forced_surface": forced_request.surface if forced_request else "",
+            "forced_action": forced_request.action if forced_request else "",
+            "forced_target_file": (
+                forced_request.target_file if forced_request else ""
+            ),
             "objective_policy_guidance": objective_policy_guidance,
             "objective_opportunity_profile": objective_opportunity_profile,
             "objective_guidance": objective_guidance,
@@ -446,6 +475,54 @@ def _build_research_surface_interface_spec(surface: Any) -> str:
         lines.append(description)
     _append_research_surface_metadata(lines, surface, prefix="")
     return "\n".join(lines)
+
+
+def _build_forced_surface_constraint(
+    *,
+    surface: Any | None,
+    surface_name: str,
+    action: str | None,
+    target_file: str | None,
+    diagnostic: bool,
+) -> str:
+    lines = ["\n## MANDATORY SEARCH CONSTRAINT"]
+    if diagnostic:
+        lines.append(
+            "A diagnostic experiment-control hook is active for the next "
+            "hypothesis generation."
+        )
+    else:
+        lines.append(
+            "The campaign has detected saturation in the current search "
+            "direction and is forcing locus diversification."
+        )
+    lines.extend(
+        [
+            f"Your hypothesis MUST target research surface `{surface_name}`.",
+            f"Set `change_locus` to `{surface_name}`.",
+        ]
+    )
+    if action:
+        lines.append(f"Set `action` to `{action}`.")
+    elif surface is not None:
+        allowed = [
+            candidate
+            for candidate in ("create_new", "modify", "remove")
+            if surface_action_allowed(surface, candidate)
+        ]
+        if allowed:
+            lines.append(
+                "Choose one legal action for that surface: "
+                + ", ".join(allowed)
+                + "."
+            )
+    if target_file:
+        lines.append(f"Set `target_file` to `{target_file}`.")
+    elif surface is not None:
+        targets = surface_target_files(surface)
+        if targets:
+            lines.append("Declared target files: " + ", ".join(targets) + ".")
+    return "\n".join(lines) + "\n"
 
 
 def _append_research_surface_metadata(
@@ -1133,11 +1210,13 @@ def _read_champion_research_code(
     if operator_code:
         sections.append(operator_code)
 
-    for file_rel in _list_champion_policy_files(
+    for file_rel in _list_champion_surface_files(
         champion,
         research_surfaces=research_surfaces,
     ):
-        sections.append(_read_surface_file(champion, file_rel, label="policy surface"))
+        sections.append(
+            _read_surface_file(champion, file_rel, label="research surface")
+        )
     return "\n\n".join(sections) if sections else "(no research-surface files found)"
 
 
@@ -1681,16 +1760,16 @@ def _list_champion_operator_files(champion: ChampionState) -> list[str]:
     return sorted(files)
 
 
-def _list_champion_policy_files(
+def _list_champion_surface_files(
     champion: ChampionState,
     *,
     research_surfaces: list[Any],
 ) -> list[str]:
     files: set[str] = set()
     for surface in research_surfaces:
-        if getattr(surface, "kind", None) != "policy":
+        if getattr(surface, "kind", None) == "operator":
             continue
-        for target in getattr(surface, "target_files", []) or []:
+        for target in surface_target_files(surface):
             if "*" in str(target):
                 continue
             file_rel = str(target).lstrip("/")
@@ -1699,12 +1778,12 @@ def _list_champion_policy_files(
     return sorted(files)
 
 
-def _policy_surface_targets(research_surfaces: list[Any]) -> list[str]:
+def _surface_file_targets(research_surfaces: list[Any]) -> list[str]:
     files: set[str] = set()
     for surface in research_surfaces:
-        if getattr(surface, "kind", None) != "policy":
+        if getattr(surface, "kind", None) == "operator":
             continue
-        for target in getattr(surface, "target_files", []) or []:
+        for target in surface_target_files(surface):
             target = str(target)
             if "*" not in target:
                 files.add(target.lstrip("/"))
@@ -2569,7 +2648,7 @@ def _read_branch_code(
                     f"### operators/{fname} (branch version)\n```python\n{branch_content}\n```"
                 )
 
-    for file_rel in _policy_surface_targets(research_surfaces or []):
+    for file_rel in _surface_file_targets(research_surfaces or []):
         branch_path = os.path.join(branch_workspace, file_rel)
         champ_path = os.path.join(champion.code_snapshot_path, file_rel)
         if not os.path.isfile(branch_path):
@@ -2586,7 +2665,8 @@ def _read_branch_code(
             champ_content = None
         if champ_content is None or branch_content != champ_content:
             sections.append(
-                f"### {file_rel} (branch policy version)\n```python\n{branch_content}\n```"
+                f"### {file_rel} (branch research-surface version)\n"
+                f"```python\n{branch_content}\n```"
             )
 
     return "\n\n".join(sections) if sections else None

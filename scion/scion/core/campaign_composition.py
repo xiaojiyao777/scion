@@ -77,6 +77,9 @@ def compose_campaign_services(
     use_agentic_proposal: bool = False,
     agentic_artifact_dir: str | None = None,
     agentic_session_timeout_sec: float | None = None,
+    force_surface: str | None = None,
+    force_action: str | None = None,
+    force_target_file: str | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     owner._problem_runtime = ProblemRuntime(
@@ -227,6 +230,8 @@ def compose_campaign_services(
 
         early_stop_controller = EarlyStopController(force_continue=True)
     owner._plateau = PlateauController(early_stop=early_stop_controller)
+    if force_surface is not None:
+        owner._plateau.set_forced_locus(force_surface)
     owner._early_stop = owner._plateau.early_stop
 
     owner._journal = CampaignJournal(owner._registry)
@@ -465,6 +470,9 @@ def compose_campaign_services(
         use_agentic_proposal=use_agentic_proposal,
         agentic_artifact_dir=agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,
+        forced_surface_action=force_action,
+        forced_surface_target_file=force_target_file,
+        forced_surface_diagnostic=force_surface is not None,
     )
     owner._governance = CampaignGovernanceService(
         branch_controller=owner._branch_ctrl,

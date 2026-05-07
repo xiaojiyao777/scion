@@ -150,6 +150,9 @@ class ProposalPipeline:
     campaign_id: str = ""
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    forced_surface_action: str | None = None
+    forced_surface_target_file: str | None = None
+    forced_surface_diagnostic: bool = False
     agentic_outputs: MutableMapping[str, AgenticProposalOutput] = field(
         default_factory=dict
     )
@@ -172,6 +175,16 @@ class ProposalPipeline:
         ]
         branch_workspace = self.branch_workspaces.get(bid)
         champ_snapshot = self._champion_snapshot()
+        forced_locus = self.consume_forced_locus()
+        forced_action = self.forced_surface_action if forced_locus else None
+        forced_target_file = (
+            self.forced_surface_target_file if forced_locus else None
+        )
+        forced_diagnostic = self.forced_surface_diagnostic if forced_locus else False
+        if forced_locus and self.forced_surface_diagnostic:
+            self.forced_surface_action = None
+            self.forced_surface_target_file = None
+            self.forced_surface_diagnostic = False
         context = self.problem_runtime.build_hypothesis_context(
             branch=branch,
             champion=champ_snapshot,
@@ -181,7 +194,10 @@ class ProposalPipeline:
             step_history=self.step_history,
             branch_workspace=branch_workspace,
             failure_streak=dict(self.failure_streak),
-            forced_locus=self.consume_forced_locus(),
+            forced_locus=forced_locus,
+            forced_action=forced_action,
+            forced_target_file=forced_target_file,
+            forced_surface_diagnostic=forced_diagnostic,
             search_memory=self.search_memory,
             saturation_signals=self._compute_saturation_signals(),
             weight_opt_result=self.get_latest_weight_opt_result(),

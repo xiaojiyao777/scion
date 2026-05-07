@@ -1895,6 +1895,114 @@ def test_generic_v2_surface_prompt_has_no_cvrp_or_warehouse_core_terms(
     assert "problem-defined scalar values" in code_ctx["operator_interface_spec"]
 
 
+def test_forced_singleton_config_surface_context_derives_modify_target(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "algorithm_blueprint",
+            "kind": "config",
+            "description": "Top-level algorithm plan.",
+            "targets": {
+                "files": ["policies/algorithm_blueprint.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+                "singleton": True,
+            },
+            "interface": {
+                "required_functions": ["algorithm_plan"],
+                "function_signatures": {
+                    "algorithm_plan": ["instance", "time_limit_sec"]
+                },
+                "return_contract": "bounded plan dict",
+            },
+        },
+    ]
+    spec_v1 = ProblemSpecV1(**payload)
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "algorithm_blueprint.py").write_text(
+        "def algorithm_plan(instance, time_limit_sec):\n"
+        "    return {'enabled': False}\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        forced_locus="algorithm_blueprint",
+        forced_surface_diagnostic=True,
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert ctx["forced_surface"] == "algorithm_blueprint"
+    assert ctx["forced_action"] == "modify"
+    assert ctx["forced_target_file"] == "policies/algorithm_blueprint.py"
+    assert "policies/algorithm_blueprint.py" in ctx["targetable_files"]
+    assert "algorithm_plan" in ctx["champion_operators_code"]
+    assert "diagnostic experiment-control hook" in prompt_text
+    assert "Set `change_locus` to `algorithm_blueprint`." in prompt_text
+    assert "Set `action` to `modify`." in prompt_text
+    assert "Set `target_file` to `policies/algorithm_blueprint.py`." in prompt_text
+
+
+def test_forced_surface_context_rejects_unknown_surface(tmp_path: Path) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["research_surfaces"] = [
+        {
+            "name": "dispatch_policy",
+            "kind": "policy",
+            "description": "Dispatch policy.",
+            "target_files": ["policies/dispatch_policy.py"],
+        },
+    ]
+    spec_v1 = ProblemSpecV1(**payload)
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+
+    with pytest.raises(ValueError, match="unknown research surface 'missing'"):
+        ContextManager().build_hypothesis_context(
+            branch=branch,
+            champion=champion,
+            problem_spec=legacy,
+            active_hypotheses=[],
+            blacklist=[],
+            forced_locus="missing",
+        )
+
+
 def test_validation_and_frozen_raw_metric_refs_stay_out_of_context(
     tmp_path: Path,
 ) -> None:

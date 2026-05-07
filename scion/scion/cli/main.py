@@ -21,6 +21,29 @@ app.add_typer(inspect_app, name="inspect")
 app.add_typer(report_app, name="report")
 
 
+def _validate_cli_forced_surface(
+    spec: object,
+    *,
+    force_surface: str | None,
+    force_action: str | None,
+    force_target_file: str | None,
+):
+    if force_surface is None:
+        return None
+    from scion.core.forced_surface import validate_forced_surface_request
+
+    try:
+        return validate_forced_surface_request(
+            spec,
+            force_surface,
+            action=force_action,
+            target_file=force_target_file,
+        )
+    except ValueError as exc:
+        typer.echo(f"ERROR: invalid --force-surface: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 # ---------------------------------------------------------------------------
 # scion init
 # ---------------------------------------------------------------------------
@@ -76,6 +99,9 @@ def run(
     seeds: Optional[str] = typer.Option(None, "--seeds", help="Path to seed_ledger.yaml"),
     time_limit_sec: Optional[int] = typer.Option(None, "--time-limit-sec", help="Per solver run time limit; defaults to problem solver.time_limit_sec"),
     disable_early_stop: bool = typer.Option(False, "--disable-early-stop", help="Diagnostic mode: do not stop early on idle/stagnation signals"),
+    force_surface: Optional[str] = typer.Option(None, "--force-surface", help="Diagnostic mode: force the next hypothesis to a declared research surface"),
+    force_action: Optional[str] = typer.Option(None, "--force-action", help="Diagnostic mode: force the hypothesis action for --force-surface"),
+    force_target_file: Optional[str] = typer.Option(None, "--force-target-file", help="Diagnostic mode: force the target_file for --force-surface"),
     agentic_proposal: bool = typer.Option(False, "--agentic-proposal", help="Enable AgenticProposalSession for proposal generation"),
     agentic_artifact_dir: Optional[str] = typer.Option(None, "--agentic-artifact-dir", help="APS artifact directory; defaults to campaign_dir/agentic_sessions when --agentic-proposal is enabled"),
     agentic_session_timeout_sec: Optional[float] = typer.Option(None, "--agentic-session-timeout-sec", help="APS max wall time per session in seconds"),
@@ -100,6 +126,14 @@ def run(
     if not problem_yaml.exists():
         typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
         raise typer.Exit(code=1)
+    if force_surface is None and (
+        force_action is not None or force_target_file is not None
+    ):
+        typer.echo(
+            "ERROR: --force-action and --force-target-file require --force-surface",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig
 
@@ -109,6 +143,7 @@ def run(
     metric_specs = None
     objective_policy = None
     operator_execute_signature = None
+    forced_request = None
     problem_v1_path = problem_dir / "problem-v1.yaml"
     if problem_v1_path.exists():
         from scion.problem.preflight import (
@@ -126,17 +161,32 @@ def run(
             run_runtime_preflight(problem_v1)
             bridge = bridge_problem_spec_v1(problem_v1)
             spec = bridge.problem_spec
+            forced_request = _validate_cli_forced_surface(
+                spec,
+                force_surface=force_surface,
+                force_action=force_action,
+                force_target_file=force_target_file,
+            )
             adapter = load_problem_adapter(problem_v1)
             run_runtime_preflight(problem_v1, adapter=adapter)
             metric_specs = bridge.metric_specs
             objective_policy = bridge.objective_policy
             operator_execute_signature = bridge.operator_execute_signature
+        except typer.Exit:
+            raise
         except RuntimeDependencyPreflightError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1)
         except Exception as exc:
             typer.echo(f"ERROR: failed to load problem-v1 adapter: {exc}", err=True)
             raise typer.Exit(code=1)
+    if forced_request is None:
+        forced_request = _validate_cli_forced_surface(
+            spec,
+            force_surface=force_surface,
+            force_action=force_action,
+            force_target_file=force_target_file,
+        )
 
     # Protocol config
     if protocol:
@@ -268,12 +318,18 @@ def run(
         use_agentic_proposal=agentic_proposal,
         agentic_artifact_dir=resolved_agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,
+        force_surface=forced_request.surface if forced_request else None,
+        force_action=forced_request.action if forced_request else None,
+        force_target_file=forced_request.target_file if forced_request else None,
     )
 
+    forced_surface_note = (
+        f", force_surface={forced_request.surface}" if forced_request else ""
+    )
     typer.echo(
         f"Starting campaign: {spec.name} "
         f"(max_rounds={rounds}, mock_llm={mock_llm}, "
-        f"disable_early_stop={disable_early_stop})"
+        f"disable_early_stop={disable_early_stop}{forced_surface_note})"
     )
     mgr.run(max_rounds=rounds)
 

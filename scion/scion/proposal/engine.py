@@ -499,7 +499,7 @@ def _split_hypothesis_context(
         f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
         f"## Sibling Branches\n{D['sibling_summary']}\n\n"
         f"## Analysis Steps (follow in order)\n"
-        f"1. Read every relevant champion research-surface file. For operator files, note: what move type, what objective(s) it improves or protects, what it cannot improve. For policy files, note the budget or scheduling lever being changed.\n"
+        f"1. Read every relevant champion research-surface file. For operator files, note: what move type, what objective(s) it improves or protects, what it cannot improve. For policy/config files, note the declared bounded lever being changed.\n"
         f"2. Identify specific GAPS \u2014 what improvements are IMPOSSIBLE with the current pool?\n"
         f"3. Check experiment history \u2014 which attempts at filling gaps failed, and WHY?\n"
         f"4. Only then propose a hypothesis targeting an identified gap.\n"

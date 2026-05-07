@@ -122,6 +122,13 @@ The v0.4 focus remains:
   post-baseline registry-operator toggle/round limit. Invalid plans record
   `algorithm_blueprint_errors`, do not take over the lifecycle, and fail
   selected-surface runtime audit.
+- `scion run --force-surface <surface>` is a diagnostic experiment-control
+  hook for proposal smoke tests. It accepts only declared research surfaces,
+  fails closed during CLI/campaign startup for unknown surfaces, and can derive
+  `action=modify` plus the singleton target file for surfaces such as
+  `algorithm_blueprint`. This hook is not a Decision input, not solver-quality
+  evidence, and should be used to force algorithm-blueprint smoke coverage
+  without hardcoding CVRP or any specific surface into framework core.
 - CVRP policy-surface prompts and adapter interface rendering now expose the
   safe `CvrpInstance` policy API explicitly: `customer_ids`, `customer_count`,
   `demands[customer_id]`, `capacity`, and `distance(i, j)`. The problem package
@@ -159,15 +166,15 @@ The v0.4 focus remains:
 
 Full Scion test suite:
 
-```bash
-cd scion
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests -q
+```text
+cwd: /home/clawd/research/or-autoresearch-agent/scion
+command: /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests -q
 ```
 
 Latest result:
 
 ```text
-1457 passed, 1 skipped in 47.20s
+1463 passed, 1 skipped in 48.27s
 ```
 
 Latest focused APS compactness/proposal validation:
@@ -1209,9 +1216,11 @@ Interpretation:
 
 The current APS repair closes that surface-context compactness gap: surface
 listing and `context.read_surface` compact reads are bounded by default, and the
-next algorithm-blueprint check should be a forced or strongly steered smoke that
-verifies the agent can actually inspect and select `algorithm_blueprint`. The
-focused APS/proposal regression set passed after the repair:
+next algorithm-blueprint check can use the diagnostic forced-surface control
+(`--force-surface algorithm_blueprint`) to verify the agent can actually
+inspect and select that declared surface. Such a forced smoke remains
+control-path evidence only; it must not be promoted to solver-quality evidence.
+The focused APS/proposal regression set passed after the repair:
 `101 passed in 0.94s` from `scion/`.
 
 The current bottleneck is policy-surface efficacy and observability rather than

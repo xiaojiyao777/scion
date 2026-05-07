@@ -84,8 +84,23 @@ class CampaignManager:
         use_agentic_proposal: bool = False,
         agentic_artifact_dir: Optional[str] = None,
         agentic_session_timeout_sec: Optional[float] = None,
+        force_surface: Optional[str] = None,
+        force_action: Optional[str] = None,
+        force_target_file: Optional[str] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
+        from scion.core.forced_surface import validate_forced_surface_request
+
+        forced_request = None
+        if force_surface is not None:
+            forced_request = validate_forced_surface_request(
+                problem_spec,
+                force_surface,
+                action=force_action,
+                target_file=force_target_file,
+                adapter_spec=getattr(adapter, "spec", None)
+                or getattr(adapter, "_spec", None),
+            )
 
         compose_campaign_services(
             self,
@@ -110,6 +125,9 @@ class CampaignManager:
             use_agentic_proposal=use_agentic_proposal,
             agentic_artifact_dir=agentic_artifact_dir,
             agentic_session_timeout_sec=agentic_session_timeout_sec,
+            force_surface=forced_request.surface if forced_request else None,
+            force_action=forced_request.action if forced_request else None,
+            force_target_file=forced_request.target_file if forced_request else None,
         )
 
     # ------------------------------------------------------------------

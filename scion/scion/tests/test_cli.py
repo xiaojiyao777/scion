@@ -39,6 +39,15 @@ def test_run_help_exposes_agentic_proposal_options() -> None:
     assert "--agentic-session-timeout-sec" in result.output
 
 
+def test_run_help_exposes_force_surface_options() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--force-surface" in result.output
+    assert "--force-action" in result.output
+    assert "--force-target-file" in result.output
+
+
 def _write_minimal_problem(tmp_path: Path) -> Path:
     root_dir = tmp_path / "workspace"
     root_dir.mkdir()
@@ -65,6 +74,7 @@ def _write_minimal_problem_v1_package(
     tmp_path: Path,
     *,
     required_python_modules: list[str] | None = None,
+    research_surfaces_block: str = "",
 ) -> Path:
     root_dir = tmp_path / "workspace"
     root_dir.mkdir()
@@ -122,6 +132,7 @@ def _write_minimal_problem_v1_package(
                 '  base_class_import: "scion.problems.fakecli.operators.base:FakeOperator"',
                 '  execute_signature: "execute(self, solution, rng) -> Solution"',
                 "  categories: []",
+                research_surfaces_block,
                 "objective_policy:",
                 "  mode: single",
                 "objectives:",
@@ -285,6 +296,128 @@ def test_run_leaves_agentic_proposal_disabled_by_default(
     assert kwargs["use_agentic_proposal"] is False
     assert kwargs["agentic_artifact_dir"] is None
     assert kwargs["agentic_session_timeout_sec"] is None
+
+
+_FORCE_SURFACE_BLOCK = "\n".join(
+    [
+        "research_surfaces:",
+        "  - name: algorithm_blueprint",
+        "    kind: config",
+        "    description: Forced surface test",
+        "    targets:",
+        "      files:",
+        "        - policies/algorithm_blueprint.py",
+        "      create_new_allowed: false",
+        "      modify_allowed: true",
+        "      remove_allowed: false",
+        "      singleton: true",
+    ]
+)
+
+
+def test_run_force_surface_threads_validated_request_to_campaign_manager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem_v1_package(
+        tmp_path,
+        research_surfaces_block=_FORCE_SURFACE_BLOCK,
+    )
+    captured: list[dict[str, object]] = []
+    fake_adapter = object()
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+        def run(self, max_rounds: int = 1000) -> None:
+            captured[-1]["max_rounds"] = max_rounds
+
+        def get_state(self) -> dict[str, object]:
+            return {
+                "n_experiments": 0,
+                "champion_version": 1,
+                "n_active_branches": 0,
+            }
+
+    import scion.core.campaign as campaign_module
+    import scion.problem.loader as loader_module
+    import scion.problem.preflight as preflight_module
+
+    monkeypatch.setattr(loader_module, "load_problem_adapter", lambda spec: fake_adapter)
+    monkeypatch.setattr(preflight_module, "run_runtime_preflight", lambda *args, **kwargs: None)
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--force-surface",
+            "algorithm_blueprint",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    kwargs = captured[0]
+    assert kwargs["force_surface"] == "algorithm_blueprint"
+    assert kwargs["force_action"] == "modify"
+    assert kwargs["force_target_file"] == "policies/algorithm_blueprint.py"
+    assert kwargs["max_rounds"] == 1
+    assert "force_surface=algorithm_blueprint" in result.output
+
+
+def test_run_force_surface_rejects_unknown_before_campaign_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_yaml = _write_minimal_problem_v1_package(
+        tmp_path,
+        research_surfaces_block=_FORCE_SURFACE_BLOCK,
+    )
+
+    class FakeCampaignManager:
+        def __init__(self, **kwargs: object) -> None:
+            raise AssertionError("CampaignManager should not be constructed")
+
+    import scion.core.campaign as campaign_module
+    import scion.problem.loader as loader_module
+    import scion.problem.preflight as preflight_module
+
+    monkeypatch.setattr(
+        loader_module,
+        "load_problem_adapter",
+        lambda spec: pytest.fail("adapter should not be loaded"),
+    )
+    monkeypatch.setattr(preflight_module, "run_runtime_preflight", lambda *args, **kwargs: None)
+    monkeypatch.setattr(campaign_module, "CampaignManager", FakeCampaignManager)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--mock-llm",
+            "--rounds",
+            "1",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--problem",
+            str(problem_yaml),
+            "--force-surface",
+            "missing_surface",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "invalid --force-surface" in result.output
+    assert "missing_surface" in result.output
+    assert "algorithm_blueprint" in result.output
 
 
 def test_run_problem_v1_calls_runtime_preflight(

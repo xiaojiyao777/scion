@@ -16,6 +16,16 @@ Inputs come from campaign services: current branch, champion snapshot, active/bl
 
 LLM failures are routed as proposal failures. `LLMBalanceError` marks balance exhausted; retry exhaustion, format errors, timeout, and schema validation errors increment circuit breaker state and call the campaign failure handler. Successful hypothesis generation creates a `HypothesisRecord` with classifier-derived family metadata.
 
+The same forced-locus path is also used by the CLI diagnostic
+`--force-surface` hook. CLI/campaign startup validates the requested surface
+against declared research surfaces, derives action/target only from generic
+surface metadata, and fails closed before campaign launch for unknown surfaces.
+For a singleton concrete target such as a config surface, the proposal context
+can therefore receive `action=modify` and the exact declared `target_file`
+without hardcoding CVRP or `algorithm_blueprint` in framework core. This is an
+experiment-control hook for smoke coverage, not a Decision input and not
+solver-quality evidence.
+
 As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
 Session path (`use_agentic_proposal` or injected `agentic_session`). The default
 path above remains the normal behavior. The APS-1 skeleton wraps the current
@@ -105,7 +115,9 @@ Hypothesis context includes:
 - runtime feedback from verification/screening facts;
 - search memory and research log;
 - saturation/weight optimization feedback;
-- forced locus constraint when governance requests diversification.
+- forced locus constraint when governance requests diversification or a
+  diagnostic `--force-surface` run steers the next hypothesis to a declared
+  research surface.
 
 Code and fix contexts deliberately exclude experiment history and protocol stats. They are implementation contexts, not research decision contexts.
 
@@ -145,6 +157,11 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
   on proposals/records. Free-text rationale fields do not affect identity.
 
 This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
+
+`--force-surface` is intentionally limited to this declared-surface model. It
+does not create new loci, does not bypass `ContractGate`, and does not feed
+`DecisionFeatures`; it only constrains one hypothesis-generation prompt for
+diagnostic and forced algorithm-blueprint smoke runs.
 
 ## Search Memory and Taxonomy
 
