@@ -50,6 +50,13 @@ from scion.proposal.tools import (
 )
 
 
+_COMPACT_FEEDBACK_TOOL_NAMES = {
+    "memory.query",
+    "feedback.query_screening",
+    "feedback.query_runtime",
+}
+
+
 class FakeCreative:
     def __init__(
         self,
@@ -900,6 +907,41 @@ def test_schema_target_and_interface_previews_catch_static_issues(
     )
 
 
+def test_target_permission_preview_is_compact_without_full_surface_payload(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+
+    observation = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "search_policy",
+            "action": "modify",
+            "target_file": "policies/search_policy.py",
+        },
+        context,
+    )
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert payload["surface"] == {
+        "name": "search_policy",
+        "kind": "policy",
+        "allowed_actions": ["modify"],
+        "declared_targets": ["policies/search_policy.py"],
+    }
+    assert payload["permission"]["target_declared"] is True
+    assert payload["issues"] == []
+    assert "algorithm" not in rendered
+    assert "bounds" not in rendered
+    assert "interface" not in rendered
+    assert "prompt" not in rendered
+    assert "code_content" not in rendered
+
+
 def test_contract_preview_is_static_and_does_not_materialize_workspace(
     tmp_path: Path,
 ) -> None:
@@ -925,6 +967,50 @@ def test_contract_preview_is_static_and_does_not_materialize_workspace(
     assert observation.structured_payload["protocol_run"] is False
     assert observation.structured_payload["decision_run"] is False
     assert after == before
+
+
+def test_contract_preview_patch_payload_is_compact_without_code_content(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    patch_payload = _valid_policy_patch_payload()
+
+    schema = registry.call(
+        "proposal.schema_preview",
+        {"patch": patch_payload},
+        context,
+    )
+    contract = registry.call(
+        "proposal.contract_preview",
+        {
+            "hypothesis": _valid_hypothesis_payload(),
+            "patch": patch_payload,
+        },
+        context,
+    )
+    schema_patch = schema.structured_payload["patch"]["patch"]
+    contract_patch = contract.structured_payload["patch"]["patch"]
+    rendered = json.dumps(
+        [schema.structured_payload, contract.structured_payload],
+        sort_keys=True,
+    )
+
+    assert schema.is_error is False
+    assert contract.is_error is False
+    assert schema_patch["file_path"] == "policies/search_policy.py"
+    assert schema_patch["action"] == "modify"
+    assert schema_patch["code_char_count"] == len(patch_payload["code_content"])
+    assert len(schema_patch["code_digest"]) == 64
+    assert schema_patch["functions"] == [
+        "baseline_time_fraction",
+        "max_operator_rounds",
+    ]
+    assert schema_patch["classes"] == []
+    assert contract_patch == schema_patch
+    assert contract.structured_payload["patch"]["checks"]
+    assert "code_content" not in rendered
+    assert "return 0.35" not in rendered
 
 
 def test_cvrp_policy_preview_good_defaults_pass(tmp_path: Path) -> None:
@@ -1079,6 +1165,9 @@ def test_cvrp_contract_preview_records_problem_preview_failure_without_raw_refs(
     assert observation.is_error is False
     assert observation.structured_payload["passed"] is False
     assert observation.structured_payload["patch"]["problem_preview"]["passed"] is False
+    assert "issues" in observation.structured_payload["patch"]["problem_preview"]
+    assert "synthetic_instance" not in rendered
+    assert "code_content" not in rendered
     assert "raw_metrics_ref" not in rendered
     assert "SECRET_RAW" not in rendered
 
@@ -1586,6 +1675,49 @@ def test_agentic_idempotency_key_is_stable_and_anchor_config_sensitive(
     assert key != compute_agentic_idempotency_key(changed_request, config)
 
 
+def test_partial_hypothesis_idempotency_key_is_surface_sensitive(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    route_hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="route_local",
+            action="modify",
+            target_file="operators/local_a.py",
+        )
+    )
+    policy_hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
+    request = AgenticProposalRequest(
+        campaign_id="camp-1",
+        branch=context.branch,
+        champion=context.champion,
+        hypothesis_context={},
+        build_code_context=lambda _hypothesis: {"kind": "code"},
+        problem_id=context.problem_id,
+        problem_spec_hash=context.problem_spec_hash,
+        tool_context=context,
+    )
+
+    route_output = AgenticProposalSession(
+        FakeCreative(hypothesis=route_hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    ).run(request)
+    policy_output = AgenticProposalSession(
+        FakeCreative(hypothesis=policy_hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    ).run(request)
+
+    assert route_output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert policy_output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert route_output.selected_surface == "route_local"
+    assert policy_output.selected_surface == "search_policy"
+    assert route_output.idempotency_key != policy_output.idempotency_key
+    assert route_output.idempotency_key != compute_agentic_idempotency_key(
+        request,
+        AgenticToolLoopConfig(),
+    )
+
+
 def test_agentic_session_step_limit_fail_closes_missing_required_context(
     tmp_path: Path,
 ) -> None:
@@ -1697,6 +1829,69 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
     assert client.tool_names[:2] == ["plan_proposal_tool_call"] * 2
     assert "allowed_tool_specs" in client.prompts[0]
     assert "raw_metrics_ref" not in client.prompts[0]
+
+
+def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_read(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    tool_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("tool_name")
+    ]
+    tool_names = [event["tool_name"] for event in tool_events]
+    code_observations = creative.code_contexts[0]["agentic_tool_observations"]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert any(
+        event.metadata.get("error_code")
+        == "planner_stopped_before_required_context"
+        for event in output.transcript
+    )
+    assert any(name in tool_names for name in _COMPACT_FEEDBACK_TOOL_NAMES)
+    assert any(
+        event["tool_name"] == "context.read_surface"
+        and event["selection_source"] == "selected_surface_required"
+        for event in tool_events
+    )
+    assert any(
+        observation["tool_name"] == "context.read_surface"
+        and observation["structured_payload"]["surface"]["name"] == "search_policy"
+        for observation in code_observations
+    )
+    assert any(
+        observation["tool_name"] in _COMPACT_FEEDBACK_TOOL_NAMES
+        for observation in creative.hypothesis_contexts[0]["agentic_tool_observations"]
+    )
 
 
 def test_agentic_session_bounded_planner_rejects_forbidden_tool(
@@ -1958,8 +2153,10 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
         AgenticTerminationReason.TOOL_LOOP_LIMIT,
         AgenticTerminationReason.REPEATED_TOOL_CALL,
     }
-    assert len(read_surface_events) == 1
+    assert len(read_surface_events) == 2
     assert read_surface_events[0]["error_code"] == "not_found"
+    assert read_surface_events[1]["status"] == "ok"
+    assert read_surface_events[1]["selection_source"] == "selected_surface_required"
     assert creative.planner_contexts[1]["tool_arg_guidance"]["context.read_surface"][
         "allowed_surface_ids"
     ] == ["route_local", "search_policy"]

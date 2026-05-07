@@ -329,13 +329,18 @@ research_surfaces:
         choose a small bounded round cap.
       implementation_guidance: >-
         Keep all policy functions deterministic, side-effect free, and bounded
-        by instance size and time_limit_sec. Return scalar policy values only;
-        let the solver execute the schedule.
+        by instance size and time_limit_sec. For instance features, use
+        instance.customer_ids, instance.customer_count,
+        instance.demands[customer_id], instance.capacity, and
+        instance.distance(i, j). Return scalar policy values only; let the
+        solver execute the schedule.
       anti_patterns: >-
         Do not import solver internals, read benchmark files, mutate the
-        instance, return values outside the declared bounds, increase operator
-        rounds after no_accepted_moves evidence without a candidate-quality
-        rationale, or encode case-name-specific behavior.
+        instance, use instance.customers or other undeclared instance aliases,
+        return values outside the declared bounds, increase operator rounds
+        after no_accepted_moves evidence without a candidate-quality rationale,
+        or encode case-name-specific behavior. Never use instance.customers; it
+        is not part of the CVRP instance API.
     target_files:
       - "policies/search_policy.py"
     prompt_hint: "Tune baseline time fraction and post-baseline operator budget."
@@ -425,11 +430,16 @@ research_surfaces:
       implementation_guidance: >-
         Keep policy functions deterministic and side-effect free. Return only
         predeclared mode strings and numeric bias values within the declared
-        range; the solver owns route construction and feasibility checks.
+        range; the solver owns route construction and feasibility checks. For
+        instance features, use instance.customer_ids, instance.customer_count,
+        instance.demands[customer_id], instance.capacity, and
+        instance.distance(i, j).
       anti_patterns: >-
         Do not import solver internals, read benchmark files, create routes
-        directly, mutate the instance, return undeclared modes, branch on raw
-        file paths, or simulate neighborhood search inside construction policy.
+        directly, mutate the instance, use instance.customers or other
+        undeclared instance aliases, return undeclared modes, branch on raw file
+        paths, or simulate neighborhood search inside construction policy.
+        Never use instance.customers; it is not part of the CVRP instance API.
     target_files:
       - "policies/construction_policy.py"
     prompt_hint: "Select a bounded initial construction mode and bias."
@@ -550,12 +560,17 @@ research_surfaces:
         Keep all functions deterministic and side-effect free. Return only
         declared component names, finite bounded weights, and small bounded
         integer limits; prefer small top_k, max_rounds, and attempt caps. The
-        solver owns all route edits and feasibility checks.
+        solver owns all route edits and feasibility checks. For instance
+        features, use instance.customer_ids, instance.customer_count,
+        instance.demands[customer_id], instance.capacity, and
+        instance.distance(i, j).
       anti_patterns: >-
         Do not import solver internals, read benchmark files, create routes,
-        mutate the instance, invent component names, or return broad top_k
-        values, unbounded loops, weights, candidate limits, or schedules that
-        spend more attempts on components with no accepted-move evidence.
+        mutate the instance, use instance.customers or other undeclared
+        instance aliases, invent component names, or return broad top_k values,
+        unbounded loops, weights, candidate limits, or schedules that spend more
+        attempts on components with no accepted-move evidence. Never use
+        instance.customers; it is not part of the CVRP instance API.
     target_files:
       - "policies/neighborhood_portfolio.py"
     prompt_hint: "Schedule bounded registry neighborhood component families."
@@ -591,10 +606,11 @@ llm_hints:
     CvrpSolution. They must use bounded route-local or route-pair neighborhoods,
     top-k filters, sampling, or early no-op exits. CvrpSolution.routes is a
     tuple of implicit-depot customer routes. CvrpInstance exposes capacity,
-    depot, customer_ids, node_ids, demand(customer_id), distance(i, j),
-    route_load(route), and route_distance(route). Do not use nonexistent
-    attributes such as vehicle_capacity, demands, distance_matrix, customers,
-    or num_customers.
+    depot, customer_ids, customer_count, node_ids, demands,
+    demand(customer_id), distance(i, j), route_load(route), and
+    route_distance(route). Use demands[customer_id] for direct demand lookup.
+    Do not use nonexistent attributes such as vehicle_capacity,
+    distance_matrix, customers, or num_customers. Never use instance.customers.
 
 family_taxonomy:
   version: "cvrp-route-v1"

@@ -1580,6 +1580,9 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "prompt.hypothesis_guidance:" in prompt_text
     assert "prompt.implementation_guidance:" in prompt_text
     assert "prompt.anti_patterns:" in prompt_text
+    assert "instance.customer_ids, instance.customer_count" in prompt_text
+    assert "instance.demands[customer_id]" in prompt_text
+    assert "Never use instance.customers" in prompt_text
     assert ctx["available_actions"] == "create_new, modify"
     assert "remove" not in ctx["available_actions"]
 
@@ -1603,6 +1606,8 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Active surface: search_policy [policy]" in code_prompt_text
     assert "module-level policy file; no class is required" in code_prompt_text
     assert "def baseline_time_fraction" in code_prompt_text
+    assert "`instance.customer_count`" in code_prompt_text
+    assert "Never use `instance.customers`" in code_prompt_text
 
     construction_hypothesis = HypothesisProposal(
         hypothesis_text="Tune initial construction mode.",

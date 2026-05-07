@@ -43,6 +43,11 @@ _RAW_REF_MARKERS = (
     "SECRET_FROZEN",
     "SECRET_HOLDOUT",
 )
+_COMPACT_FEEDBACK_TOOLS = (
+    "memory.query",
+    "feedback.query_screening",
+    "feedback.query_runtime",
+)
 
 
 class AgenticProposalStatus(str, Enum):
@@ -88,7 +93,7 @@ class AgenticToolLoopConfig:
     """Deterministic limits for one proposal-session tool loop."""
 
     max_steps: int = 12
-    max_tool_calls: int = 8
+    max_tool_calls: int = 9
     max_observation_chars: int = 24000
     max_wall_time_sec: float = 120.0
     max_repeated_tool_calls: int = 2
@@ -671,6 +676,18 @@ class AgenticProposalSession:
                 return self._persist(output, state)
 
             if tool_context is not None:
+                selected_surface_observations = (
+                    self._run_selected_surface_observation_tool(
+                        tool_context,
+                        hypothesis,
+                        state,
+                        observations,
+                    )
+                )
+                observations.extend(selected_surface_observations)
+                evidence.extend(
+                    _evidence_from_observations(selected_surface_observations)
+                )
                 preview_observations = self._run_hypothesis_preview_tools(
                     tool_context,
                     hypothesis,
@@ -746,6 +763,14 @@ class AgenticProposalSession:
                 )
                 return self._persist(output, state)
         elif tool_context is not None:
+            selected_surface_observations = self._run_selected_surface_observation_tool(
+                tool_context,
+                hypothesis,
+                state,
+                observations,
+            )
+            observations.extend(selected_surface_observations)
+            evidence.extend(_evidence_from_observations(selected_surface_observations))
             preview_observations = self._run_hypothesis_preview_tools(
                 tool_context,
                 hypothesis,
@@ -776,6 +801,11 @@ class AgenticProposalSession:
                 code_context["agentic_resume_context"] = _sanitize_agentic_value(
                     request.resume_context
                 )
+            if observations:
+                code_context["agentic_tool_observations"] = [
+                    _observation_prompt_payload(observation)
+                    for observation in observations
+                ]
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
             patch = self._creative.generate_code(code_context)
         except self._SESSION_ERROR_TYPES as exc:
@@ -875,7 +905,10 @@ class AgenticProposalSession:
             session_id=session_id,
             campaign_id=request.campaign_id,
             branch_id=request.branch.branch_id,
-            idempotency_key=self.idempotency_key_for_request(request),
+            idempotency_key=self._idempotency_key_for_hypothesis(
+                request,
+                hypothesis,
+            ),
             champion_version=_champion_version(request.champion),
             champion_weight_revision=_champion_weight_revision(request.champion),
             problem_id=request.problem_id,
@@ -912,7 +945,10 @@ class AgenticProposalSession:
             session_id=session_id,
             campaign_id=request.campaign_id,
             branch_id=request.branch.branch_id,
-            idempotency_key=self.idempotency_key_for_request(request),
+            idempotency_key=self._idempotency_key_for_hypothesis(
+                request,
+                hypothesis,
+            ),
             champion_version=_champion_version(request.champion),
             champion_weight_revision=_champion_weight_revision(request.champion),
             problem_id=request.problem_id,
@@ -925,6 +961,16 @@ class AgenticProposalSession:
             self_check=self_check or AgenticSelfCheck(schema_valid=True),
             termination_reason=termination_reason,
             failure_detail=detail,
+        )
+
+    def _idempotency_key_for_hypothesis(
+        self,
+        request: AgenticProposalRequest,
+        hypothesis: HypothesisProposal,
+    ) -> str:
+        return compute_agentic_idempotency_key(
+            replace(request, approved_hypothesis=hypothesis),
+            self._tool_loop_config,
         )
 
     def _failed_output(
@@ -987,6 +1033,10 @@ class AgenticProposalSession:
             ("memory.query", {}),
             (
                 "feedback.query_screening",
+                {"branch_id": state.branch_id},
+            ),
+            (
+                "feedback.query_runtime",
                 {"branch_id": state.branch_id},
             ),
         )
@@ -1085,7 +1135,7 @@ class AgenticProposalSession:
             return self._run_hypothesis_observation_tools(context, state)
 
         while not self._tool_loop_limit_reached(state):
-            if self._required_context_satisfied(observations):
+            if self._planner_context_satisfied(context, observations):
                 self._record_loop_stop(state, "required_context_satisfied")
                 break
             planner_context = {
@@ -1131,9 +1181,47 @@ class AgenticProposalSession:
                 )
 
             if not planned or getattr(planned, "stop", False):
+                missing = self._missing_planner_context_error(context, observations)
+                if missing is not None:
+                    state.note(
+                        AgenticProposalPhase.DIAGNOSE,
+                        "Planner stopped before required compact context; using fixed APS-0 tool plan.",
+                        metadata={
+                            "status": "error",
+                            "error_code": "planner_stopped_before_required_context",
+                            "fallback": "fixed_tool_plan",
+                            "detail": missing,
+                        },
+                    )
+                    return self._fallback_after_planner_error(
+                        context,
+                        state,
+                        observations,
+                        error_code="planner_stopped_before_required_context",
+                        tool_name=None,
+                    )
                 self._record_loop_stop(state, "planner_stop")
                 break
             if isinstance(planned, Mapping) and planned.get("stop"):
+                missing = self._missing_planner_context_error(context, observations)
+                if missing is not None:
+                    state.note(
+                        AgenticProposalPhase.DIAGNOSE,
+                        "Planner stopped before required compact context; using fixed APS-0 tool plan.",
+                        metadata={
+                            "status": "error",
+                            "error_code": "planner_stopped_before_required_context",
+                            "fallback": "fixed_tool_plan",
+                            "detail": missing,
+                        },
+                    )
+                    return self._fallback_after_planner_error(
+                        context,
+                        state,
+                        observations,
+                        error_code="planner_stopped_before_required_context",
+                        tool_name=None,
+                    )
                 self._record_loop_stop(state, "planner_stop")
                 break
 
@@ -1248,7 +1336,7 @@ class AgenticProposalSession:
                     error_code=str(_enum_value(observation.failure_code)),
                     tool_name=observation.tool_name,
                 )
-            if self._required_context_satisfied(observations):
+            if self._planner_context_satisfied(context, observations):
                 self._record_loop_stop(state, "required_context_satisfied")
                 break
 
@@ -1288,6 +1376,45 @@ class AgenticProposalSession:
         observations: list[ProposalObservation],
     ) -> bool:
         return self._missing_required_context_error(observations) is None
+
+    def _planner_context_satisfied(
+        self,
+        context: ProposalToolContext,
+        observations: list[ProposalObservation],
+    ) -> bool:
+        return self._missing_planner_context_error(context, observations) is None
+
+    def _missing_planner_context_error(
+        self,
+        context: ProposalToolContext,
+        observations: list[ProposalObservation],
+    ) -> str | None:
+        required_error = self._missing_required_context_error(observations)
+        if required_error is not None:
+            return required_error
+        available_feedback = self._available_compact_feedback_tools(context)
+        if not available_feedback:
+            return None
+        observed_ok = {
+            observation.tool_name
+            for observation in observations
+            if not observation.is_error
+        }
+        if observed_ok.isdisjoint(available_feedback):
+            return (
+                "missing compact proposal feedback tool: one of "
+                + ", ".join(available_feedback)
+            )
+        return None
+
+    def _available_compact_feedback_tools(
+        self,
+        context: ProposalToolContext,
+    ) -> tuple[str, ...]:
+        if self.tool_registry is None:
+            return ()
+        allowed = set(self.tool_registry.allowed_tools(context))
+        return tuple(name for name in _COMPACT_FEEDBACK_TOOLS if name in allowed)
 
     def _tool_arg_guidance(
         self,
@@ -1356,6 +1483,41 @@ class AgenticProposalSession:
                 )
             )
         return observations
+
+    def _run_selected_surface_observation_tool(
+        self,
+        context: ProposalToolContext,
+        hypothesis: HypothesisProposal,
+        state: AgenticProposalSessionState,
+        observations: list[ProposalObservation],
+    ) -> list[ProposalObservation]:
+        if _has_successful_surface_read(observations, hypothesis.change_locus):
+            state.note(
+                AgenticProposalPhase.INSPECT_INTERFACE,
+                "Skipped selected-surface read already completed successfully.",
+                metadata={
+                    "tool_name": "context.read_surface",
+                    "status": "skipped",
+                    "selection_source": "selected_surface_required",
+                    "skip_reason": "already_succeeded",
+                },
+            )
+            return []
+        if self._tool_loop_limit_reached(state):
+            self._record_loop_stop(state, self._current_loop_stop_reason(state))
+            return []
+        args: dict[str, Any] = {"surface": hypothesis.change_locus}
+        if hypothesis.target_file:
+            args["target_file"] = hypothesis.target_file
+        observation = self._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.INSPECT_INTERFACE,
+            "context.read_surface",
+            args,
+            selection_source="selected_surface_required",
+        )
+        return [observation]
 
     def _run_contract_preview_tool(
         self,
@@ -1621,6 +1783,7 @@ class AgenticProposalSession:
             tool_budget_used=_tool_budget_used_payload(state),
             transcript_digest=transcript_digest,
         )
+        state.idempotency_key = output.idempotency_key or state.idempotency_key
         if self._artifact_store is None:
             return output
         transcript_ref = self._artifact_store.write_transcript(state)
@@ -2159,11 +2322,27 @@ def _surface_names_from_observations(
     return list(dict.fromkeys(names))
 
 
+def _has_successful_surface_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    surface_name: str,
+) -> bool:
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_surface":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        surface = payload.get("surface")
+        if isinstance(surface, Mapping) and surface.get("name") == surface_name:
+            return True
+    return False
+
+
 def _self_check_from_previews(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
 ) -> AgenticSelfCheck:
     schema_valid = True
-    saw_schema_preview = False
+    schema_preview_evaluated = False
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
     for observation in observations:
@@ -2172,10 +2351,10 @@ def _self_check_from_previews(
                 "proposal.schema_preview",
                 "proposal.target_permission_preview",
             }:
-                schema_valid = False
-                saw_schema_preview = True
+                if observation.failure_code != ProposalToolFailureCode.RESULT_TOO_LARGE:
+                    schema_valid = False
+                    schema_preview_evaluated = True
             if observation.tool_name == "proposal.contract_preview":
-                contract_preview_passed = False
                 contract_preview_codes = tuple(
                     code
                     for code in (
@@ -2184,19 +2363,24 @@ def _self_check_from_previews(
                     )
                     if code
                 )
+                budget_error = (
+                    observation.failure_code
+                    == ProposalToolFailureCode.RESULT_TOO_LARGE
+                )
+                contract_preview_passed = None if budget_error else False
             continue
         payload = observation.structured_payload
         if observation.tool_name in {
             "proposal.schema_preview",
             "proposal.target_permission_preview",
         }:
-            saw_schema_preview = True
+            schema_preview_evaluated = True
             schema_valid = schema_valid and bool(payload.get("passed"))
         if observation.tool_name == "proposal.contract_preview":
             contract_preview_passed = bool(payload.get("passed"))
             contract_preview_codes = _preview_codes(payload)
     return AgenticSelfCheck(
-        schema_valid=schema_valid if saw_schema_preview else False,
+        schema_valid=schema_valid if schema_preview_evaluated else False,
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
     )

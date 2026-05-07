@@ -6,6 +6,7 @@ import os
 import random
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -16,7 +17,7 @@ from scion.core.models import PatchProposal, RunResult, SolverOutput
 from scion.problem.contracts import ProblemAdapter
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
-from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 from scion.problems.cvrp.solver import solve
 from scion.verification.gate import VerificationGate
 
@@ -56,6 +57,73 @@ def test_cvrp_problem_spec_loads(cvrp_spec: ProblemSpecV1, cvrp_adapter: Problem
     assert [o.name for o in cvrp_spec.objectives] == ["fleet_violation", "total_distance"]
     assert "fleet_violation" in cvrp_adapter.render_problem_summary()
     assert "implicit depot" in cvrp_adapter.render_operator_interface()
+
+
+def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None:
+    inst = CvrpInstance(
+        name="api_smoke",
+        capacity=10,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            CvrpNode(id=1, x=1.0, y=0.0, demand=3),
+            CvrpNode(id=2, x=0.0, y=1.0, demand=4),
+        ),
+    )
+
+    assert inst.customer_ids == (1, 2)
+    assert inst.customer_count == len(inst.customer_ids) == 2
+    assert inst.demands == {0: 0, 1: 3, 2: 4}
+    assert inst.demands[1] == inst.demand(1)
+    assert not hasattr(inst, "customers")
+    with pytest.raises(AttributeError):
+        getattr(inst, "customers")
+
+
+@pytest.mark.parametrize(
+    "surface_name",
+    ["construction_policy", "search_policy", "neighborhood_portfolio"],
+)
+def test_cvrp_policy_surface_interfaces_render_safe_instance_api(
+    cvrp_adapter: ProblemAdapter,
+    surface_name: str,
+) -> None:
+    rendered = cvrp_adapter.render_research_surface_interface(surface_name)
+
+    assert "`instance.customer_ids`" in rendered
+    assert "`instance.customer_count`" in rendered
+    assert "`instance.demands[customer_id]`" in rendered
+    assert "`instance.capacity`" in rendered
+    assert "`instance.distance(i, j)`" in rendered
+    assert "Never use `instance.customers`" in rendered
+
+
+def test_cvrp_policy_preview_rejects_instance_customers_alias(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/search_policy.py",
+        action="modify",
+        code_content=(
+            "def baseline_time_fraction(instance, time_limit_sec):\n"
+            "    return 0.7 if instance.customers else 0.8\n\n"
+            "def max_operator_rounds(instance, time_limit_sec):\n"
+            "    return 1\n\n"
+            "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+            "    return True\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="search_policy"),
+    )
+
+    assert preview["passed"] is False
+    assert "baseline_time_fraction raised during synthetic preview" in json.dumps(preview)
+    assert "customers" in json.dumps(preview["issues"])
+    assert preview["synthetic_instance"]["customer_count"] == 3
+    assert "customers" not in preview["synthetic_instance"]
 
 
 def test_valid_route_solution_passes_all_adapter_checks(

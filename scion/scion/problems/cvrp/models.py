@@ -34,6 +34,14 @@ class CvrpInstance:
     def customer_ids(self) -> tuple[int, ...]:
         return tuple(n.id for n in self.nodes if n.id != self.depot)
 
+    @property
+    def customer_count(self) -> int:
+        return len(self.customer_ids)
+
+    @property
+    def demands(self) -> dict[int, int]:
+        return {n.id: n.demand for n in self.nodes}
+
     def demand(self, node_id: int) -> int:
         return self._node(node_id).demand
 
@@ -107,4 +115,3 @@ class CvrpSolution:
     """Implicit-depot CVRP solution: each route lists customers only."""
 
     routes: tuple[tuple[int, ...], ...]
-

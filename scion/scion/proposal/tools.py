@@ -6,6 +6,7 @@ workspaces and they do not expose validation/frozen raw metrics.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -1047,7 +1048,13 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
 
         payload = {
             "passed": passed,
-            "surface": _surface_payload(surface) if surface is not None else None,
+            "surface": _surface_permission_summary(
+                surface,
+                allowed_actions=allowed_actions,
+                declared_targets=declared_targets,
+            )
+            if surface is not None
+            else None,
             "requested": {
                 "change_locus": args.change_locus,
                 "action": args.action,
@@ -1055,6 +1062,19 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
             },
             "allowed_actions": allowed_actions,
             "declared_targets": declared_targets,
+            "permission": {
+                "surface_known": surface is not None,
+                "action_allowed": bool(
+                    surface is not None and args.action in allowed_actions
+                ),
+                "target_required": args.action in {"modify", "remove"},
+                "target_path_safe": target_error is None,
+                "target_declared": bool(
+                    args.target_file
+                    and surface is not None
+                    and _target_declared(args.target_file, declared_targets)
+                ),
+            },
             "issues": issues,
             "workspace_materialized": False,
         }
@@ -1199,7 +1219,9 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     patch_preview["patch_object"],
                     approved_hypothesis=hypothesis_object,
                 )
-                patch_preview["contract"] = _contract_result_payload(result)
+                contract_payload = _contract_result_payload(result)
+                patch_preview["contract"] = contract_payload
+                patch_preview["checks"] = contract_payload["checks"]
                 patch_preview["passed"] = result.passed
                 if result.passed:
                     surface = _surface_for_patch_path(
@@ -1212,7 +1234,9 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                         surface,
                     )
                     if problem_preview is not None:
-                        patch_preview["problem_preview"] = problem_preview
+                        patch_preview["problem_preview"] = _compact_problem_preview(
+                            problem_preview
+                        )
                         patch_preview["passed"] = bool(
                             patch_preview["passed"]
                         ) and bool(problem_preview.get("passed"))
@@ -1302,16 +1326,17 @@ def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
         }
     patch = _patch_from_input(validated)
     path_error = _patch_path_error(patch.file_path)
+    patch_summary = _patch_preview_summary(patch)
     if path_error is not None:
         return {
             "passed": False,
             "errors": [{"loc": ("file_path",), "msg": path_error}],
-            "patch": _model_payload(patch),
+            "patch": patch_summary,
         }
     return {
         "passed": True,
         "errors": [],
-        "patch": _model_payload(patch),
+        "patch": patch_summary,
         "patch_object": patch,
     }
 
@@ -1427,6 +1452,75 @@ def _surface_allowed_actions(surface: Any | None) -> list[str]:
         if value:
             allowed.append(action)
     return allowed
+
+
+def _surface_permission_summary(
+    surface: Any,
+    *,
+    allowed_actions: list[str],
+    declared_targets: list[str],
+) -> dict[str, Any]:
+    return {
+        "name": _attr(surface, "name"),
+        "kind": _attr(surface, "kind"),
+        "allowed_actions": list(allowed_actions),
+        "declared_targets": list(declared_targets),
+    }
+
+
+def _patch_preview_summary(patch: PatchProposal) -> dict[str, Any]:
+    code_content = str(patch.code_content or "")
+    return {
+        "file_path": patch.file_path,
+        "action": patch.action,
+        "code_char_count": len(code_content),
+        "code_digest": hashlib.sha256(code_content.encode("utf-8")).hexdigest(),
+        "functions": _module_level_functions(code_content),
+        "classes": _module_classes(code_content),
+        "checks": [],
+    }
+
+
+def _compact_problem_preview(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if preview is None:
+        return None
+    return {
+        "passed": bool(preview.get("passed")),
+        "surface": preview.get("surface"),
+        "issues": _problem_preview_issues(preview),
+        "checks": _compact_problem_preview_checks(preview.get("checks")),
+        "workspace_materialized": bool(preview.get("workspace_materialized", False)),
+        "verification_run": bool(preview.get("verification_run", False)),
+    }
+
+
+def _problem_preview_issues(preview: Mapping[str, Any]) -> list[str]:
+    issues = preview.get("issues", [])
+    if isinstance(issues, str):
+        values = [issues]
+    else:
+        try:
+            values = [str(issue) for issue in issues if str(issue)]
+        except TypeError:
+            values = []
+    return [_limit_text(issue, 1000) for issue in values[:12]]
+
+
+def _compact_problem_preview_checks(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    checks: list[dict[str, Any]] = []
+    for item in value[:12]:
+        if not isinstance(item, Mapping):
+            continue
+        checks.append(
+            {
+                "name": item.get("name"),
+                "passed": bool(item.get("passed")),
+                "detail": _limit_text(str(item.get("detail", "")), 1000),
+            }
+        )
+    return checks
 
 
 def _surface_required_functions(surface: Any | None) -> list[str]:

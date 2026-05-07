@@ -38,6 +38,9 @@ Adapter semantics are route-native. Routes use implicit-depot customer sequences
 - `CvrpSolution`
 
 `CvrpInstance` owns demand, distance, route load, and route distance calculations. It also carries optional `allowed_routes`, `bks`, and `bks_routes`.
+For generated policy surfaces it exposes safe instance helpers:
+`customer_ids`, `customer_count`, `demands`, `capacity`, and `distance`;
+there is intentionally no `customers` alias.
 
 `cvrplib.py` is the small parser owned by the CVRP boundary. It parses EUC_2D CVRPLIB `.vrp` files and optional `.sol` files, maps raw depot/customer ids into Scion's depot-first zero-based id space, and returns `CvrpInstance`. It is package code, not framework logic.
 
@@ -94,6 +97,14 @@ Operator outputs are structurally coerced to `CvrpSolution` when possible becaus
 The solver validates/clamps numeric policy returns and records policy errors as runtime audit failures. Policy functions must be deterministic and must not read external answers.
 
 `problem-v1.yaml` declares this as a `policy` research surface with `modify` allowed and `create_new/remove` disallowed.
+
+The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
+for `search_policy`, `construction_policy`, and `neighborhood_portfolio`
+explicitly direct generated code to use `instance.customer_ids`,
+`instance.customer_count`, `instance.demands[customer_id]`,
+`instance.capacity`, and `instance.distance(i, j)`, and to avoid
+`instance.customers`. Adapter preview and runtime audit still fail reached uses
+of the nonexistent `instance.customers` attribute.
 
 `policies/construction_policy.py` is a singleton construction research surface.
 Required functions:

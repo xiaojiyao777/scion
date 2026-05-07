@@ -39,6 +39,15 @@ _PORTFOLIO_LIMIT_RANGES = {
     "ruin_recreate": (0, 200),
     "registry_operator": (0, 200),
 }
+_POLICY_INSTANCE_API_TEXT = (
+    "Safe CvrpInstance API for policy functions: use "
+    "`instance.customer_ids`, `instance.customer_count`, "
+    "`instance.demands[customer_id]`, `instance.capacity`, and "
+    "`instance.distance(i, j)`. `instance.demand(customer_id)` remains "
+    "available for direct demand lookup. Never use `instance.customers`; that "
+    "attribute is intentionally not defined and will fail synthetic preview or "
+    "runtime audit when reached."
+)
 
 
 class CvrpAdapter:
@@ -103,7 +112,9 @@ class CvrpAdapter:
                 "'sequential'\n\n"
                 "def construction_bias(instance, time_limit_sec):\n"
                 "    return a finite numeric value in [0.0, 1.0]\n\n"
-                "The solver clamps out-of-range bias values but records them as "
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "The solver clamps out-of-range bias values but records them as "
                 "construction_errors. Unknown modes, exceptions, missing "
                 "functions, and non-numeric bias values are runtime audit "
                 "failures. Policy functions must be deterministic and must not "
@@ -124,7 +135,9 @@ class CvrpAdapter:
                 "    return an int in [0, 20]\n\n"
                 "def enable_post_baseline_operators(instance, time_limit_sec):\n"
                 "    return a bool\n\n"
-                "The solver clamps out-of-range numeric values but records them as "
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "The solver clamps out-of-range numeric values but records them as "
                 "policy_errors. Exceptions, missing functions, non-numeric budget "
                 "values, and non-bool enable flags are runtime audit failures. "
                 "Policy functions must be deterministic and must not read solver "
@@ -150,7 +163,9 @@ class CvrpAdapter:
                 "top_k, total_attempts, per_component_attempts, or per-component "
                 "attempt caps. Keep defaults small: max_rounds around 3, top_k "
                 "around 16, and total attempts around 100.\n\n"
-                "Unknown components, non-finite weights, non-integer limits, and "
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "Unknown components, non-finite weights, non-integer limits, and "
                 "out-of-range limits are portfolio_errors and runtime audit "
                 "failures. The solver owns route moves and uses this policy only "
                 "to schedule already-declared bounded components."
@@ -175,11 +190,12 @@ class CvrpAdapter:
             "loads with instance.route_load(route), and return the original route "
             "structure as a no-op when a move would break capacity or coverage.\n\n"
             "CvrpInstance API: instance.capacity, instance.depot, "
-            "instance.customer_ids, instance.node_ids, instance.demand(customer_id), "
-            "instance.distance(i, j), instance.route_load(route), and "
-            "instance.route_distance(route). Do not use nonexistent attributes such "
-            "as vehicle_capacity, demands, distance_matrix, customers, or "
-            "num_customers."
+            "instance.customer_ids, instance.customer_count, instance.node_ids, "
+            "instance.demands, instance.demand(customer_id), instance.distance(i, j), "
+            "instance.route_load(route), and instance.route_distance(route). Use "
+            "instance.demands[customer_id] for direct demand lookup. Never use "
+            "instance.customers; do not use nonexistent attributes such as "
+            "vehicle_capacity, distance_matrix, or num_customers."
         )
 
     def preview_research_surface_patch(
@@ -445,7 +461,8 @@ def _policy_preview_result(
         "issues": issues,
         "synthetic_instance": {
             "name": "synthetic_preview",
-            "customers": 3,
+            "customer_ids": [1, 2, 3],
+            "customer_count": 3,
             "capacity": 10,
         },
         "workspace_materialized": False,

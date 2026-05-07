@@ -114,6 +114,11 @@ The v0.4 focus remains:
   `enabled_components`, `component_weights`, `candidate_limits`,
   `component_attempts`, `component_accepted`, `component_runtime_ms`, and
   `portfolio_stop_reason`; portfolio errors fail closed through runtime audit.
+- CVRP policy-surface prompts and adapter interface rendering now expose the
+  safe `CvrpInstance` policy API explicitly: `customer_ids`, `customer_count`,
+  `demands[customer_id]`, `capacity`, and `distance(i, j)`. The problem package
+  does not define `instance.customers`; reached uses fail in adapter preview or
+  runtime audit rather than becoming a silent alias.
 
 ### Campaign Structure
 
@@ -449,6 +454,11 @@ Completed capabilities:
 - Session artifacts are versioned, tainted, compact, replay-validatable, and
   safe for resume-context construction. They omit raw metrics refs, holdout
   detail, validation/frozen case feedback, transcript payloads, and patch code.
+- Planner-backed APS sessions now fail over to compact feedback reads instead
+  of stopping after only `context.list_surfaces` and `context.read_problem`;
+  they also read the selected surface before code generation or partial
+  finalization. Static target/schema/contract preview payloads are compact and
+  omit full surface payloads and patch `code_content`.
 - `AgenticSessionStore` maintains a file-backed recovery index with lookup by
   session id, idempotency key, and request. ProposalPipeline can inject sanitized
   resume context from prior valid artifacts without reusing patches or bypassing
@@ -945,6 +955,9 @@ Completed the follow-up verification modernization slice:
 - V8 now accepts an optional adapter and compares adapter-backed canonical
   solver artifact signatures based on normalized solution, filtered objective,
   and feasible flag, with an optional dynamic adapter fingerprint hook.
+- Successful V8 comparisons persist bounded comparison mode, selected surface,
+  adapter-backed, and equality metadata on `CheckResult` and lineage
+  `verification_checks`, not on `DecisionFeatures`.
 - Legacy V6/V7 oracle fallback and V8 objective-only comparison remain
   available only for legacy/no-adapter compatibility.
 - V8 failure archives now prefer selected-surface target files declared in
@@ -963,7 +976,7 @@ Validation:
 1435 passed, 1 skipped in 44.87s
 ```
 
-## 2026-05-07 Sonnet CVRP Framework Smoke Launched
+## 2026-05-07 Sonnet CVRP Framework Smoke
 
 A detached real Sonnet CVRP formal-path smoke was launched after the
 V2-V8 gate modernization commits to validate that the governed APS/protocol
@@ -992,19 +1005,75 @@ split=scion/scion/problems/cvrp/formal/split_manifest.yaml
 seeds=scion/scion/problems/cvrp/formal/seed_ledger.yaml
 ```
 
-Launch state:
+Outcome:
 
 ```text
-wrapper_pid=2160932
-scion_pid=2160933
-status=running
+exit_code=0
+rounds=5/5
+experiments=3
+champion=v1
+promotions=0
+stop=max_rounds_exhausted
+active_branches=0
+formal_ready=false
+final_evidence_refs=missing
 ```
 
-This is a framework/control smoke, not final solver-quality evidence. Raw run
-logs and metrics should be analyzed only through a delegated post-run audit.
-Any remaining V8 compatibility risk, especially the legacy/no-adapter
-objective-only nondeterminism path, is deferred until that post-run analysis
-shows whether it affects real CVRP framework behavior.
+Delegated post-run audit found:
+
+- The run is valid framework/control evidence, not solver-quality evidence.
+- Surface coverage hit `route_local`, `construction_policy`, `search_policy`,
+  `neighborhood_portfolio`, and `route_pair`.
+- Contract passed for all five candidates.
+- Two policy-surface candidates failed `V5_solution_consistency` because
+  generated code used nonexistent CVRP instance attributes such as
+  `customer_count` before the package exposed it, or `customers`.
+- Three candidates reached real VRP screening and failed
+  `SCREENING_FAIL_WIN_RATE`; aggregate evidence was tie/no-op dominated:
+  64/64 valid pairs, 2 wins, 62 ties, 0 losses, no candidate/champion runtime
+  failures, and repo-local `vrp_alns_vns` baseline evidence.
+- V8 did not fail and the remaining legacy/no-adapter objective-only V8 path
+  did not affect this adapter-backed CVRP run. The useful V8 follow-up was
+  auditability: persist bounded successful comparison metadata.
+- APS artifacts were structurally healthy, but planner mode was too shallow and
+  static preview observations were too large, causing `result_too_large`
+  preview observations and misleading self-check failures.
+
+Post-audit repairs completed:
+
+- CVRP policy surfaces now expose safe instance helpers:
+  `customer_ids`, `customer_count`, `demands[customer_id]`, `capacity`, and
+  `distance(i, j)`, while intentionally keeping `instance.customers` undefined.
+- CVRP adapter/problem guidance now tells generated policy code to use those
+  helpers and avoid `instance.customers`; preview/runtime audit fails reached
+  uses of that nonexistent alias.
+- Planner-backed APS now falls back to compact feedback reads instead of
+  stopping after only `context.list_surfaces` and `context.read_problem`, and it
+  performs a deterministic selected-surface read before code generation or
+  partial finalization.
+- APS target/schema/contract preview payloads are compact and omit full surface
+  payloads and patch `code_content`.
+- V8 success checks now persist bounded comparison metadata on `CheckResult`
+  and lineage `verification_checks`, not on `DecisionFeatures`.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py -q
+85 passed in 7.06s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_contract.py scion/scion/tests/test_cli.py -q
+184 passed in 1.49s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/core/test_evidence_recorder.py -q
+94 passed in 2.86s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_contract.py scion/scion/tests/test_cli.py scion/scion/tests/test_verification.py scion/scion/tests/unit/core/test_evidence_recorder.py -q
+363 passed in 10.17s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1446 passed, 1 skipped in 48.04s
+```
 
 ## Remaining Optimization Backlog
 
@@ -1017,11 +1086,11 @@ P1:
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
 - CVRP formal research needs implementation slices for problem-owned algorithm
-  surfaces beyond `construction_policy` and `neighborhood_portfolio`.
-  `search_policy` proved useful as a generic surface model but too narrow as an
-  optimization lever because it still acts around the post-baseline operator
-  layer. Next candidates are destroy/repair and acceptance/restart policy
-  surfaces once the CVRP package can expose bounded hooks and runtime audit.
+  surfaces beyond the current policy correctness pass. Next candidates are
+  destroy/repair and acceptance/restart policy surfaces once the CVRP package
+  can expose bounded hooks and runtime audit. A short follow-up CVRP APS smoke
+  should bias toward `construction_policy`, `search_policy`, and
+  `neighborhood_portfolio` before adding more post-baseline route operators.
 
 P2:
 

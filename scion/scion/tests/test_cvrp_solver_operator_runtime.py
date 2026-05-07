@@ -451,6 +451,142 @@ def test_neighborhood_portfolio_surface_runtime_fields_match_solver_output(
     ) is None
 
 
+def test_policy_surfaces_accept_safe_cvrp_instance_api_without_runtime_errors(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "search_policy.py").write_text(
+        "\n".join(
+            [
+                "def baseline_time_fraction(instance, time_limit_sec):",
+                "    return 0.5 if instance.customer_count == len(instance.customer_ids) else 0.6",
+                "",
+                "def max_operator_rounds(instance, time_limit_sec):",
+                "    return min(3, max(1, instance.customer_count))",
+                "",
+                "def enable_post_baseline_operators(instance, time_limit_sec):",
+                "    return len(instance.customer_ids) > 0",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "construction_policy.py").write_text(
+        "\n".join(
+            [
+                "def construction_mode(instance, time_limit_sec):",
+                "    total_demand = sum(instance.demands[c] for c in instance.customer_ids)",
+                "    return 'nearest_neighbor_demand_bias' if total_demand <= instance.capacity else 'nearest_neighbor'",
+                "",
+                "def construction_bias(instance, time_limit_sec):",
+                "    farthest = max((instance.distance(instance.depot, c) for c in instance.customer_ids), default=0.0)",
+                "    return 0.2 if farthest >= 0.0 else 0.0",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "neighborhood_portfolio.py").write_text(
+        "\n".join(
+            [
+                "def enabled_components(instance, time_limit_sec):",
+                "    return ['route_local', 'route_pair'] if instance.customer_count == len(instance.customer_ids) else ['registry_operator']",
+                "",
+                "def component_weights(instance, time_limit_sec):",
+                "    avg_demand = sum(instance.demands[c] for c in instance.customer_ids) / max(1, instance.customer_count)",
+                "    demand_ratio = avg_demand / max(1, instance.capacity)",
+                "    return {'route_local': 1.0, 'route_pair': min(5.0, 1.0 + demand_ratio)}",
+                "",
+                "def candidate_limits(instance, time_limit_sec):",
+                "    count = instance.customer_count",
+                "    return {",
+                "        'max_rounds': min(3, count),",
+                "        'top_k': min(4, count),",
+                "        'total_attempts': min(200, count * 4),",
+                "        'per_component_attempts': min(80, max(1, count * 2)),",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["policy_errors"] == 0
+    assert runtime["baseline_time_fraction"] == 0.5
+    assert runtime["operator_round_limit"] == 3
+    assert runtime["post_baseline_operators_enabled"] is True
+    assert runtime["construction_errors"] == 0
+    assert runtime["construction_mode"] == "nearest_neighbor_demand_bias"
+    assert runtime["construction_bias"] == 0.2
+    assert runtime["portfolio_errors"] == 0
+    assert runtime["enabled_components"] == ["route_local", "route_pair"]
+    assert runtime["candidate_limits"]["top_k"] == 4
+    for surface_name in (
+        "search_policy",
+        "construction_policy",
+        "neighborhood_portfolio",
+    ):
+        assert (
+            runtime_audit_failure_from_raw(
+                raw,
+                problem_spec=legacy_spec,
+                selected_surface=surface_name,
+            )
+            is None
+        )
+
+
+def test_search_policy_using_instance_customers_fails_runtime_audit(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "search_policy.py").write_text(
+        "\n".join(
+            [
+                "def baseline_time_fraction(instance, time_limit_sec):",
+                "    return 0.7 if instance.customers else 0.8",
+                "",
+                "def max_operator_rounds(instance, time_limit_sec):",
+                "    return 1",
+                "",
+                "def enable_post_baseline_operators(instance, time_limit_sec):",
+                "    return True",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="search_policy",
+    )
+
+    assert raw["runtime"]["policy_errors"] == 1
+    assert issue is not None
+    assert issue["error_category"] == "policy_runtime_error"
+    assert "customers" in json.dumps(raw["runtime"]["policy_events"])
+
+
 def test_modified_construction_policy_changes_mode_without_solver_edit(
     tmp_path: Path,
 ) -> None:

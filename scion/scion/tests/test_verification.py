@@ -1019,6 +1019,9 @@ class TestStateleakCheck:
         # Check passes (even if oracle isn't available — we compare raw JSON objects).
         assert r.name == "V8_nondeterminism"
         assert r.passed is True
+        assert r.metadata["comparison_mode"] == "legacy_objective"
+        assert r.metadata["adapter_backed"] is False
+        assert r.metadata["comparison_equal"] is True
 
     def test_non_deterministic_runs_fail(self, tmp_path):
         canary = str(tmp_path / "small.json")
@@ -1159,6 +1162,9 @@ class TestStateleakCheck:
 
         assert r.passed is True
         assert "adapter_canonical_signature identical" in r.detail
+        assert r.metadata["comparison_mode"] == "adapter_canonical_signature"
+        assert r.metadata["adapter_backed"] is True
+        assert r.metadata["comparison_equal"] is True
 
     @pytest.mark.parametrize(
         ("bad_run", "expected_run"),

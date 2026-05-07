@@ -66,6 +66,18 @@ and existing `ContractGate` static checks where practical. The registry still
 does not include Verification/Protocol/Decision execution or candidate-workspace
 write tools.
 
+Post-audit APS behavior keeps the planner generic but less shallow:
+planner-backed diagnosis is not considered complete after only
+`context.list_surfaces` and `context.read_problem` when compact memory,
+screening, or runtime-feedback tools are available. If the planner stops there,
+APS falls back to the fixed read-only plan. After a hypothesis selects a surface,
+APS performs a deterministic `context.read_surface` before code generation or
+partial-session finalization, unless that exact surface was already read.
+Static preview observations are compact: target-permission previews return only
+surface name/kind/actions/targets and permission issues, while schema/contract
+patch previews omit `code_content` and expose path, action, char count, digest,
+discovered functions/classes, checks, and compact problem-preview issues.
+
 ## ContextManager Inputs
 
 `ContextManager` in `scion/scion/proposal/context_manager.py` builds three context types:

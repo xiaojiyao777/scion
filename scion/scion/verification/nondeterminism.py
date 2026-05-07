@@ -187,7 +187,17 @@ def check_nondeterminism(
     obj2 = {k: v for k, v in raw2.get("objective", {}).items() if k != "solve_time_ms"}
 
     if obj1 == obj2:
-        return _cr(True, "legacy objective comparison identical across two runs", t0)
+        return _cr(
+            True,
+            "legacy objective comparison identical across two runs",
+            t0,
+            metadata={
+                "comparison_mode": "legacy_objective",
+                "selected_surface": selected_surface,
+                "adapter_backed": False,
+                "comparison_equal": True,
+            },
+        )
 
     # Archive candidate code on failure
     archive_ref: str | None = None
@@ -244,7 +254,17 @@ def _check_via_adapter(
     sig1_text = _stable_json(sig1)
     sig2_text = _stable_json(sig2)
     if sig1_text == sig2_text:
-        return _cr(True, f"{mode} identical across two runs", t0)
+        return _cr(
+            True,
+            f"{mode} identical across two runs",
+            t0,
+            metadata={
+                "comparison_mode": mode,
+                "selected_surface": selected_surface,
+                "adapter_backed": True,
+                "comparison_equal": True,
+            },
+        )
 
     archive_ref: str | None = None
     if metrics_dir and os.path.isdir(metrics_dir):
@@ -449,7 +469,13 @@ def _matching_workspace_paths(workspace_path: Path, pattern: str) -> list[Path]:
     return [path for path in workspace_path.glob(pattern) if path.exists()]
 
 
-def _cr(passed: bool, detail: str, t0: int) -> CheckResult:
+def _cr(
+    passed: bool,
+    detail: str,
+    t0: int,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     return CheckResult(
         name="V8_nondeterminism",
@@ -457,4 +483,5 @@ def _cr(passed: bool, detail: str, t0: int) -> CheckResult:
         severity="heavy",
         detail=detail,
         elapsed_ms=elapsed,
+        metadata=dict(metadata or {}),
     )

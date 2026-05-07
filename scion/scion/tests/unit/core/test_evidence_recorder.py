@@ -337,6 +337,19 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
             "candidate_timeout": False,
         },
     )
+    v8_check = CheckResult(
+        "V8_nondeterminism",
+        True,
+        "heavy",
+        "adapter_canonical_signature identical across two runs",
+        5,
+        metadata={
+            "comparison_mode": "adapter_canonical_signature",
+            "selected_surface": "search_policy",
+            "adapter_backed": True,
+            "comparison_equal": True,
+        },
+    )
     event = recorder.build_step_lineage_event(
         branch=_branch(),
         hypothesis=_hypothesis(),
@@ -347,7 +360,11 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
         ),
         verification_result=VerificationResult(
             passed=True,
-            checks=(CheckResult("syntax", True, "light", "ok", 1), runtime_check),
+            checks=(
+                CheckResult("syntax", True, "light", "ok", 1),
+                v8_check,
+                runtime_check,
+            ),
         ),
         canary_result=CanaryResult(passed=True),
         protocol_result=_protocol_result("/tmp/promotion-metrics.json"),
@@ -379,7 +396,12 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert metadata["runtime_guard"]["metadata"]["ratio"] == 1.2
     assert metadata["runtime_stats"]["runtime_ratio_median"] == 1.18
     assert metadata["runtime_stats"]["runtime_pairs"] == 4
-    assert metadata["verification_checks"][1]["name"] == "V9_perf_guard"
+    assert metadata["verification_checks"][1]["name"] == "V8_nondeterminism"
+    assert metadata["verification_checks"][1]["metadata"]["comparison_mode"] == (
+        "adapter_canonical_signature"
+    )
+    assert metadata["verification_checks"][1]["metadata"]["adapter_backed"] is True
+    assert metadata["verification_checks"][2]["name"] == "V9_perf_guard"
     payload_features = json.loads(decision_payload["features_json"])
     assert payload_features["runtime_guard"]["metadata"]["case_id"] == "case-1"
     assert payload_features["runtime_stats"]["runtime_regression_rate"] == 0.5
