@@ -6,7 +6,7 @@ Sources read: CVRP code/config under `scion/scion/problems/cvrp/` excluding raw 
 
 ## Package Role
 
-`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search and construction policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
+`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search/construction/portfolio/algorithm-blueprint policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
 
 Framework core should treat this package through `ProblemSpecV1`, `ProblemAdapter`, `Runner`, and objective metric specs.
 
@@ -52,29 +52,38 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/search_policy.py` and `policies/construction_policy.py` from
-   the workspace when present, validating returns and recording runtime audit
-   fields.
-4. Build a construction solution through the bounded construction surface and
-   use it as the JSON/synthetic fallback or required-baseline fallback.
-5. Build baseline solution:
+3. Load `policies/algorithm_blueprint.py`, `policies/search_policy.py`, and
+   `policies/construction_policy.py` from the workspace when present,
+   validating returns and recording runtime audit fields.
+4. If `algorithm_blueprint` returns an enabled valid plan, let it coordinate
+   bounded construction ensemble, baseline time fraction, package-owned local
+   search, restart knobs, and post-baseline registry-operator toggle/round
+   limit. Invalid enabled plans record `algorithm_blueprint_errors` and do not
+   take over.
+5. Build a construction solution through either the bounded construction
+   surface or the algorithm-blueprint construction ensemble, and use it as the
+   JSON/synthetic fallback or required-baseline fallback.
+6. Build baseline solution:
    - real `.vrp` formal runs can use repo-local `vrp/src` ALNS+VNS baseline when data root env is configured;
    - smoke/synthetic/JSON paths use deterministic nearest-neighbor fallback.
-6. Load registry operators from workspace `registry.yaml`.
-7. Load `policies/neighborhood_portfolio.py` from the workspace when present,
+7. Run the algorithm-blueprint local-search phase, when active, after baseline
+   and before registry operators. The solver owns the bounded primitives:
+   `intra_route_2opt` and `inter_route_relocate`.
+8. Load registry operators from workspace `registry.yaml`.
+9. Load `policies/neighborhood_portfolio.py` from the workspace when present,
    validating returns and recording runtime audit fields.
-8. Apply the portfolio surface to filter/sort bounded registry component
+10. Apply the portfolio surface to filter/sort bounded registry component
    families and enforce top-k, round, total-attempt, and per-component attempt
    limits.
-9. Apply operators in portfolio-adjusted weight order inside a bounded
+11. Apply operators in portfolio-adjusted weight order inside a bounded
    post-baseline loop.
-10. Accept an operator output only if it is valid, feasible, and lexicographically improves current objective.
-11. Write JSON output with routes, feasible flag, objective, and runtime audit fields.
+12. Accept an operator output only if it is valid, feasible, and lexicographically improves current objective.
+13. Write JSON output with routes, feasible flag, objective, and runtime audit fields.
 
 The solver treats exceptions, invalid outputs, infeasible outputs, invalid
-policy/portfolio returns, and required-baseline failures as runtime audit
-failures. These are later promoted to verification/evidence failures by
-`scion/scion/runtime/audit.py`.
+policy/portfolio/algorithm-blueprint returns, and required-baseline failures as
+runtime audit failures. These are later promoted to verification/evidence
+failures by `scion/scion/runtime/audit.py`.
 
 ## Operators and Registry
 
@@ -99,8 +108,9 @@ The solver validates/clamps numeric policy returns and records policy errors as 
 `problem-v1.yaml` declares this as a `policy` research surface with `modify` allowed and `create_new/remove` disallowed.
 
 The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
-for `search_policy`, `construction_policy`, and `neighborhood_portfolio`
-explicitly direct generated code to use `instance.customer_ids`,
+for `search_policy`, `construction_policy`, `neighborhood_portfolio`, and
+`algorithm_blueprint` explicitly direct generated code to use
+`instance.customer_ids`,
 `instance.customer_count`, `instance.demands[customer_id]`,
 `instance.capacity`, and `instance.distance(i, j)`, and to avoid
 `instance.customers`. Adapter preview and runtime audit still fail reached uses
@@ -136,6 +146,21 @@ audit failures. The default checked-in policy enables all components at weight
 `1.0` with high attempt/top-k caps, preserving previous post-baseline registry
 operator behavior.
 
+`policies/algorithm_blueprint.py` is a singleton top-level config research
+surface. Required function:
+
+- `algorithm_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive (`enabled=False`) and preserves the
+existing solver lifecycle. An enabled candidate plan can only select bounded
+package-owned components and knobs: construction methods from the declared
+construction modes, baseline time fraction, post-baseline registry-operator
+toggle and round cap, local-search components `intra_route_2opt` and
+`inter_route_relocate`, and restart stagnation metadata. Unknown keys, missing
+required keys for enabled plans, bad types, non-finite values, unknown
+components, and out-of-range values increment `algorithm_blueprint_errors`;
+invalid enabled plans do not take over the solver lifecycle.
+
 ## Problem Specs and Config
 
 `problem-v1.yaml` is authoritative. It declares:
@@ -145,7 +170,8 @@ operator behavior.
 - import whitelist;
 - operator interface signature: `execute(self, solution, instance, rng) -> CvrpSolution`;
 - research surfaces: `route_local`, `route_pair`, `ruin_recreate`,
-  `search_policy`, `construction_policy`, `neighborhood_portfolio`;
+  `search_policy`, `construction_policy`, `neighborhood_portfolio`,
+  `algorithm_blueprint`;
 - objective policy: lexicographic;
 - objectives: `fleet_violation` priority 1, `total_distance` priority 2;
 - family taxonomy and aliases;
@@ -183,7 +209,9 @@ These helpers feed final evidence refs and readiness summaries but do not make c
 
 ## Runtime Audit Fields
 
-CVRP solver runtime output includes baseline, construction, operator, portfolio, and policy audit fields. `runtime/audit.py` interprets:
+CVRP solver runtime output includes baseline, construction, operator,
+portfolio, policy, and algorithm-blueprint audit fields. `runtime/audit.py`
+interprets:
 
 - required baseline fallback/error as `baseline_runtime_error`;
 - construction policy errors as `construction_runtime_error`;
@@ -193,5 +221,12 @@ CVRP solver runtime output includes baseline, construction, operator, portfolio,
 - selected-surface required runtime field failures as
   `surface_runtime_contract_error` when a surface declares
   `evidence.required_runtime_fields` and verification receives that surface.
+
+The `algorithm_blueprint` surface declares required runtime fields covering
+load/active/error status, normalized plan, phases executed, construction
+methods, baseline fraction, operator toggle/limit, local-search components,
+rounds, attempts, accepted moves, restart knobs/count, phase deltas, phase
+runtime, and stop reason. Selected-surface audit fails closed when
+`algorithm_blueprint_errors` is positive or those fields are missing/empty.
 
 `ExperimentProtocol`, `VerificationGate`, and final evidence builders treat these as failed evidence rather than objective ties.

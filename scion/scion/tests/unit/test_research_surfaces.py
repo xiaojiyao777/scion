@@ -370,6 +370,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "search_policy",
         "construction_policy",
         "neighborhood_portfolio",
+        "algorithm_blueprint",
     ]
     assert "policies/*.py" in legacy.search_space.editable
     assert "solver.py" in legacy.search_space.frozen
@@ -405,6 +406,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert no_accepted_guidance.failure_categories == ["no_accepted_moves"]
     assert no_accepted_guidance.applies_to_surface_kinds == ["operator"]
     assert no_accepted_guidance.recommended_surfaces == [
+        "algorithm_blueprint",
         "construction_policy",
         "neighborhood_portfolio",
         "search_policy",
@@ -504,6 +506,40 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     ]
     assert neighborhood_portfolio.novelty is not None
     assert neighborhood_portfolio.novelty.signature_fields == [
+        "predicted_direction",
+        "target_objectives",
+    ]
+
+    algorithm_blueprint = next(
+        surface
+        for surface in spec.research_surfaces or []
+        if surface.name == "algorithm_blueprint"
+    )
+    assert algorithm_blueprint.kind == "config"
+    assert algorithm_blueprint.algorithm is not None
+    assert algorithm_blueprint.algorithm.role == "top_level_algorithm_lifecycle"
+    assert algorithm_blueprint.targets is not None
+    assert algorithm_blueprint.targets.files == ["policies/algorithm_blueprint.py"]
+    assert algorithm_blueprint.targets.singleton is True
+    assert algorithm_blueprint.targets.create_new_allowed is False
+    assert algorithm_blueprint.targets.remove_allowed is False
+    assert algorithm_blueprint.interface is not None
+    assert algorithm_blueprint.interface.required_functions == ["algorithm_plan"]
+    assert algorithm_blueprint.interface.function_signatures == {
+        "algorithm_plan": ["instance", "time_limit_sec"],
+    }
+    assert algorithm_blueprint.bounds is not None
+    assert "intra_route_2opt" in algorithm_blueprint.bounds.allowed_components
+    assert "inter_route_relocate" in algorithm_blueprint.bounds.allowed_components
+    assert algorithm_blueprint.evidence is not None
+    assert "algorithm_blueprint_errors" in (
+        algorithm_blueprint.evidence.required_runtime_fields
+    )
+    assert "algorithm_local_search_components" in (
+        algorithm_blueprint.evidence.required_runtime_fields
+    )
+    assert algorithm_blueprint.novelty is not None
+    assert algorithm_blueprint.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
     ]
@@ -1538,9 +1574,11 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "search_policy [policy]" in prompt_text
     assert "construction_policy [construction]" in prompt_text
     assert "neighborhood_portfolio [portfolio]" in prompt_text
+    assert "algorithm_blueprint [config]" in prompt_text
     assert "policies/search_policy.py" in prompt_text
     assert "policies/construction_policy.py" in prompt_text
     assert "policies/neighborhood_portfolio.py" in prompt_text
+    assert "policies/algorithm_blueprint.py" in prompt_text
     assert "algorithm.role: post_baseline_search_scheduling" in prompt_text
     assert (
         "algorithm.invocation_point: "
@@ -1577,6 +1615,9 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "component_weights" in prompt_text
     assert "candidate_limits" in prompt_text
     assert "portfolio_stop_reason" in prompt_text
+    assert "algorithm_plan" in prompt_text
+    assert "algorithm_blueprint_errors" in prompt_text
+    assert "algorithm_local_search_components" in prompt_text
     assert "prompt.hypothesis_guidance:" in prompt_text
     assert "prompt.implementation_guidance:" in prompt_text
     assert "prompt.anti_patterns:" in prompt_text
@@ -1650,6 +1691,29 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Active surface: neighborhood_portfolio [portfolio]" in portfolio_prompt_text
     assert "module-level portfolio policy file; no class is required" in portfolio_prompt_text
     assert "def enabled_components" in portfolio_prompt_text
+
+    blueprint_hypothesis = HypothesisProposal(
+        hypothesis_text="Coordinate the top-level algorithm lifecycle.",
+        change_locus="algorithm_blueprint",
+        action="modify",
+        target_file="policies/algorithm_blueprint.py",
+        target_weakness="no accepted post-baseline moves",
+        expected_effect="run bounded package-owned local search",
+    )
+    blueprint_code_ctx = manager.build_code_context(
+        branch=branch,
+        hypothesis=blueprint_hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    system_blocks, _ = _split_code_context(blueprint_code_ctx)
+    blueprint_prompt_text = "\n".join(block["text"] for block in system_blocks)
+
+    assert "Active surface: algorithm_blueprint [config]" in blueprint_prompt_text
+    assert "top-level algorithm lifecycle config surface" in blueprint_prompt_text
+    assert "def algorithm_plan" in blueprint_prompt_text
+    assert "intra_route_2opt" in blueprint_prompt_text
+    assert "Never use `instance.customers`" in blueprint_prompt_text
 
 
 def test_context_still_renders_legacy_v1_surface_metadata(tmp_path: Path) -> None:

@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from scion.contract.gate import ContractGate
+from scion.core.models import PatchProposal
 from scion.problem.bridge import load_problem_spec_v1_from_yaml, legacy_problem_spec_from_v1
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.runtime.audit import runtime_audit_failure_from_raw, runtime_audit_failure_from_result
@@ -145,6 +147,10 @@ def test_empty_registry_keeps_json_nearest_neighbor_behavior(tmp_path: Path) -> 
     }
     assert raw["runtime"]["operator_loaded"] == 0
     assert raw["runtime"]["operator_attempts"] == 0
+    assert raw["runtime"]["algorithm_blueprint_loaded"] is True
+    assert raw["runtime"]["algorithm_blueprint_active"] is False
+    assert raw["runtime"]["algorithm_blueprint_errors"] == 0
+    assert raw["runtime"]["algorithm_stop_reason"] == "inactive"
 
     adapter, instance, artifact = _artifact(raw, workspace, "data/operator_case.json")
     assert adapter.check_solution_consistency(artifact, instance).passed is True
@@ -449,6 +455,199 @@ def test_neighborhood_portfolio_surface_runtime_fields_match_solver_output(
         problem_spec=legacy_spec,
         selected_surface="neighborhood_portfolio",
     ) is None
+
+
+def test_default_algorithm_blueprint_policy_matches_contract_gate_interface() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    policy_path = CVRP_DIR / "policies" / "algorithm_blueprint.py"
+    gate = ContractGate(legacy_spec)
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/algorithm_blueprint.py",
+            action="modify",
+            code_content=policy_path.read_text(encoding="utf-8"),
+        )
+    )
+
+    c7 = next(check for check in result.checks if check.name == "C7_interface")
+    assert result.passed is True
+    assert c7.passed is True
+
+
+def test_algorithm_blueprint_surface_declares_runtime_fields_and_default_is_inactive(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    surface = next(
+        surface
+        for surface in spec_v1.research_surfaces or []
+        if surface.name == "algorithm_blueprint"
+    )
+    required_fields = tuple(surface.evidence.required_runtime_fields)
+
+    assert required_fields == (
+        "algorithm_blueprint_loaded",
+        "algorithm_blueprint_active",
+        "algorithm_blueprint_errors",
+        "algorithm_plan",
+        "algorithm_phases_executed",
+        "algorithm_construction_methods",
+        "algorithm_baseline_time_fraction",
+        "algorithm_operator_round_limit",
+        "algorithm_post_baseline_operators_enabled",
+        "algorithm_local_search_components",
+        "algorithm_local_search_rounds",
+        "algorithm_local_search_attempts",
+        "algorithm_local_search_accepted",
+        "algorithm_restart_enabled",
+        "algorithm_restart_stagnation_rounds",
+        "algorithm_restart_count",
+        "algorithm_best_delta_by_phase",
+        "algorithm_phase_runtime_ms",
+        "algorithm_stop_reason",
+    )
+    assert set(required_fields).issubset(runtime)
+    assert runtime["algorithm_blueprint_loaded"] is True
+    assert runtime["algorithm_blueprint_active"] is False
+    assert runtime["algorithm_plan"]["enabled"] is False
+    assert runtime["algorithm_phases_executed"] == ["inactive"]
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="algorithm_blueprint",
+    )
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+
+
+def test_enabled_algorithm_blueprint_runs_package_owned_local_search_without_solver_edit(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    solver_before = (workspace / "solver.py").read_text(encoding="utf-8")
+    (workspace / "policies" / "algorithm_blueprint.py").write_text(
+        "\n".join(
+            [
+                "def algorithm_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction_methods': ['nearest_neighbor'],",
+                "        'construction_keep_top_k': 1,",
+                "        'construction_bias': 0.0,",
+                "        'baseline_time_fraction': 0.8,",
+                "        'operator_round_limit': 0,",
+                "        'post_baseline_operators_enabled': False,",
+                "        'local_search': {",
+                "            'enabled_components': ['intra_route_2opt'],",
+                "            'rounds': 2,",
+                "            'top_k': 32,",
+                "        },",
+                "        'restart': {'enabled': True, 'stagnation_rounds': 1},",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert (workspace / "solver.py").read_text(encoding="utf-8") == solver_before
+    assert raw["routes"] == [[1, 2, 3, 5, 4]]
+    assert raw["objective"]["total_distance"] == 12.0
+    assert runtime["algorithm_blueprint_loaded"] is True
+    assert runtime["algorithm_blueprint_active"] is True
+    assert runtime["algorithm_blueprint_errors"] == 0
+    assert runtime["algorithm_plan"]["enabled"] is True
+    assert runtime["post_baseline_operators_enabled"] is False
+    assert runtime["operator_round_limit"] == 0
+    assert runtime["algorithm_local_search_components"] == ["intra_route_2opt"]
+    assert runtime["algorithm_local_search_attempts"] > 0
+    assert runtime["algorithm_local_search_accepted"] == 1
+    assert runtime["algorithm_restart_enabled"] is True
+    assert runtime["algorithm_restart_stagnation_rounds"] == 1
+    assert runtime["algorithm_restart_count"] == 1
+    assert "construction_ensemble" in runtime["algorithm_phases_executed"]
+    assert "baseline" in runtime["algorithm_phases_executed"]
+    assert "local_search" in runtime["algorithm_phases_executed"]
+    assert runtime["algorithm_best_delta_by_phase"]["local_search"] == 4.0
+    assert runtime["operator_attempts"] == 0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="algorithm_blueprint",
+        )
+        is None
+    )
+
+
+def test_invalid_algorithm_blueprint_output_is_runtime_audit_failure(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "algorithm_blueprint.py").write_text(
+        "\n".join(
+            [
+                "def algorithm_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction_methods': ['nearest_neighbor'],",
+                "        'construction_keep_top_k': 1,",
+                "        'construction_bias': 0.0,",
+                "        'baseline_time_fraction': 0.8,",
+                "        'operator_round_limit': 0,",
+                "        'post_baseline_operators_enabled': False,",
+                "        'local_search': {'enabled_components': ['unknown_move'], 'rounds': 1, 'top_k': 8},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0},",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="algorithm_blueprint",
+    )
+
+    assert raw["runtime"]["algorithm_blueprint_errors"] == 1
+    assert raw["runtime"]["algorithm_blueprint_active"] is False
+    assert raw["runtime"]["algorithm_stop_reason"] == "invalid_plan"
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "algorithm_blueprint_errors" in issue["detail"]
+    assert "unknown_move" in json.dumps(raw["runtime"]["algorithm_blueprint_events"])
 
 
 def test_policy_surfaces_accept_safe_cvrp_instance_api_without_runtime_errors(

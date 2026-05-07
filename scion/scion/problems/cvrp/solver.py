@@ -30,6 +30,7 @@ _MAX_BASELINE_TIME_FRACTION = 0.95
 _SEARCH_POLICY_RELATIVE_PATH = "policies/search_policy.py"
 _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
+_ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
 _DEFAULT_CONSTRUCTION_MODE = "nearest_neighbor"
 _DEFAULT_CONSTRUCTION_BIAS = 0.0
 _MIN_CONSTRUCTION_BIAS = 0.0
@@ -62,6 +63,35 @@ _ALLOWED_CONSTRUCTION_MODES = frozenset(
         "demand_descending",
         "sequential",
     }
+)
+_ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS = frozenset(
+    {
+        "intra_route_2opt",
+        "inter_route_relocate",
+    }
+)
+_MAX_BLUEPRINT_CONSTRUCTION_METHODS = 4
+_MAX_BLUEPRINT_LOCAL_SEARCH_ROUNDS = 4
+_MAX_BLUEPRINT_LOCAL_SEARCH_TOP_K = 64
+_MAX_BLUEPRINT_RESTART_STAGNATION_ROUNDS = 25
+_ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
+    {
+        "enabled",
+        "construction_methods",
+        "construction_keep_top_k",
+        "construction_bias",
+        "baseline_time_fraction",
+        "operator_round_limit",
+        "post_baseline_operators_enabled",
+        "local_search",
+        "restart",
+    }
+)
+_ALGORITHM_BLUEPRINT_LOCAL_SEARCH_REQUIRED_KEYS = frozenset(
+    {"enabled_components", "rounds", "top_k"}
+)
+_ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS = frozenset(
+    {"enabled", "stagnation_rounds"}
 )
 
 
@@ -156,6 +186,7 @@ def solve_baseline(
     time_limit_sec: float,
     baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
     construction_policy: dict[str, Any] | None = None,
+    algorithm_blueprint: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Return a baseline solution plus audit metadata.
 
@@ -169,6 +200,7 @@ def solve_baseline(
         instance=instance,
         rng=rng,
         construction_policy=construction_policy,
+        algorithm_blueprint=algorithm_blueprint,
     )
     resolved = Path(instance_path).resolve(strict=False)
     is_vrp = resolved.suffix.lower() == ".vrp"
@@ -386,10 +418,19 @@ def _main() -> None:
     instance_path = _resolve_instance_path(args.instance)
     instance = adapter.load_instance(instance_path)
     rng = random.Random(args.seed)
+    algorithm_blueprint = _load_algorithm_blueprint(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     search_policy = _load_search_policy(
         workspace_root=Path.cwd(),
         instance=instance,
         time_limit_sec=args.time_limit,
+    )
+    _apply_algorithm_blueprint_search_policy(
+        search_policy,
+        algorithm_blueprint=algorithm_blueprint,
     )
     construction_policy = _load_construction_policy(
         workspace_root=Path.cwd(),
@@ -409,6 +450,16 @@ def _main() -> None:
         time_limit_sec=args.time_limit,
         baseline_time_fraction=search_policy["baseline_time_fraction"],
         construction_policy=construction_policy,
+        algorithm_blueprint=algorithm_blueprint,
+    )
+    sol, algorithm_audit = improve_with_algorithm_blueprint(
+        sol,
+        instance,
+        adapter=adapter,
+        rng=rng,
+        time_limit_sec=args.time_limit,
+        start_time=start,
+        algorithm_blueprint=algorithm_blueprint,
     )
     sol, operator_audit = improve_with_registry_operators(
         sol,
@@ -433,6 +484,8 @@ def _main() -> None:
         "elapsed_s": time.perf_counter() - start,
         "time_limit_s": args.time_limit,
         **search_policy,
+        **algorithm_blueprint,
+        **algorithm_audit,
         **baseline_audit,
         **operator_audit,
     }
@@ -630,6 +683,7 @@ def _construct_with_policy_audit(
     instance: CvrpInstance,
     rng: random.Random,
     construction_policy: dict[str, Any] | None,
+    algorithm_blueprint: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     audit = dict(construction_policy or {})
     if not audit:
@@ -645,6 +699,14 @@ def _construct_with_policy_audit(
     audit.setdefault("construction_events", [])
     audit.setdefault("construction_mode", _DEFAULT_CONSTRUCTION_MODE)
     audit.setdefault("construction_bias", _DEFAULT_CONSTRUCTION_BIAS)
+
+    if _algorithm_blueprint_active(algorithm_blueprint):
+        return _construct_with_algorithm_blueprint(
+            instance=instance,
+            rng=rng,
+            construction_audit=audit,
+            algorithm_blueprint=algorithm_blueprint or {},
+        )
 
     start_ns = time.monotonic_ns()
     try:
@@ -780,6 +842,844 @@ def _as_nonnegative_int(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _load_algorithm_blueprint(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _algorithm_blueprint_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _ALGORITHM_BLUEPRINT_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_algorithm_event(audit, "error", "algorithm blueprint path escapes workspace")
+        audit["algorithm_blueprint_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(audit, "error", f"algorithm blueprint load failed: {exc}")
+        return audit
+
+    audit["algorithm_blueprint_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(
+            module,
+            "algorithm_plan",
+            instance,
+            time_limit_sec,
+        )
+    except Exception as exc:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(audit, "error", f"algorithm_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"algorithm_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+
+    _normalize_algorithm_blueprint_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _algorithm_blueprint_defaults() -> dict[str, Any]:
+    return {
+        "algorithm_blueprint_path": _ALGORITHM_BLUEPRINT_RELATIVE_PATH,
+        "algorithm_blueprint_loaded": False,
+        "algorithm_blueprint_active": False,
+        "algorithm_blueprint_errors": 0,
+        "algorithm_blueprint_events": [],
+        "algorithm_plan": {
+            "enabled": False,
+            "construction_methods": [_DEFAULT_CONSTRUCTION_MODE],
+            "construction_keep_top_k": 1,
+            "construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
+            "baseline_time_fraction": _BASELINE_TIME_FRACTION,
+            "operator_round_limit": _MAX_OPERATOR_ROUNDS,
+            "post_baseline_operators_enabled": True,
+            "local_search": {
+                "enabled_components": [],
+                "rounds": 0,
+                "top_k": 16,
+            },
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+            },
+        },
+        "algorithm_phases_executed": ["inactive"],
+        "algorithm_construction_methods": [_DEFAULT_CONSTRUCTION_MODE],
+        "algorithm_construction_keep_top_k": 1,
+        "algorithm_baseline_time_fraction": _BASELINE_TIME_FRACTION,
+        "algorithm_operator_round_limit": _MAX_OPERATOR_ROUNDS,
+        "algorithm_post_baseline_operators_enabled": True,
+        "algorithm_local_search_components": [],
+        "algorithm_local_search_rounds": 0,
+        "algorithm_local_search_top_k": 16,
+        "algorithm_local_search_attempts": 0,
+        "algorithm_local_search_accepted": 0,
+        "algorithm_restart_enabled": False,
+        "algorithm_restart_stagnation_rounds": 0,
+        "algorithm_restart_count": 0,
+        "algorithm_best_delta_by_phase": {"inactive": 0.0},
+        "algorithm_phase_runtime_ms": {"inactive": 0},
+        "algorithm_stop_reason": "inactive",
+    }
+
+
+def _normalize_algorithm_blueprint_plan(
+    plan: dict[str, Any],
+    *,
+    audit: dict[str, Any],
+) -> None:
+    requested_active = _algorithm_bool(
+        plan.get("enabled", False),
+        field_name="enabled",
+        default=False,
+        audit=audit,
+    )
+    _validate_algorithm_plan_keys(
+        plan,
+        requested_active=requested_active,
+        audit=audit,
+    )
+    construction_methods = _algorithm_string_sequence(
+        plan.get("construction_methods", [_DEFAULT_CONSTRUCTION_MODE]),
+        allowed=_ALLOWED_CONSTRUCTION_MODES,
+        default=[_DEFAULT_CONSTRUCTION_MODE],
+        max_items=_MAX_BLUEPRINT_CONSTRUCTION_METHODS,
+        field_name="construction_methods",
+        audit=audit,
+    )
+    construction_keep_top_k = _algorithm_int(
+        plan.get("construction_keep_top_k", 1),
+        minimum=1,
+        maximum=_MAX_BLUEPRINT_CONSTRUCTION_METHODS,
+        default=1,
+        field_name="construction_keep_top_k",
+        audit=audit,
+    )
+    construction_bias = _algorithm_float(
+        plan.get("construction_bias", _DEFAULT_CONSTRUCTION_BIAS),
+        minimum=_MIN_CONSTRUCTION_BIAS,
+        maximum=_MAX_CONSTRUCTION_BIAS,
+        default=_DEFAULT_CONSTRUCTION_BIAS,
+        field_name="construction_bias",
+        audit=audit,
+    )
+    baseline_time_fraction = _algorithm_float(
+        plan.get("baseline_time_fraction", _BASELINE_TIME_FRACTION),
+        minimum=_MIN_BASELINE_TIME_FRACTION,
+        maximum=_MAX_BASELINE_TIME_FRACTION,
+        default=_BASELINE_TIME_FRACTION,
+        field_name="baseline_time_fraction",
+        audit=audit,
+    )
+    operator_round_limit = _algorithm_int(
+        plan.get("operator_round_limit", _MAX_OPERATOR_ROUNDS),
+        minimum=0,
+        maximum=_MAX_OPERATOR_ROUNDS,
+        default=_MAX_OPERATOR_ROUNDS,
+        field_name="operator_round_limit",
+        audit=audit,
+    )
+    post_baseline_enabled = _algorithm_bool(
+        plan.get("post_baseline_operators_enabled", True),
+        field_name="post_baseline_operators_enabled",
+        default=True,
+        audit=audit,
+    )
+    local_search = plan.get("local_search", {})
+    if not isinstance(local_search, Mapping):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"local_search returned non-mapping value {local_search!r}",
+        )
+        local_search = {}
+    local_components = _algorithm_string_sequence(
+        local_search.get("enabled_components", []),
+        allowed=_ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS,
+        default=[],
+        max_items=len(_ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS),
+        field_name="local_search.enabled_components",
+        audit=audit,
+        allow_empty=True,
+    )
+    local_rounds = _algorithm_int(
+        local_search.get("rounds", 0),
+        minimum=0,
+        maximum=_MAX_BLUEPRINT_LOCAL_SEARCH_ROUNDS,
+        default=0,
+        field_name="local_search.rounds",
+        audit=audit,
+    )
+    local_top_k = _algorithm_int(
+        local_search.get("top_k", 16),
+        minimum=0,
+        maximum=_MAX_BLUEPRINT_LOCAL_SEARCH_TOP_K,
+        default=16,
+        field_name="local_search.top_k",
+        audit=audit,
+    )
+    restart = plan.get("restart", {})
+    if not isinstance(restart, Mapping):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"restart returned non-mapping value {restart!r}",
+        )
+        restart = {}
+    restart_enabled = _algorithm_bool(
+        restart.get("enabled", False),
+        field_name="restart.enabled",
+        default=False,
+        audit=audit,
+    )
+    restart_stagnation = _algorithm_int(
+        restart.get("stagnation_rounds", 0),
+        minimum=0,
+        maximum=_MAX_BLUEPRINT_RESTART_STAGNATION_ROUNDS,
+        default=0,
+        field_name="restart.stagnation_rounds",
+        audit=audit,
+    )
+    active = requested_active and _as_nonnegative_int(
+        audit["algorithm_blueprint_errors"]
+    ) == 0
+
+    normalized_plan = {
+        "enabled": active,
+        "construction_methods": construction_methods,
+        "construction_keep_top_k": construction_keep_top_k,
+        "construction_bias": construction_bias,
+        "baseline_time_fraction": baseline_time_fraction,
+        "operator_round_limit": operator_round_limit,
+        "post_baseline_operators_enabled": post_baseline_enabled,
+        "local_search": {
+            "enabled_components": local_components,
+            "rounds": local_rounds,
+            "top_k": local_top_k,
+        },
+        "restart": {
+            "enabled": restart_enabled,
+            "stagnation_rounds": restart_stagnation,
+        },
+    }
+    audit["algorithm_plan"] = normalized_plan
+    audit["algorithm_blueprint_active"] = active
+    audit["algorithm_construction_methods"] = construction_methods
+    audit["algorithm_construction_keep_top_k"] = construction_keep_top_k
+    audit["algorithm_baseline_time_fraction"] = baseline_time_fraction
+    audit["algorithm_operator_round_limit"] = operator_round_limit
+    audit["algorithm_post_baseline_operators_enabled"] = post_baseline_enabled
+    audit["algorithm_local_search_components"] = local_components
+    audit["algorithm_local_search_rounds"] = local_rounds
+    audit["algorithm_local_search_top_k"] = local_top_k
+    audit["algorithm_restart_enabled"] = restart_enabled
+    audit["algorithm_restart_stagnation_rounds"] = restart_stagnation
+    if active:
+        audit["algorithm_phases_executed"] = ["plan_loaded"]
+        audit["algorithm_best_delta_by_phase"] = {"plan_loaded": 0.0}
+        audit["algorithm_phase_runtime_ms"] = {"plan_loaded": 0}
+        audit["algorithm_stop_reason"] = "plan_loaded"
+    elif requested_active:
+        audit["algorithm_phases_executed"] = ["plan_invalid"]
+        audit["algorithm_best_delta_by_phase"] = {"plan_invalid": 0.0}
+        audit["algorithm_phase_runtime_ms"] = {"plan_invalid": 0}
+        audit["algorithm_stop_reason"] = "invalid_plan"
+
+
+def _validate_algorithm_plan_keys(
+    plan: Mapping[str, Any],
+    *,
+    requested_active: bool,
+    audit: dict[str, Any],
+) -> None:
+    allowed_top = _ALGORITHM_BLUEPRINT_REQUIRED_KEYS
+    unknown = sorted(str(key) for key in plan if str(key) not in allowed_top)
+    if unknown:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"algorithm_plan contains unknown keys {unknown}",
+        )
+    if requested_active:
+        missing = sorted(key for key in allowed_top if key not in plan)
+        if missing:
+            audit["algorithm_blueprint_errors"] += 1
+            _record_algorithm_event(
+                audit,
+                "error",
+                f"enabled algorithm_plan missing required keys {missing}",
+            )
+    local_search = plan.get("local_search")
+    if isinstance(local_search, Mapping):
+        local_unknown = sorted(
+            str(key)
+            for key in local_search
+            if str(key) not in _ALGORITHM_BLUEPRINT_LOCAL_SEARCH_REQUIRED_KEYS
+        )
+        if local_unknown:
+            audit["algorithm_blueprint_errors"] += 1
+            _record_algorithm_event(
+                audit,
+                "error",
+                f"local_search contains unknown keys {local_unknown}",
+            )
+        if requested_active:
+            local_missing = sorted(
+                key
+                for key in _ALGORITHM_BLUEPRINT_LOCAL_SEARCH_REQUIRED_KEYS
+                if key not in local_search
+            )
+            if local_missing:
+                audit["algorithm_blueprint_errors"] += 1
+                _record_algorithm_event(
+                    audit,
+                    "error",
+                    f"enabled local_search missing required keys {local_missing}",
+                )
+    restart = plan.get("restart")
+    if isinstance(restart, Mapping):
+        restart_unknown = sorted(
+            str(key)
+            for key in restart
+            if str(key) not in _ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS
+        )
+        if restart_unknown:
+            audit["algorithm_blueprint_errors"] += 1
+            _record_algorithm_event(
+                audit,
+                "error",
+                f"restart contains unknown keys {restart_unknown}",
+            )
+        if requested_active:
+            restart_missing = sorted(
+                key
+                for key in _ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS
+                if key not in restart
+            )
+            if restart_missing:
+                audit["algorithm_blueprint_errors"] += 1
+                _record_algorithm_event(
+                    audit,
+                    "error",
+                    f"enabled restart missing required keys {restart_missing}",
+                )
+
+
+def _apply_algorithm_blueprint_search_policy(
+    search_policy: dict[str, Any],
+    *,
+    algorithm_blueprint: dict[str, Any],
+) -> None:
+    if not _algorithm_blueprint_active(algorithm_blueprint):
+        return
+    search_policy["baseline_time_fraction"] = algorithm_blueprint[
+        "algorithm_baseline_time_fraction"
+    ]
+    search_policy["operator_round_limit"] = algorithm_blueprint[
+        "algorithm_operator_round_limit"
+    ]
+    search_policy["post_baseline_operators_enabled"] = algorithm_blueprint[
+        "algorithm_post_baseline_operators_enabled"
+    ]
+
+
+def _algorithm_blueprint_active(algorithm_blueprint: Mapping[str, Any] | None) -> bool:
+    return bool(algorithm_blueprint and algorithm_blueprint.get("algorithm_blueprint_active"))
+
+
+def _algorithm_bool(
+    value: Any,
+    *,
+    field_name: str,
+    default: bool,
+    audit: dict[str, Any],
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    audit["algorithm_blueprint_errors"] += 1
+    _record_algorithm_event(
+        audit,
+        "error",
+        f"{field_name} returned non-bool value {value!r}",
+    )
+    return default
+
+
+def _algorithm_float(
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    default: float,
+    field_name: str,
+    audit: dict[str, Any],
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name} returned non-numeric value {value!r}",
+        )
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name} returned non-finite value {value!r}",
+        )
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _algorithm_int(
+    value: Any,
+    *,
+    minimum: int,
+    maximum: int,
+    default: int,
+    field_name: str,
+    audit: dict[str, Any],
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name} returned non-integer value {value!r}",
+        )
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _algorithm_string_sequence(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: list[str],
+    max_items: int,
+    field_name: str,
+    audit: dict[str, Any],
+    allow_empty: bool = False,
+) -> list[str]:
+    if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name} returned non-sequence value {value!r}",
+        )
+        return list(default)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = str(item).strip()
+        if text not in allowed:
+            audit["algorithm_blueprint_errors"] += 1
+            _record_algorithm_event(
+                audit,
+                "error",
+                f"{field_name} contains unknown value {text!r}",
+            )
+            continue
+        if text not in seen:
+            seen.add(text)
+            normalized.append(text)
+        if len(normalized) >= max_items:
+            break
+    if not normalized and not allow_empty:
+        audit["algorithm_blueprint_errors"] += 1
+        _record_algorithm_event(
+            audit,
+            "error",
+            f"{field_name} produced no valid values",
+        )
+        return list(default)
+    return normalized
+
+
+def _record_algorithm_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("algorithm_blueprint_events", [])
+    if len(events) >= 10:
+        return
+    events.append(
+        {
+            "policy": _ALGORITHM_BLUEPRINT_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+
+def _construct_with_algorithm_blueprint(
+    *,
+    instance: CvrpInstance,
+    rng: random.Random,
+    construction_audit: dict[str, Any],
+    algorithm_blueprint: dict[str, Any],
+) -> tuple[CvrpSolution, dict[str, Any]]:
+    start_ns = time.monotonic_ns()
+    methods = [
+        method
+        for method in algorithm_blueprint.get("algorithm_construction_methods", [])
+        if method in _ALLOWED_CONSTRUCTION_MODES
+    ]
+    if not methods:
+        methods = [_DEFAULT_CONSTRUCTION_MODE]
+    keep_top_k = _as_nonnegative_int(
+        algorithm_blueprint.get("algorithm_construction_keep_top_k", 1)
+    )
+    methods = methods[: max(1, min(keep_top_k, len(methods)))]
+    bias = float(
+        algorithm_blueprint.get("algorithm_plan", {}).get(
+            "construction_bias",
+            algorithm_blueprint.get("construction_bias", _DEFAULT_CONSTRUCTION_BIAS),
+        )
+    )
+
+    adapter = CvrpAdapter(object())  # type: ignore[arg-type]
+    best_solution: CvrpSolution | None = None
+    best_objective: dict[str, int | float] | None = None
+    first_objective: dict[str, int | float] | None = None
+    tried: list[str] = []
+    for method in methods:
+        tried.append(method)
+        try:
+            candidate = solve(
+                instance,
+                rng,
+                construction_mode=method,
+                construction_bias=bias,
+            )
+        except Exception as exc:
+            construction_audit["construction_errors"] = (
+                _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+            )
+            _record_construction_event(
+                construction_audit,
+                "error",
+                f"algorithm construction failed for mode={method!r}: {exc}",
+            )
+            continue
+        valid, reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            construction_audit["construction_errors"] = (
+                _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+            )
+            _record_construction_event(
+                construction_audit,
+                "error",
+                f"algorithm construction infeasible for mode={method!r}: {reason}",
+            )
+            continue
+        objective = _objective_for_solution(adapter, instance, candidate)
+        if first_objective is None:
+            first_objective = objective
+        if best_objective is None or _lexicographic_improves(objective, best_objective):
+            best_solution = candidate
+            best_objective = objective
+            construction_audit["construction_mode"] = method
+
+    if best_solution is None:
+        construction_audit["construction_errors"] = (
+            _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+        )
+        _record_construction_event(
+            construction_audit,
+            "error",
+            "algorithm construction ensemble produced no valid solution",
+        )
+        best_solution = solve(instance, rng)
+        best_objective = _objective_for_solution(adapter, instance, best_solution)
+
+    construction_audit["construction_elapsed_ms"] = int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
+    construction_audit["construction_routes"] = len(best_solution.routes)
+    construction_audit["construction_distance"] = sum(
+        instance.route_distance(route) for route in best_solution.routes
+    )
+    construction_audit["construction_feasible"] = True
+    construction_audit["algorithm_construction_methods_tried"] = tried
+    _append_algorithm_phase(algorithm_blueprint, "construction_ensemble")
+    _set_algorithm_phase_runtime(
+        algorithm_blueprint,
+        "construction_ensemble",
+        start_ns,
+    )
+    if first_objective is not None and best_objective is not None:
+        algorithm_blueprint.setdefault("algorithm_best_delta_by_phase", {})[
+            "construction_ensemble"
+        ] = _objective_distance_delta(first_objective, best_objective)
+    return best_solution, construction_audit
+
+
+def improve_with_algorithm_blueprint(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    rng: random.Random,
+    time_limit_sec: float,
+    start_time: float,
+    algorithm_blueprint: dict[str, Any] | None = None,
+) -> tuple[CvrpSolution, dict[str, Any]]:
+    if not _algorithm_blueprint_active(algorithm_blueprint):
+        return solution, {}
+
+    assert algorithm_blueprint is not None
+    audit = dict(algorithm_blueprint)
+    _append_algorithm_phase(audit, "baseline")
+    audit.setdefault("algorithm_phase_runtime_ms", {}).setdefault("baseline", 0)
+    components = [
+        component
+        for component in audit.get("algorithm_local_search_components", [])
+        if component in _ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS
+    ]
+    rounds = _as_nonnegative_int(audit.get("algorithm_local_search_rounds", 0))
+    top_k = _as_nonnegative_int(audit.get("algorithm_local_search_top_k", 16))
+    if not components or rounds <= 0 or top_k <= 0:
+        audit["algorithm_stop_reason"] = "local_search_disabled"
+        return solution, audit
+
+    phase_start_ns = time.monotonic_ns()
+    initial_objective = _objective_for_solution(adapter, instance, solution)
+    current = solution
+    current_objective = dict(initial_objective)
+    no_improvement_rounds = 0
+    stop_reason = "max_local_search_rounds"
+
+    _append_algorithm_phase(audit, "local_search")
+    for round_index in range(rounds):
+        if _time_exhausted(start_time, time_limit_sec):
+            stop_reason = "time_limit"
+            break
+        audit["algorithm_local_search_rounds"] = round_index + 1
+        round_accepted = 0
+        for component in components:
+            if _time_exhausted(start_time, time_limit_sec):
+                stop_reason = "time_limit"
+                break
+            component_start_ns = time.monotonic_ns()
+            if component == "intra_route_2opt":
+                candidate, attempts = _best_intra_route_2opt(
+                    current,
+                    instance,
+                    adapter=adapter,
+                    current_objective=current_objective,
+                    top_k=top_k,
+                )
+            elif component == "inter_route_relocate":
+                candidate, attempts = _best_inter_route_relocate(
+                    current,
+                    instance,
+                    adapter=adapter,
+                    current_objective=current_objective,
+                    top_k=top_k,
+                )
+            else:
+                candidate, attempts = None, 0
+            audit["algorithm_local_search_attempts"] = (
+                _as_nonnegative_int(audit.get("algorithm_local_search_attempts")) + attempts
+            )
+            _record_algorithm_component_runtime(audit, component, component_start_ns)
+            if candidate is None:
+                continue
+            candidate_objective = _objective_for_solution(adapter, instance, candidate)
+            if _lexicographic_improves(candidate_objective, current_objective):
+                current = candidate
+                current_objective = candidate_objective
+                audit["algorithm_local_search_accepted"] = (
+                    _as_nonnegative_int(audit.get("algorithm_local_search_accepted")) + 1
+                )
+                round_accepted += 1
+        if stop_reason == "time_limit":
+            break
+        if round_accepted > 0:
+            no_improvement_rounds = 0
+            continue
+        no_improvement_rounds += 1
+        stagnation_limit = _as_nonnegative_int(
+            audit.get("algorithm_restart_stagnation_rounds", 0)
+        )
+        if bool(audit.get("algorithm_restart_enabled")) and stagnation_limit:
+            if no_improvement_rounds >= stagnation_limit:
+                audit["algorithm_restart_count"] = (
+                    _as_nonnegative_int(audit.get("algorithm_restart_count")) + 1
+                )
+                stop_reason = "restart_stagnation_limit"
+                break
+        else:
+            stop_reason = "no_local_search_improvement"
+            break
+
+    _set_algorithm_phase_runtime(audit, "local_search", phase_start_ns)
+    audit.setdefault("algorithm_best_delta_by_phase", {})[
+        "local_search"
+    ] = _objective_distance_delta(initial_objective, current_objective)
+    audit["algorithm_stop_reason"] = stop_reason
+    return current, audit
+
+
+def _best_intra_route_2opt(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int]:
+    routes = [list(route) for route in solution.routes]
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    attempts = 0
+    for route_index, route in enumerate(routes):
+        if len(route) < 2:
+            continue
+        for i in range(len(route) - 1):
+            for j in range(i + 1, len(route)):
+                if attempts >= top_k:
+                    return best_solution, attempts
+                attempts += 1
+                candidate_routes = [list(item) for item in routes]
+                candidate_routes[route_index] = (
+                    route[:i] + list(reversed(route[i : j + 1])) + route[j + 1 :]
+                )
+                candidate = CvrpSolution(
+                    routes=tuple(tuple(item) for item in candidate_routes if item)
+                )
+                objective = _objective_for_solution(adapter, instance, candidate)
+                if _lexicographic_improves(objective, best_objective):
+                    best_solution = candidate
+                    best_objective = objective
+    return best_solution, attempts
+
+
+def _best_inter_route_relocate(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int]:
+    routes = [list(route) for route in solution.routes]
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    attempts = 0
+    for source_index, source_route in enumerate(routes):
+        for customer_pos, customer in enumerate(source_route):
+            for dest_index, dest_route in enumerate(routes):
+                if dest_index == source_index:
+                    continue
+                for insert_pos in range(len(dest_route) + 1):
+                    if attempts >= top_k:
+                        return best_solution, attempts
+                    attempts += 1
+                    candidate_routes = [list(item) for item in routes]
+                    moved = candidate_routes[source_index].pop(customer_pos)
+                    candidate_routes[dest_index].insert(insert_pos, moved)
+                    if instance.route_load(tuple(candidate_routes[dest_index])) > instance.capacity:
+                        continue
+                    normalized_routes = [
+                        tuple(route) for route in candidate_routes if route
+                    ]
+                    candidate = CvrpSolution(routes=tuple(normalized_routes))
+                    valid, _reason = _solution_is_valid(adapter, instance, candidate)
+                    if not valid:
+                        continue
+                    objective = _objective_for_solution(adapter, instance, candidate)
+                    if _lexicographic_improves(objective, best_objective):
+                        best_solution = candidate
+                        best_objective = objective
+    return best_solution, attempts
+
+
+def _record_algorithm_component_runtime(
+    audit: dict[str, Any],
+    component: str,
+    start_ns: int,
+) -> None:
+    runtime = audit.setdefault("algorithm_component_runtime_ms", {})
+    runtime[component] = _as_nonnegative_int(runtime.get(component)) + int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
+
+
+def _append_algorithm_phase(audit: dict[str, Any], phase: str) -> None:
+    phases = audit.setdefault("algorithm_phases_executed", [])
+    if not isinstance(phases, list):
+        phases = []
+        audit["algorithm_phases_executed"] = phases
+    if phases == ["inactive"] or phases == ["plan_invalid"]:
+        phases.clear()
+    if phase not in phases:
+        phases.append(phase)
+
+
+def _set_algorithm_phase_runtime(
+    audit: dict[str, Any],
+    phase: str,
+    start_ns: int,
+) -> None:
+    runtime = audit.setdefault("algorithm_phase_runtime_ms", {})
+    runtime[phase] = _as_nonnegative_int(runtime.get(phase)) + int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
+
+
+def _objective_distance_delta(
+    before: Mapping[str, int | float],
+    after: Mapping[str, int | float],
+) -> float:
+    if float(after.get("fleet_violation", 0)) != float(before.get("fleet_violation", 0)):
+        return float(before.get("fleet_violation", 0)) - float(
+            after.get("fleet_violation", 0)
+        )
+    return float(before.get("total_distance", 0.0)) - float(
+        after.get("total_distance", 0.0)
+    )
 
 
 def _load_neighborhood_portfolio(

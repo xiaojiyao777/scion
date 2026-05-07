@@ -29,6 +29,12 @@ _ALLOWED_PORTFOLIO_COMPONENTS = frozenset(
         "registry_operator",
     }
 )
+_ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS = frozenset(
+    {
+        "intra_route_2opt",
+        "inter_route_relocate",
+    }
+)
 _PORTFOLIO_LIMIT_RANGES = {
     "max_rounds": (0, 6),
     "top_k": (0, 32),
@@ -39,6 +45,19 @@ _PORTFOLIO_LIMIT_RANGES = {
     "ruin_recreate": (0, 200),
     "registry_operator": (0, 200),
 }
+_ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
+    {
+        "enabled",
+        "construction_methods",
+        "construction_keep_top_k",
+        "construction_bias",
+        "baseline_time_fraction",
+        "operator_round_limit",
+        "post_baseline_operators_enabled",
+        "local_search",
+        "restart",
+    }
+)
 _POLICY_INSTANCE_API_TEXT = (
     "Safe CvrpInstance API for policy functions: use "
     "`instance.customer_ids`, `instance.customer_count`, "
@@ -82,6 +101,16 @@ class CvrpAdapter:
             "predeclared registry component families, apply component weight "
             "multipliers, and bound rounds, top-k scheduled operators, and "
             "component attempt limits before the post-baseline operator loop.\n"
+            "- The `algorithm_blueprint` research surface is inactive by "
+            "default. When a candidate returns an enabled valid plan, it "
+            "coordinates the top-level CVRP algorithm lifecycle: bounded "
+            "construction ensemble, baseline budget, package-owned local "
+            "search, restart knobs, and post-baseline registry-operator "
+            "toggle/round limit.\n"
+            "- The algorithm blueprint can only select package-owned bounded "
+            "local-search components (`intra_route_2opt` and "
+            "`inter_route_relocate`); it cannot inject route-editing code into "
+            "the solver.\n"
             "- Operator research surfaces are applied after the baseline in a "
             "bounded improvement loop, up to the policy-controlled round limit "
             "or until the solver time budget is exhausted.\n"
@@ -170,6 +199,43 @@ class CvrpAdapter:
                 "failures. The solver owns route moves and uses this policy only "
                 "to schedule already-declared bounded components."
             )
+        if surface_name == "algorithm_blueprint":
+            return (
+                "policies/algorithm_blueprint.py is a module-level top-level "
+                "algorithm lifecycle config surface; no class is required.\n\n"
+                "Declared signature:\n"
+                "algorithm_plan(instance, time_limit_sec)\n\n"
+                "Required function:\n"
+                "def algorithm_plan(instance, time_limit_sec):\n"
+                "    return a dict with exactly these top-level keys: enabled, "
+                "construction_methods, construction_keep_top_k, construction_bias, "
+                "baseline_time_fraction, operator_round_limit, "
+                "post_baseline_operators_enabled, local_search, and restart.\n\n"
+                "Plan contract:\n"
+                "- enabled: bool. The default must be False. Only enabled=True "
+                "and a valid plan lets this surface take over the lifecycle.\n"
+                "- construction_methods: sequence drawn from 'nearest_neighbor', "
+                "'nearest_neighbor_demand_bias', 'demand_descending', and "
+                "'sequential'.\n"
+                "- construction_keep_top_k: int in [1, 4].\n"
+                "- construction_bias: finite number in [0.0, 1.0].\n"
+                "- baseline_time_fraction: finite number in [0.2, 0.95].\n"
+                "- operator_round_limit: int in [0, 20].\n"
+                "- post_baseline_operators_enabled: bool.\n"
+                "- local_search: dict with enabled_components, rounds, and top_k. "
+                "enabled_components is drawn from 'intra_route_2opt' and "
+                "'inter_route_relocate'; rounds is an int in [0, 4]; top_k is "
+                "an int in [0, 64].\n"
+                "- restart: dict with enabled bool and stagnation_rounds int in "
+                "[0, 25].\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "Unknown keys, missing required keys when enabled=True, "
+                "unknown components, non-finite numbers, out-of-range values, "
+                "and exceptions increment algorithm_blueprint_errors. The "
+                "solver then refuses lifecycle takeover and runtime audit fails "
+                "closed for selected_surface=algorithm_blueprint."
+            )
         return self.render_operator_interface()
 
     def render_operator_interface(self) -> str:
@@ -218,6 +284,7 @@ class CvrpAdapter:
             "construction_policy",
             "search_policy",
             "neighborhood_portfolio",
+            "algorithm_blueprint",
         }:
             return {
                 "passed": True,
@@ -256,6 +323,8 @@ class CvrpAdapter:
             _preview_search_policy(module, instance, issues, checks)
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
+        elif surface_name == "algorithm_blueprint":
+            _preview_algorithm_blueprint(module, instance, issues, checks)
         return _policy_preview_result(surface_name, issues, checks)
 
     def load_instance(self, instance_path: str) -> Any:
@@ -422,6 +491,7 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/construction_policy.py": "construction_policy",
         "policies/search_policy.py": "search_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
+        "policies/algorithm_blueprint.py": "algorithm_blueprint",
     }.get(normalized, "")
 
 
@@ -591,6 +661,156 @@ def _preview_neighborhood_portfolio(
                     integral=True,
                     issues=issues,
                 )
+
+
+def _preview_algorithm_blueprint(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(module, "algorithm_plan", instance, issues, checks)
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"algorithm_plan returned non-mapping value {plan!r}")
+        return
+
+    unknown = sorted(str(key) for key in plan if str(key) not in _ALGORITHM_BLUEPRINT_REQUIRED_KEYS)
+    if unknown:
+        issues.append(f"algorithm_plan returned unknown keys {unknown}")
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(f"algorithm_plan enabled returned non-bool value {enabled!r}")
+        enabled = False
+    if enabled:
+        missing = sorted(key for key in _ALGORITHM_BLUEPRINT_REQUIRED_KEYS if key not in plan)
+        if missing:
+            issues.append(f"enabled algorithm_plan missing required keys {missing}")
+
+    methods = plan.get("construction_methods", ["nearest_neighbor"])
+    _check_sequence_literals(
+        "construction_methods",
+        methods,
+        allowed=_ALLOWED_CONSTRUCTION_MODES,
+        allow_empty=False,
+        issues=issues,
+    )
+    _check_number(
+        "construction_keep_top_k",
+        plan.get("construction_keep_top_k", 1),
+        minimum=1,
+        maximum=4,
+        integral=True,
+        issues=issues,
+    )
+    _check_number(
+        "construction_bias",
+        plan.get("construction_bias", 0.0),
+        minimum=0.0,
+        maximum=1.0,
+        integral=False,
+        issues=issues,
+    )
+    _check_number(
+        "baseline_time_fraction",
+        plan.get("baseline_time_fraction", 0.8),
+        minimum=0.2,
+        maximum=0.95,
+        integral=False,
+        issues=issues,
+    )
+    _check_number(
+        "operator_round_limit",
+        plan.get("operator_round_limit", 20),
+        minimum=0,
+        maximum=20,
+        integral=True,
+        issues=issues,
+    )
+    post_baseline = plan.get("post_baseline_operators_enabled", True)
+    if not isinstance(post_baseline, bool):
+        issues.append(
+            "post_baseline_operators_enabled returned non-bool value "
+            f"{post_baseline!r}"
+        )
+
+    local_search = plan.get("local_search", {})
+    if not isinstance(local_search, Mapping):
+        issues.append(f"local_search returned non-mapping value {local_search!r}")
+    else:
+        unknown_local = sorted(
+            str(key)
+            for key in local_search
+            if str(key) not in {"enabled_components", "rounds", "top_k"}
+        )
+        if unknown_local:
+            issues.append(f"local_search returned unknown keys {unknown_local}")
+        _check_sequence_literals(
+            "local_search.enabled_components",
+            local_search.get("enabled_components", []),
+            allowed=_ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS,
+            allow_empty=True,
+            issues=issues,
+        )
+        _check_number(
+            "local_search.rounds",
+            local_search.get("rounds", 0),
+            minimum=0,
+            maximum=4,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "local_search.top_k",
+            local_search.get("top_k", 16),
+            minimum=0,
+            maximum=64,
+            integral=True,
+            issues=issues,
+        )
+
+    restart = plan.get("restart", {})
+    if not isinstance(restart, Mapping):
+        issues.append(f"restart returned non-mapping value {restart!r}")
+    else:
+        unknown_restart = sorted(
+            str(key)
+            for key in restart
+            if str(key) not in {"enabled", "stagnation_rounds"}
+        )
+        if unknown_restart:
+            issues.append(f"restart returned unknown keys {unknown_restart}")
+        restart_enabled = restart.get("enabled", False)
+        if not isinstance(restart_enabled, bool):
+            issues.append(f"restart.enabled returned non-bool value {restart_enabled!r}")
+        _check_number(
+            "restart.stagnation_rounds",
+            restart.get("stagnation_rounds", 0),
+            minimum=0,
+            maximum=25,
+            integral=True,
+            issues=issues,
+        )
+
+
+def _check_sequence_literals(
+    field: str,
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    allow_empty: bool,
+    issues: list[str],
+) -> None:
+    if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+        issues.append(f"{field} returned non-sequence value {value!r}")
+        return
+    normalized = [str(item).strip() for item in value]
+    bad = [item for item in normalized if item not in allowed]
+    if bad:
+        issues.append(f"{field} returned unknown values {bad}")
+    if not normalized and not allow_empty:
+        issues.append(f"{field} returned an empty sequence")
 
 
 _PREVIEW_FAILED = object()

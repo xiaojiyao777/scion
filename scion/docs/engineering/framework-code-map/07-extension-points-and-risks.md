@@ -68,6 +68,10 @@ Medium-risk areas:
   aggregate stats and raw holdout details are not rendered.
 - Search memory family extraction depends on taxonomy quality. Without problem taxonomy, framework defaults are intentionally weak.
 - Runtime audit fields are generic by convention, but solver packages choose field names. Keep new fields under general prefixes or document them in adapter/solver mechanics.
+- CVRP now exposes `algorithm_blueprint` as a problem-owned top-level
+  algorithm lifecycle surface. Its solver integration stays inside the CVRP
+  package: Scion core sees only declared surface metadata and generic required
+  runtime fields, not CVRP construction modes or local-search component names.
 - Promotion and weight optimization mutate champion state asynchronously/synchronously. Any new design surface that changes registry semantics should be checked against promotion snapshot and stale/reconcile behavior.
 
 ## Places to Avoid Editing for Problem Features
@@ -88,7 +92,7 @@ Avoid changing these for CVRP/warehouse-specific feature work:
 
 ## Recommended Next Implementation Slice
 
-For algorithm design space expansion, use a thin vertical slice:
+For future algorithm design space expansion, use a thin vertical slice:
 
 1. Add/adjust `research_surfaces` in the problem package `problem-v1.yaml`.
 2. Update adapter rendering so prompts describe the new surface and invariants.
@@ -103,7 +107,11 @@ For algorithm design space expansion, use a thin vertical slice:
 7. Add focused tests around bridge loading, context rendering, contract validation, solver runtime audit, and one campaign smoke.
 8. Add or update problem-specific final evidence only if final reporting needs new domain fields.
 
-This slice keeps campaign core stable while proving the problem package can own the new algorithm space.
+The CVRP `algorithm_blueprint` slice follows this pattern for a top-level
+lifecycle surface: problem spec declaration, adapter interface/preview, solver
+execution and audit, selected-surface runtime evidence, focused tests, and
+engineering docs were updated without adding CVRP semantics to core governance.
+Future surfaces should keep the same boundary.
 
 ## Design Review Checklist
 

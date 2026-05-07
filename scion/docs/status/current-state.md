@@ -95,9 +95,9 @@ The v0.4 focus remains:
 - Operator design optimization is preserved as the default/legacy surface:
   problems without `research_surfaces` still use `operator_interface.categories`
   as before.
-- CVRP currently exposes six surfaces: `route_local`, `route_pair`,
-  `ruin_recreate`, `search_policy`, `construction_policy`, and
-  `neighborhood_portfolio`.
+- CVRP currently exposes seven surfaces: `route_local`, `route_pair`,
+  `ruin_recreate`, `search_policy`, `construction_policy`,
+  `neighborhood_portfolio`, and `algorithm_blueprint`.
 - The CVRP `search_policy` surface allows bounded optimization of baseline
   time fraction, post-baseline operator round limit, and whether post-baseline
   operators run, without allowing LLM edits to `solver.py`.
@@ -114,6 +114,14 @@ The v0.4 focus remains:
   `enabled_components`, `component_weights`, `candidate_limits`,
   `component_attempts`, `component_accepted`, `component_runtime_ms`, and
   `portfolio_stop_reason`; portfolio errors fail closed through runtime audit.
+- The CVRP `algorithm_blueprint` surface is a top-level config surface in
+  `policies/algorithm_blueprint.py`. It is inactive by default, preserving the
+  existing solver lifecycle. A valid enabled plan can coordinate bounded
+  construction ensemble, baseline time fraction, package-owned local search
+  (`intra_route_2opt`, `inter_route_relocate`), restart knobs, and
+  post-baseline registry-operator toggle/round limit. Invalid plans record
+  `algorithm_blueprint_errors`, do not take over the lifecycle, and fail
+  selected-surface runtime audit.
 - CVRP policy-surface prompts and adapter interface rendering now expose the
   safe `CvrpInstance` policy API explicitly: `customer_ids`, `customer_count`,
   `demands[customer_id]`, `capacity`, and `distance(i, j)`. The problem package
@@ -160,6 +168,26 @@ Latest result:
 
 ```text
 1435 passed, 1 skipped in 44.87s
+```
+
+Latest focused CVRP algorithm-blueprint validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_research_surfaces.py -q
+```
+
+```text
+98 passed in 6.96s
+```
+
+Broader CVRP subset:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_*.py scion/scion/tests/unit/evidence/test_cvrp_*.py -q
+```
+
+```text
+111 passed in 30.63s
 ```
 
 CVRP synthetic baseline smoke with explicit repo `vrp` baseline:
@@ -1075,9 +1103,9 @@ Validation:
 1446 passed, 1 skipped in 48.04s
 ```
 
-## 2026-05-07 Post-Repair Sonnet CVRP Smoke Launched
+## 2026-05-07 Post-Repair Sonnet CVRP Smoke Audited
 
-A new detached real Sonnet CVRP formal-path smoke was launched after the CVRP
+A detached real Sonnet CVRP formal-path smoke completed after the CVRP
 policy-surface, APS compactness, and V8 auditability repairs.
 
 Run root:
@@ -1103,19 +1131,70 @@ split=scion/scion/problems/cvrp/formal/split_manifest.yaml
 seeds=scion/scion/problems/cvrp/formal/seed_ledger.yaml
 ```
 
-Launch state:
+Outcome:
 
 ```text
-wrapper_pid=2174142
-scion_pid=2174143
-status=running
+exit_code=0
+rounds=5/5
+step_records=5
+experiments=4
+champion=v1_r0
+promotions=0
+weight_optimizations=0
+stop=max_rounds_exhausted
+formal_ready=false
+final_evidence_refs=missing
+frozen_budget_used=0
+frozen_budget_remaining=2
 ```
 
-This is a framework/control validation smoke. Raw logs, APS transcripts, raw
-metrics, and DB artifacts should be analyzed only through delegated post-run
-audit. The key post-run questions are whether policy surfaces now clear
-Verification, whether APS preview observations stay compact, and whether
-screening evidence moves beyond tie/no-op dominated behavior.
+Detailed delegated analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-post-aps-cvrp-sonnet-20260507.md
+```
+
+Interpretation:
+
+- The run is valid framework/control smoke evidence, not formal solver-quality
+  evidence. It was only five rounds, no candidate promoted, no validation or
+  frozen stage was reached, and `final_evidence_refs` are absent.
+- ContractGate passed 4/5 proposals; the only contract failure was
+  `C9c_complexity_bound` on `operators/oropt_intra_route.py` for an uncapped
+  while loop.
+- Verification and canary are no longer the blocking issue for the tested CVRP
+  surfaces: all four candidates that reached them passed both.
+- Policy surfaces now clear Contract and Verification in this smoke:
+  `construction_policy`, `neighborhood_portfolio`, and `search_policy` all
+  reached real VRP screening with no policy/runtime API errors.
+- V8 success metadata for policy surfaces is adapter-backed and persisted as
+  audit metadata: `comparison_mode=adapter_canonical_signature` and
+  `comparison_equal=true`.
+- Screening evidence was complete and fail-closed rather than infrastructure
+  failed: all 72 candidate/champion pairs were valid, with 0 failed pairs, and
+  the real repo-local `vrp_alns_vns` baseline was used.
+- All four screened candidates failed `SCREENING_FAIL_WIN_RATE`; no validation
+  or frozen stage was reached and no frozen budget was spent.
+- The route-local operator candidate remained no-op dominated: 24 attempts, 0
+  accepted moves, and `no_improvement_round` on all screening pairs.
+- `construction_policy` and `neighborhood_portfolio` cleared runtime audit but
+  produced tie-dominated objective evidence; the portfolio candidate had no
+  generated registry operators to schedule and stopped as
+  `no_registry_operators`.
+- `search_policy` produced the strongest nontrivial signal: runtime median
+  ratio about `0.842`, median runtime delta about `-1312.5ms`, and mixed
+  objective evidence of 2 wins, 1 loss, and 13 ties. It still failed the
+  screening win-rate gate.
+- APS artifacts remained tainted, digest-backed, and compact enough to complete
+  proposal generation, but `context.read_surface` can still hit
+  `result_too_large`; APS surface-context compactness remains a follow-up.
+
+The current bottleneck is policy-surface efficacy and observability rather than
+gate modernization. The next CVRP slice should either make
+`neighborhood_portfolio` observable when no generated registry operators exist
+or add the next bounded problem-owned surface, such as destroy/repair or
+acceptance/restart, only after defining its invocation point, runtime audit
+fields, and tests.
 
 ## Remaining Optimization Backlog
 

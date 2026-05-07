@@ -26,10 +26,14 @@ enough to continue, validate, freeze, promote, or abandon.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
 - Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
-  API guidance and APS preview/planner compactness have been repaired, and a
-  post-repair five-round Sonnet CVRP smoke is running. The next decision point
-  is delegated post-run analysis of that smoke: whether policy surfaces now
-  clear Verification and produce nontrivial screening signal.
+  API guidance and APS preview/planner compactness have been repaired, and the
+  post-repair five-round Sonnet CVRP smoke has been post-audited. The tested
+  policy surfaces now clear Verification and reach real VRP screening, but
+  screening signal remains weak/tie-dominated. The next decision point is
+  policy-surface efficacy and observability, especially making
+  `neighborhood_portfolio` meaningful without prior generated registry
+  operators or adding a bounded next surface such as destroy/repair or
+  acceptance/restart.
 
 ## Required Reading Order
 
@@ -126,8 +130,10 @@ Gate modernization follow-up:
 
 Near-term CVRP research-space work:
 
-- Analyze the active post-repair Sonnet CVRP smoke:
+- The post-repair Sonnet CVRP smoke has been analyzed:
   `/home/clawd/research/scion-experiments/v04-post-aps-cvrp-sonnet-20260507T083649Z`.
+  The analysis is recorded in
+  `docs/experiments/v0.4/v0.4-post-aps-cvrp-sonnet-20260507.md`.
 - Improve policy-surface efficacy rather than adding more post-baseline route
   operators unless the post-run evidence shows accepted-move signal.
 - Add or refine bounded problem-owned surfaces only when the problem package can

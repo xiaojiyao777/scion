@@ -82,7 +82,12 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
 
 @pytest.mark.parametrize(
     "surface_name",
-    ["construction_policy", "search_policy", "neighborhood_portfolio"],
+    [
+        "construction_policy",
+        "search_policy",
+        "neighborhood_portfolio",
+        "algorithm_blueprint",
+    ],
 )
 def test_cvrp_policy_surface_interfaces_render_safe_instance_api(
     cvrp_adapter: ProblemAdapter,
@@ -124,6 +129,64 @@ def test_cvrp_policy_preview_rejects_instance_customers_alias(
     assert "customers" in json.dumps(preview["issues"])
     assert preview["synthetic_instance"]["customer_count"] == 3
     assert "customers" not in preview["synthetic_instance"]
+
+
+def test_cvrp_algorithm_blueprint_preview_rejects_bad_plan(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/algorithm_blueprint.py",
+        action="modify",
+        code_content=(
+            "def algorithm_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'construction_methods': ['nearest_neighbor'],\n"
+            "        'construction_keep_top_k': 1,\n"
+            "        'construction_bias': 0.0,\n"
+            "        'baseline_time_fraction': 0.8,\n"
+            "        'operator_round_limit': 20,\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'local_search': {\n"
+            "            'enabled_components': ['made_up_move'],\n"
+            "            'rounds': 9,\n"
+            "            'top_k': 16,\n"
+            "        },\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0},\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="algorithm_blueprint"),
+    )
+
+    assert preview["passed"] is False
+    assert "made_up_move" in json.dumps(preview["issues"])
+    assert "local_search.rounds" in json.dumps(preview["issues"])
+
+
+def test_cvrp_algorithm_blueprint_preview_rejects_instance_customers_alias(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/algorithm_blueprint.py",
+        action="modify",
+        code_content=(
+            "def algorithm_plan(instance, time_limit_sec):\n"
+            "    return {'enabled': bool(instance.customers)}\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="algorithm_blueprint"),
+    )
+
+    assert preview["passed"] is False
+    assert "algorithm_plan raised during synthetic preview" in json.dumps(preview)
+    assert "customers" in json.dumps(preview["issues"])
 
 
 def test_valid_route_solution_passes_all_adapter_checks(

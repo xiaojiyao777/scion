@@ -48,6 +48,7 @@ runtime_failure_guidance:
     min_category_fraction: 0.5
     min_count: 2
     recommended_surfaces:
+      - algorithm_blueprint
       - construction_policy
       - neighborhood_portfolio
       - search_policy
@@ -57,8 +58,9 @@ runtime_failure_guidance:
       - ruin_recreate
     guidance: >-
       Recent operator-like attempts are spending post-baseline budget without
-      accepting moves. Prefer algorithm-level surfaces that change initial
-      construction, component scheduling, or baseline/operator budget policy.
+      accepting moves. Prefer algorithm-level surfaces that change the top-level
+      lifecycle, initial construction, package-owned local search, component
+      scheduling, or baseline/operator budget policy.
       Discourage adding another post-baseline route_local, route_pair, or
       ruin_recreate polish operator unless the hypothesis directly explains how
       it will raise accepted move rate through bounded candidate generation,
@@ -581,6 +583,140 @@ research_surfaces:
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false
+  - name: algorithm_blueprint
+    kind: config
+    description: "Top-level CVRP algorithm lifecycle blueprint."
+    algorithm:
+      role: top_level_algorithm_lifecycle
+      invocation_point: construction_baseline_local_search_before_registry_operators
+      description: >-
+        Coordinates a bounded construction ensemble, baseline time budget,
+        package-owned local search phase, restart knobs, and post-baseline
+        registry-operator toggle/round limit. The default file is inactive and
+        preserves existing solver behavior until a candidate returns an enabled
+        valid plan.
+    targets:
+      files:
+        - "policies/algorithm_blueprint.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "algorithm_plan"
+      function_signatures:
+        algorithm_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        algorithm_plan returns a bounded dict with enabled bool,
+        construction_methods sequence, construction_keep_top_k int,
+        construction_bias number, baseline_time_fraction number,
+        operator_round_limit int, post_baseline_operators_enabled bool,
+        local_search dict, and restart dict. When enabled is true, all required
+        keys must be present and valid or the solver records
+        algorithm_blueprint_errors and refuses lifecycle takeover.
+      return_values:
+        algorithm_plan:
+          value_type: mapping
+          allowed_keys:
+            - enabled
+            - construction_methods
+            - construction_keep_top_k
+            - construction_bias
+            - baseline_time_fraction
+            - operator_round_limit
+            - post_baseline_operators_enabled
+            - local_search
+            - restart
+          required_keys:
+            - enabled
+            - construction_methods
+            - construction_keep_top_k
+            - construction_bias
+            - baseline_time_fraction
+            - operator_round_limit
+            - post_baseline_operators_enabled
+            - local_search
+            - restart
+    bounds:
+      allowed_components:
+        - nearest_neighbor
+        - nearest_neighbor_demand_bias
+        - demand_descending
+        - sequential
+        - intra_route_2opt
+        - inter_route_relocate
+        - post_baseline_operator_toggle
+        - restart_stagnation
+      numeric_ranges:
+        construction_keep_top_k: [1, 4]
+        construction_bias: [0.0, 1.0]
+        baseline_time_fraction: [0.2, 0.95]
+        operator_round_limit: [0, 20]
+        local_search_rounds: [0, 4]
+        local_search_top_k: [0, 64]
+        restart_stagnation_rounds: [0, 25]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+        - local_search_top_k
+    evidence:
+      required_runtime_fields:
+        - algorithm_blueprint_loaded
+        - algorithm_blueprint_active
+        - algorithm_blueprint_errors
+        - algorithm_plan
+        - algorithm_phases_executed
+        - algorithm_construction_methods
+        - algorithm_baseline_time_fraction
+        - algorithm_operator_round_limit
+        - algorithm_post_baseline_operators_enabled
+        - algorithm_local_search_components
+        - algorithm_local_search_rounds
+        - algorithm_local_search_attempts
+        - algorithm_local_search_accepted
+        - algorithm_restart_enabled
+        - algorithm_restart_stagnation_rounds
+        - algorithm_restart_count
+        - algorithm_best_delta_by_phase
+        - algorithm_phase_runtime_ms
+        - algorithm_stop_reason
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how the top-level lifecycle change should improve CVRP evidence:
+        which construction ensemble, baseline budget, local-search phase,
+        restart behavior, and post-baseline registry-operator setting should
+        work together. Prefer this surface when prior post-baseline operators
+        have zero accepted moves.
+      implementation_guidance: >-
+        Keep algorithm_plan deterministic, side-effect free, and return only the
+        declared bounded plan dict. The solver owns construction, local-search
+        route edits, feasibility checks, acceptance, restarts, and registry
+        operators. For instance features, use instance.customer_ids,
+        instance.customer_count, instance.demands[customer_id],
+        instance.capacity, and instance.distance(i, j).
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, create or mutate
+        routes directly, use instance.customers or other undeclared instance
+        aliases, invent local-search components, return unknown keys, widen
+        numeric bounds, or encode case-name-specific behavior. Never use
+        instance.customers; it is not part of the CVRP instance API.
+    target_files:
+      - "policies/algorithm_blueprint.py"
+    prompt_hint: "Coordinate the bounded top-level CVRP algorithm lifecycle."
+    required_functions:
+      - "algorithm_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
 
 objective_policy:
   mode: lexicographic
@@ -621,6 +757,7 @@ family_taxonomy:
     - search_policy
     - construction_policy
     - neighborhood_portfolio
+    - algorithm_blueprint
   aliases:
     route_local:
       - route local
@@ -688,6 +825,17 @@ family_taxonomy:
       - component schedule
       - component weights
       - candidate limits
+    algorithm_blueprint:
+      - algorithm blueprint
+      - algorithm plan
+      - lifecycle plan
+      - top level algorithm
+      - top-level algorithm
+      - construction ensemble
+      - local search phase
+      - restart policy
+      - post baseline toggle
+      - package owned local search
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"
