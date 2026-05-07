@@ -1075,6 +1075,48 @@ Validation:
 1446 passed, 1 skipped in 48.04s
 ```
 
+## 2026-05-07 Post-Repair Sonnet CVRP Smoke Launched
+
+A new detached real Sonnet CVRP formal-path smoke was launched after the CVRP
+policy-surface, APS compactness, and V8 auditability repairs.
+
+Run root:
+
+```text
+/home/clawd/research/scion-experiments/v04-post-aps-cvrp-sonnet-20260507T083649Z
+```
+
+Configuration:
+
+```text
+scion_commit=68c33d0
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+protocol=scion/scion/problems/cvrp/formal/protocol.yaml
+split=scion/scion/problems/cvrp/formal/split_manifest.yaml
+seeds=scion/scion/problems/cvrp/formal/seed_ledger.yaml
+```
+
+Launch state:
+
+```text
+wrapper_pid=2174142
+scion_pid=2174143
+status=running
+```
+
+This is a framework/control validation smoke. Raw logs, APS transcripts, raw
+metrics, and DB artifacts should be analyzed only through delegated post-run
+audit. The key post-run questions are whether policy surfaces now clear
+Verification, whether APS preview observations stay compact, and whether
+screening evidence moves beyond tie/no-op dominated behavior.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`

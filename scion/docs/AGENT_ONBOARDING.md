@@ -25,11 +25,11 @@ enough to continue, validate, freeze, promote, or abandon.
   - `surrogate` / warehouse delivery: original v0.3 research object.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
-- Current bottleneck: CVRP surface steering and selected-surface runtime audit
-  now reach canary/protocol candidate runs, and V2/V5/V6/V7/V8 gate
-  modernization is closed. The next risk is improving CVRP policy-surface
-  correctness and efficacy while keeping legacy verification fallbacks
-  compatibility-only.
+- Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
+  API guidance and APS preview/planner compactness have been repaired, and a
+  post-repair five-round Sonnet CVRP smoke is running. The next decision point
+  is delegated post-run analysis of that smoke: whether policy surfaces now
+  clear Verification and produce nontrivial screening signal.
 
 ## Required Reading Order
 
@@ -100,6 +100,15 @@ For experiment analysis:
 - V2 interface validation shares the AST-only surface interface validator used
   by `ContractGate C7`; V5 disables the legacy assignment/vehicles fallback for
   bridged adapter-required `problem-v1` packages when an adapter is missing.
+- V6/V7/V8 now also keep adapter-required `problem-v1` packages on
+  adapter-backed verification paths, and successful V8 comparison mode is
+  persisted as bounded `CheckResult` metadata rather than decision input.
+- CVRP policy surfaces now expose safe problem-owned instance helpers
+  (`customer_ids`, `customer_count`, `demands`, `capacity`, `distance`) and
+  explicitly reject `instance.customers` as an undefined alias.
+- APS planner mode now reads compact feedback when available, reads the selected
+  surface before code generation/partial finalization, and uses compact static
+  preview payloads that omit patch code.
 - Campaign orchestration has been decomposed; `CampaignManager` is mostly a
   facade over proposal, evaluation, promotion, evidence, failure lifecycle, and
   branch-step services.
@@ -117,8 +126,10 @@ Gate modernization follow-up:
 
 Near-term CVRP research-space work:
 
-- Improve policy-surface correctness and efficacy rather than adding more
-  post-baseline route operators.
+- Analyze the active post-repair Sonnet CVRP smoke:
+  `/home/clawd/research/scion-experiments/v04-post-aps-cvrp-sonnet-20260507T083649Z`.
+- Improve policy-surface efficacy rather than adding more post-baseline route
+  operators unless the post-run evidence shows accepted-move signal.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.
