@@ -1002,6 +1002,9 @@ status=running
 
 This is a framework/control smoke, not final solver-quality evidence. Raw run
 logs and metrics should be analyzed only through a delegated post-run audit.
+Any remaining V8 compatibility risk, especially the legacy/no-adapter
+objective-only nondeterminism path, is deferred until that post-run analysis
+shows whether it affects real CVRP framework behavior.
 
 ## Remaining Optimization Backlog
 
@@ -1035,3 +1038,6 @@ P2:
   read-only mount sandbox.
 - Stale/reconcile semantics still need a dedicated v3-aligned review after this
   formal-readiness run.
+- Legacy/no-adapter V8 objective-only comparison remains intentionally
+  compatibility-only; optimize it only after the active Sonnet CVRP smoke is
+  post-audited.
