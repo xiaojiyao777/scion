@@ -12,6 +12,7 @@ referenced, not copied into development prompts.
 - [Dual Sonnet 50R analysis, 2026-05-05](v0.4-dual-sonnet-50r-20260505/README.md)
 - [Post-APS CVRP Sonnet smoke, 2026-05-07](v0.4-post-aps-cvrp-sonnet-20260507.md)
 - [Algorithm blueprint Sonnet smoke, 2026-05-07](v0.4-algorithm-blueprint-sonnet-smoke-20260507.md)
+- [Forced algorithm blueprint Sonnet smoke, 2026-05-07](v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md)
 
 ## Related
 

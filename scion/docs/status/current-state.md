@@ -1214,13 +1214,60 @@ Interpretation:
   retreated to `route_local` / `search_policy`. That short smoke is control-path
   evidence only, not solver-quality evidence.
 
-The current APS repair closes that surface-context compactness gap: surface
-listing and `context.read_surface` compact reads are bounded by default, and the
-next algorithm-blueprint check can use the diagnostic forced-surface control
-(`--force-surface algorithm_blueprint`) to verify the agent can actually
-inspect and select that declared surface. Such a forced smoke remains
-control-path evidence only; it must not be promoted to solver-quality evidence.
-The focused APS/proposal regression set passed after the repair:
+## 2026-05-07 Forced Algorithm Blueprint Sonnet Smoke
+
+A detached three-round Sonnet CVRP formal-path smoke was launched with the
+diagnostic forced-surface control:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-forced-blueprint-sonnet-20260507T125015Z
+model=claude-sonnet-4-6
+problem=cvrp formal VRP path
+rounds=3
+agentic_proposal=true
+disable_early_stop=true
+force_surface=algorithm_blueprint
+cvrp_time_limit_sec=10
+```
+
+The artifacts did not include an explicit exit code, but stdout reported
+`Campaign finished`. The summary state was `total_rounds=3`,
+`n_experiments=3`, `stopped_reason=max_rounds_exhausted`,
+`champion_version=1`, `n_active_branches=0`, `promotions=0`, frozen budget
+`0/2`, and `formal_readiness=false` because final evidence refs were missing.
+
+`--force-surface algorithm_blueprint` worked for the first forced hypothesis:
+round 1 modified `policies/algorithm_blueprint.py` with
+`change_locus=algorithm_blueprint`. It was not an every-round override; rounds
+2 and 3 used `route_local` and `construction_policy`.
+
+APS successfully performed the compact selected-surface read for
+`algorithm_blueprint`, but compactness is still unresolved. Later
+`result_too_large` observations came from other surface reads, and all six APS
+sessions ultimately exceeded `max_observation_chars=24000`, affecting both
+persisted recovery artifacts and live sessions.
+
+All three evaluated candidates passed Contract, Verification, and canary, then
+failed screening by `SCREENING_FAIL_WIN_RATE`. The round-1 blueprint candidate
+did activate the top-level algorithm path (`algorithm_blueprint_loaded=true`,
+`algorithm_blueprint_active=true`, `algorithm_blueprint_errors=0`) and
+exercised `plan_loaded`, `construction_ensemble`, `baseline`, and
+`local_search`, but it had `win_rate=0.0`, `median_delta=0.0`, no promotion,
+and no validation/frozen evidence.
+
+This is valid control-path evidence that the top-level CVRP
+`algorithm_blueprint` surface can be selected, patched, loaded, audited, and
+screened through Scion gates. It is not solver-quality evidence. Screening
+summaries still need full bounded `algorithm_*` audit fields, and
+`construction_keep_top_k=2` meant the declared `demand_descending` construction
+method was not actually tried. The next work should fix APS
+compactness/recovery first, then refine algorithm-blueprint audit and contract
+reporting before longer runs or deeper CVRP algorithm development.
+
+Detailed delegated analysis is recorded in
+`scion/docs/experiments/v0.4/v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md`.
+
+The focused APS/proposal regression set passed after the compact-read repair:
 `101 passed in 0.94s` from `scion/`.
 
 The current bottleneck is policy-surface efficacy and observability rather than
