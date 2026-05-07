@@ -58,6 +58,19 @@ _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
         "restart",
     }
 )
+_BASELINE_POLICY_ALLOWED_KEYS = frozenset(
+    {
+        "destroy_ratio",
+        "segment_length",
+        "reaction_factor",
+        "vns_max_no_improve",
+        "use_vns",
+        "cw_threshold",
+        "vns_threshold",
+        "alns_threshold",
+        "max_destroy_customers",
+    }
+)
 _POLICY_INSTANCE_API_TEXT = (
     "Safe CvrpInstance API for policy functions: use "
     "`instance.customer_ids`, `instance.customer_count`, "
@@ -97,6 +110,12 @@ class CvrpAdapter:
             "- The `search_policy` research surface may tune the baseline time "
             "fraction, post-baseline operator round limit, and whether "
             "post-baseline operators run at all.\n"
+            "- The `baseline_policy` research surface may tune bounded "
+            "repo-local vrp/src ALNS+VNS main-search knobs such as destroy "
+            "ratio, ALNS segment length, adaptive reaction factor, VNS usage, "
+            "VNS no-improvement limit, threshold gates, and max destroyed "
+            "customers. Invalid returns are sanitized to defaults or clamped "
+            "and recorded as runtime audit failures.\n"
             "- The `neighborhood_portfolio` research surface may select "
             "predeclared registry component families, apply component weight "
             "multipliers, and bound rounds, top-k scheduled operators, and "
@@ -171,6 +190,36 @@ class CvrpAdapter:
                 "values, and non-bool enable flags are runtime audit failures. "
                 "Policy functions must be deterministic and must not read solver "
                 "outputs, benchmark answers, or external files."
+            )
+        if surface_name == "baseline_policy":
+            return (
+                "policies/baseline_policy.py is a module-level repo-local "
+                "baseline policy file; no class is required.\n\n"
+                "Declared signature:\n"
+                "baseline_params(instance, time_limit_sec)\n\n"
+                "Required function:\n"
+                "def baseline_params(instance, time_limit_sec):\n"
+                "    return a dict with optional bounded keys destroy_ratio, "
+                "segment_length, reaction_factor, vns_max_no_improve, use_vns, "
+                "cw_threshold, vns_threshold, alns_threshold, and "
+                "max_destroy_customers\n\n"
+                "Parameter contract:\n"
+                "- destroy_ratio: pair of finite numbers in [0.01, 0.80] with "
+                "lower <= upper.\n"
+                "- segment_length: int in [1, 1000].\n"
+                "- reaction_factor: finite number in [0.01, 1.0].\n"
+                "- vns_max_no_improve: int in [0, 20000].\n"
+                "- use_vns: bool.\n"
+                "- cw_threshold, vns_threshold, alns_threshold: ints in "
+                "[0, 10000].\n"
+                "- max_destroy_customers: int in [1, 500].\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "Omitted known keys use the vrp/src default values. Unknown "
+                "keys, exceptions, non-finite numbers, non-bool toggles, and "
+                "out-of-range values increment baseline_policy_errors. The "
+                "solver only passes sanitized params into the repo-local "
+                "ALNS+VNS baseline."
             )
         if surface_name == "neighborhood_portfolio":
             return (
@@ -283,6 +332,7 @@ class CvrpAdapter:
         if surface_name not in {
             "construction_policy",
             "search_policy",
+            "baseline_policy",
             "neighborhood_portfolio",
             "algorithm_blueprint",
         }:
@@ -321,6 +371,8 @@ class CvrpAdapter:
             _preview_construction_policy(module, instance, issues, checks)
         elif surface_name == "search_policy":
             _preview_search_policy(module, instance, issues, checks)
+        elif surface_name == "baseline_policy":
+            _preview_baseline_policy(module, instance, issues, checks)
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
@@ -490,6 +542,7 @@ def _surface_name_from_policy_path(path: str) -> str:
     return {
         "policies/construction_policy.py": "construction_policy",
         "policies/search_policy.py": "search_policy",
+        "policies/baseline_policy.py": "baseline_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
     }.get(normalized, "")
@@ -600,6 +653,75 @@ def _preview_search_policy(
     if enabled is not _PREVIEW_FAILED and not isinstance(enabled, bool):
         issues.append(
             f"enable_post_baseline_operators returned non-bool value {enabled!r}"
+        )
+
+
+def _preview_baseline_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    params = _call_preview_function(module, "baseline_params", instance, issues, checks)
+    if params is _PREVIEW_FAILED:
+        return
+    if not isinstance(params, Mapping):
+        issues.append(f"baseline_params returned non-mapping value {params!r}")
+        return
+
+    unknown = sorted(str(key) for key in params if str(key) not in _BASELINE_POLICY_ALLOWED_KEYS)
+    if unknown:
+        issues.append(f"baseline_params returned unknown keys {unknown}")
+
+    if "destroy_ratio" in params:
+        _check_destroy_ratio(params["destroy_ratio"], issues)
+    if "segment_length" in params:
+        _check_number(
+            "segment_length",
+            params["segment_length"],
+            minimum=1,
+            maximum=1000,
+            integral=True,
+            issues=issues,
+        )
+    if "reaction_factor" in params:
+        _check_number(
+            "reaction_factor",
+            params["reaction_factor"],
+            minimum=0.01,
+            maximum=1.0,
+            integral=False,
+            issues=issues,
+        )
+    if "vns_max_no_improve" in params:
+        _check_number(
+            "vns_max_no_improve",
+            params["vns_max_no_improve"],
+            minimum=0,
+            maximum=20000,
+            integral=True,
+            issues=issues,
+        )
+    if "use_vns" in params and not isinstance(params["use_vns"], bool):
+        issues.append(f"use_vns returned non-bool value {params['use_vns']!r}")
+    for name in ("cw_threshold", "vns_threshold", "alns_threshold"):
+        if name in params:
+            _check_number(
+                name,
+                params[name],
+                minimum=0,
+                maximum=10000,
+                integral=True,
+                issues=issues,
+            )
+    if "max_destroy_customers" in params:
+        _check_number(
+            "max_destroy_customers",
+            params["max_destroy_customers"],
+            minimum=1,
+            maximum=500,
+            integral=True,
+            issues=issues,
         )
 
 
@@ -811,6 +933,38 @@ def _check_sequence_literals(
         issues.append(f"{field} returned unknown values {bad}")
     if not normalized and not allow_empty:
         issues.append(f"{field} returned an empty sequence")
+
+
+def _check_destroy_ratio(value: Any, issues: list[str]) -> None:
+    if isinstance(value, str) or not isinstance(value, (list, tuple)):
+        issues.append(f"destroy_ratio returned non-pair value {value!r}")
+        return
+    if len(value) != 2:
+        issues.append(f"destroy_ratio must contain exactly two values, got {value!r}")
+        return
+    before = len(issues)
+    _check_number(
+        "destroy_ratio[0]",
+        value[0],
+        minimum=0.01,
+        maximum=0.80,
+        integral=False,
+        issues=issues,
+    )
+    _check_number(
+        "destroy_ratio[1]",
+        value[1],
+        minimum=0.01,
+        maximum=0.80,
+        integral=False,
+        issues=issues,
+    )
+    if len(issues) != before:
+        return
+    if float(value[0]) > float(value[1]):
+        issues.append(
+            f"destroy_ratio lower bound {value[0]!r} exceeds upper bound {value[1]!r}"
+        )
 
 
 _PREVIEW_FAILED = object()

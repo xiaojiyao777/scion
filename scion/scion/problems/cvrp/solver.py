@@ -28,6 +28,7 @@ _BASELINE_TIME_FRACTION = 0.8
 _MIN_BASELINE_TIME_FRACTION = 0.2
 _MAX_BASELINE_TIME_FRACTION = 0.95
 _SEARCH_POLICY_RELATIVE_PATH = "policies/search_policy.py"
+_BASELINE_POLICY_RELATIVE_PATH = "policies/baseline_policy.py"
 _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
 _ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
@@ -93,6 +94,18 @@ _ALGORITHM_BLUEPRINT_LOCAL_SEARCH_REQUIRED_KEYS = frozenset(
 _ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS = frozenset(
     {"enabled", "stagnation_rounds"}
 )
+_DEFAULT_BASELINE_POLICY_PARAMS = {
+    "destroy_ratio": (0.10, 0.40),
+    "segment_length": 100,
+    "reaction_factor": 0.1,
+    "vns_max_no_improve": 5000,
+    "use_vns": True,
+    "cw_threshold": 1500,
+    "vns_threshold": 1200,
+    "alns_threshold": 2000,
+    "max_destroy_customers": 200,
+}
+_BASELINE_POLICY_ALLOWED_KEYS = frozenset(_DEFAULT_BASELINE_POLICY_PARAMS)
 
 
 def solve(
@@ -186,6 +199,7 @@ def solve_baseline(
     time_limit_sec: float,
     baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
     construction_policy: dict[str, Any] | None = None,
+    baseline_policy: dict[str, Any] | None = None,
     algorithm_blueprint: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Return a baseline solution plus audit metadata.
@@ -202,6 +216,12 @@ def solve_baseline(
         construction_policy=construction_policy,
         algorithm_blueprint=algorithm_blueprint,
     )
+    baseline_policy_audit = _baseline_policy_defaults()
+    if baseline_policy is not None:
+        baseline_policy_audit.update(baseline_policy)
+    baseline_policy_params = baseline_policy_audit.get("baseline_policy_params")
+    if not isinstance(baseline_policy_params, Mapping):
+        baseline_policy_params = dict(_DEFAULT_BASELINE_POLICY_PARAMS)
     resolved = Path(instance_path).resolve(strict=False)
     is_vrp = resolved.suffix.lower() == ".vrp"
     baseline_root = _find_vrp_baseline_root()
@@ -216,12 +236,14 @@ def solve_baseline(
                 time_limit_sec=budget,
                 baseline_root=baseline_root,
                 baseline_required=baseline_required,
+                baseline_policy_params=baseline_policy_params,
             )
-            return solution, {**construction_audit, **audit}
+            return solution, {**construction_audit, **baseline_policy_audit, **audit}
         except Exception as exc:
             fallback = construction_solution
             return fallback, {
                 **construction_audit,
+                **baseline_policy_audit,
                 "baseline_mode": "scion_nearest_neighbor_fallback",
                 "baseline_required": baseline_required,
                 "baseline_error": f"{type(exc).__name__}: {exc}",
@@ -233,6 +255,7 @@ def solve_baseline(
         fallback = construction_solution
         return fallback, {
             **construction_audit,
+            **baseline_policy_audit,
             "baseline_mode": "scion_nearest_neighbor_fallback",
             "baseline_required": True,
             "baseline_error": "vrp/src baseline not available for configured CVRP data root",
@@ -243,6 +266,7 @@ def solve_baseline(
     fallback = construction_solution
     return fallback, {
         **construction_audit,
+        **baseline_policy_audit,
         "baseline_mode": "scion_nearest_neighbor",
         "baseline_required": False,
         "baseline_routes": len(fallback.routes),
@@ -437,6 +461,11 @@ def _main() -> None:
         instance=instance,
         time_limit_sec=args.time_limit,
     )
+    baseline_policy = _load_baseline_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     neighborhood_portfolio = _load_neighborhood_portfolio(
         workspace_root=Path.cwd(),
         instance=instance,
@@ -450,6 +479,7 @@ def _main() -> None:
         time_limit_sec=args.time_limit,
         baseline_time_fraction=search_policy["baseline_time_fraction"],
         construction_policy=construction_policy,
+        baseline_policy=baseline_policy,
         algorithm_blueprint=algorithm_blueprint,
     )
     sol, algorithm_audit = improve_with_algorithm_blueprint(
@@ -827,6 +857,333 @@ def _record_construction_event(
     events.append(
         {
             "policy": _CONSTRUCTION_POLICY_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+
+def _load_baseline_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _baseline_policy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _BASELINE_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_baseline_policy_event(audit, "error", "baseline policy path escapes workspace")
+        audit["baseline_policy_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(audit, "error", f"baseline policy load failed: {exc}")
+        return audit
+
+    audit["baseline_policy_loaded"] = True
+    try:
+        raw_params = _call_policy_function(
+            module,
+            "baseline_params",
+            instance,
+            time_limit_sec,
+        )
+    except Exception as exc:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(audit, "error", f"baseline_params failed: {exc}")
+        return audit
+    if not isinstance(raw_params, Mapping):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"baseline_params returned non-mapping value {raw_params!r}",
+        )
+        return audit
+
+    _normalize_baseline_policy_params(dict(raw_params), audit=audit)
+    return audit
+
+
+def _baseline_policy_defaults() -> dict[str, Any]:
+    params = dict(_DEFAULT_BASELINE_POLICY_PARAMS)
+    return {
+        "baseline_policy_path": _BASELINE_POLICY_RELATIVE_PATH,
+        "baseline_policy_loaded": False,
+        "baseline_policy_errors": 0,
+        "baseline_policy_events": [],
+        "baseline_policy_params": params,
+        "baseline_destroy_ratio": list(params["destroy_ratio"]),
+        "baseline_segment_length": params["segment_length"],
+        "baseline_reaction_factor": params["reaction_factor"],
+        "baseline_vns_max_no_improve": params["vns_max_no_improve"],
+        "baseline_use_vns": params["use_vns"],
+        "baseline_cw_threshold": params["cw_threshold"],
+        "baseline_vns_threshold": params["vns_threshold"],
+        "baseline_alns_threshold": params["alns_threshold"],
+        "baseline_max_destroy_customers": params["max_destroy_customers"],
+    }
+
+
+def _normalize_baseline_policy_params(
+    raw_params: dict[str, Any],
+    *,
+    audit: dict[str, Any],
+) -> None:
+    unknown = sorted(str(key) for key in raw_params if str(key) not in _BASELINE_POLICY_ALLOWED_KEYS)
+    if unknown:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"baseline_params contains unknown keys {unknown}",
+        )
+
+    defaults = _DEFAULT_BASELINE_POLICY_PARAMS
+    params = dict(defaults)
+    params["destroy_ratio"] = _baseline_destroy_ratio(
+        raw_params.get("destroy_ratio", defaults["destroy_ratio"]),
+        audit=audit,
+    )
+    params["segment_length"] = _baseline_int(
+        raw_params.get("segment_length", defaults["segment_length"]),
+        minimum=1,
+        maximum=1000,
+        default=int(defaults["segment_length"]),
+        field_name="segment_length",
+        audit=audit,
+    )
+    params["reaction_factor"] = _baseline_float(
+        raw_params.get("reaction_factor", defaults["reaction_factor"]),
+        minimum=0.01,
+        maximum=1.0,
+        default=float(defaults["reaction_factor"]),
+        field_name="reaction_factor",
+        audit=audit,
+    )
+    params["vns_max_no_improve"] = _baseline_int(
+        raw_params.get("vns_max_no_improve", defaults["vns_max_no_improve"]),
+        minimum=0,
+        maximum=20000,
+        default=int(defaults["vns_max_no_improve"]),
+        field_name="vns_max_no_improve",
+        audit=audit,
+    )
+    params["use_vns"] = _baseline_bool(
+        raw_params.get("use_vns", defaults["use_vns"]),
+        default=bool(defaults["use_vns"]),
+        field_name="use_vns",
+        audit=audit,
+    )
+    params["cw_threshold"] = _baseline_int(
+        raw_params.get("cw_threshold", defaults["cw_threshold"]),
+        minimum=0,
+        maximum=10000,
+        default=int(defaults["cw_threshold"]),
+        field_name="cw_threshold",
+        audit=audit,
+    )
+    params["vns_threshold"] = _baseline_int(
+        raw_params.get("vns_threshold", defaults["vns_threshold"]),
+        minimum=0,
+        maximum=10000,
+        default=int(defaults["vns_threshold"]),
+        field_name="vns_threshold",
+        audit=audit,
+    )
+    params["alns_threshold"] = _baseline_int(
+        raw_params.get("alns_threshold", defaults["alns_threshold"]),
+        minimum=0,
+        maximum=10000,
+        default=int(defaults["alns_threshold"]),
+        field_name="alns_threshold",
+        audit=audit,
+    )
+    params["max_destroy_customers"] = _baseline_int(
+        raw_params.get("max_destroy_customers", defaults["max_destroy_customers"]),
+        minimum=1,
+        maximum=500,
+        default=int(defaults["max_destroy_customers"]),
+        field_name="max_destroy_customers",
+        audit=audit,
+    )
+
+    audit["baseline_policy_params"] = params
+    audit["baseline_destroy_ratio"] = list(params["destroy_ratio"])
+    audit["baseline_segment_length"] = params["segment_length"]
+    audit["baseline_reaction_factor"] = params["reaction_factor"]
+    audit["baseline_vns_max_no_improve"] = params["vns_max_no_improve"]
+    audit["baseline_use_vns"] = params["use_vns"]
+    audit["baseline_cw_threshold"] = params["cw_threshold"]
+    audit["baseline_vns_threshold"] = params["vns_threshold"]
+    audit["baseline_alns_threshold"] = params["alns_threshold"]
+    audit["baseline_max_destroy_customers"] = params["max_destroy_customers"]
+
+
+def _baseline_destroy_ratio(value: Any, *, audit: dict[str, Any]) -> tuple[float, float]:
+    default = _DEFAULT_BASELINE_POLICY_PARAMS["destroy_ratio"]
+    if isinstance(value, str) or not isinstance(value, (list, tuple)):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"destroy_ratio returned non-pair value {value!r}",
+        )
+        return default
+    if len(value) != 2:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"destroy_ratio must contain exactly two values, got {value!r}",
+        )
+        return default
+    low = _baseline_ratio_item(value[0], "destroy_ratio[0]", audit)
+    high = _baseline_ratio_item(value[1], "destroy_ratio[1]", audit)
+    if low is None or high is None:
+        return default
+    if low > high:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"destroy_ratio lower bound {low!r} exceeds upper bound {high!r}",
+        )
+        return default
+    return (low, high)
+
+
+def _baseline_ratio_item(value: Any, field_name: str, audit: dict[str, Any]) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name} returned non-numeric value {value!r}",
+        )
+        return None
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name} returned non-finite value {value!r}",
+        )
+        return None
+    clamped = min(max(numeric, 0.01), 0.80)
+    if clamped != numeric:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [0.01, 0.8], clamped",
+        )
+    return clamped
+
+
+def _baseline_float(
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    default: float,
+    field_name: str,
+    audit: dict[str, Any],
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name} returned non-numeric value {value!r}",
+        )
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name} returned non-finite value {value!r}",
+        )
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _baseline_int(
+    value: Any,
+    *,
+    minimum: int,
+    maximum: int,
+    default: int,
+    field_name: str,
+    audit: dict[str, Any],
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name} returned non-integer value {value!r}",
+        )
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit["baseline_policy_errors"] += 1
+        _record_baseline_policy_event(
+            audit,
+            "error",
+            f"{field_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _baseline_bool(
+    value: Any,
+    *,
+    default: bool,
+    field_name: str,
+    audit: dict[str, Any],
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    audit["baseline_policy_errors"] += 1
+    _record_baseline_policy_event(
+        audit,
+        "error",
+        f"{field_name} returned non-bool value {value!r}",
+    )
+    return default
+
+
+def _record_baseline_policy_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("baseline_policy_events", [])
+    if len(events) >= 10:
+        return
+    events.append(
+        {
+            "policy": _BASELINE_POLICY_RELATIVE_PATH,
             "status": status,
             "detail": detail,
         }
@@ -2219,6 +2576,7 @@ def _solve_with_vrp_baseline(
     time_limit_sec: float,
     baseline_root: Path,
     baseline_required: bool,
+    baseline_policy_params: Mapping[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     root = str(baseline_root)
     if root not in sys.path:
@@ -2236,6 +2594,7 @@ def _solve_with_vrp_baseline(
         time_limit=time_limit_sec,
         seed=seed,
         max_routes=allowed_routes,
+        **dict(baseline_policy_params or {}),
     )
     routes = tuple(
         tuple(

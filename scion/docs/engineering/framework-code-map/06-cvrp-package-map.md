@@ -52,9 +52,10 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/algorithm_blueprint.py`, `policies/search_policy.py`, and
-   `policies/construction_policy.py` from the workspace when present,
-   validating returns and recording runtime audit fields.
+3. Load `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
+   `policies/baseline_policy.py`, and `policies/construction_policy.py` from
+   the workspace when present, validating returns and recording runtime audit
+   fields.
 4. If `algorithm_blueprint` returns an enabled valid plan, let it coordinate
    bounded construction ensemble, baseline time fraction, package-owned local
    search, restart knobs, and post-baseline registry-operator toggle/round
@@ -65,6 +66,8 @@ Solver flow:
    JSON/synthetic fallback or required-baseline fallback.
 6. Build baseline solution:
    - real `.vrp` formal runs can use repo-local `vrp/src` ALNS+VNS baseline when data root env is configured;
+   - `baseline_policy` passes sanitized bounded ALNS+VNS kwargs into the
+     repo-local baseline;
    - smoke/synthetic/JSON paths use deterministic nearest-neighbor fallback.
 7. Run the algorithm-blueprint local-search phase, when active, after baseline
    and before registry operators. The solver owns the bounded primitives:
@@ -81,9 +84,9 @@ Solver flow:
 13. Write JSON output with routes, feasible flag, objective, and runtime audit fields.
 
 The solver treats exceptions, invalid outputs, infeasible outputs, invalid
-policy/portfolio/algorithm-blueprint returns, and required-baseline failures as
-runtime audit failures. These are later promoted to verification/evidence
-failures by `scion/scion/runtime/audit.py`.
+policy/baseline-policy/portfolio/algorithm-blueprint returns, and
+required-baseline failures as runtime audit failures. These are later promoted
+to verification/evidence failures by `scion/scion/runtime/audit.py`.
 
 ## Operators and Registry
 
@@ -108,13 +111,26 @@ The solver validates/clamps numeric policy returns and records policy errors as 
 `problem-v1.yaml` declares this as a `policy` research surface with `modify` allowed and `create_new/remove` disallowed.
 
 The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
-for `search_policy`, `construction_policy`, `neighborhood_portfolio`, and
-`algorithm_blueprint` explicitly direct generated code to use
+for `search_policy`, `baseline_policy`, `construction_policy`,
+`neighborhood_portfolio`, and `algorithm_blueprint` explicitly direct generated code to use
 `instance.customer_ids`,
 `instance.customer_count`, `instance.demands[customer_id]`,
 `instance.capacity`, and `instance.distance(i, j)`, and to avoid
 `instance.customers`. Adapter preview and runtime audit still fail reached uses
 of the nonexistent `instance.customers` attribute.
+
+`policies/baseline_policy.py` is a singleton policy research surface. Required
+function:
+
+- `baseline_params(instance, time_limit_sec)`
+
+The solver accepts only known bounded repo-local baseline parameters:
+`destroy_ratio`, `segment_length`, `reaction_factor`, `vns_max_no_improve`,
+`use_vns`, `cw_threshold`, `vns_threshold`, `alns_threshold`, and
+`max_destroy_customers`. Unknown keys, bad return types, non-finite values, and
+out-of-range values increment `baseline_policy_errors`; sanitized defaults or
+clamped values are the only values passed into `vrp/src`. The default
+checked-in policy returns the existing `vrp/src` ALNS+VNS defaults.
 
 `policies/construction_policy.py` is a singleton construction research surface.
 Required functions:
@@ -170,8 +186,8 @@ invalid enabled plans do not take over the solver lifecycle.
 - import whitelist;
 - operator interface signature: `execute(self, solution, instance, rng) -> CvrpSolution`;
 - research surfaces: `route_local`, `route_pair`, `ruin_recreate`,
-  `search_policy`, `construction_policy`, `neighborhood_portfolio`,
-  `algorithm_blueprint`;
+  `search_policy`, `baseline_policy`, `construction_policy`,
+  `neighborhood_portfolio`, `algorithm_blueprint`;
 - objective policy: lexicographic;
 - objectives: `fleet_violation` priority 1, `total_distance` priority 2;
 - family taxonomy and aliases;
@@ -209,8 +225,9 @@ These helpers feed final evidence refs and readiness summaries but do not make c
 
 ## Runtime Audit Fields
 
-CVRP solver runtime output includes baseline, construction, operator,
-portfolio, policy, and algorithm-blueprint audit fields. `runtime/audit.py`
+CVRP solver runtime output includes baseline, baseline-policy, construction,
+operator, portfolio, policy, and algorithm-blueprint audit fields.
+`runtime/audit.py`
 interprets:
 
 - required baseline fallback/error as `baseline_runtime_error`;
@@ -221,6 +238,14 @@ interprets:
 - selected-surface required runtime field failures as
   `surface_runtime_contract_error` when a surface declares
   `evidence.required_runtime_fields` and verification receives that surface.
+
+The `baseline_policy` surface declares required runtime fields covering
+loaded/error status, normalized baseline params, destroy ratio, ALNS segment
+length, adaptive reaction factor, VNS toggle/no-improvement limit, and max
+destroyed customers. When `baseline_policy` is selected,
+`ExperimentProtocol` preserves these required fields in candidate-side pair
+metrics and campaign summaries through the generic selected-surface runtime
+summary.
 
 The `algorithm_blueprint` surface declares required runtime fields covering
 load/active/error status, normalized plan, phases executed, construction

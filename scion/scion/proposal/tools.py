@@ -2194,6 +2194,9 @@ def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
         "candidate_runtime_stop_reasons": dict(
             protocol.candidate_runtime_stop_reasons or {}
         ),
+        "candidate_surface_runtime_summary": _strip_forbidden_value(
+            protocol.candidate_surface_runtime_summary or {}
+        ),
         "pattern_summary": _model_payload(protocol.pattern_summary),
         "case_feedback": [
             _model_payload(feedback)
@@ -2235,6 +2238,9 @@ def _holdout_step_payload(
         "candidate_portfolio_errors": protocol.candidate_portfolio_errors,
         "candidate_runtime_stop_reasons": dict(
             protocol.candidate_runtime_stop_reasons or {}
+        ),
+        "candidate_surface_runtime_summary": _strip_forbidden_value(
+            protocol.candidate_surface_runtime_summary or {}
         ),
         "metrics_file_ref_exposed": False,
         "case_ids_exposed": False,

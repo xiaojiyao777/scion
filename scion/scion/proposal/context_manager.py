@@ -2220,6 +2220,9 @@ def _build_screening_failure_cause_line(
             quality_notes.append(
                 "no_improvement_round indicates weak/no-op search behavior, not schema/runtime failure"
             )
+    surface_runtime_note = _surface_runtime_summary_note(protocol)
+    if surface_runtime_note:
+        quality_notes.append(surface_runtime_note)
     if (
         quality_notes
         and failed_pairs == 0
@@ -2245,6 +2248,64 @@ def _build_screening_failure_cause_line(
         f"operator_errors={operator_errors} invalid_outputs={invalid_outputs}"
         f"{quality_suffix}"
     )
+
+
+def _surface_runtime_summary_note(protocol: Any) -> str:
+    summary = getattr(protocol, "candidate_surface_runtime_summary", None)
+    if not isinstance(summary, dict):
+        return ""
+    surface = str(summary.get("selected_surface") or "").strip()
+    fields = summary.get("fields")
+    if not surface or not isinstance(fields, dict):
+        return ""
+
+    interesting: list[str] = []
+    for field, field_summary in fields.items():
+        if not isinstance(field_summary, dict):
+            continue
+        field_name = str(field)
+        if not _surface_runtime_field_interesting(field_name, field_summary):
+            continue
+        values = field_summary.get("values")
+        value_text = ""
+        if isinstance(values, list) and values:
+            first = values[0]
+            if isinstance(first, dict):
+                raw_value = str(first.get("value", ""))[:120]
+                count = _as_int(first.get("count", 0))
+                value_text = f" value={raw_value} count={count}"
+        failed = _as_int(field_summary.get("failed", 0))
+        missing = _as_int(field_summary.get("missing", 0))
+        suffix = value_text
+        if failed or missing:
+            suffix += f" failed={failed} missing={missing}"
+        interesting.append(f"{field_name}:{suffix.strip()}")
+        if len(interesting) >= 8:
+            break
+    if not interesting:
+        return ""
+    return f"selected_surface_runtime[{surface}]=" + "; ".join(interesting)
+
+
+def _surface_runtime_field_interesting(
+    field_name: str,
+    field_summary: dict[str, Any],
+) -> bool:
+    if _as_int(field_summary.get("failed", 0)) > 0:
+        return True
+    suffixes = (
+        "_accepted",
+        "_attempts",
+        "_errors",
+        "_loaded",
+        "_active",
+        "_use_vns",
+        "_destroy_ratio",
+        "_stop_reason",
+        "_baseline_time_fraction",
+        "_max_destroy_customers",
+    )
+    return any(field_name.endswith(suffix) for suffix in suffixes)
 
 
 def _runtime_failure_categories(step: StepRecord) -> dict[str, int]:

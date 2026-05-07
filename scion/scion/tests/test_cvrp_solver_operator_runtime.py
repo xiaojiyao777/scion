@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 import json
+import random
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from scion.contract.gate import ContractGate
 from scion.core.models import PatchProposal
 from scion.problem.bridge import load_problem_spec_v1_from_yaml, legacy_problem_spec_from_v1
+from scion.problems.cvrp import solver as cvrp_solver
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode
 from scion.runtime.audit import runtime_audit_failure_from_raw, runtime_audit_failure_from_result
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -474,6 +480,245 @@ def test_default_algorithm_blueprint_policy_matches_contract_gate_interface() ->
     c7 = next(check for check in result.checks if check.name == "C7_interface")
     assert result.passed is True
     assert c7.passed is True
+
+
+def test_default_baseline_policy_matches_contract_gate_interface() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    policy_path = CVRP_DIR / "policies" / "baseline_policy.py"
+    gate = ContractGate(legacy_spec)
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_policy.py",
+            action="modify",
+            code_content=policy_path.read_text(encoding="utf-8"),
+        )
+    )
+
+    c7 = next(check for check in result.checks if check.name == "C7_interface")
+    assert result.passed is True
+    assert c7.passed is True
+
+
+def test_baseline_policy_surface_declares_runtime_fields_and_defaults(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    surface = next(
+        surface
+        for surface in spec_v1.research_surfaces or []
+        if surface.name == "baseline_policy"
+    )
+    required_fields = tuple(surface.evidence.required_runtime_fields)
+
+    assert required_fields == (
+        "baseline_policy_loaded",
+        "baseline_policy_errors",
+        "baseline_policy_params",
+        "baseline_destroy_ratio",
+        "baseline_segment_length",
+        "baseline_reaction_factor",
+        "baseline_use_vns",
+        "baseline_vns_max_no_improve",
+        "baseline_max_destroy_customers",
+    )
+    assert set(required_fields).issubset(runtime)
+    assert runtime["baseline_policy_loaded"] is True
+    assert runtime["baseline_policy_errors"] == 0
+    assert runtime["baseline_policy_params"]["destroy_ratio"] == [0.1, 0.4]
+    assert runtime["baseline_destroy_ratio"] == [0.1, 0.4]
+    assert runtime["baseline_use_vns"] is True
+    assert runtime["baseline_vns_max_no_improve"] == 5000
+    assert runtime["baseline_max_destroy_customers"] == 200
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="baseline_policy",
+        )
+        is None
+    )
+
+
+def test_invalid_baseline_policy_output_is_runtime_audit_failure(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "baseline_policy.py").write_text(
+        "\n".join(
+            [
+                "def baseline_params(instance, time_limit_sec):",
+                "    return {",
+                "        'destroy_ratio': (0.9, 0.1),",
+                "        'segment_length': 0,",
+                "        'use_vns': 'yes',",
+                "        'unknown': 1,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="baseline_policy",
+    )
+
+    assert raw["runtime"]["baseline_policy_errors"] == 5
+    assert raw["runtime"]["baseline_policy_params"]["destroy_ratio"] == [0.1, 0.4]
+    assert raw["runtime"]["baseline_segment_length"] == 1
+    assert raw["runtime"]["baseline_use_vns"] is True
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "baseline_policy_errors" in issue["detail"]
+    assert "unknown" in json.dumps(raw["runtime"]["baseline_policy_events"])
+
+
+def test_modified_baseline_policy_changes_repo_local_baseline_kwargs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    fake_root = tmp_path / "fake_vrp"
+    fake_src = fake_root / "src"
+    fake_src.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("", encoding="utf-8")
+    (fake_src / "parser.py").write_text(
+        "\n".join(
+            [
+                "from types import SimpleNamespace",
+                "",
+                "def parse_vrp(path):",
+                "    return SimpleNamespace(depot=0, dimension=4)",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    capture_path = tmp_path / "baseline_kwargs.json"
+    (fake_src / "solver.py").write_text(
+        "\n".join(
+            [
+                "import json",
+                "import os",
+                "from types import SimpleNamespace",
+                "",
+                "def solve(instance, **kwargs):",
+                "    capture = os.environ.get('SCION_FAKE_BASELINE_CAPTURE')",
+                "    if capture:",
+                "        with open(capture, 'w', encoding='utf-8') as f:",
+                "            json.dump(kwargs, f, sort_keys=True)",
+                "    route = SimpleNamespace(customers=[1, 2, 3])",
+                "    solution = SimpleNamespace(routes=[route])",
+                "    return SimpleNamespace(",
+                "        solution=solution,",
+                "        elapsed=0.01,",
+                "        iterations=3,",
+                "        best_cost=30.0,",
+                "    )",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    case_dir = fake_root / "cases"
+    case_dir.mkdir()
+    instance_path = case_dir / "case.vrp"
+    instance_path.write_text("", encoding="utf-8")
+    (workspace / "policies" / "baseline_policy.py").write_text(
+        "\n".join(
+            [
+                "def baseline_params(instance, time_limit_sec):",
+                "    return {",
+                "        'destroy_ratio': (0.05, 0.25),",
+                "        'segment_length': 25,",
+                "        'reaction_factor': 0.3,",
+                "        'vns_max_no_improve': 17,",
+                "        'use_vns': False,",
+                "        'cw_threshold': 7,",
+                "        'vns_threshold': 8,",
+                "        'alns_threshold': 9,",
+                "        'max_destroy_customers': 11,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    instance = CvrpInstance(
+        name="fake_baseline_case",
+        capacity=10,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            CvrpNode(id=1, x=1.0, y=0.0, demand=1),
+            CvrpNode(id=2, x=2.0, y=0.0, demand=1),
+            CvrpNode(id=3, x=3.0, y=0.0, demand=1),
+        ),
+        allowed_routes=1,
+        use_integer_cost=True,
+    )
+    monkeypatch.setenv("SCION_CVRP_DATA_ROOT", str(fake_root))
+    monkeypatch.setenv("SCION_FAKE_BASELINE_CAPTURE", str(capture_path))
+    for module_name in ("src", "src.parser", "src.solver"):
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    baseline_policy = cvrp_solver._load_baseline_policy(
+        workspace_root=workspace,
+        instance=instance,
+        time_limit_sec=2.0,
+    )
+    solution, audit = cvrp_solver.solve_baseline(
+        instance=instance,
+        instance_path=str(instance_path),
+        seed=5,
+        rng=random.Random(5),
+        time_limit_sec=2.0,
+        baseline_time_fraction=0.5,
+        baseline_policy=baseline_policy,
+    )
+    if str(fake_root) in sys.path:
+        sys.path.remove(str(fake_root))
+
+    captured = json.loads(capture_path.read_text(encoding="utf-8"))
+    assert solution.routes == ((1, 2, 3),)
+    assert captured["time_limit"] == 1.0
+    assert captured["seed"] == 5
+    assert captured["max_routes"] == 1
+    assert captured["destroy_ratio"] == [0.05, 0.25]
+    assert captured["segment_length"] == 25
+    assert captured["reaction_factor"] == 0.3
+    assert captured["vns_max_no_improve"] == 17
+    assert captured["use_vns"] is False
+    assert captured["cw_threshold"] == 7
+    assert captured["vns_threshold"] == 8
+    assert captured["alns_threshold"] == 9
+    assert captured["max_destroy_customers"] == 11
+    assert audit["baseline_mode"] == "vrp_alns_vns"
+    assert audit["baseline_policy_errors"] == 0
+    assert audit["baseline_destroy_ratio"] == [0.05, 0.25]
+    assert audit["baseline_use_vns"] is False
 
 
 def test_algorithm_blueprint_surface_declares_runtime_fields_and_default_is_inactive(

@@ -72,6 +72,10 @@ Medium-risk areas:
   algorithm lifecycle surface. Its solver integration stays inside the CVRP
   package: Scion core sees only declared surface metadata and generic required
   runtime fields, not CVRP construction modes or local-search component names.
+- CVRP now exposes `baseline_policy` as a problem-owned baseline/main-search
+  policy surface. Its solver integration stays inside the CVRP package: Scion
+  core sees only declared surface metadata and selected-surface runtime fields,
+  not ALNS/VNS parameter semantics.
 - Promotion and weight optimization mutate champion state asynchronously/synchronously. Any new design surface that changes registry semantics should be checked against promotion snapshot and stale/reconcile behavior.
 
 ## Places to Avoid Editing for Problem Features
@@ -107,11 +111,12 @@ For future algorithm design space expansion, use a thin vertical slice:
 7. Add focused tests around bridge loading, context rendering, contract validation, solver runtime audit, and one campaign smoke.
 8. Add or update problem-specific final evidence only if final reporting needs new domain fields.
 
-The CVRP `algorithm_blueprint` slice follows this pattern for a top-level
-lifecycle surface: problem spec declaration, adapter interface/preview, solver
-execution and audit, selected-surface runtime evidence, focused tests, and
-engineering docs were updated without adding CVRP semantics to core governance.
-Future surfaces should keep the same boundary.
+The CVRP `algorithm_blueprint` and `baseline_policy` slices follow this pattern
+for top-level lifecycle and main-search parameter surfaces: problem spec
+declaration, adapter interface/preview, solver execution and audit,
+selected-surface runtime evidence, focused tests, and engineering docs were
+updated without adding CVRP semantics to core governance. Future surfaces
+should keep the same boundary.
 
 ## Design Review Checklist
 

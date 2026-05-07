@@ -371,6 +371,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "route_pair",
         "ruin_recreate",
         "search_policy",
+        "baseline_policy",
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
@@ -410,6 +411,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert no_accepted_guidance.applies_to_surface_kinds == ["operator"]
     assert no_accepted_guidance.recommended_surfaces == [
         "algorithm_blueprint",
+        "baseline_policy",
         "construction_policy",
         "neighborhood_portfolio",
         "search_policy",
@@ -418,6 +420,45 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "accepted move rate" in no_accepted_guidance.guidance
     assert legacy.runtime_failure_guidance[0].failure_categories == [
         "no_accepted_moves"
+    ]
+
+    baseline_policy = next(
+        surface
+        for surface in spec.research_surfaces or []
+        if surface.name == "baseline_policy"
+    )
+    assert baseline_policy.kind == "policy"
+    assert baseline_policy.algorithm is not None
+    assert baseline_policy.algorithm.role == "repo_local_baseline_main_search"
+    assert baseline_policy.targets is not None
+    assert baseline_policy.targets.files == ["policies/baseline_policy.py"]
+    assert baseline_policy.targets.singleton is True
+    assert baseline_policy.targets.create_new_allowed is False
+    assert baseline_policy.targets.remove_allowed is False
+    assert baseline_policy.interface is not None
+    assert baseline_policy.interface.required_functions == ["baseline_params"]
+    assert baseline_policy.interface.function_signatures == {
+        "baseline_params": ["instance", "time_limit_sec"],
+    }
+    assert baseline_policy.bounds is not None
+    assert baseline_policy.bounds.numeric_ranges["destroy_ratio"] == (0.01, 0.80)
+    assert baseline_policy.bounds.numeric_ranges["max_destroy_customers"] == (1, 500)
+    assert baseline_policy.evidence is not None
+    assert baseline_policy.evidence.required_runtime_fields == [
+        "baseline_policy_loaded",
+        "baseline_policy_errors",
+        "baseline_policy_params",
+        "baseline_destroy_ratio",
+        "baseline_segment_length",
+        "baseline_reaction_factor",
+        "baseline_use_vns",
+        "baseline_vns_max_no_improve",
+        "baseline_max_destroy_customers",
+    ]
+    assert baseline_policy.novelty is not None
+    assert baseline_policy.novelty.signature_fields == [
+        "predicted_direction",
+        "target_objectives",
     ]
 
     construction_policy = next(
@@ -732,6 +773,7 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
 
     for file_path in (
         "policies/search_policy.py",
+        "policies/baseline_policy.py",
         "policies/construction_policy.py",
         "policies/neighborhood_portfolio.py",
     ):

@@ -49,6 +49,7 @@ runtime_failure_guidance:
     min_count: 2
     recommended_surfaces:
       - algorithm_blueprint
+      - baseline_policy
       - construction_policy
       - neighborhood_portfolio
       - search_policy
@@ -350,6 +351,117 @@ research_surfaces:
       - "baseline_time_fraction"
       - "max_operator_rounds"
       - "enable_post_baseline_operators"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: baseline_policy
+    kind: policy
+    description: "Repo-local vrp/src ALNS+VNS baseline main-search policy."
+    algorithm:
+      role: repo_local_baseline_main_search
+      invocation_point: before_repo_local_vrp_baseline
+      description: >-
+        Controls bounded ALNS+VNS main-search parameters passed into the
+        repo-local vrp/src baseline for CVRPLIB .vrp cases. Defaults preserve
+        existing solver behavior.
+    targets:
+      files:
+        - "policies/baseline_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "baseline_params"
+      function_signatures:
+        baseline_params:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        baseline_params returns a mapping with optional known keys:
+        destroy_ratio pair, segment_length int, reaction_factor number,
+        vns_max_no_improve int, use_vns bool, cw_threshold int, vns_threshold
+        int, alns_threshold int, and max_destroy_customers int. Omitted keys
+        use the repo-local baseline defaults; unknown or invalid keys are
+        runtime audit failures and are not passed unsanitized to vrp/src.
+      return_values:
+        baseline_params:
+          value_type: mapping
+          allowed_keys:
+            - destroy_ratio
+            - segment_length
+            - reaction_factor
+            - vns_max_no_improve
+            - use_vns
+            - cw_threshold
+            - vns_threshold
+            - alns_threshold
+            - max_destroy_customers
+    bounds:
+      allowed_components:
+        - destroy_ratio
+        - segment_length
+        - reaction_factor
+        - use_vns
+        - vns_max_no_improve
+        - construction_thresholds
+        - max_destroy_customers
+      numeric_ranges:
+        destroy_ratio: [0.01, 0.80]
+        segment_length: [1, 1000]
+        reaction_factor: [0.01, 1.0]
+        vns_max_no_improve: [0, 20000]
+        cw_threshold: [0, 10000]
+        vns_threshold: [0, 10000]
+        alns_threshold: [0, 10000]
+        max_destroy_customers: [1, 500]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+        - max_destroy_customers
+    evidence:
+      required_runtime_fields:
+        - baseline_policy_loaded
+        - baseline_policy_errors
+        - baseline_policy_params
+        - baseline_destroy_ratio
+        - baseline_segment_length
+        - baseline_reaction_factor
+        - baseline_use_vns
+        - baseline_vns_max_no_improve
+        - baseline_max_destroy_customers
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how bounded repo-local baseline main-search knobs should improve
+        formal CVRP evidence before post-baseline operators run. Safe
+        modifications include changing destroy ratio, ALNS segment length,
+        adaptive reaction factor, VNS usage or no-improvement limit, threshold
+        gates, or max destroyed customers using instance-size rationale.
+      implementation_guidance: >-
+        Keep baseline_params deterministic, side-effect free, and return only
+        known bounded keys. The solver owns vrp/src invocation, route
+        construction, ALNS/VNS execution, feasibility checks, and audit
+        normalization. For instance features, use instance.customer_ids,
+        instance.customer_count, instance.demands[customer_id],
+        instance.capacity, and instance.distance(i, j).
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, mutate the
+        instance, use instance.customers or other undeclared instance aliases,
+        return unknown keys, widen numeric bounds, disable safety checks, or
+        encode case-name-specific behavior. Never use instance.customers; it is
+        not part of the CVRP instance API.
+    target_files:
+      - "policies/baseline_policy.py"
+    prompt_hint: "Tune bounded repo-local vrp/src ALNS+VNS main-search knobs."
+    required_functions:
+      - "baseline_params"
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false
@@ -755,6 +867,7 @@ family_taxonomy:
     - route_pair
     - ruin_recreate
     - search_policy
+    - baseline_policy
     - construction_policy
     - neighborhood_portfolio
     - algorithm_blueprint
@@ -809,6 +922,16 @@ family_taxonomy:
       - operator budget
       - post baseline
       - scheduling policy
+    baseline_policy:
+      - baseline policy
+      - main search
+      - alns
+      - vns
+      - destroy ratio
+      - segment length
+      - reaction factor
+      - max destroy customers
+      - repo local baseline
     construction_policy:
       - construction policy
       - initial construction

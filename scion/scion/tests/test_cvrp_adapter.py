@@ -85,6 +85,7 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
     [
         "construction_policy",
         "search_policy",
+        "baseline_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
     ],
@@ -165,6 +166,68 @@ def test_cvrp_algorithm_blueprint_preview_rejects_bad_plan(
     assert preview["passed"] is False
     assert "made_up_move" in json.dumps(preview["issues"])
     assert "local_search.rounds" in json.dumps(preview["issues"])
+
+
+def test_cvrp_baseline_policy_preview_accepts_valid_params(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_policy.py",
+        action="modify",
+        code_content=(
+            "def baseline_params(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'destroy_ratio': (0.05, 0.25),\n"
+            "        'segment_length': 50,\n"
+            "        'reaction_factor': 0.2,\n"
+            "        'vns_max_no_improve': 250,\n"
+            "        'use_vns': False,\n"
+            "        'cw_threshold': 100,\n"
+            "        'vns_threshold': 100,\n"
+            "        'alns_threshold': 200,\n"
+            "        'max_destroy_customers': min(20, instance.customer_count + 5),\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="baseline_policy"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["surface"] == "baseline_policy"
+    assert preview["issues"] == []
+
+
+def test_cvrp_baseline_policy_preview_rejects_invalid_params(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_policy.py",
+        action="modify",
+        code_content=(
+            "def baseline_params(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'destroy_ratio': (0.7, 0.2),\n"
+            "        'segment_length': 0,\n"
+            "        'use_vns': 'yes',\n"
+            "        'unknown': 1,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="baseline_policy"),
+    )
+
+    assert preview["passed"] is False
+    issues = json.dumps(preview["issues"])
+    assert "destroy_ratio lower bound" in issues
+    assert "segment_length" in issues
+    assert "use_vns" in issues
+    assert "unknown" in issues
 
 
 def test_cvrp_algorithm_blueprint_preview_rejects_instance_customers_alias(
