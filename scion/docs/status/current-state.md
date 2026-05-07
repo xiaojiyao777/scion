@@ -1412,7 +1412,8 @@ scion/docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md
 
 Configuration: five-round Sonnet CVRP formal VRP, `--agentic-proposal`,
 `--disable-early-stop`, `--force-surface algorithm_blueprint`,
-`time_limit_sec=10`, and repo-local `SCION_PROBLEM_DATA_ROOT`.
+`time_limit_sec=10`, and repo-local `SCION_PROBLEM_DATA_ROOT`. The run was
+launched as independent process `pid=2206097` from commit `278d543`.
 
 ## Remaining Optimization Backlog
 

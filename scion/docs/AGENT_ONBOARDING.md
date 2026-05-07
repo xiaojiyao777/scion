@@ -152,8 +152,9 @@ Near-term CVRP research-space work:
 - The post-reporting validation launch is documented in
   `docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md`.
   It is a five-round Sonnet CVRP formal VRP control-path run with
-  `--force-surface algorithm_blueprint`; use it to validate real campaign
-  artifacts for selected-surface runtime reporting.
+  `--force-surface algorithm_blueprint`, launched as independent process
+  `pid=2206097`; use it to validate real campaign artifacts for
+  selected-surface runtime reporting.
 - Treat APS budget/recovery as unblocked. The budget headroom is low and may
   deserve later compaction, but the next work is not another compactness fix or
   a longer run.
