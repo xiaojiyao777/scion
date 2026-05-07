@@ -88,6 +88,15 @@ selection-oriented metadata, and `context.read_surface` defaults to
 `detail="compact"` with bounded interface text and champion-code preview.
 `detail="full"` and `max_code_chars` are explicit opt-ins for debug or deep
 inspection.
+Within `AgenticProposalSession`, surface reads are further normalized to compact
+`max_code_chars=1200` observations before execution. If a returned observation
+would exceed the remaining session observation budget, APS stores a bounded
+`result_too_large` summary instead of the original payload before incrementing
+`tool_budget_used.observation_chars`. Optional planner-selected
+`context.read_surface` calls also fail closed when the remaining budget is below
+the reserved floor, so persisted recovery artifacts stay within
+`AgenticToolLoopConfig.max_observation_chars` while the replay validator remains
+strict for genuinely invalid artifacts.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

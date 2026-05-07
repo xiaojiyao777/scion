@@ -1260,15 +1260,31 @@ This is valid control-path evidence that the top-level CVRP
 screened through Scion gates. It is not solver-quality evidence. Screening
 summaries still need full bounded `algorithm_*` audit fields, and
 `construction_keep_top_k=2` meant the declared `demand_descending` construction
-method was not actually tried. The next work should fix APS
-compactness/recovery first, then refine algorithm-blueprint audit and contract
-reporting before longer runs or deeper CVRP algorithm development.
+method was not actually tried.
+
+Follow-up APS recovery compactness repair is now in code. Tool observations are
+bounded before they are counted or persisted, optional planner
+`context.read_surface` calls fail closed when remaining observation budget is
+low, and APS-level surface reads are normalized to compact `max_code_chars=1200`
+payloads. The replay validator remains fail-closed for genuinely over-budget
+artifacts; the repair prevents new artifacts from being written with
+`tool_budget_used.observation_chars > max_observation_chars`.
 
 Detailed delegated analysis is recorded in
 `scion/docs/experiments/v0.4/v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md`.
 
-The focused APS/proposal regression set passed after the compact-read repair:
-`101 passed in 0.94s` from `scion/`.
+Validation after the recovery compactness repair:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/unit/test_agentic_proposal_tools.py -q
+62 passed in 1.07s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/unit/test_agentic_proposal_tools.py scion/tests/unit/core/test_proposal_pipeline.py scion/tests/test_cli.py -q
+124 passed in 1.60s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests -q
+1465 passed, 1 skipped in 49.41s
+```
 
 The current bottleneck is policy-surface efficacy and observability rather than
 gate modernization. The next CVRP slice should either make

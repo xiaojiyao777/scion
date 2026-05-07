@@ -26,7 +26,9 @@ from scion.proposal.llm_client import (
     LLMTimeoutError,
 )
 from scion.proposal.tools import (
+    ProposalExposureLevel,
     ProposalObservation,
+    ProposalTaint,
     ProposalToolContext,
     ProposalToolFailureCode,
     ProposalToolRegistry,
@@ -48,6 +50,9 @@ _COMPACT_FEEDBACK_TOOLS = (
     "feedback.query_screening",
     "feedback.query_runtime",
 )
+_MIN_BUDGETED_OBSERVATION_CHARS = 512
+_OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
+_APS_SURFACE_READ_CODE_CHARS = 1200
 
 
 class AgenticProposalStatus(str, Enum):
@@ -1580,6 +1585,7 @@ class AgenticProposalSession:
         selection_source: str = "fallback_selected",
     ) -> ProposalObservation:
         assert self.tool_registry is not None
+        args = self._budgeted_tool_args(name, args, selection_source=selection_source)
         if self._session_timeout_reached(state):
             self._record_loop_stop(state, "session_timeout", error_code="session_timeout")
             return ProposalObservation(
@@ -1642,15 +1648,50 @@ class AgenticProposalSession:
                 },
             )
             return observation
-        observation = self.tool_registry.call(
+        if self._should_deny_optional_tool_for_budget(
             name,
-            args,
-            context,
-            tool_call_id=step_id,
-        )
+            selection_source=selection_source,
+            state=state,
+        ):
+            observation = self._budget_error_observation(
+                context,
+                state,
+                tool_name=name,
+                tool_call_id=step_id,
+                summary=(
+                    "Optional proposal tool call denied because the remaining "
+                    "session observation budget is reserved."
+                ),
+                estimated_chars=None,
+                budget_action="tool_denied",
+                repair_hint="Use existing compact observations or stop planning.",
+            )
+        else:
+            observation = self.tool_registry.call(
+                name,
+                args,
+                context,
+                tool_call_id=step_id,
+            )
         observation = self._enforce_observation_budget(context, state, observation)
         prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
+        remaining = self._remaining_observation_chars(state)
+        if prompt_payload_chars > remaining:
+            observation = self._fit_observation_to_remaining(
+                observation,
+                remaining_chars=remaining,
+            )
+            prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
         state.observation_chars_used += prompt_payload_chars
+        if state.observation_chars_used > self._tool_loop_config.max_observation_chars:
+            state.observation_chars_used = self._tool_loop_config.max_observation_chars
+        if self._observation_budget_exhausted(state):
+            self._record_loop_stop(
+                state,
+                "tool_loop_limit",
+                error_code="observation_budget_exhausted",
+                tool_name=name,
+            )
         state.note(
             phase,
             f"Proposal tool observation: {name}",
@@ -1676,9 +1717,82 @@ class AgenticProposalSession:
         return (
             state.tool_step_count >= self._tool_loop_config.max_steps
             or state.tool_call_count >= self._tool_loop_config.max_tool_calls
-            or state.observation_chars_used >= self._tool_loop_config.max_observation_chars
+            or self._observation_budget_exhausted(state)
             or self._session_timeout_reached(state)
         )
+
+    def _remaining_observation_chars(
+        self,
+        state: AgenticProposalSessionState,
+    ) -> int:
+        return max(
+            0,
+            int(self._tool_loop_config.max_observation_chars)
+            - int(state.observation_chars_used),
+        )
+
+    def _observation_budget_exhausted(
+        self,
+        state: AgenticProposalSessionState,
+    ) -> bool:
+        remaining = self._remaining_observation_chars(state)
+        if remaining <= 0:
+            return True
+        return remaining < self._minimum_budgeted_observation_chars()
+
+    def _minimum_budgeted_observation_chars(self) -> int:
+        return _MIN_BUDGETED_OBSERVATION_CHARS
+
+    def _optional_surface_read_budget_floor(self) -> int:
+        return max(
+            self._minimum_budgeted_observation_chars(),
+            min(
+                _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS,
+                max(0, int(self._tool_loop_config.max_observation_chars) // 8),
+            ),
+        )
+
+    def _should_deny_optional_tool_for_budget(
+        self,
+        name: str,
+        *,
+        selection_source: str,
+        state: AgenticProposalSessionState,
+    ) -> bool:
+        if name != "context.read_surface":
+            return False
+        if selection_source == "selected_surface_required":
+            return False
+        return (
+            self._remaining_observation_chars(state)
+            < self._optional_surface_read_budget_floor()
+        )
+
+    def _budgeted_tool_args(
+        self,
+        name: str,
+        args: Mapping[str, Any],
+        *,
+        selection_source: str,
+    ) -> Mapping[str, Any]:
+        if name != "context.read_surface":
+            return args
+        budgeted = dict(args)
+        if budgeted.get("detail") != "compact":
+            budgeted["detail"] = "compact"
+        max_code_chars = budgeted.get("max_code_chars")
+        if max_code_chars is None:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+            return budgeted
+        try:
+            requested = int(max_code_chars)
+        except Exception:
+            return budgeted
+        if requested > _APS_SURFACE_READ_CODE_CHARS:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+        elif selection_source == "selected_surface_required" and requested < 0:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+        return budgeted
 
     def _session_timeout_reached(self, state: AgenticProposalSessionState) -> bool:
         return (
@@ -1721,28 +1835,112 @@ class AgenticProposalSession:
         observation: ProposalObservation,
     ) -> ProposalObservation:
         projected = _json_size(_observation_prompt_payload(observation))
-        remaining = (
-            self._tool_loop_config.max_observation_chars
-            - state.observation_chars_used
-        )
-        if projected <= max(0, remaining):
+        remaining = self._remaining_observation_chars(state)
+        if projected <= remaining:
             return observation
-        return ProposalObservation(
-            observation_id=str(uuid.uuid4()),
-            session_id=context.session_id,
+        return self._budget_error_observation(
+            context,
+            state,
             tool_name=observation.tool_name,
             tool_call_id=observation.tool_call_id,
+            summary=(
+                "Tool observation exceeded the configured session observation budget."
+            ),
+            estimated_chars=projected,
+            budget_action="observation_truncated",
+            source_observation=observation,
+            repair_hint="Request fewer or smaller observations.",
+        )
+
+    def _budget_error_observation(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        *,
+        tool_name: str,
+        tool_call_id: str,
+        summary: str,
+        estimated_chars: int | None,
+        budget_action: str,
+        source_observation: ProposalObservation | None = None,
+        repair_hint: str | None = None,
+    ) -> ProposalObservation:
+        payload = {
+            "budget_action": budget_action,
+            "max_observation_chars": self._tool_loop_config.max_observation_chars,
+            "observation_chars_used": state.observation_chars_used,
+            "remaining_observation_chars": self._remaining_observation_chars(state),
+        }
+        if estimated_chars is not None:
+            payload["estimated_chars"] = estimated_chars
+        if source_observation is not None:
+            payload["source_observation_type"] = source_observation.observation_type
+            payload["source_was_error"] = source_observation.is_error
+            payload["source_failure_code"] = _enum_value(
+                source_observation.failure_code
+            )
+        observation = ProposalObservation(
+            observation_id=str(uuid.uuid4()),
+            session_id=context.session_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
             observation_type="tool_error",
-            summary="Tool observation exceeded the configured session observation budget.",
-            structured_payload={
-                "max_observation_chars": self._tool_loop_config.max_observation_chars,
-                "estimated_chars": projected,
-            },
-            taint=observation.taint,
-            exposure_level=observation.exposure_level,
+            summary=summary,
+            structured_payload=payload,
+            taint=source_observation.taint
+            if source_observation is not None
+            else ProposalTaint.PROPOSAL,
+            exposure_level=source_observation.exposure_level
+            if source_observation is not None
+            else ProposalExposureLevel.PUBLIC_SPEC,
             is_error=True,
             failure_code=ProposalToolFailureCode.RESULT_TOO_LARGE,
-            repair_hint="Request fewer or smaller observations.",
+            repair_hint=repair_hint,
+        )
+        return self._fit_observation_to_remaining(
+            observation,
+            remaining_chars=self._remaining_observation_chars(state),
+        )
+
+    def _fit_observation_to_remaining(
+        self,
+        observation: ProposalObservation,
+        *,
+        remaining_chars: int,
+    ) -> ProposalObservation:
+        if _json_size(_observation_prompt_payload(observation)) <= remaining_chars:
+            return observation
+        compact_payloads: tuple[Mapping[str, Any], ...] = (
+            {
+                "budget_action": "observation_truncated",
+                "remaining_observation_chars": max(0, remaining_chars),
+            },
+            {},
+        )
+        summaries = (
+            observation.summary,
+            "Tool observation omitted because the remaining session observation budget is too small.",
+            "Observation budget exhausted.",
+            "",
+        )
+        for payload in compact_payloads:
+            for summary in summaries:
+                candidate = replace(
+                    observation,
+                    summary=summary,
+                    structured_payload=payload,
+                    repair_hint=None,
+                )
+                if (
+                    _json_size(_observation_prompt_payload(candidate))
+                    <= remaining_chars
+                ):
+                    return candidate
+        return replace(
+            observation,
+            summary="",
+            structured_payload={},
+            repair_hint=None,
         )
 
     def _fatal_observation_error(

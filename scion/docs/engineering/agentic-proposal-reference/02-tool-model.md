@@ -253,7 +253,7 @@ Suggested MVP tool set:
 |---|---|---|
 | `context.read_problem` | read_public_context | Adapter-rendered summary/mechanics/objectives. |
 | `context.list_surfaces` | read_public_context | Compact selection metadata from `ProblemSpecV1.research_surfaces`. |
-| `context.read_surface` | read_champion_artifact | Compact-by-default interface and bounded current target-file preview; `detail="full"` / `max_code_chars` are explicit opt-ins. |
+| `context.read_surface` | read_champion_artifact | Compact-by-default interface and bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=1200`, and optional reads fail closed near the observation budget. |
 | `memory.query` | read_tainted_memory | Search memory, research log, failed hypotheses. |
 | `feedback.query_screening` | read_tainted_memory | Screening-only detailed feedback. |
 | `feedback.query_holdout_summary` | read_tainted_memory | Validation aggregate, frozen pass/fail/budget only. |
@@ -263,3 +263,12 @@ Suggested MVP tool set:
 | `proposal.finalize` | draft_patch | Emits final session output. |
 
 Everything else remains outside the proposal agent.
+
+Tool-loop observation budgets are enforced at the APS boundary, not only inside
+individual tools. A tool may still return a large payload or a large error, but
+`AgenticProposalSession` must replace any over-budget observation with a bounded
+`result_too_large` summary before counting or persisting it. New persisted
+session artifacts should therefore satisfy
+`tool_budget_used.observation_chars <= max_observation_chars`; replay validation
+continues to reject older or malformed artifacts that exceed the configured
+budget.

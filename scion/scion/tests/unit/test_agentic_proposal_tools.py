@@ -27,7 +27,9 @@ from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.proposal.agentic_session import (
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticProposalRequest,
+    AgenticProposalPhase,
     AgenticProposalSession,
+    AgenticProposalSessionState,
     AgenticProposalStatus,
     AgenticSessionStore,
     AgenticTerminationReason,
@@ -46,6 +48,7 @@ from scion.proposal.tools import (
     ProposalTaint,
     ProposalToolContext,
     ProposalToolFailureCode,
+    ProposalToolPermission,
     ProposalToolRegistry,
 )
 
@@ -111,6 +114,50 @@ class ToolSelectionClient:
         if tool["name"] == "generate_patch":
             return _valid_policy_patch_payload()
         raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
+class _EmptyToolInput(BaseModel):
+    pass
+
+
+class LargeObservationTool:
+    permission = ProposalToolPermission.READ_PUBLIC_CONTEXT
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 200000
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        payload_chars: int,
+        is_error: bool = False,
+    ) -> None:
+        self.name = name
+        self.payload_chars = payload_chars
+        self.is_error = is_error
+        self.input_schema = _EmptyToolInput
+
+    def call(
+        self,
+        args: BaseModel,
+        context: ProposalToolContext,
+    ) -> ProposalObservation:
+        return ProposalObservation(
+            observation_id=f"{self.name}-obs",
+            session_id=context.session_id,
+            tool_name=self.name,
+            tool_call_id="",
+            observation_type="huge_error" if self.is_error else "huge_payload",
+            summary="Returned deliberately large test observation.",
+            structured_payload={"payload": "x" * self.payload_chars},
+            taint=ProposalTaint.PROPOSAL,
+            exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
+            is_error=self.is_error,
+            failure_code=(
+                ProposalToolFailureCode.RUNTIME_EXCEPTION if self.is_error else None
+            ),
+        )
 
 
 def _problem_spec(root: Path) -> ProblemSpecV1:
@@ -1680,6 +1727,115 @@ def test_agentic_session_tool_loop_limits_are_enforced(tmp_path: Path) -> None:
     assert stop_events
 
 
+def test_agentic_session_observation_budget_bounds_large_tool_results(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "test.huge_observation", "args": {}},
+            {"tool_name": "test.huge_error", "args": {}},
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    registry = ProposalToolRegistry.default_read_only()
+    registry.register(
+        LargeObservationTool(
+            "test.huge_observation",
+            payload_chars=20000,
+        )
+    )
+    registry.register(
+        LargeObservationTool(
+            "test.huge_error",
+            payload_chars=20000,
+            is_error=True,
+        )
+    )
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    config = AgenticToolLoopConfig(
+        max_steps=6,
+        max_tool_calls=6,
+        max_observation_chars=2000,
+    )
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=registry,
+        tool_loop_config=config,
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    output_ref = next(ref for ref in output.tainted_artifact_refs if ref.endswith("output.json"))
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    huge_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("tool_name")
+        in {"test.huge_observation", "test.huge_error"}
+    ]
+
+    assert output.tool_budget_used["observation_chars"] <= 2000
+    assert artifact["tool_budget_used"]["observation_chars"] <= 2000
+    assert validate_agentic_session_artifact(artifact).ok is True
+    assert {event["tool_name"] for event in huge_events} == {
+        "test.huge_observation",
+        "test.huge_error",
+    }
+    assert all(event["error_code"] == "result_too_large" for event in huge_events)
+
+
+def test_optional_read_surface_near_budget_returns_bounded_error(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_observation_chars=24000)
+    state = AgenticProposalSessionState(
+        session_id="session-budget",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        observation_chars_used=23000,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+
+    observation = session._call_tool(
+        context,
+        state,
+        AgenticProposalPhase.DIAGNOSE,
+        "context.read_surface",
+        {"surface": "search_policy"},
+        selection_source="planner_selected",
+    )
+
+    assert observation.is_error is True
+    assert observation.failure_code == ProposalToolFailureCode.RESULT_TOO_LARGE
+    assert observation.structured_payload["budget_action"] == "tool_denied"
+    assert state.observation_chars_used <= config.max_observation_chars
+    assert state.observation_chars_used - 23000 < 1000
+    assert any(
+        event.metadata.get("error_code") == "result_too_large"
+        and event.metadata.get("selection_source") == "planner_selected"
+        for event in state.transcript
+    )
+
+
 def test_agentic_session_wall_time_timeout_returns_typed_failure(
     tmp_path: Path,
 ) -> None:
@@ -2013,6 +2169,10 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
     code_observations = creative.code_contexts[0]["agentic_tool_observations"]
 
     assert output.status == AgenticProposalStatus.COMPLETED
+    assert (
+        output.tool_budget_used["observation_chars"]
+        <= output.tool_loop_config["max_observation_chars"]
+    )
     assert any(
         event.metadata.get("error_code")
         == "planner_stopped_before_required_context"
