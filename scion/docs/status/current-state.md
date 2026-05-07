@@ -18,16 +18,18 @@ The v0.4 focus remains:
 - use CVRP as the second real problem class for adapter/protocol validation.
 
 Latest interpretation: APS observation-budget/recovery repair from `af4ab5b`
-has now passed a one-round forced `algorithm_blueprint` Sonnet CVRP formal
-smoke. APS is fixed enough to unblock control-path work, but the budget
-headroom is low. The first `algorithm_blueprint` reporting refinement is now
-implemented: selected-surface `evidence.required_runtime_fields`, including
-the CVRP `algorithm_*` runtime fields, are preserved in formal protocol raw
-metrics and summarized in campaign summaries. The next check should rerun a
-forced `algorithm_blueprint` smoke to validate the real artifact path before
-longer runs; the five-round Sonnet CVRP formal VRP launch is now documented for
-that purpose. This is still not solver-quality evidence, and no candidate
-promoted.
+has passed control-path validation, and the first `algorithm_blueprint`
+reporting refinement is now validated on a fresh five-round Sonnet CVRP formal
+VRP run. Selected-surface `evidence.required_runtime_fields`, including the
+CVRP `algorithm_*` runtime fields, survive into formal protocol raw metrics
+and `campaign_summary.json` in real campaign artifacts. The current blocker is
+no longer APS compactness, gate modernization, or selected-surface reporting;
+it is CVRP algorithm-surface efficacy. The latest run had 5/5 candidates pass
+Contract, Verification, and canary, but all failed screening with
+`SCREENING_FAIL_WIN_RATE`; no validation/frozen stage was reached and no
+candidate promoted. Do not start a long solver-quality validation yet; first
+improve CVRP problem-owned surfaces so at least one diagnostic candidate shows
+nontrivial screening quality rather than tie/no-op dominated evidence.
 
 ## Current Engineering State
 
@@ -1397,23 +1399,109 @@ Detailed delegated analysis is recorded in:
 scion/docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md
 ```
 
-The current bottleneck is now validating the `algorithm_blueprint` reporting
-refinement on a fresh forced smoke rather than APS compactness, gate
-modernization, or longer CVRP runs. The next CVRP slice should confirm that
-required `algorithm_*` runtime fields appear in formal screening pair metrics
-and campaign summaries before judging solver quality or broadening algorithm
-development.
+## 2026-05-07 Blueprint Reporting Sonnet 5R VRP Validation
 
-The validation launch is documented in:
+The post-reporting five-round Sonnet CVRP formal VRP validation completed and
+is analyzed in:
 
 ```text
 scion/docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md
 ```
 
-Configuration: five-round Sonnet CVRP formal VRP, `--agentic-proposal`,
-`--disable-early-stop`, `--force-surface algorithm_blueprint`,
-`time_limit_sec=10`, and repo-local `SCION_PROBLEM_DATA_ROOT`. The run was
-launched as independent process `pid=2206097` from commit `278d543`.
+Run root:
+
+```text
+/home/clawd/research/scion-experiments/v04-blueprint-reporting-sonnet-5r-20260507T141342Z
+```
+
+Configuration:
+
+```text
+scion_commit=278d543
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=algorithm_blueprint
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+```
+
+Outcome:
+
+```text
+exit_code=0
+rounds=5/5
+champion=v1_r0
+active_branches=0
+promotions=0
+frozen_budget_used=0
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Surface coverage:
+
+```text
+modify/algorithm_blueprint: 1
+create_new/route_local: 1
+modify/neighborhood_portfolio: 1
+modify/construction_policy: 1
+create_new/route_pair: 1
+```
+
+Reporting validation result:
+
+- The intended selected-surface reporting path is now validated in real formal
+  campaign artifacts.
+- Round 1 selected `algorithm_blueprint`; `campaign_summary.json` and the
+  round's raw metrics both record
+  `selected_surface=algorithm_blueprint`.
+- All declared `algorithm_blueprint` required runtime fields were present for
+  16/16 candidate-side screening pairs, with `runtime_missing_pairs=0`.
+- The candidate had `algorithm_blueprint_loaded=true`,
+  `algorithm_blueprint_active=true`, `algorithm_blueprint_errors=0`,
+  executed `plan_loaded`, `construction_ensemble`, `baseline`, and
+  `local_search`, and preserved the required `algorithm_plan`,
+  `algorithm_*` counters, phase deltas, and runtime fields in pair metrics.
+- APS artifact validation passed for all ten persisted sessions. Observation
+  headroom remains very low, but no invalid recovery artifact,
+  `result_too_large`, or observation-budget persistence failure was found.
+
+Solver-quality interpretation:
+
+- This remains control-path evidence, not solver-quality evidence.
+- All five candidates passed Contract, Verification, and canary, then failed
+  screening with `SCREENING_FAIL_WIN_RATE`.
+- The blueprint candidate improved runtime
+  (`runtime_ratio_median=0.821`, `runtime_delta_median_ms=-1497.5`) but did
+  not improve objective quality enough: pair-level evidence was 1 win, 3
+  losses, and 12 ties, collapsing to case-level `win_rate=0.0` and
+  `median_delta=0.0`.
+- The blueprint local-search phase attempted 192 bounded moves per pair and
+  accepted 0. The current package-owned local-search primitives are not
+  compensating for the reduced baseline budget.
+- Other surfaces were also tie/no-op dominated: route-local had 2 winning
+  pairs but no winning cases, neighborhood portfolio and construction policy
+  produced all ties, and route-pair produced 0 wins, 1 loss, and 23 ties.
+
+Recommendation:
+
+- Do not launch a long formal solver-quality validation yet.
+- The next work should be a focused CVRP surface-efficacy slice: expose or
+  improve bounded problem-owned algorithm hooks that can change solution
+  quality before/inside the strong baseline, such as real destroy/repair or
+  acceptance/perturbation/restart behavior with declared runtime audit fields.
+- Tighten `algorithm_blueprint` guidance so candidates do not trade away
+  baseline budget unless the compensating package-owned phase shows accepted
+  moves or objective improvement in diagnostic evidence.
+- Run another 5-10 round diagnostic only after that slice. Move to a longer
+  Sonnet validation once a diagnostic candidate shows nontrivial screening
+  quality rather than only speed or no-op/tie evidence.
 
 ## Remaining Optimization Backlog
 
@@ -1425,13 +1513,13 @@ P1:
 
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
-- CVRP formal research needs analysis of the five-round forced
-  `algorithm_blueprint` Sonnet VRP validation once it completes. Required
-  `algorithm_*` runtime fields should now appear in formal screening pair
-  metrics and campaign summaries. Future compactness work may improve the very
-  low APS budget headroom, but it is not the current blocker. Destroy/repair
-  and acceptance/restart surfaces remain later candidates once the CVRP package
-  can expose bounded hooks and runtime audit.
+- CVRP formal research should now prioritize surface efficacy, not reporting
+  plumbing. Required `algorithm_*` runtime fields are present in fresh formal
+  screening pair metrics and campaign summaries. Future compactness work may
+  improve the very low APS budget headroom, but it is not the current blocker.
+  Destroy/repair and acceptance/restart surfaces should move forward once the
+  CVRP package can expose bounded hooks, real behavior changes, and runtime
+  audit fields.
 
 P2:
 
@@ -1450,4 +1538,4 @@ P2:
   formal-readiness run.
 - Legacy/no-adapter V8 objective-only comparison remains intentionally
   compatibility-only; do not prioritize it ahead of the
-  `algorithm_blueprint` reporting slice.
+  CVRP surface-efficacy slice.

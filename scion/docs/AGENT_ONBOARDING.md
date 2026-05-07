@@ -26,17 +26,16 @@ enough to continue, validate, freeze, promote, or abandon.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
 - Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
-  API guidance has been repaired, and the APS observation-budget/recovery fix
-  after `af4ab5b` has been validated by a one-round forced
-  `algorithm_blueprint` Sonnet CVRP formal smoke. APS is fixed enough to
-  unblock proposal work, though observation headroom is still low. The first
-  `algorithm_blueprint` reporting refinement is implemented: selected-surface
-  required runtime fields, including CVRP `algorithm_*` fields, are preserved
-  in protocol raw metrics and campaign summaries. The next decision point is a
-  documented five-round forced Sonnet CVRP formal VRP run to validate the real
-  artifact path before longer runs or more compactness work. This remains
-  control-path evidence, not solver-quality evidence, and there has been no
-  promotion.
+  API guidance has been repaired, APS observation-budget/recovery is fixed
+  enough to unblock proposal work, and the first `algorithm_blueprint`
+  reporting refinement is validated on a fresh five-round Sonnet CVRP formal
+  VRP run. Selected-surface required runtime fields, including CVRP
+  `algorithm_*` fields, are preserved in formal protocol raw metrics and
+  campaign summaries. The bottleneck is now CVRP algorithm-surface efficacy:
+  recent candidates pass Contract, Verification, canary, and runtime audit, but
+  still fail screening with tie/no-op dominated objective evidence. Do not run
+  a long solver-quality validation until a focused surface-efficacy slice
+  produces nontrivial screening quality.
 
 ## Required Reading Order
 
@@ -149,22 +148,20 @@ Near-term CVRP research-space work:
   `/home/clawd/research/scion-experiments/v04-forced-blueprint-budget-sonnet-20260507T133711Z`.
   The analysis is recorded in
   `docs/experiments/v0.4/v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md`.
-- The post-reporting validation launch is documented in
+- The post-reporting validation run has been analyzed:
+  `/home/clawd/research/scion-experiments/v04-blueprint-reporting-sonnet-5r-20260507T141342Z`.
+  The analysis is recorded in
   `docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md`.
-  It is a five-round Sonnet CVRP formal VRP control-path run with
-  `--force-surface algorithm_blueprint`, launched as independent process
-  `pid=2206097`; use it to validate real campaign artifacts for
-  selected-surface runtime reporting.
+  It validated that selected-surface `algorithm_*` runtime fields survive in
+  real formal screening pair metrics and campaign summaries.
 - Treat APS budget/recovery as unblocked. The budget headroom is low and may
   deserve later compaction, but the next work is not another compactness fix or
   a longer run.
-- Analyze the five-round forced `algorithm_blueprint` Sonnet VRP validation
-  after it completes, confirming that required `algorithm_*` runtime fields now
-  survive through formal screening pair metrics and campaign summaries in real
-  campaign artifacts.
-- Improve policy-surface efficacy only after the control-path reporting path is
-  validated in a fresh smoke; do not treat the latest smoke as solver-quality
-  evidence.
+- Improve CVRP surface efficacy before any long solver-quality validation. The
+  latest run passed Contract, Verification, canary, and runtime audit for all
+  evaluated candidates, but all five candidates failed screening with
+  `SCREENING_FAIL_WIN_RATE`; the `algorithm_blueprint` local-search phase made
+  192 attempts per pair and accepted 0 moves.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.
