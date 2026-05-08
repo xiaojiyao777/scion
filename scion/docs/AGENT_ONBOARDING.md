@@ -40,10 +40,13 @@ enough to continue, validate, freeze, promote, or abandon.
   screening and it still failed `SCREENING_FAIL_WIN_RATE`. Do not run a long
   solver-quality validation. Singleton semantic novelty has a code-level
   repair, and APS surface reads now use compact `surface-contract.v1` payloads
-  with a 48000-character default observation cap. The next step is another
-  tightly forced `main_search_strategy` diagnostic, not prompt/guidance tuning
-  or another post-baseline operator run. That clean-worktree diagnostic is now
-  running from commit `b98196b`.
+  with a 48000-character default observation cap. The clean-worktree
+  `main_search_strategy` diagnostic from commit `b98196b` validated those
+  control repairs: all three candidates reached screening on the forced
+  surface. It still did not produce solver-quality evidence; all three failed
+  `SCREENING_FAIL_WIN_RATE`, and none selected `route_pair_swap` or
+  `bounded_destroy_repair`. The current blocker is candidate use and efficacy
+  of the deeper problem-owned main-search components.
 
 ## Required Reading Order
 
@@ -201,13 +204,13 @@ Near-term CVRP research-space work:
   `main_search_strategy` diagnostic and check whether multiple candidates reach
   screening and exercise route-pair-swap / bounded destroy-repair components,
   not another generated post-baseline operator or a baseline-policy-only run.
-- A clean-worktree forced `main_search_strategy` diagnostic is running:
+- A clean-worktree forced `main_search_strategy` diagnostic has been analyzed:
   `/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T142513Z`.
-  It was launched from commit `b98196b` with
-  `python=/home/clawd/miniconda3/envs/claw/bin/python`,
-  `force_surface=main_search_strategy`, `rounds=3`, and
-  `worktree_dirty=false`. Analyze bounded artifacts only after `exit.txt`
-  appears.
+  The analysis is recorded in
+  `docs/experiments/v0.4/v0.4-main-search-strategy-clean-sonnet-3r-20260508.md`.
+  It validated persistent forced-surface selection, C10 singleton novelty, APS
+  compact selected-surface reads, and active runtime audit across three
+  screened candidates.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

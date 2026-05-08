@@ -37,11 +37,14 @@ failed `SCREENING_FAIL_WIN_RATE`. Do not start a long solver-quality
 validation yet. Singleton semantic novelty has been repaired so distinct
 strategy identities are not collapsed by target file. APS surface reads have
 also been repaired with a compact `surface-contract.v1` section view and a
-48000-character default observation cap. The next step is another tightly
-forced `main_search_strategy` diagnostic to see whether multiple distinct
-whole-algorithm candidates now reach screening and exercise the
-route-pair-swap / bounded destroy-repair components. That clean-worktree
-diagnostic is now running from commit `b98196b`.
+48000-character default observation cap. A clean-worktree forced
+`main_search_strategy` diagnostic from commit `b98196b` validated those control
+repairs: all three candidates reached screening and all stayed on the forced
+surface. It still did not produce solver-quality evidence; all three failed
+`SCREENING_FAIL_WIN_RATE`, and none selected `route_pair_swap` or
+`bounded_destroy_repair`. The current blocker is candidate use and efficacy of
+the deeper problem-owned main-search components, not force-surface drift, C10
+target-file collapse, or selected-surface runtime audit.
 
 ## Current Engineering State
 
@@ -1793,14 +1796,13 @@ distinct `main_search_strategy` candidates can now reach screening and that the
 problem-owned route-pair-swap / bounded destroy-repair components are actually
 selected by candidate plans.
 
-## 2026-05-08 Clean Main Search Strategy Diagnostic Running
+## 2026-05-08 Clean Main Search Strategy Diagnostic Audited
 
-A new detached three-round Sonnet CVRP formal-path diagnostic was launched
-after the singleton novelty and APS compact surface-read repairs:
+A detached three-round Sonnet CVRP formal-path diagnostic completed after the
+singleton novelty and APS compact surface-read repairs:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T142513Z
-pid=2257917
 scion_commit=b98196b
 worktree_dirty=false
 model=claude-sonnet-4-6
@@ -1813,11 +1815,59 @@ cvrp_time_limit_sec=10
 python=/home/clawd/miniconda3/envs/claw/bin/python
 data_root=/home/clawd/research/or-autoresearch-agent/vrp
 started_utc=2026-05-08T14:25:13Z
+ended_utc=2026-05-08T14:42:29Z
+exit_code=0
 ```
 
-Initial bounded startup check found the process running, `launch.env`,
-`pid.txt`, and `campaign/status.json` present, and `exit.txt` not yet present.
-This run is attributable to clean commit `b98196b`.
+Outcome:
+
+```text
+rounds=3/3
+steps=3
+experiments=3
+champion=v1
+weight_revision=0
+promotions=0
+frozen_budget_used=0
+frozen_budget_limit=2
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Detailed delegated analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-main-search-strategy-clean-sonnet-3r-20260508.md
+```
+
+Interpretation:
+
+- This is valid control-path evidence for the C10 and APS compact-read repairs,
+  not solver-quality evidence.
+- Persistent `--force-surface main_search_strategy` worked for all three
+  rounds: coverage was `modify/main_search_strategy: 3`.
+- C10 singleton semantic novelty no longer blocked follow-up hypotheses. All
+  three rounds passed Contract, Verification, and canary, then reached formal
+  screening.
+- `main_search_strategy` selected-surface audit was complete in every screened
+  candidate: `loaded=true`, `active=true`, `errors=0`, and all 27 required
+  runtime fields present for all 16 candidate-side pairs per round.
+- APS compact selected-surface reads worked: every session read
+  `main_search_strategy` successfully, and the remaining `result_too_large`
+  events came from optional reads guarded by remaining observation budget.
+- Screening remained negative and tie-dominated:
+  round 1 pair W/L/T `1/1/14`, case `win_rate=0.0`;
+  round 2 `1/2/13`, `win_rate=0.0`;
+  round 3 `3/3/10`, `win_rate=0.125`. No validation/frozen/promote.
+- The candidates still did not select the deeper components
+  `route_pair_swap` or `bounded_destroy_repair`; evaluated plans used only
+  `intra_route_2opt` and/or `inter_route_relocate`.
+
+Remaining question: whether Sonnet can select and use the deeper problem-owned
+main-search components through `main_search_strategy`, and whether those
+components can produce objective improvement on formal cases.
 
 ## Remaining Optimization Backlog
 
@@ -1840,10 +1890,10 @@ P1:
   runtime plumbing but evaluated only one candidate because APS surface reads
   were too large and C10 novelty rejected later hypotheses. C10 now supports
   structured singleton semantic identity through `novelty_signature`, and APS
-  surface context is compact by default. A new clean-worktree
-  `main_search_strategy` diagnostic is running from commit `b98196b`; analyze
-  it after `exit.txt` appears instead of launching additional generated
-  post-baseline operator work.
+  surface context is compact by default. The clean-worktree diagnostic from
+  commit `b98196b` validated those control repairs but still failed screening
+  for all three candidates and did not exercise route-pair-swap or
+  destroy-repair components.
 
 P2:
 
