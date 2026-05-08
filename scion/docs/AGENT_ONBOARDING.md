@@ -42,7 +42,8 @@ enough to continue, validate, freeze, promote, or abandon.
   repair, and APS surface reads now use compact `surface-contract.v1` payloads
   with a 48000-character default observation cap. The next step is another
   tightly forced `main_search_strategy` diagnostic, not prompt/guidance tuning
-  or another post-baseline operator run.
+  or another post-baseline operator run. That clean-worktree diagnostic is now
+  running from commit `b98196b`.
 
 ## Required Reading Order
 
@@ -200,6 +201,13 @@ Near-term CVRP research-space work:
   `main_search_strategy` diagnostic and check whether multiple candidates reach
   screening and exercise route-pair-swap / bounded destroy-repair components,
   not another generated post-baseline operator or a baseline-policy-only run.
+- A clean-worktree forced `main_search_strategy` diagnostic is running:
+  `/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T142513Z`.
+  It was launched from commit `b98196b` with
+  `python=/home/clawd/miniconda3/envs/claw/bin/python`,
+  `force_surface=main_search_strategy`, `rounds=3`, and
+  `worktree_dirty=false`. Analyze bounded artifacts only after `exit.txt`
+  appears.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

@@ -40,7 +40,8 @@ also been repaired with a compact `surface-contract.v1` section view and a
 48000-character default observation cap. The next step is another tightly
 forced `main_search_strategy` diagnostic to see whether multiple distinct
 whole-algorithm candidates now reach screening and exercise the
-route-pair-swap / bounded destroy-repair components.
+route-pair-swap / bounded destroy-repair components. That clean-worktree
+diagnostic is now running from commit `b98196b`.
 
 ## Current Engineering State
 
@@ -1792,6 +1793,32 @@ distinct `main_search_strategy` candidates can now reach screening and that the
 problem-owned route-pair-swap / bounded destroy-repair components are actually
 selected by candidate plans.
 
+## 2026-05-08 Clean Main Search Strategy Diagnostic Running
+
+A new detached three-round Sonnet CVRP formal-path diagnostic was launched
+after the singleton novelty and APS compact surface-read repairs:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T142513Z
+pid=2257917
+scion_commit=b98196b
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=3
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+started_utc=2026-05-08T14:25:13Z
+```
+
+Initial bounded startup check found the process running, `launch.env`,
+`pid.txt`, and `campaign/status.json` present, and `exit.txt` not yet present.
+This run is attributable to clean commit `b98196b`.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -1813,9 +1840,10 @@ P1:
   runtime plumbing but evaluated only one candidate because APS surface reads
   were too large and C10 novelty rejected later hypotheses. C10 now supports
   structured singleton semantic identity through `novelty_signature`, and APS
-  surface context is compact by default. The next slice is a new tightly forced
-  `main_search_strategy` diagnostic, not additional generated post-baseline
-  operators.
+  surface context is compact by default. A new clean-worktree
+  `main_search_strategy` diagnostic is running from commit `b98196b`; analyze
+  it after `exit.txt` appears instead of launching additional generated
+  post-baseline operator work.
 
 P2:
 
