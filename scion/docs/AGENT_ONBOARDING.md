@@ -50,6 +50,9 @@ enough to continue, validate, freeze, promote, or abandon.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).
+  Version boundary: v0.4 should validate autoresearch on manually onboarded
+  problem packages; v0.5 should own onboarding automation. See
+  [v0.5 onboarding memo](roadmap/v0.5-onboarding-memo.md).
 
 ## Required Reading Order
 

@@ -51,7 +51,10 @@ The broader design conclusion is now captured in
 Scion core can govern autoresearch only after a solver has been made into a
 Scion-native research object with adapter semantics, declared surfaces,
 component libraries, runtime audit, and tests. The CVRP work is the manual
-prototype of that onboarding layer.
+prototype of that onboarding layer. The version boundary is now recorded in
+[`v0.5-onboarding-memo.md`](../roadmap/v0.5-onboarding-memo.md): v0.4 should
+close around autoresearch feasibility on manually onboarded problem packages,
+while v0.5 should make problem/algorithm onboarding a first-class module.
 
 ## Current Engineering State
 
