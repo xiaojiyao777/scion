@@ -30,10 +30,14 @@ baseline budget/params, package-owned main-loop components including
 route-pair swap and bounded destroy/repair, acceptance/restart/perturbation,
 and optional post-baseline registry operators. The current blocker remains
 CVRP algorithm-surface efficacy. A tightly forced `main_search_strategy`
-three-round diagnostic has been launched from the current dirty worktree using
-the `claw` environment; analyze it after `exit.txt` appears. Do not start a
-long solver-quality validation until that focused diagnostic shows more than
-tie/no-op dominated objective evidence.
+three-round diagnostic completed from the current dirty worktree using the
+`claw` environment. It validated continuous forced-surface control and active
+whole-algorithm runtime audit, but only one candidate reached screening and it
+failed `SCREENING_FAIL_WIN_RATE`. Do not start a long solver-quality
+validation yet. The next blockers are APS compact surface reads for
+`main_search_strategy`, singleton semantic novelty for distinct strategy
+hypotheses, and proposal guidance that actually exercises route-pair
+swap/destroy-repair components.
 
 ## Current Engineering State
 
@@ -1650,13 +1654,13 @@ Interpretation:
   was exhausted. Deterministic Contract/Verification/canary still passed, so
   the final blocker was screening quality, not gate validity.
 
-Next step: analyze the running tightly forced `main_search_strategy` diagnostic
-after completion before treating further CVRP runs as solver-quality evidence.
-Do not start another post-baseline operator campaign, a baseline-policy-only
-run, or a long formal solver-quality validation until the new whole-algorithm
-surface has been exercised and analyzed.
+Next step: repair APS compact surface reads and singleton novelty for
+`main_search_strategy` before treating further CVRP runs as solver-quality
+evidence. Do not start another post-baseline operator campaign, a
+baseline-policy-only run, or a long formal solver-quality validation until the
+new whole-algorithm surface can be explored for multiple evaluated candidates.
 
-## 2026-05-08 Main Search Strategy Governance Repair And Diagnostic Launch
+## 2026-05-08 Main Search Strategy Governance Repair And Diagnostic Audited
 
 Implemented the whole-algorithm CVRP surface and repaired the diagnostic
 controls needed to test it cleanly:
@@ -1688,11 +1692,10 @@ Validation:
 1495 passed, 1 skipped in 53.50s
 ```
 
-A detached three-round Sonnet CVRP formal-path diagnostic has been launched:
+A detached three-round Sonnet CVRP formal-path diagnostic completed:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T133838Z
-pid=2250722
 scion_commit=45e2be9
 worktree_dirty=true
 model=claude-sonnet-4-6
@@ -1705,12 +1708,70 @@ cvrp_time_limit_sec=10
 python=/home/clawd/miniconda3/envs/claw/bin/python
 data_root=/home/clawd/research/or-autoresearch-agent/vrp
 started_utc=2026-05-08T13:38:38Z
+ended_utc=2026-05-08T13:45:29Z
+exit_code=0
 ```
 
-Initial bounded startup check found the process running, `launch.env`,
-`pid.txt`, and `campaign/status.json` present, and `exit.txt` not yet present.
-Because the launch uses the current dirty worktree, interpret the run as a
-current-worktree diagnostic rather than evidence for commit `45e2be9` alone.
+Outcome:
+
+```text
+rounds=3/3
+steps=3
+experiments=1
+champion=v1
+weight_revision=0
+promotions=0
+frozen_budget_used=0
+frozen_budget_limit=2
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Detailed delegated analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-main-search-strategy-sonnet-3r-20260508.md
+```
+
+Interpretation:
+
+- This is valid control-path and whole-algorithm surface plumbing evidence,
+  not solver-quality evidence.
+- Persistent `--force-surface main_search_strategy` worked: all three
+  campaign step hypotheses used `change_locus=main_search_strategy`,
+  `action=modify`, and `target_file=policies/main_search_strategy.py`.
+- Round 1 passed Contract, Verification, and canary, selected and activated
+  `main_search_strategy`, and reached formal screening.
+- Selected-surface runtime audit was complete for the 16 candidate-side
+  screening pairs: 27 required runtime fields present, missing pairs `0`,
+  `main_search_strategy_loaded=true`,
+  `main_search_strategy_active=true`, and
+  `main_search_strategy_errors=0`.
+- The evaluated plan executed `plan_loaded`, `construction`, `baseline`,
+  `improvement_loop`, and `perturbation`, disabled post-baseline registry
+  operators, and ran inside the problem-owned main-search path.
+- The evaluated plan only exercised `intra_route_2opt` and
+  `inter_route_relocate`: 944 attempts each, with 20 and 2 accepted moves
+  respectively. It did not exercise `route_pair_swap` or
+  `bounded_destroy_repair`.
+- Screening produced nonzero but insufficient signal: 4 wins, 2 losses, and
+  10 ties at pair level; case-level `win_rate=0.25`; `median_delta=0.0`;
+  median runtime ratio about `0.9413`; no validation/frozen/promote.
+- Rounds 2 and 3 were not surface drift. They stayed on
+  `main_search_strategy` but failed Contract at `C10_novelty` as duplicate
+  hypotheses, so only one candidate was evaluated.
+- APS artifacts remain a bottleneck for this large surface:
+  `context.read_surface(main_search_strategy)` produced repeated
+  `result_too_large`, all sessions used 9/9 tool calls, observation budget was
+  near 24k, and only one of four sessions completed.
+
+Do not expand directly to 5-10 rounds. First make
+`context.read_surface(main_search_strategy)` compact, tune singleton semantic
+novelty so distinct strategy hypotheses are not rejected as duplicates, and
+adjust `main_search_strategy` guidance toward `route_pair_swap` and
+`bounded_destroy_repair`.
 
 ## Remaining Optimization Backlog
 
@@ -1729,10 +1790,11 @@ P1:
   `main_search_strategy` now exposes the whole-algorithm CVRP slice with
   bounded construction, baseline params, package-owned route-pair
   swap/destroy-repair components, acceptance, restart, perturbation, and
-  optional registry toggles. Future compactness work may improve the very low
-  APS budget headroom, but it is secondary to analyzing the launched forced
-  `main_search_strategy` diagnostic. Do not spend the next slice on additional
-  generated post-baseline operators.
+  optional registry toggles. The first forced diagnostic validated active
+  runtime plumbing but evaluated only one candidate because APS surface reads
+  were too large and C10 novelty rejected later hypotheses. The next slice is
+  APS/surface-context compactness plus semantic novelty for this singleton
+  strategy surface, not additional generated post-baseline operators.
 
 P2:
 

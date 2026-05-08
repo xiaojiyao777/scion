@@ -34,11 +34,13 @@ enough to continue, validate, freeze, promote, or abandon.
   present for the evaluated candidate, but it did not produce solver-quality
   evidence. CVRP now has `main_search_strategy`, a problem-owned
   whole-algorithm surface in `policies/main_search_strategy.py`. The bottleneck
-  remains CVRP algorithm-surface efficacy. A tightly forced three-round
-  `main_search_strategy` diagnostic has been launched from the current dirty
-  worktree using the `claw` environment; analyze it after `exit.txt` appears.
-  Do not run a long solver-quality validation until that focused diagnostic
-  shows more than tie/no-op dominated objective evidence.
+  remains CVRP algorithm-surface efficacy. The first tightly forced
+  `main_search_strategy` diagnostic validated continuous forced-surface control
+  and active whole-algorithm runtime audit, but only one candidate reached
+  screening and it still failed `SCREENING_FAIL_WIN_RATE`. Do not run a long
+  solver-quality validation. The next blockers are compact APS surface reads,
+  singleton semantic novelty, and guidance that makes Sonnet exercise
+  route-pair swap / bounded destroy-repair components.
 
 ## Required Reading Order
 
@@ -175,23 +177,25 @@ Near-term CVRP research-space work:
   by ContractGate, non-operator/singleton surfaces cannot directly probe
   `instance.name`, and proposal interface preview runs only after full
   ContractGate success.
-- The forced `main_search_strategy` diagnostic is running:
+- The forced `main_search_strategy` diagnostic has been analyzed:
   `/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T133838Z`.
-  It was launched with `python=/home/clawd/miniconda3/envs/claw/bin/python`,
-  `force_surface=main_search_strategy`, `rounds=3`, and
-  `worktree_dirty=true`; analyze bounded artifacts only after `exit.txt`
-  appears.
+  The analysis is recorded in
+  `docs/experiments/v0.4/v0.4-main-search-strategy-sonnet-3r-20260508.md`.
+  It validated persistent force-surface behavior and complete active runtime
+  audit for the selected surface, but only one candidate reached screening.
 - Treat APS budget/recovery as unblocked. The budget headroom is low and may
   deserve later compaction, but the next work is not another compactness fix or
   a longer run.
 - Improve CVRP surface efficacy before any long solver-quality validation. The
   latest baseline-policy diagnostic passed Contract, Verification, canary, and
   runtime audit for all evaluated candidates, but all candidates still failed
-  screening with `SCREENING_FAIL_WIN_RATE`. The next experiment-analysis step
-  is the running tightly forced `main_search_strategy` diagnostic. Do not spend
-  the next slice on another generated post-baseline operator or a
-  baseline-policy-only run unless the forced whole-algorithm diagnostic has
-  already been completed and analyzed.
+  screening with `SCREENING_FAIL_WIN_RATE`. The latest main-search diagnostic
+  had one runtime-valid candidate fail screening and two later hypotheses fail
+  C10 novelty. The next implementation step is to compact
+  `context.read_surface(main_search_strategy)`, tune singleton semantic
+  novelty, and steer proposals toward `route_pair_swap` /
+  `bounded_destroy_repair`, not another generated post-baseline operator or a
+  baseline-policy-only run.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

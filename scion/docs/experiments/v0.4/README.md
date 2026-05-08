@@ -16,6 +16,7 @@ referenced, not copied into development prompts.
 - [Forced blueprint budget Sonnet smoke, 2026-05-07](v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md)
 - [Blueprint reporting Sonnet 5R VRP validation, 2026-05-07](v0.4-blueprint-reporting-sonnet-5r-20260507.md)
 - [Baseline policy Sonnet 3R diagnostic, 2026-05-07](v0.4-baseline-policy-sonnet-3r-20260507.md)
+- [Main search strategy Sonnet 3R diagnostic, 2026-05-08](v0.4-main-search-strategy-sonnet-3r-20260508.md)
 
 ## Related
 
