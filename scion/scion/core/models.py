@@ -63,6 +63,7 @@ class HypothesisProposal:
     target_runtime_effect: Optional[str] = None
     complexity_claim: Optional[str] = None
     runtime_budget_strategy: Optional[str] = None
+    novelty_signature: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class PatchProposal:
@@ -333,6 +334,7 @@ class HypothesisRecord:
     predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
     target_objectives: Tuple[str, ...] = ()
     protected_objectives: Tuple[str, ...] = ()
+    novelty_signature: Dict[str, Any] = field(default_factory=dict)
 
 # --- Solver Output ---
 

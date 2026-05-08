@@ -38,9 +38,11 @@ enough to continue, validate, freeze, promote, or abandon.
   `main_search_strategy` diagnostic validated continuous forced-surface control
   and active whole-algorithm runtime audit, but only one candidate reached
   screening and it still failed `SCREENING_FAIL_WIN_RATE`. Do not run a long
-  solver-quality validation. The next blockers are compact APS surface reads,
-  singleton semantic novelty, and guidance that makes Sonnet exercise
-  route-pair swap / bounded destroy-repair components.
+  solver-quality validation. Singleton semantic novelty has a code-level
+  repair, and APS surface reads now use compact `surface-contract.v1` payloads
+  with a 48000-character default observation cap. The next step is another
+  tightly forced `main_search_strategy` diagnostic, not prompt/guidance tuning
+  or another post-baseline operator run.
 
 ## Required Reading Order
 
@@ -124,10 +126,11 @@ For experiment analysis:
 - APS planner mode now reads compact feedback when available, reads the selected
   surface before code generation/partial finalization, and uses compact static
   preview payloads that omit patch code.
-- APS observation-budget/recovery behavior has been smoke-validated after
-  `af4ab5b`: partial and completed APS artifacts validated under the
-  24000-character observation cap, bounded `observation_budget_exhausted`
-  stops did not fail the sessions, and the completed session produced a patch.
+- APS observation-budget/recovery behavior is compact-first: surface reads use
+  a bounded `surface-contract.v1` section view by default, optional oversized
+  reads fail closed, and the default observation cap is now 48000 chars so the
+  normal list/problem/feedback/selected-surface sequence has room without
+  exposing raw refs.
 - Campaign orchestration has been decomposed; `CampaignManager` is mostly a
   facade over proposal, evaluation, promotion, evidence, failure lifecycle, and
   branch-step services.
@@ -191,11 +194,12 @@ Near-term CVRP research-space work:
   runtime audit for all evaluated candidates, but all candidates still failed
   screening with `SCREENING_FAIL_WIN_RATE`. The latest main-search diagnostic
   had one runtime-valid candidate fail screening and two later hypotheses fail
-  C10 novelty. The next implementation step is to compact
-  `context.read_surface(main_search_strategy)`, tune singleton semantic
-  novelty, and steer proposals toward `route_pair_swap` /
-  `bounded_destroy_repair`, not another generated post-baseline operator or a
-  baseline-policy-only run.
+  C10 novelty. C10 now allows distinct singleton semantic identities through
+  `novelty_signature`, and `context.read_surface(main_search_strategy)` is
+  compact by default. The next experiment step is to rerun a tightly forced
+  `main_search_strategy` diagnostic and check whether multiple candidates reach
+  screening and exercise route-pair-swap / bounded destroy-repair components,
+  not another generated post-baseline operator or a baseline-policy-only run.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

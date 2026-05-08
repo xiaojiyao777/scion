@@ -947,4 +947,5 @@ class ProposalPipeline:
             predicted_direction=hypothesis.predicted_direction,
             target_objectives=hypothesis.target_objectives,
             protected_objectives=hypothesis.protected_objectives,
+            novelty_signature=dict(hypothesis.novelty_signature or {}),
         )

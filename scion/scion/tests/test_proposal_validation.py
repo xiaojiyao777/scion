@@ -98,6 +98,7 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
         "target_runtime_effect": "neutral: same solve budget with fewer evaluated pairs",
         "complexity_claim": "O(k * routes) candidates with k <= 8, no all-pairs scan",
         "runtime_budget_strategy": "top-k route pairs, early exit after first feasible improvement",
+        "novelty_signature": {"selected_components": ["route_pair_swap"]},
     }
 
     result = _parse_hypothesis(raw)
@@ -105,11 +106,13 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
     assert result.target_runtime_effect == raw["target_runtime_effect"]
     assert result.complexity_claim == raw["complexity_claim"]
     assert result.runtime_budget_strategy == raw["runtime_budget_strategy"]
+    assert result.novelty_signature == raw["novelty_signature"]
 
     formatted = _format_hypothesis(result)
     assert "target_runtime_effect: neutral" in formatted
     assert "complexity_claim: O(k * routes)" in formatted
     assert "runtime_budget_strategy: top-k route pairs" in formatted
+    assert "novelty_signature:" in formatted
 
 
 def test_hypothesis_runtime_intent_fields_default_when_missing():
@@ -124,6 +127,7 @@ def test_hypothesis_runtime_intent_fields_default_when_missing():
     assert result.target_runtime_effect is None
     assert result.complexity_claim is None
     assert result.runtime_budget_strategy is None
+    assert result.novelty_signature == {}
     assert "target_runtime_effect" not in _format_hypothesis(result)
 
 
@@ -136,6 +140,7 @@ def test_hypothesis_schema_exposes_optional_runtime_intent_fields():
         "target_runtime_effect",
         "complexity_claim",
         "runtime_budget_strategy",
+        "novelty_signature",
     ):
         assert field_name in properties
         assert field_name not in required

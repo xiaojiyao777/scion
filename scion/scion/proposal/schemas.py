@@ -27,6 +27,7 @@ class HypothesisProposalInput(BaseModel):
     target_runtime_effect: Optional[str] = None
     complexity_claim: Optional[str] = None
     runtime_budget_strategy: Optional[str] = None
+    novelty_signature: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -157,6 +158,11 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "runtime_budget_strategy": {
             "type": ["string", "null"],
             "description": "How the implementation should bound solve time, e.g. top-k candidates, sampling, early exit, or bounded neighborhoods.",
+        },
+        "novelty_signature": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Optional structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Use compact scalars, lists, or small objects; do not put rationale prose here.",
         },
     },
 }

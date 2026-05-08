@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
@@ -2599,6 +2600,15 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
         lines.append(f"complexity_claim: {hypothesis.complexity_claim}")
     if hypothesis.runtime_budget_strategy:
         lines.append(f"runtime_budget_strategy: {hypothesis.runtime_budget_strategy}")
+    if hypothesis.novelty_signature:
+        lines.append(
+            "novelty_signature: "
+            + json.dumps(
+                hypothesis.novelty_signature,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
     if hypothesis.suggested_weight is not None:
         lines.append(f"suggested_weight: {hypothesis.suggested_weight}")
     if hypothesis.target_objectives:

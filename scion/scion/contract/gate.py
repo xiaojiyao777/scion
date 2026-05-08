@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import re
 import time
 from typing import Any, List, Optional
@@ -72,13 +73,17 @@ _LEGACY_PROBLEM_SCALE_NAMES = frozenset(
     }
 )
 
-_STRUCTURED_SIGNATURE_FIELDS = frozenset(
+_DIRECT_SIGNATURE_FIELDS = frozenset(
     {
         "predicted_direction",
         "target_objectives",
         "protected_objectives",
     }
 )
+_WEAK_SIGNATURE_FIELDS = frozenset({"predicted_direction"})
+_MAX_GENERIC_SIGNATURE_ITEMS = 16
+_MAX_GENERIC_SIGNATURE_STRING = 120
+_SIGNATURE_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
 _PREDICTED_DIRECTIONS = frozenset({"improve", "tradeoff", "exploratory"})
 _MAX_OBJECTIVE_SIGNATURE_ITEMS = 16
@@ -87,7 +92,7 @@ _MAX_OBJECTIVE_SIGNATURE_ITEMS = 16
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
 
-    SUPPORTED_SEMANTIC_SIGNATURE_FIELDS = _STRUCTURED_SIGNATURE_FIELDS
+    SUPPORTED_SEMANTIC_SIGNATURE_FIELDS = _DIRECT_SIGNATURE_FIELDS
 
     def __init__(
         self,
@@ -97,6 +102,14 @@ class ContractGate:
     ) -> None:
         self._spec = problem_spec
         self._operator_signature = parse_execute_signature(operator_execute_signature)
+
+    @classmethod
+    def supports_semantic_signature_field(cls, field: str) -> bool:
+        """Return whether ContractGate can normalize a declared novelty field."""
+        name = str(field).strip()
+        return name in cls.SUPPORTED_SEMANTIC_SIGNATURE_FIELDS or bool(
+            _SIGNATURE_FIELD_RE.fullmatch(name)
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -836,7 +849,6 @@ class ContractGate:
         if novelty_error is not None:
             return _cr("C10_novelty", False, "light", novelty_error, t0)
         key = self._novelty_key(h)
-        strict_key = self._strict_novelty_key(h)
         for existing in active_hypotheses + blacklist:
             # Rejected hypotheses only block if they come from the same champion version;
             # a champion upgrade opens the door to retry previously rejected modify paths.
@@ -844,13 +856,7 @@ class ContractGate:
                 if existing.base_champion_version != current_champion_version:
                     continue
             existing_key = self._novelty_key(existing)
-            existing_strict_key = self._strict_novelty_key(existing)
-            semantic_unavailable = (
-                h.action == "modify"
-                and strict_key == existing_strict_key
-                and (len(key) == len(strict_key) or len(existing_key) == len(existing_strict_key))
-            )
-            if key == existing_key or semantic_unavailable:
+            if key == existing_key:
                 return _cr(
                     "C10_novelty",
                     False,
@@ -880,7 +886,14 @@ class ContractGate:
             if self._surface_novelty_strategy(surface) == "semantic_signature":
                 semantic_key = self._semantic_signature_key(h, surface)
                 if semantic_key is not None:
-                    return (*strict_key, semantic_key)
+                    return (h.change_locus, h.action, "semantic_signature", semantic_key)
+                if self._surface_is_singleton(surface):
+                    return (
+                        h.change_locus,
+                        h.action,
+                        "semantic_unstructured",
+                        _normalized_free_text_identity(h.hypothesis_text),
+                    )
                 return strict_key
 
         # Ordinary modify/remove remains strict by locus/action/target file.
@@ -923,18 +936,34 @@ class ContractGate:
         if not fields:
             return None
         parts: list[str] = []
+        sufficient = False
         for field in fields:
-            if field not in _STRUCTURED_SIGNATURE_FIELDS:
-                return None
-            if not hasattr(h, field):
-                return None
-            value = getattr(h, field)
-            normalized = self._normalize_structured_signature_value(field, value)
+            normalized = self._normalize_signature_field(field, h)
             if normalized is None:
-                return None
+                continue
+            if field not in _WEAK_SIGNATURE_FIELDS:
+                sufficient = True
             parts.append(f"{field}:{normalized}")
+        if not parts or not sufficient:
+            return None
         normalized = "|".join(parts)
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+    def _normalize_signature_field(
+        self,
+        field: str,
+        h: HypothesisProposal | HypothesisRecord,
+    ) -> str | None:
+        if field in _DIRECT_SIGNATURE_FIELDS:
+            if not hasattr(h, field):
+                return None
+            return self._normalize_structured_signature_value(field, getattr(h, field))
+        if not _SIGNATURE_FIELD_RE.fullmatch(field):
+            return None
+        values = getattr(h, "novelty_signature", None)
+        if not isinstance(values, dict) or field not in values:
+            return None
+        return _normalize_generic_signature_value(values[field])
 
     def _normalize_structured_signature_value(
         self,
@@ -1075,6 +1104,12 @@ class ContractGate:
         if targets is not None and hasattr(targets, attr):
             return bool(getattr(targets, attr))
         return bool(getattr(surface, attr, True))
+
+    def _surface_is_singleton(self, surface: Any | None) -> bool:
+        targets = self._surface_targets(surface)
+        if targets is not None and hasattr(targets, "singleton"):
+            return bool(getattr(targets, "singleton"))
+        return len(self._surface_target_files(surface)) == 1
 
     def _surface_required_functions(self, surface: Any | None) -> list[str]:
         interface = getattr(surface, "interface", None) if surface is not None else None
@@ -1373,6 +1408,63 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
             seen.add(text)
             deduped.append(text)
     return deduped
+
+
+def _normalized_free_text_identity(value: Any) -> str:
+    text = _normalize_text_token(value, max_length=240)
+    if text is None:
+        text = ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _normalize_generic_signature_value(value: Any, *, depth: int = 0) -> str | None:
+    if depth > 3:
+        return None
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return f"{value:.6g}"
+    if isinstance(value, str):
+        return _normalize_text_token(value, max_length=_MAX_GENERIC_SIGNATURE_STRING)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        if len(value) > _MAX_GENERIC_SIGNATURE_ITEMS:
+            return None
+        items = [
+            _normalize_generic_signature_value(item, depth=depth + 1)
+            for item in value
+        ]
+        if any(item is None for item in items):
+            return None
+        if isinstance(value, (set, frozenset)):
+            items = sorted(items)  # type: ignore[arg-type]
+        return json.dumps(items, separators=(",", ":"), ensure_ascii=True)
+    if isinstance(value, dict):
+        if len(value) > _MAX_GENERIC_SIGNATURE_ITEMS:
+            return None
+        normalized: dict[str, str] = {}
+        for raw_key, raw_item in value.items():
+            key = _normalize_text_token(raw_key, max_length=64)
+            item = _normalize_generic_signature_value(raw_item, depth=depth + 1)
+            if key is None or item is None:
+                return None
+            normalized[key] = item
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return None
+
+
+def _normalize_text_token(value: Any, *, max_length: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.strip().casefold().split())
+    if not text or len(text) > max_length:
+        return None
+    return text
 
 
 def _build_result(checks: List[CheckResult]) -> ContractResult:

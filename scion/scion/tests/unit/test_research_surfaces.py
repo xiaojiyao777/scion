@@ -623,6 +623,10 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert main_search_strategy.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
+        "selected_components",
+        "baseline_fraction_pattern",
+        "acceptance_restart_pattern",
+        "perturbation_pattern",
     ]
 
 
@@ -635,9 +639,11 @@ def test_cvrp_semantic_signature_fields_are_contract_supported() -> None:
         novelty = surface.novelty
         if novelty is None or novelty.strategy != "semantic_signature":
             continue
-        unsupported_fields = set(novelty.signature_fields) - set(
-            ContractGate.SUPPORTED_SEMANTIC_SIGNATURE_FIELDS
-        )
+        unsupported_fields = {
+            field
+            for field in novelty.signature_fields
+            if not ContractGate.supports_semantic_signature_field(field)
+        }
         if unsupported_fields:
             unsupported[surface.name] = unsupported_fields
 
@@ -683,6 +689,101 @@ def test_cvrp_search_policy_semantic_signature_distinguishes_objective_identity(
     assert different_result.passed
     assert not same_result.passed
     assert "C10_novelty" in (same_result.failure_reason or "")
+
+
+def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatures() -> None:
+    spec = load_problem_spec_v1_from_yaml(
+        Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem-v1.yaml"
+    )
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+    existing = [
+        HypothesisRecord(
+            hypothesis_id="h1",
+            branch_id="b1",
+            change_locus="main_search_strategy",
+            action="modify",
+            status="active",
+            target_file="policies/main_search_strategy.py",
+            hypothesis_text="Use route-pair swap after a small baseline budget.",
+            predicted_direction="improve",
+            novelty_signature={
+                "selected_components": ["route_pair_swap"],
+                "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
+                "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
+                "perturbation_pattern": "none",
+            },
+        ),
+        HypothesisRecord(
+            hypothesis_id="h2",
+            branch_id="b2",
+            change_locus="main_search_strategy",
+            action="modify",
+            status="active",
+            target_file="policies/main_search_strategy.py",
+            hypothesis_text="Use bounded destroy repair with restart.",
+            predicted_direction="improve",
+            novelty_signature={
+                "selected_components": ["bounded_destroy_repair"],
+                "baseline_fraction_pattern": {"baseline": 0.50, "post": 0.50},
+                "acceptance_restart_pattern": {"min_improvement": 0.01, "restart": True},
+                "perturbation_pattern": "restart_only",
+            },
+        ),
+    ]
+    candidate = HypothesisProposal(
+        hypothesis_text="Use two-opt and relocate after a medium baseline fraction.",
+        change_locus="main_search_strategy",
+        action="modify",
+        target_file="policies/main_search_strategy.py",
+        predicted_direction="improve",
+        novelty_signature={
+            "selected_components": ["intra_route_2opt", "inter_route_relocate"],
+            "baseline_fraction_pattern": {"baseline": 0.35, "post": 0.65},
+            "acceptance_restart_pattern": {"min_improvement": 0.005, "restart": False},
+            "perturbation_pattern": "none",
+        },
+    )
+
+    result = gate.validate_hypothesis(candidate, existing, [])
+
+    assert result.passed
+
+
+def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> None:
+    spec = load_problem_spec_v1_from_yaml(
+        Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem-v1.yaml"
+    )
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+    signature = {
+        "selected_components": ["route_pair_swap"],
+        "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
+        "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
+        "perturbation_pattern": "none",
+    }
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="main_search_strategy",
+        action="modify",
+        status="active",
+        target_file="policies/main_search_strategy.py",
+        hypothesis_text="Use route-pair swap after a small baseline budget.",
+        predicted_direction="improve",
+        novelty_signature=signature,
+    )
+    candidate = HypothesisProposal(
+        hypothesis_text="Same structured main search plan with different prose.",
+        change_locus="main_search_strategy",
+        action="modify",
+        target_file="policies/main_search_strategy.py",
+        predicted_direction="improve",
+        novelty_signature=dict(signature),
+    )
+
+    result = gate.validate_hypothesis(candidate, [existing], [])
+
+    assert not result.passed
+    assert "C10_novelty" in (result.failure_reason or "")
 
 
 def test_cvrp_construction_policy_contract_targets_and_required_functions() -> None:
@@ -1098,7 +1199,7 @@ def _surface_gate() -> ContractGate:
     return ContractGate(spec)
 
 
-def test_policy_modify_free_text_changes_do_not_bypass_duplicate_c10() -> None:
+def test_singleton_semantic_surface_without_signature_does_not_target_file_block() -> None:
     gate = _surface_gate()
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1116,6 +1217,30 @@ def test_policy_modify_free_text_changes_do_not_bypass_duplicate_c10() -> None:
         target_file="policies/budget.py",
         expected_effect="Different free-text expected effect.",
         no_op_condition="Different free-text no-op condition.",
+    )
+
+    result = gate._c10_novelty(hyp, [existing], [])
+
+    assert result.passed
+
+
+def test_singleton_semantic_surface_identical_unstructured_hypothesis_fails_c10() -> None:
+    gate = _surface_gate()
+    text = "Allocate more time to construction on large instances."
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="budget_policy",
+        action="modify",
+        status="active",
+        target_file="policies/budget.py",
+        hypothesis_text=text,
+    )
+    hyp = HypothesisProposal(
+        hypothesis_text="  allocate MORE time to construction on large instances. ",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
     )
 
     result = gate._c10_novelty(hyp, [existing], [])
@@ -1204,7 +1329,41 @@ def test_semantic_signature_uses_declared_structured_fields_only() -> None:
     assert different_result.passed
 
 
-def test_invalid_predicted_direction_fails_closed_without_semantic_bypass() -> None:
+def test_semantic_signature_uses_problem_owned_novelty_signature_fields() -> None:
+    gate = _surface_gate()
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="budget_policy",
+        action="modify",
+        status="active",
+        target_file="policies/budget.py",
+        hypothesis_text="Use a large-instance budget split.",
+        novelty_signature={"budget_pattern": ["construction_heavy", "repair_light"]},
+    )
+    same_structured = HypothesisProposal(
+        hypothesis_text="Same pattern with different rationale.",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
+        novelty_signature={"budget_pattern": ["construction_heavy", "repair_light"]},
+    )
+    different_structured = HypothesisProposal(
+        hypothesis_text="Different problem-owned budget pattern.",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
+        novelty_signature={"budget_pattern": ["repair_heavy", "construction_light"]},
+    )
+
+    same_result = gate._c10_novelty(same_structured, [existing], [])
+    different_result = gate._c10_novelty(different_structured, [existing], [])
+
+    assert not same_result.passed
+    assert different_result.passed
+
+
+def test_invalid_predicted_direction_fails_schema_before_semantic_identity() -> None:
     gate = _semantic_objective_gate(["predicted_direction"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1230,10 +1389,10 @@ def test_invalid_predicted_direction_fails_closed_without_semantic_bypass() -> N
 
     assert not result.passed
     assert not c1.passed
-    assert not c10.passed
+    assert c10.passed
 
 
-def test_arbitrary_objective_names_do_not_bypass_semantic_duplicate() -> None:
+def test_arbitrary_objective_names_fail_schema_before_semantic_identity() -> None:
     gate = _semantic_objective_gate(["target_objectives", "protected_objectives"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1261,7 +1420,7 @@ def test_arbitrary_objective_names_do_not_bypass_semantic_duplicate() -> None:
 
     assert not result.passed
     assert not c1.passed
-    assert not c10.passed
+    assert c10.passed
 
 
 def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
@@ -1291,7 +1450,7 @@ def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
     assert not result.passed
 
 
-def test_free_text_signature_fields_fall_back_to_duplicate_identity() -> None:
+def test_free_text_signature_fields_do_not_fall_back_to_target_file_identity() -> None:
     gate = _semantic_objective_gate(
         ["predicted_direction", "target_objectives", "hypothesis_text"],
     )
@@ -1312,7 +1471,7 @@ def test_free_text_signature_fields_fall_back_to_duplicate_identity() -> None:
         action="modify",
         target_file="policies/budget.py",
         predicted_direction="improve",
-        target_objectives=("cost",),
+        target_objectives=("time",),
         expected_effect="Different free-text expected effect.",
         no_op_condition="Different free-text no-op condition.",
         target_runtime_effect="Different unsupported string field.",
@@ -1320,7 +1479,7 @@ def test_free_text_signature_fields_fall_back_to_duplicate_identity() -> None:
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert not result.passed
+    assert result.passed
 
 
 def test_different_legal_bounded_semantic_identity_is_novel() -> None:
@@ -1397,7 +1556,7 @@ def test_operator_modify_remains_strict_by_locus_action_target_file() -> None:
     assert not result.passed
 
 
-def test_dummy_singleton_config_unextractable_signature_falls_back_to_target_strict() -> None:
+def test_dummy_singleton_config_unextractable_signature_allows_exploration() -> None:
     spec = ProblemSpec(
         name="dummy",
         root_dir="/tmp/dummy",
@@ -1445,7 +1604,7 @@ def test_dummy_singleton_config_unextractable_signature_falls_back_to_target_str
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert not result.passed
+    assert result.passed
     for forbidden in ("cvrp", "warehouse", "customer", "vehicle", "route"):
         assert forbidden not in result.detail.lower()
 

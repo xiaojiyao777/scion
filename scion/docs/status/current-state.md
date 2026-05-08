@@ -34,10 +34,13 @@ three-round diagnostic completed from the current dirty worktree using the
 `claw` environment. It validated continuous forced-surface control and active
 whole-algorithm runtime audit, but only one candidate reached screening and it
 failed `SCREENING_FAIL_WIN_RATE`. Do not start a long solver-quality
-validation yet. The next blockers are APS compact surface reads for
-`main_search_strategy`, singleton semantic novelty for distinct strategy
-hypotheses, and proposal guidance that actually exercises route-pair
-swap/destroy-repair components.
+validation yet. Singleton semantic novelty has been repaired so distinct
+strategy identities are not collapsed by target file. APS surface reads have
+also been repaired with a compact `surface-contract.v1` section view and a
+48000-character default observation cap. The next step is another tightly
+forced `main_search_strategy` diagnostic to see whether multiple distinct
+whole-algorithm candidates now reach screening and exercise the
+route-pair-swap / bounded destroy-repair components.
 
 ## Current Engineering State
 
@@ -563,8 +566,10 @@ Completed capabilities:
   omit full surface payloads and patch `code_content`.
 - Surface context tools are compact by default: `context.list_surfaces` returns
   selection-oriented surface metadata, while `context.read_surface` defaults to
-  `detail="compact"` with a bounded code preview. `detail="full"` and
-  `max_code_chars` remain available as explicit debug/deep-inspection opt-ins.
+  `detail="compact"` with a bounded `surface-contract.v1` section view
+  (`summary`, `interface`, `bounds`, `evidence`, `novelty`, `target_preview`)
+  and a bounded code preview. `detail="full"`, `section`, and `max_code_chars`
+  remain available as explicit debug/deep-inspection opt-ins.
 - `AgenticSessionStore` maintains a file-backed recovery index with lookup by
   session id, idempotency key, and request. ProposalPipeline can inject sanitized
   resume context from prior valid artifacts without reusing patches or bypassing
@@ -1327,6 +1332,14 @@ payloads. The replay validator remains fail-closed for genuinely over-budget
 artifacts; the repair prevents new artifacts from being written with
 `tool_budget_used.observation_chars > max_observation_chars`.
 
+The whole-algorithm surface context repair is also in code: default
+`context.read_surface` now returns a compact `surface-contract.v1` section view
+instead of duplicating full prompt guidance, `main_search_strategy` compact
+reads stay below the legacy 24000-char budget in focused tests, and the APS
+default observation cap is 48000 chars. The larger cap is only a bounded
+transcript allowance; individual observations still compact/strip raw refs
+before APS records them.
+
 Detailed delegated analysis is recorded in
 `scion/docs/experiments/v0.4/v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md`.
 
@@ -1654,11 +1667,12 @@ Interpretation:
   was exhausted. Deterministic Contract/Verification/canary still passed, so
   the final blocker was screening quality, not gate validity.
 
-Next step: repair APS compact surface reads and singleton novelty for
-`main_search_strategy` before treating further CVRP runs as solver-quality
-evidence. Do not start another post-baseline operator campaign, a
-baseline-policy-only run, or a long formal solver-quality validation until the
-new whole-algorithm surface can be explored for multiple evaluated candidates.
+Next step: rerun a tightly forced `main_search_strategy` diagnostic before
+treating further CVRP runs as solver-quality evidence. Singleton semantic
+novelty now has a code-level repair: `main_search_strategy` and other singleton
+policy/config surfaces can carry structured `novelty_signature` identity, and
+missing structured identity does not collapse all later attempts by target
+file. APS compact surface reads are also repaired in code.
 
 ## 2026-05-08 Main Search Strategy Governance Repair And Diagnostic Audited
 
@@ -1762,16 +1776,21 @@ Interpretation:
 - Rounds 2 and 3 were not surface drift. They stayed on
   `main_search_strategy` but failed Contract at `C10_novelty` as duplicate
   hypotheses, so only one candidate was evaluated.
-- APS artifacts remain a bottleneck for this large surface:
+- At run time, APS artifacts were the bottleneck for this large surface:
   `context.read_surface(main_search_strategy)` produced repeated
   `result_too_large`, all sessions used 9/9 tool calls, observation budget was
   near 24k, and only one of four sessions completed.
 
-Do not expand directly to 5-10 rounds. First make
-`context.read_surface(main_search_strategy)` compact, tune singleton semantic
-novelty so distinct strategy hypotheses are not rejected as duplicates, and
-adjust `main_search_strategy` guidance toward `route_pair_swap` and
-`bounded_destroy_repair`.
+Do not expand directly to 5-10 rounds without another smoke check. The APS
+surface-context blocker is repaired in code: default compact
+`context.read_surface(main_search_strategy)` no longer returns prompt-block
+duplicates and stays under the legacy 24k budget in focused tests. The C10
+singleton semantic novelty blocker has also been repaired in code: distinct
+structured strategy identities are no longer rejected merely because they edit
+`policies/main_search_strategy.py`. The next run should verify that multiple
+distinct `main_search_strategy` candidates can now reach screening and that the
+problem-owned route-pair-swap / bounded destroy-repair components are actually
+selected by candidate plans.
 
 ## Remaining Optimization Backlog
 
@@ -1792,9 +1811,11 @@ P1:
   swap/destroy-repair components, acceptance, restart, perturbation, and
   optional registry toggles. The first forced diagnostic validated active
   runtime plumbing but evaluated only one candidate because APS surface reads
-  were too large and C10 novelty rejected later hypotheses. The next slice is
-  APS/surface-context compactness plus semantic novelty for this singleton
-  strategy surface, not additional generated post-baseline operators.
+  were too large and C10 novelty rejected later hypotheses. C10 now supports
+  structured singleton semantic identity through `novelty_signature`, and APS
+  surface context is compact by default. The next slice is a new tightly forced
+  `main_search_strategy` diagnostic, not additional generated post-baseline
+  operators.
 
 P2:
 

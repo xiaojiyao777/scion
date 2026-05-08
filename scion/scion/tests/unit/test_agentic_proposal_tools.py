@@ -516,6 +516,30 @@ def _cvrp_context(tmp_path: Path) -> ProposalToolContext:
     )
 
 
+def _cvrp_context_with_champion(tmp_path: Path) -> ProposalToolContext:
+    context = _cvrp_context(tmp_path)
+    champion_root = tmp_path / "cvrp_champion"
+    (champion_root / "policies").mkdir(parents=True)
+    for name in (
+        "algorithm_blueprint.py",
+        "main_search_strategy.py",
+    ):
+        (champion_root / "policies" / name).write_text(
+            (_CVRP_ROOT / "policies" / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    return replace(
+        context,
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(champion_root),
+            code_snapshot_hash="code-hash",
+        ),
+    )
+
+
 def test_list_and_read_surfaces_return_v2_metadata_without_domain_hardcoding(
     tmp_path: Path,
 ) -> None:
@@ -646,24 +670,7 @@ def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
-    context = _cvrp_context(tmp_path)
-    champion_root = tmp_path / "cvrp_champion"
-    (champion_root / "policies").mkdir(parents=True)
-    blueprint = _CVRP_ROOT / "policies" / "algorithm_blueprint.py"
-    (champion_root / "policies" / "algorithm_blueprint.py").write_text(
-        blueprint.read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    context = replace(
-        context,
-        champion=ChampionState(
-            version=1,
-            operator_pool={},
-            solver_config_hash="solver-hash",
-            code_snapshot_path=str(champion_root),
-            code_snapshot_hash="code-hash",
-        ),
-    )
+    context = _cvrp_context_with_champion(tmp_path)
 
     listed = registry.call("context.list_surfaces", {}, context)
     read = registry.call(
@@ -683,6 +690,79 @@ def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
     assert read.structured_payload["surface"]["name"] == "algorithm_blueprint"
     assert read.structured_payload["current_artifact"]["readable"] is True
     assert len(rendered) < AgenticToolLoopConfig().max_observation_chars
+
+
+def test_read_main_search_strategy_default_returns_compact_contract_below_budget(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call(
+        "context.read_surface",
+        {"surface": "main_search_strategy"},
+        context,
+    )
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True, default=str)
+
+    assert observation.is_error is False
+    assert observation.failure_code is None
+    assert payload["detail"] == "compact"
+    assert payload["section"] == "all"
+    assert payload["surface"]["name"] == "main_search_strategy"
+    assert payload["surface"]["interface"]["required_functions"] == [
+        "main_search_plan"
+    ]
+    assert payload["surface_contract"]["schema_version"] == "surface-contract.v1"
+    assert payload["surface_contract"]["available_sections"] == [
+        "summary",
+        "interface",
+        "bounds",
+        "evidence",
+        "novelty",
+        "target_preview",
+    ]
+    assert payload["surface_contract"]["target_preview"]["content_preview_chars"] <= 1200
+    assert "content_preview" not in payload["surface_contract"]["target_preview"]
+    assert "prompt" not in payload["surface"]
+    assert "State how the whole main-search strategy" not in rendered
+    assert "raw_metrics_ref" not in rendered
+    assert "SECRET_VALIDATION" not in rendered
+    assert "SECRET_FROZEN" not in rendered
+    assert len(rendered) < 24000
+
+
+def test_read_surface_section_mode_returns_interface_slice(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call(
+        "context.read_surface",
+        {"surface": "main_search_strategy", "section": "interface"},
+        context,
+    )
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True, default=str)
+
+    assert observation.is_error is False
+    assert payload["section"] == "interface"
+    assert payload["surface"] == {
+        "name": "main_search_strategy",
+        "kind": "config",
+        "section": "interface",
+        "interface": payload["surface"]["interface"],
+    }
+    assert payload["surface"]["interface"]["function_signatures"] == {
+        "main_search_plan": ["instance", "time_limit_sec"]
+    }
+    assert "bounds" not in payload["surface"]
+    assert "evidence" not in payload["surface"]
+    assert "prompt" not in payload["surface"]
+    assert "State how the whole main-search strategy" not in rendered
+    assert len(rendered) < 8000
 
 
 def test_read_surface_target_not_declared_fails_permission(tmp_path: Path) -> None:
@@ -1716,6 +1796,77 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
             "error_code",
         }.issubset(event.metadata)
         assert "structured_payload" not in event.metadata
+
+
+def test_agentic_session_reads_cvrp_main_search_strategy_under_legacy_budget(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="main_search_strategy",
+            target_file="policies/main_search_strategy.py",
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {
+                "tool_name": "context.read_surface",
+                "args": {"surface": "main_search_strategy"},
+            },
+            {"tool_name": "memory.query", "args": {}},
+        ],
+        hypothesis=hypothesis,
+    )
+    config = AgenticToolLoopConfig(max_observation_chars=24000)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    tool_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("tool_name")
+    ]
+    rendered_context = json.dumps(
+        creative.hypothesis_contexts[0]["agentic_tool_observations"],
+        sort_keys=True,
+        default=str,
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.tool_budget_used["observation_chars"] <= config.max_observation_chars
+    assert any(
+        event["tool_name"] == "context.read_surface"
+        and event["status"] == "ok"
+        and event["selection_source"] == "planner_selected"
+        for event in tool_events
+    )
+    assert not any(
+        event.get("error_code") == "result_too_large"
+        for event in tool_events
+    )
+    assert "main_search_strategy" in rendered_context
+    assert "raw_metrics_ref" not in rendered_context
+    assert "SECRET_VALIDATION" not in rendered_context
+    assert "SECRET_FROZEN" not in rendered_context
 
 
 def test_agentic_session_tool_loop_limits_are_enforced(tmp_path: Path) -> None:

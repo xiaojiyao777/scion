@@ -13,6 +13,16 @@ if TYPE_CHECKING:
     from scion.lineage.registry import LineageRegistry
 
 
+def _json_mapping(raw: object) -> dict:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 class BranchStore:
     def __init__(self, registry: "LineageRegistry") -> None:
         self.registry = registry
@@ -112,8 +122,8 @@ class HypothesisStore:
                  hypothesis_text, created_at, base_champion_version,
                  family_id, family_source, taxonomy_version,
                  predicted_direction, target_objectives_json,
-                 protected_objectives_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 protected_objectives_json, novelty_signature_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -133,6 +143,7 @@ class HypothesisStore:
                     hyp.predicted_direction,
                     json.dumps(list(hyp.target_objectives)),
                     json.dumps(list(hyp.protected_objectives)),
+                    json.dumps(hyp.novelty_signature or {}, sort_keys=True),
                 ),
             )
 
@@ -228,6 +239,7 @@ class HypothesisStore:
             predicted_direction=d.get("predicted_direction") or "exploratory",
             target_objectives=tuple(json.loads(d.get("target_objectives_json") or "[]")),
             protected_objectives=tuple(json.loads(d.get("protected_objectives_json") or "[]")),
+            novelty_signature=_json_mapping(d.get("novelty_signature_json")),
         )
 
     # ---------------------------------------------------------------

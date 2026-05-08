@@ -88,9 +88,11 @@ APS performs a deterministic `context.read_surface` before code generation or
 partial-session finalization, unless that exact surface was already read. Surface
 tool observations are compact by default: `context.list_surfaces` exposes only
 selection-oriented metadata, and `context.read_surface` defaults to
-`detail="compact"` with bounded interface text and champion-code preview.
-`detail="full"` and `max_code_chars` are explicit opt-ins for debug or deep
-inspection.
+`detail="compact"` with a `surface-contract.v1` section view (`summary`,
+`interface`, `bounds`, `evidence`, `novelty`, `target_preview`) plus bounded
+interface text and champion-code preview. Compact surface reads omit full prompt
+guidance blocks and full target-file content; `detail="full"`, `section`, and
+`max_code_chars` are explicit opt-ins for debug, paging, or deeper inspection.
 Within `AgenticProposalSession`, surface reads are further normalized to compact
 `max_code_chars=1200` observations before execution. If a returned observation
 would exceed the remaining session observation budget, APS stores a bounded
@@ -99,7 +101,9 @@ would exceed the remaining session observation budget, APS stores a bounded
 `context.read_surface` calls also fail closed when the remaining budget is below
 the reserved floor, so persisted recovery artifacts stay within
 `AgenticToolLoopConfig.max_observation_chars` while the replay validator remains
-strict for genuinely invalid artifacts.
+strict for genuinely invalid artifacts. The default APS observation budget is
+48,000 chars; compactness is still enforced first, and the larger cap only gives
+room for the normal list/problem/feedback/selected-surface sequence.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,
@@ -168,8 +172,13 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
 - Surface kind typos fail closed; supported generic kinds are `operator`,
   `policy`, `config`, `portfolio`, `construction`, and
   `acceptance_restart`.
-- `semantic_signature` novelty uses only declared structured fields persisted
-  on proposals/records. Free-text rationale fields do not affect identity.
+- `semantic_signature` novelty uses declared direct fields and optional
+  `novelty_signature` mapping values persisted on proposals/records. Singleton
+  semantic surfaces without enough structured identity are not treated as
+  target-file duplicates; only matching structured signatures or repeated
+  normalized hypothesis text are collapsed. Free-text rationale fields do not
+  become semantic identity unless the proposal explicitly carries a compact
+  structured value under a declared `novelty_signature` key.
 
 This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
 

@@ -120,7 +120,8 @@ class LineageRegistry:
                     taxonomy_version     TEXT,
                     predicted_direction  TEXT,
                     target_objectives_json TEXT,
-                    protected_objectives_json TEXT
+                    protected_objectives_json TEXT,
+                    novelty_signature_json TEXT
                 )
             """)
             conn.execute("""
@@ -162,6 +163,7 @@ class LineageRegistry:
                 "predicted_direction": "TEXT",
                 "target_objectives_json": "TEXT",
                 "protected_objectives_json": "TEXT",
+                "novelty_signature_json": "TEXT",
             })
 
     # ------------------------------------------------------------------

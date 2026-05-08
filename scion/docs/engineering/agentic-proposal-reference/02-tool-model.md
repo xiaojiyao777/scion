@@ -253,7 +253,7 @@ Suggested MVP tool set:
 |---|---|---|
 | `context.read_problem` | read_public_context | Adapter-rendered summary/mechanics/objectives. |
 | `context.list_surfaces` | read_public_context | Compact selection metadata from `ProblemSpecV1.research_surfaces`. |
-| `context.read_surface` | read_champion_artifact | Compact-by-default interface and bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=1200`, and optional reads fail closed near the observation budget. |
+| `context.read_surface` | read_champion_artifact | Compact-by-default surface contract with `summary` / `interface` / `bounds` / `evidence` / `novelty` / `target_preview` sections plus a bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=1200`, and optional reads fail closed near the observation budget. |
 | `memory.query` | read_tainted_memory | Search memory, research log, failed hypotheses. |
 | `feedback.query_screening` | read_tainted_memory | Screening-only detailed feedback. |
 | `feedback.query_holdout_summary` | read_tainted_memory | Validation aggregate, frozen pass/fail/budget only. |
@@ -272,3 +272,12 @@ session artifacts should therefore satisfy
 `tool_budget_used.observation_chars <= max_observation_chars`; replay validation
 continues to reject older or malformed artifacts that exceed the configured
 budget.
+
+`context.read_surface` compact mode is the default for whole-algorithm surfaces.
+It omits full prompt guidance blocks and full target-file content, returns a
+deterministic `surface-contract.v1` section map, and caps long text/list/map
+fields before the APS boundary sees the observation. `detail="full"` remains an
+explicit debug opt-in. The default APS observation budget is 48,000 chars: large
+enough for list/problem/feedback plus one compact whole-algorithm surface read,
+while individual tool observations remain bounded and raw metrics refs remain
+stripped.

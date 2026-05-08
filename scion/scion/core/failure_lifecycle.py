@@ -173,6 +173,7 @@ class FailureLifecycleService:
             predicted_direction=hyp.predicted_direction,
             target_objectives=hyp.target_objectives,
             protected_objectives=hyp.protected_objectives,
+            novelty_signature=dict(hyp.novelty_signature or {}),
         )
         self.hypothesis_store.save(record)
 

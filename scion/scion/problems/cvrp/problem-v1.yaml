@@ -961,6 +961,10 @@ research_surfaces:
       signature_fields:
         - predicted_direction
         - target_objectives
+        - selected_components
+        - baseline_fraction_pattern
+        - acceptance_restart_pattern
+        - perturbation_pattern
     prompt:
       hypothesis_guidance: >-
         State how the whole main-search strategy should improve CVRP evidence:

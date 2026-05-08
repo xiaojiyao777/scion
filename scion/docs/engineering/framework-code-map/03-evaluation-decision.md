@@ -30,9 +30,13 @@ Hypothesis checks:
 - action/target-file compatibility, including research-surface allow flags;
 - novelty against active, blacklisted, and same-champion rejected hypotheses,
   using declared generic novelty strategies where present. `semantic_signature`
-  is limited to declared bounded structured fields persisted on the
-  proposal/record; free-text fields are not identity inputs, and unsupported
-  signature fields fall back to strict target-file identity.
+  uses declared direct fields such as objectives plus optional
+  `novelty_signature` values persisted on the proposal/record. For singleton
+  semantic policy/config/portfolio surfaces, unavailable structured identity no
+  longer falls back to target-file duplicate blocking; C10 only collapses a
+  computed semantic signature or an exactly repeated unstructured hypothesis.
+  Ordinary operator modify/remove still uses strict locus/action/target-file
+  duplicate protection.
 
 Patch checks:
 

@@ -46,7 +46,18 @@ from scion.proposal.schemas import HypothesisProposalInput, PatchProposalInput
 _COMPACT_SURFACE_CODE_CHARS = 1200
 _FULL_SURFACE_CODE_CHARS = 12000
 _COMPACT_SURFACE_TEXT_CHARS = 600
-_COMPACT_SURFACE_INTERFACE_CHARS = 3600
+_COMPACT_SURFACE_HINT_CHARS = 240
+_COMPACT_SURFACE_INTERFACE_CHARS = 2400
+_COMPACT_SURFACE_LIST_ITEMS = 32
+_COMPACT_SURFACE_MAP_ITEMS = 32
+_COMPACT_SURFACE_SECTIONS = (
+    "summary",
+    "interface",
+    "bounds",
+    "evidence",
+    "novelty",
+    "target_preview",
+)
 
 
 class ProposalToolPermission(str, Enum):
@@ -201,6 +212,15 @@ class ReadSurfaceInput(_StrictInput):
     )
     target_file: str | None = None
     detail: Literal["compact", "full"] = "compact"
+    section: Literal[
+        "all",
+        "summary",
+        "interface",
+        "bounds",
+        "evidence",
+        "novelty",
+        "target_preview",
+    ] = "all"
     include_code: bool = True
     max_code_chars: int | None = Field(default=None, ge=0, le=24000)
 
@@ -615,9 +635,24 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
             )
 
         payload = {
-            "surface": _surface_read_payload(surface, detail=detail),
-            "interface_summary": _surface_interface_summary(surface, detail=detail),
+            "surface": _surface_read_payload(
+                surface,
+                detail=detail,
+                section=args.section,
+            ),
+            "surface_contract": _surface_contract_metadata(
+                surface,
+                detail=detail,
+                section=args.section,
+                current_artifact=code_payload,
+            ),
+            "interface_summary": _surface_interface_summary(
+                surface,
+                detail=detail,
+                section=args.section,
+            ),
             "detail": detail,
+            "section": args.section,
             "declared_targets": target_files,
             "target_file": target_file,
             "current_artifact": code_payload,
@@ -1301,6 +1336,7 @@ def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal
         target_runtime_effect=value.target_runtime_effect,
         complexity_claim=value.complexity_claim,
         runtime_budget_strategy=value.runtime_budget_strategy,
+        novelty_signature=dict(value.novelty_signature or {}),
     )
 
 
@@ -1580,7 +1616,7 @@ def _surface_return_values(surface: Any | None) -> dict[str, Any]:
     values = _attr(interface, "return_values", None) if interface is not None else None
     if not isinstance(values, Mapping):
         return {}
-    return {str(key): _model_payload(item) for key, item in values.items()}
+    return _compact_mapping_payload(values)
 
 
 def _surface_for_patch_path(
@@ -1765,35 +1801,50 @@ def _surface_listing_payload(surface: Any) -> dict[str, Any]:
     )
 
 
-def _surface_read_payload(surface: Any, *, detail: str) -> dict[str, Any]:
-    if detail == "full":
-        return _surface_payload(surface)
-    return _surface_compact_payload(surface, include_prompt=True)
-
-
-def _surface_compact_payload(
+def _surface_read_payload(
     surface: Any,
     *,
-    include_prompt: bool,
+    detail: str,
+    section: str = "all",
 ) -> dict[str, Any]:
+    if detail == "full":
+        return _surface_payload(surface)
+    return _surface_compact_payload(surface, section=section)
+
+
+def _surface_compact_payload(surface: Any, *, section: str = "all") -> dict[str, Any]:
     target_files = _surface_target_files(surface)
     payload: dict[str, Any] = {
         "name": _attr(surface, "name"),
         "kind": _attr(surface, "kind"),
-        "description": _compact_text(_attr(surface, "description", "")),
-        "algorithm": _compact_algorithm_payload(surface),
-        "targets": _compact_targets_payload(surface, target_files),
-        "target_files": target_files,
-        "interface": _compact_interface_payload(surface),
-        "bounds": _compact_bounds_payload(surface),
-        "evidence": _compact_evidence_payload(surface),
-        "novelty": _compact_novelty_payload(surface),
+        "section": section,
     }
-    if include_prompt:
-        payload["prompt"] = _compact_prompt_payload(surface)
-        prompt_hint = _compact_text(_attr(surface, "prompt_hint", ""))
+    if section in {"all", "summary"}:
+        payload.update(
+            {
+                "description": _compact_text(_attr(surface, "description", "")),
+                "algorithm": _compact_algorithm_payload(surface),
+                "targets": _compact_targets_payload(surface, target_files),
+                "target_files": target_files,
+            }
+        )
+        prompt_hint = _compact_text(
+            _attr(surface, "prompt_hint", ""),
+            _COMPACT_SURFACE_HINT_CHARS,
+        )
         if prompt_hint:
             payload["prompt_hint"] = prompt_hint
+    if section in {"all", "interface"}:
+        payload["interface"] = _compact_interface_payload(surface)
+    if section in {"all", "bounds"}:
+        payload["bounds"] = _compact_bounds_payload(surface)
+    if section in {"all", "evidence"}:
+        payload["evidence"] = _compact_evidence_payload(surface)
+    if section in {"all", "novelty"}:
+        payload["novelty"] = _compact_novelty_payload(surface)
+    if section == "target_preview":
+        payload["targets"] = _compact_targets_payload(surface, target_files)
+        payload["target_files"] = target_files
     return _drop_empty_items(payload)
 
 
@@ -1864,7 +1915,9 @@ def _compact_bounds_payload(surface: Any) -> dict[str, Any]:
             "allowed_components": _coerce_compact_list(
                 _attr(bounds, "allowed_components", [])
             ),
-            "numeric_ranges": _model_payload(_attr(bounds, "numeric_ranges", {})),
+            "numeric_ranges": _compact_mapping_payload(
+                _attr(bounds, "numeric_ranges", {})
+            ),
             "complexity_scale_terms": _coerce_compact_list(
                 _attr(bounds, "complexity_scale_terms", [])
             ),
@@ -1899,37 +1952,104 @@ def _compact_novelty_payload(surface: Any) -> dict[str, Any]:
     )
 
 
-def _compact_prompt_payload(surface: Any) -> dict[str, Any]:
-    prompt = _attr(surface, "prompt")
-    if prompt is None:
+def _surface_contract_metadata(
+    surface: Any,
+    *,
+    detail: str,
+    section: str,
+    current_artifact: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    contract: dict[str, Any] = {
+        "schema_version": "surface-contract.v1",
+        "detail": detail,
+        "section": section,
+        "available_sections": list(_COMPACT_SURFACE_SECTIONS),
+        "cap": {
+            "text_chars_per_field": _COMPACT_SURFACE_TEXT_CHARS,
+            "hint_chars": _COMPACT_SURFACE_HINT_CHARS,
+            "list_items_per_field": _COMPACT_SURFACE_LIST_ITEMS,
+            "map_items_per_field": _COMPACT_SURFACE_MAP_ITEMS,
+        },
+        "omitted_from_compact": [
+            "prompt.hypothesis_guidance",
+            "prompt.implementation_guidance",
+            "prompt.anti_patterns",
+            "full_target_file_content",
+        ],
+    }
+    if detail == "compact":
+        contract["section_paths"] = _surface_section_paths(section)
+        target_preview = _target_artifact_preview(current_artifact)
+        if target_preview:
+            contract["target_preview"] = target_preview
+    return _drop_empty_items(contract)
+
+
+def _surface_section_paths(section: str) -> dict[str, list[str]]:
+    sections = {
+        "summary": [
+            "surface.description",
+            "surface.algorithm",
+            "surface.targets",
+            "surface.prompt_hint",
+        ],
+        "interface": ["surface.interface"],
+        "bounds": ["surface.bounds"],
+        "evidence": ["surface.evidence"],
+        "novelty": ["surface.novelty"],
+        "target_preview": ["surface_contract.target_preview", "current_artifact"],
+    }
+    if section == "all":
+        return sections
+    selected = sections.get(section, [])
+    return {section: selected}
+
+
+def _target_artifact_preview(
+    current_artifact: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not current_artifact:
         return {}
     return _drop_empty_items(
         {
-            "hypothesis_guidance": _compact_text(
-                _attr(prompt, "hypothesis_guidance", "")
+            "file_path": current_artifact.get("file_path"),
+            "readable": current_artifact.get("readable"),
+            "reason": current_artifact.get("reason"),
+            "size_chars": current_artifact.get("size_chars"),
+            "content_preview_chars": len(
+                str(current_artifact.get("content_preview", ""))
             ),
-            "implementation_guidance": _compact_text(
-                _attr(prompt, "implementation_guidance", "")
-            ),
-            "anti_patterns": _compact_text(_attr(prompt, "anti_patterns", "")),
+            "truncated": current_artifact.get("truncated"),
+            "max_chars": current_artifact.get("max_chars"),
         }
     )
 
 
-def _surface_interface_summary(surface: Any, *, detail: str) -> str:
+def _surface_interface_summary(
+    surface: Any,
+    *,
+    detail: str,
+    section: str = "all",
+) -> str:
     if detail == "full":
         return _build_research_surface_interface_spec(surface)
-    return _compact_surface_interface_summary(surface)
+    return _compact_surface_interface_summary(surface, section=section)
 
 
-def _compact_surface_interface_summary(surface: Any) -> str:
-    compact = _surface_compact_payload(surface, include_prompt=True)
+def _compact_surface_interface_summary(surface: Any, *, section: str = "all") -> str:
+    compact = _surface_compact_payload(surface, section=section)
     lines = [
         (
             f"### Declared Research Surface: {compact.get('name', '')} "
             f"[{compact.get('kind', '')}]"
         )
     ]
+    lines.append(
+        "compact_contract_sections: "
+        + ", ".join(
+            [section] if section != "all" else list(_COMPACT_SURFACE_SECTIONS)
+        )
+    )
     description = compact.get("description")
     if description:
         lines.append(str(description))
@@ -2005,23 +2125,19 @@ def _compact_surface_interface_summary(surface: Any) -> str:
             "evidence.required_runtime_fields",
             evidence.get("required_runtime_fields"),
         )
-    prompt = compact.get("prompt")
-    if isinstance(prompt, Mapping):
+    novelty = compact.get("novelty")
+    if isinstance(novelty, Mapping):
         _append_compact_summary_line(
             lines,
-            "prompt.hypothesis_guidance",
-            prompt.get("hypothesis_guidance"),
+            "novelty.strategy",
+            novelty.get("strategy"),
         )
         _append_compact_summary_line(
             lines,
-            "prompt.implementation_guidance",
-            prompt.get("implementation_guidance"),
+            "novelty.signature_fields",
+            novelty.get("signature_fields"),
         )
-        _append_compact_summary_line(
-            lines,
-            "prompt.anti_patterns",
-            prompt.get("anti_patterns"),
-        )
+    _append_compact_summary_line(lines, "prompt_hint", compact.get("prompt_hint"))
     return _limit_text("\n".join(lines), _COMPACT_SURFACE_INTERFACE_CHARS)
 
 
@@ -2056,7 +2172,11 @@ def _compact_text(value: Any, max_chars: int = _COMPACT_SURFACE_TEXT_CHARS) -> s
     return _limit_text(text, max_chars) if text else ""
 
 
-def _coerce_compact_list(values: Any, *, max_items: int = 32) -> list[str]:
+def _coerce_compact_list(
+    values: Any,
+    *,
+    max_items: int = _COMPACT_SURFACE_LIST_ITEMS,
+) -> list[str]:
     if values is None:
         return []
     try:
@@ -2064,6 +2184,23 @@ def _coerce_compact_list(values: Any, *, max_items: int = 32) -> list[str]:
     except TypeError:
         return []
     return items[:max_items]
+
+
+def _compact_mapping_payload(
+    value: Any,
+    *,
+    max_items: int = _COMPACT_SURFACE_MAP_ITEMS,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    compact: dict[str, Any] = {}
+    for idx, (key, item) in enumerate(
+        sorted(value.items(), key=lambda pair: str(pair[0]))
+    ):
+        if idx >= max_items:
+            break
+        compact[str(key)] = _model_payload(item)
+    return compact
 
 
 def _drop_empty_items(payload: Mapping[str, Any]) -> dict[str, Any]:

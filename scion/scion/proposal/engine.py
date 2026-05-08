@@ -321,6 +321,7 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         target_runtime_effect=validated.target_runtime_effect,
         complexity_claim=validated.complexity_claim,
         runtime_budget_strategy=validated.runtime_budget_strategy,
+        novelty_signature=dict(validated.novelty_signature or {}),
     )
 
 
