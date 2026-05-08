@@ -47,6 +47,9 @@ enough to continue, validate, freeze, promote, or abandon.
   `SCREENING_FAIL_WIN_RATE`, and none selected `route_pair_swap` or
   `bounded_destroy_repair`. The current blocker is candidate use and efficacy
   of the deeper problem-owned main-search components.
+- Design conclusion: problem/algorithm onboarding is a first-class Scion
+  module, not incidental setup. See
+  [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).
 
 ## Required Reading Order
 
@@ -56,8 +59,9 @@ For architecture or planning work:
 2. [Architecture v3](../design/scion-architecture-v3.md).
 3. [v0.4 current state](status/current-state.md).
 4. [v0.4 algorithm design-space upgrade](../design/v0.4/v0.4-algorithm-design-space-upgrade.md).
-5. [Framework code map](engineering/framework-code-map/README.md).
-6. [Extension points and risks](engineering/framework-code-map/07-extension-points-and-risks.md).
+5. [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).
+6. [Framework code map](engineering/framework-code-map/README.md).
+7. [Extension points and risks](engineering/framework-code-map/07-extension-points-and-risks.md).
 
 For implementation work delegated to a subagent:
 
@@ -211,6 +215,10 @@ Near-term CVRP research-space work:
   It validated persistent forced-surface selection, C10 singleton novelty, APS
   compact selected-surface reads, and active runtime audit across three
   screened candidates.
+- The problem/algorithm onboarding design has been captured in
+  `design/v0.4/v0.4-problem-algorithm-onboarding.md`. Treat CVRP's manual
+  adapter/surface/component work as a prototype of a future onboarding module
+  that turns human-written solvers into Scion-native research objects.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

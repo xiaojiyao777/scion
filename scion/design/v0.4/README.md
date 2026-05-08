@@ -1,6 +1,6 @@
 # Scion v0.4 Design Index
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-08*
 
 These are active v0.4 design-source documents. Current implementation status is
 tracked in [docs/status/current-state.md](../../docs/status/current-state.md).
@@ -12,6 +12,7 @@ tracked in [docs/status/current-state.md](../../docs/status/current-state.md).
 - [Algorithm design-space optimization](v0.4-algorithm-design-space-optimization.md) - motivation and evidence for moving beyond operator-only optimization.
 - [Agentic proposal session design](v0.4-agentic-proposal-session-design.md) - bounded proposal-agent design.
 - [CVRP research-surface design](v0.4-cvrp-research-surface-design.md) - first non-operator CVRP research surface design.
+- [Problem and algorithm onboarding](v0.4-problem-algorithm-onboarding.md) - design source for turning human-written solvers into Scion-native research objects.
 
 ## Framework And Evidence Designs
 

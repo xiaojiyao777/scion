@@ -46,6 +46,13 @@ surface. It still did not produce solver-quality evidence; all three failed
 the deeper problem-owned main-search components, not force-surface drift, C10
 target-file collapse, or selected-surface runtime audit.
 
+The broader design conclusion is now captured in
+[`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
+Scion core can govern autoresearch only after a solver has been made into a
+Scion-native research object with adapter semantics, declared surfaces,
+component libraries, runtime audit, and tests. The CVRP work is the manual
+prototype of that onboarding layer.
+
 ## Current Engineering State
 
 ### Framework Boundary
