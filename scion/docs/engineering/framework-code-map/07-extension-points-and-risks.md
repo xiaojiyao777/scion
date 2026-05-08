@@ -64,6 +64,14 @@ Medium-risk areas:
 - `semantic_signature` is intentionally narrow: only declared bounded
   structured fields persisted on proposals/records can affect identity.
   Free-text rationale changes do not bypass duplicate detection.
+- ContractGate now treats external file reads as sensitive APIs, not only file
+  writes. `open()`, `*.open()`, `*.read_text()`, and `*.read_bytes()` fail
+  closed for generated research-surface patches.
+- ContractGate blocks `instance.name` on non-operator policy/config/portfolio/
+  construction/acceptance_restart and singleton surfaces, including direct
+  `getattr(instance, "name")` / `hasattr(instance, "name")` probes. This
+  reduces case-specific policy behavior while preserving safe structural APIs
+  declared by the problem package.
 - Hypothesis context may include screening aggregates, but validation/frozen
   aggregate stats and raw holdout details are not rendered.
 - Search memory family extraction depends on taxonomy quality. Without problem taxonomy, framework defaults are intentionally weak.
@@ -72,6 +80,12 @@ Medium-risk areas:
   algorithm lifecycle surface. Its solver integration stays inside the CVRP
   package: Scion core sees only declared surface metadata and generic required
   runtime fields, not CVRP construction modes or local-search component names.
+- CVRP now exposes `main_search_strategy` as the preferred problem-owned
+  whole-algorithm surface. Its solver integration stays inside the CVRP
+  package: Scion core sees only declared surface metadata and generic required
+  runtime fields, not CVRP construction modes, ALNS/VNS params, route-pair
+  swaps, bounded destroy/repair, restart, perturbation, or registry-toggle
+  semantics.
 - CVRP now exposes `baseline_policy` as a problem-owned baseline/main-search
   policy surface. Its solver integration stays inside the CVRP package: Scion
   core sees only declared surface metadata and selected-surface runtime fields,
@@ -92,7 +106,7 @@ Avoid changing these for CVRP/warehouse-specific feature work:
 - `scion.runtime.audit`: may enforce generic surface runtime evidence fields
   declared in `ProblemSpecV1`, but should not interpret CVRP, warehouse, or
   other domain-specific field meanings beyond generic presence, error-count,
-  and loaded/executed checks.
+  and loaded/executed/active checks.
 
 ## Recommended Next Implementation Slice
 
@@ -111,12 +125,17 @@ For future algorithm design space expansion, use a thin vertical slice:
 7. Add focused tests around bridge loading, context rendering, contract validation, solver runtime audit, and one campaign smoke.
 8. Add or update problem-specific final evidence only if final reporting needs new domain fields.
 
-The CVRP `algorithm_blueprint` and `baseline_policy` slices follow this pattern
-for top-level lifecycle and main-search parameter surfaces: problem spec
-declaration, adapter interface/preview, solver execution and audit,
-selected-surface runtime evidence, focused tests, and engineering docs were
-updated without adding CVRP semantics to core governance. Future surfaces
-should keep the same boundary.
+The CVRP `main_search_strategy`, `algorithm_blueprint`, and `baseline_policy`
+slices follow this pattern for whole-algorithm, top-level lifecycle, and
+main-search parameter surfaces: problem spec declaration, adapter
+interface/preview, solver execution and audit, selected-surface runtime
+evidence, focused tests, and engineering docs were updated without adding CVRP
+semantics to core governance. Future surfaces should keep the same boundary.
+
+Current next diagnostic: force `main_search_strategy` and evaluate whether the
+new whole-algorithm surface produces nontrivial main-search movement before
+spending more budget on post-baseline generated operators or baseline-policy
+only tuning.
 
 ## Design Review Checklist
 
@@ -128,6 +147,8 @@ Before merging architecture changes, check:
 - Does verification fail closed when adapter/runtime config is missing?
 - Does selected-surface runtime audit fail closed when declared evidence fields
   are missing in both Verification and candidate-side Protocol/Canary runs?
+- Do generated policy/config/portfolio/construction surfaces avoid external
+  file reads and case-identity checks such as `instance.name`?
 - Are raw metrics and final evidence represented as refs, not copied into step schemas?
 - Does promotion still snapshot immutable candidate code before stale-marking other branches?
 - Does stale/reconcile re-run contract, verification, and screening after champion changes?

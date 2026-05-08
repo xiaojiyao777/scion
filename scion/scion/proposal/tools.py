@@ -1143,7 +1143,10 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
             check for check in result.checks if check.name == "C7_interface"
         ]
         surface = _surface_for_patch_path(context, patch.file_path)
-        passed = bool(interface_checks and all(check.passed for check in interface_checks))
+        interface_passed = bool(
+            interface_checks and all(check.passed for check in interface_checks)
+        )
+        passed = interface_passed and result.passed
         if not interface_checks:
             passed = False
         problem_preview = None
@@ -1159,7 +1162,7 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
             "declared_return_values": _surface_return_values(surface),
             "present_functions": _module_level_functions(args.code_content),
             "present_classes": _module_classes(args.code_content),
-            "checks": _checks_payload(interface_checks or result.checks),
+            "checks": _checks_payload(result.checks),
             "problem_preview": problem_preview,
             "workspace_materialized": False,
         }

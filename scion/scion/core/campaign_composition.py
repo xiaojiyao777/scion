@@ -230,8 +230,6 @@ def compose_campaign_services(
 
         early_stop_controller = EarlyStopController(force_continue=True)
     owner._plateau = PlateauController(early_stop=early_stop_controller)
-    if force_surface is not None:
-        owner._plateau.set_forced_locus(force_surface)
     owner._early_stop = owner._plateau.early_stop
 
     owner._journal = CampaignJournal(owner._registry)
@@ -470,6 +468,7 @@ def compose_campaign_services(
         use_agentic_proposal=use_agentic_proposal,
         agentic_artifact_dir=agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,
+        persistent_forced_locus=force_surface,
         forced_surface_action=force_action,
         forced_surface_target_file=force_target_file,
         forced_surface_diagnostic=force_surface is not None,

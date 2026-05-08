@@ -88,6 +88,7 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
         "baseline_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
+        "main_search_strategy",
     ],
 )
 def test_cvrp_policy_surface_interfaces_render_safe_instance_api(
@@ -249,6 +250,93 @@ def test_cvrp_algorithm_blueprint_preview_rejects_instance_customers_alias(
 
     assert preview["passed"] is False
     assert "algorithm_plan raised during synthetic preview" in json.dumps(preview)
+    assert "customers" in json.dumps(preview["issues"])
+
+
+def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.1},\n"
+            "        'baseline': {'time_fraction': 0.6, 'params': {'destroy_ratio': (0.05, 0.25)}},\n"
+            "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 2, 'top_k': 24},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': True, 'stagnation_rounds': 1, 'max_restarts': 1},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="main_search_strategy"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["surface"] == "main_search_strategy"
+    assert preview["issues"] == []
+
+
+def test_cvrp_main_search_strategy_preview_rejects_bad_plan(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {'unknown': 1}},\n"
+            "        'improvement': {'enabled_components': ['made_up_move'], 'rounds': 0, 'top_k': 0},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0, 'extra': 1},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="main_search_strategy"),
+    )
+
+    assert preview["passed"] is False
+    assert "made_up_move" in json.dumps(preview["issues"])
+    assert "baseline.params" in json.dumps(preview["issues"])
+    assert "restart returned unknown keys" in json.dumps(preview["issues"])
+
+
+def test_cvrp_main_search_strategy_preview_rejects_instance_customers_alias(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {'enabled': bool(instance.customers)}\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="main_search_strategy"),
+    )
+
+    assert preview["passed"] is False
+    assert "main_search_plan raised during synthetic preview" in json.dumps(preview)
     assert "customers" in json.dumps(preview["issues"])
 
 

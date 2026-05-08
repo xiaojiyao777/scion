@@ -34,8 +34,6 @@ _SENSITIVE_APIS = frozenset(
 # os.* calls that are forbidden
 _SENSITIVE_OS_ATTRS = frozenset({"system", "popen", "execve", "execvp", "execv"})
 
-# builtins that open files for writing (open is ok for reading)
-_SENSITIVE_OPEN_MODES = frozenset({"w", "wb", "a", "ab", "x", "xb", "w+", "wb+", "a+", "ab+"})
 _STATIC_UNKNOWN = object()
 
 
@@ -154,6 +152,7 @@ class ContractGate:
         checks.append(self._c7_interface_signature(patch))
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
+        checks.append(self._c9d_surface_instance_identity(patch))
         checks.append(self._c9b_non_rng_random(patch))
         checks.append(self._c9c_complexity_bound(patch))
 
@@ -588,16 +587,15 @@ class ContractGate:
 
             func = node.func
 
-            # Direct call: eval(...), exec(...), subprocess(...)
+            # Direct call: eval(...), exec(...), subprocess(...), open(...)
             if isinstance(func, ast.Name):
                 if func.id in _SENSITIVE_APIS:
                     violations.append(func.id)
                 elif func.id == "open":
-                    write_mode = _open_has_write_mode(node)
-                    if write_mode:
-                        violations.append(f"open(..., mode={write_mode!r})")
+                    violations.append("open(...)")
 
-            # Attribute call: os.system(...), subprocess.Popen(...), socket.socket(...)
+            # Attribute call: os.system(...), subprocess.Popen(...),
+            # socket.socket(...), Path(...).read_text(), path.open(), etc.
             elif isinstance(func, ast.Attribute):
                 obj_name: Optional[str] = None
                 if isinstance(func.value, ast.Name):
@@ -607,15 +605,92 @@ class ContractGate:
                     violations.append(f"os.{func.attr}")
                 elif obj_name in _SENSITIVE_APIS:
                     violations.append(f"{obj_name}.{func.attr}")
-                elif func.attr == "open":
-                    # open() calls: check for write modes in kwargs or positional args
-                    write_mode = _open_has_write_mode(node)
-                    if write_mode:
-                        violations.append(f"open(..., mode={write_mode!r})")
+                elif func.attr in {"open", "read_text", "read_bytes"}:
+                    violations.append(f"*.{func.attr}(...)")
 
         passed = len(violations) == 0
         detail = "no sensitive APIs" if passed else f"sensitive APIs detected: {violations}"
         return _cr("C9_sensitive_api", passed, "heavy", detail, t0)
+
+    # ------------------------------------------------------------------
+    # C9d: Surface policy/config code must not branch on case identity.
+    # ------------------------------------------------------------------
+
+    def _c9d_surface_instance_identity(self, patch: PatchProposal) -> CheckResult:
+        t0 = time.monotonic_ns()
+        if patch.action == "delete":
+            return _cr(
+                "C9d_surface_instance_identity",
+                True,
+                "heavy",
+                "delete action — no instance identity check",
+                t0,
+            )
+
+        try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError as exc:
+            return _cr("C9d_surface_instance_identity", False, "heavy", str(exc), t0)
+
+        surface = self._surface_for_patch_path(file_rel)
+        if not self._surface_disallows_instance_name(surface):
+            return _cr(
+                "C9d_surface_instance_identity",
+                True,
+                "heavy",
+                "surface does not restrict instance.name",
+                t0,
+            )
+
+        try:
+            tree = ast.parse(patch.code_content)
+        except SyntaxError:
+            return _cr(
+                "C9d_surface_instance_identity",
+                False,
+                "heavy",
+                "unparseable code",
+                t0,
+            )
+
+        violations: list[str] = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr == "name"
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "instance"
+            ):
+                violations.append("instance.name")
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"getattr", "hasattr"}
+                and len(node.args) >= 2
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "instance"
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value == "name"
+            ):
+                violations.append(f"{node.func.id}(instance, 'name')")
+
+        if not violations:
+            return _cr(
+                "C9d_surface_instance_identity",
+                True,
+                "heavy",
+                "no instance identity access",
+                t0,
+            )
+        surface_name = getattr(surface, "name", "<unknown>")
+        return _cr(
+            "C9d_surface_instance_identity",
+            False,
+            "heavy",
+            f"case-specific instance identity access is forbidden for research "
+            f"surface '{surface_name}': {violations}",
+            t0,
+        )
 
     # ------------------------------------------------------------------
     # C9b: Non-rng random source detection
@@ -1142,6 +1217,25 @@ class ContractGate:
             return frozenset(str(term).strip() for term in (terms or ()) if str(term).strip())
         return _LEGACY_PROBLEM_SCALE_NAMES
 
+    def _surface_disallows_instance_name(self, surface: Any | None) -> bool:
+        if surface is None:
+            return False
+        kind = str(getattr(surface, "kind", "") or "").strip()
+        if kind in {
+            "policy",
+            "config",
+            "portfolio",
+            "construction",
+            "acceptance_restart",
+        }:
+            return True
+        if kind == "operator":
+            return False
+        targets = self._surface_targets(surface)
+        return bool(getattr(targets, "singleton", False)) or bool(
+            getattr(surface, "singleton", False)
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1322,24 +1416,6 @@ def _hypothesis_action_for_patch_action(action: str) -> str | None:
 def _in_whitelist(module_top: str, whitelist: set) -> bool:
     """Return True if module_top is explicitly allowed."""
     return module_top in whitelist
-
-
-def _open_has_write_mode(call_node: ast.Call) -> Optional[str]:
-    """Return the mode string if open() is called with a write mode, else None."""
-    # open(path, mode) — mode is the second positional arg
-    if len(call_node.args) >= 2:
-        arg = call_node.args[1]
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-            if arg.value in _SENSITIVE_OPEN_MODES:
-                return arg.value
-
-    # open(path, mode=...) as keyword
-    for kw in call_node.keywords:
-        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
-            if kw.value.value in _SENSITIVE_OPEN_MODES:
-                return kw.value.value
-
-    return None
 
 
 def _collect_itertools_aliases(tree: ast.AST) -> dict[str, str]:

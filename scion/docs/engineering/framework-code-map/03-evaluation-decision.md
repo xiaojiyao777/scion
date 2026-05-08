@@ -43,7 +43,12 @@ Patch checks:
 - operator, policy, or declared module-function surface interface;
 - declared non-operator surface required-function presence;
 - import whitelist;
-- sensitive API detection;
+- sensitive API detection, including `open()` in any mode and file-read
+  helpers such as `Path.read_text()`, `Path.read_bytes()`, and `Path.open()`;
+- case-identity access rejection for non-operator policy/config/portfolio/
+  construction/acceptance_restart surfaces and singleton surfaces:
+  generated surface code must not branch on `instance.name` or direct
+  `getattr(instance, "name")` / `hasattr(instance, "name")` probes;
 - non-`rng` randomness detection;
 - complexity bound for high-order/uncapped enumeration.
 
@@ -51,6 +56,9 @@ For v2 research surfaces, the complexity guard uses
 `bounds.complexity_scale_terms` from surface metadata. The old
 route/customer/order/vehicle names remain only as a legacy fallback for
 surfaces without v2 bounds metadata.
+The `instance.name` rule is intentionally generic and surface-aware: it does
+not restrict safe problem-owned instance APIs such as customer ids/counts,
+demands, capacity, distance, or operator route helpers.
 
 ## VerificationGate
 
@@ -85,8 +93,10 @@ and stale-reconcile paths. V5/V6/V7/V8/V9 call `scion.runtime.audit` with that
 surface name. If the declared surface has
 `evidence.required_runtime_fields`, missing or empty fields in solver
 `runtime` output fail closed as runtime evidence failures, not objective ties.
-Unknown selected surfaces also fail closed. Calls that provide no selected
-surface are the legacy compatibility path.
+Declared `*_errors` fields must be zero, and declared `*_loaded`,
+`*_executed`, or `*_active` fields must be truthy. Unknown selected surfaces
+also fail closed. Calls that provide no selected surface are the legacy
+compatibility path.
 
 Legacy verification fallback still exists:
 

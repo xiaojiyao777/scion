@@ -32,6 +32,7 @@ _BASELINE_POLICY_RELATIVE_PATH = "policies/baseline_policy.py"
 _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
 _ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
+_MAIN_SEARCH_STRATEGY_RELATIVE_PATH = "policies/main_search_strategy.py"
 _DEFAULT_CONSTRUCTION_MODE = "nearest_neighbor"
 _DEFAULT_CONSTRUCTION_BIAS = 0.0
 _MIN_CONSTRUCTION_BIAS = 0.0
@@ -71,10 +72,26 @@ _ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS = frozenset(
         "inter_route_relocate",
     }
 )
+_ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
+    {
+        "intra_route_2opt",
+        "inter_route_relocate",
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    }
+)
 _MAX_BLUEPRINT_CONSTRUCTION_METHODS = 4
 _MAX_BLUEPRINT_LOCAL_SEARCH_ROUNDS = 4
 _MAX_BLUEPRINT_LOCAL_SEARCH_TOP_K = 64
 _MAX_BLUEPRINT_RESTART_STAGNATION_ROUNDS = 25
+_MAX_MAIN_SEARCH_CONSTRUCTION_METHODS = 4
+_MAX_MAIN_SEARCH_ROUNDS = 8
+_MAX_MAIN_SEARCH_TOP_K = 128
+_MAX_MAIN_SEARCH_RESTARTS = 3
+_MAX_MAIN_SEARCH_RESTART_STAGNATION_ROUNDS = 25
+_MAX_MAIN_SEARCH_PERTURBATIONS = 4
+_MAX_MAIN_SEARCH_PERTURBATION_STRENGTH = 8
+_MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT = 10.0
 _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
     {
         "enabled",
@@ -93,6 +110,33 @@ _ALGORITHM_BLUEPRINT_LOCAL_SEARCH_REQUIRED_KEYS = frozenset(
 )
 _ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS = frozenset(
     {"enabled", "stagnation_rounds"}
+)
+_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
+    {
+        "enabled",
+        "construction",
+        "baseline",
+        "improvement",
+        "acceptance",
+        "restart",
+        "perturbation",
+        "post_baseline_operators_enabled",
+        "operator_round_limit",
+    }
+)
+_MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
+    {"methods", "keep_top_k", "bias"}
+)
+_MAIN_SEARCH_BASELINE_REQUIRED_KEYS = frozenset({"time_fraction", "params"})
+_MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS = frozenset(
+    {"enabled_components", "rounds", "top_k"}
+)
+_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS = frozenset({"min_distance_improvement"})
+_MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
+    {"enabled", "stagnation_rounds", "max_restarts"}
+)
+_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS = frozenset(
+    {"enabled", "strength", "max_perturbations"}
 )
 _DEFAULT_BASELINE_POLICY_PARAMS = {
     "destroy_ratio": (0.10, 0.40),
@@ -201,6 +245,7 @@ def solve_baseline(
     construction_policy: dict[str, Any] | None = None,
     baseline_policy: dict[str, Any] | None = None,
     algorithm_blueprint: dict[str, Any] | None = None,
+    main_search_strategy: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     """Return a baseline solution plus audit metadata.
 
@@ -215,6 +260,7 @@ def solve_baseline(
         rng=rng,
         construction_policy=construction_policy,
         algorithm_blueprint=algorithm_blueprint,
+        main_search_strategy=main_search_strategy,
     )
     baseline_policy_audit = _baseline_policy_defaults()
     if baseline_policy is not None:
@@ -442,6 +488,11 @@ def _main() -> None:
     instance_path = _resolve_instance_path(args.instance)
     instance = adapter.load_instance(instance_path)
     rng = random.Random(args.seed)
+    main_search_strategy = _load_main_search_strategy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     algorithm_blueprint = _load_algorithm_blueprint(
         workspace_root=Path.cwd(),
         instance=instance,
@@ -452,10 +503,16 @@ def _main() -> None:
         instance=instance,
         time_limit_sec=args.time_limit,
     )
-    _apply_algorithm_blueprint_search_policy(
-        search_policy,
-        algorithm_blueprint=algorithm_blueprint,
-    )
+    if _main_search_strategy_active(main_search_strategy):
+        _apply_main_search_strategy_search_policy(
+            search_policy,
+            main_search_strategy=main_search_strategy,
+        )
+    else:
+        _apply_algorithm_blueprint_search_policy(
+            search_policy,
+            algorithm_blueprint=algorithm_blueprint,
+        )
     construction_policy = _load_construction_policy(
         workspace_root=Path.cwd(),
         instance=instance,
@@ -466,6 +523,11 @@ def _main() -> None:
         instance=instance,
         time_limit_sec=args.time_limit,
     )
+    if _main_search_strategy_active(main_search_strategy):
+        _apply_main_search_strategy_baseline_policy(
+            baseline_policy,
+            main_search_strategy=main_search_strategy,
+        )
     neighborhood_portfolio = _load_neighborhood_portfolio(
         workspace_root=Path.cwd(),
         instance=instance,
@@ -480,17 +542,33 @@ def _main() -> None:
         baseline_time_fraction=search_policy["baseline_time_fraction"],
         construction_policy=construction_policy,
         baseline_policy=baseline_policy,
-        algorithm_blueprint=algorithm_blueprint,
+        algorithm_blueprint=(
+            None if _main_search_strategy_active(main_search_strategy) else algorithm_blueprint
+        ),
+        main_search_strategy=main_search_strategy,
     )
-    sol, algorithm_audit = improve_with_algorithm_blueprint(
-        sol,
-        instance,
-        adapter=adapter,
-        rng=rng,
-        time_limit_sec=args.time_limit,
-        start_time=start,
-        algorithm_blueprint=algorithm_blueprint,
-    )
+    main_search_audit: dict[str, Any] = {}
+    if _main_search_strategy_active(main_search_strategy):
+        sol, main_search_audit = improve_with_main_search_strategy(
+            sol,
+            instance,
+            adapter=adapter,
+            rng=rng,
+            time_limit_sec=args.time_limit,
+            start_time=start,
+            main_search_strategy=main_search_strategy,
+        )
+        algorithm_audit = {}
+    else:
+        sol, algorithm_audit = improve_with_algorithm_blueprint(
+            sol,
+            instance,
+            adapter=adapter,
+            rng=rng,
+            time_limit_sec=args.time_limit,
+            start_time=start,
+            algorithm_blueprint=algorithm_blueprint,
+        )
     sol, operator_audit = improve_with_registry_operators(
         sol,
         instance,
@@ -516,6 +594,8 @@ def _main() -> None:
         **search_policy,
         **algorithm_blueprint,
         **algorithm_audit,
+        **main_search_strategy,
+        **main_search_audit,
         **baseline_audit,
         **operator_audit,
     }
@@ -714,6 +794,7 @@ def _construct_with_policy_audit(
     rng: random.Random,
     construction_policy: dict[str, Any] | None,
     algorithm_blueprint: dict[str, Any] | None = None,
+    main_search_strategy: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     audit = dict(construction_policy or {})
     if not audit:
@@ -729,6 +810,14 @@ def _construct_with_policy_audit(
     audit.setdefault("construction_events", [])
     audit.setdefault("construction_mode", _DEFAULT_CONSTRUCTION_MODE)
     audit.setdefault("construction_bias", _DEFAULT_CONSTRUCTION_BIAS)
+
+    if _main_search_strategy_active(main_search_strategy):
+        return _construct_with_main_search_strategy(
+            instance=instance,
+            rng=rng,
+            construction_audit=audit,
+            main_search_strategy=main_search_strategy or {},
+        )
 
     if _algorithm_blueprint_active(algorithm_blueprint):
         return _construct_with_algorithm_blueprint(
@@ -1199,6 +1288,690 @@ def _as_nonnegative_int(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _load_main_search_strategy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _main_search_strategy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _MAIN_SEARCH_STRATEGY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_main_search_event(audit, "error", "main search strategy path escapes workspace")
+        audit["main_search_strategy_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(audit, "error", f"main search strategy load failed: {exc}")
+        return audit
+
+    audit["main_search_strategy_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(
+            module,
+            "main_search_plan",
+            instance,
+            time_limit_sec,
+        )
+    except Exception as exc:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(audit, "error", f"main_search_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"main_search_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+
+    _normalize_main_search_strategy_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _main_search_strategy_defaults() -> dict[str, Any]:
+    params = dict(_DEFAULT_BASELINE_POLICY_PARAMS)
+    return {
+        "main_search_strategy_path": _MAIN_SEARCH_STRATEGY_RELATIVE_PATH,
+        "main_search_strategy_loaded": False,
+        "main_search_strategy_active": False,
+        "main_search_strategy_errors": 0,
+        "main_search_strategy_events": [],
+        "main_search_plan": {
+            "enabled": False,
+            "construction": {
+                "methods": [_DEFAULT_CONSTRUCTION_MODE],
+                "keep_top_k": 1,
+                "bias": _DEFAULT_CONSTRUCTION_BIAS,
+            },
+            "baseline": {
+                "time_fraction": _BASELINE_TIME_FRACTION,
+                "params": {},
+            },
+            "improvement": {
+                "enabled_components": [],
+                "rounds": 0,
+                "top_k": 16,
+            },
+            "acceptance": {
+                "min_distance_improvement": 0.0,
+            },
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        "main_search_phases": ["inactive"],
+        "main_search_construction_methods": [_DEFAULT_CONSTRUCTION_MODE],
+        "main_search_construction_keep_top_k": 1,
+        "main_search_construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
+        "main_search_baseline_time_fraction": _BASELINE_TIME_FRACTION,
+        "main_search_baseline_params": params,
+        "main_search_post_baseline_operators_enabled": False,
+        "main_search_operator_round_limit": 0,
+        "main_search_components": [],
+        "main_search_rounds": 0,
+        "main_search_top_k": 16,
+        "main_search_component_attempts": {},
+        "main_search_component_accepted": {},
+        "main_search_component_runtime_ms": {},
+        "main_search_acceptance_min_distance_improvement": 0.0,
+        "main_search_restart_enabled": False,
+        "main_search_restart_stagnation_rounds": 0,
+        "main_search_restart_count": 0,
+        "main_search_perturbation_enabled": False,
+        "main_search_perturbation_strength": 1,
+        "main_search_perturbation_count": 0,
+        "main_search_objective_delta_by_phase": {"inactive": 0.0},
+        "main_search_phase_runtime_ms": {"inactive": 0},
+        "main_search_elapsed_ms": 0,
+        "main_search_stop_reason": "inactive",
+    }
+
+
+def _normalize_main_search_strategy_plan(
+    plan: dict[str, Any],
+    *,
+    audit: dict[str, Any],
+) -> None:
+    requested_active = _main_search_bool(
+        plan.get("enabled", False),
+        field_name="enabled",
+        default=False,
+        audit=audit,
+    )
+    _validate_main_search_plan_keys(plan, requested_active=requested_active, audit=audit)
+
+    construction = _main_search_mapping_section(
+        plan.get("construction", {}),
+        field_name="construction",
+        audit=audit,
+    )
+    baseline = _main_search_mapping_section(
+        plan.get("baseline", {}),
+        field_name="baseline",
+        audit=audit,
+    )
+    improvement = _main_search_mapping_section(
+        plan.get("improvement", {}),
+        field_name="improvement",
+        audit=audit,
+    )
+    acceptance = _main_search_mapping_section(
+        plan.get("acceptance", {}),
+        field_name="acceptance",
+        audit=audit,
+    )
+    restart = _main_search_mapping_section(
+        plan.get("restart", {}),
+        field_name="restart",
+        audit=audit,
+    )
+    perturbation = _main_search_mapping_section(
+        plan.get("perturbation", {}),
+        field_name="perturbation",
+        audit=audit,
+    )
+
+    construction_methods = _main_search_string_sequence(
+        construction.get("methods", [_DEFAULT_CONSTRUCTION_MODE]),
+        allowed=_ALLOWED_CONSTRUCTION_MODES,
+        default=[_DEFAULT_CONSTRUCTION_MODE],
+        max_items=_MAX_MAIN_SEARCH_CONSTRUCTION_METHODS,
+        field_name="construction.methods",
+        audit=audit,
+    )
+    construction_keep_top_k = _main_search_int(
+        construction.get("keep_top_k", 1),
+        minimum=1,
+        maximum=_MAX_MAIN_SEARCH_CONSTRUCTION_METHODS,
+        default=1,
+        field_name="construction.keep_top_k",
+        audit=audit,
+    )
+    construction_bias = _main_search_float(
+        construction.get("bias", _DEFAULT_CONSTRUCTION_BIAS),
+        minimum=_MIN_CONSTRUCTION_BIAS,
+        maximum=_MAX_CONSTRUCTION_BIAS,
+        default=_DEFAULT_CONSTRUCTION_BIAS,
+        field_name="construction.bias",
+        audit=audit,
+    )
+    baseline_time_fraction = _main_search_float(
+        baseline.get("time_fraction", _BASELINE_TIME_FRACTION),
+        minimum=_MIN_BASELINE_TIME_FRACTION,
+        maximum=_MAX_BASELINE_TIME_FRACTION,
+        default=_BASELINE_TIME_FRACTION,
+        field_name="baseline.time_fraction",
+        audit=audit,
+    )
+    baseline_params = _main_search_baseline_params(
+        baseline.get("params", {}),
+        audit=audit,
+    )
+    components = _main_search_string_sequence(
+        improvement.get("enabled_components", []),
+        allowed=_ALLOWED_MAIN_SEARCH_COMPONENTS,
+        default=[],
+        max_items=len(_ALLOWED_MAIN_SEARCH_COMPONENTS),
+        field_name="improvement.enabled_components",
+        audit=audit,
+        allow_empty=not requested_active,
+    )
+    rounds = _main_search_int(
+        improvement.get("rounds", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_ROUNDS,
+        default=0,
+        field_name="improvement.rounds",
+        audit=audit,
+    )
+    top_k = _main_search_int(
+        improvement.get("top_k", 16),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_TOP_K,
+        default=16,
+        field_name="improvement.top_k",
+        audit=audit,
+    )
+    if requested_active and rounds <= 0:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            "enabled main_search_plan requires improvement.rounds > 0",
+        )
+    if requested_active and top_k <= 0:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            "enabled main_search_plan requires improvement.top_k > 0",
+        )
+
+    min_distance_improvement = _main_search_float(
+        acceptance.get("min_distance_improvement", 0.0),
+        minimum=0.0,
+        maximum=_MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT,
+        default=0.0,
+        field_name="acceptance.min_distance_improvement",
+        audit=audit,
+    )
+    restart_enabled = _main_search_bool(
+        restart.get("enabled", False),
+        field_name="restart.enabled",
+        default=False,
+        audit=audit,
+    )
+    restart_stagnation = _main_search_int(
+        restart.get("stagnation_rounds", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_RESTART_STAGNATION_ROUNDS,
+        default=0,
+        field_name="restart.stagnation_rounds",
+        audit=audit,
+    )
+    max_restarts = _main_search_int(
+        restart.get("max_restarts", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_RESTARTS,
+        default=0,
+        field_name="restart.max_restarts",
+        audit=audit,
+    )
+    perturbation_enabled = _main_search_bool(
+        perturbation.get("enabled", False),
+        field_name="perturbation.enabled",
+        default=False,
+        audit=audit,
+    )
+    perturbation_strength = _main_search_int(
+        perturbation.get("strength", 1),
+        minimum=1,
+        maximum=_MAX_MAIN_SEARCH_PERTURBATION_STRENGTH,
+        default=1,
+        field_name="perturbation.strength",
+        audit=audit,
+    )
+    max_perturbations = _main_search_int(
+        perturbation.get("max_perturbations", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_PERTURBATIONS,
+        default=0,
+        field_name="perturbation.max_perturbations",
+        audit=audit,
+    )
+    post_baseline_enabled = _main_search_bool(
+        plan.get("post_baseline_operators_enabled", False),
+        field_name="post_baseline_operators_enabled",
+        default=False,
+        audit=audit,
+    )
+    operator_round_limit = _main_search_int(
+        plan.get("operator_round_limit", 0),
+        minimum=0,
+        maximum=_MAX_OPERATOR_ROUNDS,
+        default=0,
+        field_name="operator_round_limit",
+        audit=audit,
+    )
+    active = requested_active and _as_nonnegative_int(
+        audit["main_search_strategy_errors"]
+    ) == 0
+
+    normalized_plan = {
+        "enabled": active,
+        "construction": {
+            "methods": construction_methods,
+            "keep_top_k": construction_keep_top_k,
+            "bias": construction_bias,
+        },
+        "baseline": {
+            "time_fraction": baseline_time_fraction,
+            "params": baseline_params,
+        },
+        "improvement": {
+            "enabled_components": components,
+            "rounds": rounds,
+            "top_k": top_k,
+        },
+        "acceptance": {
+            "min_distance_improvement": min_distance_improvement,
+        },
+        "restart": {
+            "enabled": restart_enabled,
+            "stagnation_rounds": restart_stagnation,
+            "max_restarts": max_restarts,
+        },
+        "perturbation": {
+            "enabled": perturbation_enabled,
+            "strength": perturbation_strength,
+            "max_perturbations": max_perturbations,
+        },
+        "post_baseline_operators_enabled": post_baseline_enabled,
+        "operator_round_limit": operator_round_limit,
+    }
+    audit["main_search_plan"] = normalized_plan
+    audit["main_search_strategy_active"] = active
+    audit["main_search_construction_methods"] = construction_methods
+    audit["main_search_construction_keep_top_k"] = construction_keep_top_k
+    audit["main_search_construction_bias"] = construction_bias
+    audit["main_search_baseline_time_fraction"] = baseline_time_fraction
+    audit["main_search_baseline_params"] = baseline_params
+    audit["main_search_post_baseline_operators_enabled"] = post_baseline_enabled
+    audit["main_search_operator_round_limit"] = operator_round_limit
+    audit["main_search_components"] = components
+    audit["main_search_rounds"] = rounds
+    audit["main_search_top_k"] = top_k
+    audit["main_search_component_attempts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_accepted"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_runtime_ms"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_acceptance_min_distance_improvement"] = min_distance_improvement
+    audit["main_search_restart_enabled"] = restart_enabled
+    audit["main_search_restart_stagnation_rounds"] = restart_stagnation
+    audit["main_search_restart_count"] = 0
+    audit["main_search_perturbation_enabled"] = perturbation_enabled
+    audit["main_search_perturbation_strength"] = perturbation_strength
+    audit["main_search_perturbation_count"] = 0
+    if active:
+        audit["main_search_phases"] = ["plan_loaded"]
+        audit["main_search_objective_delta_by_phase"] = {"plan_loaded": 0.0}
+        audit["main_search_phase_runtime_ms"] = {"plan_loaded": 0}
+        audit["main_search_stop_reason"] = "plan_loaded"
+    elif requested_active:
+        audit["main_search_phases"] = ["plan_invalid"]
+        audit["main_search_objective_delta_by_phase"] = {"plan_invalid": 0.0}
+        audit["main_search_phase_runtime_ms"] = {"plan_invalid": 0}
+        audit["main_search_stop_reason"] = "invalid_plan"
+
+
+def _validate_main_search_plan_keys(
+    plan: Mapping[str, Any],
+    *,
+    requested_active: bool,
+    audit: dict[str, Any],
+) -> None:
+    _validate_main_search_section_keys(
+        plan,
+        allowed=_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS,
+        required=_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS,
+        requested_active=requested_active,
+        field_name="main_search_plan",
+        audit=audit,
+    )
+    section_specs = {
+        "construction": _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS,
+        "baseline": _MAIN_SEARCH_BASELINE_REQUIRED_KEYS,
+        "improvement": _MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS,
+        "acceptance": _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+        "restart": _MAIN_SEARCH_RESTART_REQUIRED_KEYS,
+        "perturbation": _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+    }
+    for section_name, allowed in section_specs.items():
+        section = plan.get(section_name)
+        if isinstance(section, Mapping):
+            _validate_main_search_section_keys(
+                section,
+                allowed=allowed,
+                required=allowed,
+                requested_active=requested_active,
+                field_name=section_name,
+                audit=audit,
+            )
+
+
+def _validate_main_search_section_keys(
+    section: Mapping[str, Any],
+    *,
+    allowed: frozenset[str],
+    required: frozenset[str],
+    requested_active: bool,
+    field_name: str,
+    audit: dict[str, Any],
+) -> None:
+    unknown = sorted(str(key) for key in section if str(key) not in allowed)
+    if unknown:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} contains unknown keys {unknown}",
+        )
+    if requested_active:
+        missing = sorted(key for key in required if key not in section)
+        if missing:
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                f"enabled {field_name} missing required keys {missing}",
+            )
+
+
+def _main_search_mapping_section(
+    value: Any,
+    *,
+    field_name: str,
+    audit: dict[str, Any],
+) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    audit["main_search_strategy_errors"] += 1
+    _record_main_search_event(
+        audit,
+        "error",
+        f"{field_name} returned non-mapping value {value!r}",
+    )
+    return {}
+
+
+def _main_search_baseline_params(
+    value: Any,
+    *,
+    audit: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"baseline.params returned non-mapping value {value!r}",
+        )
+        return dict(_DEFAULT_BASELINE_POLICY_PARAMS)
+    baseline_audit = _baseline_policy_defaults()
+    _normalize_baseline_policy_params(dict(value), audit=baseline_audit)
+    for event in baseline_audit.get("baseline_policy_events", []):
+        if isinstance(event, Mapping):
+            detail = event.get("detail")
+            if detail:
+                _record_main_search_event(
+                    audit,
+                    "error",
+                    f"baseline.params invalid: {detail}",
+                )
+    audit["main_search_strategy_errors"] += _as_nonnegative_int(
+        baseline_audit.get("baseline_policy_errors")
+    )
+    params = baseline_audit.get("baseline_policy_params")
+    if not isinstance(params, Mapping):
+        return dict(_DEFAULT_BASELINE_POLICY_PARAMS)
+    return dict(params)
+
+
+def _apply_main_search_strategy_search_policy(
+    search_policy: dict[str, Any],
+    *,
+    main_search_strategy: dict[str, Any],
+) -> None:
+    if not _main_search_strategy_active(main_search_strategy):
+        return
+    search_policy["baseline_time_fraction"] = main_search_strategy[
+        "main_search_baseline_time_fraction"
+    ]
+    search_policy["operator_round_limit"] = main_search_strategy[
+        "main_search_operator_round_limit"
+    ]
+    search_policy["post_baseline_operators_enabled"] = main_search_strategy[
+        "main_search_post_baseline_operators_enabled"
+    ]
+
+
+def _apply_main_search_strategy_baseline_policy(
+    baseline_policy: dict[str, Any],
+    *,
+    main_search_strategy: dict[str, Any],
+) -> None:
+    if not _main_search_strategy_active(main_search_strategy):
+        return
+    params = dict(main_search_strategy.get("main_search_baseline_params") or {})
+    baseline_policy["baseline_policy_params"] = params
+    baseline_policy["baseline_destroy_ratio"] = list(params["destroy_ratio"])
+    baseline_policy["baseline_segment_length"] = params["segment_length"]
+    baseline_policy["baseline_reaction_factor"] = params["reaction_factor"]
+    baseline_policy["baseline_vns_max_no_improve"] = params["vns_max_no_improve"]
+    baseline_policy["baseline_use_vns"] = params["use_vns"]
+    baseline_policy["baseline_cw_threshold"] = params["cw_threshold"]
+    baseline_policy["baseline_vns_threshold"] = params["vns_threshold"]
+    baseline_policy["baseline_alns_threshold"] = params["alns_threshold"]
+    baseline_policy["baseline_max_destroy_customers"] = params["max_destroy_customers"]
+
+
+def _main_search_strategy_active(main_search_strategy: Mapping[str, Any] | None) -> bool:
+    return bool(
+        main_search_strategy
+        and main_search_strategy.get("main_search_strategy_active")
+    )
+
+
+def _main_search_bool(
+    value: Any,
+    *,
+    field_name: str,
+    default: bool,
+    audit: dict[str, Any],
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    audit["main_search_strategy_errors"] += 1
+    _record_main_search_event(
+        audit,
+        "error",
+        f"{field_name} returned non-bool value {value!r}",
+    )
+    return default
+
+
+def _main_search_float(
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    default: float,
+    field_name: str,
+    audit: dict[str, Any],
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} returned non-numeric value {value!r}",
+        )
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} returned non-finite value {value!r}",
+        )
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _main_search_int(
+    value: Any,
+    *,
+    minimum: int,
+    maximum: int,
+    default: int,
+    field_name: str,
+    audit: dict[str, Any],
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} returned non-integer value {value!r}",
+        )
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _main_search_string_sequence(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: list[str],
+    max_items: int,
+    field_name: str,
+    audit: dict[str, Any],
+    allow_empty: bool = False,
+) -> list[str]:
+    if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} returned non-sequence value {value!r}",
+        )
+        return list(default)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = str(item).strip()
+        if text not in allowed:
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                f"{field_name} contains unknown value {text!r}",
+            )
+            continue
+        if text not in seen:
+            seen.add(text)
+            normalized.append(text)
+        if len(normalized) >= max_items:
+            break
+    if not normalized and not allow_empty:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"{field_name} produced no valid values",
+        )
+        return list(default)
+    return normalized
+
+
+def _record_main_search_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("main_search_strategy_events", [])
+    if len(events) >= 10:
+        return
+    events.append(
+        {
+            "policy": _MAIN_SEARCH_STRATEGY_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
 
 
 def _load_algorithm_blueprint(
@@ -1812,6 +2585,321 @@ def _construct_with_algorithm_blueprint(
     return best_solution, construction_audit
 
 
+def _construct_with_main_search_strategy(
+    *,
+    instance: CvrpInstance,
+    rng: random.Random,
+    construction_audit: dict[str, Any],
+    main_search_strategy: dict[str, Any],
+) -> tuple[CvrpSolution, dict[str, Any]]:
+    start_ns = time.monotonic_ns()
+    methods = [
+        method
+        for method in main_search_strategy.get("main_search_construction_methods", [])
+        if method in _ALLOWED_CONSTRUCTION_MODES
+    ]
+    if not methods:
+        methods = [_DEFAULT_CONSTRUCTION_MODE]
+    keep_top_k = max(
+        1,
+        min(
+            _as_nonnegative_int(
+                main_search_strategy.get("main_search_construction_keep_top_k", 1)
+            ),
+            len(methods),
+        ),
+    )
+    bias = float(
+        main_search_strategy.get(
+            "main_search_construction_bias",
+            _DEFAULT_CONSTRUCTION_BIAS,
+        )
+    )
+
+    adapter = CvrpAdapter(object())  # type: ignore[arg-type]
+    candidates: list[tuple[dict[str, int | float], CvrpSolution, str]] = []
+    tried: list[str] = []
+    for method in methods:
+        tried.append(method)
+        try:
+            candidate = solve(
+                instance,
+                rng,
+                construction_mode=method,
+                construction_bias=bias,
+            )
+        except Exception as exc:
+            construction_audit["construction_errors"] = (
+                _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+            )
+            _record_construction_event(
+                construction_audit,
+                "error",
+                f"main search construction failed for mode={method!r}: {exc}",
+            )
+            continue
+        valid, reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            construction_audit["construction_errors"] = (
+                _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+            )
+            _record_construction_event(
+                construction_audit,
+                "error",
+                f"main search construction infeasible for mode={method!r}: {reason}",
+            )
+            continue
+        candidates.append((_objective_for_solution(adapter, instance, candidate), candidate, method))
+
+    first_objective = candidates[0][0] if candidates else None
+    if not candidates:
+        construction_audit["construction_errors"] = (
+            _as_nonnegative_int(construction_audit["construction_errors"]) + 1
+        )
+        _record_construction_event(
+            construction_audit,
+            "error",
+            "main search construction ensemble produced no valid solution",
+        )
+        best_solution = solve(instance, rng)
+        best_objective = _objective_for_solution(adapter, instance, best_solution)
+        best_method = _DEFAULT_CONSTRUCTION_MODE
+    else:
+        candidates.sort(
+            key=lambda item: (
+                float(item[0].get("fleet_violation", 0)),
+                float(item[0].get("total_distance", 0.0)),
+            )
+        )
+        kept = candidates[:keep_top_k]
+        best_objective, best_solution, best_method = kept[0]
+
+    construction_audit["construction_elapsed_ms"] = int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
+    construction_audit["construction_mode"] = best_method
+    construction_audit["construction_routes"] = len(best_solution.routes)
+    construction_audit["construction_distance"] = sum(
+        instance.route_distance(route) for route in best_solution.routes
+    )
+    construction_audit["construction_feasible"] = True
+    construction_audit["main_search_construction_methods_tried"] = tried
+    _append_main_search_phase(main_search_strategy, "construction")
+    _set_main_search_phase_runtime(main_search_strategy, "construction", start_ns)
+    if first_objective is not None:
+        main_search_strategy.setdefault("main_search_objective_delta_by_phase", {})[
+            "construction"
+        ] = _objective_distance_delta(first_objective, best_objective)
+    return best_solution, construction_audit
+
+
+def improve_with_main_search_strategy(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    rng: random.Random,
+    time_limit_sec: float,
+    start_time: float,
+    main_search_strategy: dict[str, Any] | None = None,
+) -> tuple[CvrpSolution, dict[str, Any]]:
+    if not _main_search_strategy_active(main_search_strategy):
+        return solution, {}
+
+    assert main_search_strategy is not None
+    audit = dict(main_search_strategy)
+    _append_main_search_phase(audit, "baseline")
+    audit.setdefault("main_search_phase_runtime_ms", {}).setdefault("baseline", 0)
+
+    components = [
+        component
+        for component in audit.get("main_search_components", [])
+        if component in _ALLOWED_MAIN_SEARCH_COMPONENTS
+    ]
+    rounds = _as_nonnegative_int(audit.get("main_search_rounds", 0))
+    top_k = _as_nonnegative_int(audit.get("main_search_top_k", 16))
+    min_distance_improvement = float(
+        audit.get("main_search_acceptance_min_distance_improvement", 0.0)
+    )
+    if not components or rounds <= 0 or top_k <= 0:
+        audit["main_search_stop_reason"] = "improvement_loop_disabled"
+        return solution, audit
+
+    phase_start_ns = time.monotonic_ns()
+    initial_objective = _objective_for_solution(adapter, instance, solution)
+    best_solution = solution
+    best_objective = dict(initial_objective)
+    current = solution
+    current_objective = dict(initial_objective)
+    no_improvement_rounds = 0
+    stop_reason = "max_main_search_rounds"
+
+    _append_main_search_phase(audit, "improvement_loop")
+    for round_index in range(rounds):
+        if _time_exhausted(start_time, time_limit_sec):
+            stop_reason = "time_limit"
+            break
+        audit["main_search_rounds"] = round_index + 1
+        round_accepted = 0
+        for component in components:
+            if _time_exhausted(start_time, time_limit_sec):
+                stop_reason = "time_limit"
+                break
+            component_start_ns = time.monotonic_ns()
+            candidate, attempts = _main_search_component_candidate(
+                component,
+                current,
+                instance,
+                adapter=adapter,
+                current_objective=current_objective,
+                top_k=top_k,
+            )
+            _record_main_search_component_attempts(audit, component, attempts)
+            _record_main_search_component_runtime(audit, component, component_start_ns)
+            if candidate is None:
+                continue
+            candidate_objective = _objective_for_solution(adapter, instance, candidate)
+            if not _main_search_accepts(
+                candidate_objective,
+                current_objective,
+                min_distance_improvement=min_distance_improvement,
+            ):
+                continue
+            valid, reason = _solution_is_valid(adapter, instance, candidate)
+            if not valid:
+                audit["main_search_strategy_errors"] = (
+                    _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
+                )
+                _record_main_search_event(
+                    audit,
+                    "error",
+                    f"{component} produced invalid solution: {reason}",
+                )
+                stop_reason = "invalid_component_output"
+                break
+            current = candidate
+            current_objective = candidate_objective
+            _record_main_search_component_accepted(audit, component)
+            round_accepted += 1
+            if _lexicographic_improves(current_objective, best_objective):
+                best_solution = current
+                best_objective = dict(current_objective)
+        if stop_reason in {"time_limit", "invalid_component_output"}:
+            break
+        if round_accepted > 0:
+            no_improvement_rounds = 0
+            continue
+        no_improvement_rounds += 1
+        stagnation_limit = _as_nonnegative_int(
+            audit.get("main_search_restart_stagnation_rounds", 0)
+        )
+        restart_limit = _main_search_plan_int(audit, "restart", "max_restarts")
+        perturb_limit = _main_search_plan_int(audit, "perturbation", "max_perturbations")
+        if (
+            bool(audit.get("main_search_perturbation_enabled"))
+            and _as_nonnegative_int(audit.get("main_search_perturbation_count")) < perturb_limit
+        ):
+            perturbed = _perturb_solution(
+                best_solution,
+                instance,
+                rng=rng,
+                strength=_as_nonnegative_int(
+                    audit.get("main_search_perturbation_strength", 1)
+                ),
+            )
+            if perturbed is not None:
+                valid, reason = _solution_is_valid(adapter, instance, perturbed)
+                if valid:
+                    current = perturbed
+                    current_objective = _objective_for_solution(adapter, instance, current)
+                    audit["main_search_perturbation_count"] = (
+                        _as_nonnegative_int(audit.get("main_search_perturbation_count")) + 1
+                    )
+                    _append_main_search_phase(audit, "perturbation")
+                    continue
+                audit["main_search_strategy_errors"] = (
+                    _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
+                )
+                _record_main_search_event(
+                    audit,
+                    "error",
+                    f"perturbation produced invalid solution: {reason}",
+                )
+                stop_reason = "invalid_perturbation"
+                break
+        if (
+            bool(audit.get("main_search_restart_enabled"))
+            and stagnation_limit
+            and no_improvement_rounds >= stagnation_limit
+            and _as_nonnegative_int(audit.get("main_search_restart_count")) < restart_limit
+        ):
+            audit["main_search_restart_count"] = (
+                _as_nonnegative_int(audit.get("main_search_restart_count")) + 1
+            )
+            current = best_solution
+            current_objective = dict(best_objective)
+            _append_main_search_phase(audit, "restart")
+            no_improvement_rounds = 0
+            continue
+        stop_reason = "no_main_search_improvement"
+        break
+
+    _set_main_search_phase_runtime(audit, "improvement_loop", phase_start_ns)
+    audit.setdefault("main_search_objective_delta_by_phase", {})[
+        "improvement_loop"
+    ] = _objective_distance_delta(initial_objective, best_objective)
+    audit["main_search_elapsed_ms"] = sum(
+        _as_nonnegative_int(value)
+        for value in audit.get("main_search_phase_runtime_ms", {}).values()
+    )
+    audit["main_search_stop_reason"] = stop_reason
+    return best_solution, audit
+
+
+def _main_search_component_candidate(
+    component: str,
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int]:
+    if component == "intra_route_2opt":
+        return _best_intra_route_2opt(
+            solution,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=top_k,
+        )
+    if component == "inter_route_relocate":
+        return _best_inter_route_relocate(
+            solution,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=top_k,
+        )
+    if component == "route_pair_swap":
+        return _best_route_pair_swap(
+            solution,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=top_k,
+        )
+    if component == "bounded_destroy_repair":
+        return _best_bounded_destroy_repair(
+            solution,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=top_k,
+        )
+    return None, 0
+
+
 def improve_with_algorithm_blueprint(
     solution: CvrpSolution,
     instance: CvrpInstance,
@@ -1991,6 +3079,220 @@ def _best_inter_route_relocate(
                         best_solution = candidate
                         best_objective = objective
     return best_solution, attempts
+
+
+def _best_route_pair_swap(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int]:
+    routes = [list(route) for route in solution.routes]
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    attempts = 0
+    for left_index, left_route in enumerate(routes):
+        for right_index in range(left_index + 1, len(routes)):
+            right_route = routes[right_index]
+            for left_pos, _left_customer in enumerate(left_route):
+                for right_pos, _right_customer in enumerate(right_route):
+                    if attempts >= top_k:
+                        return best_solution, attempts
+                    attempts += 1
+                    candidate_routes = [list(item) for item in routes]
+                    (
+                        candidate_routes[left_index][left_pos],
+                        candidate_routes[right_index][right_pos],
+                    ) = (
+                        candidate_routes[right_index][right_pos],
+                        candidate_routes[left_index][left_pos],
+                    )
+                    if (
+                        instance.route_load(tuple(candidate_routes[left_index]))
+                        > instance.capacity
+                        or instance.route_load(tuple(candidate_routes[right_index]))
+                        > instance.capacity
+                    ):
+                        continue
+                    candidate = CvrpSolution(
+                        routes=tuple(tuple(route) for route in candidate_routes if route)
+                    )
+                    valid, _reason = _solution_is_valid(adapter, instance, candidate)
+                    if not valid:
+                        continue
+                    objective = _objective_for_solution(adapter, instance, candidate)
+                    if _lexicographic_improves(objective, best_objective):
+                        best_solution = candidate
+                        best_objective = objective
+    return best_solution, attempts
+
+
+def _best_bounded_destroy_repair(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int]:
+    routes = [list(route) for route in solution.routes]
+    removable: list[tuple[float, int, int, int]] = []
+    for route_index, route in enumerate(routes):
+        for pos, customer in enumerate(route):
+            prev_node = instance.depot if pos == 0 else route[pos - 1]
+            next_node = instance.depot if pos == len(route) - 1 else route[pos + 1]
+            saving = (
+                instance.distance(prev_node, customer)
+                + instance.distance(customer, next_node)
+                - instance.distance(prev_node, next_node)
+            )
+            removable.append((float(saving), route_index, pos, customer))
+    removable.sort(key=lambda item: (-item[0], item[3]))
+
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    attempts = 0
+    for _saving, remove_route_index, remove_pos, customer in removable[: max(1, min(4, top_k))]:
+        base_routes = [list(route) for route in routes]
+        removed = base_routes[remove_route_index].pop(remove_pos)
+        if removed != customer:
+            continue
+        for dest_index in range(len(base_routes)):
+            for insert_pos in range(len(base_routes[dest_index]) + 1):
+                if attempts >= top_k:
+                    return best_solution, attempts
+                attempts += 1
+                candidate_routes = [list(route) for route in base_routes]
+                candidate_routes[dest_index].insert(insert_pos, customer)
+                if instance.route_load(tuple(candidate_routes[dest_index])) > instance.capacity:
+                    continue
+                candidate = CvrpSolution(
+                    routes=tuple(tuple(route) for route in candidate_routes if route)
+                )
+                valid, _reason = _solution_is_valid(adapter, instance, candidate)
+                if not valid:
+                    continue
+                objective = _objective_for_solution(adapter, instance, candidate)
+                if _lexicographic_improves(objective, best_objective):
+                    best_solution = candidate
+                    best_objective = objective
+    return best_solution, attempts
+
+
+def _main_search_accepts(
+    candidate: Mapping[str, int | float],
+    current: Mapping[str, int | float],
+    *,
+    min_distance_improvement: float,
+) -> bool:
+    candidate_fleet = float(candidate.get("fleet_violation", 0))
+    current_fleet = float(current.get("fleet_violation", 0))
+    if candidate_fleet < current_fleet:
+        return True
+    if candidate_fleet > current_fleet:
+        return False
+    candidate_distance = float(candidate.get("total_distance", 0.0))
+    current_distance = float(current.get("total_distance", 0.0))
+    threshold = max(_OBJECTIVE_TOLERANCE, float(min_distance_improvement))
+    return candidate_distance < current_distance - threshold
+
+
+def _main_search_plan_int(
+    audit: Mapping[str, Any],
+    section_name: str,
+    field_name: str,
+) -> int:
+    plan = audit.get("main_search_plan")
+    if not isinstance(plan, Mapping):
+        return 0
+    section = plan.get(section_name)
+    if not isinstance(section, Mapping):
+        return 0
+    return _as_nonnegative_int(section.get(field_name))
+
+
+def _perturb_solution(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    rng: random.Random,
+    strength: int,
+) -> CvrpSolution | None:
+    routes = [list(route) for route in solution.routes]
+    for _ in range(max(1, strength)):
+        candidates = [
+            index for index, route in enumerate(routes)
+            if len(route) >= 2
+        ]
+        if not candidates:
+            return None
+        route_index = rng.choice(candidates)
+        route = routes[route_index]
+        left = rng.randrange(len(route))
+        right = rng.randrange(len(route))
+        if left == right:
+            continue
+        route[left], route[right] = route[right], route[left]
+    candidate = CvrpSolution(routes=tuple(tuple(route) for route in routes if route))
+    if all(instance.route_load(route) <= instance.capacity for route in candidate.routes):
+        return candidate
+    return None
+
+
+def _record_main_search_component_attempts(
+    audit: dict[str, Any],
+    component: str,
+    attempts: int,
+) -> None:
+    component_attempts = audit.setdefault("main_search_component_attempts", {})
+    component_attempts[component] = (
+        _as_nonnegative_int(component_attempts.get(component)) + attempts
+    )
+
+
+def _record_main_search_component_accepted(
+    audit: dict[str, Any],
+    component: str,
+) -> None:
+    component_accepted = audit.setdefault("main_search_component_accepted", {})
+    component_accepted[component] = (
+        _as_nonnegative_int(component_accepted.get(component)) + 1
+    )
+
+
+def _record_main_search_component_runtime(
+    audit: dict[str, Any],
+    component: str,
+    start_ns: int,
+) -> None:
+    runtime = audit.setdefault("main_search_component_runtime_ms", {})
+    runtime[component] = _as_nonnegative_int(runtime.get(component)) + int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
+
+
+def _append_main_search_phase(audit: dict[str, Any], phase: str) -> None:
+    phases = audit.setdefault("main_search_phases", [])
+    if not isinstance(phases, list):
+        phases = []
+        audit["main_search_phases"] = phases
+    if phases == ["inactive"] or phases == ["plan_invalid"]:
+        phases.clear()
+    if phase not in phases:
+        phases.append(phase)
+
+
+def _set_main_search_phase_runtime(
+    audit: dict[str, Any],
+    phase: str,
+    start_ns: int,
+) -> None:
+    runtime = audit.setdefault("main_search_phase_runtime_ms", {})
+    runtime[phase] = _as_nonnegative_int(runtime.get(phase)) + int(
+        (time.monotonic_ns() - start_ns) / 1_000_000
+    )
 
 
 def _record_algorithm_component_runtime(

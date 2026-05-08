@@ -6,7 +6,7 @@ Sources read: CVRP code/config under `scion/scion/problems/cvrp/` excluding raw 
 
 ## Package Role
 
-`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search/construction/portfolio/algorithm-blueprint policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
+`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search/construction/portfolio/main-search/algorithm-blueprint policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
 
 Framework core should treat this package through `ProblemSpecV1`, `ProblemAdapter`, `Runner`, and objective metric specs.
 
@@ -52,39 +52,54 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
+3. Load `policies/main_search_strategy.py`,
+   `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
    `policies/baseline_policy.py`, and `policies/construction_policy.py` from
    the workspace when present, validating returns and recording runtime audit
    fields.
-4. If `algorithm_blueprint` returns an enabled valid plan, let it coordinate
+4. If `main_search_strategy` returns an enabled valid plan, let it take over
+   the whole CVRP main-search lifecycle: construction ensemble, repo-local
+   baseline budget and sanitized baseline params, package-owned improvement
+   loop, bounded acceptance/restart/perturbation knobs, and optional
+   post-baseline registry-operator scheduling. Invalid enabled plans record
+   `main_search_strategy_errors` and do not take over.
+5. If no main-search strategy is active and `algorithm_blueprint` returns an
+   enabled valid plan, let it coordinate
    bounded construction ensemble, baseline time fraction, package-owned local
    search, restart knobs, and post-baseline registry-operator toggle/round
    limit. Invalid enabled plans record `algorithm_blueprint_errors` and do not
    take over.
-5. Build a construction solution through either the bounded construction
-   surface or the algorithm-blueprint construction ensemble, and use it as the
-   JSON/synthetic fallback or required-baseline fallback.
-6. Build baseline solution:
+6. Build a construction solution through either the bounded construction
+   surface, the main-search construction ensemble, or the algorithm-blueprint
+   construction ensemble, and use it as the JSON/synthetic fallback or
+   required-baseline fallback.
+7. Build baseline solution:
    - real `.vrp` formal runs can use repo-local `vrp/src` ALNS+VNS baseline when data root env is configured;
    - `baseline_policy` passes sanitized bounded ALNS+VNS kwargs into the
      repo-local baseline;
+   - active `main_search_strategy` baseline params reuse the same sanitization
+     path before passing kwargs into the repo-local baseline;
    - smoke/synthetic/JSON paths use deterministic nearest-neighbor fallback.
-7. Run the algorithm-blueprint local-search phase, when active, after baseline
+8. Run the main-search improvement loop, when active, after baseline and before
+   registry operators. The solver owns bounded primitives:
+   `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
+   `bounded_destroy_repair`.
+9. Run the algorithm-blueprint local-search phase, when active, after baseline
    and before registry operators. The solver owns the bounded primitives:
    `intra_route_2opt` and `inter_route_relocate`.
-8. Load registry operators from workspace `registry.yaml`.
-9. Load `policies/neighborhood_portfolio.py` from the workspace when present,
+10. Load registry operators from workspace `registry.yaml`.
+11. Load `policies/neighborhood_portfolio.py` from the workspace when present,
    validating returns and recording runtime audit fields.
-10. Apply the portfolio surface to filter/sort bounded registry component
+12. Apply the portfolio surface to filter/sort bounded registry component
    families and enforce top-k, round, total-attempt, and per-component attempt
    limits.
-11. Apply operators in portfolio-adjusted weight order inside a bounded
+13. Apply operators in portfolio-adjusted weight order inside a bounded
    post-baseline loop.
-12. Accept an operator output only if it is valid, feasible, and lexicographically improves current objective.
-13. Write JSON output with routes, feasible flag, objective, and runtime audit fields.
+14. Accept an operator output only if it is valid, feasible, and lexicographically improves current objective.
+15. Write JSON output with routes, feasible flag, objective, and runtime audit fields.
 
 The solver treats exceptions, invalid outputs, infeasible outputs, invalid
-policy/baseline-policy/portfolio/algorithm-blueprint returns, and
+policy/baseline-policy/portfolio/main-search/algorithm-blueprint returns, and
 required-baseline failures as runtime audit failures. These are later promoted
 to verification/evidence failures by `scion/scion/runtime/audit.py`.
 
@@ -112,12 +127,30 @@ The solver validates/clamps numeric policy returns and records policy errors as 
 
 The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
 for `search_policy`, `baseline_policy`, `construction_policy`,
-`neighborhood_portfolio`, and `algorithm_blueprint` explicitly direct generated code to use
+`neighborhood_portfolio`, `main_search_strategy`, and `algorithm_blueprint` explicitly direct generated code to use
 `instance.customer_ids`,
 `instance.customer_count`, `instance.demands[customer_id]`,
 `instance.capacity`, and `instance.distance(i, j)`, and to avoid
 `instance.customers`. Adapter preview and runtime audit still fail reached uses
 of the nonexistent `instance.customers` attribute.
+
+`policies/main_search_strategy.py` is the current singleton whole-algorithm
+CVRP research surface. Required function:
+
+- `main_search_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive (`enabled=False`) and disables
+post-baseline registry operators for this surface. A valid enabled plan can
+only select bounded package-owned knobs and components: construction methods,
+repo-local baseline time fraction and sanitized baseline params, improvement
+components `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
+`bounded_destroy_repair`, strict-improvement acceptance threshold, restart
+stagnation/max-restart controls, bounded perturbation controls, and optional
+post-baseline registry-operator toggle/round limit. Unknown keys, missing
+required keys for enabled plans, invalid baseline params, bad types,
+non-finite values, unknown components, and out-of-range values increment
+`main_search_strategy_errors`; invalid enabled plans do not take over the
+solver lifecycle and selected-surface runtime audit fails closed.
 
 `policies/baseline_policy.py` is a singleton policy research surface. Required
 function:
@@ -187,7 +220,7 @@ invalid enabled plans do not take over the solver lifecycle.
 - operator interface signature: `execute(self, solution, instance, rng) -> CvrpSolution`;
 - research surfaces: `route_local`, `route_pair`, `ruin_recreate`,
   `search_policy`, `baseline_policy`, `construction_policy`,
-  `neighborhood_portfolio`, `algorithm_blueprint`;
+  `neighborhood_portfolio`, `algorithm_blueprint`, `main_search_strategy`;
 - objective policy: lexicographic;
 - objectives: `fleet_violation` priority 1, `total_distance` priority 2;
 - family taxonomy and aliases;
@@ -226,7 +259,8 @@ These helpers feed final evidence refs and readiness summaries but do not make c
 ## Runtime Audit Fields
 
 CVRP solver runtime output includes baseline, baseline-policy, construction,
-operator, portfolio, policy, and algorithm-blueprint audit fields.
+operator, portfolio, policy, main-search-strategy, and algorithm-blueprint
+audit fields.
 `runtime/audit.py`
 interprets:
 
@@ -256,5 +290,16 @@ runtime, and stop reason. Selected-surface audit fails closed when
 When `algorithm_blueprint` is the selected surface, `ExperimentProtocol`
 preserves these required `algorithm_*` fields in candidate-side pair metrics
 and campaign summaries through the generic selected-surface runtime summary.
+
+The `main_search_strategy` surface declares required runtime fields covering
+load/active/error status, normalized plan, phases executed, construction
+methods, baseline fraction and params, post-baseline registry toggle/limit,
+improvement components, rounds/top-k, component attempts/accepted/runtime,
+acceptance threshold, restart/perturbation knobs and counts, phase objective
+deltas, phase runtime, elapsed runtime, and stop reason. Selected-surface
+audit fails closed when `main_search_strategy_errors` is positive or these
+fields are missing/empty. When `main_search_strategy` is the selected surface,
+`ExperimentProtocol` preserves these required `main_search_*` fields through
+the generic selected-surface runtime summary.
 
 `ExperimentProtocol`, `VerificationGate`, and final evidence builders treat these as failed evidence rather than objective ties.

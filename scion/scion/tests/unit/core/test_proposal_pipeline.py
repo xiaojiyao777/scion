@@ -166,6 +166,7 @@ def _pipeline(
     lineage_registry=None,
     branch_workspace: str = "/tmp/branch",
     forced_locus: str | None = "local_search",
+    persistent_forced_locus: str | None = None,
     forced_surface_action: str | None = None,
     forced_surface_target_file: str | None = None,
     forced_surface_diagnostic: bool = False,
@@ -210,6 +211,7 @@ def _pipeline(
         campaign_id="camp-1",
         problem_id="toy",
         problem_spec_hash="spec-hash",
+        persistent_forced_locus=persistent_forced_locus,
         forced_surface_action=forced_surface_action,
         forced_surface_target_file=forced_surface_target_file,
         forced_surface_diagnostic=forced_surface_diagnostic,
@@ -260,6 +262,49 @@ def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> Non
     assert pipeline.forced_surface_action is None
     assert pipeline.forced_surface_target_file is None
     assert pipeline.forced_surface_diagnostic is False
+
+
+def test_generate_hypothesis_keeps_launch_forced_surface_across_rounds() -> None:
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        forced_locus=None,
+        persistent_forced_locus="algorithm_blueprint",
+        forced_surface_action="modify",
+        forced_surface_target_file="policies/algorithm_blueprint.py",
+        forced_surface_diagnostic=True,
+    )
+
+    first_hypothesis, first_record = pipeline.generate_hypothesis(branch)
+
+    assert first_hypothesis is not None
+    assert first_record is not None
+    assert runtime.hypothesis_kwargs["forced_locus"] == "algorithm_blueprint"
+    assert runtime.hypothesis_kwargs["forced_action"] == "modify"
+    assert (
+        runtime.hypothesis_kwargs["forced_target_file"]
+        == "policies/algorithm_blueprint.py"
+    )
+    assert runtime.hypothesis_kwargs["forced_surface_diagnostic"] is True
+
+    next_branch = _branch("round-2")
+    second_hypothesis, second_record = pipeline.generate_hypothesis(next_branch)
+
+    assert second_hypothesis is not None
+    assert second_record is not None
+    assert second_record.branch_id == "round-2"
+    assert runtime.hypothesis_kwargs["forced_locus"] == "algorithm_blueprint"
+    assert runtime.hypothesis_kwargs["forced_action"] == "modify"
+    assert (
+        runtime.hypothesis_kwargs["forced_target_file"]
+        == "policies/algorithm_blueprint.py"
+    )
+    assert runtime.hypothesis_kwargs["forced_surface_diagnostic"] is True
+    assert pipeline.persistent_forced_locus == "algorithm_blueprint"
+    assert pipeline.forced_surface_action == "modify"
+    assert (
+        pipeline.forced_surface_target_file
+        == "policies/algorithm_blueprint.py"
+    )
+    assert pipeline.forced_surface_diagnostic is True
 
 
 def test_generate_code_failure_routes_proposal_failure() -> None:

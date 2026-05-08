@@ -89,6 +89,7 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
+        "main_search_strategy",
     ]
     assert [surface.name for surface in legacy.research_surfaces] == [
         "route_local",
@@ -99,6 +100,7 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
+        "main_search_strategy",
     ]
     assert legacy.family_taxonomy.families == [
         "route_local",
@@ -109,6 +111,7 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
+        "main_search_strategy",
     ]
     assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
     assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]

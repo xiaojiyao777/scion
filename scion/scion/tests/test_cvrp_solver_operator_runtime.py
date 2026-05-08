@@ -895,6 +895,181 @@ def test_invalid_algorithm_blueprint_output_is_runtime_audit_failure(
     assert "unknown_move" in json.dumps(raw["runtime"]["algorithm_blueprint_events"])
 
 
+def test_default_main_search_strategy_policy_matches_contract_gate_interface() -> None:
+    spec = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+    policy_path = CVRP_DIR / "policies" / "main_search_strategy.py"
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=policy_path.read_text(encoding="utf-8"),
+        )
+    )
+
+    c7 = next(check for check in result.checks if check.name == "C7_interface")
+    assert c7.passed, c7.detail
+
+
+def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_inactive(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    surface = next(
+        surface
+        for surface in spec_v1.research_surfaces or []
+        if surface.name == "main_search_strategy"
+    )
+    required_fields = tuple(surface.evidence.required_runtime_fields)
+
+    assert "main_search_strategy_loaded" in required_fields
+    assert "main_search_strategy_errors" in required_fields
+    assert "main_search_component_attempts" in required_fields
+    assert set(required_fields).issubset(runtime)
+    assert runtime["main_search_strategy_loaded"] is True
+    assert runtime["main_search_strategy_active"] is False
+    assert runtime["main_search_plan"]["enabled"] is False
+    assert runtime["main_search_phases"] == ["inactive"]
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="main_search_strategy",
+    )
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "main_search_strategy_active" in issue["failed_runtime_fields"]
+
+
+def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    solver_before = (workspace / "solver.py").read_text(encoding="utf-8")
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {'destroy_ratio': (0.05, 0.20), 'use_vns': False}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 3, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': True, 'stagnation_rounds': 1, 'max_restarts': 1},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert (workspace / "solver.py").read_text(encoding="utf-8") == solver_before
+    assert raw["routes"] == [[1, 2, 3, 5, 4]]
+    assert raw["objective"]["total_distance"] == 12.0
+    assert runtime["main_search_strategy_loaded"] is True
+    assert runtime["main_search_strategy_active"] is True
+    assert runtime["main_search_strategy_errors"] == 0
+    assert runtime["main_search_plan"]["enabled"] is True
+    assert runtime["baseline_time_fraction"] == 0.5
+    assert runtime["baseline_policy_params"]["destroy_ratio"] == [0.05, 0.2]
+    assert runtime["baseline_use_vns"] is False
+    assert runtime["post_baseline_operators_enabled"] is False
+    assert runtime["operator_round_limit"] == 0
+    assert runtime["main_search_components"] == [
+        "bounded_destroy_repair",
+        "intra_route_2opt",
+    ]
+    assert runtime["main_search_component_attempts"]["intra_route_2opt"] > 0
+    assert sum(runtime["main_search_component_accepted"].values()) == 1
+    assert runtime["main_search_restart_enabled"] is True
+    assert runtime["main_search_restart_count"] == 1
+    assert "construction" in runtime["main_search_phases"]
+    assert "baseline" in runtime["main_search_phases"]
+    assert "improvement_loop" in runtime["main_search_phases"]
+    assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 4.0
+    assert runtime["operator_attempts"] == 0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="main_search_strategy",
+        )
+        is None
+    )
+
+
+def test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.8, 'params': {}},",
+                "        'improvement': {'enabled_components': ['unknown_move'], 'rounds': 1, 'top_k': 8},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="main_search_strategy",
+    )
+
+    assert raw["runtime"]["main_search_strategy_errors"] >= 1
+    assert raw["runtime"]["main_search_strategy_active"] is False
+    assert raw["runtime"]["main_search_stop_reason"] == "invalid_plan"
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "main_search_strategy_errors" in issue["detail"]
+    assert "unknown_move" in json.dumps(raw["runtime"]["main_search_strategy_events"])
+
+
 def test_policy_surfaces_accept_safe_cvrp_instance_api_without_runtime_errors(
     tmp_path: Path,
 ) -> None:

@@ -16,13 +16,16 @@ Inputs come from campaign services: current branch, champion snapshot, active/bl
 
 LLM failures are routed as proposal failures. `LLMBalanceError` marks balance exhausted; retry exhaustion, format errors, timeout, and schema validation errors increment circuit breaker state and call the campaign failure handler. Successful hypothesis generation creates a `HypothesisRecord` with classifier-derived family metadata.
 
-The same forced-locus path is also used by the CLI diagnostic
-`--force-surface` hook. CLI/campaign startup validates the requested surface
-against declared research surfaces, derives action/target only from generic
-surface metadata, and fails closed before campaign launch for unknown surfaces.
-For a singleton concrete target such as a config surface, the proposal context
-can therefore receive `action=modify` and the exact declared `target_file`
-without hardcoding CVRP or `algorithm_blueprint` in framework core. This is an
+The transient forced-locus path is used for one-shot governance
+diversification. The CLI diagnostic `--force-surface` hook uses a separate
+persistent proposal-pipeline constraint: CLI/campaign startup validates the
+requested surface against declared research surfaces, derives action/target
+only from generic surface metadata, and fails closed before campaign launch for
+unknown surfaces. Every subsequent hypothesis-generation proposal in that
+campaign receives the same forced surface/action/target context. For a
+singleton concrete target such as a config surface, the proposal context can
+therefore receive `action=modify` and the exact declared `target_file` without
+hardcoding CVRP or `algorithm_blueprint` in framework core. This is an
 experiment-control hook for smoke coverage, not a Decision input and not
 solver-quality evidence.
 
@@ -101,6 +104,9 @@ Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,
 discovered functions/classes, checks, and compact problem-preview issues.
+Problem-owned preview hooks run only after the full ContractGate patch result
+passes, not merely after interface-shape checks, so tainted policy/config code
+with forbidden APIs is not imported or executed during preview.
 
 ## ContextManager Inputs
 
@@ -124,9 +130,9 @@ Hypothesis context includes:
 - runtime feedback from verification/screening facts;
 - search memory and research log;
 - saturation/weight optimization feedback;
-- forced locus constraint when governance requests diversification or a
-  diagnostic `--force-surface` run steers the next hypothesis to a declared
-  research surface.
+- forced locus constraint when governance requests one-shot diversification or
+  a diagnostic `--force-surface` run steers every hypothesis-generation
+  proposal to a declared research surface.
 
 Code and fix contexts deliberately exclude experiment history and protocol stats. They are implementation contexts, not research decision contexts.
 
@@ -169,8 +175,8 @@ This means algorithm design space expansion should start in problem package `pro
 
 `--force-surface` is intentionally limited to this declared-surface model. It
 does not create new loci, does not bypass `ContractGate`, and does not feed
-`DecisionFeatures`; it only constrains one hypothesis-generation prompt for
-diagnostic and forced algorithm-blueprint smoke runs.
+`DecisionFeatures`; it constrains each hypothesis-generation prompt in the
+campaign for diagnostic and forced surface smoke runs.
 
 ## Search Memory and Taxonomy
 

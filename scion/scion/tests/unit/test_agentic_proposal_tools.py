@@ -1319,6 +1319,37 @@ def test_cvrp_search_and_portfolio_preview_fail_bad_limits_and_components(
     assert "top_k" in rendered
 
 
+def test_cvrp_interface_preview_skips_problem_preview_after_contract_failure(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.interface_preview",
+        {
+            "file_path": "policies/search_policy.py",
+            "action": "modify",
+            "code_content": (
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return open('/definitely/not/present/scion_secret.json').read()\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 20\n\n"
+                "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                "    return True\n"
+            ),
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered_checks = json.dumps(payload["checks"])
+    assert payload["passed"] is False
+    assert payload["problem_preview"] is None
+    assert "C9_sensitive_api" in rendered_checks
+    assert "open" in rendered_checks
+
+
 def test_cvrp_contract_preview_records_problem_preview_failure_without_raw_refs(
     tmp_path: Path,
 ) -> None:

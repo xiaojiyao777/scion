@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-08*
 
 This is the first document an agent or developer should read before working on
 Scion. It explains what the project is, where the current truth lives, what is
@@ -27,20 +27,18 @@ enough to continue, validate, freeze, promote, or abandon.
     adapter and algorithm-surface generality.
 - Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
   API guidance has been repaired, APS observation-budget/recovery is fixed
-  enough to unblock proposal work, and the first `algorithm_blueprint`
-  reporting refinement is validated on a fresh five-round Sonnet CVRP formal
-  VRP run. Selected-surface required runtime fields, including CVRP
-  `algorithm_*` fields, are preserved in formal protocol raw metrics and
-  campaign summaries. The bottleneck is now CVRP algorithm-surface efficacy:
-  recent candidates pass Contract, Verification, canary, and runtime audit, but
-  still fail screening with tie/no-op dominated objective evidence. The sharper
-  diagnosis is that several CVRP surfaces were auditable or post-baseline
-  controls, while the repo-local `vrp/src` ALNS+VNS main-search knobs remained
-  mostly unexposed. A bounded problem-owned `baseline_policy` surface now
-  exposes those main-search knobs; the next blocker is validating whether
-  Sonnet can use that surface to produce nontrivial screening quality. Do not
-  run a long solver-quality validation until a focused diagnostic shows more
-  than tie/no-op dominated evidence.
+  enough to unblock proposal work, selected-surface reporting is validated in
+  real formal CVRP artifacts, and the first `baseline_policy` diagnostic has
+  completed. That diagnostic proved the problem-owned surface can be selected,
+  patched, loaded, audited, and screened, with all declared runtime fields
+  present for the evaluated candidate, but it did not produce solver-quality
+  evidence. CVRP now has `main_search_strategy`, a problem-owned
+  whole-algorithm surface in `policies/main_search_strategy.py`. The bottleneck
+  remains CVRP algorithm-surface efficacy. A tightly forced three-round
+  `main_search_strategy` diagnostic has been launched from the current dirty
+  worktree using the `claw` environment; analyze it after `exit.txt` appears.
+  Do not run a long solver-quality validation until that focused diagnostic
+  shows more than tie/no-op dominated objective evidence.
 
 ## Required Reading Order
 
@@ -101,8 +99,8 @@ For experiment analysis:
   fields.
 - CVRP exposes multiple research surfaces:
   `route_local`, `route_pair`, `ruin_recreate`, `search_policy`,
-  `baseline_policy`, `construction_policy`, `neighborhood_portfolio`, and
-  `algorithm_blueprint`.
+  `baseline_policy`, `construction_policy`, `neighborhood_portfolio`,
+  `algorithm_blueprint`, and `main_search_strategy`.
 - `AgenticProposalSession` exists as a bounded Creative Layer path with proposal
   tools, exposure policy, compact session refs, and tainted artifacts.
 - Selected research surface metadata now propagates through Verification,
@@ -159,18 +157,41 @@ Near-term CVRP research-space work:
   `docs/experiments/v0.4/v0.4-blueprint-reporting-sonnet-5r-20260507.md`.
   It validated that selected-surface `algorithm_*` runtime fields survive in
   real formal screening pair metrics and campaign summaries.
+- The baseline-policy Sonnet diagnostic has been analyzed:
+  `/home/clawd/research/scion-experiments/v04-baseline-policy-sonnet-3r-20260507T153355Z`.
+  The analysis is recorded in
+  `docs/experiments/v0.4/v0.4-baseline-policy-sonnet-3r-20260507.md`.
+  It validated `baseline_policy` loading/runtime audit/parameter propagation,
+  but did not show enough screening quality to justify long validation.
+- CVRP now has a problem-owned whole-algorithm `main_search_strategy` surface.
+  It is inactive by default; enabled plans can govern construction ensemble,
+  repo-local baseline budget and sanitized params, package-owned improvement
+  components including route-pair swap and bounded destroy/repair,
+  acceptance/restart/perturbation, and optional post-baseline registry
+  operators. `--force-surface` now persists across proposal rounds for clean
+  diagnostic campaigns.
+- Governance risk repair is complete for this slice: selected-surface
+  `*_active` runtime fields must be truthy, common file-read APIs are blocked
+  by ContractGate, non-operator/singleton surfaces cannot directly probe
+  `instance.name`, and proposal interface preview runs only after full
+  ContractGate success.
+- The forced `main_search_strategy` diagnostic is running:
+  `/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T133838Z`.
+  It was launched with `python=/home/clawd/miniconda3/envs/claw/bin/python`,
+  `force_surface=main_search_strategy`, `rounds=3`, and
+  `worktree_dirty=true`; analyze bounded artifacts only after `exit.txt`
+  appears.
 - Treat APS budget/recovery as unblocked. The budget headroom is low and may
   deserve later compaction, but the next work is not another compactness fix or
   a longer run.
 - Improve CVRP surface efficacy before any long solver-quality validation. The
-  latest run passed Contract, Verification, canary, and runtime audit for all
-  evaluated candidates, but all five candidates failed screening with
-  `SCREENING_FAIL_WIN_RATE`; the `algorithm_blueprint` local-search phase made
-  192 attempts per pair and accepted 0 moves. A bounded problem-owned
-  `baseline_policy` surface now controls real `vrp/src` ALNS+VNS parameters
-  through the CVRP package without adding CVRP logic to Scion core. The next
-  implementation/experiment step is a short forced-surface diagnostic and, if
-  needed, proposal-guidance tuning for that surface.
+  latest baseline-policy diagnostic passed Contract, Verification, canary, and
+  runtime audit for all evaluated candidates, but all candidates still failed
+  screening with `SCREENING_FAIL_WIN_RATE`. The next experiment-analysis step
+  is the running tightly forced `main_search_strategy` diagnostic. Do not spend
+  the next slice on another generated post-baseline operator or a
+  baseline-policy-only run unless the forced whole-algorithm diagnostic has
+  already been completed and analyzed.
 - Add or refine bounded problem-owned surfaces only when the problem package can
   define invocation point, contract, runtime audit fields, and tests.
 - Keep BKS/gap as final reporting evidence, not promotion evidence.

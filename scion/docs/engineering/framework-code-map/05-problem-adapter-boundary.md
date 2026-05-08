@@ -78,8 +78,8 @@ Solver `runtime` output is also the evidence surface for
 `research_surfaces` v2. Problem packages declare required runtime fields on a
 surface with `evidence.required_runtime_fields`; Scion core only checks generic
 presence, empty values, obvious `*_errors` counts, and generic
-`*_loaded`/`*_executed` truthiness. Problem-specific interpretation stays in
-the package's solver, adapter rendering, and evidence docs.
+`*_loaded`/`*_executed`/`*_active` truthiness. Problem-specific interpretation
+stays in the package's solver, adapter rendering, and evidence docs.
 
 Problem packages can use `SCION_*` env vars to resolve external data roots without core naming problem-specific variables.
 
@@ -132,6 +132,12 @@ Known current risk areas:
 - `scion/scion/contract/gate.py` complexity guard now prefers v2 surface
   `bounds.complexity_scale_terms`; route/customer/order/vehicle names remain as
   a legacy-only fallback when surface metadata is absent.
+- `scion/scion/contract/gate.py` also enforces generic research-surface
+  governance before candidate code runs: file-read APIs are forbidden even in
+  read-only mode, and non-operator policy/config/portfolio/construction/
+  acceptance_restart or singleton surfaces cannot access `instance.name` or
+  direct `getattr`/`hasattr` probes for that name. Problem packages should
+  expose safe structural instance APIs instead of case identifiers.
 - Custom protocol stubs or legacy protocols that do not carry problem specs with
   declared research surfaces remain on the compatibility path and do not receive
   automatic selected-surface forwarding from `EvaluationPipeline`.

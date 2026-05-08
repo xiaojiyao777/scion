@@ -32,6 +32,7 @@ from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 from scion.problems.cvrp.solver import (
     _baseline_time_budget,
     _load_construction_policy,
+    _load_main_search_strategy,
     _load_neighborhood_portfolio,
     _load_search_policy,
     improve_with_registry_operators,
@@ -375,6 +376,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
+        "main_search_strategy",
     ]
     assert "policies/*.py" in legacy.search_space.editable
     assert "solver.py" in legacy.search_space.frozen
@@ -410,6 +412,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert no_accepted_guidance.failure_categories == ["no_accepted_moves"]
     assert no_accepted_guidance.applies_to_surface_kinds == ["operator"]
     assert no_accepted_guidance.recommended_surfaces == [
+        "main_search_strategy",
         "algorithm_blueprint",
         "baseline_policy",
         "construction_policy",
@@ -584,6 +587,40 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     )
     assert algorithm_blueprint.novelty is not None
     assert algorithm_blueprint.novelty.signature_fields == [
+        "predicted_direction",
+        "target_objectives",
+    ]
+
+    main_search_strategy = next(
+        surface
+        for surface in spec.research_surfaces or []
+        if surface.name == "main_search_strategy"
+    )
+    assert main_search_strategy.kind == "config"
+    assert main_search_strategy.algorithm is not None
+    assert main_search_strategy.algorithm.role == "whole_algorithm_main_search_strategy"
+    assert main_search_strategy.targets is not None
+    assert main_search_strategy.targets.files == ["policies/main_search_strategy.py"]
+    assert main_search_strategy.targets.singleton is True
+    assert main_search_strategy.targets.create_new_allowed is False
+    assert main_search_strategy.targets.remove_allowed is False
+    assert main_search_strategy.interface is not None
+    assert main_search_strategy.interface.required_functions == ["main_search_plan"]
+    assert main_search_strategy.interface.function_signatures == {
+        "main_search_plan": ["instance", "time_limit_sec"],
+    }
+    assert main_search_strategy.bounds is not None
+    assert "route_pair_swap" in main_search_strategy.bounds.allowed_components
+    assert "bounded_destroy_repair" in main_search_strategy.bounds.allowed_components
+    assert main_search_strategy.evidence is not None
+    assert "main_search_strategy_errors" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
+    assert "main_search_component_attempts" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
+    assert main_search_strategy.novelty is not None
+    assert main_search_strategy.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
     ]
@@ -766,6 +803,241 @@ def test_cvrp_neighborhood_portfolio_contract_targets_and_required_functions() -
     assert c7.passed
 
 
+def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> None:
+    spec = load_problem_spec_v1_from_yaml(
+        Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem-v1.yaml"
+    )
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    create_hypothesis = HypothesisProposal(
+        hypothesis_text="Create a second main-search strategy.",
+        change_locus="main_search_strategy",
+        action="create_new",
+        target_file="policies/other_main_search_strategy.py",
+    )
+    create_result = gate.validate_hypothesis(create_hypothesis, [], [])
+    c3 = next(check for check in create_result.checks if check.name == "C3_action_target")
+    assert not c3.passed
+    assert "not allowed" in c3.detail
+
+    wrong_target = HypothesisProposal(
+        hypothesis_text="Modify main search through an operator file.",
+        change_locus="main_search_strategy",
+        action="modify",
+        target_file="operators/not_strategy.py",
+    )
+    wrong_target_result = gate.validate_hypothesis(wrong_target, [], [])
+    c3 = next(
+        check for check in wrong_target_result.checks if check.name == "C3_action_target"
+    )
+    assert not c3.passed
+    assert "policies/main_search_strategy.py" in c3.detail
+
+    missing_patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content="def helper(instance, time_limit_sec):\n    return {}\n",
+    )
+    missing_result = gate.validate_patch(missing_patch)
+    c7 = next(check for check in missing_result.checks if check.name == "C7_interface")
+    assert not c7.passed
+    assert "missing required functions ['main_search_plan']" in c7.detail
+
+    valid_patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': False,\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+            "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+    valid_result = gate.validate_patch(valid_patch)
+    c7 = next(check for check in valid_result.checks if check.name == "C7_interface")
+    assert c7.passed
+
+
+def _main_search_strategy_code(extra_body: str = "") -> str:
+    return (
+        "def main_search_plan(instance, time_limit_sec):\n"
+        f"{extra_body}"
+        "    return {\n"
+        "        'enabled': False,\n"
+        "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+        "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+        "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
+        "        'acceptance': {'min_distance_improvement': 0.0},\n"
+        "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+        "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+        "        'post_baseline_operators_enabled': False,\n"
+        "        'operator_round_limit': 0,\n"
+        "    }\n"
+    )
+
+
+def test_contract_gate_rejects_main_search_strategy_read_only_open() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=_main_search_strategy_code(
+                "    data = open('/tmp/external_results.json', 'r').read()\n"
+            ),
+        )
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "open" in c9.detail
+    assert not result.passed
+
+
+def test_contract_gate_rejects_main_search_strategy_path_read_text() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=(
+                "from pathlib import Path\n\n"
+                + _main_search_strategy_code(
+                    "    data = Path('/tmp/external_results.json').read_text()\n"
+                )
+            ),
+        )
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "read_text" in c9.detail
+    assert not result.passed
+
+
+def test_contract_gate_rejects_instance_name_on_main_search_strategy() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=_main_search_strategy_code(
+                "    if instance.name == 'X-n101-k25':\n"
+                "        return {'enabled': False}\n"
+            ),
+        )
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert not c9d.passed
+    assert "instance.name" in c9d.detail
+    assert not result.passed
+
+
+def test_contract_gate_rejects_instance_name_on_search_policy() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    if instance.name == 'X-n101-k25':\n"
+                "        return 0.95\n"
+                "    return 0.8\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 20\n\n"
+                "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                "    return True\n"
+            ),
+        )
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert not c9d.passed
+    assert "instance.name" in c9d.detail
+    assert not result.passed
+
+
+def test_contract_gate_rejects_getattr_instance_name_on_search_policy() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.95 if getattr(instance, 'name') == 'X-n101-k25' else 0.8\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 20\n\n"
+                "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                "    return True\n"
+            ),
+        )
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert not c9d.passed
+    assert "getattr(instance, 'name')" in c9d.detail
+    assert not result.passed
+
+
+def test_contract_gate_allows_safe_policy_instance_api() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/search_policy.py",
+            action="modify",
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    scale = min(instance.customer_count, len(instance.customer_ids))\n"
+                "    return 0.8 if scale >= 0 else 0.7\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    first = instance.customer_ids[0]\n"
+                "    demand = instance.demands[first] + instance.demand(first)\n"
+                "    distance = instance.distance(instance.depot, first)\n"
+                "    return 10 if demand + distance + instance.capacity >= 0 else 0\n\n"
+                "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                "    return True\n"
+            ),
+        )
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert c9.passed
+    assert c9d.passed
+    assert result.passed, result.failure_reason
+
+
 def test_cvrp_default_policy_files_match_declared_signatures() -> None:
     root = Path(__file__).resolve().parents[2] / "problems" / "cvrp"
     spec = load_problem_spec_v1_from_yaml(root / "problem-v1.yaml")
@@ -776,6 +1048,7 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
         "policies/baseline_policy.py",
         "policies/construction_policy.py",
         "policies/neighborhood_portfolio.py",
+        "policies/main_search_strategy.py",
     ):
         result = gate.validate_patch(
             PatchProposal(
@@ -1505,6 +1778,96 @@ def test_invalid_cvrp_neighborhood_portfolio_counts_portfolio_errors(
     assert policy["candidate_limits"]["top_k"] == 0
 
 
+def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
+    tmp_path: Path,
+) -> None:
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.2},",
+                "        'baseline': {'time_fraction': 0.6, 'params': {'destroy_ratio': (0.05, 0.25), 'use_vns': False}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 3, 'top_k': 40},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': True, 'stagnation_rounds': 1, 'max_restarts': 1},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    policy = _load_main_search_strategy(
+        workspace_root=tmp_path,
+        instance=_tiny_instance(),
+        time_limit_sec=10.0,
+    )
+
+    assert policy["main_search_strategy_loaded"] is True
+    assert policy["main_search_strategy_active"] is True
+    assert policy["main_search_strategy_errors"] == 0
+    assert policy["main_search_construction_methods"] == [
+        "nearest_neighbor",
+        "sequential",
+    ]
+    assert policy["main_search_baseline_time_fraction"] == 0.6
+    assert policy["main_search_baseline_params"]["destroy_ratio"] == (0.05, 0.25)
+    assert policy["main_search_baseline_params"]["use_vns"] is False
+    assert policy["main_search_components"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert policy["main_search_rounds"] == 3
+    assert policy["main_search_top_k"] == 40
+    assert policy["main_search_post_baseline_operators_enabled"] is False
+
+
+def test_invalid_cvrp_main_search_strategy_counts_strategy_errors(
+    tmp_path: Path,
+) -> None:
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['bad_mode'], 'keep_top_k': 0, 'bias': 2.0},",
+                "        'baseline': {'time_fraction': 2.0, 'params': {'unknown': 1}},",
+                "        'improvement': {'enabled_components': ['unknown_move'], 'rounds': 0, 'top_k': 0},",
+                "        'acceptance': {'min_distance_improvement': 20.0},",
+                "        'restart': {'enabled': 'yes', 'stagnation_rounds': -1, 'max_restarts': 99},",
+                "        'perturbation': {'enabled': False, 'strength': 0, 'max_perturbations': 99},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 99,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    policy = _load_main_search_strategy(
+        workspace_root=tmp_path,
+        instance=_tiny_instance(),
+        time_limit_sec=10.0,
+    )
+
+    assert policy["main_search_strategy_loaded"] is True
+    assert policy["main_search_strategy_active"] is False
+    assert policy["main_search_strategy_errors"] >= 10
+    assert policy["main_search_stop_reason"] == "invalid_plan"
+    assert "unknown_move" in str(policy["main_search_strategy_events"])
+
+
 def test_runtime_audit_fails_when_policy_errors_present() -> None:
     issue = runtime_audit_failure_from_runtime(
         {
@@ -1620,10 +1983,12 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "construction_policy [construction]" in prompt_text
     assert "neighborhood_portfolio [portfolio]" in prompt_text
     assert "algorithm_blueprint [config]" in prompt_text
+    assert "main_search_strategy [config]" in prompt_text
     assert "policies/search_policy.py" in prompt_text
     assert "policies/construction_policy.py" in prompt_text
     assert "policies/neighborhood_portfolio.py" in prompt_text
     assert "policies/algorithm_blueprint.py" in prompt_text
+    assert "policies/main_search_strategy.py" in prompt_text
     assert "algorithm.role: post_baseline_search_scheduling" in prompt_text
     assert (
         "algorithm.invocation_point: "
@@ -1662,6 +2027,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "portfolio_stop_reason" in prompt_text
     assert "algorithm_plan" in prompt_text
     assert "algorithm_blueprint_errors" in prompt_text
+    assert "main_search_strategy_errors" in prompt_text
     assert "algorithm_local_search_components" in prompt_text
     assert "prompt.hypothesis_guidance:" in prompt_text
     assert "prompt.implementation_guidance:" in prompt_text

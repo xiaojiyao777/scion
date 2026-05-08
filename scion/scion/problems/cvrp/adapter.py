@@ -35,6 +35,14 @@ _ALLOWED_BLUEPRINT_LOCAL_SEARCH_COMPONENTS = frozenset(
         "inter_route_relocate",
     }
 )
+_ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
+    {
+        "intra_route_2opt",
+        "inter_route_relocate",
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    }
+)
 _PORTFOLIO_LIMIT_RANGES = {
     "max_rounds": (0, 6),
     "top_k": (0, 32),
@@ -57,6 +65,33 @@ _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
         "local_search",
         "restart",
     }
+)
+_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
+    {
+        "enabled",
+        "construction",
+        "baseline",
+        "improvement",
+        "acceptance",
+        "restart",
+        "perturbation",
+        "post_baseline_operators_enabled",
+        "operator_round_limit",
+    }
+)
+_MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
+    {"methods", "keep_top_k", "bias"}
+)
+_MAIN_SEARCH_BASELINE_REQUIRED_KEYS = frozenset({"time_fraction", "params"})
+_MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS = frozenset(
+    {"enabled_components", "rounds", "top_k"}
+)
+_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS = frozenset({"min_distance_improvement"})
+_MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
+    {"enabled", "stagnation_rounds", "max_restarts"}
+)
+_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS = frozenset(
+    {"enabled", "strength", "max_perturbations"}
 )
 _BASELINE_POLICY_ALLOWED_KEYS = frozenset(
     {
@@ -126,6 +161,15 @@ class CvrpAdapter:
             "construction ensemble, baseline budget, package-owned local "
             "search, restart knobs, and post-baseline registry-operator "
             "toggle/round limit.\n"
+            "- The `main_search_strategy` research surface is the current "
+            "problem-owned whole-algorithm surface. It is inactive by default. "
+            "When enabled with a valid plan, it takes over construction "
+            "ensemble selection, repo-local baseline budget and sanitized "
+            "baseline params, package-owned main improvement components "
+            "including route-pair swap and bounded destroy/repair, bounded "
+            "acceptance/restart/perturbation knobs, and the optional "
+            "post-baseline registry-operator toggle. Registry operators are "
+            "disabled by default for this surface unless explicitly enabled.\n"
             "- The algorithm blueprint can only select package-owned bounded "
             "local-search components (`intra_route_2opt` and "
             "`inter_route_relocate`); it cannot inject route-editing code into "
@@ -248,6 +292,54 @@ class CvrpAdapter:
                 "failures. The solver owns route moves and uses this policy only "
                 "to schedule already-declared bounded components."
             )
+        if surface_name == "main_search_strategy":
+            return (
+                "policies/main_search_strategy.py is a module-level "
+                "whole-algorithm strategy surface; no class is required.\n\n"
+                "Declared signature:\n"
+                "main_search_plan(instance, time_limit_sec)\n\n"
+                "Required function:\n"
+                "def main_search_plan(instance, time_limit_sec):\n"
+                "    return a dict with exactly these top-level keys: enabled, "
+                "construction, baseline, improvement, acceptance, restart, "
+                "perturbation, post_baseline_operators_enabled, and "
+                "operator_round_limit.\n\n"
+                "Plan contract:\n"
+                "- enabled: bool. The default must be False. Only enabled=True "
+                "and a valid plan lets this surface take over the main CVRP "
+                "algorithm lifecycle.\n"
+                "- construction: dict with methods, keep_top_k, and bias. "
+                "methods is drawn from 'nearest_neighbor', "
+                "'nearest_neighbor_demand_bias', 'demand_descending', and "
+                "'sequential'; keep_top_k is an int in [1, 4]; bias is a finite "
+                "number in [0.0, 1.0].\n"
+                "- baseline: dict with time_fraction in [0.2, 0.95] and params "
+                "mapping. params accepts the same sanitized bounded keys as "
+                "baseline_policy.baseline_params.\n"
+                "- improvement: dict with enabled_components, rounds, and top_k. "
+                "enabled_components is drawn from 'intra_route_2opt', "
+                "'inter_route_relocate', 'route_pair_swap', and "
+                "'bounded_destroy_repair'; enabled plans must include at least "
+                "one component, rounds in [1, 8], and top_k in [1, 128].\n"
+                "- acceptance: dict with min_distance_improvement finite number "
+                "in [0.0, 10.0].\n"
+                "- restart: dict with enabled bool, stagnation_rounds int in "
+                "[0, 25], and max_restarts int in [0, 3].\n"
+                "- perturbation: dict with enabled bool, strength int in "
+                "[1, 8], and max_perturbations int in [0, 4].\n"
+                "- post_baseline_operators_enabled: bool. Keep False by default "
+                "for this surface unless the hypothesis explicitly needs "
+                "registry operators after the owned main loop.\n"
+                "- operator_round_limit: int in [0, 20].\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "Unknown keys, missing required keys when enabled=True, "
+                "unknown components, invalid baseline params, non-finite "
+                "numbers, out-of-range values, exceptions, and use of "
+                "instance.customers increment main_search_strategy_errors. The "
+                "solver refuses takeover for invalid plans and selected-surface "
+                "runtime audit fails closed."
+            )
         if surface_name == "algorithm_blueprint":
             return (
                 "policies/algorithm_blueprint.py is a module-level top-level "
@@ -334,6 +426,7 @@ class CvrpAdapter:
             "search_policy",
             "baseline_policy",
             "neighborhood_portfolio",
+            "main_search_strategy",
             "algorithm_blueprint",
         }:
             return {
@@ -375,6 +468,8 @@ class CvrpAdapter:
             _preview_baseline_policy(module, instance, issues, checks)
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
+        elif surface_name == "main_search_strategy":
+            _preview_main_search_strategy(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
             _preview_algorithm_blueprint(module, instance, issues, checks)
         return _policy_preview_result(surface_name, issues, checks)
@@ -544,6 +639,7 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/search_policy.py": "search_policy",
         "policies/baseline_policy.py": "baseline_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
+        "policies/main_search_strategy.py": "main_search_strategy",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
     }.get(normalized, "")
 
@@ -783,6 +879,309 @@ def _preview_neighborhood_portfolio(
                     integral=True,
                     issues=issues,
                 )
+
+
+def _preview_main_search_strategy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(module, "main_search_plan", instance, issues, checks)
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"main_search_plan returned non-mapping value {plan!r}")
+        return
+
+    unknown = sorted(str(key) for key in plan if str(key) not in _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS)
+    if unknown:
+        issues.append(f"main_search_plan returned unknown keys {unknown}")
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(f"main_search_plan enabled returned non-bool value {enabled!r}")
+        enabled = False
+    if enabled:
+        missing = sorted(key for key in _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS if key not in plan)
+        if missing:
+            issues.append(f"enabled main_search_plan missing required keys {missing}")
+
+    construction = _preview_mapping_section("construction", plan.get("construction", {}), issues)
+    if construction is not None:
+        _preview_section_keys(
+            "construction",
+            construction,
+            allowed=_MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        _check_sequence_literals(
+            "construction.methods",
+            construction.get("methods", ["nearest_neighbor"]),
+            allowed=_ALLOWED_CONSTRUCTION_MODES,
+            allow_empty=False,
+            issues=issues,
+        )
+        _check_number(
+            "construction.keep_top_k",
+            construction.get("keep_top_k", 1),
+            minimum=1,
+            maximum=4,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "construction.bias",
+            construction.get("bias", 0.0),
+            minimum=0.0,
+            maximum=1.0,
+            integral=False,
+            issues=issues,
+        )
+
+    baseline = _preview_mapping_section("baseline", plan.get("baseline", {}), issues)
+    if baseline is not None:
+        _preview_section_keys(
+            "baseline",
+            baseline,
+            allowed=_MAIN_SEARCH_BASELINE_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_BASELINE_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        _check_number(
+            "baseline.time_fraction",
+            baseline.get("time_fraction", 0.8),
+            minimum=0.2,
+            maximum=0.95,
+            integral=False,
+            issues=issues,
+        )
+        params = baseline.get("params", {})
+        if not isinstance(params, Mapping):
+            issues.append(f"baseline.params returned non-mapping value {params!r}")
+        else:
+            _preview_baseline_params_mapping(params, issues)
+
+    improvement = _preview_mapping_section("improvement", plan.get("improvement", {}), issues)
+    if improvement is not None:
+        _preview_section_keys(
+            "improvement",
+            improvement,
+            allowed=_MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        components = improvement.get("enabled_components", [])
+        _check_sequence_literals(
+            "improvement.enabled_components",
+            components,
+            allowed=_ALLOWED_MAIN_SEARCH_COMPONENTS,
+            allow_empty=not enabled,
+            issues=issues,
+        )
+        _check_number(
+            "improvement.rounds",
+            improvement.get("rounds", 0),
+            minimum=1 if enabled else 0,
+            maximum=8,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "improvement.top_k",
+            improvement.get("top_k", 16),
+            minimum=1 if enabled else 0,
+            maximum=128,
+            integral=True,
+            issues=issues,
+        )
+
+    acceptance = _preview_mapping_section("acceptance", plan.get("acceptance", {}), issues)
+    if acceptance is not None:
+        _preview_section_keys(
+            "acceptance",
+            acceptance,
+            allowed=_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        _check_number(
+            "acceptance.min_distance_improvement",
+            acceptance.get("min_distance_improvement", 0.0),
+            minimum=0.0,
+            maximum=10.0,
+            integral=False,
+            issues=issues,
+        )
+
+    restart = _preview_mapping_section("restart", plan.get("restart", {}), issues)
+    if restart is not None:
+        _preview_section_keys(
+            "restart",
+            restart,
+            allowed=_MAIN_SEARCH_RESTART_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_RESTART_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        restart_enabled = restart.get("enabled", False)
+        if not isinstance(restart_enabled, bool):
+            issues.append(f"restart.enabled returned non-bool value {restart_enabled!r}")
+        _check_number(
+            "restart.stagnation_rounds",
+            restart.get("stagnation_rounds", 0),
+            minimum=0,
+            maximum=25,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "restart.max_restarts",
+            restart.get("max_restarts", 0),
+            minimum=0,
+            maximum=3,
+            integral=True,
+            issues=issues,
+        )
+
+    perturbation = _preview_mapping_section("perturbation", plan.get("perturbation", {}), issues)
+    if perturbation is not None:
+        _preview_section_keys(
+            "perturbation",
+            perturbation,
+            allowed=_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+            require_missing=enabled,
+            issues=issues,
+        )
+        perturbation_enabled = perturbation.get("enabled", False)
+        if not isinstance(perturbation_enabled, bool):
+            issues.append(
+                f"perturbation.enabled returned non-bool value {perturbation_enabled!r}"
+            )
+        _check_number(
+            "perturbation.strength",
+            perturbation.get("strength", 1),
+            minimum=1,
+            maximum=8,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "perturbation.max_perturbations",
+            perturbation.get("max_perturbations", 0),
+            minimum=0,
+            maximum=4,
+            integral=True,
+            issues=issues,
+        )
+
+    post_baseline = plan.get("post_baseline_operators_enabled", False)
+    if not isinstance(post_baseline, bool):
+        issues.append(
+            "post_baseline_operators_enabled returned non-bool value "
+            f"{post_baseline!r}"
+        )
+    _check_number(
+        "operator_round_limit",
+        plan.get("operator_round_limit", 0),
+        minimum=0,
+        maximum=20,
+        integral=True,
+        issues=issues,
+    )
+
+
+def _preview_mapping_section(
+    name: str,
+    value: Any,
+    issues: list[str],
+) -> Mapping[str, Any] | None:
+    if isinstance(value, Mapping):
+        return value
+    issues.append(f"{name} returned non-mapping value {value!r}")
+    return None
+
+
+def _preview_section_keys(
+    name: str,
+    section: Mapping[str, Any],
+    *,
+    allowed: frozenset[str],
+    required: frozenset[str],
+    require_missing: bool,
+    issues: list[str],
+) -> None:
+    unknown = sorted(str(key) for key in section if str(key) not in allowed)
+    if unknown:
+        issues.append(f"{name} returned unknown keys {unknown}")
+    if require_missing:
+        missing = sorted(key for key in required if key not in section)
+        if missing:
+            issues.append(f"enabled {name} missing required keys {missing}")
+
+
+def _preview_baseline_params_mapping(
+    params: Mapping[str, Any],
+    issues: list[str],
+) -> None:
+    unknown = sorted(str(key) for key in params if str(key) not in _BASELINE_POLICY_ALLOWED_KEYS)
+    if unknown:
+        issues.append(f"baseline.params returned unknown keys {unknown}")
+    if "destroy_ratio" in params:
+        _check_destroy_ratio(params["destroy_ratio"], issues)
+    if "segment_length" in params:
+        _check_number(
+            "baseline.params.segment_length",
+            params["segment_length"],
+            minimum=1,
+            maximum=1000,
+            integral=True,
+            issues=issues,
+        )
+    if "reaction_factor" in params:
+        _check_number(
+            "baseline.params.reaction_factor",
+            params["reaction_factor"],
+            minimum=0.01,
+            maximum=1.0,
+            integral=False,
+            issues=issues,
+        )
+    if "vns_max_no_improve" in params:
+        _check_number(
+            "baseline.params.vns_max_no_improve",
+            params["vns_max_no_improve"],
+            minimum=0,
+            maximum=20000,
+            integral=True,
+            issues=issues,
+        )
+    if "use_vns" in params and not isinstance(params["use_vns"], bool):
+        issues.append(f"baseline.params.use_vns returned non-bool value {params['use_vns']!r}")
+    for name in ("cw_threshold", "vns_threshold", "alns_threshold"):
+        if name in params:
+            _check_number(
+                f"baseline.params.{name}",
+                params[name],
+                minimum=0,
+                maximum=10000,
+                integral=True,
+                issues=issues,
+            )
+    if "max_destroy_customers" in params:
+        _check_number(
+            "baseline.params.max_destroy_customers",
+            params["max_destroy_customers"],
+            minimum=1,
+            maximum=500,
+            integral=True,
+            issues=issues,
+        )
 
 
 def _preview_algorithm_blueprint(

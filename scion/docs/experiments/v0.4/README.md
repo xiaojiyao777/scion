@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-08*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -15,6 +15,7 @@ referenced, not copied into development prompts.
 - [Forced algorithm blueprint Sonnet smoke, 2026-05-07](v0.4-forced-algorithm-blueprint-sonnet-smoke-20260507.md)
 - [Forced blueprint budget Sonnet smoke, 2026-05-07](v0.4-forced-blueprint-budget-sonnet-smoke-20260507.md)
 - [Blueprint reporting Sonnet 5R VRP validation, 2026-05-07](v0.4-blueprint-reporting-sonnet-5r-20260507.md)
+- [Baseline policy Sonnet 3R diagnostic, 2026-05-07](v0.4-baseline-policy-sonnet-3r-20260507.md)
 
 ## Related
 

@@ -787,6 +787,7 @@ class TestSolutionConsistencyCheck:
         [
             ("dispatch_loaded", False, "failed=dispatch_loaded"),
             ("dispatch_executed", False, "failed=dispatch_executed"),
+            ("dispatch_active", False, "failed=dispatch_active"),
             ("dispatch_errors", 1, "failed=dispatch_errors"),
             ("dispatch_errors", "not-an-int", "failed=dispatch_errors"),
         ],

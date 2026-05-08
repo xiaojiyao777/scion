@@ -48,6 +48,7 @@ runtime_failure_guidance:
     min_category_fraction: 0.5
     min_count: 2
     recommended_surfaces:
+      - main_search_strategy
       - algorithm_blueprint
       - baseline_policy
       - construction_policy
@@ -829,6 +830,172 @@ research_surfaces:
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false
+  - name: main_search_strategy
+    kind: config
+    description: "Problem-owned whole-algorithm CVRP main-search strategy."
+    algorithm:
+      role: whole_algorithm_main_search_strategy
+      invocation_point: construction_baseline_internal_main_loop_before_optional_registry_operators
+      description: >-
+        Takes over the CVRP package's main algorithm lifecycle when enabled:
+        bounded construction ensemble, repo-local baseline time budget and
+        sanitized baseline params, package-owned improvement loop components
+        including route-pair swap and bounded destroy/repair, bounded
+        acceptance/restart/perturbation knobs, and optional post-baseline
+        registry-operator scheduling. Defaults are inactive and disable
+        post-baseline registry operators for this surface unless explicitly
+        requested.
+    targets:
+      files:
+        - "policies/main_search_strategy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "main_search_plan"
+      function_signatures:
+        main_search_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        main_search_plan returns a bounded dict with enabled bool,
+        construction dict, baseline dict, improvement dict, acceptance dict,
+        restart dict, perturbation dict, post_baseline_operators_enabled bool,
+        and operator_round_limit int. When enabled is true, all required keys
+        must be present and valid or the solver records
+        main_search_strategy_errors and refuses main-search takeover.
+      return_values:
+        main_search_plan:
+          value_type: mapping
+          allowed_keys:
+            - enabled
+            - construction
+            - baseline
+            - improvement
+            - acceptance
+            - restart
+            - perturbation
+            - post_baseline_operators_enabled
+            - operator_round_limit
+          required_keys:
+            - enabled
+            - construction
+            - baseline
+            - improvement
+            - acceptance
+            - restart
+            - perturbation
+            - post_baseline_operators_enabled
+            - operator_round_limit
+    bounds:
+      allowed_components:
+        - nearest_neighbor
+        - nearest_neighbor_demand_bias
+        - demand_descending
+        - sequential
+        - intra_route_2opt
+        - inter_route_relocate
+        - route_pair_swap
+        - bounded_destroy_repair
+        - repo_local_baseline_params
+        - strict_improvement_acceptance
+        - restart_stagnation
+        - bounded_perturbation
+        - post_baseline_operator_toggle
+      numeric_ranges:
+        construction_keep_top_k: [1, 4]
+        construction_bias: [0.0, 1.0]
+        baseline_time_fraction: [0.2, 0.95]
+        destroy_ratio: [0.01, 0.80]
+        segment_length: [1, 1000]
+        reaction_factor: [0.01, 1.0]
+        vns_max_no_improve: [0, 20000]
+        max_destroy_customers: [1, 500]
+        improvement_rounds: [1, 8]
+        improvement_top_k: [1, 128]
+        min_distance_improvement: [0.0, 10.0]
+        restart_stagnation_rounds: [0, 25]
+        max_restarts: [0, 3]
+        perturbation_strength: [1, 8]
+        max_perturbations: [0, 4]
+        operator_round_limit: [0, 20]
+      complexity_scale_terms:
+        - time_limit_sec
+        - route_count
+        - customer_count
+        - improvement_top_k
+        - max_destroy_customers
+    evidence:
+      required_runtime_fields:
+        - main_search_strategy_loaded
+        - main_search_strategy_active
+        - main_search_strategy_errors
+        - main_search_plan
+        - main_search_phases
+        - main_search_construction_methods
+        - main_search_baseline_time_fraction
+        - main_search_baseline_params
+        - main_search_post_baseline_operators_enabled
+        - main_search_operator_round_limit
+        - main_search_components
+        - main_search_rounds
+        - main_search_top_k
+        - main_search_component_attempts
+        - main_search_component_accepted
+        - main_search_component_runtime_ms
+        - main_search_acceptance_min_distance_improvement
+        - main_search_restart_enabled
+        - main_search_restart_stagnation_rounds
+        - main_search_restart_count
+        - main_search_perturbation_enabled
+        - main_search_perturbation_strength
+        - main_search_perturbation_count
+        - main_search_objective_delta_by_phase
+        - main_search_phase_runtime_ms
+        - main_search_elapsed_ms
+        - main_search_stop_reason
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+    prompt:
+      hypothesis_guidance: >-
+        State how the whole main-search strategy should improve CVRP evidence:
+        which construction ensemble, repo-local baseline params/budget,
+        package-owned improvement components, acceptance threshold, restart or
+        perturbation knobs, and optional registry-operator setting should work
+        together. Prefer this surface for forced diagnostics after
+        post-baseline operator work has shown low accepted-move value.
+      implementation_guidance: >-
+        Keep main_search_plan deterministic, side-effect free, and return only
+        the declared bounded plan dict. The solver owns construction,
+        repo-local baseline invocation, route edits, feasibility checks,
+        strict-improvement acceptance, restarts, perturbations, and optional
+        registry operators. For instance features, use instance.customer_ids,
+        instance.customer_count, instance.demands[customer_id],
+        instance.capacity, and instance.distance(i, j). Leave
+        post_baseline_operators_enabled false unless the hypothesis explicitly
+        needs generated registry operators after the owned main loop.
+      anti_patterns: >-
+        Do not import solver internals, read benchmark files, create or mutate
+        routes directly, use instance.customers or other undeclared instance
+        aliases, invent improvement components, return unknown keys, widen
+        numeric bounds, bypass baseline param sanitization, enable registry
+        operators by habit, or encode case-name-specific behavior. Never use
+        instance.customers; it is not part of the CVRP instance API.
+    target_files:
+      - "policies/main_search_strategy.py"
+    prompt_hint: >-
+      Govern the whole CVRP main-search lifecycle through a bounded plan;
+      registry post-baseline operators are off by default.
+    required_functions:
+      - "main_search_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
 
 objective_policy:
   mode: lexicographic
@@ -859,6 +1026,9 @@ llm_hints:
     route_distance(route). Use demands[customer_id] for direct demand lookup.
     Do not use nonexistent attributes such as vehicle_capacity,
     distance_matrix, customers, or num_customers. Never use instance.customers.
+    The preferred whole-algorithm research surface is main_search_strategy:
+    change only policies/main_search_strategy.py and return a bounded
+    main_search_plan; do not edit solver.py.
 
 family_taxonomy:
   version: "cvrp-route-v1"
@@ -871,6 +1041,7 @@ family_taxonomy:
     - construction_policy
     - neighborhood_portfolio
     - algorithm_blueprint
+    - main_search_strategy
   aliases:
     route_local:
       - route local
@@ -959,6 +1130,20 @@ family_taxonomy:
       - restart policy
       - post baseline toggle
       - package owned local search
+    main_search_strategy:
+      - main search strategy
+      - whole algorithm strategy
+      - whole-algorithm strategy
+      - main search plan
+      - algorithm takeover
+      - construction ensemble
+      - route pair swap
+      - bounded destroy repair
+      - destroy repair
+      - perturbation
+      - restart
+      - package owned main loop
+      - post baseline off
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"

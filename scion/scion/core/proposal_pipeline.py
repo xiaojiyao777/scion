@@ -150,6 +150,7 @@ class ProposalPipeline:
     campaign_id: str = ""
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    persistent_forced_locus: str | None = None
     forced_surface_action: str | None = None
     forced_surface_target_file: str | None = None
     forced_surface_diagnostic: bool = False
@@ -175,13 +176,18 @@ class ProposalPipeline:
         ]
         branch_workspace = self.branch_workspaces.get(bid)
         champ_snapshot = self._champion_snapshot()
-        forced_locus = self.consume_forced_locus()
+        transient_forced_locus = self.consume_forced_locus()
+        forced_locus = self.persistent_forced_locus or transient_forced_locus
         forced_action = self.forced_surface_action if forced_locus else None
         forced_target_file = (
             self.forced_surface_target_file if forced_locus else None
         )
         forced_diagnostic = self.forced_surface_diagnostic if forced_locus else False
-        if forced_locus and self.forced_surface_diagnostic:
+        if (
+            forced_locus
+            and self.forced_surface_diagnostic
+            and self.persistent_forced_locus is None
+        ):
             self.forced_surface_action = None
             self.forced_surface_target_file = None
             self.forced_surface_diagnostic = False

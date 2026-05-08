@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-08*
 
 ## Status
 
@@ -18,24 +18,22 @@ The v0.4 focus remains:
 - use CVRP as the second real problem class for adapter/protocol validation.
 
 Latest interpretation: APS observation-budget/recovery repair from `af4ab5b`
-has passed control-path validation, and the first `algorithm_blueprint`
-reporting refinement is now validated on a fresh five-round Sonnet CVRP formal
-VRP run. Selected-surface `evidence.required_runtime_fields`, including the
-CVRP `algorithm_*` runtime fields, survive into formal protocol raw metrics
-and `campaign_summary.json` in real campaign artifacts. The current blocker is
-no longer APS compactness, gate modernization, or selected-surface reporting;
-it is CVRP algorithm-surface efficacy. The latest run had 5/5 candidates pass
-Contract, Verification, and canary, but all failed screening with
-`SCREENING_FAIL_WIN_RATE`; no validation/frozen stage was reached and no
-candidate promoted. The more precise engineering diagnosis is that several CVRP
-surfaces were largely post-baseline, fallback-construction, reporting, or weak
-local-search levers, while the repo-local `vrp/src` ALNS+VNS main-search
-parameters remained mostly hidden from Scion-governed proposals. A bounded
-problem-owned `baseline_policy` surface now exposes those parameters through
-the CVRP package. Do not start a long solver-quality validation yet; first run
-a short diagnostic that forces or strongly steers this surface and confirms
-whether Sonnet can produce nontrivial screening quality rather than tie/no-op
-dominated evidence.
+has passed control-path validation, and selected-surface runtime reporting is
+validated in real formal CVRP artifacts. The first `baseline_policy` Sonnet
+diagnostic also completed. It proved that the problem-owned surface can be
+selected, patched, loaded, audited, and screened through the formal VRP path,
+with all declared runtime fields present for the evaluated candidate, but it
+did not produce solver-quality evidence. CVRP now has a separate
+`main_search_strategy` whole-algorithm surface in
+`policies/main_search_strategy.py`; it governs construction, repo-local
+baseline budget/params, package-owned main-loop components including
+route-pair swap and bounded destroy/repair, acceptance/restart/perturbation,
+and optional post-baseline registry operators. The current blocker remains
+CVRP algorithm-surface efficacy. A tightly forced `main_search_strategy`
+three-round diagnostic has been launched from the current dirty worktree using
+the `claw` environment; analyze it after `exit.txt` appears. Do not start a
+long solver-quality validation until that focused diagnostic shows more than
+tie/no-op dominated objective evidence.
 
 ## Current Engineering State
 
@@ -122,10 +120,11 @@ dominated evidence.
 - Operator design optimization is preserved as the default/legacy surface:
   problems without `research_surfaces` still use `operator_interface.categories`
   as before.
-- CVRP currently exposes eight surfaces: `route_local`, `route_pair`,
+- CVRP currently exposes nine surfaces: `route_local`, `route_pair`,
   `ruin_recreate`, `search_policy`, `baseline_policy`,
   `construction_policy`, `neighborhood_portfolio`, and
-  `algorithm_blueprint`.
+  `algorithm_blueprint`, plus the preferred whole-algorithm
+  `main_search_strategy`.
 - The CVRP `search_policy` surface allows bounded optimization of baseline
   time fraction, post-baseline operator round limit, and whether post-baseline
   operators run, without allowing LLM edits to `solver.py`.
@@ -157,17 +156,30 @@ dominated evidence.
   post-baseline registry-operator toggle/round limit. Invalid plans record
   `algorithm_blueprint_errors`, do not take over the lifecycle, and fail
   selected-surface runtime audit.
-- CVRP still needs a surface-efficacy diagnostic that reaches the formal `.vrp`
-  main search. The new `baseline_policy` surface is the first implemented
-  main-search lever; it has focused unit/runtime coverage but has not yet been
-  validated in a Sonnet formal-path diagnostic.
+- The CVRP `main_search_strategy` surface is a singleton whole-algorithm
+  config surface in `policies/main_search_strategy.py`. It is inactive by
+  default and disables post-baseline registry operators unless explicitly
+  requested by the plan. A valid enabled plan takes over the main CVRP
+  lifecycle: bounded construction ensemble, repo-local baseline budget and
+  sanitized baseline params, package-owned improvement components
+  (`intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`,
+  `bounded_destroy_repair`), strict-improvement acceptance threshold, restart
+  and perturbation knobs, and optional registry-operator round limit. Invalid
+  plans record `main_search_strategy_errors`, do not take over, and fail
+  selected-surface runtime audit.
+- CVRP still needs a successful surface-efficacy diagnostic that reaches the
+  formal `.vrp` main search and shows nontrivial screening quality. The next
+  diagnostic should force `main_search_strategy` so Scion governs the whole
+  CVRP algorithm slice rather than another post-baseline operator or
+  baseline-policy-only change.
 - `scion run --force-surface <surface>` is a diagnostic experiment-control
   hook for proposal smoke tests. It accepts only declared research surfaces,
   fails closed during CLI/campaign startup for unknown surfaces, and can derive
   `action=modify` plus the singleton target file for surfaces such as
-  `algorithm_blueprint`. This hook is not a Decision input, not solver-quality
-  evidence, and should be used to force algorithm-blueprint smoke coverage
-  without hardcoding CVRP or any specific surface into framework core.
+  `main_search_strategy` or `algorithm_blueprint`. This hook is not a Decision
+  input, not solver-quality evidence, and should be used next to force
+  `main_search_strategy` smoke coverage without hardcoding CVRP or any
+  specific surface into framework core.
 - CVRP policy-surface prompts and adapter interface rendering now expose the
   safe `CvrpInstance` policy API explicitly: `customer_ids`, `customer_count`,
   `demands[customer_id]`, `capacity`, and `distance(i, j)`. The problem package
@@ -227,14 +239,15 @@ cd scion
 101 passed in 0.94s
 ```
 
-Latest focused CVRP baseline-policy/proposal validation:
+Latest focused CVRP main-search-surface validation:
 
 ```bash
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+cd /home/clawd/research/or-autoresearch-agent/scion
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/test_cvrp_adapter.py scion/tests/test_problem_bridge.py scion/tests/unit/test_research_surfaces.py::test_cvrp_problem_v1_exposes_policy_surfaces scion/tests/unit/test_research_surfaces.py::test_cvrp_main_search_strategy_contract_targets_and_required_functions scion/tests/unit/test_research_surfaces.py::test_cvrp_default_policy_files_match_declared_signatures scion/tests/unit/test_research_surfaces.py::test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds scion/tests/unit/test_research_surfaces.py::test_invalid_cvrp_main_search_strategy_counts_strategy_errors scion/tests/test_cvrp_solver_operator_runtime.py::test_default_main_search_strategy_policy_matches_contract_gate_interface scion/tests/test_cvrp_solver_operator_runtime.py::test_main_search_strategy_surface_declares_runtime_fields_and_default_is_inactive scion/tests/test_cvrp_solver_operator_runtime.py::test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default scion/tests/test_cvrp_solver_operator_runtime.py::test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
 ```
 
 ```text
-163 passed in 8.92s
+43 passed in 3.05s
 ```
 
 Broader CVRP/protocol subset:
@@ -1563,18 +1576,17 @@ Validation:
 ```
 
 This is implementation/control readiness, not solver-quality evidence. The
-next step is a short forced or strongly steered Sonnet diagnostic for
-`baseline_policy`, followed by another 5-10 round CVRP diagnostic only if the
-surface shows nontrivial screening behavior.
+first short Sonnet diagnostic for `baseline_policy` has since completed and is
+recorded below; it validated runtime/audit plumbing but did not show enough
+screening quality to justify a long solver-quality validation.
 
-## 2026-05-07 Baseline Policy Sonnet Diagnostic Running
+## 2026-05-07 Baseline Policy Sonnet Diagnostic Audited
 
-A detached three-round Sonnet CVRP formal-path diagnostic is running to test
-the new `baseline_policy` surface:
+A detached three-round Sonnet CVRP formal-path diagnostic completed to test the
+new `baseline_policy` surface:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-baseline-policy-sonnet-3r-20260507T153355Z
-pid=2216228
 scion_commit=605cfa5
 model=claude-sonnet-4-6
 problem=cvrp formal VRP
@@ -1586,14 +1598,119 @@ cvrp_time_limit_sec=10
 python=/home/clawd/miniconda3/envs/claw/bin/python
 data_root=/home/clawd/research/or-autoresearch-agent/vrp
 started_utc=2026-05-07T15:33:55Z
+ended_utc=2026-05-07T15:52:56Z
+exit_code=0
 ```
 
-The process was launched with `setsid`/`nohup` via the run-local
-`run_experiment.sh`, so it should remain independent of the interactive
-session. Initial bounded status at startup reported `total_rounds=0`,
-`n_experiments=0`, `champion_version=1`, frozen budget `0/2`, and
-`balance_exhausted=false`. No completion or solver-quality interpretation is
-recorded yet; analyze only bounded artifacts first after `exit.txt` appears.
+Outcome:
+
+```text
+rounds=3/3
+experiments=3
+steps=3
+champion=v1
+weight_revision=0
+promotions=0
+frozen_budget_used=0
+frozen_budget_limit=2
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Detailed delegated analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-baseline-policy-sonnet-3r-20260507.md
+```
+
+Interpretation:
+
+- This is valid implementation/control evidence, not solver-quality evidence.
+- Round 1 selected `baseline_policy`, modified
+  `policies/baseline_policy.py`, passed Contract, Verification, and canary,
+  and reached formal screening.
+- The selected-surface runtime audit was complete for all 16 candidate-side
+  screening pairs: `baseline_policy_loaded=true`,
+  `baseline_policy_errors=0`, and all declared `baseline_*` parameter fields
+  were present. The raw metrics also recorded the repo-local
+  `vrp_alns_vns` baseline path with `baseline_required=true`.
+- The candidate produced weak pair-level movement but failed case-level
+  screening: 4 wins, 2 losses, 10 ties at pair level, case-level
+  `win_rate=0.125`, `median_delta=0.0`, and median runtime ratio about
+  `0.9997`.
+- The launched `--force-surface baseline_policy` control did not hold across
+  all three rounds. Round 2 moved to `route_local` and round 3 moved to
+  `algorithm_blueprint`; both also failed screening with tie/no-op dominated
+  evidence.
+- APS artifacts were sufficient to produce governed candidates, but not clean:
+  each completed session used the full 9/9 tool-call budget, `result_too_large`
+  appeared repeatedly, and contract previews were skipped because the tool loop
+  was exhausted. Deterministic Contract/Verification/canary still passed, so
+  the final blocker was screening quality, not gate validity.
+
+Next step: analyze the running tightly forced `main_search_strategy` diagnostic
+after completion before treating further CVRP runs as solver-quality evidence.
+Do not start another post-baseline operator campaign, a baseline-policy-only
+run, or a long formal solver-quality validation until the new whole-algorithm
+surface has been exercised and analyzed.
+
+## 2026-05-08 Main Search Strategy Governance Repair And Diagnostic Launch
+
+Implemented the whole-algorithm CVRP surface and repaired the diagnostic
+controls needed to test it cleanly:
+
+- Added `main_search_strategy` as a problem-owned singleton surface in
+  `policies/main_search_strategy.py`.
+- Enabled valid plans can take over the CVRP algorithm slice through bounded
+  construction, repo-local baseline budget/params, package-owned main-loop
+  components (`route_pair_swap` and `bounded_destroy_repair`),
+  acceptance/restart/perturbation controls, and optional registry operators.
+- `--force-surface <surface>` is now a persistent diagnostic proposal
+  constraint across proposal rounds, not a one-shot plateau/diversification
+  hint.
+- Selected-surface runtime audit now treats declared `*_active` fields like
+  `*_loaded` and `*_executed`: they must be truthy. This prevents selected
+  `main_search_strategy` candidates from returning inactive plans while still
+  passing runtime audit.
+- Contract governance now blocks common file-read APIs (`open()`,
+  `*.open()`, `*.read_text()`, `*.read_bytes()`) and blocks direct
+  `instance.name` / `getattr(instance, "name")` / `hasattr(instance, "name")`
+  probes on non-operator and singleton surfaces before candidate code runs.
+- `proposal.interface_preview` now requires full ContractGate success before
+  executing problem-owned preview hooks.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1495 passed, 1 skipped in 53.50s
+```
+
+A detached three-round Sonnet CVRP formal-path diagnostic has been launched:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T133838Z
+pid=2250722
+scion_commit=45e2be9
+worktree_dirty=true
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=3
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+started_utc=2026-05-08T13:38:38Z
+```
+
+Initial bounded startup check found the process running, `launch.env`,
+`pid.txt`, and `campaign/status.json` present, and `exit.txt` not yet present.
+Because the launch uses the current dirty worktree, interpret the run as a
+current-worktree diagnostic rather than evidence for commit `45e2be9` alone.
 
 ## Remaining Optimization Backlog
 
@@ -1605,15 +1722,17 @@ P1:
 
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
-- CVRP formal research should now prioritize surface efficacy, not reporting
-  plumbing. Required `algorithm_*` runtime fields are present in fresh formal
-  screening pair metrics and campaign summaries, and `baseline_policy` now
-  exposes the first bounded main-search parameter surface. Future compactness
-  work may improve the very low APS budget headroom, but it is not the current
-  blocker. Destroy/repair and acceptance/restart surfaces should move forward
-  if `baseline_policy` diagnostics remain tie/no-op dominated and once the
-  CVRP package can expose bounded hooks, real behavior changes, and runtime
-  audit fields.
+- CVRP formal research should now prioritize surface efficacy and diagnostic
+  control, not reporting plumbing. Required `algorithm_*` runtime fields are
+  present in fresh formal screening pair metrics and campaign summaries,
+  `baseline_policy` validated bounded baseline-param plumbing, and
+  `main_search_strategy` now exposes the whole-algorithm CVRP slice with
+  bounded construction, baseline params, package-owned route-pair
+  swap/destroy-repair components, acceptance, restart, perturbation, and
+  optional registry toggles. Future compactness work may improve the very low
+  APS budget headroom, but it is secondary to analyzing the launched forced
+  `main_search_strategy` diagnostic. Do not spend the next slice on additional
+  generated post-baseline operators.
 
 P2:
 

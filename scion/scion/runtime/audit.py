@@ -425,7 +425,11 @@ def _is_error_count_field(field_name: str) -> bool:
 
 
 def _is_generic_true_evidence_field(field_name: str) -> bool:
-    return field_name.endswith("_loaded") or field_name.endswith("_executed")
+    return (
+        field_name.endswith("_loaded")
+        or field_name.endswith("_executed")
+        or field_name.endswith("_active")
+    )
 
 
 def _as_truthy(value: Any) -> bool:
