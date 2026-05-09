@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-09*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -18,6 +18,7 @@ referenced, not copied into development prompts.
 - [Baseline policy Sonnet 3R diagnostic, 2026-05-07](v0.4-baseline-policy-sonnet-3r-20260507.md)
 - [Main search strategy Sonnet 3R diagnostic, 2026-05-08](v0.4-main-search-strategy-sonnet-3r-20260508.md)
 - [Main search strategy clean Sonnet 3R diagnostic, 2026-05-08](v0.4-main-search-strategy-clean-sonnet-3r-20260508.md)
+- [Main search surface repair Sonnet 2R diagnostic, 2026-05-09](v0.4-main-search-surface-repair-sonnet-2r-20260509.md)
 
 ## Related
 

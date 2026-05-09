@@ -55,9 +55,14 @@ C10 no longer falls back to free-text semantic identity, patch ContractGate
 checks use the approved selected surface for interface/identity/complexity
 validation, and `main_search_strategy` now records selected/attempted/
 accepted/skipped component telemetry plus stronger route-pair-swap and bounded
-destroy/repair behavior. Focused, boundary, and full test suites pass. A short
-forced `main_search_strategy` smoke should be treated as the next control-path
-validation, not solver-quality evidence.
+destroy/repair behavior. Focused, boundary, and full test suites pass. The
+short forced `main_search_strategy` smoke from clean commit `e25680a` has now
+completed and is analyzed: it validated selected-surface runtime audit and the
+new component telemetry for the evaluated candidate, and it produced
+nontrivial pair-level screening movement, but it still did not select or
+attempt `route_pair_swap` or `bounded_destroy_repair`. A second forced
+hypothesis was blocked by `C10_novelty`, so only one candidate reached
+screening. Do not launch long CVRP solver-quality validation yet.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -1986,11 +1991,80 @@ Validation:
 1508 passed, 1 skipped in 54.78s
 ```
 
-Next step: run a short forced `main_search_strategy` formal smoke from the
-clean committed repair and inspect whether APS candidates now select and
-exercise `route_pair_swap` or `bounded_destroy_repair` through the new
-component-coverage telemetry. Do not launch long validation until that smoke
-shows nontrivial deep-component use and screening quality.
+## 2026-05-09 Main Search Surface Repair Smoke Audited
+
+A detached two-round Sonnet CVRP formal-path smoke completed after the core
+governance and CVRP deep-surface repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-main-search-surface-repair-sonnet-2r-20260509T133405Z
+scion_commit=e25680a
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=2
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+exit_code=0
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-main-search-surface-repair-sonnet-2r-20260509.md
+```
+
+Outcome:
+
+```text
+rounds=2/2
+steps=2
+experiments=1
+champion=v1
+promotions=0
+frozen_budget_used=0
+frozen_budget_limit=2
+frozen_budget_remaining=2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- Persistent `--force-surface main_search_strategy` held for both hypotheses.
+- Round 1 passed Contract, Verification, and canary, activated
+  `main_search_strategy`, reached formal screening, then failed
+  `SCREENING_FAIL_WIN_RATE`.
+- Round 2 stayed on `main_search_strategy` but failed hypothesis Contract at
+  `C10_novelty` duplicate, so only one candidate reached screening.
+- Selected-surface runtime audit was complete for the evaluated candidate:
+  16/16 candidate-side pairs had `main_search_strategy_loaded=true`,
+  `main_search_strategy_active=true`, `main_search_strategy_errors=0`, and
+  all 34 required runtime fields present.
+- The new component telemetry path worked, but the deep components still were
+  not selected: `route_pair_swap` and `bounded_destroy_repair` both had
+  selected/attempted/accepted counts of zero. The candidate used
+  `intra_route_2opt` and `inter_route_relocate`; 2-opt produced accepted moves,
+  relocate did not.
+- Screening had nontrivial but insufficient signal: 4 pair wins, 2 pair losses,
+  10 ties, case-level `win_rate=0.125`, `median_delta=0.0`, and median runtime
+  ratio about `0.9412`.
+- APS artifacts were usable but still under pressure: one completed session,
+  two partial hypothesis sessions, no invalid recovery artifact, no observation
+  budget exhaustion, and bounded `result_too_large` events on optional surface
+  reads.
+
+This is valid control-path evidence for selected-surface audit and telemetry,
+not solver-quality evidence. The run does not satisfy the long-validation
+condition because the intended deep components were not selected or attempted.
+The next v0.4 slice should make deep component use explicit in forced
+`main_search_strategy` diagnostics and investigate why the second forced
+hypothesis still collapsed to `C10_novelty` duplicate.
 
 ## Remaining Optimization Backlog
 
@@ -2026,10 +2100,15 @@ P1:
   surface context is compact by default. The clean-worktree diagnostic from
   commit `b98196b` validated those control repairs but still failed screening
   for all three candidates and did not exercise route-pair-swap or
-  destroy-repair components. The next CVRP slice should add a problem-owned
-  component-coverage contract, stronger route-pair/destroy-repair components
-  mapped from the original `vrp` baseline, per-component runtime telemetry, and
-  controlled fixtures that prove those components can improve known cases.
+  destroy-repair components. The post-repair smoke from commit `e25680a`
+  validated the new component telemetry and produced some pair-level movement,
+  but still selected only shallow local-search components; `route_pair_swap`
+  and `bounded_destroy_repair` were never selected or attempted, and a second
+  forced hypothesis failed C10 duplicate detection. The next CVRP slice should
+  make deep-component selection explicit for forced diagnostics, tighten
+  proposal/static preview or plan validation around component coverage, and
+  keep long validation blocked until those components are selected, attempted,
+  audited, and paired with nontrivial screening quality.
 
 P2:
 
