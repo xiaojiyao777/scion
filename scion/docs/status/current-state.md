@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-09*
 
 ## Status
 
@@ -43,8 +43,13 @@ repairs: all three candidates reached screening and all stayed on the forced
 surface. It still did not produce solver-quality evidence; all three failed
 `SCREENING_FAIL_WIN_RATE`, and none selected `route_pair_swap` or
 `bounded_destroy_repair`. The current blocker is candidate use and efficacy of
-the deeper problem-owned main-search components, not force-surface drift, C10
-target-file collapse, or selected-surface runtime audit.
+the deeper problem-owned main-search components, not force-surface drift or
+selected-surface runtime audit. A 2026-05-09 read-only Core/CVRP gap audit
+also found that the C10 singleton novelty repair is incomplete when structured
+semantic signature fields are unavailable: the implementation can still fall
+back to hypothesis free text instead of strict target-file identity. Treat that
+as a v0.4 core governance fix before relying on longer forced-surface
+diagnostics.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -1879,6 +1884,59 @@ Remaining question: whether Sonnet can select and use the deeper problem-owned
 main-search components through `main_search_strategy`, and whether those
 components can produce objective improvement on formal cases.
 
+## 2026-05-09 Core/CVRP Gap Audit
+
+A read-only audit separated four objects that should not be conflated:
+Architecture v3, Scion core framework code, the CVRP Scion problem package, and
+the original `vrp/` baseline solver. The audit is recorded in:
+
+```text
+scion/docs/audits/v0.4/v0.4-core-cvrp-gap-audit-20260509.md
+```
+
+Interpretation:
+
+- v0.4 has not violated the v3 architecture. LLM outputs remain tainted,
+  Contract / Verification / Protocol / Decision remain separate, and
+  `DecisionEngine` does not directly read proposal free text.
+- The current blocker is not that Scion cannot connect to CVRP. The CVRP
+  package is a valid Scion-native integration object, but not yet a strong
+  research object: the deepest algorithm levers from the original `vrp`
+  baseline are only partially exposed through bounded surfaces and runtime
+  telemetry.
+- The original `vrp` baseline's high-leverage structure is construction,
+  adaptive ALNS destroy/repair, VNS portfolio, simulated-annealing acceptance,
+  thresholds, and adaptive weights. v0.4 should map these manually into the
+  CVRP problem package; v0.5 should generalize that mapping as onboarding.
+- Do not run a long CVRP solver-quality validation until a short forced
+  diagnostic proves that deep components are selected, attempted, audited, and
+  produce nontrivial screening quality.
+
+Core governance findings to fix before v0.4 closeout:
+
+- C10 semantic novelty still has a free-text fallback for singleton surfaces
+  when structured signature fields are unavailable.
+- Patch-level ContractGate checks should use the approved selected surface
+  rather than re-inferring surfaces from patch target paths.
+- Lineage should persist the actual schema-versioned `DecisionFeatures`
+  snapshot used by `DecisionEngine`, not a reconstructed metadata subset.
+- Soft-abandon should either live inside `DecisionEngine` or be represented as
+  an explicit coordinated decision with independent reason-code provenance.
+- Proposal context should stop hardcoding CVRP/ALNS runtime field names and
+  use problem/surface-declared feedback metadata instead.
+- If `main_search_strategy` is the v0.4 closeout surface, core needs either a
+  minimal nested-plan return contract extension or a problem-owned static
+  validator hook; broad surface-schema generalization belongs in v0.5.
+
+CVRP problem-package findings to address before another long run:
+
+- `main_search_strategy` needs a problem-owned component-coverage contract for
+  diagnostics, with selected / attempted / accepted / skipped-reason telemetry.
+- `route_pair_swap` and `bounded_destroy_repair` should be strengthened or
+  remapped to the original baseline's real VNS/ALNS components.
+- Controlled fixtures should prove route-pair swap and bounded destroy/repair
+  can improve known cases before formal screening is used to judge them.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -1887,6 +1945,11 @@ summaries expose fail-closed formal readiness status for final evidence refs.
 
 P1:
 
+- Core governance closeout should fix the 2026-05-09 audit findings before
+  another long validation: C10 free-text novelty fallback, actual
+  `DecisionFeatures` lineage persistence, patch-level selected-surface
+  propagation, soft-abandon decision provenance, and problem-specific
+  runtime-field heuristics in proposal context.
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
 - CVRP formal research should now prioritize surface efficacy and diagnostic
@@ -1903,7 +1966,10 @@ P1:
   surface context is compact by default. The clean-worktree diagnostic from
   commit `b98196b` validated those control repairs but still failed screening
   for all three candidates and did not exercise route-pair-swap or
-  destroy-repair components.
+  destroy-repair components. The next CVRP slice should add a problem-owned
+  component-coverage contract, stronger route-pair/destroy-repair components
+  mapped from the original `vrp` baseline, per-component runtime telemetry, and
+  controlled fixtures that prove those components can improve known cases.
 
 P2:
 
