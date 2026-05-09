@@ -928,10 +928,47 @@ class ContractGate:
                     "C10_novelty",
                     False,
                     "light",
-                    f"duplicate of existing hypothesis (key={duplicate_key})",
+                    self._duplicate_novelty_detail(h, existing, duplicate_key),
                     t0,
                 )
         return _cr("C10_novelty", True, "light", "novel", t0)
+
+    def _duplicate_novelty_detail(
+        self,
+        h: HypothesisProposal,
+        existing: HypothesisRecord,
+        duplicate_key: tuple[Any, ...],
+    ) -> str:
+        base = f"duplicate of existing hypothesis (key={duplicate_key})"
+        if not self._uses_same_semantic_modify_surface(h, existing):
+            return base
+        surface = self._surface_for_hypothesis(h)
+        fields = self._surface_signature_fields(surface)
+        candidate_missing = self._missing_semantic_signature_fields(h, surface)
+        existing_missing = self._missing_semantic_signature_fields(existing, surface)
+        if candidate_missing or existing_missing:
+            parts = [
+                "semantic_signature surface lacks usable structured identity; "
+                "C10 fell back to target-file identity"
+            ]
+            if candidate_missing:
+                parts.append(
+                    "candidate missing novelty_signature fields: "
+                    + ", ".join(candidate_missing)
+                )
+            if existing_missing:
+                parts.append(
+                    "existing hypothesis missing novelty_signature fields: "
+                    + ", ".join(existing_missing)
+                )
+            return base + "; " + "; ".join(parts)
+        if len(duplicate_key) >= 4 and duplicate_key[2] == "semantic_signature":
+            return (
+                base
+                + "; duplicate structured novelty_signature for declared fields: "
+                + ", ".join(fields)
+            )
+        return base
 
     def _duplicate_novelty_key(
         self,
@@ -1050,6 +1087,17 @@ class ContractGate:
             return None
         normalized = "|".join(parts)
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+    def _missing_semantic_signature_fields(
+        self,
+        h: HypothesisProposal | HypothesisRecord,
+        surface: Any | None,
+    ) -> list[str]:
+        missing: list[str] = []
+        for field in self._surface_signature_fields(surface):
+            if self._normalize_signature_field(field, h) is None:
+                missing.append(field)
+        return missing
 
     def _normalize_signature_field(
         self,

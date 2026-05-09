@@ -80,6 +80,12 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
+_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS = frozenset(
+    {
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    }
+)
 _MAX_BLUEPRINT_CONSTRUCTION_METHODS = 4
 _MAX_BLUEPRINT_LOCAL_SEARCH_ROUNDS = 4
 _MAX_BLUEPRINT_LOCAL_SEARCH_TOP_K = 64
@@ -1389,6 +1395,21 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_post_baseline_operators_enabled": False,
         "main_search_operator_round_limit": 0,
         "main_search_components": [],
+        "main_search_component_coverage_status": {
+            "status": "inactive",
+            "required_deep_components": sorted(
+                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+            ),
+            "selected_deep_components": [],
+            "missing_deep_components": sorted(
+                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+            ),
+            "attempted_deep_components": [],
+            "unattempted_deep_components": sorted(
+                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+            ),
+        },
+        "main_search_deep_components_selected": [],
         "main_search_rounds": 0,
         "main_search_top_k": 16,
         "main_search_selected_components": [],
@@ -1649,6 +1670,7 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_post_baseline_operators_enabled"] = post_baseline_enabled
     audit["main_search_operator_round_limit"] = operator_round_limit
     audit["main_search_components"] = components
+    _refresh_main_search_component_coverage_status(audit, components)
     audit["main_search_rounds"] = rounds
     audit["main_search_top_k"] = top_k
     audit["main_search_selected_components"] = list(components)
@@ -3581,6 +3603,58 @@ def _record_main_search_component_attempted(
         audit["main_search_attempted_components"] = attempted
     if component not in attempted:
         attempted.append(component)
+    _refresh_main_search_component_coverage_status(audit)
+
+
+def _refresh_main_search_component_coverage_status(
+    audit: dict[str, Any],
+    selected_components: list[str] | None = None,
+) -> None:
+    selected = (
+        list(selected_components)
+        if selected_components is not None
+        else list(audit.get("main_search_selected_components") or [])
+    )
+    attempted = list(audit.get("main_search_attempted_components") or [])
+    required = sorted(_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS)
+    selected_deep = [
+        component
+        for component in selected
+        if component in _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+    ]
+    attempted_deep = [
+        component
+        for component in attempted
+        if component in _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+    ]
+    missing = [
+        component
+        for component in required
+        if component not in set(selected_deep)
+    ]
+    unattempted = [
+        component
+        for component in required
+        if component not in set(attempted_deep)
+    ]
+    active = bool(audit.get("main_search_strategy_active"))
+    if not active:
+        status = "inactive"
+    elif missing:
+        status = "missing_forced_diagnostic_deep_components"
+    elif unattempted:
+        status = "selected_not_attempted"
+    else:
+        status = "deep_components_attempted"
+    audit["main_search_deep_components_selected"] = selected_deep
+    audit["main_search_component_coverage_status"] = {
+        "status": status,
+        "required_deep_components": required,
+        "selected_deep_components": selected_deep,
+        "missing_deep_components": missing,
+        "attempted_deep_components": attempted_deep,
+        "unattempted_deep_components": unattempted,
+    }
 
 
 def _record_main_search_component_accepted(

@@ -35,7 +35,10 @@ Hypothesis checks:
   semantic policy/config/portfolio surfaces, unavailable structured identity no
   longer falls back to hypothesis free text; C10 uses a computed structured
   semantic signature when all required identity fields are usable, otherwise it
-  falls back to strict locus/action/target-file duplicate protection.
+  falls back to strict locus/action/target-file duplicate protection and names
+  the missing structured `novelty_signature` fields in the failure detail.
+  Duplicate structured semantic signatures are reported as structured
+  `novelty_signature` duplicates rather than generic duplicates.
   Ordinary operator modify/remove still uses strict locus/action/target-file
   duplicate protection.
 

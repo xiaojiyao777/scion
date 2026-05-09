@@ -86,7 +86,11 @@ Solver flow:
    `bounded_destroy_repair`. The main-search loop records selected,
    attempted, accepted, and skipped components, per-component skip reasons,
    best observed distance deltas, improvement counts, runtime, and
-   destroy/repair removed/reinserted counts.
+   destroy/repair removed/reinserted counts. It also emits a
+   `main_search_component_coverage_status` summary and
+   `main_search_deep_components_selected` so forced diagnostics can audit
+   whether `route_pair_swap` and `bounded_destroy_repair` were selected and
+   attempted without changing normal promotion semantics.
 9. Run the algorithm-blueprint local-search phase, when active, after baseline
    and before registry operators. The solver owns the bounded primitives:
    `intra_route_2opt` and `inter_route_relocate`.
@@ -160,6 +164,11 @@ bounded set of route-pair/customer-swap candidates before applying `top_k`,
 instead of relying on raw nested enumeration order. `bounded_destroy_repair`
 uses worst-removal over a bounded customer subset followed by regret-2 repair
 with cheapest insertion candidates, and records removed and reinserted counts.
+Forced diagnostic `main_search_strategy` candidates should select both deep
+components in `improvement.enabled_components`, keep registry operators off
+unless explicitly needed, and use 5 improvement rounds for the next short smoke
+so selected/attempted/skipped/accepted coverage is visible before judging
+promotion evidence.
 
 `policies/baseline_policy.py` is a singleton policy research surface. Required
 function:

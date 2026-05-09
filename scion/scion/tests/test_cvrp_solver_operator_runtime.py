@@ -964,6 +964,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_strategy_errors" in required_fields
     assert "main_search_selected_components" in required_fields
     assert "main_search_attempted_components" in required_fields
+    assert "main_search_component_coverage_status" in required_fields
+    assert "main_search_deep_components_selected" in required_fields
     assert "main_search_component_attempts" in required_fields
     assert "main_search_component_skip_reasons" in required_fields
     assert set(required_fields).issubset(runtime)
@@ -971,6 +973,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_strategy_active"] is False
     assert runtime["main_search_plan"]["enabled"] is False
     assert runtime["main_search_phases"] == ["inactive"]
+    assert runtime["main_search_component_coverage_status"]["status"] == "inactive"
+    assert runtime["main_search_deep_components_selected"] == []
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
@@ -1036,6 +1040,15 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         "bounded_destroy_repair",
         "intra_route_2opt",
     ]
+    assert runtime["main_search_deep_components_selected"] == [
+        "bounded_destroy_repair",
+    ]
+    assert runtime["main_search_component_coverage_status"]["status"] == (
+        "missing_forced_diagnostic_deep_components"
+    )
+    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "route_pair_swap",
+    ]
     assert runtime["main_search_attempted_components"] == [
         "bounded_destroy_repair",
         "intra_route_2opt",
@@ -1070,6 +1083,64 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         )
         is None
     )
+
+
+def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+
+    assert runtime["main_search_selected_components"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert runtime["main_search_attempted_components"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert runtime["main_search_deep_components_selected"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert runtime["main_search_component_coverage_status"]["status"] == (
+        "deep_components_attempted"
+    )
+    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == []
+    assert runtime["main_search_component_coverage_status"]["unattempted_deep_components"] == []
+    assert runtime["main_search_component_attempts"]["route_pair_swap"] == 0
+    assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
+    assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {
+        "no_candidates": 1,
+    }
+    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
 
 
 def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
@@ -1113,6 +1184,13 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
     }
     assert raw["objective"]["total_distance"] == 224.0
     assert runtime["main_search_selected_components"] == ["route_pair_swap"]
+    assert runtime["main_search_deep_components_selected"] == ["route_pair_swap"]
+    assert runtime["main_search_component_coverage_status"]["status"] == (
+        "missing_forced_diagnostic_deep_components"
+    )
+    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "bounded_destroy_repair",
+    ]
     assert runtime["main_search_attempted_components"] == ["route_pair_swap"]
     assert runtime["main_search_accepted_components"] == ["route_pair_swap"]
     assert runtime["main_search_component_attempts"]["route_pair_swap"] == 1
@@ -1167,6 +1245,13 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
 
     assert raw["objective"]["total_distance"] == 12.0
     assert runtime["main_search_selected_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_deep_components_selected"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_component_coverage_status"]["status"] == (
+        "missing_forced_diagnostic_deep_components"
+    )
+    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "route_pair_swap",
+    ]
     assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_accepted_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1

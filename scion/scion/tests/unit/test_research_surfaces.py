@@ -619,11 +619,20 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "main_search_component_attempts" in (
         main_search_strategy.evidence.required_runtime_fields
     )
+    assert "main_search_component_coverage_status" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
+    assert "main_search_deep_components_selected" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
     assert main_search_strategy.novelty is not None
     assert main_search_strategy.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
         "selected_components",
+        "deep_components_selected",
+        "budget_pattern",
+        "destroy_repair_pattern",
         "baseline_fraction_pattern",
         "acceptance_restart_pattern",
         "perturbation_pattern",
@@ -709,6 +718,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             target_objectives=("total_distance",),
             novelty_signature={
                 "selected_components": ["route_pair_swap"],
+                "deep_components_selected": ["route_pair_swap"],
+                "budget_pattern": "baseline_20_post_80",
+                "destroy_repair_pattern": "none",
                 "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
                 "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
                 "perturbation_pattern": "none",
@@ -726,6 +738,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             target_objectives=("fleet_violation",),
             novelty_signature={
                 "selected_components": ["bounded_destroy_repair"],
+                "deep_components_selected": ["bounded_destroy_repair"],
+                "budget_pattern": "baseline_50_post_50",
+                "destroy_repair_pattern": "bounded_destroy_repair_restart",
                 "baseline_fraction_pattern": {"baseline": 0.50, "post": 0.50},
                 "acceptance_restart_pattern": {"min_improvement": 0.01, "restart": True},
                 "perturbation_pattern": "restart_only",
@@ -741,6 +756,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
         target_objectives=("fleet_violation", "total_distance"),
         novelty_signature={
             "selected_components": ["intra_route_2opt", "inter_route_relocate"],
+            "deep_components_selected": ["intra_route_2opt", "inter_route_relocate"],
+            "budget_pattern": "baseline_35_post_65",
+            "destroy_repair_pattern": "none",
             "baseline_fraction_pattern": {"baseline": 0.35, "post": 0.65},
             "acceptance_restart_pattern": {"min_improvement": 0.005, "restart": False},
             "perturbation_pattern": "none",
@@ -759,6 +777,9 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
     gate = ContractGate(legacy_problem_spec_from_v1(spec))
     signature = {
         "selected_components": ["route_pair_swap"],
+        "deep_components_selected": ["route_pair_swap"],
+        "budget_pattern": "baseline_20_post_80",
+        "destroy_repair_pattern": "none",
         "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
         "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
         "perturbation_pattern": "none",
@@ -772,6 +793,7 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
         target_file="policies/main_search_strategy.py",
         hypothesis_text="Use route-pair swap after a small baseline budget.",
         predicted_direction="improve",
+        target_objectives=("total_distance",),
         novelty_signature=signature,
     )
     candidate = HypothesisProposal(
@@ -780,6 +802,7 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
         action="modify",
         target_file="policies/main_search_strategy.py",
         predicted_direction="improve",
+        target_objectives=("total_distance",),
         novelty_signature=dict(signature),
     )
 
@@ -787,6 +810,8 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
 
     assert not result.passed
     assert "C10_novelty" in (result.failure_reason or "")
+    c10 = next(check for check in result.checks if check.name == "C10_novelty")
+    assert "duplicate structured novelty_signature" in c10.detail
 
 
 def test_cvrp_construction_policy_contract_targets_and_required_functions() -> None:
@@ -1342,6 +1367,8 @@ def test_singleton_semantic_surface_without_signature_falls_back_to_target_ident
 
     assert not result.passed
     assert "duplicate" in result.detail
+    assert "lacks usable structured identity" in result.detail
+    assert "candidate missing novelty_signature fields: budget_pattern" in result.detail
 
 
 def test_singleton_semantic_surface_identical_unstructured_hypothesis_fails_c10() -> None:
@@ -2106,6 +2133,13 @@ def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
+    assert policy["main_search_deep_components_selected"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert policy["main_search_component_coverage_status"]["status"] == (
+        "selected_not_attempted"
+    )
     assert policy["main_search_rounds"] == 3
     assert policy["main_search_top_k"] == 40
     assert policy["main_search_post_baseline_operators_enabled"] is False
@@ -2609,6 +2643,10 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
                 },
                 "return_contract": "bounded plan dict",
             },
+            "novelty": {
+                "strategy": "semantic_signature",
+                "signature_fields": ["component_pattern", "budget_pattern"],
+            },
         },
     ]
     spec_v1 = ProblemSpecV1(**payload)
@@ -2637,7 +2675,21 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
         branch=branch,
         champion=champion,
         problem_spec=legacy,
-        active_hypotheses=[],
+        active_hypotheses=[
+            HypothesisRecord(
+                hypothesis_id="h1",
+                branch_id="b-active",
+                change_locus="algorithm_blueprint",
+                action="modify",
+                status="active",
+                target_file="policies/algorithm_blueprint.py",
+                hypothesis_text="Use the existing bounded plan.",
+                novelty_signature={
+                    "component_pattern": ["baseline"],
+                    "budget_pattern": "conservative",
+                },
+            )
+        ],
         blacklist=[],
         forced_locus="algorithm_blueprint",
         forced_surface_diagnostic=True,
@@ -2654,6 +2706,14 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
     assert "Set `change_locus` to `algorithm_blueprint`." in prompt_text
     assert "Set `action` to `modify`." in prompt_text
     assert "Set `target_file` to `policies/algorithm_blueprint.py`." in prompt_text
+    assert "This surface uses structured semantic novelty." in prompt_text
+    assert (
+        "novelty.signature_fields`: component_pattern, budget_pattern"
+        in prompt_text
+    )
+    assert "Occupied structured signatures for this surface:" in prompt_text
+    assert '"budget_pattern":"conservative"' in prompt_text
+    assert "Do not use hypothesis prose as novelty identity" in prompt_text
 
 
 def test_forced_surface_context_rejects_unknown_surface(tmp_path: Path) -> None:

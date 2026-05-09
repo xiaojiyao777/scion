@@ -4,6 +4,11 @@ This singleton policy is intentionally inactive by default. Candidate proposals
 can enable it to let the CVRP package own the complete construction, baseline,
 improvement-loop, restart/perturbation, and optional registry-operator schedule
 without editing solver.py.
+
+Forced diagnostic candidates should keep this file as the only edited target,
+set enabled=True, select both deep components route_pair_swap and
+bounded_destroy_repair, and use 5 improvement rounds so runtime audit can show
+selected and attempted coverage. The checked-in default remains inactive.
 """
 from __future__ import annotations
 

@@ -942,6 +942,8 @@ research_surfaces:
         - main_search_post_baseline_operators_enabled
         - main_search_operator_round_limit
         - main_search_components
+        - main_search_component_coverage_status
+        - main_search_deep_components_selected
         - main_search_rounds
         - main_search_top_k
         - main_search_selected_components
@@ -971,6 +973,9 @@ research_surfaces:
         - predicted_direction
         - target_objectives
         - selected_components
+        - deep_components_selected
+        - budget_pattern
+        - destroy_repair_pattern
         - baseline_fraction_pattern
         - acceptance_restart_pattern
         - perturbation_pattern
@@ -981,7 +986,11 @@ research_surfaces:
         package-owned improvement components, acceptance threshold, restart or
         perturbation knobs, and optional registry-operator setting should work
         together. Prefer this surface for forced diagnostics after
-        post-baseline operator work has shown low accepted-move value.
+        post-baseline operator work has shown low accepted-move value. In
+        forced diagnostic runs, make the deep-component coverage explicit by
+        selecting both route_pair_swap and bounded_destroy_repair in
+        improvement.enabled_components and plan 5 improvement rounds so runtime
+        evidence can show selected, attempted, skipped, and accepted coverage.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict. The solver owns construction,
@@ -992,7 +1001,10 @@ research_surfaces:
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
         post_baseline_operators_enabled false unless the hypothesis explicitly
-        needs generated registry operators after the owned main loop.
+        needs generated registry operators after the owned main loop. For
+        forced diagnostics, include novelty_signature fields that distinguish
+        selected_components, deep_components_selected, budget_pattern, and
+        destroy_repair_pattern from prior whole-algorithm strategies.
       anti_patterns: >-
         Do not import solver internals, read benchmark files, create or mutate
         routes directly, use instance.customers or other undeclared instance
@@ -1004,7 +1016,9 @@ research_surfaces:
       - "policies/main_search_strategy.py"
     prompt_hint: >-
       Govern the whole CVRP main-search lifecycle through a bounded plan;
-      registry post-baseline operators are off by default.
+      registry post-baseline operators are off by default. Forced diagnostic
+      candidates should select route_pair_swap and bounded_destroy_repair for
+      5 improvement rounds and expose that choice in the novelty signature.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false

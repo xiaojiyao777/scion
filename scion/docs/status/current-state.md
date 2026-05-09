@@ -62,7 +62,14 @@ new component telemetry for the evaluated candidate, and it produced
 nontrivial pair-level screening movement, but it still did not select or
 attempt `route_pair_swap` or `bounded_destroy_repair`. A second forced
 hypothesis was blocked by `C10_novelty`, so only one candidate reached
-screening. Do not launch long CVRP solver-quality validation yet.
+screening. The follow-up optimization slice is now implemented: forced
+semantic singleton proposal context renders declared structured novelty fields
+and occupied signatures, APS draft/preview reports missing structured identity
+before C10, C10 duplicate details distinguish structured duplicate from
+strict-target fallback, and CVRP `main_search_strategy` emits explicit
+deep-component coverage status for forced diagnostics. Do not launch long CVRP
+solver-quality validation yet; the next short smoke should be a five-round
+forced `main_search_strategy` diagnostic.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2066,6 +2073,55 @@ The next v0.4 slice should make deep component use explicit in forced
 `main_search_strategy` diagnostics and investigate why the second forced
 hypothesis still collapsed to `C10_novelty` duplicate.
 
+## 2026-05-09 Deep Component Diagnostic Coverage Slice
+
+Implemented the next, stronger optimization slice after the two-round
+post-repair smoke:
+
+- Forced semantic singleton surface context now renders declared
+  `novelty.signature_fields`, occupied structured signatures for the selected
+  surface, and explicit guidance that free-text hypothesis prose is not novelty
+  identity.
+- APS draft/schema/contract preview reports missing structured semantic
+  identity early for `semantic_signature` surfaces, before a later C10 duplicate
+  failure.
+- C10 duplicate details now distinguish duplicate structured
+  `novelty_signature` values from fallback strict locus/action/target-file
+  duplicates caused by missing structured identity.
+- CVRP `main_search_strategy` metadata now makes forced diagnostic
+  deep-component coverage explicit: candidates should select
+  `route_pair_swap` and `bounded_destroy_repair`, use 5 improvement rounds, and
+  carry structured novelty fields such as selected/deep components, budget
+  pattern, and destroy/repair pattern.
+- CVRP adapter preview adds a problem-owned diagnostic advisory when an enabled
+  `main_search_strategy` plan omits either deep component. This is not a normal
+  promotion hard fail.
+- CVRP runtime audit now emits `main_search_component_coverage_status` and
+  `main_search_deep_components_selected`, so summaries can distinguish
+  inactive, missing deep components, selected-but-not-attempted, and attempted
+  deep-component coverage.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_contract.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
+294 passed in 13.28s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py scion/scion/tests/unit/core/test_proposal_pipeline.py -q
+444 passed in 42.09s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1511 passed, 1 skipped in 56.68s
+```
+
+Next step: commit this slice and run a five-round forced
+`main_search_strategy` smoke. The smoke should be judged first on whether
+`main_search_component_coverage_status.status` reaches
+`deep_components_attempted`, with both `route_pair_swap` and
+`bounded_destroy_repair` present in selected/attempted component telemetry.
+Only if that holds and screening remains nontrivial should longer validation be
+considered.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2104,10 +2160,10 @@ P1:
   validated the new component telemetry and produced some pair-level movement,
   but still selected only shallow local-search components; `route_pair_swap`
   and `bounded_destroy_repair` were never selected or attempted, and a second
-  forced hypothesis failed C10 duplicate detection. The next CVRP slice should
-  make deep-component selection explicit for forced diagnostics, tighten
-  proposal/static preview or plan validation around component coverage, and
-  keep long validation blocked until those components are selected, attempted,
+  forced hypothesis failed C10 duplicate detection. Deep-component selection
+  is now explicit in forced diagnostic prompt metadata, APS preview, C10
+  feedback, and runtime coverage telemetry. Keep long validation blocked until
+  the next five-round smoke shows both deep components selected, attempted,
   audited, and paired with nontrivial screening quality.
 
 P2:

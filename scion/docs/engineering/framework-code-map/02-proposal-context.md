@@ -179,12 +179,15 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
   `policy`, `config`, `portfolio`, `construction`, and
   `acceptance_restart`.
 - `semantic_signature` novelty uses declared direct fields and optional
-  `novelty_signature` mapping values persisted on proposals/records. Singleton
-  semantic surfaces without enough structured identity are not treated as
-  target-file duplicates; only matching structured signatures or repeated
-  normalized hypothesis text are collapsed. Free-text rationale fields do not
-  become semantic identity unless the proposal explicitly carries a compact
-  structured value under a declared `novelty_signature` key.
+  `novelty_signature` mapping values persisted on proposals/records. Forced
+  diagnostic context for such surfaces renders the declared
+  `novelty.signature_fields`, already occupied structured signatures on that
+  surface, and the requirement to provide a distinct structured identity.
+  Proposal draft/schema/contract preview tools report missing structured
+  identity early for singleton semantic surfaces. C10 never uses hypothesis
+  prose as semantic identity: when required structured fields are unavailable,
+  it falls back to strict locus/action/target-file duplicate protection with a
+  diagnostic detail naming the missing fields.
 
 This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
 

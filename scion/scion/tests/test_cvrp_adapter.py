@@ -283,6 +283,55 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
     assert preview["passed"] is True
     assert preview["surface"] == "main_search_strategy"
     assert preview["issues"] == []
+    coverage_check = next(
+        check
+        for check in preview["checks"]
+        if check["name"] == "main_search_forced_diagnostic_deep_component_coverage"
+    )
+    assert coverage_check["passed"] is True
+    assert coverage_check["missing_components"] == []
+
+
+def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_components_missing(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+            "        'improvement': {'enabled_components': ['intra_route_2opt', 'inter_route_relocate'], 'rounds': 5, 'top_k': 24},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="main_search_strategy"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["issues"] == []
+    coverage_check = next(
+        check
+        for check in preview["checks"]
+        if check["name"] == "main_search_forced_diagnostic_deep_component_coverage"
+    )
+    assert coverage_check["passed"] is False
+    assert coverage_check["severity"] == "diagnostic_warning"
+    assert coverage_check["missing_components"] == [
+        "bounded_destroy_repair",
+        "route_pair_swap",
+    ]
 
 
 def test_cvrp_main_search_strategy_preview_rejects_bad_plan(

@@ -322,11 +322,18 @@ def _stats(**overrides) -> EvalStats:
 
 
 def _hyp(surface: str = "search_policy") -> HypothesisProposal:
+    novelty_signature = {}
+    if surface == "search_policy":
+        novelty_signature = {
+            "budget_pattern": "lower_baseline_fraction",
+            "round_limit_pattern": "fixed_small_cap",
+        }
     return HypothesisProposal(
         hypothesis_text=f"Improve {surface}.",
         change_locus=surface,
         action="modify",
         target_file="policies/search_policy.py",
+        novelty_signature=novelty_signature,
     )
 
 
@@ -347,6 +354,10 @@ def _valid_hypothesis_payload(**overrides) -> dict:
         "target_runtime_effect": "improve",
         "complexity_claim": "O(1) policy calculations.",
         "runtime_budget_strategy": "Use fixed scalar caps.",
+        "novelty_signature": {
+            "budget_pattern": "lower_baseline_fraction",
+            "round_limit_pattern": "fixed_small_cap",
+        },
     }
     payload.update(overrides)
     return payload
@@ -1128,6 +1139,41 @@ def test_draft_hypothesis_accepts_structured_fields_and_rejects_invalid_values(
     assert invalid_direction.failure_code == ProposalToolFailureCode.SCHEMA_ERROR
     assert invalid_objective.is_error is True
     assert invalid_objective.failure_code == ProposalToolFailureCode.SCHEMA_ERROR
+
+
+def test_draft_and_preview_report_missing_semantic_novelty_signature(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    missing_signature = _valid_hypothesis_payload(novelty_signature={})
+
+    draft = registry.call(
+        "proposal.draft_hypothesis",
+        missing_signature,
+        context,
+    )
+    preview = registry.call(
+        "proposal.contract_preview",
+        {"hypothesis": missing_signature},
+        context,
+    )
+
+    assert draft.is_error is True
+    assert draft.failure_code == ProposalToolFailureCode.SCHEMA_ERROR
+    assert "missing structured novelty_signature identity" in (
+        draft.structured_payload["failure_reason"]
+    )
+    guidance = draft.structured_payload["novelty_signature_guidance"]
+    assert guidance["missing_fields"] == [
+        "budget_pattern",
+        "round_limit_pattern",
+    ]
+    assert preview.is_error is False
+    assert preview.structured_payload["passed"] is False
+    assert preview.structured_payload["hypothesis"]["novelty_signature_guidance"][
+        "missing_fields"
+    ] == ["budget_pattern", "round_limit_pattern"]
 
 
 def test_draft_patch_returns_artifact_without_workspace_write(tmp_path: Path) -> None:

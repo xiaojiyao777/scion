@@ -1415,12 +1415,84 @@ def _hypothesis_schema_preview(
         current_champion_version=_champion_version(context.champion),
     )
     c1_checks = [check for check in result.checks if check.name == "C1_schema"]
+    novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
+    if novelty_guidance.get("required") and novelty_guidance.get("missing_fields"):
+        passed = False
     return {
         "passed": passed,
         "checks": _checks_payload(c1_checks),
-        "failure_reason": None if passed else _first_failure(c1_checks),
+        "failure_reason": None
+        if passed
+        else (
+            novelty_guidance.get("detail")
+            if novelty_guidance.get("missing_fields")
+            else _first_failure(c1_checks)
+        ),
+        "novelty_signature_guidance": novelty_guidance,
     }
+
+
+def _semantic_signature_preview_guidance(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    surface = _surface_for_hypothesis(context, hypothesis)
+    novelty = _attr(surface, "novelty") if surface is not None else None
+    strategy = str(_attr(novelty, "strategy", "") or "")
+    fields = _coerce_compact_list(_attr(novelty, "signature_fields", []))
+    if strategy != "semantic_signature" or not fields:
+        return {}
+
+    missing: list[str] = []
+    unsupported: list[str] = []
+    for field in fields:
+        name = str(field).strip()
+        if not name:
+            continue
+        if not ContractGate.supports_semantic_signature_field(name):
+            unsupported.append(name)
+            continue
+        if name in {"predicted_direction", "target_objectives", "protected_objectives"}:
+            value = getattr(hypothesis, name, None)
+            if value in (None, "", [], (), {}):
+                missing.append(name)
+            continue
+        values = hypothesis.novelty_signature
+        if not isinstance(values, dict) or name not in values or values[name] in (
+            None,
+            "",
+            [],
+            {},
+        ):
+            missing.append(name)
+
+    detail = ""
+    if missing:
+        detail = (
+            "missing structured novelty_signature identity for semantic_signature "
+            f"surface '{hypothesis.change_locus}': {', '.join(missing)}"
+        )
+    elif unsupported:
+        detail = (
+            "unsupported novelty.signature_fields for semantic_signature surface "
+            f"'{hypothesis.change_locus}': {', '.join(unsupported)}"
+        )
+    else:
+        detail = (
+            "semantic_signature identity is present; contract preview/C10 will "
+            "still reject duplicate structured values."
+        )
+    return _drop_empty_items(
+        {
+            "required": True,
+            "strategy": strategy,
+            "signature_fields": fields,
+            "missing_fields": missing,
+            "unsupported_fields": unsupported,
+            "detail": detail,
+        }
+    )
 
 
 def _contract_gate(context: ProposalToolContext) -> ContractGate:
@@ -1639,6 +1711,18 @@ def _surface_for_patch_path(
     for surface in _surfaces(context):
         if _target_declared(normalized, _surface_target_files(surface)):
             return surface
+    return None
+
+
+def _surface_for_hypothesis(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> Any | None:
+    surface = _find_surface(context, hypothesis.change_locus)
+    if surface is not None:
+        return surface
+    if hypothesis.target_file:
+        return _surface_for_patch_path(context, hypothesis.target_file)
     return None
 
 

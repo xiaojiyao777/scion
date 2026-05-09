@@ -170,6 +170,7 @@ class ContextManager:
                 action=forced_request.action,
                 target_file=forced_request.target_file,
                 diagnostic=forced_surface_diagnostic,
+                active_hypotheses=active_hypotheses,
             )
 
         # J1: Render search memory (cross-branch search history)
@@ -485,6 +486,7 @@ def _build_forced_surface_constraint(
     action: str | None,
     target_file: str | None,
     diagnostic: bool,
+    active_hypotheses: List[HypothesisRecord] | None = None,
 ) -> str:
     lines = ["\n## MANDATORY SEARCH CONSTRAINT"]
     if diagnostic:
@@ -523,7 +525,78 @@ def _build_forced_surface_constraint(
         targets = surface_target_files(surface)
         if targets:
             lines.append("Declared target files: " + ", ".join(targets) + ".")
+    lines.extend(
+        _build_forced_surface_novelty_guidance(
+            surface=surface,
+            surface_name=surface_name,
+            active_hypotheses=active_hypotheses or [],
+        )
+    )
     return "\n".join(lines) + "\n"
+
+
+def _build_forced_surface_novelty_guidance(
+    *,
+    surface: Any | None,
+    surface_name: str,
+    active_hypotheses: List[HypothesisRecord],
+) -> list[str]:
+    if surface is None:
+        return []
+    novelty = getattr(surface, "novelty", None)
+    strategy = str(getattr(novelty, "strategy", "") or "")
+    fields = _coerce_text_list(getattr(novelty, "signature_fields", None))
+    if strategy != "semantic_signature" or not fields:
+        return []
+
+    lines = [
+        "This surface uses structured semantic novelty.",
+        "Set `novelty_signature` with distinct values for declared "
+        f"`novelty.signature_fields`: {', '.join(fields)}.",
+        "Do not use hypothesis prose as novelty identity; C10 ignores free text "
+        "for this semantic signature.",
+    ]
+    occupied = _summarise_surface_structured_signatures(
+        active_hypotheses,
+        surface_name=surface_name,
+        fields=fields,
+    )
+    if occupied:
+        lines.append("Occupied structured signatures for this surface:")
+        lines.extend(f"  - {item}" for item in occupied)
+    else:
+        lines.append("Occupied structured signatures for this surface: (none)")
+    return lines
+
+
+def _summarise_surface_structured_signatures(
+    active_hypotheses: List[HypothesisRecord],
+    *,
+    surface_name: str,
+    fields: list[str],
+) -> list[str]:
+    summaries: list[str] = []
+    for hypothesis in active_hypotheses:
+        if hypothesis.change_locus != surface_name:
+            continue
+        signature: dict[str, Any] = {}
+        for field in fields:
+            if hasattr(hypothesis, field):
+                value = getattr(hypothesis, field)
+                if value not in (None, "", [], (), {}):
+                    signature[field] = value
+                    continue
+            novelty_values = getattr(hypothesis, "novelty_signature", None)
+            if isinstance(novelty_values, dict) and field in novelty_values:
+                signature[field] = novelty_values[field]
+        if signature:
+            summaries.append(
+                json.dumps(signature, sort_keys=True, default=str, separators=(",", ":"))
+            )
+        else:
+            target = hypothesis.target_file or "(no target_file)"
+            summaries.append(f"{target}: missing structured novelty_signature")
+    return summaries
 
 
 def _append_research_surface_metadata(

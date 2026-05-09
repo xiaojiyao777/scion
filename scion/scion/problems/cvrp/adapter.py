@@ -43,6 +43,12 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
+_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS = frozenset(
+    {
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    }
+)
 _PORTFOLIO_LIMIT_RANGES = {
     "max_rounds": (0, 6),
     "top_k": (0, 32),
@@ -998,6 +1004,34 @@ def _preview_main_search_strategy(
             integral=True,
             issues=issues,
         )
+        if (
+            enabled
+            and isinstance(components, Sequence)
+            and not isinstance(components, (str, bytes))
+        ):
+            selected = {str(component) for component in components}
+            missing_deep = sorted(
+                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS - selected
+            )
+            checks.append(
+                {
+                    "name": "main_search_forced_diagnostic_deep_component_coverage",
+                    "passed": not missing_deep,
+                    "severity": "diagnostic_warning",
+                    "required_components": sorted(
+                        _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+                    ),
+                    "selected_components": sorted(selected),
+                    "missing_components": missing_deep,
+                    "guidance": (
+                        "Forced main_search_strategy diagnostics should select both "
+                        "route_pair_swap and bounded_destroy_repair so runtime can "
+                        "audit selected/attempted/deep-component coverage. This "
+                        "preview advisory does not make an otherwise valid normal "
+                        "promotion plan fail."
+                    ),
+                }
+            )
 
     acceptance = _preview_mapping_section("acceptance", plan.get("acceptance", {}), issues)
     if acceptance is not None:
