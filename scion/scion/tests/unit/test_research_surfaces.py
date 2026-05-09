@@ -706,6 +706,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             target_file="policies/main_search_strategy.py",
             hypothesis_text="Use route-pair swap after a small baseline budget.",
             predicted_direction="improve",
+            target_objectives=("total_distance",),
             novelty_signature={
                 "selected_components": ["route_pair_swap"],
                 "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
@@ -722,6 +723,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             target_file="policies/main_search_strategy.py",
             hypothesis_text="Use bounded destroy repair with restart.",
             predicted_direction="improve",
+            target_objectives=("fleet_violation",),
             novelty_signature={
                 "selected_components": ["bounded_destroy_repair"],
                 "baseline_fraction_pattern": {"baseline": 0.50, "post": 0.50},
@@ -736,6 +738,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
         action="modify",
         target_file="policies/main_search_strategy.py",
         predicted_direction="improve",
+        target_objectives=("fleet_violation", "total_distance"),
         novelty_signature={
             "selected_components": ["intra_route_2opt", "inter_route_relocate"],
             "baseline_fraction_pattern": {"baseline": 0.35, "post": 0.65},
@@ -1199,7 +1202,123 @@ def _surface_gate() -> ContractGate:
     return ContractGate(spec)
 
 
-def test_singleton_semantic_surface_without_signature_does_not_target_file_block() -> None:
+def _overlapping_surface_gate() -> ContractGate:
+    spec = ProblemSpec(
+        name="overlap-demo",
+        root_dir="/tmp/overlap-demo",
+        operator_categories=["local", "budget_policy"],
+        research_surfaces=[
+            SimpleNamespace(
+                name="local",
+                kind="operator",
+                targets=SimpleNamespace(
+                    files=["shared/*.py"],
+                    create_new_allowed=True,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                    singleton=False,
+                ),
+            ),
+            SimpleNamespace(
+                name="budget_policy",
+                kind="policy",
+                targets=SimpleNamespace(
+                    files=["shared/policy.py"],
+                    create_new_allowed=False,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                    singleton=True,
+                ),
+                interface=SimpleNamespace(
+                    required_functions=["choose_budget"],
+                    function_signatures={"choose_budget": ["instance"]},
+                ),
+                bounds=SimpleNamespace(complexity_scale_terms=["item_count"]),
+            ),
+        ],
+        search_space=SearchSpace(
+            editable=["shared/*.py"],
+            frozen=[],
+            import_whitelist=["math"],
+        ),
+    )
+    return ContractGate(spec)
+
+
+def _budget_policy_hypothesis() -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text="Tune the budget policy.",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="shared/policy.py",
+    )
+
+
+def test_patch_interface_uses_approved_surface_on_overlapping_targets() -> None:
+    gate = _overlapping_surface_gate()
+    patch = PatchProposal(
+        file_path="shared/policy.py",
+        action="modify",
+        code_content=(
+            "class LooksLikeOperator:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        ),
+    )
+
+    result = gate.validate_patch(patch, approved_hypothesis=_budget_policy_hypothesis())
+    c7 = next(check for check in result.checks if check.name == "C7_interface")
+
+    assert not c7.passed
+    assert "policy surface" in c7.detail
+
+
+def test_instance_identity_uses_approved_surface_on_overlapping_targets() -> None:
+    gate = _overlapping_surface_gate()
+    patch = PatchProposal(
+        file_path="shared/policy.py",
+        action="modify",
+        code_content=(
+            "def choose_budget(instance):\n"
+            "    if instance.name == 'case-a':\n"
+            "        return 2\n"
+            "    return 1\n"
+        ),
+    )
+
+    result = gate.validate_patch(patch, approved_hypothesis=_budget_policy_hypothesis())
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+
+    assert not c9d.passed
+    assert "budget_policy" in c9d.detail
+    assert "instance.name" in c9d.detail
+
+
+def test_complexity_bound_uses_approved_surface_on_overlapping_targets() -> None:
+    gate = _overlapping_surface_gate()
+    patch = PatchProposal(
+        file_path="shared/policy.py",
+        action="modify",
+        code_content=(
+            "def choose_budget(instance):\n"
+            "    for a in item_count:\n"
+            "        for b in item_count:\n"
+            "            for c in item_count:\n"
+            "                pass\n"
+            "    return 1\n"
+        ),
+    )
+
+    result = gate.validate_patch(patch, approved_hypothesis=_budget_policy_hypothesis())
+    c9c = next(check for check in result.checks if check.name == "C9c_complexity_bound")
+
+    assert not c9c.passed
+    assert "three-level problem-scale nested loops" in c9c.detail
+
+
+def test_singleton_semantic_surface_without_signature_falls_back_to_target_identity() -> None:
     gate = _surface_gate()
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1221,7 +1340,8 @@ def test_singleton_semantic_surface_without_signature_does_not_target_file_block
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert result.passed
+    assert not result.passed
+    assert "duplicate" in result.detail
 
 
 def test_singleton_semantic_surface_identical_unstructured_hypothesis_fails_c10() -> None:
@@ -1363,7 +1483,7 @@ def test_semantic_signature_uses_problem_owned_novelty_signature_fields() -> Non
     assert different_result.passed
 
 
-def test_invalid_predicted_direction_fails_schema_before_semantic_identity() -> None:
+def test_invalid_predicted_direction_falls_back_to_target_identity() -> None:
     gate = _semantic_objective_gate(["predicted_direction"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1389,10 +1509,11 @@ def test_invalid_predicted_direction_fails_schema_before_semantic_identity() -> 
 
     assert not result.passed
     assert not c1.passed
-    assert c10.passed
+    assert not c10.passed
+    assert "duplicate" in c10.detail
 
 
-def test_arbitrary_objective_names_fail_schema_before_semantic_identity() -> None:
+def test_arbitrary_objective_names_fall_back_to_target_identity() -> None:
     gate = _semantic_objective_gate(["target_objectives", "protected_objectives"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1420,7 +1541,8 @@ def test_arbitrary_objective_names_fail_schema_before_semantic_identity() -> Non
 
     assert not result.passed
     assert not c1.passed
-    assert c10.passed
+    assert not c10.passed
+    assert "duplicate" in c10.detail
 
 
 def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
@@ -1450,7 +1572,7 @@ def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
     assert not result.passed
 
 
-def test_free_text_signature_fields_do_not_fall_back_to_target_file_identity() -> None:
+def test_unavailable_signature_field_falls_back_to_target_file_identity() -> None:
     gate = _semantic_objective_gate(
         ["predicted_direction", "target_objectives", "hypothesis_text"],
     )
@@ -1479,7 +1601,8 @@ def test_free_text_signature_fields_do_not_fall_back_to_target_file_identity() -
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert result.passed
+    assert not result.passed
+    assert "duplicate" in result.detail
 
 
 def test_different_legal_bounded_semantic_identity_is_novel() -> None:
@@ -1556,7 +1679,7 @@ def test_operator_modify_remains_strict_by_locus_action_target_file() -> None:
     assert not result.passed
 
 
-def test_dummy_singleton_config_unextractable_signature_allows_exploration() -> None:
+def test_dummy_singleton_config_unextractable_signature_falls_back_to_target_identity() -> None:
     spec = ProblemSpec(
         name="dummy",
         root_dir="/tmp/dummy",
@@ -1604,7 +1727,7 @@ def test_dummy_singleton_config_unextractable_signature_allows_exploration() -> 
 
     result = gate._c10_novelty(hyp, [existing], [])
 
-    assert result.passed
+    assert not result.passed
     for forbidden in ("cvrp", "warehouse", "customer", "vehicle", "route"):
         assert forbidden not in result.detail.lower()
 

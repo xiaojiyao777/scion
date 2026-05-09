@@ -495,6 +495,44 @@ def _context(
     )
 
 
+def _overlapping_surface_context(tmp_path: Path) -> ProposalToolContext:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    payload = _problem_spec(tmp_path).model_dump()
+    payload["search_space"]["editable"] = ["shared/*.py"]
+    payload["search_space"]["import_whitelist"] = ["math"]
+    payload["research_surfaces"] = [
+        {
+            "name": "local",
+            "kind": "operator",
+            "description": "Broad generated files.",
+            "targets": {"files": ["shared/*.py"]},
+        },
+        {
+            "name": "budget_policy",
+            "kind": "policy",
+            "description": "Specific budget policy.",
+            "targets": {
+                "files": ["shared/policy.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+                "singleton": True,
+            },
+            "interface": {
+                "required_functions": ["choose_budget"],
+                "function_signatures": {"choose_budget": ["instance"]},
+            },
+            "bounds": {"complexity_scale_terms": ["item_count"]},
+        },
+    ]
+    return replace(
+        context,
+        problem_spec=ProblemSpecV1(**payload),
+        adapter=None,
+        problem_spec_hash="overlap-spec-hash",
+    )
+
+
 def _cvrp_context(tmp_path: Path) -> ProposalToolContext:
     spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     return ProposalToolContext(
@@ -1279,6 +1317,41 @@ def test_contract_preview_patch_payload_is_compact_without_code_content(
     assert contract.structured_payload["patch"]["checks"]
     assert "code_content" not in rendered
     assert "return 0.35" not in rendered
+
+
+def test_contract_preview_uses_hypothesis_selected_surface_on_overlapping_targets(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _overlapping_surface_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.contract_preview",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="budget_policy",
+                target_file="shared/policy.py",
+            ),
+            "patch": {
+                "file_path": "shared/policy.py",
+                "action": "modify",
+                "code_content": (
+                    "class LooksLikeOperator:\n"
+                    "    def execute(self, solution, rng):\n"
+                    "        return solution\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    checks = observation.structured_payload["patch"]["checks"]
+    c7 = next(check for check in checks if check["name"] == "C7_interface")
+
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert c7["passed"] is False
+    assert "policy surface" in c7["detail"]
 
 
 def test_cvrp_policy_preview_good_defaults_pass(tmp_path: Path) -> None:

@@ -49,7 +49,15 @@ also found that the C10 singleton novelty repair is incomplete when structured
 semantic signature fields are unavailable: the implementation can still fall
 back to hypothesis free text instead of strict target-file identity. Treat that
 as a v0.4 core governance fix before relying on longer forced-surface
-diagnostics.
+diagnostics. That governance repair and the first CVRP deep-component surface
+repair are now implemented in the working tree after the 2026-05-09 audit:
+C10 no longer falls back to free-text semantic identity, patch ContractGate
+checks use the approved selected surface for interface/identity/complexity
+validation, and `main_search_strategy` now records selected/attempted/
+accepted/skipped component telemetry plus stronger route-pair-swap and bounded
+destroy/repair behavior. Focused, boundary, and full test suites pass. A short
+forced `main_search_strategy` smoke should be treated as the next control-path
+validation, not solver-quality evidence.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -1937,6 +1945,53 @@ CVRP problem-package findings to address before another long run:
 - Controlled fixtures should prove route-pair swap and bounded destroy/repair
   can improve known cases before formal screening is used to judge them.
 
+## 2026-05-09 Core Governance And CVRP Deep-Surface Repair
+
+Implemented the immediate repair slice identified by the Core/CVRP gap audit:
+
+- C10 singleton semantic novelty no longer uses hypothesis free text as a
+  fallback identity. If a semantic singleton surface lacks usable structured
+  signature fields, duplicate detection falls back to strict
+  locus/action/target-file identity.
+- Patch-level ContractGate checks now use the approved selected surface for
+  C7 interface validation, C9d instance-identity checks, and C9c complexity
+  scale terms. Explicit selected-surface/target mismatches fail closed.
+- APS contract/interface previews now pass the selected surface consistently
+  with the formal ContractGate path.
+- CVRP `main_search_strategy` now emits component-coverage telemetry:
+  selected, attempted, accepted, skipped components, skip reasons, best deltas,
+  improvement counts, and bounded destroy/repair remove/reinsert counts.
+- CVRP route-pair swap now ranks bounded route-pair/customer swap candidates
+  before applying `top_k`.
+- CVRP bounded destroy/repair now uses a bounded worst-removal plus
+  regret-2/cheapest-insertion style repair subset instead of single-customer
+  remove/reinsert only.
+- Controlled runtime tests now prove `route_pair_swap` and
+  `bounded_destroy_repair` can be selected, attempted, accepted, and audited on
+  small constructed cases.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_contract.py -q
+205 passed in 2.17s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_adapter.py -q
+65 passed in 20.27s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+414 passed in 40.13s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1508 passed, 1 skipped in 54.78s
+```
+
+Next step: run a short forced `main_search_strategy` formal smoke from the
+clean committed repair and inspect whether APS candidates now select and
+exercise `route_pair_swap` or `bounded_destroy_repair` through the new
+component-coverage telemetry. Do not launch long validation until that smoke
+shows nontrivial deep-component use and screening quality.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -1950,6 +2005,11 @@ P1:
   `DecisionFeatures` lineage persistence, patch-level selected-surface
   propagation, soft-abandon decision provenance, and problem-specific
   runtime-field heuristics in proposal context.
+- The C10 free-text fallback and patch-level selected-surface propagation
+  repairs are now implemented and validated. Remaining core governance backlog
+  from the audit is actual `DecisionFeatures` lineage persistence,
+  soft-abandon decision provenance, and moving problem-specific runtime-field
+  heuristics out of proposal context.
 - Campaign composition is now owner-backed and centralized, but a future
   typed-collaborator pass can still reduce callback coupling further.
 - CVRP formal research should now prioritize surface efficacy and diagnostic

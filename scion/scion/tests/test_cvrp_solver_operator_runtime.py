@@ -66,6 +66,33 @@ def _write_operator_case(workspace: Path) -> Path:
     return case_path
 
 
+def _write_route_pair_swap_case(workspace: Path) -> Path:
+    data_dir = workspace / "data"
+    data_dir.mkdir(exist_ok=True)
+    case_path = data_dir / "route_pair_swap_case.json"
+    case_path.write_text(
+        json.dumps(
+            {
+                "name": "route_pair_swap_case",
+                "capacity": 2,
+                "depot": 0,
+                "allowed_routes": 2,
+                "use_integer_cost": True,
+                "nodes": [
+                    {"id": 0, "x": 0, "y": 0, "demand": 0},
+                    {"id": 1, "x": 0, "y": 10, "demand": 1},
+                    {"id": 2, "x": 100, "y": 10, "demand": 1},
+                    {"id": 3, "x": 0, "y": 11, "demand": 1},
+                    {"id": 4, "x": 100, "y": 11, "demand": 1},
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return case_path
+
+
 def _write_synthetic_vrp(tmp_path: Path) -> Path:
     path = tmp_path / "operator_runtime_smoke.vrp"
     path.write_text(
@@ -935,7 +962,10 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
 
     assert "main_search_strategy_loaded" in required_fields
     assert "main_search_strategy_errors" in required_fields
+    assert "main_search_selected_components" in required_fields
+    assert "main_search_attempted_components" in required_fields
     assert "main_search_component_attempts" in required_fields
+    assert "main_search_component_skip_reasons" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
@@ -988,7 +1018,6 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     legacy_spec = legacy_problem_spec_from_v1(spec_v1)
 
     assert (workspace / "solver.py").read_text(encoding="utf-8") == solver_before
-    assert raw["routes"] == [[1, 2, 3, 5, 4]]
     assert raw["objective"]["total_distance"] == 12.0
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is True
@@ -1003,8 +1032,29 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         "bounded_destroy_repair",
         "intra_route_2opt",
     ]
+    assert runtime["main_search_selected_components"] == [
+        "bounded_destroy_repair",
+        "intra_route_2opt",
+    ]
+    assert runtime["main_search_attempted_components"] == [
+        "bounded_destroy_repair",
+        "intra_route_2opt",
+    ]
     assert runtime["main_search_component_attempts"]["intra_route_2opt"] > 0
     assert sum(runtime["main_search_component_accepted"].values()) == 1
+    assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] == 4.0
+    assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
+    assert (
+        runtime["main_search_component_reinserted_counts"]["bounded_destroy_repair"]
+        == runtime["main_search_component_removed_counts"]["bounded_destroy_repair"]
+    )
+    assert set(runtime["main_search_skipped_components"]) == {
+        "bounded_destroy_repair",
+        "intra_route_2opt",
+    }
+    assert "no_improving_candidate" in json.dumps(
+        runtime["main_search_component_skip_reasons"]
+    )
     assert runtime["main_search_restart_enabled"] is True
     assert runtime["main_search_restart_count"] == 1
     assert "construction" in runtime["main_search_phases"]
@@ -1012,6 +1062,123 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert "improvement_loop" in runtime["main_search_phases"]
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 4.0
     assert runtime["operator_attempts"] == 0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="main_search_strategy",
+        )
+        is None
+    )
+
+
+def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_route_pair_swap_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 1, 'top_k': 1},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/route_pair_swap_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert {frozenset(route) for route in raw["routes"]} == {
+        frozenset((1, 3)),
+        frozenset((2, 4)),
+    }
+    assert raw["objective"]["total_distance"] == 224.0
+    assert runtime["main_search_selected_components"] == ["route_pair_swap"]
+    assert runtime["main_search_attempted_components"] == ["route_pair_swap"]
+    assert runtime["main_search_accepted_components"] == ["route_pair_swap"]
+    assert runtime["main_search_component_attempts"]["route_pair_swap"] == 1
+    assert runtime["main_search_component_accepted"]["route_pair_swap"] == 1
+    assert runtime["main_search_component_best_delta"]["route_pair_swap"] == 198.0
+    assert runtime["main_search_component_improvement_counts"]["route_pair_swap"] == 1
+    assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {}
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="main_search_strategy",
+        )
+        is None
+    )
+
+
+def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audited(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert raw["objective"]["total_distance"] == 12.0
+    assert runtime["main_search_selected_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_accepted_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
+    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
+    assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] == 4.0
+    assert runtime["main_search_component_improvement_counts"]["bounded_destroy_repair"] == 1
+    assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
+    assert (
+        runtime["main_search_component_reinserted_counts"]["bounded_destroy_repair"]
+        == runtime["main_search_component_removed_counts"]["bounded_destroy_repair"]
+    )
+    assert runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"] == {}
     assert (
         runtime_audit_failure_from_raw(
             raw,

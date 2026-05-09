@@ -108,6 +108,12 @@ Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,
 discovered functions/classes, checks, and compact problem-preview issues.
+Contract previews pass the hypothesis-selected surface into ContractGate patch
+checks, so C7 interface, C9d instance-identity, and C9c complexity previews use
+the same authoritative surface as the formal patch gate; standalone interface
+previews may also carry an explicit selected surface. A selected surface whose
+targets do not contain the patch path fails closed instead of silently falling
+back to a path-resolved surface.
 Problem-owned preview hooks run only after the full ContractGate patch result
 passes, not merely after interface-shape checks, so tainted policy/config code
 with forbidden APIs is not imported or executed during preview.

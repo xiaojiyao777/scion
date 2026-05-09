@@ -260,6 +260,7 @@ class InterfacePreviewInput(_StrictInput):
     file_path: str
     action: str = "modify"
     code_content: str
+    selected_surface: str | None = None
 
 
 class ContractPreviewInput(_StrictInput):
@@ -1173,11 +1174,18 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
 
         patch = patch_preview["patch_object"]
         gate = _contract_gate(context)
-        result = gate.validate_patch(patch)
+        result = gate.validate_patch(
+            patch,
+            selected_surface=args.selected_surface,
+        )
         interface_checks = [
             check for check in result.checks if check.name == "C7_interface"
         ]
-        surface = _surface_for_patch_path(context, patch.file_path)
+        surface = _surface_for_selected_or_patch_path(
+            context,
+            patch.file_path,
+            args.selected_surface,
+        )
         interface_passed = bool(
             interface_checks and all(check.passed for check in interface_checks)
         )
@@ -1276,9 +1284,11 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                 patch_preview["checks"] = contract_payload["checks"]
                 patch_preview["passed"] = result.passed
                 if result.passed:
-                    surface = _surface_for_patch_path(
+                    selected_surface = _hypothesis_selected_surface(hypothesis_object)
+                    surface = _surface_for_selected_or_patch_path(
                         context,
                         patch_preview["patch_object"].file_path,
+                        selected_surface,
                     )
                     problem_preview = _problem_surface_preview(
                         context,
@@ -1630,6 +1640,28 @@ def _surface_for_patch_path(
         if _target_declared(normalized, _surface_target_files(surface)):
             return surface
     return None
+
+
+def _surface_for_selected_or_patch_path(
+    context: ProposalToolContext,
+    file_path: str,
+    selected_surface: str | None,
+) -> Any | None:
+    selected = str(selected_surface or "").strip()
+    if selected:
+        surface = _find_surface(context, selected)
+        if surface is not None:
+            return surface
+    return _surface_for_patch_path(context, file_path)
+
+
+def _hypothesis_selected_surface(
+    hypothesis: HypothesisProposal | None,
+) -> str | None:
+    if hypothesis is None:
+        return None
+    value = str(getattr(hypothesis, "change_locus", "") or "").strip()
+    return value or None
 
 
 def _problem_surface_preview(

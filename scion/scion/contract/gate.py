@@ -144,11 +144,15 @@ class ContractGate:
         hypothesis: HypothesisProposal | HypothesisRecord | None = None,
         *,
         approved_hypothesis: HypothesisProposal | HypothesisRecord | None = None,
+        selected_surface: str | None = None,
     ) -> ContractResult:
         """Run C4–C9 checks on a PatchProposal."""
         checks: List[CheckResult] = []
         contract_hypothesis = (
             approved_hypothesis if approved_hypothesis is not None else hypothesis
+        )
+        selected_surface_name = (
+            self._selected_surface_name(contract_hypothesis) or selected_surface
         )
 
         checks.append(self._c4_file_whitelist(patch))
@@ -162,12 +166,27 @@ class ContractGate:
         if not checks[-1].passed:
             return _build_result(checks)
 
-        checks.append(self._c7_interface_signature(patch))
+        checks.append(
+            self._c7_interface_signature(
+                patch,
+                selected_surface=selected_surface_name,
+            )
+        )
         checks.append(self._c8_import_whitelist(patch))
         checks.append(self._c9_sensitive_api(patch))
-        checks.append(self._c9d_surface_instance_identity(patch))
+        checks.append(
+            self._c9d_surface_instance_identity(
+                patch,
+                selected_surface=selected_surface_name,
+            )
+        )
         checks.append(self._c9b_non_rng_random(patch))
-        checks.append(self._c9c_complexity_bound(patch))
+        checks.append(
+            self._c9c_complexity_bound(
+                patch,
+                selected_surface=selected_surface_name,
+            )
+        )
 
         return _build_result(checks)
 
@@ -368,7 +387,19 @@ class ContractGate:
                         f"hypothesis target_file '{target_rel}'",
                         t0,
                     )
-            surface = self._surface_for_hypothesis(hypothesis)
+            selected_name = self._selected_surface_name(hypothesis)
+            surface = self._surface_by_name(selected_name or "")
+            if selected_name and self._research_surfaces() and surface is None:
+                return _cr(
+                    "C4b_patch_action_target",
+                    False,
+                    "heavy",
+                    f"selected research surface '{selected_name}' is not declared "
+                    "in problem_spec.research_surfaces",
+                    t0,
+                )
+            if surface is None:
+                surface = self._surface_for_hypothesis(hypothesis)
 
         if surface is None:
             surface = self._surface_for_patch_path(file_rel)
@@ -426,10 +457,16 @@ class ContractGate:
     # C7: Interface signature — validate the active research-surface interface.
     # ------------------------------------------------------------------
 
-    def _c7_interface_signature(self, patch: PatchProposal) -> CheckResult:
+    def _c7_interface_signature(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> CheckResult:
         return check_surface_interface(
             patch,
             problem_spec=self._spec,
+            selected_surface=selected_surface,
             operator_execute_signature=self._operator_signature.display,
             check_name="C7_interface",
             severity="light",
@@ -629,7 +666,12 @@ class ContractGate:
     # C9d: Surface policy/config code must not branch on case identity.
     # ------------------------------------------------------------------
 
-    def _c9d_surface_instance_identity(self, patch: PatchProposal) -> CheckResult:
+    def _c9d_surface_instance_identity(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> CheckResult:
         t0 = time.monotonic_ns()
         if patch.action == "delete":
             return _cr(
@@ -645,7 +687,18 @@ class ContractGate:
         except ValueError as exc:
             return _cr("C9d_surface_instance_identity", False, "heavy", str(exc), t0)
 
-        surface = self._surface_for_patch_path(file_rel)
+        surface, surface_error = self._surface_for_patch_selection(
+            file_rel,
+            selected_surface=selected_surface,
+        )
+        if surface_error is not None:
+            return _cr(
+                "C9d_surface_instance_identity",
+                False,
+                "heavy",
+                surface_error,
+                t0,
+            )
         if not self._surface_disallows_instance_name(surface):
             return _cr(
                 "C9d_surface_instance_identity",
@@ -768,7 +821,12 @@ class ContractGate:
     # C9c: Complexity bound for generated neighborhood enumeration.
     # ------------------------------------------------------------------
 
-    def _c9c_complexity_bound(self, patch: PatchProposal) -> CheckResult:
+    def _c9c_complexity_bound(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> CheckResult:
         """Reject high-order or variable-size combinations in operator code.
 
         Production instances can contain 100+ vehicles in one region. An LLM
@@ -786,7 +844,12 @@ class ContractGate:
         except SyntaxError:
             return _cr("C9c_complexity_bound", False, "heavy", "unparseable code", t0)
 
-        scale_names = self._complexity_scale_terms_for_patch(patch)
+        scale_names, surface_error = self._complexity_scale_terms_for_patch(
+            patch,
+            selected_surface=selected_surface,
+        )
+        if surface_error is not None:
+            return _cr("C9c_complexity_bound", False, "heavy", surface_error, t0)
         itertools_aliases = _collect_itertools_aliases(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
@@ -855,16 +918,62 @@ class ContractGate:
             if existing.status == "rejected":
                 if existing.base_champion_version != current_champion_version:
                     continue
-            existing_key = self._novelty_key(existing)
-            if key == existing_key:
+            duplicate_key = self._duplicate_novelty_key(
+                h,
+                existing,
+                candidate_key=key,
+            )
+            if duplicate_key is not None:
                 return _cr(
                     "C10_novelty",
                     False,
                     "light",
-                    f"duplicate of existing hypothesis (key={key})",
+                    f"duplicate of existing hypothesis (key={duplicate_key})",
                     t0,
                 )
         return _cr("C10_novelty", True, "light", "novel", t0)
+
+    def _duplicate_novelty_key(
+        self,
+        h: HypothesisProposal,
+        existing: HypothesisRecord,
+        *,
+        candidate_key: tuple[Any, ...],
+    ) -> tuple[Any, ...] | None:
+        if self._uses_same_semantic_modify_surface(h, existing):
+            surface = self._surface_for_hypothesis(h)
+            candidate_semantic = self._semantic_signature_key(h, surface)
+            existing_semantic = self._semantic_signature_key(existing, surface)
+            if candidate_semantic is None or existing_semantic is None:
+                strict_key = self._strict_novelty_key(h)
+                if strict_key == self._strict_novelty_key(existing):
+                    return strict_key
+                return None
+            if candidate_semantic == existing_semantic:
+                return (
+                    h.change_locus,
+                    h.action,
+                    "semantic_signature",
+                    candidate_semantic,
+                )
+            return None
+
+        existing_key = self._novelty_key(existing)
+        if candidate_key == existing_key:
+            return candidate_key
+        return None
+
+    def _uses_same_semantic_modify_surface(
+        self,
+        h: HypothesisProposal,
+        existing: HypothesisRecord,
+    ) -> bool:
+        if h.action != "modify" or existing.action != "modify":
+            return False
+        if h.change_locus != existing.change_locus:
+            return False
+        surface = self._surface_for_hypothesis(h)
+        return self._surface_novelty_strategy(surface) == "semantic_signature"
 
     def _novelty_key(self, h: HypothesisProposal | HypothesisRecord) -> tuple[Any, ...]:
         strict_key = self._strict_novelty_key(h)
@@ -887,13 +996,6 @@ class ContractGate:
                 semantic_key = self._semantic_signature_key(h, surface)
                 if semantic_key is not None:
                     return (h.change_locus, h.action, "semantic_signature", semantic_key)
-                if self._surface_is_singleton(surface):
-                    return (
-                        h.change_locus,
-                        h.action,
-                        "semantic_unstructured",
-                        _normalized_free_text_identity(h.hypothesis_text),
-                    )
                 return strict_key
 
         # Ordinary modify/remove remains strict by locus/action/target file.
@@ -940,7 +1042,7 @@ class ContractGate:
         for field in fields:
             normalized = self._normalize_signature_field(field, h)
             if normalized is None:
-                continue
+                return None
             if field not in _WEAK_SIGNATURE_FIELDS:
                 sufficient = True
             parts.append(f"{field}:{normalized}")
@@ -1067,6 +1169,33 @@ class ContractGate:
                 return surface
         return None
 
+    def _surface_for_patch_selection(
+        self,
+        file_rel: str,
+        *,
+        selected_surface: str | None,
+    ) -> tuple[Any | None, str | None]:
+        surfaces = self._research_surfaces()
+        selected = str(selected_surface or "").strip()
+        if not selected or not surfaces:
+            return self._surface_for_patch_path(file_rel), None
+
+        surface = self._surface_by_name(selected)
+        if surface is None:
+            return (
+                None,
+                f"selected research surface '{selected}' is not declared "
+                "in problem_spec.research_surfaces",
+            )
+        if not self._target_matches_surface(file_rel, surface):
+            return (
+                None,
+                f"patch file_path '{file_rel}' is not in target files "
+                f"{self._surface_target_files(surface)} for selected research "
+                f"surface '{selected}'",
+            )
+        return surface, None
+
     def _target_matches_surface(self, file_rel: str, surface: Any) -> bool:
         try:
             normalized = normalize_relative_patch_path(file_rel)
@@ -1104,12 +1233,6 @@ class ContractGate:
         if targets is not None and hasattr(targets, attr):
             return bool(getattr(targets, attr))
         return bool(getattr(surface, attr, True))
-
-    def _surface_is_singleton(self, surface: Any | None) -> bool:
-        targets = self._surface_targets(surface)
-        if targets is not None and hasattr(targets, "singleton"):
-            return bool(getattr(targets, "singleton"))
-        return len(self._surface_target_files(surface)) == 1
 
     def _surface_required_functions(self, surface: Any | None) -> list[str]:
         interface = getattr(surface, "interface", None) if surface is not None else None
@@ -1244,13 +1367,43 @@ class ContractGate:
                 normalized.append(value)
         return normalized
 
-    def _complexity_scale_terms_for_patch(self, patch: PatchProposal) -> frozenset[str]:
-        surface = self._surface_for_patch_path(patch.file_path)
+    def _complexity_scale_terms_for_patch(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> tuple[frozenset[str], str | None]:
+        try:
+            file_rel = normalize_relative_patch_path(patch.file_path)
+        except ValueError as exc:
+            return frozenset(), str(exc)
+        surface, surface_error = self._surface_for_patch_selection(
+            file_rel,
+            selected_surface=selected_surface,
+        )
+        if surface_error is not None:
+            return frozenset(), surface_error
         bounds = getattr(surface, "bounds", None) if surface is not None else None
         if bounds is not None:
             terms = getattr(bounds, "complexity_scale_terms", None)
-            return frozenset(str(term).strip() for term in (terms or ()) if str(term).strip())
-        return _LEGACY_PROBLEM_SCALE_NAMES
+            return (
+                frozenset(
+                    str(term).strip()
+                    for term in (terms or ())
+                    if str(term).strip()
+                ),
+                None,
+            )
+        return _LEGACY_PROBLEM_SCALE_NAMES, None
+
+    @staticmethod
+    def _selected_surface_name(
+        hypothesis: HypothesisProposal | HypothesisRecord | None,
+    ) -> str | None:
+        if hypothesis is None:
+            return None
+        name = str(getattr(hypothesis, "change_locus", "") or "").strip()
+        return name or None
 
     def _surface_disallows_instance_name(self, surface: Any | None) -> bool:
         if surface is None:
@@ -1408,13 +1561,6 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
             seen.add(text)
             deduped.append(text)
     return deduped
-
-
-def _normalized_free_text_identity(value: Any) -> str:
-    text = _normalize_text_token(value, max_length=240)
-    if text is None:
-        text = ""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 def _normalize_generic_signature_value(value: Any, *, depth: int = 0) -> str | None:

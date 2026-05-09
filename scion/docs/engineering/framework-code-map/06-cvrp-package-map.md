@@ -83,7 +83,10 @@ Solver flow:
 8. Run the main-search improvement loop, when active, after baseline and before
    registry operators. The solver owns bounded primitives:
    `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
-   `bounded_destroy_repair`.
+   `bounded_destroy_repair`. The main-search loop records selected,
+   attempted, accepted, and skipped components, per-component skip reasons,
+   best observed distance deltas, improvement counts, runtime, and
+   destroy/repair removed/reinserted counts.
 9. Run the algorithm-blueprint local-search phase, when active, after baseline
    and before registry operators. The solver owns the bounded primitives:
    `intra_route_2opt` and `inter_route_relocate`.
@@ -151,6 +154,12 @@ required keys for enabled plans, invalid baseline params, bad types,
 non-finite values, unknown components, and out-of-range values increment
 `main_search_strategy_errors`; invalid enabled plans do not take over the
 solver lifecycle and selected-surface runtime audit fails closed.
+
+The deep components are package-owned and audited. `route_pair_swap` ranks a
+bounded set of route-pair/customer-swap candidates before applying `top_k`,
+instead of relying on raw nested enumeration order. `bounded_destroy_repair`
+uses worst-removal over a bounded customer subset followed by regret-2 repair
+with cheapest insertion candidates, and records removed and reinserted counts.
 
 `policies/baseline_policy.py` is a singleton policy research surface. Required
 function:
@@ -294,12 +303,15 @@ and campaign summaries through the generic selected-surface runtime summary.
 The `main_search_strategy` surface declares required runtime fields covering
 load/active/error status, normalized plan, phases executed, construction
 methods, baseline fraction and params, post-baseline registry toggle/limit,
-improvement components, rounds/top-k, component attempts/accepted/runtime,
-acceptance threshold, restart/perturbation knobs and counts, phase objective
-deltas, phase runtime, elapsed runtime, and stop reason. Selected-surface
-audit fails closed when `main_search_strategy_errors` is positive or these
-fields are missing/empty. When `main_search_strategy` is the selected surface,
-`ExperimentProtocol` preserves these required `main_search_*` fields through
-the generic selected-surface runtime summary.
+improvement components, rounds/top-k, selected and attempted component lists,
+component attempts/accepted/runtime, per-component skip reasons, best component
+distance deltas, improvement counts, bounded destroy/repair
+removed/reinserted counts, acceptance threshold, restart/perturbation knobs and
+counts, phase objective deltas, phase runtime, elapsed runtime, and stop
+reason. Selected-surface audit fails closed when
+`main_search_strategy_errors` is positive or these fields are missing/empty.
+When `main_search_strategy` is the selected surface, `ExperimentProtocol`
+preserves these required `main_search_*` fields through the generic
+selected-surface runtime summary.
 
 `ExperimentProtocol`, `VerificationGate`, and final evidence builders treat these as failed evidence rather than objective ties.

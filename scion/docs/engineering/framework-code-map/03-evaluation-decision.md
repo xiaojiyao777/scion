@@ -33,8 +33,9 @@ Hypothesis checks:
   uses declared direct fields such as objectives plus optional
   `novelty_signature` values persisted on the proposal/record. For singleton
   semantic policy/config/portfolio surfaces, unavailable structured identity no
-  longer falls back to target-file duplicate blocking; C10 only collapses a
-  computed semantic signature or an exactly repeated unstructured hypothesis.
+  longer falls back to hypothesis free text; C10 uses a computed structured
+  semantic signature when all required identity fields are usable, otherwise it
+  falls back to strict locus/action/target-file duplicate protection.
   Ordinary operator modify/remove still uses strict locus/action/target-file
   duplicate protection.
 
@@ -44,20 +45,23 @@ Patch checks:
 - patch action/target compatibility with the approved hypothesis and selected
   surface target/allow flags;
 - Python AST syntax;
-- operator, policy, or declared module-function surface interface;
+- operator, policy, or declared module-function surface interface, using the
+  approved hypothesis's selected surface as authoritative when present;
 - declared non-operator surface required-function presence;
 - import whitelist;
 - sensitive API detection, including `open()` in any mode and file-read
   helpers such as `Path.read_text()`, `Path.read_bytes()`, and `Path.open()`;
-- case-identity access rejection for non-operator policy/config/portfolio/
-  construction/acceptance_restart surfaces and singleton surfaces:
+- case-identity access rejection for the approved selected surface when present,
+  otherwise for the path-resolved non-operator policy/config/portfolio/
+  construction/acceptance_restart surface or singleton surface:
   generated surface code must not branch on `instance.name` or direct
   `getattr(instance, "name")` / `hasattr(instance, "name")` probes;
 - non-`rng` randomness detection;
 - complexity bound for high-order/uncapped enumeration.
 
 For v2 research surfaces, the complexity guard uses
-`bounds.complexity_scale_terms` from surface metadata. The old
+`bounds.complexity_scale_terms` from the approved selected surface when present,
+and otherwise from path-resolved surface metadata. The old
 route/customer/order/vehicle names remain only as a legacy fallback for
 surfaces without v2 bounds metadata.
 The `instance.name` rule is intentionally generic and surface-aware: it does

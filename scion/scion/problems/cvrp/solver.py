@@ -1391,8 +1391,17 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_components": [],
         "main_search_rounds": 0,
         "main_search_top_k": 16,
+        "main_search_selected_components": [],
+        "main_search_attempted_components": [],
+        "main_search_accepted_components": [],
+        "main_search_skipped_components": [],
         "main_search_component_attempts": {},
         "main_search_component_accepted": {},
+        "main_search_component_skip_reasons": {},
+        "main_search_component_best_delta": {},
+        "main_search_component_improvement_counts": {},
+        "main_search_component_removed_counts": {},
+        "main_search_component_reinserted_counts": {},
         "main_search_component_runtime_ms": {},
         "main_search_acceptance_min_distance_improvement": 0.0,
         "main_search_restart_enabled": False,
@@ -1642,10 +1651,29 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_components"] = components
     audit["main_search_rounds"] = rounds
     audit["main_search_top_k"] = top_k
+    audit["main_search_selected_components"] = list(components)
+    audit["main_search_attempted_components"] = []
+    audit["main_search_accepted_components"] = []
+    audit["main_search_skipped_components"] = []
     audit["main_search_component_attempts"] = {
         component: 0 for component in components
     }
     audit["main_search_component_accepted"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_skip_reasons"] = {
+        component: {} for component in components
+    }
+    audit["main_search_component_best_delta"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_improvement_counts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_removed_counts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_reinserted_counts"] = {
         component: 0 for component in components
     }
     audit["main_search_component_runtime_ms"] = {
@@ -2746,7 +2774,8 @@ def improve_with_main_search_strategy(
                 stop_reason = "time_limit"
                 break
             component_start_ns = time.monotonic_ns()
-            candidate, attempts = _main_search_component_candidate(
+            _record_main_search_component_attempted(audit, component)
+            candidate, attempts, component_telemetry = _main_search_component_candidate(
                 component,
                 current,
                 instance,
@@ -2755,15 +2784,39 @@ def improve_with_main_search_strategy(
                 top_k=top_k,
             )
             _record_main_search_component_attempts(audit, component, attempts)
+            _record_main_search_component_repair_counts(
+                audit,
+                component,
+                component_telemetry,
+            )
             _record_main_search_component_runtime(audit, component, component_start_ns)
             if candidate is None:
+                _record_main_search_component_skip(
+                    audit,
+                    component,
+                    _main_search_skip_reason(component_telemetry, attempts),
+                )
                 continue
             candidate_objective = _objective_for_solution(adapter, instance, candidate)
+            candidate_delta = _objective_distance_delta(
+                current_objective,
+                candidate_objective,
+            )
+            _record_main_search_component_candidate_delta(
+                audit,
+                component,
+                candidate_delta,
+            )
             if not _main_search_accepts(
                 candidate_objective,
                 current_objective,
                 min_distance_improvement=min_distance_improvement,
             ):
+                _record_main_search_component_skip(
+                    audit,
+                    component,
+                    "candidate_below_acceptance_threshold",
+                )
                 continue
             valid, reason = _solution_is_valid(adapter, instance, candidate)
             if not valid:
@@ -2774,6 +2827,11 @@ def improve_with_main_search_strategy(
                     audit,
                     "error",
                     f"{component} produced invalid solution: {reason}",
+                )
+                _record_main_search_component_skip(
+                    audit,
+                    component,
+                    "invalid_component_output",
                 )
                 stop_reason = "invalid_component_output"
                 break
@@ -2864,31 +2922,34 @@ def _main_search_component_candidate(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
-) -> tuple[CvrpSolution | None, int]:
+) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     if component == "intra_route_2opt":
-        return _best_intra_route_2opt(
+        candidate, attempts = _best_intra_route_2opt(
             solution,
             instance,
             adapter=adapter,
             current_objective=current_objective,
             top_k=top_k,
         )
+        return candidate, attempts, {}
     if component == "inter_route_relocate":
-        return _best_inter_route_relocate(
+        candidate, attempts = _best_inter_route_relocate(
             solution,
             instance,
             adapter=adapter,
             current_objective=current_objective,
             top_k=top_k,
         )
+        return candidate, attempts, {}
     if component == "route_pair_swap":
-        return _best_route_pair_swap(
+        candidate, attempts = _best_route_pair_swap(
             solution,
             instance,
             adapter=adapter,
             current_objective=current_objective,
             top_k=top_k,
         )
+        return candidate, attempts, {}
     if component == "bounded_destroy_repair":
         return _best_bounded_destroy_repair(
             solution,
@@ -2897,7 +2958,7 @@ def _main_search_component_candidate(
             current_objective=current_objective,
             top_k=top_k,
         )
-    return None, 0
+    return None, 0, {"skip_reason": "unknown_component"}
 
 
 def improve_with_algorithm_blueprint(
@@ -3090,42 +3151,38 @@ def _best_route_pair_swap(
     top_k: int,
 ) -> tuple[CvrpSolution | None, int]:
     routes = [list(route) for route in solution.routes]
+    ranked_swaps = _rank_route_pair_swap_candidates(routes, instance, top_k=top_k)
     best_solution: CvrpSolution | None = None
     best_objective: Mapping[str, int | float] = current_objective
     attempts = 0
-    for left_index, left_route in enumerate(routes):
-        for right_index in range(left_index + 1, len(routes)):
-            right_route = routes[right_index]
-            for left_pos, _left_customer in enumerate(left_route):
-                for right_pos, _right_customer in enumerate(right_route):
-                    if attempts >= top_k:
-                        return best_solution, attempts
-                    attempts += 1
-                    candidate_routes = [list(item) for item in routes]
-                    (
-                        candidate_routes[left_index][left_pos],
-                        candidate_routes[right_index][right_pos],
-                    ) = (
-                        candidate_routes[right_index][right_pos],
-                        candidate_routes[left_index][left_pos],
-                    )
-                    if (
-                        instance.route_load(tuple(candidate_routes[left_index]))
-                        > instance.capacity
-                        or instance.route_load(tuple(candidate_routes[right_index]))
-                        > instance.capacity
-                    ):
-                        continue
-                    candidate = CvrpSolution(
-                        routes=tuple(tuple(route) for route in candidate_routes if route)
-                    )
-                    valid, _reason = _solution_is_valid(adapter, instance, candidate)
-                    if not valid:
-                        continue
-                    objective = _objective_for_solution(adapter, instance, candidate)
-                    if _lexicographic_improves(objective, best_objective):
-                        best_solution = candidate
-                        best_objective = objective
+    for _estimated_delta, left_index, right_index, left_pos, right_pos in ranked_swaps:
+        if attempts >= top_k:
+            return best_solution, attempts
+        attempts += 1
+        candidate_routes = [list(item) for item in routes]
+        (
+            candidate_routes[left_index][left_pos],
+            candidate_routes[right_index][right_pos],
+        ) = (
+            candidate_routes[right_index][right_pos],
+            candidate_routes[left_index][left_pos],
+        )
+        if (
+            instance.route_load(tuple(candidate_routes[left_index])) > instance.capacity
+            or instance.route_load(tuple(candidate_routes[right_index]))
+            > instance.capacity
+        ):
+            continue
+        candidate = CvrpSolution(
+            routes=tuple(tuple(route) for route in candidate_routes if route)
+        )
+        valid, _reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            continue
+        objective = _objective_for_solution(adapter, instance, candidate)
+        if _lexicographic_improves(objective, best_objective):
+            best_solution = candidate
+            best_objective = objective
     return best_solution, attempts
 
 
@@ -3136,49 +3193,311 @@ def _best_bounded_destroy_repair(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
-) -> tuple[CvrpSolution | None, int]:
+) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     routes = [list(route) for route in solution.routes]
+    telemetry = {
+        "removed_count": 0,
+        "reinserted_count": 0,
+        "skip_reason": "",
+    }
+    customer_count = sum(len(route) for route in routes)
+    if customer_count < 2 or top_k <= 0:
+        telemetry["skip_reason"] = "insufficient_destroy_budget"
+        return None, 0, telemetry
+
+    destroy_count = _bounded_destroy_count(customer_count, top_k)
+    removable = _rank_worst_removal_customers(routes, instance)
+    if len(removable) < destroy_count:
+        telemetry["skip_reason"] = "insufficient_removal_candidates"
+        return None, 0, telemetry
+
+    selected = removable[:destroy_count]
+    base_routes = [list(route) for route in routes]
+    removed_customers = [customer for _saving, _route_index, _pos, customer in selected]
+    for _saving, route_index, pos, customer in sorted(
+        selected,
+        key=lambda item: (item[1], item[2]),
+        reverse=True,
+    ):
+        if route_index >= len(base_routes) or pos >= len(base_routes[route_index]):
+            telemetry["skip_reason"] = "stale_removal_position"
+            return None, 0, telemetry
+        removed = base_routes[route_index].pop(pos)
+        if removed != customer:
+            telemetry["skip_reason"] = "stale_removal_customer"
+            return None, 0, telemetry
+
+    telemetry["removed_count"] = len(removed_customers)
+    repaired_routes, attempts, reinserted_count, repair_reason = (
+        _repair_destroyed_customers_with_regret2(
+            base_routes,
+            removed_customers,
+            instance,
+            top_k=top_k,
+        )
+    )
+    telemetry["reinserted_count"] = reinserted_count
+    if reinserted_count != len(removed_customers):
+        telemetry["skip_reason"] = repair_reason or "incomplete_repair"
+        return None, attempts, telemetry
+
+    candidate = CvrpSolution(
+        routes=tuple(tuple(route) for route in repaired_routes if route)
+    )
+    valid, _reason = _solution_is_valid(adapter, instance, candidate)
+    if not valid:
+        telemetry["skip_reason"] = "invalid_repair_solution"
+        return None, attempts, telemetry
+    objective = _objective_for_solution(adapter, instance, candidate)
+    if _lexicographic_improves(objective, current_objective):
+        return candidate, attempts, telemetry
+    telemetry["skip_reason"] = "no_repair_improvement"
+    return None, attempts, telemetry
+
+
+def _rank_route_pair_swap_candidates(
+    routes: list[list[int]],
+    instance: CvrpInstance,
+    *,
+    top_k: int,
+) -> list[tuple[float, int, int, int, int]]:
+    if len(routes) < 2 or top_k <= 0:
+        return []
+
+    route_distances = [instance.route_distance(tuple(route)) for route in routes]
+    route_worst_savings = [
+        max(
+            (_route_removal_saving(route, pos, instance) for pos in range(len(route))),
+            default=0.0,
+        )
+        for route in routes
+    ]
+    route_pairs: list[tuple[float, int, int]] = []
+    for left_index, left_route in enumerate(routes):
+        if not left_route:
+            continue
+        for right_index in range(left_index + 1, len(routes)):
+            if not routes[right_index]:
+                continue
+            score = (
+                route_distances[left_index]
+                + route_distances[right_index]
+                + route_worst_savings[left_index]
+                + route_worst_savings[right_index]
+            )
+            route_pairs.append((float(score), left_index, right_index))
+    route_pairs.sort(key=lambda item: (-item[0], item[1], item[2]))
+
+    pair_cap = max(1, min(len(route_pairs), max(8, top_k * 2)))
+    position_cap = max(2, min(8, top_k + 1))
+    ranked: list[tuple[float, int, int, int, int]] = []
+    seen: set[tuple[int, int, int, int]] = set()
+    for _score, left_index, right_index in route_pairs[:pair_cap]:
+        left_route = routes[left_index]
+        right_route = routes[right_index]
+        left_positions = _rank_swap_positions(left_route, instance, position_cap)
+        right_positions = _rank_swap_positions(right_route, instance, position_cap)
+        before_distance = route_distances[left_index] + route_distances[right_index]
+        for left_pos in left_positions:
+            for right_pos in right_positions:
+                key = (left_index, right_index, left_pos, right_pos)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidate_left = list(left_route)
+                candidate_right = list(right_route)
+                candidate_left[left_pos], candidate_right[right_pos] = (
+                    candidate_right[right_pos],
+                    candidate_left[left_pos],
+                )
+                if (
+                    instance.route_load(tuple(candidate_left)) > instance.capacity
+                    or instance.route_load(tuple(candidate_right)) > instance.capacity
+                ):
+                    estimated_delta = float("-inf")
+                else:
+                    after_distance = instance.route_distance(
+                        tuple(candidate_left)
+                    ) + instance.route_distance(tuple(candidate_right))
+                    estimated_delta = float(before_distance - after_distance)
+                ranked.append(
+                    (estimated_delta, left_index, right_index, left_pos, right_pos)
+                )
+    ranked.sort(key=lambda item: (-item[0], item[1], item[2], item[3], item[4]))
+    return ranked[: max(0, top_k)]
+
+
+def _rank_swap_positions(
+    route: list[int],
+    instance: CvrpInstance,
+    limit: int,
+) -> list[int]:
+    records = [
+        (
+            _route_removal_saving(route, pos, instance),
+            pos == 0 or pos == len(route) - 1,
+            -pos,
+            pos,
+        )
+        for pos in range(len(route))
+    ]
+    records.sort(key=lambda item: (-item[0], not item[1], item[2]))
+    return [pos for _saving, _is_endpoint, _neg_pos, pos in records[:limit]]
+
+
+def _rank_worst_removal_customers(
+    routes: list[list[int]],
+    instance: CvrpInstance,
+) -> list[tuple[float, int, int, int]]:
     removable: list[tuple[float, int, int, int]] = []
     for route_index, route in enumerate(routes):
         for pos, customer in enumerate(route):
-            prev_node = instance.depot if pos == 0 else route[pos - 1]
-            next_node = instance.depot if pos == len(route) - 1 else route[pos + 1]
-            saving = (
-                instance.distance(prev_node, customer)
-                + instance.distance(customer, next_node)
-                - instance.distance(prev_node, next_node)
-            )
-            removable.append((float(saving), route_index, pos, customer))
-    removable.sort(key=lambda item: (-item[0], item[3]))
-
-    best_solution: CvrpSolution | None = None
-    best_objective: Mapping[str, int | float] = current_objective
-    attempts = 0
-    for _saving, remove_route_index, remove_pos, customer in removable[: max(1, min(4, top_k))]:
-        base_routes = [list(route) for route in routes]
-        removed = base_routes[remove_route_index].pop(remove_pos)
-        if removed != customer:
-            continue
-        for dest_index in range(len(base_routes)):
-            for insert_pos in range(len(base_routes[dest_index]) + 1):
-                if attempts >= top_k:
-                    return best_solution, attempts
-                attempts += 1
-                candidate_routes = [list(route) for route in base_routes]
-                candidate_routes[dest_index].insert(insert_pos, customer)
-                if instance.route_load(tuple(candidate_routes[dest_index])) > instance.capacity:
-                    continue
-                candidate = CvrpSolution(
-                    routes=tuple(tuple(route) for route in candidate_routes if route)
+            removable.append(
+                (
+                    _route_removal_saving(route, pos, instance),
+                    route_index,
+                    pos,
+                    customer,
                 )
-                valid, _reason = _solution_is_valid(adapter, instance, candidate)
-                if not valid:
-                    continue
-                objective = _objective_for_solution(adapter, instance, candidate)
-                if _lexicographic_improves(objective, best_objective):
-                    best_solution = candidate
-                    best_objective = objective
-    return best_solution, attempts
+            )
+    removable.sort(key=lambda item: (-item[0], item[1], item[2], item[3]))
+    return removable
+
+
+def _route_removal_saving(
+    route: list[int],
+    pos: int,
+    instance: CvrpInstance,
+) -> float:
+    customer = route[pos]
+    prev_node = instance.depot if pos == 0 else route[pos - 1]
+    next_node = instance.depot if pos == len(route) - 1 else route[pos + 1]
+    return float(
+        instance.distance(prev_node, customer)
+        + instance.distance(customer, next_node)
+        - instance.distance(prev_node, next_node)
+    )
+
+
+def _bounded_destroy_count(customer_count: int, top_k: int) -> int:
+    if customer_count <= 1:
+        return customer_count
+    budget_count = max(2, min(6, max(2, top_k // 4)))
+    return min(max(2, customer_count - 1), budget_count)
+
+
+def _repair_destroyed_customers_with_regret2(
+    base_routes: list[list[int]],
+    removed_customers: list[int],
+    instance: CvrpInstance,
+    *,
+    top_k: int,
+) -> tuple[list[list[int]], int, int, str]:
+    routes = [list(route) for route in base_routes]
+    pending = list(removed_customers)
+    attempts = 0
+    reinserted_count = 0
+    while pending:
+        if attempts >= top_k:
+            return routes, attempts, reinserted_count, "repair_budget_exhausted"
+        ranked_customers: list[
+            tuple[float, float, int, _RepairInsertion, list[_RepairInsertion]]
+        ] = []
+        for customer in pending:
+            remaining_budget = max(0, top_k - attempts)
+            if remaining_budget <= 0:
+                break
+            insertions = _bounded_regret_insertions(
+                routes,
+                customer,
+                instance,
+                remaining_budget=remaining_budget,
+            )
+            attempts += len(insertions)
+            if not insertions:
+                continue
+            best = insertions[0]
+            if len(insertions) >= 2:
+                regret = insertions[1].delta - best.delta
+            else:
+                regret = float("inf")
+            ranked_customers.append((regret, best.delta, customer, best, insertions))
+        if not ranked_customers:
+            reason = "repair_budget_exhausted" if attempts >= top_k else "no_feasible_insertion"
+            return routes, attempts, reinserted_count, reason
+        ranked_customers.sort(key=lambda item: (-item[0], item[1], item[2]))
+        _regret, _best_delta, customer, insertion, _insertions = ranked_customers[0]
+        if insertion.route_index == len(routes):
+            routes.append([customer])
+        else:
+            routes[insertion.route_index].insert(insertion.insert_pos, customer)
+        pending.remove(customer)
+        reinserted_count += 1
+    return routes, attempts, reinserted_count, ""
+
+
+class _RepairInsertion:
+    def __init__(self, route_index: int, insert_pos: int, delta: float) -> None:
+        self.route_index = route_index
+        self.insert_pos = insert_pos
+        self.delta = delta
+
+
+def _bounded_regret_insertions(
+    routes: list[list[int]],
+    customer: int,
+    instance: CvrpInstance,
+    *,
+    remaining_budget: int,
+) -> list[_RepairInsertion]:
+    if remaining_budget <= 0:
+        return []
+    records: list[_RepairInsertion] = []
+    demand = instance.demand(customer)
+    per_route_cap = max(1, min(8, remaining_budget))
+    for route_index, route in enumerate(routes):
+        if len(records) >= remaining_budget:
+            break
+        if instance.route_load(tuple(route)) + demand > instance.capacity:
+            continue
+        route_records = [
+            _RepairInsertion(
+                route_index,
+                insert_pos,
+                _insertion_delta(route, customer, insert_pos, instance),
+            )
+            for insert_pos in range(len(route) + 1)
+        ]
+        route_records.sort(
+            key=lambda item: (item.delta, -item.insert_pos, item.route_index)
+        )
+        take = min(per_route_cap, remaining_budget - len(records))
+        records.extend(route_records[:take])
+    if len(records) < remaining_budget and demand <= instance.capacity:
+        records.append(
+            _RepairInsertion(
+                len(routes),
+                0,
+                instance.route_distance((customer,)),
+            )
+        )
+    records.sort(key=lambda item: (item.delta, -item.insert_pos, item.route_index))
+    return records[:remaining_budget]
+
+
+def _insertion_delta(
+    route: list[int],
+    customer: int,
+    insert_pos: int,
+    instance: CvrpInstance,
+) -> float:
+    prev_node = instance.depot if insert_pos == 0 else route[insert_pos - 1]
+    next_node = instance.depot if insert_pos == len(route) else route[insert_pos]
+    return float(
+        instance.distance(prev_node, customer)
+        + instance.distance(customer, next_node)
+        - instance.distance(prev_node, next_node)
+    )
 
 
 def _main_search_accepts(
@@ -3252,6 +3571,18 @@ def _record_main_search_component_attempts(
     )
 
 
+def _record_main_search_component_attempted(
+    audit: dict[str, Any],
+    component: str,
+) -> None:
+    attempted = audit.setdefault("main_search_attempted_components", [])
+    if not isinstance(attempted, list):
+        attempted = []
+        audit["main_search_attempted_components"] = attempted
+    if component not in attempted:
+        attempted.append(component)
+
+
 def _record_main_search_component_accepted(
     audit: dict[str, Any],
     component: str,
@@ -3260,6 +3591,87 @@ def _record_main_search_component_accepted(
     component_accepted[component] = (
         _as_nonnegative_int(component_accepted.get(component)) + 1
     )
+    accepted = audit.setdefault("main_search_accepted_components", [])
+    if not isinstance(accepted, list):
+        accepted = []
+        audit["main_search_accepted_components"] = accepted
+    if component not in accepted:
+        accepted.append(component)
+
+
+def _record_main_search_component_skip(
+    audit: dict[str, Any],
+    component: str,
+    reason: str,
+) -> None:
+    normalized_reason = reason.strip() if reason else "skipped"
+    skipped = audit.setdefault("main_search_skipped_components", [])
+    if not isinstance(skipped, list):
+        skipped = []
+        audit["main_search_skipped_components"] = skipped
+    if component not in skipped:
+        skipped.append(component)
+    all_reasons = audit.setdefault("main_search_component_skip_reasons", {})
+    component_reasons = all_reasons.setdefault(component, {})
+    if not isinstance(component_reasons, dict):
+        component_reasons = {}
+        all_reasons[component] = component_reasons
+    component_reasons[normalized_reason] = (
+        _as_nonnegative_int(component_reasons.get(normalized_reason)) + 1
+    )
+
+
+def _main_search_skip_reason(
+    telemetry: Mapping[str, Any],
+    attempts: int,
+) -> str:
+    reason = telemetry.get("skip_reason") if isinstance(telemetry, Mapping) else None
+    if isinstance(reason, str) and reason.strip():
+        return reason.strip()
+    if attempts <= 0:
+        return "no_candidates"
+    return "no_improving_candidate"
+
+
+def _record_main_search_component_candidate_delta(
+    audit: dict[str, Any],
+    component: str,
+    delta: float,
+) -> None:
+    best_delta = audit.setdefault("main_search_component_best_delta", {})
+    current_best = float(best_delta.get(component, 0.0) or 0.0)
+    if delta > current_best:
+        best_delta[component] = float(delta)
+    improvement_counts = audit.setdefault(
+        "main_search_component_improvement_counts",
+        {},
+    )
+    if delta > _OBJECTIVE_TOLERANCE:
+        improvement_counts[component] = (
+            _as_nonnegative_int(improvement_counts.get(component)) + 1
+        )
+
+
+def _record_main_search_component_repair_counts(
+    audit: dict[str, Any],
+    component: str,
+    telemetry: Mapping[str, Any],
+) -> None:
+    removed = _as_nonnegative_int(telemetry.get("removed_count"))
+    reinserted = _as_nonnegative_int(telemetry.get("reinserted_count"))
+    if removed:
+        removed_counts = audit.setdefault("main_search_component_removed_counts", {})
+        removed_counts[component] = (
+            _as_nonnegative_int(removed_counts.get(component)) + removed
+        )
+    if reinserted:
+        reinserted_counts = audit.setdefault(
+            "main_search_component_reinserted_counts",
+            {},
+        )
+        reinserted_counts[component] = (
+            _as_nonnegative_int(reinserted_counts.get(component)) + reinserted
+        )
 
 
 def _record_main_search_component_runtime(
