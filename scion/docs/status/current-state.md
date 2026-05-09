@@ -80,7 +80,11 @@ destroy/repair splits repair budget across pending customers, falls back to
 smaller bounded destroy subsets, records repair fallback counts, and has a
 formal-like controlled regression showing accepted bounded destroy/repair moves
 under `rounds=5, top_k=64`. The next step is another five-round forced
-`main_search_strategy` smoke, not long validation.
+`main_search_strategy` smoke, not long validation. That smoke has completed:
+bounded destroy/repair produced accepted moves in one screened candidate and
+the dominant skip reason moved away from repair-budget exhaustion, but all
+screened candidates still failed `SCREENING_FAIL_WIN_RATE`. The blocker is now
+net case-level efficacy of accepted moves, not component execution.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2245,6 +2249,76 @@ Next step: commit this slice and run another five-round forced
 deep selected/attempted; it is that `bounded_destroy_repair` produces accepted
 moves in formal screening pairs, while selected-surface audit remains complete.
 
+## 2026-05-09 Bounded Destroy/Repair 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the
+bounded destroy/repair efficacy slice:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-bounded-destroy-repair-sonnet-5r-20260509T160637Z
+scion_commit=8a37fd6
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+exit_code=0
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-bounded-destroy-repair-sonnet-5r-20260509.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=4
+screened_candidates=4
+verification_failed_candidates=1
+promotions=0
+frozen_budget_used=0
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- Persistent `--force-surface main_search_strategy` held for all five rounds.
+- C10 remained healthy: all five hypotheses carried structured novelty
+  signatures and no C10 rejection occurred.
+- Four candidates passed Contract, Verification, canary, and reached screening.
+  One candidate failed verification because selected-surface runtime audit was
+  incomplete and the strategy did not activate cleanly.
+- Screening runtime audit was complete in the four screened candidates,
+  including `main_search_component_coverage_status`,
+  `main_search_deep_components_selected`, and
+  `main_search_component_repair_fallback_counts`.
+- `bounded_destroy_repair` improved from the previous smoke: round 5 selected
+  and attempted it, accepted 21 moves, recorded positive best deltas in 12/16
+  pairs, and used 157 repair fallbacks. The dominant skip reason shifted to
+  `repair_produced_no_improvement` instead of `repair_budget_exhausted`.
+- Rounds 2 and 4 did not select `bounded_destroy_repair`, so forced diagnostic
+  guidance still does not guarantee every candidate exercises the repaired
+  component.
+- Screening quality remained insufficient. The four screened candidates had
+  case-level win rates `0.25`, `0.125`, `0.0`, and `0.125`; all failed
+  `SCREENING_FAIL_WIN_RATE`, and none reached validation/frozen/promotion.
+
+This validates local component repair, not solver-quality improvement. The
+next optimization target is net case-level efficacy: accepted route-pair and
+destroy/repair moves must translate into stronger case-level wins rather than
+mixed pair-level movement.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2289,10 +2363,11 @@ P1:
   `114727e` showed that both deep components can now be selected and attempted,
   but screening still failed and `bounded_destroy_repair` accepted zero moves.
   The bounded destroy/repair efficacy slice is implemented and validated in
-  controlled tests with formal-like `rounds=5, top_k=64`; keep long validation
-  blocked until the next formal smoke shows destroy/repair accepted moves and
-  case-level screening quality improves beyond the current `0.0` to `0.25`
-  win-rate range.
+  controlled tests with formal-like `rounds=5, top_k=64`. The follow-up smoke
+  from commit `8a37fd6` showed destroy/repair accepted moves in formal
+  screening, but case-level screening quality still topped out at `0.25` and
+  all candidates failed `SCREENING_FAIL_WIN_RATE`. Keep long validation blocked
+  until accepted component moves translate into stronger case-level outcomes.
 
 P2:
 
