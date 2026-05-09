@@ -163,12 +163,18 @@ The deep components are package-owned and audited. `route_pair_swap` ranks a
 bounded set of route-pair/customer-swap candidates before applying `top_k`,
 instead of relying on raw nested enumeration order. `bounded_destroy_repair`
 uses worst-removal over a bounded customer subset followed by regret-2 repair
-with cheapest insertion candidates, and records removed and reinserted counts.
+with cheapest insertion candidates. Its repair budget is split across pending
+customers instead of allowing one customer to exhaust the whole `top_k` budget,
+and if a multi-customer repair fails or produces no improvement it can spend
+remaining budget on bounded smaller destroy subsets before giving up. Runtime
+audit records removed, reinserted, and repair-fallback counts, while skip
+reasons distinguish budget exhaustion, infeasible insertion, below-threshold
+candidates, and repairs that produced no improvement.
 Forced diagnostic `main_search_strategy` candidates should select both deep
 components in `improvement.enabled_components`, keep registry operators off
-unless explicitly needed, and use 5 improvement rounds for the next short smoke
-so selected/attempted/skipped/accepted coverage is visible before judging
-promotion evidence.
+unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128
+for the next short smoke so selected/attempted/skipped/accepted coverage is
+visible before judging promotion evidence.
 
 `policies/baseline_policy.py` is a singleton policy research surface. Required
 function:

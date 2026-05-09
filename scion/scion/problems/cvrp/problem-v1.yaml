@@ -955,6 +955,7 @@ research_surfaces:
         - main_search_component_improvement_counts
         - main_search_component_removed_counts
         - main_search_component_reinserted_counts
+        - main_search_component_repair_fallback_counts
         - main_search_component_runtime_ms
         - main_search_acceptance_min_distance_improvement
         - main_search_restart_enabled
@@ -989,7 +990,8 @@ research_surfaces:
         post-baseline operator work has shown low accepted-move value. In
         forced diagnostic runs, make the deep-component coverage explicit by
         selecting both route_pair_swap and bounded_destroy_repair in
-        improvement.enabled_components and plan 5 improvement rounds so runtime
+        improvement.enabled_components, use 5 improvement rounds, and give the
+        destroy/repair component enough top_k budget (64 or 128) so runtime
         evidence can show selected, attempted, skipped, and accepted coverage.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
@@ -1018,7 +1020,8 @@ research_surfaces:
       Govern the whole CVRP main-search lifecycle through a bounded plan;
       registry post-baseline operators are off by default. Forced diagnostic
       candidates should select route_pair_swap and bounded_destroy_repair for
-      5 improvement rounds and expose that choice in the novelty signature.
+      5 improvement rounds, use top_k 64 or 128 for destroy/repair budget, and
+      expose that choice in the novelty signature.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false

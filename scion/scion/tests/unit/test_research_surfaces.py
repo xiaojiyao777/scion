@@ -625,6 +625,9 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "main_search_deep_components_selected" in (
         main_search_strategy.evidence.required_runtime_fields
     )
+    assert "main_search_component_repair_fallback_counts" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
     assert main_search_strategy.novelty is not None
     assert main_search_strategy.novelty.signature_fields == [
         "predicted_direction",

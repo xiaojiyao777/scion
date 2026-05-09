@@ -75,7 +75,12 @@ candidate, and C10 no longer blocked follow-up hypotheses, but all screened
 candidates still failed `SCREENING_FAIL_WIN_RATE`; `bounded_destroy_repair`
 accepted zero moves despite many attempts. The blocker has moved from
 surface-control plumbing to bounded destroy/repair efficacy and screening
-quality.
+quality. The next CVRP package repair is now implemented: bounded
+destroy/repair splits repair budget across pending customers, falls back to
+smaller bounded destroy subsets, records repair fallback counts, and has a
+formal-like controlled regression showing accepted bounded destroy/repair moves
+under `rounds=5, top_k=64`. The next step is another five-round forced
+`main_search_strategy` smoke, not long validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2201,6 +2206,45 @@ trigger long validation. The next optimization target is
 `bounded_destroy_repair` efficacy: it must produce accepted moves under formal
 budgeted search before the run can support a longer validation.
 
+## 2026-05-09 Bounded Destroy/Repair Efficacy Slice
+
+Implemented the next CVRP problem-package repair after the 5R deep diagnostic:
+
+- `bounded_destroy_repair` no longer lets the first removed customer consume
+  the whole `top_k` repair budget.
+- Regret/cheapest insertion repair now splits bounded candidate budget across
+  pending customers.
+- When multi-customer repair fails or produces no improvement, the component
+  can spend remaining budget on smaller bounded destroy subsets before giving
+  up.
+- Runtime telemetry now records
+  `main_search_component_repair_fallback_counts` alongside removed and
+  reinserted counts.
+- Skip reasons now distinguish budget exhaustion, infeasible insertion, and
+  repaired candidates that produced no improvement.
+- CVRP surface guidance and adapter preview recommend 5 improvement rounds and
+  `top_k` 64 or 128 for forced destroy/repair diagnostics.
+- A formal-like controlled regression now proves `bounded_destroy_repair` can
+  be selected, attempted, accepted, and audited under `rounds=5, top_k=64`.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py -q
+130 passed in 11.28s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+418 passed in 40.81s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1512 passed, 1 skipped in 56.46s
+```
+
+Next step: commit this slice and run another five-round forced
+`main_search_strategy` smoke. The first acceptance condition is no longer just
+deep selected/attempted; it is that `bounded_destroy_repair` produces accepted
+moves in formal screening pairs, while selected-surface audit remains complete.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2244,8 +2288,10 @@ P1:
   feedback, and runtime coverage telemetry. The five-round smoke from commit
   `114727e` showed that both deep components can now be selected and attempted,
   but screening still failed and `bounded_destroy_repair` accepted zero moves.
-  Keep long validation blocked until destroy/repair can produce accepted moves
-  and case-level screening quality improves beyond the current `0.0` to `0.25`
+  The bounded destroy/repair efficacy slice is implemented and validated in
+  controlled tests with formal-like `rounds=5, top_k=64`; keep long validation
+  blocked until the next formal smoke shows destroy/repair accepted moves and
+  case-level screening quality improves beyond the current `0.0` to `0.25`
   win-rate range.
 
 P2:

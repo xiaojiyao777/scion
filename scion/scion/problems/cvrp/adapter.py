@@ -326,7 +326,10 @@ class CvrpAdapter:
                 "enabled_components is drawn from 'intra_route_2opt', "
                 "'inter_route_relocate', 'route_pair_swap', and "
                 "'bounded_destroy_repair'; enabled plans must include at least "
-                "one component, rounds in [1, 8], and top_k in [1, 128].\n"
+                "one component, rounds in [1, 8], and top_k in [1, 128]. "
+                "Forced destroy/repair diagnostics should usually use top_k "
+                "64 or 128 so bounded repair can evaluate enough insertion "
+                "candidates.\n"
                 "- acceptance: dict with min_distance_improvement finite number "
                 "in [0.0, 10.0].\n"
                 "- restart: dict with enabled bool, stagnation_rounds int in "
@@ -1026,7 +1029,9 @@ def _preview_main_search_strategy(
                     "guidance": (
                         "Forced main_search_strategy diagnostics should select both "
                         "route_pair_swap and bounded_destroy_repair so runtime can "
-                        "audit selected/attempted/deep-component coverage. This "
+                        "audit selected/attempted/deep-component coverage. Use 5 "
+                        "improvement rounds and top_k 64 or 128 when the goal is "
+                        "formal-like destroy/repair acceptance telemetry. This "
                         "preview advisory does not make an otherwise valid normal "
                         "promotion plan fail."
                     ),

@@ -1423,6 +1423,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_improvement_counts": {},
         "main_search_component_removed_counts": {},
         "main_search_component_reinserted_counts": {},
+        "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
         "main_search_acceptance_min_distance_improvement": 0.0,
         "main_search_restart_enabled": False,
@@ -1696,6 +1697,9 @@ def _normalize_main_search_strategy_plan(
         component: 0 for component in components
     }
     audit["main_search_component_reinserted_counts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_repair_fallback_counts"] = {
         component: 0 for component in components
     }
     audit["main_search_component_runtime_ms"] = {
@@ -3220,6 +3224,7 @@ def _best_bounded_destroy_repair(
     telemetry = {
         "removed_count": 0,
         "reinserted_count": 0,
+        "repair_fallback_count": 0,
         "skip_reason": "",
     }
     customer_count = sum(len(route) for route in routes)
@@ -3233,48 +3238,76 @@ def _best_bounded_destroy_repair(
         telemetry["skip_reason"] = "insufficient_removal_candidates"
         return None, 0, telemetry
 
-    selected = removable[:destroy_count]
-    base_routes = [list(route) for route in routes]
-    removed_customers = [customer for _saving, _route_index, _pos, customer in selected]
-    for _saving, route_index, pos, customer in sorted(
-        selected,
-        key=lambda item: (item[1], item[2]),
-        reverse=True,
-    ):
-        if route_index >= len(base_routes) or pos >= len(base_routes[route_index]):
-            telemetry["skip_reason"] = "stale_removal_position"
-            return None, 0, telemetry
-        removed = base_routes[route_index].pop(pos)
-        if removed != customer:
-            telemetry["skip_reason"] = "stale_removal_customer"
-            return None, 0, telemetry
+    total_attempts = 0
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    best_removed = 0
+    best_reinserted = 0
+    last_reason = ""
 
-    telemetry["removed_count"] = len(removed_customers)
-    repaired_routes, attempts, reinserted_count, repair_reason = (
-        _repair_destroyed_customers_with_regret2(
-            base_routes,
-            removed_customers,
-            instance,
-            top_k=top_k,
+    for selected in _bounded_destroy_repair_subsets(removable, destroy_count):
+        remaining_budget = top_k - total_attempts
+        if remaining_budget <= 0:
+            if not last_reason:
+                last_reason = "repair_budget_exhausted"
+            break
+        if total_attempts > 0:
+            telemetry["repair_fallback_count"] += 1
+        base_routes, removed_customers, removal_reason = _remove_destroy_subset(
+            routes,
+            selected,
         )
-    )
-    telemetry["reinserted_count"] = reinserted_count
-    if reinserted_count != len(removed_customers):
-        telemetry["skip_reason"] = repair_reason or "incomplete_repair"
-        return None, attempts, telemetry
+        if base_routes is None:
+            telemetry["skip_reason"] = removal_reason
+            return None, total_attempts, telemetry
 
-    candidate = CvrpSolution(
-        routes=tuple(tuple(route) for route in repaired_routes if route)
-    )
-    valid, _reason = _solution_is_valid(adapter, instance, candidate)
-    if not valid:
-        telemetry["skip_reason"] = "invalid_repair_solution"
-        return None, attempts, telemetry
-    objective = _objective_for_solution(adapter, instance, candidate)
-    if _lexicographic_improves(objective, current_objective):
-        return candidate, attempts, telemetry
-    telemetry["skip_reason"] = "no_repair_improvement"
-    return None, attempts, telemetry
+        repaired_routes, attempts, reinserted_count, repair_reason = (
+            _repair_destroyed_customers_with_regret2(
+                base_routes,
+                removed_customers,
+                instance,
+                top_k=remaining_budget,
+            )
+        )
+        total_attempts += attempts
+        if reinserted_count != len(removed_customers):
+            last_reason = repair_reason or "incomplete_repair"
+            best_removed = max(best_removed, len(removed_customers))
+            best_reinserted = max(best_reinserted, reinserted_count)
+            continue
+
+        candidate = CvrpSolution(
+            routes=tuple(tuple(route) for route in repaired_routes if route)
+        )
+        valid, _reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            last_reason = "invalid_repair_solution"
+            best_removed = max(best_removed, len(removed_customers))
+            best_reinserted = max(best_reinserted, reinserted_count)
+            continue
+        objective = _objective_for_solution(adapter, instance, candidate)
+        best_removed = max(best_removed, len(removed_customers))
+        best_reinserted = max(best_reinserted, reinserted_count)
+        if _lexicographic_improves(objective, best_objective):
+            best_solution = candidate
+            best_objective = objective
+            telemetry["removed_count"] = len(removed_customers)
+            telemetry["reinserted_count"] = reinserted_count
+        else:
+            last_reason = "repair_produced_no_improvement"
+
+    if best_solution is not None:
+        return best_solution, total_attempts, telemetry
+    telemetry["removed_count"] = best_removed
+    telemetry["reinserted_count"] = best_reinserted
+    if (
+        last_reason == "repair_budget_exhausted"
+        and best_removed > 0
+        and best_reinserted == best_removed
+    ):
+        last_reason = "repair_produced_no_improvement"
+    telemetry["skip_reason"] = last_reason or "repair_produced_no_improvement"
+    return None, total_attempts, telemetry
 
 
 def _rank_route_pair_swap_candidates(
@@ -3386,6 +3419,41 @@ def _rank_worst_removal_customers(
     return removable
 
 
+def _bounded_destroy_repair_subsets(
+    removable: list[tuple[float, int, int, int]],
+    destroy_count: int,
+) -> list[list[tuple[float, int, int, int]]]:
+    max_count = min(len(removable), destroy_count)
+    if max_count <= 0:
+        return []
+    sizes = [max_count]
+    for size in (4, 3, 2, 1):
+        if 0 < size < max_count and size not in sizes:
+            sizes.append(size)
+    return [removable[:size] for size in sizes]
+
+
+def _remove_destroy_subset(
+    routes: list[list[int]],
+    selected: list[tuple[float, int, int, int]],
+) -> tuple[list[list[int]] | None, list[int], str]:
+    base_routes = [list(route) for route in routes]
+    removed_customers = [
+        customer for _saving, _route_index, _pos, customer in selected
+    ]
+    for _saving, route_index, pos, customer in sorted(
+        selected,
+        key=lambda item: (item[1], item[2]),
+        reverse=True,
+    ):
+        if route_index >= len(base_routes) or pos >= len(base_routes[route_index]):
+            return None, removed_customers, "stale_removal_position"
+        removed = base_routes[route_index].pop(pos)
+        if removed != customer:
+            return None, removed_customers, "stale_removal_customer"
+    return base_routes, removed_customers, ""
+
+
 def _route_removal_saving(
     route: list[int],
     pos: int,
@@ -3422,18 +3490,23 @@ def _repair_destroyed_customers_with_regret2(
     while pending:
         if attempts >= top_k:
             return routes, attempts, reinserted_count, "repair_budget_exhausted"
+        remaining_budget = max(0, top_k - attempts)
+        per_customer_budget = _repair_candidate_budget_per_customer(
+            remaining_budget,
+            len(pending),
+        )
         ranked_customers: list[
             tuple[float, float, int, _RepairInsertion, list[_RepairInsertion]]
         ] = []
         for customer in pending:
-            remaining_budget = max(0, top_k - attempts)
-            if remaining_budget <= 0:
+            customer_budget = min(per_customer_budget, top_k - attempts)
+            if customer_budget <= 0:
                 break
             insertions = _bounded_regret_insertions(
                 routes,
                 customer,
                 instance,
-                remaining_budget=remaining_budget,
+                remaining_budget=customer_budget,
             )
             attempts += len(insertions)
             if not insertions:
@@ -3456,6 +3529,15 @@ def _repair_destroyed_customers_with_regret2(
         pending.remove(customer)
         reinserted_count += 1
     return routes, attempts, reinserted_count, ""
+
+
+def _repair_candidate_budget_per_customer(
+    remaining_budget: int,
+    pending_count: int,
+) -> int:
+    if remaining_budget <= 0 or pending_count <= 0:
+        return 0
+    return max(1, min(4, remaining_budget // pending_count))
 
 
 class _RepairInsertion:
@@ -3733,6 +3815,7 @@ def _record_main_search_component_repair_counts(
 ) -> None:
     removed = _as_nonnegative_int(telemetry.get("removed_count"))
     reinserted = _as_nonnegative_int(telemetry.get("reinserted_count"))
+    fallback = _as_nonnegative_int(telemetry.get("repair_fallback_count"))
     if removed:
         removed_counts = audit.setdefault("main_search_component_removed_counts", {})
         removed_counts[component] = (
@@ -3745,6 +3828,14 @@ def _record_main_search_component_repair_counts(
         )
         reinserted_counts[component] = (
             _as_nonnegative_int(reinserted_counts.get(component)) + reinserted
+        )
+    if fallback:
+        fallback_counts = audit.setdefault(
+            "main_search_component_repair_fallback_counts",
+            {},
+        )
+        fallback_counts[component] = (
+            _as_nonnegative_int(fallback_counts.get(component)) + fallback
         )
 
 

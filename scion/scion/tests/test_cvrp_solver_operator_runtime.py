@@ -5,6 +5,7 @@ import json
 import random
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from scion.core.models import PatchProposal
 from scion.problem.bridge import load_problem_spec_v1_from_yaml, legacy_problem_spec_from_v1
 from scion.problems.cvrp import solver as cvrp_solver
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.problems.cvrp.models import CvrpInstance, CvrpNode
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 from scion.runtime.audit import runtime_audit_failure_from_raw, runtime_audit_failure_from_result
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -968,6 +969,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_deep_components_selected" in required_fields
     assert "main_search_component_attempts" in required_fields
     assert "main_search_component_skip_reasons" in required_fields
+    assert "main_search_component_repair_fallback_counts" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
@@ -1271,6 +1273,95 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
             selected_surface="main_search_strategy",
         )
         is None
+    )
+
+
+def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget() -> None:
+    instance = CvrpInstance(
+        name="bounded_destroy_repair_formal_like",
+        capacity=3,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 0, 12, 1),
+            CvrpNode(4, 100, 10, 1),
+            CvrpNode(5, 100, 11, 1),
+            CvrpNode(6, 100, 12, 1),
+        ),
+    )
+    solution = CvrpSolution(routes=((1, 4, 2), (5, 3, 6)))
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": ["sequential"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.5, "params": {}},
+            "improvement": {
+                "enabled_components": ["bounded_destroy_repair"],
+                "rounds": 5,
+                "top_k": 64,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        audit=audit,
+    )
+
+    improved, runtime = cvrp_solver.improve_with_main_search_strategy(
+        solution,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.time(),
+        main_search_strategy=audit,
+    )
+
+    assert improved != solution
+    assert runtime["main_search_selected_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_accepted_components"] == ["bounded_destroy_repair"]
+    assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] >= 64
+    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] > 0
+    assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] > 0.0
+    assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
+    assert (
+        runtime["main_search_component_reinserted_counts"]["bounded_destroy_repair"]
+        == runtime["main_search_component_removed_counts"]["bounded_destroy_repair"]
+    )
+    assert (
+        runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"].get(
+            "repair_budget_exhausted",
+            0,
+        )
+        < runtime["main_search_rounds"]
+    )
+    assert (
+        runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"].get(
+            "repair_produced_no_improvement",
+            0,
+        )
+        > 0
     )
 
 
