@@ -69,7 +69,13 @@ before C10, C10 duplicate details distinguish structured duplicate from
 strict-target fallback, and CVRP `main_search_strategy` emits explicit
 deep-component coverage status for forced diagnostics. Do not launch long CVRP
 solver-quality validation yet; the next short smoke should be a five-round
-forced `main_search_strategy` diagnostic.
+forced `main_search_strategy` diagnostic. That five-round smoke has now
+completed: deep components were selected and attempted in every screened
+candidate, and C10 no longer blocked follow-up hypotheses, but all screened
+candidates still failed `SCREENING_FAIL_WIN_RATE`; `bounded_destroy_repair`
+accepted zero moves despite many attempts. The blocker has moved from
+surface-control plumbing to bounded destroy/repair efficacy and screening
+quality.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2122,6 +2128,79 @@ Next step: commit this slice and run a five-round forced
 Only if that holds and screening remains nontrivial should longer validation be
 considered.
 
+## 2026-05-09 Main Search Deep Diagnostic 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the deep
+component diagnostic coverage slice:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-main-search-deep-diagnostic-sonnet-5r-20260509T150855Z
+scion_commit=114727e
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+exit_code=0
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-main-search-deep-diagnostic-sonnet-5r-20260509.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=5
+screened_candidates=4
+verification_failed_candidates=1
+promotions=0
+frozen_budget_used=0
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- Persistent `--force-surface main_search_strategy` held for all five rounds.
+- C10 was no longer the blocker: all five hypotheses carried structured
+  `novelty_signature` values and no C10 rejection occurred.
+- Four candidates passed Contract, Verification, canary, and reached screening.
+  One candidate failed heavy verification at `V5_solution_consistency` because
+  selected-surface runtime audit reported missing
+  `main_search_deep_components_selected`.
+- The intended deep-component coverage target was reached for all screened
+  candidates: `main_search_component_coverage_status.status` was
+  `deep_components_attempted` for 16/16 candidate-side pairs in each screened
+  round.
+- `route_pair_swap` was selected, attempted, and accepted in rounds 1, 4, and
+  5. `bounded_destroy_repair` was selected and attempted in all screened
+  rounds, but accepted zero moves; its dominant skip reason was
+  `repair_budget_exhausted`.
+- Screening remained insufficient: the four screened candidates had case-level
+  win rates `0.125`, `0.0`, `0.125`, and `0.25`, with `median_delta=0.0` in
+  every round. All failed `SCREENING_FAIL_WIN_RATE`.
+- APS remained usable but budget pressured: 10 sessions, 5 completed, 5
+  partial hypothesis sessions, no invalid recovery artifacts, selected-surface
+  reads succeeded 10/10, and bounded `result_too_large` observations still
+  occurred on optional surface reads.
+
+This is valid evidence that the forced diagnostic can now drive deep-component
+selection and runtime audit. It is not solver-quality evidence and should not
+trigger long validation. The next optimization target is
+`bounded_destroy_repair` efficacy: it must produce accepted moves under formal
+budgeted search before the run can support a longer validation.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2162,9 +2241,12 @@ P1:
   and `bounded_destroy_repair` were never selected or attempted, and a second
   forced hypothesis failed C10 duplicate detection. Deep-component selection
   is now explicit in forced diagnostic prompt metadata, APS preview, C10
-  feedback, and runtime coverage telemetry. Keep long validation blocked until
-  the next five-round smoke shows both deep components selected, attempted,
-  audited, and paired with nontrivial screening quality.
+  feedback, and runtime coverage telemetry. The five-round smoke from commit
+  `114727e` showed that both deep components can now be selected and attempted,
+  but screening still failed and `bounded_destroy_repair` accepted zero moves.
+  Keep long validation blocked until destroy/repair can produce accepted moves
+  and case-level screening quality improves beyond the current `0.0` to `0.25`
+  win-rate range.
 
 P2:
 

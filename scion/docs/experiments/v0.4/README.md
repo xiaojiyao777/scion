@@ -19,6 +19,7 @@ referenced, not copied into development prompts.
 - [Main search strategy Sonnet 3R diagnostic, 2026-05-08](v0.4-main-search-strategy-sonnet-3r-20260508.md)
 - [Main search strategy clean Sonnet 3R diagnostic, 2026-05-08](v0.4-main-search-strategy-clean-sonnet-3r-20260508.md)
 - [Main search surface repair Sonnet 2R diagnostic, 2026-05-09](v0.4-main-search-surface-repair-sonnet-2r-20260509.md)
+- [Main search deep diagnostic Sonnet 5R smoke, 2026-05-09](v0.4-main-search-deep-diagnostic-sonnet-5r-20260509.md)
 
 ## Related
 
