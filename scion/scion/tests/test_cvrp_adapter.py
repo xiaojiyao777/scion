@@ -290,6 +290,8 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
     )
     assert coverage_check["passed"] is True
     assert coverage_check["missing_components"] == []
+    assert "baseline time_fraction 0.75" in coverage_check["guidance"]
+    assert "top_k 64" in coverage_check["guidance"]
 
 
 def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_components_missing(

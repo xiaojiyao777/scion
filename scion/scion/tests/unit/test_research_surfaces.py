@@ -2148,6 +2148,54 @@ def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
     assert policy["main_search_post_baseline_operators_enabled"] is False
 
 
+def test_cvrp_main_search_strategy_clamps_aggressive_baseline_params(
+    tmp_path: Path,
+) -> None:
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.75, 'params': {'destroy_ratio': (0.05, 0.50), 'segment_length': 400, 'reaction_factor': 0.05, 'vns_max_no_improve': 10000, 'max_destroy_customers': 200}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 5, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': True, 'strength': 3, 'max_perturbations': 2},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    policy = _load_main_search_strategy(
+        workspace_root=tmp_path,
+        instance=_tiny_instance(),
+        time_limit_sec=10.0,
+    )
+
+    assert policy["main_search_strategy_active"] is True
+    assert policy["main_search_baseline_params_clamped"] is True
+    assert policy["main_search_baseline_params"]["destroy_ratio"] == (0.05, 0.35)
+    assert policy["main_search_baseline_params"]["segment_length"] == 200
+    assert policy["main_search_baseline_params"]["reaction_factor"] == 0.08
+    assert policy["main_search_baseline_params"]["vns_max_no_improve"] == 7000
+    assert policy["main_search_baseline_params"]["max_destroy_customers"] == 16
+    assert set(policy["main_search_baseline_param_clamps"]) == {
+        "destroy_ratio",
+        "segment_length",
+        "reaction_factor",
+        "vns_max_no_improve",
+        "max_destroy_customers",
+    }
+
+
 def test_invalid_cvrp_main_search_strategy_counts_strategy_errors(
     tmp_path: Path,
 ) -> None:

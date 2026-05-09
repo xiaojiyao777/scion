@@ -98,6 +98,12 @@ _MAX_MAIN_SEARCH_RESTART_STAGNATION_ROUNDS = 25
 _MAX_MAIN_SEARCH_PERTURBATIONS = 4
 _MAX_MAIN_SEARCH_PERTURBATION_STRENGTH = 8
 _MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT = 10.0
+_MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR = 0.75
+_BOUNDED_DESTROY_REPAIR_MIN_DISTANCE_IMPROVEMENT = 1.0
+_MAIN_SEARCH_BDR_ACCEPT_LIMIT = 1
+_MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR = 16
+_MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING = 96
+_MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION = 0.12
 _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
     {
         "enabled",
@@ -278,8 +284,22 @@ def solve_baseline(
     is_vrp = resolved.suffix.lower() == ".vrp"
     baseline_root = _find_vrp_baseline_root()
     baseline_required = is_vrp and _baseline_required_for_instance(resolved)
+    effective_baseline_time_fraction = _effective_baseline_time_fraction(
+        baseline_time_fraction,
+        is_vrp=is_vrp,
+        baseline_required=baseline_required,
+        main_search_strategy=main_search_strategy,
+    )
+    baseline_fraction_audit = {
+        "main_search_baseline_time_fraction_effective": (
+            effective_baseline_time_fraction
+        ),
+        "main_search_baseline_quality_guard_applied": (
+            effective_baseline_time_fraction > float(baseline_time_fraction)
+        ),
+    }
     if is_vrp and baseline_required and baseline_root is not None:
-        budget = _baseline_time_budget(time_limit_sec, baseline_time_fraction)
+        budget = _baseline_time_budget(time_limit_sec, effective_baseline_time_fraction)
         try:
             solution, audit = _solve_with_vrp_baseline(
                 instance=instance,
@@ -290,12 +310,18 @@ def solve_baseline(
                 baseline_required=baseline_required,
                 baseline_policy_params=baseline_policy_params,
             )
-            return solution, {**construction_audit, **baseline_policy_audit, **audit}
+            return solution, {
+                **construction_audit,
+                **baseline_policy_audit,
+                **baseline_fraction_audit,
+                **audit,
+            }
         except Exception as exc:
             fallback = construction_solution
             return fallback, {
                 **construction_audit,
                 **baseline_policy_audit,
+                **baseline_fraction_audit,
                 "baseline_mode": "scion_nearest_neighbor_fallback",
                 "baseline_required": baseline_required,
                 "baseline_error": f"{type(exc).__name__}: {exc}",
@@ -308,6 +334,7 @@ def solve_baseline(
         return fallback, {
             **construction_audit,
             **baseline_policy_audit,
+            **baseline_fraction_audit,
             "baseline_mode": "scion_nearest_neighbor_fallback",
             "baseline_required": True,
             "baseline_error": "vrp/src baseline not available for configured CVRP data root",
@@ -319,6 +346,7 @@ def solve_baseline(
     return fallback, {
         **construction_audit,
         **baseline_policy_audit,
+        **baseline_fraction_audit,
         "baseline_mode": "scion_nearest_neighbor",
         "baseline_required": False,
         "baseline_routes": len(fallback.routes),
@@ -1342,7 +1370,7 @@ def _load_main_search_strategy(
         )
         return audit
 
-    _normalize_main_search_strategy_plan(dict(raw_plan), audit=audit)
+    _normalize_main_search_strategy_plan(dict(raw_plan), instance=instance, audit=audit)
     return audit
 
 
@@ -1391,7 +1419,11 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_construction_keep_top_k": 1,
         "main_search_construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
         "main_search_baseline_time_fraction": _BASELINE_TIME_FRACTION,
+        "main_search_baseline_time_fraction_effective": _BASELINE_TIME_FRACTION,
+        "main_search_baseline_quality_guard_applied": False,
         "main_search_baseline_params": params,
+        "main_search_baseline_params_clamped": False,
+        "main_search_baseline_param_clamps": {},
         "main_search_post_baseline_operators_enabled": False,
         "main_search_operator_round_limit": 0,
         "main_search_components": [],
@@ -1426,6 +1458,10 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
         "main_search_acceptance_min_distance_improvement": 0.0,
+        "main_search_component_min_distance_improvement": {},
+        "main_search_bounded_destroy_repair_accept_limit": (
+            _MAIN_SEARCH_BDR_ACCEPT_LIMIT
+        ),
         "main_search_restart_enabled": False,
         "main_search_restart_stagnation_rounds": 0,
         "main_search_restart_count": 0,
@@ -1435,6 +1471,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_objective_delta_by_phase": {"inactive": 0.0},
         "main_search_phase_runtime_ms": {"inactive": 0},
         "main_search_elapsed_ms": 0,
+        "main_search_best_returned": False,
         "main_search_stop_reason": "inactive",
     }
 
@@ -1442,6 +1479,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
 def _normalize_main_search_strategy_plan(
     plan: dict[str, Any],
     *,
+    instance: CvrpInstance,
     audit: dict[str, Any],
 ) -> None:
     requested_active = _main_search_bool(
@@ -1519,6 +1557,19 @@ def _normalize_main_search_strategy_plan(
         baseline.get("params", {}),
         audit=audit,
     )
+    if requested_active:
+        baseline_params, baseline_param_clamps = _clamp_main_search_baseline_params(
+            baseline_params,
+            instance=instance,
+        )
+    else:
+        baseline_param_clamps = {}
+    if baseline_param_clamps:
+        _record_main_search_event(
+            audit,
+            "info",
+            f"baseline.params conservative clamp applied: {baseline_param_clamps}",
+        )
     components = _main_search_string_sequence(
         improvement.get("enabled_components", []),
         allowed=_ALLOWED_MAIN_SEARCH_COMPONENTS,
@@ -1528,6 +1579,7 @@ def _normalize_main_search_strategy_plan(
         audit=audit,
         allow_empty=not requested_active,
     )
+    components = _schedule_main_search_components(components)
     rounds = _main_search_int(
         improvement.get("rounds", 0),
         minimum=0,
@@ -1667,7 +1719,11 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_construction_keep_top_k"] = construction_keep_top_k
     audit["main_search_construction_bias"] = construction_bias
     audit["main_search_baseline_time_fraction"] = baseline_time_fraction
+    audit["main_search_baseline_time_fraction_effective"] = baseline_time_fraction
+    audit["main_search_baseline_quality_guard_applied"] = False
     audit["main_search_baseline_params"] = baseline_params
+    audit["main_search_baseline_params_clamped"] = bool(baseline_param_clamps)
+    audit["main_search_baseline_param_clamps"] = baseline_param_clamps
     audit["main_search_post_baseline_operators_enabled"] = post_baseline_enabled
     audit["main_search_operator_round_limit"] = operator_round_limit
     audit["main_search_components"] = components
@@ -1706,6 +1762,16 @@ def _normalize_main_search_strategy_plan(
         component: 0 for component in components
     }
     audit["main_search_acceptance_min_distance_improvement"] = min_distance_improvement
+    audit["main_search_component_min_distance_improvement"] = {
+        component: _main_search_component_min_distance_improvement(
+            component,
+            min_distance_improvement,
+        )
+        for component in components
+    }
+    audit["main_search_bounded_destroy_repair_accept_limit"] = (
+        _MAIN_SEARCH_BDR_ACCEPT_LIMIT
+    )
     audit["main_search_restart_enabled"] = restart_enabled
     audit["main_search_restart_stagnation_rounds"] = restart_stagnation
     audit["main_search_restart_count"] = 0
@@ -1716,11 +1782,13 @@ def _normalize_main_search_strategy_plan(
         audit["main_search_phases"] = ["plan_loaded"]
         audit["main_search_objective_delta_by_phase"] = {"plan_loaded": 0.0}
         audit["main_search_phase_runtime_ms"] = {"plan_loaded": 0}
+        audit["main_search_best_returned"] = False
         audit["main_search_stop_reason"] = "plan_loaded"
     elif requested_active:
         audit["main_search_phases"] = ["plan_invalid"]
         audit["main_search_objective_delta_by_phase"] = {"plan_invalid": 0.0}
         audit["main_search_phase_runtime_ms"] = {"plan_invalid": 0}
+        audit["main_search_best_returned"] = False
         audit["main_search_stop_reason"] = "invalid_plan"
 
 
@@ -1835,6 +1903,87 @@ def _main_search_baseline_params(
     if not isinstance(params, Mapping):
         return dict(_DEFAULT_BASELINE_POLICY_PARAMS)
     return dict(params)
+
+
+def _clamp_main_search_baseline_params(
+    params: Mapping[str, Any],
+    *,
+    instance: CvrpInstance,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    clamped = dict(params)
+    changes: dict[str, Any] = {}
+
+    destroy_ratio = clamped.get("destroy_ratio")
+    if isinstance(destroy_ratio, (list, tuple)) and len(destroy_ratio) == 2:
+        low = float(destroy_ratio[0])
+        high = min(float(destroy_ratio[1]), 0.35)
+        if high < low:
+            high = low
+        if (low, high) != (float(destroy_ratio[0]), float(destroy_ratio[1])):
+            changes["destroy_ratio"] = {
+                "requested": tuple(destroy_ratio),
+                "effective": (low, high),
+            }
+        clamped["destroy_ratio"] = (low, high)
+
+    segment_length = int(clamped.get("segment_length", 100))
+    if segment_length > 200:
+        changes["segment_length"] = {
+            "requested": segment_length,
+            "effective": 200,
+        }
+        clamped["segment_length"] = 200
+
+    reaction_factor = float(clamped.get("reaction_factor", 0.1))
+    if reaction_factor < 0.08:
+        changes["reaction_factor"] = {
+            "requested": reaction_factor,
+            "effective": 0.08,
+        }
+        clamped["reaction_factor"] = 0.08
+
+    vns_max_no_improve = int(clamped.get("vns_max_no_improve", 5000))
+    if vns_max_no_improve > 7000:
+        changes["vns_max_no_improve"] = {
+            "requested": vns_max_no_improve,
+            "effective": 7000,
+        }
+        clamped["vns_max_no_improve"] = 7000
+
+    adaptive_destroy_cap = max(
+        _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR,
+        min(
+            _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING,
+            int(
+                math.ceil(
+                    max(1, instance.customer_count)
+                    * _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION
+                )
+            ),
+        ),
+    )
+    max_destroy_customers = int(clamped.get("max_destroy_customers", adaptive_destroy_cap))
+    if max_destroy_customers > adaptive_destroy_cap:
+        changes["max_destroy_customers"] = {
+            "requested": max_destroy_customers,
+            "effective": adaptive_destroy_cap,
+        }
+        clamped["max_destroy_customers"] = adaptive_destroy_cap
+
+    return clamped, changes
+
+
+def _schedule_main_search_components(components: list[str]) -> list[str]:
+    if not (
+        "route_pair_swap" in components
+        and "bounded_destroy_repair" in components
+    ):
+        return components
+    priority = {"route_pair_swap": 0, "bounded_destroy_repair": 1}
+    return sorted(
+        components,
+        key=lambda component: (priority.get(component, -1), components.index(component)),
+    )
 
 
 def _apply_main_search_strategy_search_policy(
@@ -2775,6 +2924,12 @@ def improve_with_main_search_strategy(
     min_distance_improvement = float(
         audit.get("main_search_acceptance_min_distance_improvement", 0.0)
     )
+    component_min_distance_improvement = audit.get(
+        "main_search_component_min_distance_improvement",
+        {},
+    )
+    if not isinstance(component_min_distance_improvement, Mapping):
+        component_min_distance_improvement = {}
     if not components or rounds <= 0 or top_k <= 0:
         audit["main_search_stop_reason"] = "improvement_loop_disabled"
         return solution, audit
@@ -2795,10 +2950,43 @@ def improve_with_main_search_strategy(
             break
         audit["main_search_rounds"] = round_index + 1
         round_accepted = 0
+        round_route_pair_improved = False
         for component in components:
             if _time_exhausted(start_time, time_limit_sec):
                 stop_reason = "time_limit"
                 break
+            if (
+                component == "bounded_destroy_repair"
+                and "route_pair_swap" in components
+                and round_route_pair_improved
+            ):
+                _record_main_search_component_skip(
+                    audit,
+                    component,
+                    "route_pair_phase_improved",
+                )
+                continue
+            if (
+                component == "bounded_destroy_repair"
+                and _as_nonnegative_int(
+                    audit.get("main_search_component_accepted", {}).get(
+                        "bounded_destroy_repair",
+                        0,
+                    )
+                )
+                >= _as_nonnegative_int(
+                    audit.get(
+                        "main_search_bounded_destroy_repair_accept_limit",
+                        _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+                    )
+                )
+            ):
+                _record_main_search_component_skip(
+                    audit,
+                    component,
+                    "bounded_destroy_repair_accept_limit_reached",
+                )
+                continue
             component_start_ns = time.monotonic_ns()
             _record_main_search_component_attempted(audit, component)
             candidate, attempts, component_telemetry = _main_search_component_candidate(
@@ -2833,10 +3021,19 @@ def improve_with_main_search_strategy(
                 component,
                 candidate_delta,
             )
+            effective_min_distance_improvement = float(
+                component_min_distance_improvement.get(
+                    component,
+                    _main_search_component_min_distance_improvement(
+                        component,
+                        min_distance_improvement,
+                    ),
+                )
+            )
             if not _main_search_accepts(
                 candidate_objective,
                 current_objective,
-                min_distance_improvement=min_distance_improvement,
+                min_distance_improvement=effective_min_distance_improvement,
             ):
                 _record_main_search_component_skip(
                     audit,
@@ -2865,6 +3062,8 @@ def improve_with_main_search_strategy(
             current_objective = candidate_objective
             _record_main_search_component_accepted(audit, component)
             round_accepted += 1
+            if component == "route_pair_swap":
+                round_route_pair_improved = True
             if _lexicographic_improves(current_objective, best_objective):
                 best_solution = current
                 best_objective = dict(current_objective)
@@ -2936,8 +3135,36 @@ def improve_with_main_search_strategy(
         _as_nonnegative_int(value)
         for value in audit.get("main_search_phase_runtime_ms", {}).values()
     )
+    audit["main_search_best_returned"] = True
     audit["main_search_stop_reason"] = stop_reason
     return best_solution, audit
+
+
+def _effective_baseline_time_fraction(
+    baseline_time_fraction: float,
+    *,
+    is_vrp: bool,
+    baseline_required: bool,
+    main_search_strategy: Mapping[str, Any] | None,
+) -> float:
+    fraction = float(baseline_time_fraction)
+    if not (
+        is_vrp
+        and baseline_required
+        and _main_search_strategy_active(main_search_strategy)
+    ):
+        return fraction
+    return max(fraction, _MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR)
+
+
+def _main_search_component_min_distance_improvement(
+    component: str,
+    requested_min_distance_improvement: float,
+) -> float:
+    threshold = max(0.0, float(requested_min_distance_improvement))
+    if component == "bounded_destroy_repair":
+        return max(threshold, _BOUNDED_DESTROY_REPAIR_MIN_DISTANCE_IMPROVEMENT)
+    return threshold
 
 
 def _main_search_component_candidate(

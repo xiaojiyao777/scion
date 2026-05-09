@@ -84,7 +84,13 @@ under `rounds=5, top_k=64`. The next step is another five-round forced
 bounded destroy/repair produced accepted moves in one screened candidate and
 the dominant skip reason moved away from repair-budget exhaustion, but all
 screened candidates still failed `SCREENING_FAIL_WIN_RATE`. The blocker is now
-net case-level efficacy of accepted moves, not component execution.
+net case-level efficacy of accepted moves, not component execution. The next,
+stronger CVRP package repair is now implemented: active `main_search_strategy`
+formal-like runs apply a baseline quality guard and conservative baseline-param
+clamps, route-pair improvement can gate bounded destroy/repair, destroy/repair
+has a per-search accepted-move cap and positive improvement floor, and the main
+loop explicitly returns the phase-best solution. The next smoke should test
+whether these net-benefit guards improve case-level outcomes.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2319,6 +2325,55 @@ next optimization target is net case-level efficacy: accepted route-pair and
 destroy/repair moves must translate into stronger case-level wins rather than
 mixed pair-level movement.
 
+## 2026-05-09 Main-Search Net-Benefit Guard Slice
+
+Implemented the next stronger CVRP problem-package repair after the bounded
+destroy/repair smoke:
+
+- Active `main_search_strategy` formal-like `.vrp` runs now apply a
+  problem-owned baseline quality guard: effective baseline time fraction is at
+  least `0.75`, and runtime records
+  `main_search_baseline_time_fraction_effective` plus
+  `main_search_baseline_quality_guard_applied`.
+- Active main-search baseline params are conservatively clamped to avoid the
+  aggressive R5 pattern that degraded baseline quality: destroy-ratio high cap,
+  segment-length cap, reaction-factor floor, VNS no-improvement cap, and
+  customer-count-scaled `max_destroy_customers`. Runtime records
+  `main_search_baseline_params_clamped` and
+  `main_search_baseline_param_clamps`.
+- `bounded_destroy_repair` now has a problem-owned positive distance
+  improvement floor and per-search accepted-move cap. Runtime records
+  per-component minimum improvement and the destroy/repair accept limit.
+- If `route_pair_swap` already improves the same round, bounded
+  destroy/repair can be gated off with an audited
+  `route_pair_phase_improved` skip reason.
+- The main search loop explicitly returns the phase-best solution and records
+  `main_search_best_returned`, preventing later perturbation/current-state
+  movement from degrading the returned candidate.
+- Adapter preview and surface guidance now recommend R1-like safe defaults:
+  baseline fraction around `0.75`, conservative ALNS/VNS params, route-pair
+  before bounded destroy/repair, 5 rounds, `top_k=64`, perturbation strength
+  `2-3`, and max perturbations `2`.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py -q
+134 passed in 11.77s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+422 passed in 43.72s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1516 passed, 1 skipped in 56.54s
+```
+
+Next step: commit this slice and run another five-round forced
+`main_search_strategy` smoke. The acceptance condition is improved net
+case-level outcome, not merely accepted component moves: screening should move
+beyond the previous `0.0` to `0.25` case-level win-rate range while preserving
+complete selected-surface runtime audit.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2368,6 +2423,9 @@ P1:
   screening, but case-level screening quality still topped out at `0.25` and
   all candidates failed `SCREENING_FAIL_WIN_RATE`. Keep long validation blocked
   until accepted component moves translate into stronger case-level outcomes.
+  The main-search net-benefit guard slice is implemented and validated; the
+  next smoke should test whether conservative baseline guards, gated
+  destroy/repair, and phase-best return improve screening quality.
 
 P2:
 

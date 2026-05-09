@@ -938,7 +938,11 @@ research_surfaces:
         - main_search_phases
         - main_search_construction_methods
         - main_search_baseline_time_fraction
+        - main_search_baseline_time_fraction_effective
+        - main_search_baseline_quality_guard_applied
         - main_search_baseline_params
+        - main_search_baseline_params_clamped
+        - main_search_baseline_param_clamps
         - main_search_post_baseline_operators_enabled
         - main_search_operator_round_limit
         - main_search_components
@@ -958,6 +962,8 @@ research_surfaces:
         - main_search_component_repair_fallback_counts
         - main_search_component_runtime_ms
         - main_search_acceptance_min_distance_improvement
+        - main_search_component_min_distance_improvement
+        - main_search_bounded_destroy_repair_accept_limit
         - main_search_restart_enabled
         - main_search_restart_stagnation_rounds
         - main_search_restart_count
@@ -967,6 +973,7 @@ research_surfaces:
         - main_search_objective_delta_by_phase
         - main_search_phase_runtime_ms
         - main_search_elapsed_ms
+        - main_search_best_returned
         - main_search_stop_reason
     novelty:
       strategy: semantic_signature
@@ -988,17 +995,20 @@ research_surfaces:
         perturbation knobs, and optional registry-operator setting should work
         together. Prefer this surface for forced diagnostics after
         post-baseline operator work has shown low accepted-move value. In
-        forced diagnostic runs, make the deep-component coverage explicit by
-        selecting both route_pair_swap and bounded_destroy_repair in
-        improvement.enabled_components, use 5 improvement rounds, and give the
-        destroy/repair component enough top_k budget (64 or 128) so runtime
-        evidence can show selected, attempted, skipped, and accepted coverage.
+        forced diagnostic runs, prefer the R1-like safe schedule: baseline
+        time_fraction around 0.75, conservative baseline params, route_pair_swap
+        before bounded_destroy_repair, 5 improvement rounds, top_k 64, and
+        perturbation strength 2-3 with max_perturbations 2. The solver gates
+        bounded_destroy_repair after same-round route-pair improvements and
+        limits accepted destroy/repair repairs per search so runtime evidence
+        focuses on net objective value instead of accepted-move volume.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict. The solver owns construction,
         repo-local baseline invocation, route edits, feasibility checks,
-        strict-improvement acceptance, component-coverage telemetry, restarts,
-        perturbations, and optional registry operators. For instance features,
+        strict-improvement acceptance, a formal-run baseline quality guard,
+        component-coverage telemetry, restarts, perturbations, and optional
+        registry operators. For instance features,
         use instance.customer_ids,
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
@@ -1006,7 +1016,10 @@ research_surfaces:
         needs generated registry operators after the owned main loop. For
         forced diagnostics, include novelty_signature fields that distinguish
         selected_components, deep_components_selected, budget_pattern, and
-        destroy_repair_pattern from prior whole-algorithm strategies.
+        destroy_repair_pattern from prior whole-algorithm strategies. Avoid
+        aggressive baseline params such as global max_destroy_customers=200 on
+        smaller formal cases; active main-search params are conservatively
+        clamped and audited by the solver.
       anti_patterns: >-
         Do not import solver internals, read benchmark files, create or mutate
         routes directly, use instance.customers or other undeclared instance
@@ -1021,7 +1034,9 @@ research_surfaces:
       registry post-baseline operators are off by default. Forced diagnostic
       candidates should select route_pair_swap and bounded_destroy_repair for
       5 improvement rounds, use top_k 64 or 128 for destroy/repair budget, and
-      expose that choice in the novelty signature.
+      expose that choice in the novelty signature; prefer baseline.time_fraction
+      around 0.75 with conservative ALNS/VNS params, route_pair_swap before
+      bounded_destroy_repair, and perturbation strength 2-3/max 2.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false

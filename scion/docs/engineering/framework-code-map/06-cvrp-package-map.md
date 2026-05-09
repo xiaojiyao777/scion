@@ -317,13 +317,16 @@ and campaign summaries through the generic selected-surface runtime summary.
 
 The `main_search_strategy` surface declares required runtime fields covering
 load/active/error status, normalized plan, phases executed, construction
-methods, baseline fraction and params, post-baseline registry toggle/limit,
+methods, requested/effective baseline fraction and params, whether the formal
+baseline quality guard and conservative baseline-param clamps were applied,
+post-baseline registry toggle/limit,
 improvement components, rounds/top-k, selected and attempted component lists,
 component attempts/accepted/runtime, per-component skip reasons, best component
 distance deltas, improvement counts, bounded destroy/repair
-removed/reinserted counts, acceptance threshold, restart/perturbation knobs and
-counts, phase objective deltas, phase runtime, elapsed runtime, and stop
-reason. Selected-surface audit fails closed when
+removed/reinserted counts and accept limit, global and per-component acceptance
+thresholds, restart/perturbation knobs and counts, phase objective deltas,
+phase runtime, elapsed runtime, whether the phase best was returned, and stop reason.
+Selected-surface audit fails closed when
 `main_search_strategy_errors` is positive or these fields are missing/empty.
 When `main_search_strategy` is the selected surface, `ExperimentProtocol`
 preserves these required `main_search_*` fields through the generic

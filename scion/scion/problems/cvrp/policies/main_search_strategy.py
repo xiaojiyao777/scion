@@ -8,7 +8,9 @@ without editing solver.py.
 Forced diagnostic candidates should keep this file as the only edited target,
 set enabled=True, select both deep components route_pair_swap and
 bounded_destroy_repair, and use 5 improvement rounds with top_k 64 or 128 so
-runtime audit can show selected, attempted, skipped, and accepted coverage. The
+runtime audit can show selected, attempted, skipped, and accepted coverage.
+Formal-like .vrp diagnostics should keep baseline.time_fraction at 0.75 or
+higher so accepted moves compete against a strong repo-local baseline. The
 checked-in default remains inactive.
 """
 from __future__ import annotations

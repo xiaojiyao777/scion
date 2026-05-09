@@ -749,6 +749,105 @@ def test_modified_baseline_policy_changes_repo_local_baseline_kwargs(
     assert audit["baseline_use_vns"] is False
 
 
+def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    fake_root = tmp_path / "fake_vrp"
+    fake_src = fake_root / "src"
+    fake_src.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("", encoding="utf-8")
+    (fake_src / "parser.py").write_text(
+        "from types import SimpleNamespace\n\n"
+        "def parse_vrp(path):\n"
+        "    return SimpleNamespace(depot=0, dimension=4)\n",
+        encoding="utf-8",
+    )
+    capture_path = tmp_path / "baseline_kwargs.json"
+    (fake_src / "solver.py").write_text(
+        "import json\n"
+        "import os\n"
+        "from types import SimpleNamespace\n\n"
+        "def solve(instance, **kwargs):\n"
+        "    capture = os.environ.get('SCION_FAKE_BASELINE_CAPTURE')\n"
+        "    if capture:\n"
+        "        with open(capture, 'w', encoding='utf-8') as f:\n"
+        "            json.dump(kwargs, f, sort_keys=True)\n"
+        "    route = SimpleNamespace(customers=[1, 2, 3])\n"
+        "    solution = SimpleNamespace(routes=[route])\n"
+        "    return SimpleNamespace(solution=solution, elapsed=0.01, iterations=3, best_cost=30.0)\n",
+        encoding="utf-8",
+    )
+    case_dir = fake_root / "cases"
+    case_dir.mkdir()
+    instance_path = case_dir / "case.vrp"
+    instance_path.write_text("", encoding="utf-8")
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.2, 'params': {}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    instance = CvrpInstance(
+        name="fake_baseline_case",
+        capacity=10,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            CvrpNode(id=1, x=1.0, y=0.0, demand=1),
+            CvrpNode(id=2, x=2.0, y=0.0, demand=1),
+            CvrpNode(id=3, x=3.0, y=0.0, demand=1),
+        ),
+        allowed_routes=1,
+        use_integer_cost=True,
+    )
+    monkeypatch.setenv("SCION_CVRP_DATA_ROOT", str(fake_root))
+    monkeypatch.setenv("SCION_FAKE_BASELINE_CAPTURE", str(capture_path))
+    for module_name in ("src", "src.parser", "src.solver"):
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    main_search_strategy = cvrp_solver._load_main_search_strategy(
+        workspace_root=workspace,
+        instance=instance,
+        time_limit_sec=2.0,
+    )
+    solution, audit = cvrp_solver.solve_baseline(
+        instance=instance,
+        instance_path=str(instance_path),
+        seed=5,
+        rng=random.Random(5),
+        time_limit_sec=2.0,
+        baseline_time_fraction=main_search_strategy[
+            "main_search_baseline_time_fraction"
+        ],
+        main_search_strategy=main_search_strategy,
+    )
+    if str(fake_root) in sys.path:
+        sys.path.remove(str(fake_root))
+
+    captured = json.loads(capture_path.read_text(encoding="utf-8"))
+    assert solution.routes == ((1, 2, 3),)
+    assert main_search_strategy["main_search_baseline_time_fraction"] == 0.2
+    assert captured["time_limit"] == 1.5
+    assert audit["main_search_baseline_time_fraction_effective"] == 0.75
+    assert audit["main_search_baseline_quality_guard_applied"] is True
+
+
 def test_algorithm_blueprint_surface_declares_runtime_fields_and_default_is_inactive(
     tmp_path: Path,
 ) -> None:
@@ -970,6 +1069,13 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_attempts" in required_fields
     assert "main_search_component_skip_reasons" in required_fields
     assert "main_search_component_repair_fallback_counts" in required_fields
+    assert "main_search_baseline_time_fraction_effective" in required_fields
+    assert "main_search_baseline_quality_guard_applied" in required_fields
+    assert "main_search_baseline_params_clamped" in required_fields
+    assert "main_search_baseline_param_clamps" in required_fields
+    assert "main_search_component_min_distance_improvement" in required_fields
+    assert "main_search_bounded_destroy_repair_accept_limit" in required_fields
+    assert "main_search_best_returned" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
@@ -977,6 +1083,9 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_phases"] == ["inactive"]
     assert runtime["main_search_component_coverage_status"]["status"] == "inactive"
     assert runtime["main_search_deep_components_selected"] == []
+    assert runtime["main_search_baseline_quality_guard_applied"] is False
+    assert runtime["main_search_baseline_params_clamped"] is False
+    assert runtime["main_search_best_returned"] is False
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
@@ -1030,6 +1139,8 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert runtime["main_search_strategy_errors"] == 0
     assert runtime["main_search_plan"]["enabled"] is True
     assert runtime["baseline_time_fraction"] == 0.5
+    assert runtime["main_search_baseline_time_fraction_effective"] == 0.5
+    assert runtime["main_search_baseline_quality_guard_applied"] is False
     assert runtime["baseline_policy_params"]["destroy_ratio"] == [0.05, 0.2]
     assert runtime["baseline_use_vns"] is False
     assert runtime["post_baseline_operators_enabled"] is False
@@ -1058,6 +1169,12 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert runtime["main_search_component_attempts"]["intra_route_2opt"] > 0
     assert sum(runtime["main_search_component_accepted"].values()) == 1
     assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] == 4.0
+    assert (
+        runtime["main_search_component_min_distance_improvement"][
+            "bounded_destroy_repair"
+        ]
+        == 1.0
+    )
     assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
     assert (
         runtime["main_search_component_reinserted_counts"]["bounded_destroy_repair"]
@@ -1076,6 +1193,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert "baseline" in runtime["main_search_phases"]
     assert "improvement_loop" in runtime["main_search_phases"]
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 4.0
+    assert runtime["main_search_best_returned"] is True
     assert runtime["operator_attempts"] == 0
     assert (
         runtime_audit_failure_from_raw(
@@ -1210,6 +1328,111 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
     )
 
 
+def test_main_search_strategy_returns_best_even_after_worse_perturbation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    instance = adapter.load_instance(str(workspace / "data/operator_case.json"))
+    best_solution = CvrpSolution(routes=((1, 2, 3, 5, 4),))
+    worse_solution = CvrpSolution(routes=((1, 2, 3, 4, 5),))
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.75, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 2, 'top_k': 8},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': True, 'strength': 1, 'max_perturbations': 1},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    main_search_strategy = cvrp_solver._load_main_search_strategy(
+        workspace_root=workspace,
+        instance=instance,
+        time_limit_sec=2.0,
+    )
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_perturb_solution",
+        lambda *args, **kwargs: worse_solution,
+    )
+
+    returned, audit = cvrp_solver.improve_with_main_search_strategy(
+        best_solution,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=2.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=main_search_strategy,
+    )
+
+    returned_objective = cvrp_solver._objective_for_solution(adapter, instance, returned)
+    best_objective = cvrp_solver._objective_for_solution(adapter, instance, best_solution)
+    worse_objective = cvrp_solver._objective_for_solution(adapter, instance, worse_solution)
+    assert returned.routes == best_solution.routes
+    assert returned_objective == best_objective
+    assert worse_objective["total_distance"] > best_objective["total_distance"]
+    assert audit["main_search_perturbation_count"] == 1
+    assert audit["main_search_best_returned"] is True
+
+
+def test_main_search_strategy_gates_destroy_repair_after_route_pair_improvement(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_route_pair_swap_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.75, 'params': {}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'route_pair_swap'], 'rounds': 1, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/route_pair_swap_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+
+    assert runtime["main_search_components"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert runtime["main_search_accepted_components"] == ["route_pair_swap"]
+    assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] == 0
+    assert runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"] == {
+        "route_pair_phase_improved": 1,
+    }
+
+
 def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audited(
     tmp_path: Path,
 ) -> None:
@@ -1324,6 +1547,7 @@ def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget(
             "post_baseline_operators_enabled": False,
             "operator_round_limit": 0,
         },
+        instance=instance,
         audit=audit,
     )
 
@@ -1342,7 +1566,8 @@ def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget(
     assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_accepted_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] >= 64
-    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] > 0
+    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
+    assert runtime["main_search_bounded_destroy_repair_accept_limit"] == 1
     assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] > 0.0
     assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
     assert (
@@ -1351,14 +1576,7 @@ def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget(
     )
     assert (
         runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"].get(
-            "repair_budget_exhausted",
-            0,
-        )
-        < runtime["main_search_rounds"]
-    )
-    assert (
-        runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"].get(
-            "repair_produced_no_improvement",
+            "bounded_destroy_repair_accept_limit_reached",
             0,
         )
         > 0
