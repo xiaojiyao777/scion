@@ -117,7 +117,14 @@ object instead of `{}`. Focused, boundary, and full test suites pass. The next
 step is another five-round forced `main_search_strategy` smoke to confirm that
 no off-surface hypothesis reaches code generation, no no-clamp evidence false
 failure recurs, and APS traces show bounded feedback use before hypothesis
-finalization.
+finalization. That smoke has now completed: forced-surface drift did not
+recur, no-clamp evidence no longer false-failed, and APS did read bounded
+memory/screening/runtime feedback, but only one of five rounds produced a
+screened candidate. The new blocker is APS observation-budget/fallback
+behavior: repeated feedback/list-surface reads can exceed the 48000-character
+observation budget before patch generation. The next repair should compact and
+deduplicate APS feedback/fallback observations before another CVRP strategy
+slice.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2542,6 +2549,79 @@ no valid no-clamp strategy should fail runtime audit solely because
 `main_search_baseline_param_clamps` is empty, and APS artifacts should show
 bounded feedback reads before hypothesis finalization.
 
+## 2026-05-10 APS Forced Diagnostic Repair 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the APS
+forced-surface and CVRP no-clamp evidence repairs:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-aps-forced-diagnostic-repair-sonnet-5r-20260510T024646Z
+scion_commit=3a4649f
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-aps-forced-diagnostic-repair-sonnet-5r-20260510.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=1
+champion=v1
+promotions=0
+frozen_budget_used=0
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- The run normally completed at the campaign level. `exit.txt` was missing,
+  but `status.json`, `campaign_summary.json`, SQLite, and `run.log` showed a
+  complete `max_rounds_exhausted` closeout.
+- Forced-surface drift was fixed for successful hypotheses. All successful
+  hypotheses were `modify/main_search_strategy` targeting
+  `policies/main_search_strategy.py`; the `create_new/proposal: 1` summary
+  entry was a round-5 proposal-failure placeholder, not a real off-surface
+  candidate.
+- No-clamp runtime evidence false failures were fixed. The screened candidate
+  had `main_search_baseline_param_clamps` present, non-empty, and not failed
+  for all 16 candidate-side pairs.
+- APS did read bounded feedback and memory. Round 1/2/4 hypothesis sessions
+  called `memory.query`, `feedback.query_screening`, and
+  `feedback.query_runtime`.
+- The repair exposed a new APS blocker: repeated feedback and list-surface
+  observations exceeded the observation budget in rounds 2, 4, and 5, causing
+  code-generation or proposal failures before a patch was produced.
+- Only round 1 reached screening. It had 16/16 valid pairs, pair W/L/T
+  `4/2/10`, case-level `win_rate=0.125`, `median_delta=0.0`, and median
+  runtime ratio about `0.9521`, then failed `SCREENING_FAIL_WIN_RATE`.
+- Selected-surface runtime audit was complete for the screened candidate, and
+  both `route_pair_swap` and `bounded_destroy_repair` were selected and
+  attempted. `bounded_destroy_repair` accepted zero moves.
+
+This smoke validates the previous repair slice only partially. It confirms
+forced-surface, no-clamp evidence, and bounded-feedback use, but it does not
+provide enough screened candidates to judge CVRP strategy changes. The next
+repair should reduce APS observation payloads and deduplicate fallback tool
+calls so forced diagnostics can produce multiple code patches under the
+feedback requirement.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2598,9 +2678,12 @@ P1:
   `bounded_destroy_repair` accepted zero moves, and accepted route-pair moves
   did not become case-level wins. The hard forced-surface proposal control,
   APS compact feedback completeness, and no-clamp runtime evidence semantics
-  repairs are now implemented and validated. The next blocker is whether a new
-  five-round smoke confirms those controls in real APS artifacts, then net
-  case-level efficacy of route-pair and destroy/repair movement.
+  repairs are now implemented and validated. The follow-up smoke from commit
+  `3a4649f` confirmed those controls in real APS artifacts but produced only
+  one screened candidate because repeated feedback/list observations exhausted
+  APS observation budget in later rounds. The next blocker is APS
+  feedback/fallback budget control, then net case-level efficacy of route-pair
+  and destroy/repair movement.
 
 P2:
 
