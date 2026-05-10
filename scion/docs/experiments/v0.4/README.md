@@ -26,6 +26,7 @@ referenced, not copied into development prompts.
 - [APS feedback budget repair Sonnet 5R smoke, 2026-05-10](v0.4-aps-feedback-budget-repair-sonnet-5r-20260510.md)
 - [Semantic novelty repair Sonnet 5R smoke, 2026-05-10](v0.4-semantic-novelty-repair-sonnet-5r-20260510.md)
 - [Campaign feedback repair Sonnet 5R smoke, 2026-05-10](v0.4-campaign-feedback-repair-sonnet-5r-20260510.md)
+- [Runtime attribution repair Sonnet 5R smoke, 2026-05-10](v0.4-runtime-attribution-repair-sonnet-5r-20260510.md)
 
 ## Related
 

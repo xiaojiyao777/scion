@@ -2338,7 +2338,7 @@ def _surface_runtime_summary_note(protocol: Any) -> str:
     if not surface or not isinstance(fields, dict):
         return ""
 
-    interesting: list[str] = []
+    candidates: list[tuple[tuple[int, int, str], str]] = []
     for field, field_summary in fields.items():
         if not isinstance(field_summary, dict):
             continue
@@ -2353,38 +2353,115 @@ def _surface_runtime_summary_note(protocol: Any) -> str:
                 raw_value = str(first.get("value", ""))[:120]
                 count = _as_int(first.get("count", 0))
                 value_text = f" value={raw_value} count={count}"
+        numeric_text = _surface_runtime_numeric_note(field_summary)
         failed = _as_int(field_summary.get("failed", 0))
         missing = _as_int(field_summary.get("missing", 0))
-        suffix = value_text
+        suffix = value_text + numeric_text
         if failed or missing:
             suffix += f" failed={failed} missing={missing}"
-        interesting.append(f"{field_name}:{suffix.strip()}")
-        if len(interesting) >= 8:
-            break
+        candidates.append(
+            (
+                _surface_runtime_sort_key(field_name, field_summary),
+                f"{field_name}:{suffix.strip()}",
+            )
+        )
+    candidates.sort(key=lambda item: item[0])
+    interesting = [text for _sort_key, text in candidates[:8]]
     if not interesting:
         return ""
     return f"selected_surface_runtime[{surface}]=" + "; ".join(interesting)
+
+
+_SURFACE_RUNTIME_PRIORITY_SUFFIXES = (
+    "_objective_trace",
+    "_delta_by_phase",
+    "_phase_delta_sum",
+    "_phase_best_delta",
+    "_phase_improvement_counts",
+    "_accepted_delta_sum",
+    "_accepted_best_delta",
+    "_accepted_positive_counts",
+    "_accepted",
+    "_attempts",
+    "_skip_reasons",
+    "_best_delta",
+    "_improvement_counts",
+    "_coverage_status",
+    "_stop_reason",
+    "_errors",
+    "_active",
+    "_loaded",
+    "_use_vns",
+    "_destroy_ratio",
+    "_baseline_time_fraction",
+    "_max_destroy_customers",
+)
+
+
+def _surface_runtime_sort_key(
+    field_name: str,
+    field_summary: dict[str, Any],
+) -> tuple[int, int, str]:
+    has_issue = any(
+        _as_int(field_summary.get(key, 0)) > 0
+        for key in ("failed", "missing", "empty")
+    )
+    priority = len(_SURFACE_RUNTIME_PRIORITY_SUFFIXES)
+    for index, suffix in enumerate(_SURFACE_RUNTIME_PRIORITY_SUFFIXES):
+        if field_name.endswith(suffix):
+            priority = index
+            break
+    return (0 if has_issue else 1, priority, field_name)
+
+
+def _surface_runtime_numeric_note(field_summary: dict[str, Any]) -> str:
+    numeric = field_summary.get("numeric_summary")
+    if not isinstance(numeric, dict):
+        return ""
+    parts: list[str] = []
+    scalar = numeric.get("scalar")
+    if isinstance(scalar, dict):
+        parts.append(_surface_runtime_numeric_stats_text("scalar", scalar))
+    mapping = numeric.get("mapping")
+    if isinstance(mapping, dict):
+        for key, stats in list(mapping.items())[:3]:
+            if isinstance(stats, dict):
+                parts.append(_surface_runtime_numeric_stats_text(str(key), stats))
+    parts = [part for part in parts if part]
+    if not parts:
+        return ""
+    return " numeric=" + "|".join(parts)
+
+
+def _surface_runtime_numeric_stats_text(label: str, stats: dict[str, Any]) -> str:
+    selected = []
+    for key in (
+        "observed_count",
+        "weighted_sum",
+        "nonzero_count",
+        "positive_count",
+        "zero_count",
+    ):
+        if key in stats:
+            selected.append(f"{key}={stats[key]}")
+    if not selected:
+        return ""
+    return f"{label}(" + ",".join(selected) + ")"
 
 
 def _surface_runtime_field_interesting(
     field_name: str,
     field_summary: dict[str, Any],
 ) -> bool:
-    if _as_int(field_summary.get("failed", 0)) > 0:
+    if any(
+        _as_int(field_summary.get(key, 0)) > 0
+        for key in ("failed", "missing", "empty")
+    ):
         return True
-    suffixes = (
-        "_accepted",
-        "_attempts",
-        "_errors",
-        "_loaded",
-        "_active",
-        "_use_vns",
-        "_destroy_ratio",
-        "_stop_reason",
-        "_baseline_time_fraction",
-        "_max_destroy_customers",
+    return any(
+        field_name.endswith(suffix)
+        for suffix in _SURFACE_RUNTIME_PRIORITY_SUFFIXES
     )
-    return any(field_name.endswith(suffix) for suffix in suffixes)
 
 
 def _runtime_failure_categories(step: StepRecord) -> dict[str, int]:

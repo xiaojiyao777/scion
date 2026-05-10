@@ -962,6 +962,9 @@ research_surfaces:
         - main_search_component_accepted_delta_sum
         - main_search_component_accepted_best_delta
         - main_search_component_accepted_positive_counts
+        - main_search_component_phase_delta_sum
+        - main_search_component_phase_best_delta
+        - main_search_component_phase_improvement_counts
         - main_search_component_removed_counts
         - main_search_component_reinserted_counts
         - main_search_component_repair_fallback_counts

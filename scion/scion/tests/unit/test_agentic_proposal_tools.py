@@ -1136,6 +1136,102 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
     assert "raw_metrics_ref" not in rendered
 
 
+def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    protocol = context.step_history[0].protocol_result
+    assert protocol is not None
+    low_priority_fields = {
+        f"main_search_low_priority_{index}_active": {
+            "present": 2,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "values": [{"value": "true", "count": 2}],
+        }
+        for index in range(20)
+    }
+    fields = {
+        **low_priority_fields,
+        "main_search_component_accepted_delta_sum": {
+            "present": 2,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "mapping": {
+                    "route_pair_swap": {
+                        "observed_count": 2,
+                        "weighted_sum": 507.0,
+                        "positive_count": 2,
+                    }
+                }
+            },
+            "values": [{"value": "{'route_pair_swap': 507.0}", "count": 1}],
+        },
+        "main_search_component_phase_delta_sum": {
+            "present": 2,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "mapping": {
+                    "route_pair_swap": {
+                        "observed_count": 2,
+                        "weighted_sum": 0.0,
+                        "zero_count": 2,
+                    }
+                }
+            },
+            "values": [{"value": "{'route_pair_swap': 0.0}", "count": 2}],
+        },
+        "main_search_objective_delta_by_phase": {
+            "present": 2,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "mapping": {
+                    "improvement_loop": {
+                        "observed_count": 2,
+                        "weighted_sum": 0.0,
+                        "zero_count": 2,
+                    }
+                }
+            },
+            "values": [{"value": "{'improvement_loop': 0.0}", "count": 2}],
+        },
+    }
+    attributed_step = replace(
+        context.step_history[0],
+        hypothesis=replace(
+            _hyp("main_search_strategy"),
+            target_file="policies/main_search_strategy.py",
+        ),
+        protocol_result=replace(
+            protocol,
+            candidate_surface_runtime_summary={
+                "selected_surface": "main_search_strategy",
+                "fields": fields,
+            },
+        ),
+    )
+    context = replace(context, step_history=(attributed_step,))
+
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    rendered = json.dumps(runtime.structured_payload, sort_keys=True, default=str)
+
+    assert "main_search_component_accepted_delta_sum" in rendered
+    assert "main_search_component_phase_delta_sum" in rendered
+    assert "main_search_objective_delta_by_phase" in rendered
+    assert "weighted_sum" in rendered
+    assert rendered.index("main_search_objective_delta_by_phase") < rendered.index(
+        "main_search_low_priority_0_active"
+    )
+
+
 def test_default_holdout_summary_exposes_no_validation_or_frozen_rows(
     tmp_path: Path,
 ) -> None:

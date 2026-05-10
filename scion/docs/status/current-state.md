@@ -180,9 +180,26 @@ selected-surface runtime summaries compute generic numeric scalar/mapping
 statistics, proposal feedback exposes those stats, and CVRP
 `main_search_strategy` emits accepted-delta totals/best deltas/positive counts
 plus an objective trace from phase start to returned best. Focused CVRP and
-full Scion tests pass. The next step is another five-round forced
-`main_search_strategy` smoke to verify whether APS can now distinguish
-component accepted moves from phase-level and case-level benefit.
+full Scion tests pass. The follow-up five-round forced `main_search_strategy`
+smoke from commit `d29b7e2` has now completed and is analyzed. It validated
+that deterministic runtime attribution is recorded: R1-R4 had complete
+selected-surface runtime audit with all 48 required fields present on 16/16
+candidate pairs, including accepted-delta and objective-trace fields. It also
+showed that attribution still was not reaching APS in a useful form: feedback
+continued to emphasize modal accepted-count values and omitted the accepted
+delta / objective-phase chain needed to diagnose accepted-but-zero-phase-delta.
+R1-R4 all failed `SCREENING_FAIL_WIN_RATE`; R5 stayed on the forced surface
+but removed both deep components and was correctly stopped by Verification with
+`empty=main_search_deep_components_selected`. The follow-up repair is now
+implemented: proposal feedback and runtime-feedback text prioritize
+objective-phase and accepted-delta attribution ahead of low-value loaded/active
+fields, and CVRP `main_search_strategy` now distinguishes
+component-local accepted moves from component moves that refresh phase best.
+Route-pair recovery moves no longer suppress bounded destroy/repair or reset
+stagnation unless they improve phase best, and new phase-level component audit
+fields expose phase delta sums, best deltas, and improvement counts. Do not run
+long CVRP validation; the next short smoke should verify attribution use and
+phase/case propagation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -384,7 +401,7 @@ command: /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests
 Latest result:
 
 ```text
-1475 passed, 1 skipped in 51.70s
+1530 passed, 1 skipped in 57.85s
 ```
 
 Latest focused APS compactness/proposal validation:
@@ -2922,65 +2939,50 @@ completion use same-campaign or forced-surface compact screening/runtime
 history after prior screening exists, and exposes bounded selected-surface
 runtime attribution from component fields, phase deltas, and screening stats.
 
-## Latest Experiment: Campaign Feedback Repair Smoke
+## Latest Experiment: Runtime Attribution Repair Smoke
 
-The five-round forced `main_search_strategy` smoke after the feedback repair
-has completed and is analyzed:
+The five-round forced `main_search_strategy` smoke after the runtime
+attribution/accounting repair has completed and is analyzed:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-campaign-feedback-repair-sonnet-5r-20260510T060603Z
-scion_commit=2de43fc
+run_root=/home/clawd/research/scion-experiments/v04-runtime-attribution-repair-sonnet-5r-20260510T065854Z
+scion_commit=d29b7e2
 model=claude-sonnet-4-6
 rounds=5/5
 force_surface=main_search_strategy
 exit_code=0
-analysis_doc=scion/docs/experiments/v0.4/v0.4-campaign-feedback-repair-sonnet-5r-20260510.md
+analysis_doc=scion/docs/experiments/v0.4/v0.4-runtime-attribution-repair-sonnet-5r-20260510.md
 ```
 
 Delegated raw-artifact analysis found:
 
-- Feedback retrieval repair validated. Round 1 had no prior feedback, as
-  expected. Rounds 2-5 read non-empty same-campaign forced-surface
-  `feedback.query_screening` and `feedback.query_runtime` in both hypothesis
-  and code sessions, accumulating `1/1`, `2/2`, `3/3`, and `4/4` feedback
-  rows.
 - Forced-surface governance held for all five candidates:
   `modify/main_search_strategy -> policies/main_search_strategy.py`.
-- All five candidates passed Contract, Verification, and canary, reached
-  screening, and had complete selected-surface runtime audit: 16/16 candidate
-  pairs, 44/44 required runtime fields, no selected-surface audit failure.
-- All five candidates failed `SCREENING_FAIL_WIN_RATE`; pair W/L/T and
-  case-level win rates were:
-  - R1: `4/2/10`, win_rate `0.125`, median_delta `0.0`;
-  - R2: `3/1/12`, win_rate `0.0`, median_delta `0.0`;
-  - R3: `4/2/10`, win_rate `0.125`, median_delta `0.0`;
-  - R4: `3/2/11`, win_rate `0.0`, median_delta `0.0`;
-  - R5: `2/4/10`, win_rate `0.125`, median_delta `0.0`.
-- APS used the feedback to change strategy, but the compact attribution
-  payload still misleads by emphasizing representative/modal zero values. The
-  agent inferred too strongly that components had no accepted moves even when
-  some pairs had accepted route-pair moves and one bounded-destroy-repair
-  accepted move.
+- R1-R4 passed Contract, Verification, and canary, reached screening, and had
+  complete selected-surface runtime audit: 16/16 candidate pairs, 48/48
+  required runtime fields, no selected-surface audit failure.
+- R1-R4 all failed `SCREENING_FAIL_WIN_RATE`; case and pair W/L/T were:
+  - R1: case `1/0/7`, pair `4/1/11`, win_rate `0.125`, median_delta `0.0`;
+  - R2: case `1/0/7`, pair `4/1/11`, win_rate `0.125`, median_delta `0.0`;
+  - R3: case `2/0/6`, pair `5/0/11`, win_rate `0.25`, median_delta `0.0`;
+  - R4: case `0/0/8`, pair `3/2/11`, win_rate `0.0`, median_delta `0.0`.
+- R5 passed Contract but failed Verification before canary/screening because
+  the generated plan selected only `intra_route_2opt`; selected-surface audit
+  failed with `empty=main_search_deep_components_selected`.
+- Deterministic attribution existed in raw metrics and campaign summaries, but
+  APS feedback did not expose the accepted-delta/objective-phase chain clearly.
+  R1, R2, and R4 had positive accepted component deltas, yet
+  `improvement_loop` phase delta remained zero and case-level quality did not
+  improve.
 - Candidate code stayed on the CVRP problem-owned whole-algorithm policy
-  surface. No generated operator-layer code or Scion core changes were
+  surface. No generated operator-layer code or Scion core decision code was
   involved.
-- `route_pair_swap` can accept moves, but accepted moves still did not become
-  improvement-loop phase-level benefit or case-level wins. Bounded
-  destroy/repair still mostly accepted zero moves and retained
-  `repair_budget_exhausted` as a dominant skip mode.
-- APS observation budget is improved but not spacious. One code session reached
-  about `47626/48000` chars and compacted `proposal.contract_preview` as
-  `result_too_large`; deterministic ContractGate still ran later and passed.
 
-Interpretation: the immediate core feedback-retrieval blocker is closed. The
-next repair should improve feedback-attribution fidelity and CVRP
-surface-level runtime accounting before more strategy tuning. Specifically,
-selected-surface feedback should expose compact totals, nonzero accepted counts,
-positive best-delta counts, phase-delta distributions, and
-accepted-but-zero-phase-delta diagnostics so the agent can distinguish
-"component executed" from "case-level benefit." CVRP `main_search_strategy`
-should also account for accepted move -> incumbent delta -> phase start/end
-objective -> returned-best objective -> case result.
+Interpretation: runtime attribution recording is mostly closed, but proposal
+feedback selection and CVRP phase-best semantics still needed repair. The
+follow-up repair now prioritizes objective-phase / accepted-delta fields
+in proposal feedback and changes CVRP main search so component-local accepted
+moves are not treated as phase improvement unless they refresh phase best.
 
 ## Remaining Optimization Backlog
 
@@ -3059,7 +3061,13 @@ P1:
   smoke from commit `2de43fc`: feedback rows were non-empty in rounds 2-5 and
   all five candidates reached screening. The remaining blocker is feedback
   attribution fidelity and CVRP surface efficacy, not campaign feedback
-  retrieval. Long validation remains blocked.
+  retrieval. The runtime-attribution repair from commit `d29b7e2` recorded the
+  right deterministic fields, but the follow-up smoke showed APS still did not
+  receive accepted-delta/objective-phase attribution clearly and R5 correctly
+  failed when it dropped deep components. The follow-up repair prioritizes
+  those attribution fields in feedback text/payloads and separates
+  component-local acceptance from phase-best improvement inside CVRP
+  `main_search_strategy`. Long validation remains blocked.
 
 P2:
 

@@ -1456,6 +1456,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_accepted_delta_sum": {},
         "main_search_component_accepted_best_delta": {},
         "main_search_component_accepted_positive_counts": {},
+        "main_search_component_phase_delta_sum": {},
+        "main_search_component_phase_best_delta": {},
+        "main_search_component_phase_improvement_counts": {},
         "main_search_component_removed_counts": {},
         "main_search_component_reinserted_counts": {},
         "main_search_component_repair_fallback_counts": {},
@@ -1766,6 +1769,15 @@ def _normalize_main_search_strategy_plan(
         component: 0.0 for component in components
     }
     audit["main_search_component_accepted_positive_counts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_phase_delta_sum"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_phase_best_delta"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_phase_improvement_counts"] = {
         component: 0 for component in components
     }
     audit["main_search_component_removed_counts"] = {
@@ -3004,8 +3016,8 @@ def improve_with_main_search_strategy(
             stop_reason = "time_limit"
             break
         audit["main_search_rounds"] = round_index + 1
-        round_accepted = 0
-        round_route_pair_improved = False
+        round_phase_improved = 0
+        round_route_pair_phase_improved = False
         for component in components:
             if _time_exhausted(start_time, time_limit_sec):
                 stop_reason = "time_limit"
@@ -3013,7 +3025,7 @@ def improve_with_main_search_strategy(
             if (
                 component == "bounded_destroy_repair"
                 and "route_pair_swap" in components
-                and round_route_pair_improved
+                and round_route_pair_phase_improved
             ):
                 _record_main_search_component_skip(
                     audit,
@@ -3121,15 +3133,24 @@ def improve_with_main_search_strategy(
                 component,
                 candidate_delta,
             )
-            round_accepted += 1
-            if component == "route_pair_swap":
-                round_route_pair_improved = True
             if _lexicographic_improves(current_objective, best_objective):
+                phase_best_delta = _objective_distance_delta(
+                    best_objective,
+                    current_objective,
+                )
                 best_solution = current
                 best_objective = dict(current_objective)
+                _record_main_search_component_phase_improvement(
+                    audit,
+                    component,
+                    phase_best_delta,
+                )
+                round_phase_improved += 1
+                if component == "route_pair_swap":
+                    round_route_pair_phase_improved = True
         if stop_reason in {"time_limit", "invalid_component_output"}:
             break
-        if round_accepted > 0:
+        if round_phase_improved > 0:
             no_improvement_rounds = 0
             continue
         no_improvement_rounds += 1
@@ -4072,6 +4093,29 @@ def _record_main_search_component_accepted_delta(
         )
 
 
+def _record_main_search_component_phase_improvement(
+    audit: dict[str, Any],
+    component: str,
+    delta: float,
+) -> None:
+    delta_sum = audit.setdefault("main_search_component_phase_delta_sum", {})
+    delta_sum[component] = round(
+        float(delta_sum.get(component, 0.0) or 0.0) + delta,
+        6,
+    )
+    best_delta = audit.setdefault("main_search_component_phase_best_delta", {})
+    best_delta[component] = max(
+        float(best_delta.get(component, 0.0) or 0.0),
+        round(float(delta), 6),
+    )
+    counts = audit.setdefault(
+        "main_search_component_phase_improvement_counts",
+        {},
+    )
+    if delta > _OBJECTIVE_TOLERANCE:
+        counts[component] = _as_nonnegative_int(counts.get(component)) + 1
+
+
 def _main_search_objective_trace(
     *,
     initial_objective: Mapping[str, int | float],
@@ -4086,10 +4130,17 @@ def _main_search_objective_trace(
     accepted_delta_sum = audit.get("main_search_component_accepted_delta_sum")
     if not isinstance(accepted_delta_sum, Mapping):
         accepted_delta_sum = {}
+    phase_delta_sum = audit.get("main_search_component_phase_delta_sum")
+    if not isinstance(phase_delta_sum, Mapping):
+        phase_delta_sum = {}
+    phase_counts = audit.get("main_search_component_phase_improvement_counts")
+    if not isinstance(phase_counts, Mapping):
+        phase_counts = {}
     accepted_but_zero_phase_delta = {
         str(component): _as_nonnegative_int(count)
         for component, count in accepted.items()
-        if _as_nonnegative_int(count) > 0 and phase_delta <= _OBJECTIVE_TOLERANCE
+        if _as_nonnegative_int(count) > 0
+        and _as_nonnegative_int(phase_counts.get(component)) <= 0
     }
     return {
         "status": "returned_best",
@@ -4101,9 +4152,17 @@ def _main_search_objective_trace(
             str(component): round(float(value or 0.0), 6)
             for component, value in accepted_delta_sum.items()
         },
+        "phase_delta_sum_by_component": {
+            str(component): round(float(value or 0.0), 6)
+            for component, value in phase_delta_sum.items()
+        },
         "accepted_count_by_component": {
             str(component): _as_nonnegative_int(count)
             for component, count in accepted.items()
+        },
+        "phase_improvement_count_by_component": {
+            str(component): _as_nonnegative_int(count)
+            for component, count in phase_counts.items()
         },
         "accepted_but_zero_phase_delta": accepted_but_zero_phase_delta,
     }

@@ -56,8 +56,16 @@ enough to continue, validate, freeze, promote, or abandon.
   implemented and full tests pass: protocol selected-surface runtime summaries
   include generic numeric scalar/mapping stats, proposal feedback exposes those
   stats, and CVRP `main_search_strategy` records accepted-delta and objective
-  trace accounting. Do not run a long CVRP solver-quality validation until
-  short diagnostics show stable case-level quality evidence.
+  trace accounting. The follow-up five-round forced smoke from commit
+  `d29b7e2` showed that deterministic attribution was recorded with complete
+  selected-surface audit in R1-R4, but APS feedback still did not surface the
+  accepted-delta/objective-phase chain clearly, and R5 was correctly stopped
+  when it dropped both deep components. The follow-up repair prioritizes
+  objective-phase and accepted-delta fields in proposal feedback
+  and changes CVRP `main_search_strategy` so component-local accepted moves do
+  not count as phase improvement unless they refresh phase best. Do not run a
+  long CVRP solver-quality validation until short diagnostics show stable
+  case-level quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

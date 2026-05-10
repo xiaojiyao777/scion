@@ -2603,6 +2603,9 @@ _RUNTIME_ATTRIBUTION_SUFFIXES = (
     "_accepted_delta_sum",
     "_accepted_best_delta",
     "_accepted_positive_counts",
+    "_phase_delta_sum",
+    "_phase_best_delta",
+    "_phase_improvement_counts",
     "_runtime_ms",
     "_objective_trace",
     "_delta_by_phase",
@@ -2610,6 +2613,28 @@ _RUNTIME_ATTRIBUTION_SUFFIXES = (
     "_coverage_status",
     "_quality_guard_applied",
     "_param_clamps",
+)
+
+
+_RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES = (
+    "_objective_trace",
+    "_delta_by_phase",
+    "_phase_delta_sum",
+    "_phase_best_delta",
+    "_phase_improvement_counts",
+    "_accepted_delta_sum",
+    "_accepted_best_delta",
+    "_accepted_positive_counts",
+    "_accepted",
+    "_attempts",
+    "_skip_reasons",
+    "_best_delta",
+    "_improvement_counts",
+    "_coverage_status",
+    "_stop_reason",
+    "_errors",
+    "_active",
+    "_loaded",
 )
 
 
@@ -2623,29 +2648,32 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
     fields = summary.get("fields")
     if not isinstance(fields, Mapping):
         return {}
-    highlights: list[dict[str, Any]] = []
+    candidates: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
     for field_name, field_summary in fields.items():
         if not isinstance(field_name, str) or not isinstance(field_summary, Mapping):
             continue
         if not _runtime_attribution_field_is_interesting(field_name, field_summary):
             continue
-        highlights.append(
-            {
-                "field": field_name,
-                "present": field_summary.get("present"),
-                "missing": field_summary.get("missing"),
-                "empty": field_summary.get("empty"),
-                "failed": field_summary.get("failed"),
-                "numeric_summary": _strip_forbidden_value(
-                    field_summary.get("numeric_summary") or {}
-                ),
-                "values": _compact_runtime_attribution_values(
-                    field_summary.get("values")
-                ),
-            }
+        candidates.append(
+            (
+                _runtime_attribution_sort_key(field_name, field_summary),
+                {
+                    "field": field_name,
+                    "present": field_summary.get("present"),
+                    "missing": field_summary.get("missing"),
+                    "empty": field_summary.get("empty"),
+                    "failed": field_summary.get("failed"),
+                    "numeric_summary": _strip_forbidden_value(
+                        field_summary.get("numeric_summary") or {}
+                    ),
+                    "values": _compact_runtime_attribution_values(
+                        field_summary.get("values")
+                    ),
+                },
+            )
         )
-        if len(highlights) >= 12:
-            break
+    candidates.sort(key=lambda item: item[0])
+    highlights = [payload for _sort_key, payload in candidates[:12]]
     if not highlights:
         return {}
     return {
@@ -2658,6 +2686,22 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
         "stats": _eval_stats_payload(protocol.stats),
         "runtime_field_highlights": highlights,
     }
+
+
+def _runtime_attribution_sort_key(
+    field_name: str,
+    field_summary: Mapping[str, Any],
+) -> tuple[int, int, str]:
+    has_issue = any(
+        _safe_positive_int(field_summary.get(key))
+        for key in ("missing", "empty", "failed")
+    )
+    priority = len(_RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES)
+    for index, suffix in enumerate(_RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES):
+        if field_name.endswith(suffix):
+            priority = index
+            break
+    return (0 if has_issue else 1, priority, field_name)
 
 
 def _runtime_attribution_field_is_interesting(

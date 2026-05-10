@@ -329,10 +329,20 @@ baseline quality guard and conservative baseline-param clamps were applied,
 post-baseline registry toggle/limit,
 improvement components, rounds/top-k, selected and attempted component lists,
 component attempts/accepted/runtime, per-component skip reasons, best component
-distance deltas, improvement counts, bounded destroy/repair
-removed/reinserted counts and accept limit, global and per-component acceptance
-thresholds, restart/perturbation knobs and counts, phase objective deltas,
-phase runtime, elapsed runtime, whether the phase best was returned, and stop reason.
+distance deltas, accepted local delta totals, phase-best delta totals, accepted
+and phase-improvement counts, bounded destroy/repair removed/reinserted counts
+and accept limit, global and per-component acceptance thresholds,
+restart/perturbation knobs and counts, phase objective deltas, phase runtime,
+elapsed runtime, whether the phase best was returned, and stop reason.
+The main-search improvement loop distinguishes component-local acceptance from
+phase-best improvement: a move that improves the current perturbed solution but
+does not refresh phase best is still audited as accepted, but it does not
+reset stagnation or suppress bounded destroy/repair via the route-pair phase
+gate. The phase-level audit fields
+`main_search_component_phase_delta_sum`,
+`main_search_component_phase_best_delta`, and
+`main_search_component_phase_improvement_counts` expose that distinction to
+proposal feedback without changing Decision inputs.
 `main_search_baseline_param_clamps` is always a non-empty JSON-safe evidence
 object. In the no-clamp case it records `applied=false`,
 `status=no_clamps`, `count=0`, and empty nested `fields`/`clamps`; when clamps

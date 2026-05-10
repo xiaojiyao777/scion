@@ -147,7 +147,11 @@ runtime summary field names, representative values, and generic numeric
 summaries. Runtime feedback exposes the same bounded attribution highlights
 across recent screening steps so the proposal agent can connect component
 attempts/accepted moves, nonzero/positive counts, phase deltas, and case-level
-screening stats without reading raw metrics.
+screening stats without reading raw metrics. Attribution rendering now
+prioritizes objective trace, objective-delta-by-phase, component phase-delta,
+and accepted-delta fields ahead of low-value loaded/active fields in both
+structured tool payloads and compact `selected_surface_runtime[...]` text, so
+modal runtime values do not hide the accepted-move-to-phase-benefit chain.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

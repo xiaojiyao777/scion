@@ -157,6 +157,9 @@ summaries for scalar and mapping-shaped runtime fields, such as observed
 counts, weighted sums, zero/nonzero counts, and positive/negative counts. These
 summaries are reporting/proposal-feedback evidence only;
 `SafeFeatureExtractor` does not read those tainted runtime values.
+Proposal feedback may prioritize selected-surface numeric summaries for
+diagnosis, but those priorities do not change protocol gates or decision
+features.
 
 ## SafeFeatureExtractor
 
