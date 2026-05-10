@@ -1030,6 +1030,99 @@ def test_feedback_query_screening_bounds_large_compact_payload_without_error(
     assert "raw_metrics_ref" not in rendered
 
 
+def test_feedback_query_defaults_to_campaign_scope_across_branches(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    current_branch = Branch(
+        branch_id="branch-current",
+        state=BranchState.EXPLORE,
+        base_champion_id=7,
+        base_champion_hash="code-hash",
+    )
+    older_step = replace(context.step_history[0], branch_id="branch-older")
+    context = replace(
+        context,
+        branch=current_branch,
+        step_history=(older_step,),
+    )
+
+    observation = registry.call("feedback.query_screening", {}, context)
+    branch_scoped = registry.call(
+        "feedback.query_screening",
+        {"branch_id": "branch-current"},
+        context,
+    )
+
+    assert observation.structured_payload["available_screening_step_count"] == 1
+    assert observation.structured_payload["matched_screening_step_count"] == 1
+    assert observation.structured_payload["screening_steps"][0]["branch_id"] == "branch-older"
+    assert branch_scoped.structured_payload["matched_screening_step_count"] == 0
+    assert branch_scoped.structured_payload["screening_steps"] == []
+
+
+def test_runtime_feedback_exposes_compact_surface_attribution(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    protocol = context.step_history[0].protocol_result
+    assert protocol is not None
+    main_search_hypothesis = replace(
+        _hyp("main_search_strategy"),
+        target_file="policies/main_search_strategy.py",
+    )
+    attributed_step = replace(
+        context.step_history[0],
+        hypothesis=main_search_hypothesis,
+        protocol_result=replace(
+            protocol,
+            candidate_surface_runtime_summary={
+                "selected_surface": "main_search_strategy",
+                "fields": {
+                    "main_search_component_accepted": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                        "values": [
+                            {
+                                "value": "{'route_pair_swap': 43, 'bounded_destroy_repair': 11}",
+                                "count": 1,
+                            }
+                        ],
+                    },
+                    "main_search_objective_delta_by_phase": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                        "values": [
+                            {"value": "{'improvement_loop': 0.0}", "count": 2}
+                        ],
+                    },
+                },
+            },
+        ),
+    )
+    context = replace(context, step_history=(attributed_step,))
+
+    screening = registry.call("feedback.query_screening", {}, context)
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    rendered = json.dumps(
+        [screening.structured_payload, runtime.structured_payload],
+        sort_keys=True,
+        default=str,
+    )
+
+    assert "candidate_surface_runtime_attribution" in rendered
+    assert "screening_runtime_attribution" in runtime.structured_payload
+    assert "main_search_component_accepted" in rendered
+    assert "main_search_objective_delta_by_phase" in rendered
+    assert "raw_metrics_ref" not in rendered
+
+
 def test_default_holdout_summary_exposes_no_validation_or_frozen_rows(
     tmp_path: Path,
 ) -> None:
@@ -2956,6 +3049,82 @@ def test_agentic_session_fallback_does_not_repeat_successful_feedback_tools(
         and event.metadata.get("skip_reason") == "already_succeeded"
         for event in output.transcript
     )
+
+
+def test_agentic_session_retries_empty_branch_scoped_feedback_campaign_wide(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"tool_name": "memory.query", "args": {}},
+            {
+                "tool_name": "feedback.query_screening",
+                "args": {"branch_id": "branch-current"},
+            },
+            {
+                "tool_name": "feedback.query_runtime",
+                "args": {"branch_id": "branch-current"},
+            },
+            {"stop": True},
+        ]
+    )
+    base_context = _context(tmp_path, policy=_tool_enabled_policy())
+    current_branch = Branch(
+        branch_id="branch-current",
+        state=BranchState.EXPLORE,
+        base_champion_id=7,
+        base_champion_hash="code-hash",
+    )
+    context = replace(base_context, branch=current_branch)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    screening_summaries = [
+        event.metadata.get("result_summary", "")
+        for event in output.transcript
+        if event.metadata.get("tool_name") == "feedback.query_screening"
+    ]
+    runtime_summaries = [
+        event.metadata.get("result_summary", "")
+        for event in output.transcript
+        if event.metadata.get("tool_name") == "feedback.query_runtime"
+    ]
+    hypothesis_observations = creative.hypothesis_contexts[0][
+        "agentic_tool_observations"
+    ]
+    useful_screening = [
+        observation
+        for observation in hypothesis_observations
+        if observation["tool_name"] == "feedback.query_screening"
+        and observation["structured_payload"]["screening_steps"]
+    ]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert any("Returned 0 of 0" in summary for summary in screening_summaries)
+    assert any("Returned 1 of 1" in summary for summary in screening_summaries)
+    assert len(runtime_summaries) >= 2
+    assert useful_screening
 
 
 def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(

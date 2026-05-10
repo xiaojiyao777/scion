@@ -100,16 +100,22 @@ If the planner stops there, APS falls back to the fixed read-only plan, which
 includes bounded `memory.query`, `feedback.query_screening`, and
 `feedback.query_runtime` calls when policy allows them. Planner context is not
 considered complete until all compact feedback tools with available data have
-returned successful observations. After a hypothesis selects a surface, APS
+returned useful observations. Feedback observations that merely succeed with an
+empty branch-scoped result do not satisfy the compact-feedback requirement when
+same-campaign screening history is available. The deterministic fallback
+therefore queries screening/runtime feedback at campaign scope, or at the
+forced-surface scope for forced diagnostics, instead of defaulting to the
+current branch id. After a hypothesis selects a surface, APS
 performs a deterministic `context.read_surface` before code generation or
 partial-session finalization, unless that exact surface was already read.
 Fallback now treats successful compact observations as reusable session facts:
 it only fills missing `context.list_surfaces`, `context.read_problem`,
 `memory.query`, `feedback.query_screening`, and `feedback.query_runtime`
-observations, and it does not reread an already successful selected
-`context.read_surface`. Planner-selected duplicate reads of those reusable
-observations switch to the same missing-only fallback instead of consuming
-another large observation.
+observations, but feedback observations are reusable only after they contain
+screening rows or screening-derived runtime/attribution content. It does not
+reread an already successful selected `context.read_surface`.
+Planner-selected duplicate reads of reusable observations switch to the same
+missing-only fallback instead of consuming another large observation.
 Surface tool observations are compact by default:
 `context.list_surfaces` exposes only selection-oriented metadata plus any active
 forced-surface constraint. During forced-surface diagnostics,
@@ -134,7 +140,13 @@ strict for genuinely invalid artifacts. The default APS observation budget is
 room for the normal list/problem/feedback/selected-surface sequence. Screening
 and runtime feedback tools also bound their compact JSON payloads before the
 registry size guard, so available compact feedback can still succeed without
-exposing raw metric refs when runtime summaries are unusually large.
+exposing raw metric refs when runtime summaries are unusually large. Screening
+feedback returns recent rows first and includes the query scope plus a bounded
+selected-surface runtime attribution highlight derived from problem-declared
+runtime summary field names and representative values. Runtime feedback exposes
+the same bounded attribution highlights across recent screening steps so the
+proposal agent can connect component attempts/accepted moves, phase deltas, and
+case-level screening stats without reading raw metrics.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

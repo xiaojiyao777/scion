@@ -39,11 +39,15 @@ enough to continue, validate, freeze, promote, or abandon.
   forced smoke: C10 no longer blocked later structured singleton hypotheses,
   four code patches reached screening, APS budget stayed healthy, and
   selected-surface audit was complete. The current blocker is proposal
-  feedback and efficacy attribution: feedback tools returned empty same-campaign
-  screening/runtime history, and accepted main-search component moves still do
-  not clearly become phase-level and final case-level benefit. Do not run a
-  long CVRP solver-quality validation until a forced smoke shows non-empty
-  feedback retrieval plus stable case-level quality evidence.
+  feedback and efficacy attribution. The APS feedback repair is now
+  implemented and full tests pass: fallback feedback queries use same-campaign
+  or forced-surface scope instead of current-branch scope, empty branch-scoped
+  feedback no longer satisfies required compact context, and feedback payloads
+  expose bounded selected-surface runtime attribution highlights. Accepted
+  main-search component moves still do not clearly become phase-level and
+  final case-level benefit. Do not run a long CVRP solver-quality validation
+  until a forced smoke shows non-empty feedback retrieval plus stable
+  case-level quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

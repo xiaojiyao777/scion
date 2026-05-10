@@ -151,7 +151,19 @@ feedback and efficacy attribution: `feedback.query_screening` and
 `feedback.query_runtime` returned empty/unavailable results even after prior
 screening rounds, and accepted component moves still do not clearly translate
 through phase deltas into final case-level benefit. Do not run long CVRP
-validation.
+validation. The next feedback repair is now implemented in the working tree:
+APS fallback feedback queries default to same-campaign scope, or forced-surface
+scope for forced diagnostics, instead of current-branch scope; empty
+branch-scoped feedback observations no longer count as satisfying required
+compact context; planner guidance recommends campaign/forced-surface feedback
+arguments; and screening/runtime feedback payloads include bounded
+selected-surface runtime attribution highlights so the proposal agent can
+compare component attempts/accepted moves, phase deltas, and screening stats
+without raw metric refs. Focused proposal-tool/research-surface tests and the
+full Scion test suite pass. The next step is another five-round forced
+`main_search_strategy` smoke to confirm non-empty feedback retrieval in real
+APS traces and check whether attribution-guided proposals improve screening
+quality.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2886,10 +2898,10 @@ Interpretation:
   runtime feedback even after earlier screening had completed.
 
 This smoke validates the core C10/APS-control repair. It does not justify long
-validation. The next repair should make proposal feedback tools return
-same-campaign compact screening/runtime history after prior screening exists,
-and should add or expose bounded attribution from component accepted moves to
-phase delta and final pair/case outcome.
+validation. The follow-up feedback repair now makes APS fallback and planner
+completion use same-campaign or forced-surface compact screening/runtime
+history after prior screening exists, and exposes bounded selected-surface
+runtime attribution from component fields, phase deltas, and screening stats.
 
 ## Remaining Optimization Backlog
 
@@ -2963,7 +2975,9 @@ P1:
   patches reached screening and no C10 failure recurred. The next blocker is
   proposal-feedback retrieval plus net efficacy attribution: feedback tools
   returned empty same-campaign history, and accepted route-pair/destroy-repair
-  moves still did not clearly become phase-level and case-level benefit.
+  moves still did not clearly become phase-level and case-level benefit. The
+  feedback-retrieval side is now repaired in code and full tests pass; the
+  efficacy side still needs another short forced smoke before long validation.
 
 P2:
 

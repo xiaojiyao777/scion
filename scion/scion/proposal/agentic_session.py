@@ -53,7 +53,7 @@ _COMPACT_FEEDBACK_TOOLS = (
 _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
     "context.list_surfaces",
     "context.read_problem",
-    *_COMPACT_FEEDBACK_TOOLS,
+    "memory.query",
 )
 _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
@@ -1145,11 +1145,11 @@ class AgenticProposalSession:
             ("memory.query", {}),
             (
                 "feedback.query_screening",
-                {"branch_id": state.branch_id},
+                _feedback_query_args(context),
             ),
             (
                 "feedback.query_runtime",
-                {"branch_id": state.branch_id},
+                _feedback_query_args(context),
             ),
         )
         skip_successful_required_tools = skip_successful_required_tools or set()
@@ -1195,11 +1195,13 @@ class AgenticProposalSession:
     def _successful_tool_names(
         self,
         observations: list[ProposalObservation],
+        *,
+        context: ProposalToolContext | None = None,
     ) -> set[str]:
         return {
             observation.tool_name
             for observation in observations
-            if not observation.is_error
+            if _observation_satisfies_compact_requirement(context, observation)
         }
 
     def _run_initial_tool_loop(
@@ -1482,6 +1484,25 @@ class AgenticProposalSession:
 
         if self._tool_loop_limit_reached(state) and state.loop_stop_reason is None:
             self._record_loop_stop(state, self._current_loop_stop_reason(state))
+        missing = self._missing_planner_context_error(context, observations)
+        if missing is not None and state.loop_stop_reason == "tool_loop_limit":
+            state.note(
+                AgenticProposalPhase.DIAGNOSE,
+                "Planner exhausted bounded tool loop before useful compact feedback; using fixed APS-0 tool plan.",
+                metadata={
+                    "status": "error",
+                    "error_code": "planner_tool_loop_limit_before_feedback",
+                    "fallback": "fixed_tool_plan",
+                    "detail": missing,
+                },
+            )
+            return self._fallback_after_planner_error(
+                context,
+                state,
+                observations,
+                error_code="planner_tool_loop_limit_before_feedback",
+                tool_name=None,
+            )
         return observations
 
     def _fallback_after_planner_error(
@@ -1508,7 +1529,10 @@ class AgenticProposalSession:
             context,
             state,
             selection_source="fallback_selected",
-            skip_successful_required_tools=self._successful_tool_names(observations),
+            skip_successful_required_tools=self._successful_tool_names(
+                observations,
+                context=context,
+            ),
         )
 
     def _required_context_satisfied(
@@ -1538,7 +1562,7 @@ class AgenticProposalSession:
         observed_ok = {
             observation.tool_name
             for observation in observations
-            if not observation.is_error
+            if _observation_satisfies_compact_requirement(context, observation)
         }
         missing_feedback = [
             tool_name for tool_name in available_feedback if tool_name not in observed_ok
@@ -1563,11 +1587,7 @@ class AgenticProposalSession:
             and (context.search_memory is not None or context.research_log is not None)
         ):
             available.append("memory.query")
-        has_screening_steps = any(
-            _step_stage_name(step) == "screening"
-            for step in context.step_history
-            if getattr(step, "protocol_result", None) is not None
-        )
+        has_screening_steps = _has_feedback_screening_history(context)
         if "feedback.query_screening" in allowed and has_screening_steps:
             available.append("feedback.query_screening")
         if "feedback.query_runtime" in allowed and has_screening_steps:
@@ -1614,6 +1634,29 @@ class AgenticProposalSession:
                 "allowed_surface_ids",
                 surface_names,
             )
+        feedback_args = _feedback_query_args(context)
+        feedback_scope_rule = (
+            "Default to same-campaign screening/runtime history. Do not add "
+            "branch_id unless intentionally narrowing to a branch known to "
+            "contain prior protocol evidence."
+        )
+        guidance["feedback.query_screening"] = {
+            "scope_rule": feedback_scope_rule,
+            "recommended_args": feedback_args,
+            "empty_result_rule": (
+                "If branch-scoped feedback returns zero rows while screening "
+                "history exists, retry without branch_id or use only the "
+                "forced surface filter."
+            ),
+        }
+        guidance["feedback.query_runtime"] = {
+            "scope_rule": feedback_scope_rule,
+            "recommended_args": feedback_args,
+            "empty_result_rule": (
+                "Runtime feedback must be useful, not just a successful empty "
+                "tool call; prefer same-campaign or forced-surface scope."
+            ),
+        }
         return guidance
 
     def _hypothesis_constraints(
@@ -2722,11 +2765,69 @@ def _surface_names_from_observations(
     return list(dict.fromkeys(names))
 
 
+def _feedback_query_args(context: ProposalToolContext) -> dict[str, Any]:
+    args: dict[str, Any] = {}
+    if context.forced_surface:
+        args["surface"] = context.forced_surface
+    return args
+
+
+def _has_feedback_screening_history(context: ProposalToolContext) -> bool:
+    forced_surface = str(context.forced_surface or "").strip()
+    for step in context.step_history:
+        if _step_stage_name(step) != "screening":
+            continue
+        if forced_surface and _step_surface_name(step) != forced_surface:
+            continue
+        return True
+    return False
+
+
+def _step_surface_name(step: Any) -> str:
+    hypothesis = getattr(step, "hypothesis", None)
+    return str(getattr(hypothesis, "change_locus", "") or "").strip()
+
+
 def _step_stage_name(step: Any) -> str:
     protocol = getattr(step, "protocol_result", None)
     stage = getattr(protocol, "stage", None)
     value = getattr(stage, "value", stage)
     return str(value or "").strip().lower()
+
+
+def _observation_satisfies_compact_requirement(
+    context: ProposalToolContext | None,
+    observation: ProposalObservation,
+) -> bool:
+    if observation.is_error:
+        return False
+    if observation.tool_name == "feedback.query_screening":
+        return _screening_feedback_observation_has_rows(observation)
+    if observation.tool_name == "feedback.query_runtime":
+        return _runtime_feedback_observation_has_content(observation)
+    return True
+
+
+def _screening_feedback_observation_has_rows(
+    observation: ProposalObservation,
+) -> bool:
+    payload = observation.structured_payload
+    rows = payload.get("screening_steps") if isinstance(payload, Mapping) else None
+    return isinstance(rows, list) and bool(rows)
+
+
+def _runtime_feedback_observation_has_content(
+    observation: ProposalObservation,
+) -> bool:
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return False
+    for key in ("runtime_feedback", "runtime_failure_guidance"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    attribution = payload.get("screening_runtime_attribution")
+    return isinstance(attribution, list) and bool(attribution)
 
 
 def _has_successful_surface_read(
@@ -2752,6 +2853,8 @@ def _has_successful_reusable_observation(
     *,
     forced_surface: str | None = None,
 ) -> bool:
+    if tool_name in {"feedback.query_screening", "feedback.query_runtime"}:
+        return False
     if tool_name in _SINGLE_SUCCESS_OBSERVATION_TOOLS:
         return any(
             observation.tool_name == tool_name and not observation.is_error

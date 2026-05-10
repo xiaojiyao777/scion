@@ -795,8 +795,17 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
                 summary="Screening detail is disabled by ContextExposurePolicy.",
             )
         safe_steps = _filter_hypothesis_prompt_steps(list(context.step_history))
+        available_screening_steps = [
+            step
+            for step in safe_steps
+            if (
+                step.protocol_result is not None
+                and step.protocol_result.stage == ExperimentStage.SCREENING
+            )
+        ]
         rows = []
-        for step in safe_steps:
+        matched_count = 0
+        for step in reversed(available_screening_steps):
             protocol = step.protocol_result
             if protocol is None or protocol.stage != ExperimentStage.SCREENING:
                 continue
@@ -805,19 +814,29 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
             surface = step.hypothesis.change_locus
             if args.surface and surface != args.surface:
                 continue
-            rows.append(_screening_step_payload(step))
-            if len(rows) >= args.max_items:
-                break
+            matched_count += 1
+            if len(rows) < args.max_items:
+                rows.append(_screening_step_payload(step))
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "query_scope": {
+                "campaign_id": context.campaign_id,
+                "branch_filter_applied": bool(args.branch_id),
+                "surface_filter_applied": bool(args.surface),
+                "recent_first": True,
+            },
+            "available_screening_step_count": len(available_screening_steps),
+            "matched_screening_step_count": matched_count,
             "screening_steps": rows,
         }
         payload = _bound_compact_feedback_payload(payload)
         return self._observation(
             context,
             observation_type="screening_feedback",
-            summary=f"Returned {len(rows)} screening feedback row(s).",
+            summary=(
+                f"Returned {len(rows)} of {matched_count} screening feedback row(s)."
+            ),
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.SCREENING_DETAIL,
         )
@@ -922,8 +941,26 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "query_scope": {
+                "campaign_id": context.campaign_id,
+                "branch_filter_applied": bool(args.branch_id),
+                "surface_filter_applied": bool(args.surface),
+                "recent_first": True,
+            },
             "runtime_feedback": rendered,
             "runtime_failure_guidance": guidance,
+            "screening_runtime_attribution": [
+                attribution
+                for attribution in (
+                    _surface_runtime_attribution_payload(step)
+                    for step in reversed(safe_steps)
+                    if (
+                        step.protocol_result is not None
+                        and step.protocol_result.stage == ExperimentStage.SCREENING
+                    )
+                )
+                if attribution
+            ][: args.max_items],
             "screening_only": True,
             "metrics_file_refs_exposed": False,
         }
@@ -2554,6 +2591,103 @@ def _path_has_symlink_component(root: Path, normalized_rel_path: str) -> bool:
     return False
 
 
+_RUNTIME_ATTRIBUTION_SUFFIXES = (
+    "_active",
+    "_loaded",
+    "_errors",
+    "_attempts",
+    "_accepted",
+    "_skip_reasons",
+    "_best_delta",
+    "_improvement_counts",
+    "_runtime_ms",
+    "_delta_by_phase",
+    "_stop_reason",
+    "_coverage_status",
+    "_quality_guard_applied",
+    "_param_clamps",
+)
+
+
+def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
+    protocol = step.protocol_result
+    if protocol is None:
+        return {}
+    summary = protocol.candidate_surface_runtime_summary or {}
+    if not isinstance(summary, Mapping):
+        return {}
+    fields = summary.get("fields")
+    if not isinstance(fields, Mapping):
+        return {}
+    highlights: list[dict[str, Any]] = []
+    for field_name, field_summary in fields.items():
+        if not isinstance(field_name, str) or not isinstance(field_summary, Mapping):
+            continue
+        if not _runtime_attribution_field_is_interesting(field_name, field_summary):
+            continue
+        highlights.append(
+            {
+                "field": field_name,
+                "present": field_summary.get("present"),
+                "missing": field_summary.get("missing"),
+                "empty": field_summary.get("empty"),
+                "failed": field_summary.get("failed"),
+                "values": _compact_runtime_attribution_values(
+                    field_summary.get("values")
+                ),
+            }
+        )
+        if len(highlights) >= 12:
+            break
+    if not highlights:
+        return {}
+    return {
+        "round_num": step.round_num,
+        "branch_id": step.branch_id,
+        "surface": step.hypothesis.change_locus,
+        "target_file": step.hypothesis.target_file,
+        "gate_outcome": protocol.gate_outcome,
+        "reason_codes": list(protocol.reason_codes),
+        "stats": _eval_stats_payload(protocol.stats),
+        "runtime_field_highlights": highlights,
+    }
+
+
+def _runtime_attribution_field_is_interesting(
+    field_name: str,
+    field_summary: Mapping[str, Any],
+) -> bool:
+    for key in ("missing", "empty", "failed"):
+        if _safe_positive_int(field_summary.get(key)):
+            return True
+    return any(field_name.endswith(suffix) for suffix in _RUNTIME_ATTRIBUTION_SUFFIXES)
+
+
+def _safe_positive_int(value: Any) -> bool:
+    try:
+        return int(value or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _compact_runtime_attribution_values(values: Any) -> list[dict[str, Any]]:
+    if not isinstance(values, list):
+        return []
+    compact: list[dict[str, Any]] = []
+    for item in values[:3]:
+        if not isinstance(item, Mapping):
+            continue
+        compact.append(
+            _drop_empty_items(
+                {
+                    "value": _limit_text(str(item.get("value", "")), 240),
+                    "count": item.get("count"),
+                }
+            )
+        )
+    return compact
+
+
 def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
     protocol = step.protocol_result
     assert protocol is not None
@@ -2587,6 +2721,9 @@ def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
         ),
         "candidate_surface_runtime_summary": _strip_forbidden_value(
             protocol.candidate_surface_runtime_summary or {}
+        ),
+        "candidate_surface_runtime_attribution": _surface_runtime_attribution_payload(
+            step
         ),
         "pattern_summary": _model_payload(protocol.pattern_summary),
         "case_feedback": [
