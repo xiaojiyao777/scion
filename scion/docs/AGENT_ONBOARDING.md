@@ -70,8 +70,13 @@ enough to continue, validate, freeze, promote, or abandon.
   `SCREENING_FAIL_WIN_RATE`, phase-level component improvement stayed zero, and
   R5 drifted off surface before being fail-closed by the forced-surface guard.
   The current blocker is CVRP `main_search_strategy` phase/case efficacy plus
-  forced-surface prompt hygiene. Do not run a long CVRP solver-quality
-  validation until short diagnostics show stable case-level quality evidence.
+  forced-surface prompt hygiene. The follow-up repair is now implemented and
+  full tests pass: CVRP main search probes both current and phase-best
+  baselines, records recovery-only accepted moves separately from phase-best
+  improvements, broadens bounded destroy/repair subsets, and generic
+  forced-surface guidance suppresses off-surface/action-switch suggestions.
+  Do not run a long CVRP solver-quality validation until short diagnostics
+  show stable case-level quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

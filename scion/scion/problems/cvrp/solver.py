@@ -1456,6 +1456,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_accepted_delta_sum": {},
         "main_search_component_accepted_best_delta": {},
         "main_search_component_accepted_positive_counts": {},
+        "main_search_component_recovery_delta_sum": {},
+        "main_search_component_recovery_best_delta": {},
+        "main_search_component_recovery_counts": {},
         "main_search_component_phase_delta_sum": {},
         "main_search_component_phase_best_delta": {},
         "main_search_component_phase_improvement_counts": {},
@@ -1769,6 +1772,15 @@ def _normalize_main_search_strategy_plan(
         component: 0.0 for component in components
     }
     audit["main_search_component_accepted_positive_counts"] = {
+        component: 0 for component in components
+    }
+    audit["main_search_component_recovery_delta_sum"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_recovery_best_delta"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_recovery_counts"] = {
         component: 0 for component in components
     }
     audit["main_search_component_phase_delta_sum"] = {
@@ -3056,13 +3068,29 @@ def improve_with_main_search_strategy(
                 continue
             component_start_ns = time.monotonic_ns()
             _record_main_search_component_attempted(audit, component)
-            candidate, attempts, component_telemetry = _main_search_component_candidate(
+            (
+                candidate,
+                attempts,
+                component_telemetry,
+                candidate_context,
+            ) = _main_search_component_candidate_choice(
                 component,
-                current,
                 instance,
+                current_solution=current,
+                best_solution=best_solution,
                 adapter=adapter,
                 current_objective=current_objective,
+                best_objective=best_objective,
                 top_k=top_k,
+                min_distance_improvement=float(
+                    component_min_distance_improvement.get(
+                        component,
+                        _main_search_component_min_distance_improvement(
+                            component,
+                            min_distance_improvement,
+                        ),
+                    )
+                ),
             )
             _record_main_search_component_attempts(audit, component, attempts)
             _record_main_search_component_repair_counts(
@@ -3078,36 +3106,14 @@ def improve_with_main_search_strategy(
                     _main_search_skip_reason(component_telemetry, attempts),
                 )
                 continue
-            candidate_objective = _objective_for_solution(adapter, instance, candidate)
-            candidate_delta = _objective_distance_delta(
-                current_objective,
-                candidate_objective,
-            )
+            candidate_objective = candidate_context["objective"]
+            candidate_delta = float(candidate_context["accepted_delta"])
+            phase_best_delta = float(candidate_context["phase_delta"])
             _record_main_search_component_candidate_delta(
                 audit,
                 component,
                 candidate_delta,
             )
-            effective_min_distance_improvement = float(
-                component_min_distance_improvement.get(
-                    component,
-                    _main_search_component_min_distance_improvement(
-                        component,
-                        min_distance_improvement,
-                    ),
-                )
-            )
-            if not _main_search_accepts(
-                candidate_objective,
-                current_objective,
-                min_distance_improvement=effective_min_distance_improvement,
-            ):
-                _record_main_search_component_skip(
-                    audit,
-                    component,
-                    "candidate_below_acceptance_threshold",
-                )
-                continue
             valid, reason = _solution_is_valid(adapter, instance, candidate)
             if not valid:
                 audit["main_search_strategy_errors"] = (
@@ -3134,10 +3140,6 @@ def improve_with_main_search_strategy(
                 candidate_delta,
             )
             if _lexicographic_improves(current_objective, best_objective):
-                phase_best_delta = _objective_distance_delta(
-                    best_objective,
-                    current_objective,
-                )
                 best_solution = current
                 best_objective = dict(current_objective)
                 _record_main_search_component_phase_improvement(
@@ -3148,6 +3150,12 @@ def improve_with_main_search_strategy(
                 round_phase_improved += 1
                 if component == "route_pair_swap":
                     round_route_pair_phase_improved = True
+            else:
+                _record_main_search_component_recovery(
+                    audit,
+                    component,
+                    candidate_delta,
+                )
         if stop_reason in {"time_limit", "invalid_component_output"}:
             break
         if round_phase_improved > 0:
@@ -3301,6 +3309,116 @@ def _main_search_component_candidate(
             top_k=top_k,
         )
     return None, 0, {"skip_reason": "unknown_component"}
+
+
+def _main_search_component_candidate_choice(
+    component: str,
+    instance: CvrpInstance,
+    *,
+    current_solution: CvrpSolution,
+    best_solution: CvrpSolution,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    best_objective: Mapping[str, int | float],
+    top_k: int,
+    min_distance_improvement: float,
+) -> tuple[CvrpSolution | None, int, dict[str, Any], dict[str, Any]]:
+    """Choose a component move, preferring phase-best improvements over recovery."""
+    total_attempts = 0
+    combined_telemetry: dict[str, Any] = {}
+    options: list[dict[str, Any]] = []
+
+    probes: list[tuple[str, CvrpSolution, Mapping[str, int | float]]] = [
+        ("current", current_solution, current_objective)
+    ]
+    if best_solution.routes != current_solution.routes:
+        probes.append(("phase_best", best_solution, best_objective))
+
+    saw_candidate = False
+    for source, source_solution, source_objective in probes:
+        candidate, attempts, telemetry = _main_search_component_candidate(
+            component,
+            source_solution,
+            instance,
+            adapter=adapter,
+            current_objective=source_objective,
+            top_k=top_k,
+        )
+        total_attempts += attempts
+        combined_telemetry = _merge_main_search_component_telemetry(
+            combined_telemetry,
+            telemetry,
+        )
+        if candidate is None:
+            continue
+        saw_candidate = True
+        objective = _objective_for_solution(adapter, instance, candidate)
+        source_delta = _objective_distance_delta(source_objective, objective)
+        current_delta = _objective_distance_delta(current_objective, objective)
+        phase_delta = _objective_distance_delta(best_objective, objective)
+        improves_current = _main_search_accepts(
+            objective,
+            current_objective,
+            min_distance_improvement=min_distance_improvement,
+        )
+        improves_phase = _main_search_accepts(
+            objective,
+            best_objective,
+            min_distance_improvement=min_distance_improvement,
+        )
+        if not (improves_current or improves_phase):
+            continue
+        options.append(
+            {
+                "source": source,
+                "candidate": candidate,
+                "objective": objective,
+                "accepted_delta": source_delta,
+                "current_delta": current_delta,
+                "phase_delta": phase_delta,
+                "improves_phase": improves_phase,
+            }
+        )
+
+    if not options:
+        if saw_candidate and not combined_telemetry.get("skip_reason"):
+            combined_telemetry["skip_reason"] = "candidate_below_acceptance_threshold"
+        return None, total_attempts, combined_telemetry, {}
+
+    options.sort(
+        key=lambda option: (
+            0 if option["improves_phase"] else 1,
+            -float(
+                option["phase_delta"]
+                if option["improves_phase"]
+                else option["current_delta"]
+            ),
+            0 if option["source"] == "phase_best" else 1,
+        )
+    )
+    selected = options[0]
+    return (
+        selected["candidate"],
+        total_attempts,
+        combined_telemetry,
+        selected,
+    )
+
+
+def _merge_main_search_component_telemetry(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+) -> dict[str, Any]:
+    combined = dict(left)
+    for key in ("removed_count", "reinserted_count", "repair_fallback_count"):
+        combined[key] = _as_nonnegative_int(combined.get(key)) + _as_nonnegative_int(
+            right.get(key) if isinstance(right, Mapping) else 0
+        )
+    if not combined.get("skip_reason") and isinstance(right, Mapping):
+        reason = right.get("skip_reason")
+        if isinstance(reason, str) and reason.strip():
+            combined["skip_reason"] = reason.strip()
+    return combined
 
 
 def improve_with_algorithm_blueprint(
@@ -3746,7 +3864,39 @@ def _bounded_destroy_repair_subsets(
     for size in (4, 3, 2, 1):
         if 0 < size < max_count and size not in sizes:
             sizes.append(size)
-    return [removable[:size] for size in sizes]
+
+    subsets: list[list[tuple[float, int, int, int]]] = []
+    seen: set[tuple[int, ...]] = set()
+
+    def add_subset(items: list[tuple[float, int, int, int]]) -> None:
+        if not items:
+            return
+        key = tuple(sorted(customer for _saving, _route, _pos, customer in items))
+        if key in seen:
+            return
+        seen.add(key)
+        subsets.append(items)
+
+    for size in sizes:
+        add_subset(removable[:size])
+        if len(removable) > size:
+            add_subset(removable[1 : 1 + size])
+        if len(removable) > size * 2:
+            add_subset(removable[size : size * 2])
+
+        route_diverse: list[tuple[float, int, int, int]] = []
+        used_routes: set[int] = set()
+        for item in removable:
+            _saving, route_index, _pos, _customer = item
+            if route_index in used_routes:
+                continue
+            route_diverse.append(item)
+            used_routes.add(route_index)
+            if len(route_diverse) >= size:
+                break
+        add_subset(route_diverse)
+
+    return subsets[:8]
 
 
 def _remove_destroy_subset(
@@ -4116,6 +4266,26 @@ def _record_main_search_component_phase_improvement(
         counts[component] = _as_nonnegative_int(counts.get(component)) + 1
 
 
+def _record_main_search_component_recovery(
+    audit: dict[str, Any],
+    component: str,
+    delta: float,
+) -> None:
+    delta_sum = audit.setdefault("main_search_component_recovery_delta_sum", {})
+    delta_sum[component] = round(
+        float(delta_sum.get(component, 0.0) or 0.0) + delta,
+        6,
+    )
+    best_delta = audit.setdefault("main_search_component_recovery_best_delta", {})
+    best_delta[component] = max(
+        float(best_delta.get(component, 0.0) or 0.0),
+        round(float(delta), 6),
+    )
+    counts = audit.setdefault("main_search_component_recovery_counts", {})
+    if delta > _OBJECTIVE_TOLERANCE:
+        counts[component] = _as_nonnegative_int(counts.get(component)) + 1
+
+
 def _main_search_objective_trace(
     *,
     initial_objective: Mapping[str, int | float],
@@ -4136,6 +4306,12 @@ def _main_search_objective_trace(
     phase_counts = audit.get("main_search_component_phase_improvement_counts")
     if not isinstance(phase_counts, Mapping):
         phase_counts = {}
+    recovery_delta_sum = audit.get("main_search_component_recovery_delta_sum")
+    if not isinstance(recovery_delta_sum, Mapping):
+        recovery_delta_sum = {}
+    recovery_counts = audit.get("main_search_component_recovery_counts")
+    if not isinstance(recovery_counts, Mapping):
+        recovery_counts = {}
     accepted_but_zero_phase_delta = {
         str(component): _as_nonnegative_int(count)
         for component, count in accepted.items()
@@ -4156,6 +4332,10 @@ def _main_search_objective_trace(
             str(component): round(float(value or 0.0), 6)
             for component, value in phase_delta_sum.items()
         },
+        "recovery_delta_sum_by_component": {
+            str(component): round(float(value or 0.0), 6)
+            for component, value in recovery_delta_sum.items()
+        },
         "accepted_count_by_component": {
             str(component): _as_nonnegative_int(count)
             for component, count in accepted.items()
@@ -4163,6 +4343,10 @@ def _main_search_objective_trace(
         "phase_improvement_count_by_component": {
             str(component): _as_nonnegative_int(count)
             for component, count in phase_counts.items()
+        },
+        "recovery_count_by_component": {
+            str(component): _as_nonnegative_int(count)
+            for component, count in recovery_counts.items()
         },
         "accepted_but_zero_phase_delta": accepted_but_zero_phase_delta,
     }

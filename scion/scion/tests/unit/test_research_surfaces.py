@@ -628,6 +628,12 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "main_search_component_repair_fallback_counts" in (
         main_search_strategy.evidence.required_runtime_fields
     )
+    assert "main_search_component_recovery_delta_sum" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
+    assert "main_search_component_recovery_counts" in (
+        main_search_strategy.evidence.required_runtime_fields
+    )
     assert main_search_strategy.novelty is not None
     assert main_search_strategy.novelty.signature_fields == [
         "predicted_direction",
@@ -2829,6 +2835,102 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
     assert '"budget_pattern":"conservative"' in prompt_text
     assert '"budget_pattern":"aggressive"' in prompt_text
     assert "Do not use hypothesis prose as novelty identity" in prompt_text
+
+
+def test_forced_surface_context_suppresses_off_surface_switch_guidance(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["search_space"]["editable"] = ["operators/*.py", "policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "route_local",
+            "kind": "operator",
+            "description": "Route-local generated operators.",
+            "targets": {"files": ["operators/*.py"]},
+        },
+        {
+            "name": "algorithm_blueprint",
+            "kind": "config",
+            "description": "Top-level algorithm plan.",
+            "targets": {
+                "files": ["policies/algorithm_blueprint.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+                "singleton": True,
+            },
+            "interface": {
+                "required_functions": ["algorithm_plan"],
+                "function_signatures": {
+                    "algorithm_plan": ["instance", "time_limit_sec"]
+                },
+            },
+        },
+    ]
+    spec_v1 = ProblemSpecV1(**payload)
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "algorithm_blueprint.py").write_text(
+        "def algorithm_plan(instance, time_limit_sec):\n"
+        "    return {'enabled': False}\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    step_history = [
+        StepRecord(
+            round_num=index + 1,
+            branch_id="b1",
+            hypothesis=HypothesisProposal(
+                hypothesis_text="Try another route-local move.",
+                change_locus="route_local",
+                action="create_new",
+                target_file=f"operators/local_{index}.py",
+            ),
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage="hypothesis_contract",
+            failure_detail="duplicate or weak route-local proposal",
+        )
+        for index in range(3)
+    ]
+
+    ctx = ContextManager().build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        step_history=step_history,
+        forced_locus="algorithm_blueprint",
+        forced_surface_diagnostic=True,
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert ctx["forced_surface"] == "algorithm_blueprint"
+    assert ctx["forced_action"] == "modify"
+    assert "Set `change_locus` to `algorithm_blueprint`." in prompt_text
+    assert "Set `action` to `modify`." in prompt_text
+    assert "Unexplored research surfaces" not in prompt_text
+    assert "Consider trying action='modify'" not in prompt_text
+    assert "Consider trying action='create_new'" not in prompt_text
+    assert "Forced-surface diagnostic is active" in prompt_text
 
 
 def test_forced_surface_context_rejects_unknown_surface(tmp_path: Path) -> None:

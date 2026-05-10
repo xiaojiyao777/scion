@@ -962,6 +962,9 @@ research_surfaces:
         - main_search_component_accepted_delta_sum
         - main_search_component_accepted_best_delta
         - main_search_component_accepted_positive_counts
+        - main_search_component_recovery_delta_sum
+        - main_search_component_recovery_best_delta
+        - main_search_component_recovery_counts
         - main_search_component_phase_delta_sum
         - main_search_component_phase_best_delta
         - main_search_component_phase_improvement_counts
@@ -1008,9 +1011,10 @@ research_surfaces:
         time_fraction around 0.75, conservative baseline params, route_pair_swap
         before bounded_destroy_repair, 5 improvement rounds, top_k 64, and
         perturbation strength 2-3 with max_perturbations 2. The solver gates
-        bounded_destroy_repair after same-round route-pair improvements and
-        limits accepted destroy/repair repairs per search so runtime evidence
-        focuses on net objective value instead of accepted-move volume.
+        bounded_destroy_repair after same-round route-pair phase-best
+        improvements and separately audits recovery moves that only improve a
+        perturbed/current solution, so runtime evidence distinguishes
+        recovery-only accepted deltas from phase-best objective gain.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict. The solver owns construction,

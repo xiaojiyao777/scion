@@ -1000,6 +1000,51 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "SECRET_RAW_REF" not in rendered
 
 
+def test_forced_runtime_feedback_omits_conflicting_surface_guidance(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    runtime_step = replace(
+        context.step_history[0],
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Local move surface produced no accepted moves.",
+            change_locus="route_local",
+            action="create_new",
+            target_file="operators/local_new.py",
+        ),
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=0, ties=2, win_rate=0.0),
+            gate_outcome="continue",
+            reason_codes=("tie_dominated",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/safe/screening.json",
+            candidate_runtime_failure_categories={"no_accepted_moves": 2},
+            candidate_operator_attempts=24,
+            candidate_operator_accepted=0,
+        ),
+    )
+    context = replace(
+        context,
+        forced_surface="route_local",
+        forced_action="create_new",
+        step_history=(runtime_step,),
+    )
+
+    observation = registry.call(
+        "feedback.query_runtime",
+        {"surface": "route_local"},
+        context,
+    )
+    guidance = observation.structured_payload["runtime_failure_guidance"]
+
+    assert "forced_surface_constraint: keep surface route_local" in guidance
+    assert "recommended_surfaces: search_policy" not in guidance
+    assert "discouraged_surfaces: route_local" not in guidance
+    assert "declared budget surface" not in guidance
+
+
 def test_feedback_query_screening_bounds_large_compact_payload_without_error(
     tmp_path: Path,
 ) -> None:
@@ -1187,6 +1232,22 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
             },
             "values": [{"value": "{'route_pair_swap': 0.0}", "count": 2}],
         },
+        "main_search_component_recovery_delta_sum": {
+            "present": 2,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "mapping": {
+                    "route_pair_swap": {
+                        "observed_count": 2,
+                        "weighted_sum": 507.0,
+                        "positive_count": 2,
+                    }
+                }
+            },
+            "values": [{"value": "{'route_pair_swap': 507.0}", "count": 1}],
+        },
         "main_search_objective_delta_by_phase": {
             "present": 2,
             "missing": 0,
@@ -1225,6 +1286,7 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
 
     assert "main_search_component_accepted_delta_sum" in rendered
     assert "main_search_component_phase_delta_sum" in rendered
+    assert "main_search_component_recovery_delta_sum" in rendered
     assert "main_search_objective_delta_by_phase" in rendered
     assert "weighted_sum" in rendered
     assert rendered.index("main_search_objective_delta_by_phase") < rendered.index(

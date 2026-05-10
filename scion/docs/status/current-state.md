@@ -208,7 +208,14 @@ mean case win rate regressed to `0.03125`, all screened rounds had
 `main_search_component_phase_delta_sum=0` and zero phase-improvement counts,
 and R5 drifted to `route_local` before being fail-closed by the forced-surface
 proposal guard. Do not run long CVRP validation; the next repair should focus
-on CVRP phase/case propagation and forced-surface prompt hygiene.
+on CVRP phase/case propagation and forced-surface prompt hygiene. That repair
+is now implemented and full tests pass: CVRP `main_search_strategy` probes
+both current and phase-best baselines for each component and prefers
+phase-best improvements, recovery-only accepted moves are audited separately
+from phase-best gains, bounded destroy/repair evaluates a richer set of
+bounded subsets, and forced-surface proposal guidance suppresses conflicting
+off-surface/action-switch recommendations. The next step is another five-round
+forced `main_search_strategy` smoke, not long validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -410,29 +417,27 @@ command: /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests
 Latest result:
 
 ```text
-1530 passed, 1 skipped in 57.85s
+1533 passed, 1 skipped in 57.89s
 ```
 
-Latest focused APS compactness/proposal validation:
+Latest focused phase-benefit / forced-surface validation:
 
 ```bash
-cd scion
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/unit/test_agentic_proposal_tools.py scion/tests/unit/core/test_proposal_pipeline.py scion/tests/test_proposal_validation.py -q
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/test_research_surfaces.py -q
 ```
 
 ```text
-101 passed in 0.94s
+189 passed in 12.30s
 ```
 
-Latest focused CVRP main-search-surface validation:
+Latest selected-surface/proposal boundary validation:
 
 ```bash
-cd /home/clawd/research/or-autoresearch-agent/scion
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/tests/test_cvrp_adapter.py scion/tests/test_problem_bridge.py scion/tests/unit/test_research_surfaces.py::test_cvrp_problem_v1_exposes_policy_surfaces scion/tests/unit/test_research_surfaces.py::test_cvrp_main_search_strategy_contract_targets_and_required_functions scion/tests/unit/test_research_surfaces.py::test_cvrp_default_policy_files_match_declared_signatures scion/tests/unit/test_research_surfaces.py::test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds scion/tests/unit/test_research_surfaces.py::test_invalid_cvrp_main_search_strategy_counts_strategy_errors scion/tests/test_cvrp_solver_operator_runtime.py::test_default_main_search_strategy_policy_matches_contract_gate_interface scion/tests/test_cvrp_solver_operator_runtime.py::test_main_search_strategy_surface_declares_runtime_fields_and_default_is_inactive scion/tests/test_cvrp_solver_operator_runtime.py::test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default scion/tests/test_cvrp_solver_operator_runtime.py::test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_protocol.py::test_run_experiment_preserves_selected_surface_required_runtime_metrics scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_solver_vrp_smoke.py scion/scion/tests/unit/core/test_proposal_pipeline.py -q
 ```
 
 ```text
-43 passed in 3.05s
+39 passed in 12.58s
 ```
 
 Broader CVRP/protocol subset:

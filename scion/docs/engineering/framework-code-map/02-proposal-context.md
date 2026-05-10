@@ -146,12 +146,19 @@ selected-surface runtime attribution highlight derived from problem-declared
 runtime summary field names, representative values, and generic numeric
 summaries. Runtime feedback exposes the same bounded attribution highlights
 across recent screening steps so the proposal agent can connect component
-attempts/accepted moves, nonzero/positive counts, phase deltas, and case-level
-screening stats without reading raw metrics. Attribution rendering now
-prioritizes objective trace, objective-delta-by-phase, component phase-delta,
-and accepted-delta fields ahead of low-value loaded/active fields in both
-structured tool payloads and compact `selected_surface_runtime[...]` text, so
-modal runtime values do not hide the accepted-move-to-phase-benefit chain.
+attempts/accepted moves, nonzero/positive counts, phase deltas, recovery-only
+deltas, and case-level screening stats without reading raw metrics.
+Attribution rendering now prioritizes objective trace, objective-delta-by-phase,
+component phase-delta, recovery-only delta, and accepted-delta fields ahead of
+low-value loaded/active fields in both structured tool payloads and compact
+`selected_surface_runtime[...]` text, so modal runtime values do not hide the
+accepted-move-to-phase-benefit chain. During forced-surface diagnostics,
+proposal context and APS runtime guidance keep exploration/action/runtime
+failure hints aligned with the forced surface/action/target: generic strategy
+guidance suppresses suggestions to switch to unexplored surfaces or alternate
+actions, and runtime-failure guidance omits recommended/discouraged surface
+hints when they conflict with the forced surface while preserving the
+fail-closed forced-surface guard.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

@@ -86,11 +86,13 @@ Solver flow:
    `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
    `bounded_destroy_repair`. The main-search loop records selected,
    attempted, accepted, and skipped components, per-component skip reasons,
-   best observed distance deltas, improvement counts, runtime, and
-   destroy/repair removed/reinserted counts. It also records accepted-move
-   delta sums, accepted best deltas, accepted positive counts, and an objective
-   trace linking phase start objective, best objective, returned objective,
-   phase delta, and accepted-but-zero-phase-delta diagnostics. It also emits a
+   best observed distance deltas, recovery-only accepted deltas/counts,
+   phase-best deltas/counts, improvement counts, runtime, and destroy/repair
+   removed/reinserted counts. It also records accepted-move delta sums,
+   accepted best deltas, accepted positive counts, and an objective trace
+   linking phase start objective, best objective, returned objective, phase
+   delta, recovery-only delta, and accepted-but-zero-phase-delta diagnostics.
+   It also emits a
    `main_search_component_coverage_status` summary and
    `main_search_deep_components_selected` so forced diagnostics can audit
    whether `route_pair_swap` and `bounded_destroy_repair` were selected and
@@ -166,17 +168,24 @@ solver lifecycle and selected-surface runtime audit fails closed.
 The deep components are package-owned and audited. `route_pair_swap` ranks a
 bounded set of route-pair/customer-swap candidates before applying `top_k`,
 instead of relying on raw nested enumeration order. `bounded_destroy_repair`
-uses worst-removal over a bounded customer subset followed by regret-2 repair
-with cheapest insertion candidates. Its repair budget is split across pending
-customers instead of allowing one customer to exhaust the whole `top_k` budget,
-and if a multi-customer repair fails or produces no improvement it can spend
-remaining budget on bounded smaller destroy subsets before giving up. Runtime
-audit records removed, reinserted, and repair-fallback counts, while skip
-reasons distinguish budget exhaustion, infeasible insertion, below-threshold
-candidates, and repairs that produced no improvement. Main-search audit also
-records per-component accepted delta totals/best deltas/positive counts plus a
-phase objective trace so proposal feedback can distinguish "component accepted
-moves" from "phase-level or final case benefit."
+uses worst-removal over bounded customer subsets followed by regret-2 repair
+with cheapest insertion candidates; subset generation includes prefix,
+shifted, and route-diverse subsets so controlled formal-like cases are less
+dependent on a single worst-removal prefix. Its repair budget is split across
+pending customers instead of allowing one customer to exhaust the whole `top_k`
+budget, and if a multi-customer repair fails or produces no improvement it can
+spend remaining budget on bounded smaller destroy subsets before giving up.
+When the current solution has been perturbed away from phase best, the
+main-search loop probes the same component against both the current solution
+and the phase-best baseline, then prefers a candidate that refreshes phase
+best over a recovery-only current improvement. Runtime audit records removed,
+reinserted, and repair-fallback counts, while skip reasons distinguish budget
+exhaustion, infeasible insertion, below-threshold candidates, and repairs that
+produced no improvement. Main-search audit records per-component accepted
+delta totals/best deltas/positive counts, recovery-only delta totals/best
+deltas/counts, phase-best delta totals/best deltas/counts, and a phase
+objective trace so proposal feedback can distinguish "component accepted
+moves" from "current recovery" and "phase-level or final case benefit."
 Forced diagnostic `main_search_strategy` candidates should select both deep
 components in `improvement.enabled_components`, keep registry operators off
 unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128
@@ -329,11 +338,12 @@ baseline quality guard and conservative baseline-param clamps were applied,
 post-baseline registry toggle/limit,
 improvement components, rounds/top-k, selected and attempted component lists,
 component attempts/accepted/runtime, per-component skip reasons, best component
-distance deltas, accepted local delta totals, phase-best delta totals, accepted
-and phase-improvement counts, bounded destroy/repair removed/reinserted counts
-and accept limit, global and per-component acceptance thresholds,
-restart/perturbation knobs and counts, phase objective deltas, phase runtime,
-elapsed runtime, whether the phase best was returned, and stop reason.
+distance deltas, accepted local delta totals, recovery-only delta totals,
+phase-best delta totals, accepted/recovery/phase-improvement counts, bounded
+destroy/repair removed/reinserted counts and accept limit, global and
+per-component acceptance thresholds, restart/perturbation knobs and counts,
+phase objective deltas, phase runtime, elapsed runtime, whether the phase best
+was returned, and stop reason.
 The main-search improvement loop distinguishes component-local acceptance from
 phase-best improvement: a move that improves the current perturbed solution but
 does not refresh phase best is still audited as accepted, but it does not
@@ -343,6 +353,11 @@ gate. The phase-level audit fields
 `main_search_component_phase_best_delta`, and
 `main_search_component_phase_improvement_counts` expose that distinction to
 proposal feedback without changing Decision inputs.
+The recovery audit fields `main_search_component_recovery_delta_sum`,
+`main_search_component_recovery_best_delta`, and
+`main_search_component_recovery_counts` make accepted current-state recovery
+explicit so APS does not treat all accepted deltas as phase-level
+improvement.
 `main_search_baseline_param_clamps` is always a non-empty JSON-safe evidence
 object. In the no-clamp case it records `applied=false`,
 `status=no_clamps`, `count=0`, and empty nested `fields`/`clamps`; when clamps

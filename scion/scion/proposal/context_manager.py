@@ -134,9 +134,28 @@ class ContextManager:
             targetable_operator_files,
             targetable_policy_files=targetable_surface_files,
         )
+        forced_surface_name = (
+            forced_request.surface
+            if forced_request is not None and forced_surface_diagnostic
+            else None
+        )
+        forced_action_name = (
+            forced_request.action
+            if forced_request is not None and forced_surface_diagnostic
+            else None
+        )
+        effective_available_actions = (
+            {forced_action_name}
+            if forced_action_name
+            else available_actions
+        )
         families = _extract_families_from_steps(all_steps, taxonomy=family_taxonomy)
         exploration_coverage = (
-            build_exploration_coverage(families, available_actions=available_actions)
+            build_exploration_coverage(
+                families,
+                available_actions=effective_available_actions,
+                forced_action=forced_action_name,
+            )
             if families
             else ""
         )
@@ -146,7 +165,9 @@ class ContextManager:
             _build_strategy_guidance(
                 families,
                 problem_spec,
-                available_actions=available_actions,
+                available_actions=effective_available_actions,
+                forced_surface=forced_surface_name,
+                forced_action=forced_action_name,
             )
             if families
             else ""
@@ -202,7 +223,10 @@ class ContextManager:
             saturation_signals, objective_feedback=objective_feedback
         )
         search_control_guidance = _build_search_control_guidance(
-            families, safe_hypothesis_steps, adapter_spec
+            families,
+            safe_hypothesis_steps,
+            adapter_spec,
+            forced_surface=forced_surface_name,
         )
         runtime_feedback = _build_runtime_feedback(
             safe_hypothesis_steps,
@@ -212,6 +236,7 @@ class ContextManager:
             safe_hypothesis_steps,
             problem_spec=problem_spec,
             adapter_spec=adapter_spec,
+            forced_surface=forced_surface_name,
         )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
@@ -1138,6 +1163,8 @@ def _build_search_control_guidance(
     families: List[HypothesisFamily],
     step_history: List[StepRecord],
     adapter_spec: Any,
+    *,
+    forced_surface: Optional[str] = None,
 ) -> str:
     """Render generic exploration/exploitation guidance from campaign evidence."""
     recent_screening = [
@@ -1161,6 +1188,7 @@ def _build_search_control_guidance(
     repeated_fail_families = [
         fam.family_id for fam in families
         if _count_trailing_failures(fam.statuses) >= 2
+        and not (forced_surface and fam.locus_pattern == forced_surface)
     ][:4]
 
     lines = ["## Exploration / Exploitation Control"]
@@ -1180,6 +1208,11 @@ def _build_search_control_guidance(
         lines.append(
             "- Avoid saturated failure families: "
             + ", ".join(repeated_fail_families)
+        )
+    if forced_surface:
+        lines.append(
+            "- Forced-surface diagnostic: keep exploration on "
+            f"{forced_surface}; use evidence to vary the mechanism within that surface."
         )
     if mode == "weighted_sum":
         lines.append(
@@ -1715,6 +1748,7 @@ def build_exploration_coverage(
     families: List[HypothesisFamily],
     *,
     available_actions: Optional[set[str]] = None,
+    forced_action: Optional[str] = None,
 ) -> str:
     """Return a formatted string showing family coverage across attempts (T07)."""
     if not families:
@@ -1748,7 +1782,7 @@ def build_exploration_coverage(
     explored_actions = {f.action_pattern for f in families}
     all_actions = available_actions or {"create_new", "modify", "remove"}
     unexplored_actions = all_actions - explored_actions
-    if unexplored_actions:
+    if unexplored_actions and not forced_action:
         lines.append(f"  Unexplored actions: {sorted(unexplored_actions)}")
     return "\n".join(lines)
 
@@ -1773,6 +1807,8 @@ def _build_strategy_guidance(
     spec: Optional[ProblemSpec] = None,
     *,
     available_actions: Optional[set[str]] = None,
+    forced_surface: Optional[str] = None,
+    forced_action: Optional[str] = None,
 ) -> str:
     """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
     if not families:
@@ -1784,14 +1820,27 @@ def _build_strategy_guidance(
     for fam in families:
         consecutive_fails = _count_trailing_failures(fam.statuses)
         if consecutive_fails >= 3:
-            guidance_parts.append(
-                f"⚠️ Family '{fam.mechanism_label}' ({fam.action_pattern}/{fam.locus_pattern}) "
-                f"has failed {consecutive_fails} consecutive times. AVOID this approach."
-            )
+            if forced_surface and fam.locus_pattern == forced_surface:
+                guidance_parts.append(
+                    f"Family '{fam.mechanism_label}' on forced surface "
+                    f"'{forced_surface}' has failed {consecutive_fails} "
+                    "consecutive times. Keep the forced surface/action/target, "
+                    "but use a distinct mechanism or runtime-evidence diagnosis."
+                )
+            else:
+                guidance_parts.append(
+                    f"⚠️ Family '{fam.mechanism_label}' "
+                    f"({fam.action_pattern}/{fam.locus_pattern}) has failed "
+                    f"{consecutive_fails} consecutive times. AVOID this approach."
+                )
 
     # Rule 2: All recent hypotheses same action → suggest alternative
     recent_actions = [f.action_pattern for f in families[-5:]]
-    if len(set(recent_actions)) == 1 and len(recent_actions) >= 3:
+    if (
+        not forced_action
+        and len(set(recent_actions)) == 1
+        and len(recent_actions) >= 3
+    ):
         alt = "modify" if recent_actions[0] == "create_new" else "create_new"
         if alt in allowed_actions:
             guidance_parts.append(
@@ -1813,9 +1862,15 @@ def _build_strategy_guidance(
         else set()
     )
     unexplored = all_loci - explored_loci
-    if unexplored:
+    if unexplored and not forced_surface:
         guidance_parts.append(
             f"Unexplored research surfaces: {sorted(unexplored)}. Consider targeting these."
+        )
+    elif forced_surface:
+        guidance_parts.append(
+            "Forced-surface diagnostic is active: keep the hypothesis on "
+            f"research surface '{forced_surface}' and vary only in-surface "
+            "mechanism details."
         )
 
     return "\n".join(guidance_parts)
@@ -2040,6 +2095,7 @@ def _build_runtime_failure_guidance(
     problem_spec: Any,
     adapter_spec: Any = None,
     max_items: int = 4,
+    forced_surface: str | None = None,
 ) -> str:
     """Render problem-declared steering for structured runtime failure categories."""
     guidance_specs = _get_runtime_failure_guidance_specs(problem_spec, adapter_spec)
@@ -2102,13 +2158,27 @@ def _build_runtime_failure_guidance(
         if surfaces_seen:
             lines.append(f"  observed_surfaces: {', '.join(surfaces_seen)}")
         recommended = _coerce_text_list(getattr(spec, "recommended_surfaces", None))
-        if recommended:
-            lines.append(f"  recommended_surfaces: {', '.join(recommended)}")
         discouraged = _coerce_text_list(getattr(spec, "discouraged_surfaces", None))
-        if discouraged:
-            lines.append(f"  discouraged_surfaces: {', '.join(discouraged)}")
+        forced_conflict = bool(
+            forced_surface
+            and (
+                (recommended and forced_surface not in recommended)
+                or forced_surface in discouraged
+            )
+        )
+        if recommended and not forced_conflict:
+            lines.append(f"  recommended_surfaces: {', '.join(recommended)}")
+        safe_discouraged = [
+            surface for surface in discouraged if surface != forced_surface
+        ]
+        if safe_discouraged and not forced_conflict:
+            lines.append(f"  discouraged_surfaces: {', '.join(safe_discouraged)}")
+        if forced_surface:
+            lines.append(
+                f"  forced_surface_constraint: keep surface {forced_surface}"
+            )
         guidance = str(getattr(spec, "guidance", "") or "").strip()
-        if guidance:
+        if guidance and not forced_conflict:
             lines.append(f"  guidance: {guidance}")
         rendered.append("\n".join(lines))
 
@@ -2378,6 +2448,9 @@ _SURFACE_RUNTIME_PRIORITY_SUFFIXES = (
     "_phase_delta_sum",
     "_phase_best_delta",
     "_phase_improvement_counts",
+    "_recovery_delta_sum",
+    "_recovery_best_delta",
+    "_recovery_counts",
     "_accepted_delta_sum",
     "_accepted_best_delta",
     "_accepted_positive_counts",
