@@ -911,6 +911,9 @@ class ContractGate:
         novelty_error = self._novelty_strategy_error(h)
         if novelty_error is not None:
             return _cr("C10_novelty", False, "light", novelty_error, t0)
+        semantic_identity_error = self._semantic_signature_identity_error(h)
+        if semantic_identity_error is not None:
+            return _cr("C10_novelty", False, "light", semantic_identity_error, t0)
         key = self._novelty_key(h)
         for existing in active_hypotheses + blacklist:
             # Rejected hypotheses only block if they come from the same champion version;
@@ -981,10 +984,12 @@ class ContractGate:
             surface = self._surface_for_hypothesis(h)
             candidate_semantic = self._semantic_signature_key(h, surface)
             existing_semantic = self._semantic_signature_key(existing, surface)
-            if candidate_semantic is None or existing_semantic is None:
+            if candidate_semantic is None:
                 strict_key = self._strict_novelty_key(h)
                 if strict_key == self._strict_novelty_key(existing):
                     return strict_key
+                return None
+            if existing_semantic is None:
                 return None
             if candidate_semantic == existing_semantic:
                 return (
@@ -1054,6 +1059,38 @@ class ContractGate:
             f"unsupported novelty.strategy '{strategy}' for research surface "
             f"'{h.change_locus}'"
         )
+
+    def _semantic_signature_identity_error(
+        self,
+        h: HypothesisProposal | HypothesisRecord,
+    ) -> str | None:
+        if h.action != "modify":
+            return None
+        surface = self._surface_for_hypothesis(h)
+        if self._surface_novelty_strategy(surface) != "semantic_signature":
+            return None
+        fields = self._surface_signature_fields(surface)
+        if not fields:
+            return (
+                "semantic_signature surface "
+                f"'{h.change_locus}' declares no usable novelty.signature_fields"
+            )
+        missing = self._missing_semantic_signature_fields(h, surface)
+        if missing:
+            return (
+                "semantic_signature surface "
+                f"'{h.change_locus}' requires usable structured "
+                "novelty_signature identity; candidate missing or invalid "
+                "novelty_signature fields: "
+                + ", ".join(missing)
+            )
+        if self._semantic_signature_key(h, surface) is None:
+            return (
+                "semantic_signature surface "
+                f"'{h.change_locus}' requires at least one strong structured "
+                "identity field beyond weak defaults such as predicted_direction"
+            )
+        return None
 
     def _surface_for_hypothesis(
         self,

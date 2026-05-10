@@ -213,12 +213,16 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
   `novelty_signature` mapping values persisted on proposals/records. Forced
   diagnostic context for such surfaces renders the declared
   `novelty.signature_fields`, already occupied structured signatures on that
-  surface, and the requirement to provide a distinct structured identity.
+  surface from active/blacklisted/rejected hypotheses, and the requirement to
+  provide a distinct structured identity.
   Proposal draft/schema/contract preview tools report missing structured
   identity early for singleton semantic surfaces. C10 never uses hypothesis
-  prose as semantic identity: when required structured fields are unavailable,
-  it falls back to strict locus/action/target-file duplicate protection with a
-  diagnostic detail naming the missing fields.
+  prose as semantic identity: a candidate on a semantic-signature `modify`
+  surface must provide all declared usable structured identity fields, or it
+  fails C10 before code generation. Historical active/blacklisted/rejected
+  records that lack usable structured identity do not poison later candidates
+  that provide valid structured identities; duplicate structured identities
+  still fail closed.
 
 This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
 

@@ -196,6 +196,7 @@ class ProposalPipeline:
             champion=champ_snapshot,
             active_hypotheses=self.hypothesis_store.get_by_status("active"),
             blacklist=self.hypothesis_store.get_by_status("blacklisted"),
+            rejected_hypotheses=self.hypothesis_store.get_by_status("rejected"),
             sibling_branches=siblings,
             step_history=self.step_history,
             branch_workspace=branch_workspace,

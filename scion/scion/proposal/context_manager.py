@@ -63,6 +63,7 @@ class ContextManager:
         forced_action: Optional[str] = None,
         forced_target_file: Optional[str] = None,
         forced_surface_diagnostic: bool = False,
+        rejected_hypotheses: Optional[List[HypothesisRecord]] = None,
         search_memory: Optional[Any] = None,
         saturation_signals: Optional[List[Any]] = None,
         weight_opt_result: Optional[Any] = None,
@@ -170,7 +171,11 @@ class ContextManager:
                 action=forced_request.action,
                 target_file=forced_request.target_file,
                 diagnostic=forced_surface_diagnostic,
-                active_hypotheses=active_hypotheses,
+                blocking_hypotheses=[
+                    *(active_hypotheses or []),
+                    *(blacklist or []),
+                    *(rejected_hypotheses or []),
+                ],
             )
 
         # J1: Render search memory (cross-branch search history)
@@ -486,7 +491,7 @@ def _build_forced_surface_constraint(
     action: str | None,
     target_file: str | None,
     diagnostic: bool,
-    active_hypotheses: List[HypothesisRecord] | None = None,
+    blocking_hypotheses: List[HypothesisRecord] | None = None,
 ) -> str:
     lines = ["\n## MANDATORY SEARCH CONSTRAINT"]
     if diagnostic:
@@ -529,7 +534,7 @@ def _build_forced_surface_constraint(
         _build_forced_surface_novelty_guidance(
             surface=surface,
             surface_name=surface_name,
-            active_hypotheses=active_hypotheses or [],
+            blocking_hypotheses=blocking_hypotheses or [],
         )
     )
     return "\n".join(lines) + "\n"
@@ -539,7 +544,7 @@ def _build_forced_surface_novelty_guidance(
     *,
     surface: Any | None,
     surface_name: str,
-    active_hypotheses: List[HypothesisRecord],
+    blocking_hypotheses: List[HypothesisRecord],
 ) -> list[str]:
     if surface is None:
         return []
@@ -551,13 +556,13 @@ def _build_forced_surface_novelty_guidance(
 
     lines = [
         "This surface uses structured semantic novelty.",
-        "Set `novelty_signature` with distinct values for declared "
+        "C10 requires `novelty_signature` with distinct values for declared "
         f"`novelty.signature_fields`: {', '.join(fields)}.",
         "Do not use hypothesis prose as novelty identity; C10 ignores free text "
         "for this semantic signature.",
     ]
     occupied = _summarise_surface_structured_signatures(
-        active_hypotheses,
+        blocking_hypotheses,
         surface_name=surface_name,
         fields=fields,
     )

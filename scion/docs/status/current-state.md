@@ -134,9 +134,14 @@ blocker is now singleton semantic novelty persistence: round 1 passed without
 a structured `novelty_signature`, was later recorded as rejected after
 screening failure, and then caused later structured `main_search_strategy`
 proposals to fall back to strict target-file duplicate identity. Long CVRP
-validation remains blocked. The next repair should make APS/Contract require
-and persist usable structured novelty identity for forced singleton semantic
-surfaces before another strategy smoke.
+validation remains blocked. The singleton semantic novelty persistence repair
+is now implemented in the working tree: C10 fails candidate semantic singleton
+`modify` hypotheses that lack usable structured identity before code
+generation, old empty-signature records no longer poison later valid
+structured proposals, and forced-surface context renders occupied structured
+signatures from active, blacklisted, and rejected hypotheses. The next step is
+focused/boundary/full validation, then another five-round forced
+`main_search_strategy` smoke.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2753,6 +2758,52 @@ surfaces, then rerun a five-round forced `main_search_strategy` smoke and
 require multiple code patches plus screened candidates before judging solver
 quality.
 
+## 2026-05-10 Singleton Semantic Novelty Persistence Repair
+
+Implemented the next core governance repair after the APS feedback budget
+smoke:
+
+- C10 now fails candidate `modify` hypotheses on `semantic_signature` surfaces
+  before code generation when the candidate lacks usable structured identity
+  for declared `novelty.signature_fields`.
+- C10 no longer lets historical active/blacklisted/rejected singleton records
+  with empty or unusable structured identity poison later candidates that do
+  provide valid structured `novelty_signature` values.
+- Duplicate valid structured semantic signatures still fail closed with
+  structured `novelty_signature` duplicate detail.
+- Forced-surface context now renders occupied structured signatures from
+  active, blacklisted, and rejected hypotheses, so APS can see the identities
+  that C10 may block.
+- Hypothesis tool/schema guidance now states that `novelty_signature` is
+  required when the selected surface declares
+  `novelty.strategy=semantic_signature`.
+
+Focused validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_proposal_validation.py scion/scion/tests/test_contract.py -q
+258 passed in 2.64s
+```
+
+Broader boundary validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+458 passed in 42.58s
+```
+
+Full suite:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1525 passed, 1 skipped in 56.37s
+```
+
+Next step: launch another five-round forced `main_search_strategy` smoke. The
+first smoke acceptance condition is multiple code patches and screened
+candidates under bounded APS feedback; solver-quality validation remains
+blocked until that happens.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2818,10 +2869,12 @@ P1:
   forced-surface control, but still produced only one code patch because C10
   rejected rounds 2-5 after comparing later structured singleton proposals
   against a rejected round-1 hypothesis with empty structured novelty identity.
-  The next blocker is APS/Contract persistence of usable structured
-  `novelty_signature` values for singleton semantic surfaces; after that,
-  rerun the five-round smoke and require multiple code patches before judging
-  net case-level efficacy of route-pair and destroy/repair movement.
+  The singleton semantic novelty persistence repair is now implemented: C10
+  requires candidate structured identity before code generation and does not
+  let old empty-signature records block later valid structured candidates.
+  After broader validation, rerun the five-round smoke and require multiple
+  code patches before judging net case-level efficacy of route-pair and
+  destroy/repair movement.
 
 P2:
 

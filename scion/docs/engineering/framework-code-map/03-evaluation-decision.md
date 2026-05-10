@@ -33,12 +33,14 @@ Hypothesis checks:
   uses declared direct fields such as objectives plus optional
   `novelty_signature` values persisted on the proposal/record. For singleton
   semantic policy/config/portfolio surfaces, unavailable structured identity no
-  longer falls back to hypothesis free text; C10 uses a computed structured
-  semantic signature when all required identity fields are usable, otherwise it
-  falls back to strict locus/action/target-file duplicate protection and names
-  the missing structured `novelty_signature` fields in the failure detail.
-  Duplicate structured semantic signatures are reported as structured
-  `novelty_signature` duplicates rather than generic duplicates.
+  longer falls back to hypothesis free text or target-file duplicate identity
+  for the candidate. C10 requires candidate `modify` hypotheses on
+  `semantic_signature` surfaces to provide all declared usable structured
+  identity fields before code generation. Historical active/blacklisted/
+  rejected records without usable structured identity do not block later
+  valid structured candidates, but duplicate structured semantic signatures are
+  still reported as structured `novelty_signature` duplicates rather than
+  generic duplicates.
   Ordinary operator modify/remove still uses strict locus/action/target-file
   duplicate protection.
 

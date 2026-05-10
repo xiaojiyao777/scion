@@ -34,11 +34,11 @@ enough to continue, validate, freeze, promote, or abandon.
   telemetry. The latest smoke from commit `d17c8b4` confirmed that APS
   feedback/fallback observations now stay under the 48000-character budget and
   all hypotheses remain on the forced surface, but only one patch reached
-  screening because rounds 2-5 failed `C10_novelty`. The current blocker is
-  singleton semantic novelty persistence: forced singleton hypotheses must
-  require and persist usable structured `novelty_signature` values so later
-  distinct `main_search_strategy` proposals are not collapsed to strict target
-  file identity. Do not run a long CVRP solver-quality validation until a
+  screening because rounds 2-5 failed `C10_novelty`. The singleton semantic
+  novelty persistence repair is now implemented in the working tree: C10
+  requires usable structured identity for semantic singleton candidates and
+  does not let old empty-signature records poison later valid structured
+  proposals. Do not run a long CVRP solver-quality validation until a
   five-round forced smoke produces multiple code patches, multiple screened
   candidates, complete selected-surface audit, and nontrivial case-level
   quality evidence.

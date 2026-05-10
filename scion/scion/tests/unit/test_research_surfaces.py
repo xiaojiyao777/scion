@@ -1346,7 +1346,7 @@ def test_complexity_bound_uses_approved_surface_on_overlapping_targets() -> None
     assert "three-level problem-scale nested loops" in c9c.detail
 
 
-def test_singleton_semantic_surface_without_signature_falls_back_to_target_identity() -> None:
+def test_singleton_semantic_surface_without_signature_fails_before_duplicate_scan() -> None:
     gate = _surface_gate()
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1369,9 +1369,41 @@ def test_singleton_semantic_surface_without_signature_falls_back_to_target_ident
     result = gate._c10_novelty(hyp, [existing], [])
 
     assert not result.passed
-    assert "duplicate" in result.detail
-    assert "lacks usable structured identity" in result.detail
-    assert "candidate missing novelty_signature fields: budget_pattern" in result.detail
+    assert "requires usable structured novelty_signature identity" in result.detail
+    assert "candidate missing or invalid novelty_signature fields: budget_pattern" in (
+        result.detail
+    )
+
+
+def test_singleton_semantic_surface_valid_signature_ignores_legacy_empty_record() -> None:
+    gate = _surface_gate()
+    existing = HypothesisRecord(
+        hypothesis_id="h1",
+        branch_id="b1",
+        change_locus="budget_policy",
+        action="modify",
+        status="rejected",
+        target_file="policies/budget.py",
+        hypothesis_text="Legacy rejected record without structured identity.",
+        base_champion_version=1,
+    )
+    hyp = HypothesisProposal(
+        hypothesis_text="Use a distinct structured budget policy.",
+        change_locus="budget_policy",
+        action="modify",
+        target_file="policies/budget.py",
+        novelty_signature={"budget_pattern": "repair_heavy"},
+    )
+
+    result = gate.validate_hypothesis(
+        hyp,
+        [],
+        [],
+        rejected_hypotheses=[existing],
+        current_champion_version=1,
+    )
+
+    assert result.passed
 
 
 def test_singleton_semantic_surface_identical_unstructured_hypothesis_fails_c10() -> None:
@@ -1396,6 +1428,7 @@ def test_singleton_semantic_surface_identical_unstructured_hypothesis_fails_c10(
     result = gate._c10_novelty(hyp, [existing], [])
 
     assert not result.passed
+    assert "requires usable structured novelty_signature identity" in result.detail
 
 
 def _semantic_objective_gate(signature_fields: list[str]) -> ContractGate:
@@ -1513,7 +1546,7 @@ def test_semantic_signature_uses_problem_owned_novelty_signature_fields() -> Non
     assert different_result.passed
 
 
-def test_invalid_predicted_direction_falls_back_to_target_identity() -> None:
+def test_invalid_predicted_direction_fails_semantic_identity() -> None:
     gate = _semantic_objective_gate(["predicted_direction"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1540,10 +1573,11 @@ def test_invalid_predicted_direction_falls_back_to_target_identity() -> None:
     assert not result.passed
     assert not c1.passed
     assert not c10.passed
-    assert "duplicate" in c10.detail
+    assert "requires usable structured novelty_signature identity" in c10.detail
+    assert "predicted_direction" in c10.detail
 
 
-def test_arbitrary_objective_names_fall_back_to_target_identity() -> None:
+def test_arbitrary_objective_names_fail_semantic_identity() -> None:
     gate = _semantic_objective_gate(["target_objectives", "protected_objectives"])
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -1572,7 +1606,8 @@ def test_arbitrary_objective_names_fall_back_to_target_identity() -> None:
     assert not result.passed
     assert not c1.passed
     assert not c10.passed
-    assert "duplicate" in c10.detail
+    assert "requires usable structured novelty_signature identity" in c10.detail
+    assert "target_objectives" in c10.detail
 
 
 def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
@@ -1602,7 +1637,7 @@ def test_semantic_signature_sorts_dedupes_objective_lists() -> None:
     assert not result.passed
 
 
-def test_unavailable_signature_field_falls_back_to_target_file_identity() -> None:
+def test_unavailable_signature_field_fails_semantic_identity() -> None:
     gate = _semantic_objective_gate(
         ["predicted_direction", "target_objectives", "hypothesis_text"],
     )
@@ -1632,7 +1667,8 @@ def test_unavailable_signature_field_falls_back_to_target_file_identity() -> Non
     result = gate._c10_novelty(hyp, [existing], [])
 
     assert not result.passed
-    assert "duplicate" in result.detail
+    assert "requires usable structured novelty_signature identity" in result.detail
+    assert "hypothesis_text" in result.detail
 
 
 def test_different_legal_bounded_semantic_identity_is_novel() -> None:
@@ -1709,7 +1745,7 @@ def test_operator_modify_remains_strict_by_locus_action_target_file() -> None:
     assert not result.passed
 
 
-def test_dummy_singleton_config_unextractable_signature_falls_back_to_target_identity() -> None:
+def test_dummy_singleton_config_unextractable_signature_fails_closed() -> None:
     spec = ProblemSpec(
         name="dummy",
         root_dir="/tmp/dummy",
@@ -2754,6 +2790,21 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
             )
         ],
         blacklist=[],
+        rejected_hypotheses=[
+            HypothesisRecord(
+                hypothesis_id="h2",
+                branch_id="b-rejected",
+                change_locus="algorithm_blueprint",
+                action="modify",
+                status="rejected",
+                target_file="policies/algorithm_blueprint.py",
+                hypothesis_text="Use an aggressive bounded plan.",
+                novelty_signature={
+                    "component_pattern": ["repair"],
+                    "budget_pattern": "aggressive",
+                },
+            )
+        ],
         forced_locus="algorithm_blueprint",
         forced_surface_diagnostic=True,
     )
@@ -2776,6 +2827,7 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
     )
     assert "Occupied structured signatures for this surface:" in prompt_text
     assert '"budget_pattern":"conservative"' in prompt_text
+    assert '"budget_pattern":"aggressive"' in prompt_text
     assert "Do not use hypothesis prose as novelty identity" in prompt_text
 
 

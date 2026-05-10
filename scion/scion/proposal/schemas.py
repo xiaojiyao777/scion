@@ -162,7 +162,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "novelty_signature": {
             "type": "object",
             "additionalProperties": True,
-            "description": "Optional structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Use compact scalars, lists, or small objects; do not put rationale prose here.",
+            "description": "Structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Required when the selected surface declares novelty.strategy=semantic_signature. Use compact scalars, lists, or small objects; do not put rationale prose here.",
         },
     },
 }
@@ -220,6 +220,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
+        "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
         "- Prefer surface changes that provide a capability the current solver currently lacks.\n\n"
