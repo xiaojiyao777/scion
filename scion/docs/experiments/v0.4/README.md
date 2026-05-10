@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-09*
+*Last updated: 2026-05-10*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -21,6 +21,11 @@ referenced, not copied into development prompts.
 - [Main search surface repair Sonnet 2R diagnostic, 2026-05-09](v0.4-main-search-surface-repair-sonnet-2r-20260509.md)
 - [Main search deep diagnostic Sonnet 5R smoke, 2026-05-09](v0.4-main-search-deep-diagnostic-sonnet-5r-20260509.md)
 - [Bounded destroy repair Sonnet 5R smoke, 2026-05-09](v0.4-bounded-destroy-repair-sonnet-5r-20260509.md)
+- [Main search net benefit Sonnet 5R smoke, 2026-05-09](v0.4-main-search-net-benefit-sonnet-5r-20260509.md)
+- [APS forced diagnostic repair Sonnet 5R smoke, 2026-05-10](v0.4-aps-forced-diagnostic-repair-sonnet-5r-20260510.md)
+- [APS feedback budget repair Sonnet 5R smoke, 2026-05-10](v0.4-aps-feedback-budget-repair-sonnet-5r-20260510.md)
+- [Semantic novelty repair Sonnet 5R smoke, 2026-05-10](v0.4-semantic-novelty-repair-sonnet-5r-20260510.md)
+- [Campaign feedback repair Sonnet 5R smoke, 2026-05-10](v0.4-campaign-feedback-repair-sonnet-5r-20260510.md)
 
 ## Related
 

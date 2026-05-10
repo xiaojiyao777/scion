@@ -160,10 +160,21 @@ arguments; and screening/runtime feedback payloads include bounded
 selected-surface runtime attribution highlights so the proposal agent can
 compare component attempts/accepted moves, phase deltas, and screening stats
 without raw metric refs. Focused proposal-tool/research-surface tests and the
-full Scion test suite pass. The next step is another five-round forced
-`main_search_strategy` smoke to confirm non-empty feedback retrieval in real
-APS traces and check whether attribution-guided proposals improve screening
-quality.
+full Scion test suite pass. The follow-up five-round forced
+`main_search_strategy` smoke from commit `2de43fc` has now completed and is
+analyzed. It validated the feedback retrieval repair in real APS traces:
+rounds 2-5 saw non-empty same-campaign forced-surface screening/runtime
+feedback in both hypothesis and code sessions, accumulating `1/1`, `2/2`,
+`3/3`, and `4/4` feedback rows. Forced-surface control held for all five
+rounds, all candidates passed Contract, Verification, and canary, and all five
+reached screening with complete selected-surface runtime audit. All five still
+failed `SCREENING_FAIL_WIN_RATE`; case-level win rates were `0.125`, `0.0`,
+`0.125`, `0.0`, and `0.125`, with `median_delta=0.0` throughout. The current
+blocker is now feedback-attribution fidelity plus CVRP problem-owned
+surface/component efficacy: APS can see feedback, but compact representative
+runtime highlights overemphasize modal zero accepted values and do not yet
+show the full chain from accepted component moves to phase delta and final
+case-level benefit. Do not run long CVRP validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2903,6 +2914,66 @@ completion use same-campaign or forced-surface compact screening/runtime
 history after prior screening exists, and exposes bounded selected-surface
 runtime attribution from component fields, phase deltas, and screening stats.
 
+## Latest Experiment: Campaign Feedback Repair Smoke
+
+The five-round forced `main_search_strategy` smoke after the feedback repair
+has completed and is analyzed:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-campaign-feedback-repair-sonnet-5r-20260510T060603Z
+scion_commit=2de43fc
+model=claude-sonnet-4-6
+rounds=5/5
+force_surface=main_search_strategy
+exit_code=0
+analysis_doc=scion/docs/experiments/v0.4/v0.4-campaign-feedback-repair-sonnet-5r-20260510.md
+```
+
+Delegated raw-artifact analysis found:
+
+- Feedback retrieval repair validated. Round 1 had no prior feedback, as
+  expected. Rounds 2-5 read non-empty same-campaign forced-surface
+  `feedback.query_screening` and `feedback.query_runtime` in both hypothesis
+  and code sessions, accumulating `1/1`, `2/2`, `3/3`, and `4/4` feedback
+  rows.
+- Forced-surface governance held for all five candidates:
+  `modify/main_search_strategy -> policies/main_search_strategy.py`.
+- All five candidates passed Contract, Verification, and canary, reached
+  screening, and had complete selected-surface runtime audit: 16/16 candidate
+  pairs, 44/44 required runtime fields, no selected-surface audit failure.
+- All five candidates failed `SCREENING_FAIL_WIN_RATE`; pair W/L/T and
+  case-level win rates were:
+  - R1: `4/2/10`, win_rate `0.125`, median_delta `0.0`;
+  - R2: `3/1/12`, win_rate `0.0`, median_delta `0.0`;
+  - R3: `4/2/10`, win_rate `0.125`, median_delta `0.0`;
+  - R4: `3/2/11`, win_rate `0.0`, median_delta `0.0`;
+  - R5: `2/4/10`, win_rate `0.125`, median_delta `0.0`.
+- APS used the feedback to change strategy, but the compact attribution
+  payload still misleads by emphasizing representative/modal zero values. The
+  agent inferred too strongly that components had no accepted moves even when
+  some pairs had accepted route-pair moves and one bounded-destroy-repair
+  accepted move.
+- Candidate code stayed on the CVRP problem-owned whole-algorithm policy
+  surface. No generated operator-layer code or Scion core changes were
+  involved.
+- `route_pair_swap` can accept moves, but accepted moves still did not become
+  improvement-loop phase-level benefit or case-level wins. Bounded
+  destroy/repair still mostly accepted zero moves and retained
+  `repair_budget_exhausted` as a dominant skip mode.
+- APS observation budget is improved but not spacious. One code session reached
+  about `47626/48000` chars and compacted `proposal.contract_preview` as
+  `result_too_large`; deterministic ContractGate still ran later and passed.
+
+Interpretation: the immediate core feedback-retrieval blocker is closed. The
+next repair should improve feedback-attribution fidelity and CVRP
+surface-level runtime accounting before more strategy tuning. Specifically,
+selected-surface feedback should expose compact totals, nonzero accepted counts,
+positive best-delta counts, phase-delta distributions, and
+accepted-but-zero-phase-delta diagnostics so the agent can distinguish
+"component executed" from "case-level benefit." CVRP `main_search_strategy`
+should also account for accepted move -> incumbent delta -> phase start/end
+objective -> returned-best objective -> case result.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2976,8 +3047,11 @@ P1:
   proposal-feedback retrieval plus net efficacy attribution: feedback tools
   returned empty same-campaign history, and accepted route-pair/destroy-repair
   moves still did not clearly become phase-level and case-level benefit. The
-  feedback-retrieval side is now repaired in code and full tests pass; the
-  efficacy side still needs another short forced smoke before long validation.
+  feedback-retrieval side is now repaired and validated in a real five-round
+  smoke from commit `2de43fc`: feedback rows were non-empty in rounds 2-5 and
+  all five candidates reached screening. The remaining blocker is feedback
+  attribution fidelity and CVRP surface efficacy, not campaign feedback
+  retrieval. Long validation remains blocked.
 
 P2:
 
