@@ -38,6 +38,7 @@ from scion.proposal.agentic_session import (
     compute_agentic_idempotency_key,
     resume_from_artifact,
     validate_agentic_session_artifact,
+    _research_diagnosis_from_observations,
 )
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.tools import (
@@ -2339,6 +2340,57 @@ def test_creative_layer_renders_agentic_observations_and_research_diagnosis() ->
     assert "## Agentic Proposal Tool Observations" in rendered
     assert "feedback.query_runtime" in rendered
     assert "screening_win_rate_failure" in rendered
+
+
+def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> None:
+    observations = [
+        ProposalObservation(
+            observation_id="obs-1",
+            session_id="session-1",
+            tool_name="feedback.query_runtime",
+            tool_call_id="tool-1",
+            observation_type="runtime_feedback",
+            summary="non-empty runtime diagnosis",
+            structured_payload={
+                "research_diagnosis": {
+                    "schema_version": "research-diagnosis.v1",
+                    "screening_step_count": 2,
+                    "reason_code_counts": {"SCREENING_FAIL_WIN_RATE": 2},
+                    "surface_counts": {"search_policy": 2},
+                    "gate_outcome_counts": {"fail": 2},
+                    "failure_mode_tags": ["screening_win_rate_failure"],
+                    "runtime_signal_rows": [
+                        {
+                            "round_num": 2,
+                            "surface": "search_policy",
+                            "nonzero_numeric_fields": ["component_delta"],
+                        }
+                    ],
+                }
+            },
+        ),
+        ProposalObservation(
+            observation_id="obs-2",
+            session_id="session-1",
+            tool_name="feedback.query_runtime",
+            tool_call_id="tool-2",
+            observation_type="runtime_feedback",
+            summary="empty runtime diagnosis",
+            structured_payload={"research_diagnosis": {}},
+        ),
+    ]
+
+    diagnosis = _research_diagnosis_from_observations(observations)
+
+    assert diagnosis["runtime_diagnosis_count"] == 2
+    assert diagnosis["runtime_diagnoses_with_signal"] == 1
+    assert diagnosis["latest_runtime_diagnosis"]["screening_step_count"] == 2
+    assert diagnosis["aggregate_runtime_diagnosis"]["reason_code_counts"] == {
+        "SCREENING_FAIL_WIN_RATE": 2
+    }
+    assert "screening_win_rate_failure" in diagnosis["aggregate_runtime_diagnosis"][
+        "failure_mode_tags"
+    ]
 
 
 def test_agentic_session_forced_surface_fails_closed_before_partial_finalize(

@@ -29,6 +29,7 @@ referenced, not copied into development prompts.
 - [Runtime attribution repair Sonnet 5R smoke, 2026-05-10](v0.4-runtime-attribution-repair-sonnet-5r-20260510.md)
 - [Phase-benefit repair Sonnet 5R smoke, 2026-05-10](v0.4-phase-benefit-repair-sonnet-5r-20260510.md)
 - [Recovery phase probe Sonnet 5R smoke, 2026-05-10](v0.4-recovery-phase-probe-sonnet-5r-20260510.md)
+- [APS evidence render Sonnet 5R smoke, 2026-05-10](v0.4-aps-evidence-render-sonnet-5r-20260510.md)
 
 ## Related
 

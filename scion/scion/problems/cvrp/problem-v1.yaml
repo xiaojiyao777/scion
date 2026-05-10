@@ -867,8 +867,10 @@ research_surfaces:
         main_search_plan returns a bounded dict with enabled bool,
         construction dict, baseline dict, improvement dict, acceptance dict,
         restart dict, perturbation dict, post_baseline_operators_enabled bool,
-        and operator_round_limit int. When enabled is true, all required keys
-        must be present and valid or the solver records
+        and operator_round_limit int. The perturbation dict may include
+        schedule set to after_no_improvement, before_first_round, or
+        before_each_round. When enabled is true, all required keys must be
+        present and valid or the solver records
         main_search_strategy_errors and refuses main-search takeover.
       return_values:
         main_search_plan:
@@ -907,6 +909,7 @@ research_surfaces:
         - strict_improvement_acceptance
         - restart_stagnation
         - bounded_perturbation
+        - pre_improvement_perturbation
         - post_baseline_operator_toggle
       numeric_ranges:
         construction_keep_top_k: [1, 4]
@@ -980,6 +983,7 @@ research_surfaces:
         - main_search_restart_count
         - main_search_perturbation_enabled
         - main_search_perturbation_strength
+        - main_search_perturbation_schedule
         - main_search_perturbation_count
         - main_search_objective_trace
         - main_search_objective_delta_by_phase
@@ -1010,18 +1014,26 @@ research_surfaces:
         forced diagnostic runs, prefer the R1-like safe schedule: baseline
         time_fraction around 0.75, conservative baseline params, route_pair_swap
         before bounded_destroy_repair, 5 improvement rounds, top_k 64, and
-        perturbation strength 2-3 with max_perturbations 2. The solver gates
-        bounded_destroy_repair after same-round route-pair phase-best
-        improvements and separately audits recovery moves that only improve a
-        perturbed/current solution, so runtime evidence distinguishes
-        recovery-only accepted deltas from phase-best objective gain.
+        perturbation strength 2-3 with max_perturbations 2. If runtime
+        feedback shows recovery-only moves, explicitly choose perturbation
+        schedule after_no_improvement, before_first_round, or
+        before_each_round and explain why the selected timing can turn recovery
+        into phase-best gain. The solver gates bounded_destroy_repair after
+        same-round route-pair phase-best improvements and separately audits
+        recovery moves that only improve a perturbed/current solution, so
+        runtime evidence distinguishes recovery-only accepted deltas from
+        phase-best objective gain.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict. The solver owns construction,
         repo-local baseline invocation, route edits, feasibility checks,
         strict-improvement acceptance, a formal-run baseline quality guard,
         component-coverage telemetry, restarts, perturbations, and optional
-        registry operators. For instance features,
+        registry operators. The perturbation schedule only changes when
+        perturbation is applied; after_no_improvement is the legacy default,
+        before_first_round perturbs once before the first improvement round,
+        and before_each_round perturbs before each round while perturbation
+        budget remains. For instance features,
         use instance.customer_ids,
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
@@ -1049,7 +1061,9 @@ research_surfaces:
       5 improvement rounds, use top_k 64 or 128 for destroy/repair budget, and
       expose that choice in the novelty signature; prefer baseline.time_fraction
       around 0.75 with conservative ALNS/VNS params, route_pair_swap before
-      bounded_destroy_repair, and perturbation strength 2-3/max 2.
+      bounded_destroy_repair, and perturbation strength 2-3/max 2. When using
+      a perturbation-first idea, implement it through perturbation.schedule
+      rather than only describing it in prose.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false

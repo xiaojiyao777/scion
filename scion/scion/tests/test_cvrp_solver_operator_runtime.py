@@ -1087,6 +1087,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_phase_delta_sum" in required_fields
     assert "main_search_component_phase_best_delta" in required_fields
     assert "main_search_component_phase_improvement_counts" in required_fields
+    assert "main_search_perturbation_schedule" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
@@ -1531,6 +1532,105 @@ def test_main_search_strategy_returns_best_even_after_worse_perturbation(
     assert worse_objective["total_distance"] > best_objective["total_distance"]
     assert audit["main_search_perturbation_count"] == 1
     assert audit["main_search_best_returned"] is True
+
+
+def test_main_search_strategy_can_perturb_before_first_round(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    instance = adapter.load_instance(str(workspace / "data/operator_case.json"))
+    best_solution = CvrpSolution(routes=((1, 2, 3, 5, 4),))
+    perturbed_solution = CvrpSolution(routes=((1, 2, 3, 4, 5),))
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pair_swap"],
+                "rounds": 1,
+                "top_k": 8,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": True,
+                "strength": 1,
+                "max_perturbations": 1,
+                "schedule": "before_first_round",
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+    seen_current: list[CvrpSolution] = []
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_perturb_solution",
+        lambda *args, **kwargs: perturbed_solution,
+    )
+
+    def fake_candidate_choice(
+        component: str,
+        _instance: CvrpInstance,
+        *,
+        current_solution: CvrpSolution,
+        best_solution: CvrpSolution,
+        adapter: CvrpAdapter,
+        current_objective: dict[str, int | float],
+        best_objective: dict[str, int | float],
+        top_k: int,
+        min_distance_improvement: float,
+    ) -> tuple[None, int, dict[str, Any], dict[str, Any]]:
+        del (
+            component,
+            _instance,
+            best_solution,
+            adapter,
+            current_objective,
+            best_objective,
+            top_k,
+            min_distance_improvement,
+        )
+        seen_current.append(current_solution)
+        return None, 1, {}, {}
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_main_search_component_candidate_choice",
+        fake_candidate_choice,
+    )
+
+    returned, runtime = cvrp_solver.improve_with_main_search_strategy(
+        best_solution,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+    )
+
+    assert returned.routes == best_solution.routes
+    assert seen_current and seen_current[0].routes == perturbed_solution.routes
+    assert runtime["main_search_perturbation_schedule"] == "before_first_round"
+    assert runtime["main_search_perturbation_count"] == 1
+    assert "pre_improvement_perturbation" in runtime["main_search_phases"]
+    assert runtime["main_search_best_returned"] is True
 
 
 def test_main_search_strategy_does_not_gate_bdr_after_non_phase_route_pair_acceptance(

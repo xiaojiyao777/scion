@@ -135,10 +135,12 @@ would exceed the remaining session observation budget, APS stores a bounded
 `context.read_surface` calls also fail closed when the remaining budget is below
 the reserved floor, so persisted recovery artifacts stay within
 `AgenticToolLoopConfig.max_observation_chars` while the replay validator remains
-strict for genuinely invalid artifacts. The default APS observation budget is
-48,000 chars; compactness is still enforced first, and the larger cap only gives
-room for the normal list/problem/feedback/selected-surface sequence. Screening
-and runtime feedback tools also bound their compact JSON payloads before the
+strict for genuinely invalid artifacts. The default APS tool loop allows 14
+steps and 12 tool calls so the normal read-feedback-schema-target-contract path
+has room after evidence diagnosis is rendered. The default APS observation
+budget is 48,000 chars; compactness is still enforced first, and the larger cap
+only gives room for the normal list/problem/feedback/selected-surface sequence.
+Screening and runtime feedback tools also bound their compact JSON payloads before the
 registry size guard, so available compact feedback can still succeed without
 exposing raw metric refs when runtime summaries are unusually large. Screening
 feedback returns recent rows first and includes the query scope plus a bounded
@@ -168,10 +170,13 @@ problem-specific field names.
 APS stores a compact diagnosis derived from successful feedback observations
 on both hypothesis and code contexts. `CreativeLayer` renders this diagnosis
 and the bounded tool observations into the final hypothesis/code generation
-prompts. This closes the gap where the planner and tool loop had read
-screening/runtime feedback but the final LLM generation call did not actually
-see the resulting observations. The rendered block is still tainted proposal
-context: it can shape the next hypothesis or patch, but it is not a
+prompts. The diagnosis keeps the latest non-empty runtime signal and an
+aggregate of recent reason codes, gate outcomes, surfaces, failure tags, and
+runtime-signal rows, so a later empty runtime-feedback wrapper does not mask
+useful prior evidence. This closes the gap where the planner and tool loop had
+read screening/runtime feedback but the final LLM generation call did not
+actually see the resulting observations. The rendered block is still tainted
+proposal context: it can shape the next hypothesis or patch, but it is not a
 `DecisionFeatures` input and cannot expose validation/frozen detail or raw
 metric refs.
 Static preview observations are compact: target-permission previews return only

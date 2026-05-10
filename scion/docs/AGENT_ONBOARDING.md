@@ -31,22 +31,20 @@ enough to continue, validate, freeze, promote, or abandon.
   `policies/main_search_strategy.py`. Forced `main_search_strategy`
   diagnostics have validated persistent forced-surface control, compact APS
   feedback/memory reads, selected-surface runtime audit, and deep-component
-  telemetry. The latest five-round smoke from commit `d4d899a` kept all five
-  candidates on `main_search_strategy`, passed Contract/Verification/canary,
-  and reached screening with complete selected-surface runtime audit, but all
-  five still failed `SCREENING_FAIL_WIN_RATE`. The key new finding is generic
-  Scion proposal-layer behavior: APS tool sessions gathered feedback/runtime
-  observations, but those observations were not rendered into the final
-  `CreativeLayer` hypothesis/code prompts. So the v3 governance core remains
-  sound, while the APS evidence-to-generation loop was not yet deep enough.
-  The follow-up core repair is now implemented and full tests pass: runtime
-  feedback emits a screening-only `research_diagnosis`, APS derives an
-  `agentic_research_diagnosis`, and final hypothesis/code prompts render
-  bounded diagnoses and tool observations as tainted proposal context. No
-  CVRP/VRP semantics were added to Scion core. Do not run a long CVRP
-  solver-quality validation until short diagnostics show stable case-level
-  quality evidence and the APS diagnosis visibly changes later hypotheses and
-  implementation choices.
+  telemetry. The latest five-round smoke from commit `1e29dec` validated the
+  APS evidence-to-generation repair: every hypothesis/code trace rendered
+  diagnosis and tool observations, and later hypotheses reacted to phase-best
+  and recovery-only runtime signals. It still did not produce solver-quality
+  evidence: all candidates failed screening/Decision, accepted moves stayed
+  recovery-only with zero phase-best delta, and R4/R5 claimed
+  perturbation-first behavior that the old `main_search_strategy` surface
+  could not express. The current repair is now implemented in the working
+  tree: APS keeps the latest non-empty runtime diagnosis and has more tool-call
+  room for target/contract preview; CVRP `main_search_strategy` exposes
+  `perturbation.schedule` as a problem-owned surface field with runtime
+  evidence. No CVRP/VRP semantics were added to Scion core. Do not run a long
+  CVRP solver-quality validation until short diagnostics show stable
+  case-level quality evidence and phase-best movement.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).
@@ -153,6 +151,12 @@ For experiment analysis:
   `agentic_research_diagnosis` and tool observations gathered during the tool
   loop, so proposal research is not lost between planning and hypothesis/code
   generation.
+- APS diagnosis keeps the latest non-empty runtime signal and the default tool
+  loop has enough calls for feedback, schema, target, and contract preview in
+  ordinary short diagnostics.
+- CVRP `main_search_strategy` now exposes `perturbation.schedule` as a
+  problem-owned surface field so perturbation timing can be tested as code,
+  not only described in hypothesis prose.
 - APS observation-budget/recovery behavior is compact-first: surface reads use
   a bounded `surface-contract.v1` section view by default, optional oversized
   reads fail closed, and the default observation cap is now 48000 chars so the
@@ -216,20 +220,17 @@ Near-term CVRP research-space work:
 - Treat APS budget/recovery, forced-surface control, C10 singleton identity,
   selected-surface audit, and compact feedback retrieval as unblocked for the
   current short-diagnostic path.
-- Improve APS evidence-to-generation depth before any long solver-quality
-  validation. The latest forced `main_search_strategy` diagnostic from commit
-  `d4d899a` produced five governed screened candidates but all failed
-  `SCREENING_FAIL_WIN_RATE`; the decisive core finding is that tool
-  observations were gathered but not rendered into final hypothesis/code
-  generation prompts. The current repair renders bounded screening-derived
-  research diagnosis and tool observations into final APS generation prompts.
-  The next experiment is another five-round forced `main_search_strategy`
-  diagnostic that checks whether later hypotheses and patches visibly respond
-  to that diagnosis.
+- Treat APS evidence-to-generation rendering as validated. The latest forced
+  `main_search_strategy` diagnostic from commit `1e29dec` proved that final
+  hypothesis/code prompts received diagnosis and tool observations. The next
+  check is deeper: whether candidates use the new `perturbation.schedule`
+  surface affordance, whether preview tools run consistently under the larger
+  tool-call budget, and whether runtime evidence shows phase-best improvement
+  instead of recovery-only accepted moves.
 - The latest analyzed `main_search_strategy` diagnostic is:
-  `/home/clawd/research/scion-experiments/v04-recovery-phase-probe-sonnet-5r-20260510T102653Z`.
+  `/home/clawd/research/scion-experiments/v04-aps-evidence-render-sonnet-5r-20260510T120149Z`.
   The analysis is recorded in
-  `docs/experiments/v0.4/v0.4-recovery-phase-probe-sonnet-5r-20260510.md`.
+  `docs/experiments/v0.4/v0.4-aps-evidence-render-sonnet-5r-20260510.md`.
 - The problem/algorithm onboarding design has been captured in
   `design/v0.4/v0.4-problem-algorithm-onboarding.md`. Treat CVRP's manual
   adapter/surface/component work as a prototype of a future onboarding module

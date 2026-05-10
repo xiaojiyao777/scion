@@ -60,8 +60,9 @@ Solver flow:
 4. If `main_search_strategy` returns an enabled valid plan, let it take over
    the whole CVRP main-search lifecycle: construction ensemble, repo-local
    baseline budget and sanitized baseline params, package-owned improvement
-   loop, bounded acceptance/restart/perturbation knobs, and optional
-   post-baseline registry-operator scheduling. Invalid enabled plans record
+   loop, bounded acceptance/restart/perturbation knobs including explicit
+   perturbation timing, and optional post-baseline registry-operator scheduling.
+   Invalid enabled plans record
    `main_search_strategy_errors` and do not take over.
 5. If no main-search strategy is active and `algorithm_blueprint` returns an
    enabled valid plan, let it coordinate
@@ -92,6 +93,9 @@ Solver flow:
    accepted best deltas, accepted positive counts, and an objective trace
    linking phase start objective, best objective, returned objective, phase
    delta, recovery-only delta, and accepted-but-zero-phase-delta diagnostics.
+   `perturbation.schedule` may be `after_no_improvement` (legacy behavior),
+   `before_first_round`, or `before_each_round`; the selected schedule is
+   recorded as `main_search_perturbation_schedule`.
    It also emits a
    `main_search_component_coverage_status` summary and
    `main_search_deep_components_selected` so forced diagnostics can audit
@@ -158,8 +162,9 @@ only select bounded package-owned knobs and components: construction methods,
 repo-local baseline time fraction and sanitized baseline params, improvement
 components `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
 `bounded_destroy_repair`, strict-improvement acceptance threshold, restart
-stagnation/max-restart controls, bounded perturbation controls, and optional
-post-baseline registry-operator toggle/round limit. Unknown keys, missing
+stagnation/max-restart controls, bounded perturbation controls with explicit
+schedule, and optional post-baseline registry-operator toggle/round limit.
+Unknown keys, missing
 required keys for enabled plans, invalid baseline params, bad types,
 non-finite values, unknown components, and out-of-range values increment
 `main_search_strategy_errors`; invalid enabled plans do not take over the
@@ -186,6 +191,11 @@ delta totals/best deltas/positive counts, recovery-only delta totals/best
 deltas/counts, phase-best delta totals/best deltas/counts, and a phase
 objective trace so proposal feedback can distinguish "component accepted
 moves" from "current recovery" and "phase-level or final case benefit."
+Perturbation timing is an explicit surface dimension: the default
+`after_no_improvement` schedule preserves legacy behavior, while
+`before_first_round` and `before_each_round` let candidates implement a real
+pre-improvement perturbation hypothesis instead of only describing it in
+prose.
 Forced diagnostic `main_search_strategy` candidates should select both deep
 components in `improvement.enabled_components`, keep registry operators off
 unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128

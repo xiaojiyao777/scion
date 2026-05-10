@@ -219,14 +219,22 @@ screening/runtime feedback, but `CreativeLayer` did not render
 `agentic_tool_observations` into the final hypothesis/code generation prompts.
 This means planner/tool research could be recorded without actually shaping
 the final LLM generation call. The follow-up generic core repair is now
-implemented and full tests pass: runtime feedback returns a screening-only
-`research_diagnosis`, APS derives an `agentic_research_diagnosis` from
-feedback observations, and hypothesis/code prompts render bounded diagnoses
-and tool observations as tainted proposal context. No CVRP/VRP semantics were
-added to Scion core. The next step is another five-round forced
-`main_search_strategy` smoke to test whether later rounds use the rendered
-diagnosis in hypothesis identity and implementation choices, not long
-validation.
+implemented and validated in a five-round forced smoke from commit `1e29dec`:
+all five hypothesis and code traces rendered the diagnosis/tool-observation
+blocks, and later hypotheses explicitly reacted to phase-best/recovery-only
+runtime evidence. This validates the generic APS evidence-to-generation repair
+and keeps Scion core free of CVRP/VRP semantics. It still did not produce
+solver-quality evidence: all candidates failed screening/Decision, all
+accepted moves remained recovery-only with zero phase-best delta, and R4/R5
+timed out after proposing a perturbation-first idea that the existing
+`main_search_strategy` surface could not actually express. The next repair is
+now implemented in the working tree: APS aggregates the latest non-empty
+runtime diagnosis and raises the default tool-call budget so target/contract
+preview is less likely to be skipped, while the CVRP problem package extends
+`main_search_strategy` with an explicit `perturbation.schedule` surface field
+(`after_no_improvement`, `before_first_round`, `before_each_round`) plus
+runtime evidence. The next smoke should be a larger short forced diagnostic,
+not long validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -367,9 +375,10 @@ while v0.5 should make problem/algorithm onboarding a first-class module.
   sanitized baseline params, package-owned improvement components
   (`intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`,
   `bounded_destroy_repair`), strict-improvement acceptance threshold, restart
-  and perturbation knobs, and optional registry-operator round limit. Invalid
-  plans record `main_search_strategy_errors`, do not take over, and fail
-  selected-surface runtime audit.
+  and perturbation knobs including explicit perturbation schedule, and optional
+  registry-operator round limit. Invalid plans record
+  `main_search_strategy_errors`, do not take over, and fail selected-surface
+  runtime audit.
 - CVRP still needs a successful surface-efficacy diagnostic that reaches the
   formal `.vrp` main search and shows nontrivial screening quality. The next
   diagnostic should force `main_search_strategy` so Scion governs the whole

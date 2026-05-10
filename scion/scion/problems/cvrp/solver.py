@@ -150,6 +150,17 @@ _MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
 _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS = frozenset(
     {"enabled", "strength", "max_perturbations"}
 )
+_MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS = frozenset(
+    {*_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS, "schedule"}
+)
+_MAIN_SEARCH_PERTURBATION_SCHEDULES = frozenset(
+    {
+        "after_no_improvement",
+        "before_first_round",
+        "before_each_round",
+    }
+)
+_DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE = "after_no_improvement"
 _DEFAULT_BASELINE_POLICY_PARAMS = {
     "destroy_ratio": (0.10, 0.40),
     "segment_length": 100,
@@ -1410,6 +1421,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
                 "enabled": False,
                 "strength": 1,
                 "max_perturbations": 0,
+                "schedule": _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
             },
             "post_baseline_operators_enabled": False,
             "operator_round_limit": 0,
@@ -1476,6 +1488,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_restart_count": 0,
         "main_search_perturbation_enabled": False,
         "main_search_perturbation_strength": 1,
+        "main_search_perturbation_schedule": _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
         "main_search_perturbation_count": 0,
         "main_search_objective_trace": {
             "status": "inactive",
@@ -1677,6 +1690,16 @@ def _normalize_main_search_strategy_plan(
         field_name="perturbation.max_perturbations",
         audit=audit,
     )
+    perturbation_schedule = _main_search_string_choice(
+        perturbation.get(
+            "schedule",
+            _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+        ),
+        allowed=_MAIN_SEARCH_PERTURBATION_SCHEDULES,
+        default=_DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+        field_name="perturbation.schedule",
+        audit=audit,
+    )
     post_baseline_enabled = _main_search_bool(
         plan.get("post_baseline_operators_enabled", False),
         field_name="post_baseline_operators_enabled",
@@ -1723,6 +1746,7 @@ def _normalize_main_search_strategy_plan(
             "enabled": perturbation_enabled,
             "strength": perturbation_strength,
             "max_perturbations": max_perturbations,
+            "schedule": perturbation_schedule,
         },
         "post_baseline_operators_enabled": post_baseline_enabled,
         "operator_round_limit": operator_round_limit,
@@ -1820,6 +1844,7 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_restart_count"] = 0
     audit["main_search_perturbation_enabled"] = perturbation_enabled
     audit["main_search_perturbation_strength"] = perturbation_strength
+    audit["main_search_perturbation_schedule"] = perturbation_schedule
     audit["main_search_perturbation_count"] = 0
     if active:
         audit["main_search_phases"] = ["plan_loaded"]
@@ -1865,15 +1890,22 @@ def _validate_main_search_plan_keys(
         "improvement": _MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS,
         "acceptance": _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
         "restart": _MAIN_SEARCH_RESTART_REQUIRED_KEYS,
-        "perturbation": _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+        "perturbation": (
+            _MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS,
+            _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+        ),
     }
-    for section_name, allowed in section_specs.items():
+    for section_name, spec in section_specs.items():
+        if isinstance(spec, tuple):
+            allowed, required = spec
+        else:
+            allowed = required = spec
         section = plan.get(section_name)
         if isinstance(section, Mapping):
             _validate_main_search_section_keys(
                 section,
                 allowed=allowed,
-                required=allowed,
+                required=required,
                 requested_active=requested_active,
                 field_name=section_name,
                 audit=audit,
@@ -2237,6 +2269,26 @@ def _main_search_string_sequence(
         )
         return list(default)
     return normalized
+
+
+def _main_search_string_choice(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: str,
+    field_name: str,
+    audit: dict[str, Any],
+) -> str:
+    text = str(value).strip() if value is not None else ""
+    if text in allowed:
+        return text
+    audit["main_search_strategy_errors"] += 1
+    _record_main_search_event(
+        audit,
+        "error",
+        f"{field_name} contains unknown value {text!r}",
+    )
+    return default
 
 
 def _record_main_search_event(
@@ -3021,200 +3073,243 @@ def improve_with_main_search_strategy(
     current_objective = dict(initial_objective)
     no_improvement_rounds = 0
     stop_reason = "max_main_search_rounds"
+    perturbation_schedule = str(
+        audit.get(
+            "main_search_perturbation_schedule",
+            _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+        )
+    )
+    perturb_limit = _main_search_plan_int(audit, "perturbation", "max_perturbations")
+
+    if perturbation_schedule == "before_first_round" and perturb_limit > 0:
+        perturbed = _try_main_search_perturbation(
+            audit,
+            best_solution,
+            instance,
+            adapter=adapter,
+            rng=rng,
+            phase_name="pre_improvement_perturbation",
+        )
+        if perturbed is None and audit.get("main_search_strategy_errors"):
+            stop_reason = "invalid_perturbation"
+        elif perturbed is not None:
+            current = perturbed
+            current_objective = _objective_for_solution(adapter, instance, current)
 
     _append_main_search_phase(audit, "improvement_loop")
-    for round_index in range(rounds):
-        if _time_exhausted(start_time, time_limit_sec):
-            stop_reason = "time_limit"
-            break
-        audit["main_search_rounds"] = round_index + 1
-        round_phase_improved = 0
-        round_route_pair_phase_improved = False
-        for component in components:
+    if stop_reason != "invalid_perturbation":
+        for round_index in range(rounds):
             if _time_exhausted(start_time, time_limit_sec):
                 stop_reason = "time_limit"
                 break
+            audit["main_search_rounds"] = round_index + 1
             if (
-                component == "bounded_destroy_repair"
-                and "route_pair_swap" in components
-                and round_route_pair_phase_improved
+                perturbation_schedule == "before_each_round"
+                and _as_nonnegative_int(audit.get("main_search_perturbation_count"))
+                < perturb_limit
             ):
-                _record_main_search_component_skip(
+                perturbed = _try_main_search_perturbation(
                     audit,
-                    component,
-                    "route_pair_phase_improved",
+                    best_solution,
+                    instance,
+                    adapter=adapter,
+                    rng=rng,
+                    phase_name="pre_round_perturbation",
                 )
-                continue
-            if (
-                component == "bounded_destroy_repair"
-                and _as_nonnegative_int(
-                    audit.get("main_search_component_accepted", {}).get(
-                        "bounded_destroy_repair",
-                        0,
+                if perturbed is None and audit.get("main_search_strategy_errors"):
+                    stop_reason = "invalid_perturbation"
+                    break
+                if perturbed is not None:
+                    current = perturbed
+                    current_objective = _objective_for_solution(
+                        adapter,
+                        instance,
+                        current,
                     )
-                )
-                >= _as_nonnegative_int(
-                    audit.get(
-                        "main_search_bounded_destroy_repair_accept_limit",
-                        _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
-                    )
-                )
-            ):
-                _record_main_search_component_skip(
-                    audit,
-                    component,
-                    "bounded_destroy_repair_accept_limit_reached",
-                )
-                continue
-            component_start_ns = time.monotonic_ns()
-            _record_main_search_component_attempted(audit, component)
-            (
-                candidate,
-                attempts,
-                component_telemetry,
-                candidate_context,
-            ) = _main_search_component_candidate_choice(
-                component,
-                instance,
-                current_solution=current,
-                best_solution=best_solution,
-                adapter=adapter,
-                current_objective=current_objective,
-                best_objective=best_objective,
-                top_k=top_k,
-                min_distance_improvement=float(
-                    component_min_distance_improvement.get(
+            round_phase_improved = 0
+            round_route_pair_phase_improved = False
+            for component in components:
+                if _time_exhausted(start_time, time_limit_sec):
+                    stop_reason = "time_limit"
+                    break
+                if (
+                    component == "bounded_destroy_repair"
+                    and "route_pair_swap" in components
+                    and round_route_pair_phase_improved
+                ):
+                    _record_main_search_component_skip(
+                        audit,
                         component,
-                        _main_search_component_min_distance_improvement(
-                            component,
-                            min_distance_improvement,
-                        ),
+                        "route_pair_phase_improved",
                     )
-                ),
-            )
-            _record_main_search_component_attempts(audit, component, attempts)
-            _record_main_search_component_repair_counts(
-                audit,
-                component,
-                component_telemetry,
-            )
-            _record_main_search_component_runtime(audit, component, component_start_ns)
-            if candidate is None:
-                _record_main_search_component_skip(
+                    continue
+                if (
+                    component == "bounded_destroy_repair"
+                    and _as_nonnegative_int(
+                        audit.get("main_search_component_accepted", {}).get(
+                            "bounded_destroy_repair",
+                            0,
+                        )
+                    )
+                    >= _as_nonnegative_int(
+                        audit.get(
+                            "main_search_bounded_destroy_repair_accept_limit",
+                            _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+                        )
+                    )
+                ):
+                    _record_main_search_component_skip(
+                        audit,
+                        component,
+                        "bounded_destroy_repair_accept_limit_reached",
+                    )
+                    continue
+                component_start_ns = time.monotonic_ns()
+                _record_main_search_component_attempted(audit, component)
+                (
+                    candidate,
+                    attempts,
+                    component_telemetry,
+                    candidate_context,
+                ) = _main_search_component_candidate_choice(
+                    component,
+                    instance,
+                    current_solution=current,
+                    best_solution=best_solution,
+                    adapter=adapter,
+                    current_objective=current_objective,
+                    best_objective=best_objective,
+                    top_k=top_k,
+                    min_distance_improvement=float(
+                        component_min_distance_improvement.get(
+                            component,
+                            _main_search_component_min_distance_improvement(
+                                component,
+                                min_distance_improvement,
+                            ),
+                        )
+                    ),
+                )
+                _record_main_search_component_attempts(audit, component, attempts)
+                _record_main_search_component_repair_counts(
                     audit,
                     component,
-                    _main_search_skip_reason(component_telemetry, attempts),
+                    component_telemetry,
                 )
-                continue
-            candidate_objective = candidate_context["objective"]
-            candidate_delta = float(candidate_context["accepted_delta"])
-            phase_best_delta = float(candidate_context["phase_delta"])
-            _record_main_search_component_candidate_delta(
-                audit,
-                component,
-                candidate_delta,
-            )
-            valid, reason = _solution_is_valid(adapter, instance, candidate)
-            if not valid:
-                audit["main_search_strategy_errors"] = (
-                    _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
-                )
-                _record_main_search_event(
-                    audit,
-                    "error",
-                    f"{component} produced invalid solution: {reason}",
-                )
-                _record_main_search_component_skip(
-                    audit,
-                    component,
-                    "invalid_component_output",
-                )
-                stop_reason = "invalid_component_output"
-                break
-            current = candidate
-            current_objective = candidate_objective
-            _record_main_search_component_accepted(audit, component)
-            _record_main_search_component_accepted_delta(
-                audit,
-                component,
-                candidate_delta,
-            )
-            if _lexicographic_improves(current_objective, best_objective):
-                best_solution = current
-                best_objective = dict(current_objective)
-                _record_main_search_component_phase_improvement(
-                    audit,
-                    component,
-                    phase_best_delta,
-                )
-                round_phase_improved += 1
-                if component == "route_pair_swap":
-                    round_route_pair_phase_improved = True
-            else:
-                _record_main_search_component_recovery(
+                _record_main_search_component_runtime(audit, component, component_start_ns)
+                if candidate is None:
+                    _record_main_search_component_skip(
+                        audit,
+                        component,
+                        _main_search_skip_reason(component_telemetry, attempts),
+                    )
+                    continue
+                candidate_objective = candidate_context["objective"]
+                candidate_delta = float(candidate_context["accepted_delta"])
+                phase_best_delta = float(candidate_context["phase_delta"])
+                _record_main_search_component_candidate_delta(
                     audit,
                     component,
                     candidate_delta,
                 )
-        if stop_reason in {"time_limit", "invalid_component_output"}:
-            break
-        if round_phase_improved > 0:
-            no_improvement_rounds = 0
-            continue
-        no_improvement_rounds += 1
-        stagnation_limit = _as_nonnegative_int(
-            audit.get("main_search_restart_stagnation_rounds", 0)
-        )
-        restart_limit = _main_search_plan_int(audit, "restart", "max_restarts")
-        perturb_limit = _main_search_plan_int(audit, "perturbation", "max_perturbations")
-        if (
-            bool(audit.get("main_search_perturbation_enabled"))
-            and _as_nonnegative_int(audit.get("main_search_perturbation_count")) < perturb_limit
-        ):
-            perturbed = _perturb_solution(
-                best_solution,
-                instance,
-                rng=rng,
-                strength=_as_nonnegative_int(
-                    audit.get("main_search_perturbation_strength", 1)
-                ),
-            )
-            if perturbed is not None:
-                valid, reason = _solution_is_valid(adapter, instance, perturbed)
-                if valid:
-                    current = perturbed
-                    current_objective = _objective_for_solution(adapter, instance, current)
-                    audit["main_search_perturbation_count"] = (
-                        _as_nonnegative_int(audit.get("main_search_perturbation_count")) + 1
+                valid, reason = _solution_is_valid(adapter, instance, candidate)
+                if not valid:
+                    audit["main_search_strategy_errors"] = (
+                        _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
                     )
-                    _append_main_search_phase(audit, "perturbation")
-                    continue
-                audit["main_search_strategy_errors"] = (
-                    _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
-                )
-                _record_main_search_event(
+                    _record_main_search_event(
+                        audit,
+                        "error",
+                        f"{component} produced invalid solution: {reason}",
+                    )
+                    _record_main_search_component_skip(
+                        audit,
+                        component,
+                        "invalid_component_output",
+                    )
+                    stop_reason = "invalid_component_output"
+                    break
+                current = candidate
+                current_objective = candidate_objective
+                _record_main_search_component_accepted(audit, component)
+                _record_main_search_component_accepted_delta(
                     audit,
-                    "error",
-                    f"perturbation produced invalid solution: {reason}",
+                    component,
+                    candidate_delta,
                 )
-                stop_reason = "invalid_perturbation"
+                if _lexicographic_improves(current_objective, best_objective):
+                    best_solution = current
+                    best_objective = dict(current_objective)
+                    _record_main_search_component_phase_improvement(
+                        audit,
+                        component,
+                        phase_best_delta,
+                    )
+                    round_phase_improved += 1
+                    if component == "route_pair_swap":
+                        round_route_pair_phase_improved = True
+                else:
+                    _record_main_search_component_recovery(
+                        audit,
+                        component,
+                        candidate_delta,
+                    )
+            if stop_reason in {
+                "time_limit",
+                "invalid_component_output",
+                "invalid_perturbation",
+            }:
                 break
-        if (
-            bool(audit.get("main_search_restart_enabled"))
-            and stagnation_limit
-            and no_improvement_rounds >= stagnation_limit
-            and _as_nonnegative_int(audit.get("main_search_restart_count")) < restart_limit
-        ):
-            audit["main_search_restart_count"] = (
-                _as_nonnegative_int(audit.get("main_search_restart_count")) + 1
+            if round_phase_improved > 0:
+                no_improvement_rounds = 0
+                continue
+            no_improvement_rounds += 1
+            stagnation_limit = _as_nonnegative_int(
+                audit.get("main_search_restart_stagnation_rounds", 0)
             )
-            current = best_solution
-            current_objective = dict(best_objective)
-            _append_main_search_phase(audit, "restart")
-            no_improvement_rounds = 0
-            continue
-        stop_reason = "no_main_search_improvement"
-        break
+            restart_limit = _main_search_plan_int(audit, "restart", "max_restarts")
+            if (
+                perturbation_schedule == "after_no_improvement"
+                and bool(audit.get("main_search_perturbation_enabled"))
+                and _as_nonnegative_int(audit.get("main_search_perturbation_count"))
+                < perturb_limit
+            ):
+                perturbed = _try_main_search_perturbation(
+                    audit,
+                    best_solution,
+                    instance,
+                    adapter=adapter,
+                    rng=rng,
+                    phase_name="perturbation",
+                )
+                if perturbed is None and audit.get("main_search_strategy_errors"):
+                    stop_reason = "invalid_perturbation"
+                    break
+                if perturbed is not None:
+                    current = perturbed
+                    current_objective = _objective_for_solution(
+                        adapter,
+                        instance,
+                        current,
+                    )
+                    continue
+            if (
+                bool(audit.get("main_search_restart_enabled"))
+                and stagnation_limit
+                and no_improvement_rounds >= stagnation_limit
+                and _as_nonnegative_int(audit.get("main_search_restart_count"))
+                < restart_limit
+            ):
+                audit["main_search_restart_count"] = (
+                    _as_nonnegative_int(audit.get("main_search_restart_count")) + 1
+                )
+                current = best_solution
+                current_objective = dict(best_objective)
+                _append_main_search_phase(audit, "restart")
+                no_improvement_rounds = 0
+                continue
+            stop_reason = "no_main_search_improvement"
+            break
 
     _set_main_search_phase_runtime(audit, "improvement_loop", phase_start_ns)
     phase_delta = _objective_distance_delta(initial_objective, best_objective)
@@ -3235,6 +3330,45 @@ def improve_with_main_search_strategy(
         audit=audit,
     )
     return best_solution, audit
+
+
+def _try_main_search_perturbation(
+    audit: dict[str, Any],
+    best_solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    rng: random.Random,
+    phase_name: str,
+) -> CvrpSolution | None:
+    if not bool(audit.get("main_search_perturbation_enabled")):
+        return None
+    perturbed = _perturb_solution(
+        best_solution,
+        instance,
+        rng=rng,
+        strength=_as_nonnegative_int(
+            audit.get("main_search_perturbation_strength", 1)
+        ),
+    )
+    if perturbed is None:
+        return None
+    valid, reason = _solution_is_valid(adapter, instance, perturbed)
+    if not valid:
+        audit["main_search_strategy_errors"] = (
+            _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
+        )
+        _record_main_search_event(
+            audit,
+            "error",
+            f"perturbation produced invalid solution: {reason}",
+        )
+        return None
+    audit["main_search_perturbation_count"] = (
+        _as_nonnegative_int(audit.get("main_search_perturbation_count")) + 1
+    )
+    _append_main_search_phase(audit, phase_name)
+    return perturbed
 
 
 def _effective_baseline_time_fraction(

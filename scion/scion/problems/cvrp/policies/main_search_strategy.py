@@ -11,7 +11,10 @@ bounded_destroy_repair, and use 5 improvement rounds with top_k 64 or 128 so
 runtime audit can show selected, attempted, skipped, and accepted coverage.
 Formal-like .vrp diagnostics should keep baseline.time_fraction at 0.75 or
 higher so accepted moves compete against a strong repo-local baseline. The
-checked-in default remains inactive.
+perturbation schedule can be after_no_improvement, before_first_round, or
+before_each_round; use a pre-improvement schedule only when the hypothesis
+needs to test whether recovery moves can escape a strong baseline local
+optimum. The checked-in default remains inactive.
 """
 from __future__ import annotations
 
@@ -45,6 +48,7 @@ def main_search_plan(instance, time_limit_sec):
             "enabled": False,
             "strength": 1,
             "max_perturbations": 0,
+            "schedule": "after_no_improvement",
         },
         "post_baseline_operators_enabled": False,
         "operator_round_limit": 0,
