@@ -35,13 +35,15 @@ enough to continue, validate, freeze, promote, or abandon.
   feedback/fallback observations now stay under the 48000-character budget and
   all hypotheses remain on the forced surface, but only one patch reached
   screening because rounds 2-5 failed `C10_novelty`. The singleton semantic
-  novelty persistence repair is now implemented in the working tree: C10
-  requires usable structured identity for semantic singleton candidates and
-  does not let old empty-signature records poison later valid structured
-  proposals. Do not run a long CVRP solver-quality validation until a
-  five-round forced smoke produces multiple code patches, multiple screened
-  candidates, complete selected-surface audit, and nontrivial case-level
-  quality evidence.
+  novelty persistence repair from commit `7111d69` is validated in a five-round
+  forced smoke: C10 no longer blocked later structured singleton hypotheses,
+  four code patches reached screening, APS budget stayed healthy, and
+  selected-surface audit was complete. The current blocker is proposal
+  feedback and efficacy attribution: feedback tools returned empty same-campaign
+  screening/runtime history, and accepted main-search component moves still do
+  not clearly become phase-level and final case-level benefit. Do not run a
+  long CVRP solver-quality validation until a forced smoke shows non-empty
+  feedback retrieval plus stable case-level quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

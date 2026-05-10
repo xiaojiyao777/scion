@@ -141,7 +141,17 @@ generation, old empty-signature records no longer poison later valid
 structured proposals, and forced-surface context renders occupied structured
 signatures from active, blacklisted, and rejected hypotheses. The next step is
 focused/boundary/full validation, then another five-round forced
-`main_search_strategy` smoke.
+`main_search_strategy` smoke. That smoke has now completed from commit
+`7111d69`: C10 no longer blocked later singleton hypotheses, four code patches
+reached screening, observation budget remained healthy, and selected-surface
+audit was complete. All screened candidates still failed
+`SCREENING_FAIL_WIN_RATE`; the best round reached only case-level
+`win_rate=0.25` with `median_delta=0.0`. The current blocker is proposal
+feedback and efficacy attribution: `feedback.query_screening` and
+`feedback.query_runtime` returned empty/unavailable results even after prior
+screening rounds, and accepted component moves still do not clearly translate
+through phase deltas into final case-level benefit. Do not run long CVRP
+validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2804,6 +2814,83 @@ first smoke acceptance condition is multiple code patches and screened
 candidates under bounded APS feedback; solver-quality validation remains
 blocked until that happens.
 
+## 2026-05-10 Semantic Novelty Repair 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the
+singleton semantic novelty persistence repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-semantic-novelty-repair-sonnet-5r-20260510T043306Z
+scion_commit=7111d69
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+exit_code=0
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-semantic-novelty-repair-sonnet-5r-20260510.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=4
+champion=v1
+promotions=0
+frozen_budget_used=0/2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- The run completed normally with `EXIT_CODE:0`.
+- The C10 repair is validated for this diagnostic. Four approved hypotheses
+  had complete structured `novelty_signature`, no `C10_novelty` failure
+  occurred, and rounds 1, 2, 4, and 5 generated code patches that reached
+  screening.
+- APS observation budget remained healthy: successful hypothesis sessions used
+  about 21k-26k chars, code sessions about 30k-35k chars, under the 48000 cap.
+- Forced-surface governance stayed fail-closed. Round 3 drafted
+  `baseline_policy`, but the proposal-side forced-surface constraint rejected
+  it before code generation.
+- All four screened candidates selected `main_search_strategy`; selected
+  surface runtime audit was complete with all 44 required runtime fields
+  observed on 16/16 candidate pairs.
+- All screened candidates failed `SCREENING_FAIL_WIN_RATE`. Pair W/L/T by
+  screened round was `3/2/11`, `3/1/12`, `3/1/12`, and `5/1/10`; case-level
+  win rates were `0.0`, `0.0`, `0.0`, and `0.25`, with `median_delta=0.0` in
+  every screened round.
+- Component activity improved but did not prove net benefit. Round 5 selected
+  both `route_pair_swap` and `bounded_destroy_repair`, accepted 43 route-pair
+  moves and 11 bounded destroy/repair moves, and produced the best case-level
+  signal, but still failed screening. Delegated analysis found the
+  improvement-loop phase delta still did not clearly reflect accepted moves as
+  final returned benefit.
+- Proposal feedback appears broken or scoped too narrowly. APS called
+  `feedback.query_screening` and `feedback.query_runtime` every successful
+  round, but later rounds still saw 0 screening feedback rows and no safe
+  runtime feedback even after earlier screening had completed.
+
+This smoke validates the core C10/APS-control repair. It does not justify long
+validation. The next repair should make proposal feedback tools return
+same-campaign compact screening/runtime history after prior screening exists,
+and should add or expose bounded attribution from component accepted moves to
+phase delta and final pair/case outcome.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2872,9 +2959,11 @@ P1:
   The singleton semantic novelty persistence repair is now implemented: C10
   requires candidate structured identity before code generation and does not
   let old empty-signature records block later valid structured candidates.
-  After broader validation, rerun the five-round smoke and require multiple
-  code patches before judging net case-level efficacy of route-pair and
-  destroy/repair movement.
+  The follow-up smoke from commit `7111d69` validated that repair: four code
+  patches reached screening and no C10 failure recurred. The next blocker is
+  proposal-feedback retrieval plus net efficacy attribution: feedback tools
+  returned empty same-campaign history, and accepted route-pair/destroy-repair
+  moves still did not clearly become phase-level and case-level benefit.
 
 P2:
 
