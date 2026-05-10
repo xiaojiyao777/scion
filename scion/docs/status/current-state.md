@@ -2622,6 +2622,43 @@ repair should reduce APS observation payloads and deduplicate fallback tool
 calls so forced diagnostics can produce multiple code patches under the
 feedback requirement.
 
+## 2026-05-10 APS Feedback/Fallback Budget Repair
+
+Implemented the follow-up APS repair after the forced diagnostic repair smoke:
+
+- APS fallback now treats successful compact observations as reusable session
+  facts. It only fills missing `context.list_surfaces`,
+  `context.read_problem`, `memory.query`, `feedback.query_screening`, and
+  `feedback.query_runtime` observations instead of repeating successful calls.
+- Planner-selected duplicate reads of those reusable observations now switch
+  to missing-only fallback rather than consuming another large observation.
+- An already successful selected `context.read_surface` is not read again after
+  hypothesis approval.
+- During forced-surface diagnostics, `context.list_surfaces` returns the forced
+  surface's compact listing plus the total declared-surface count, avoiding
+  repeated full design-space listings while preserving the constraint record.
+- `feedback.query_screening` and `feedback.query_runtime` bound compact JSON
+  payloads before the tool result-size guard, preserving safe summaries without
+  exposing raw metric refs.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py -q
+102 passed in 2.49s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+457 passed in 48.35s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1524 passed, 1 skipped in 65.90s
+```
+
+Next step: commit this slice and run another five-round forced
+`main_search_strategy` smoke. Acceptance should first check whether all five
+rounds can produce forced-surface hypotheses and multiple code patches without
+observation-budget failures, while still showing bounded feedback/memory use.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2681,9 +2718,11 @@ P1:
   repairs are now implemented and validated. The follow-up smoke from commit
   `3a4649f` confirmed those controls in real APS artifacts but produced only
   one screened candidate because repeated feedback/list observations exhausted
-  APS observation budget in later rounds. The next blocker is APS
-  feedback/fallback budget control, then net case-level efficacy of route-pair
-  and destroy/repair movement.
+  APS observation budget in later rounds. APS feedback/fallback budget control
+  is now repaired and validated in focused and full suites. The next blocker is
+  whether a new five-round smoke confirms multiple code patches under bounded
+  feedback, then net case-level efficacy of route-pair and destroy/repair
+  movement.
 
 P2:
 

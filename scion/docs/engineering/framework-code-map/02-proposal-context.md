@@ -103,9 +103,19 @@ considered complete until all compact feedback tools with available data have
 returned successful observations. After a hypothesis selects a surface, APS
 performs a deterministic `context.read_surface` before code generation or
 partial-session finalization, unless that exact surface was already read.
+Fallback now treats successful compact observations as reusable session facts:
+it only fills missing `context.list_surfaces`, `context.read_problem`,
+`memory.query`, `feedback.query_screening`, and `feedback.query_runtime`
+observations, and it does not reread an already successful selected
+`context.read_surface`. Planner-selected duplicate reads of those reusable
+observations switch to the same missing-only fallback instead of consuming
+another large observation.
 Surface tool observations are compact by default:
 `context.list_surfaces` exposes only selection-oriented metadata plus any active
-forced-surface constraint, and `context.read_surface` defaults to
+forced-surface constraint. During forced-surface diagnostics,
+`context.list_surfaces` returns the forced surface's compact listing plus the
+total declared-surface count, avoiding repeated full design-space listings
+while preserving the constraint record. `context.read_surface` defaults to
 `detail="compact"` with a `surface-contract.v1` section view (`summary`,
 `interface`, `bounds`, `evidence`, `novelty`, `target_preview`) plus bounded
 interface text and champion-code preview. Compact surface reads omit full prompt
@@ -121,7 +131,10 @@ the reserved floor, so persisted recovery artifacts stay within
 `AgenticToolLoopConfig.max_observation_chars` while the replay validator remains
 strict for genuinely invalid artifacts. The default APS observation budget is
 48,000 chars; compactness is still enforced first, and the larger cap only gives
-room for the normal list/problem/feedback/selected-surface sequence.
+room for the normal list/problem/feedback/selected-surface sequence. Screening
+and runtime feedback tools also bound their compact JSON payloads before the
+registry size guard, so available compact feedback can still succeed without
+exposing raw metric refs when runtime summaries are unusually large.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

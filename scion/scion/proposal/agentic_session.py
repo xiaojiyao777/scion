@@ -50,6 +50,11 @@ _COMPACT_FEEDBACK_TOOLS = (
     "feedback.query_screening",
     "feedback.query_runtime",
 )
+_SINGLE_SUCCESS_OBSERVATION_TOOLS = (
+    "context.list_surfaces",
+    "context.read_problem",
+    *_COMPACT_FEEDBACK_TOOLS,
+)
 _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
 _APS_SURFACE_READ_CODE_CHARS = 1200
@@ -1148,10 +1153,9 @@ class AgenticProposalSession:
             ),
         )
         skip_successful_required_tools = skip_successful_required_tools or set()
-        required_context_tools = {"context.list_surfaces", "context.read_problem"}
         observations: list[ProposalObservation] = []
         for name, args in calls:
-            if name in required_context_tools and name in skip_successful_required_tools:
+            if name in skip_successful_required_tools:
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
                     "Skipped fallback proposal tool already completed successfully.",
@@ -1413,6 +1417,34 @@ class AgenticProposalSession:
                     state,
                     observations,
                     error_code="repeated_tool_call_fuse",
+                    tool_name=name,
+                )
+            if _has_successful_reusable_observation(
+                observations,
+                name,
+                args,
+                forced_surface=context.forced_surface,
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    (
+                        "Planner selected a proposal tool already completed "
+                        "successfully; using fallback for missing context only."
+                    ),
+                    metadata={
+                        "status": "skipped",
+                        "tool_name": name,
+                        "error_code": "already_succeeded",
+                        "fallback": "fixed_tool_plan",
+                        "selection_source": "planner_selected",
+                        "skip_reason": "already_succeeded",
+                    },
+                )
+                return self._fallback_after_planner_error(
+                    context,
+                    state,
+                    observations,
+                    error_code="already_succeeded",
                     tool_name=name,
                 )
             observation = self._call_tool(
@@ -2711,6 +2743,26 @@ def _has_successful_surface_read(
         if isinstance(surface, Mapping) and surface.get("name") == surface_name:
             return True
     return False
+
+
+def _has_successful_reusable_observation(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    forced_surface: str | None = None,
+) -> bool:
+    if tool_name in _SINGLE_SUCCESS_OBSERVATION_TOOLS:
+        return any(
+            observation.tool_name == tool_name and not observation.is_error
+            for observation in observations
+        )
+    if tool_name != "context.read_surface":
+        return False
+    requested_surface = str(args.get("surface") or forced_surface or "").strip()
+    if not requested_surface:
+        return False
+    return _has_successful_surface_read(observations, requested_surface)
 
 
 def _self_check_from_previews(

@@ -50,6 +50,11 @@ _COMPACT_SURFACE_HINT_CHARS = 240
 _COMPACT_SURFACE_INTERFACE_CHARS = 2400
 _COMPACT_SURFACE_LIST_ITEMS = 32
 _COMPACT_SURFACE_MAP_ITEMS = 32
+_COMPACT_FEEDBACK_PAYLOAD_CHARS = 24000
+_COMPACT_FEEDBACK_TEXT_CHARS = 8000
+_COMPACT_FEEDBACK_STRING_CHARS = 1200
+_COMPACT_FEEDBACK_LIST_ITEMS = 8
+_COMPACT_FEEDBACK_MAP_ITEMS = 32
 _COMPACT_SURFACE_SECTIONS = (
     "summary",
     "interface",
@@ -471,10 +476,12 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
     name = "context.list_surfaces"
 
     def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
-        surfaces = _surfaces(context)
+        declared_surfaces = _surfaces(context)
+        surfaces = _surface_list_for_context(context, declared_surfaces)
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
             "surface_count": len(surfaces),
+            "total_declared_surface_count": len(declared_surfaces),
             "surfaces": [_surface_listing_payload(surface) for surface in surfaces],
             "detail": "compact",
             "forced_surface_constraint": _forced_surface_constraint_payload(context),
@@ -806,6 +813,7 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
             "surface": args.surface,
             "screening_steps": rows,
         }
+        payload = _bound_compact_feedback_payload(payload)
         return self._observation(
             context,
             observation_type="screening_feedback",
@@ -897,13 +905,19 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             if (not args.branch_id or step.branch_id == args.branch_id)
             and (not args.surface or step.hypothesis.change_locus == args.surface)
         ]
-        rendered = _build_runtime_feedback(safe_steps, max_items=args.max_items)
+        rendered = _limit_text(
+            _build_runtime_feedback(safe_steps, max_items=args.max_items),
+            _COMPACT_FEEDBACK_TEXT_CHARS,
+        )
         adapter_spec = _get_adapter_problem_spec(context.adapter)
-        guidance = _build_runtime_failure_guidance(
-            safe_steps,
-            problem_spec=context.problem_spec,
-            adapter_spec=adapter_spec,
-            max_items=args.max_items,
+        guidance = _limit_text(
+            _build_runtime_failure_guidance(
+                safe_steps,
+                problem_spec=context.problem_spec,
+                adapter_spec=adapter_spec,
+                max_items=args.max_items,
+            ),
+            _COMPACT_FEEDBACK_TEXT_CHARS,
         )
         payload = {
             "branch_id": args.branch_id,
@@ -913,6 +927,7 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             "screening_only": True,
             "metrics_file_refs_exposed": False,
         }
+        payload = _bound_compact_feedback_payload(payload)
         return self._observation(
             context,
             observation_type="runtime_feedback",
@@ -1928,6 +1943,21 @@ def _surfaces(context: ProposalToolContext) -> list[Any]:
     return _get_research_surfaces(context.problem_spec, adapter_spec)
 
 
+def _surface_list_for_context(
+    context: ProposalToolContext,
+    surfaces: list[Any],
+) -> list[Any]:
+    forced_surface = str(context.forced_surface or "").strip()
+    if not forced_surface:
+        return surfaces
+    constrained = [
+        surface
+        for surface in surfaces
+        if str(_attr(surface, "name") or "").strip() == forced_surface
+    ]
+    return constrained or surfaces
+
+
 def _find_surface(context: ProposalToolContext, name: str) -> Any | None:
     for surface in _surfaces(context):
         if _attr(surface, "name") == name:
@@ -2640,6 +2670,58 @@ def _eval_stats_payload(stats: Any) -> dict[str, Any]:
 
 def _strip_forbidden_payload_refs(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return _strip_forbidden_value(payload)
+
+
+def _bound_compact_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    estimated = _json_size(payload)
+    if estimated <= _COMPACT_FEEDBACK_PAYLOAD_CHARS:
+        bounded = dict(payload)
+        bounded.setdefault("payload_truncated", False)
+        return bounded
+    compact = _compact_feedback_value(payload)
+    compact_estimated = _json_size(compact)
+    if isinstance(compact, Mapping) and compact_estimated <= _COMPACT_FEEDBACK_PAYLOAD_CHARS:
+        bounded = dict(compact)
+        bounded["payload_truncated"] = True
+        bounded["original_estimated_chars"] = estimated
+        return bounded
+    return {
+        "payload_truncated": True,
+        "original_estimated_chars": estimated,
+        "compacted_estimated_chars": compact_estimated,
+        "available_keys": sorted(str(key) for key in payload.keys()),
+        "summary": "Compact feedback payload exceeded budget and was summarized.",
+    }
+
+
+def _compact_feedback_value(value: Any, *, depth: int = 0) -> Any:
+    if isinstance(value, Mapping):
+        compact: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= _COMPACT_FEEDBACK_MAP_ITEMS:
+                compact["omitted_mapping_items"] = len(value) - index
+                break
+            compact[str(key)] = _compact_feedback_value(item, depth=depth + 1)
+        return compact
+    if isinstance(value, tuple):
+        return _compact_feedback_value(list(value), depth=depth)
+    if isinstance(value, list):
+        compact_list = [
+            _compact_feedback_value(item, depth=depth + 1)
+            for item in value[:_COMPACT_FEEDBACK_LIST_ITEMS]
+        ]
+        if len(value) > _COMPACT_FEEDBACK_LIST_ITEMS:
+            compact_list.append(
+                {"omitted_items": len(value) - _COMPACT_FEEDBACK_LIST_ITEMS}
+            )
+        return compact_list
+    if isinstance(value, str):
+        limit = max(
+            200,
+            _COMPACT_FEEDBACK_STRING_CHARS // max(1, min(depth, 4)),
+        )
+        return _limit_text(value, limit)
+    return _strip_forbidden_value(value)
 
 
 def _strip_forbidden_value(value: Any) -> Any:

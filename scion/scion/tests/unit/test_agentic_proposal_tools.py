@@ -1000,6 +1000,36 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "SECRET_RAW_REF" not in rendered
 
 
+def test_feedback_query_screening_bounds_large_compact_payload_without_error(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    protocol = context.step_history[0].protocol_result
+    assert protocol is not None
+    large_runtime_summary = {
+        f"component_{idx}": "accepted route-pair evidence " * 200
+        for idx in range(60)
+    }
+    large_step = replace(
+        context.step_history[0],
+        protocol_result=replace(
+            protocol,
+            candidate_surface_runtime_summary=large_runtime_summary,
+        ),
+    )
+    context = replace(context, step_history=(large_step,))
+
+    observation = registry.call("feedback.query_screening", {}, context)
+    rendered = json.dumps(observation.structured_payload, sort_keys=True, default=str)
+
+    assert observation.is_error is False
+    assert observation.failure_code is None
+    assert observation.structured_payload["payload_truncated"] is True
+    assert len(rendered) <= registry.get("feedback.query_screening").max_result_chars
+    assert "raw_metrics_ref" not in rendered
+
+
 def test_default_holdout_summary_exposes_no_validation_or_frozen_rows(
     tmp_path: Path,
 ) -> None:
@@ -2859,6 +2889,152 @@ def test_agentic_session_fallback_does_not_repeat_successful_required_tools(
     assert "memory.query" in tool_names
     assert any(
         event.metadata.get("skip_reason") == "already_succeeded"
+        for event in output.transcript
+    )
+
+
+def test_agentic_session_fallback_does_not_repeat_successful_feedback_tools(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "memory.query", "args": {}},
+            {
+                "tool_name": "feedback.query_screening",
+                "args": {"branch_id": "branch-1"},
+            },
+            {
+                "tool_name": "feedback.query_runtime",
+                "args": {"branch_id": "branch-1"},
+            },
+            {"tool_name": "context.read_surface", "args": "bad-args"},
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    tool_names = [
+        event.metadata["tool_name"]
+        for event in output.transcript
+        if event.metadata.get("step_id")
+    ]
+    code_observation_names = {
+        observation["tool_name"]
+        for observation in creative.code_contexts[0]["agentic_tool_observations"]
+    }
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert creative.code_contexts
+    assert tool_names.count("context.list_surfaces") == 1
+    assert tool_names.count("context.read_problem") == 1
+    for feedback_tool in _COMPACT_FEEDBACK_TOOL_NAMES:
+        assert tool_names.count(feedback_tool) == 1
+        assert feedback_tool in code_observation_names
+    assert any(
+        event.metadata.get("fallback") == "fixed_tool_plan"
+        and event.metadata.get("skip_reason") == "already_succeeded"
+        for event in output.transcript
+    )
+
+
+def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="main_search_strategy",
+        forced_action="modify",
+        forced_target_file="policies/main_search_strategy.py",
+    )
+    listed = ProposalToolRegistry.default_read_only().call(
+        "context.list_surfaces",
+        {},
+        context,
+    )
+    rendered_list = json.dumps(listed.structured_payload, sort_keys=True, default=str)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="main_search_strategy",
+            target_file="policies/main_search_strategy.py",
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_surface",
+                "args": {"surface": "main_search_strategy"},
+            },
+            {"stop": True},
+        ],
+        hypothesis=hypothesis,
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    tool_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("step_id")
+    ]
+    read_surface_events = [
+        event for event in tool_events
+        if event["tool_name"] == "context.read_surface"
+    ]
+
+    assert listed.is_error is False
+    assert listed.structured_payload["surface_count"] == 1
+    assert listed.structured_payload["total_declared_surface_count"] > 1
+    assert listed.structured_payload["surfaces"][0]["name"] == "main_search_strategy"
+    assert len(rendered_list) < 12000
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert len(read_surface_events) == 1
+    assert read_surface_events[0]["selection_source"] == "planner_selected"
+    assert output.tool_budget_used["observation_chars"] <= (
+        output.tool_loop_config["max_observation_chars"]
+    )
+    assert any(
+        event.metadata.get("skip_reason") == "already_succeeded"
+        and event.metadata.get("tool_name") == "context.read_surface"
         for event in output.transcript
     )
 
