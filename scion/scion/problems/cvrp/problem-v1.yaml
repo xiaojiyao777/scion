@@ -53,6 +53,10 @@ runtime_failure_guidance:
       - baseline_policy
       - construction_policy
       - neighborhood_portfolio
+      - alns_vns_policy
+      - destroy_repair_policy
+      - route_pair_candidate_policy
+      - acceptance_restart_policy
       - search_policy
     discouraged_surfaces:
       - route_local
@@ -1066,6 +1070,354 @@ research_surfaces:
       rather than only describing it in prose.
     required_functions:
       - "main_search_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: alns_vns_policy
+    kind: policy
+    description: "Controlled ALNS/VNS mechanism policy for repo-local baseline search."
+    algorithm:
+      role: alns_vns_main_search_mechanism
+      invocation_point: before_repo_local_vrp_baseline
+      description: >-
+        Exposes bounded ALNS/VNS component schedule, adaptive weights, segment
+        schedule, destroy intensity schedule, and VNS stagnation response
+        without letting proposals edit solver.py or vrp/src internals.
+    targets:
+      files:
+        - "policies/alns_vns_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "alns_vns_plan"
+      function_signatures:
+        alns_vns_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        alns_vns_plan returns a dict with enabled bool, optional components
+        drawn from alns/vns, optional component_weights in [0.0, 5.0], and
+        params using the same bounded keys as baseline_policy.
+    bounds:
+      allowed_components:
+        - alns
+        - vns
+        - destroy_ratio
+        - segment_length
+        - reaction_factor
+        - vns_max_no_improve
+        - max_destroy_customers
+      numeric_ranges:
+        component_weight: [0.0, 5.0]
+        destroy_ratio: [0.01, 0.80]
+        segment_length: [1, 1000]
+        reaction_factor: [0.01, 1.0]
+        vns_max_no_improve: [0, 20000]
+        max_destroy_customers: [1, 500]
+      complexity_scale_terms:
+        - time_limit_sec
+        - customer_count
+        - route_count
+    evidence:
+      required_runtime_fields:
+        - alns_vns_surface_loaded
+        - alns_vns_active
+        - alns_vns_errors
+        - alns_vns_components
+        - alns_vns_component_weights
+        - alns_vns_segment_schedule
+        - alns_vns_destroy_schedule
+        - alns_vns_attempts
+        - alns_vns_accepted
+        - alns_vns_phase_delta_sum
+        - alns_vns_runtime_ms
+        - alns_vns_stop_reason
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - selected_components
+        - budget_pattern
+        - destroy_repair_pattern
+    prompt:
+      hypothesis_guidance: >-
+        State how the bounded ALNS/VNS schedule, adaptive weights, or destroy
+        intensity should improve phase-best or screening evidence.
+      implementation_guidance: >-
+        Return only the declared plan dict. Use instance.customer_ids,
+        instance.customer_count, instance.demands, instance.capacity, and
+        instance.distance. The solver owns repo-local baseline invocation and
+        sanitizes params before passing them to vrp/src.
+      anti_patterns: >-
+        Do not import solver internals, edit vrp/src, read benchmark answers,
+        use instance.customers, return unknown params, or widen bounds.
+    target_files:
+      - "policies/alns_vns_policy.py"
+    prompt_hint: "Tune bounded ALNS/VNS mechanism policy without editing solver internals."
+    required_functions:
+      - "alns_vns_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: destroy_repair_policy
+    kind: policy
+    description: "Controlled destroy/repair candidate-generation and repair policy."
+    algorithm:
+      role: destroy_repair_mechanism
+      invocation_point: during_main_search_bounded_destroy_repair
+      description: >-
+        Controls destroy selectors, subset generation, repair selector,
+        per-customer repair budget, fallback behavior, and phase-best
+        preference for bounded destroy/repair.
+    targets:
+      files:
+        - "policies/destroy_repair_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "destroy_repair_plan"
+      function_signatures:
+        destroy_repair_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        destroy_repair_plan returns a dict with enabled bool, bounded
+        destroy_selectors, repair_selectors, subset_strategy,
+        max_destroy_customers, repair_budget_per_customer,
+        fallback_to_smaller_subsets, and phase_best_preference.
+    bounds:
+      allowed_components:
+        - worst_removal
+        - route_diverse_worst
+        - regret_2
+        - cheapest
+        - prefix_shifted_route_diverse
+        - single_worst
+        - route_diverse
+      numeric_ranges:
+        max_destroy_customers: [1, 12]
+        repair_budget_per_customer: [1, 16]
+      complexity_scale_terms:
+        - customer_count
+        - route_count
+        - removed_customer_count
+    evidence:
+      required_runtime_fields:
+        - destroy_repair_surface_loaded
+        - destroy_repair_active
+        - destroy_repair_errors
+        - destroy_selectors
+        - repair_selectors
+        - destroy_subset_count
+        - removed_customers
+        - reinserted_customers
+        - repair_budget_used
+        - repair_fallback_counts
+        - destroy_repair_attempts
+        - destroy_repair_accepted_current
+        - destroy_repair_accepted_recovery_only
+        - destroy_repair_accepted_phase_best
+        - destroy_repair_phase_delta_sum
+        - destroy_repair_skip_reasons
+        - destroy_repair_runtime_ms
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - destroy_repair_pattern
+        - budget_pattern
+        - predicted_direction
+    prompt:
+      hypothesis_guidance: >-
+        State how the destroy selector, subset strategy, repair selector, or
+        repair-budget split should create phase-best improvement rather than
+        recovery-only accepted moves.
+      implementation_guidance: >-
+        Return only bounded selector names and numeric limits. The solver owns
+        customer removal, repair insertion, route mutation, and feasibility.
+      anti_patterns: >-
+        Do not create routes directly, import solver internals, read benchmark
+        files, use instance.customers, or return unknown selectors.
+    target_files:
+      - "policies/destroy_repair_policy.py"
+    prompt_hint: "Control bounded destroy/repair candidate and repair policy."
+    required_functions:
+      - "destroy_repair_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: route_pair_candidate_policy
+    kind: policy
+    description: "Controlled route-pair candidate ranking and filtering policy."
+    algorithm:
+      role: route_pair_candidate_generation
+      invocation_point: during_main_search_route_pair_swap
+      description: >-
+        Controls route-pair scoring terms, move-family selection, and candidate
+        caps for inter-route route-pair search.
+    targets:
+      files:
+        - "policies/route_pair_candidate_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "route_pair_plan"
+      function_signatures:
+        route_pair_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        route_pair_plan returns a dict with enabled bool, scoring_terms drawn
+        from route_distance/removal_saving/load_gap/distance_saving,
+        move_families drawn from customer_swap, and candidate_limits with
+        pair_cap and position_cap.
+    bounds:
+      allowed_components:
+        - route_distance
+        - removal_saving
+        - load_gap
+        - distance_saving
+        - customer_swap
+      numeric_ranges:
+        pair_cap: [0, 500]
+        position_cap: [0, 32]
+      complexity_scale_terms:
+        - route_count
+        - route_pairs
+        - route_length
+    evidence:
+      required_runtime_fields:
+        - route_pair_surface_loaded
+        - route_pair_active
+        - route_pair_errors
+        - route_pair_scoring_terms
+        - route_pair_move_families
+        - route_pair_candidates_generated
+        - route_pair_candidates_pruned
+        - route_pair_attempts
+        - route_pair_accepted_current
+        - route_pair_accepted_recovery_only
+        - route_pair_accepted_phase_best
+        - route_pair_phase_delta_sum
+        - route_pair_skip_reasons
+        - route_pair_runtime_ms
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - selected_components
+        - route_pair_pattern
+        - predicted_direction
+    prompt:
+      hypothesis_guidance: >-
+        State how route-pair ranking, filtering, or move-family selection
+        should find phase-best route-pair opportunities.
+      implementation_guidance: >-
+        Return only declared scoring terms, move families, and candidate caps.
+        The solver owns route mutation, capacity checks, and acceptance.
+      anti_patterns: >-
+        Do not enumerate unbounded route pairs, create routes directly, import
+        solver internals, read benchmark files, or use instance.customers.
+    target_files:
+      - "policies/route_pair_candidate_policy.py"
+    prompt_hint: "Control bounded route-pair candidate scoring and caps."
+    required_functions:
+      - "route_pair_plan"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: acceptance_restart_policy
+    kind: acceptance_restart
+    description: "Controlled acceptance, recovery, restart, and perturbation policy."
+    algorithm:
+      role: acceptance_restart_mechanism
+      invocation_point: during_main_search_acceptance_and_stagnation
+      description: >-
+        Controls strict-improvement threshold, recovery-only handling,
+        phase-best preference, restart cadence, perturbation trigger, and
+        perturbation schedule inside candidate search.
+    targets:
+      files:
+        - "policies/acceptance_restart_policy.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "acceptance_restart_plan"
+      function_signatures:
+        acceptance_restart_plan:
+          - instance
+          - time_limit_sec
+      return_contract: >-
+        acceptance_restart_plan returns a dict with enabled bool,
+        min_distance_improvement, recovery_only_policy, restart dict, and
+        perturbation dict. This affects candidate search only and cannot
+        override protocol or Decision.
+    bounds:
+      allowed_components:
+        - allow
+        - reject_recovery_only
+        - phase_best_preferred
+        - after_no_improvement
+        - before_first_round
+        - before_each_round
+      numeric_ranges:
+        min_distance_improvement: [0.0, 10.0]
+        stagnation_rounds: [0, 25]
+        max_restarts: [0, 3]
+        perturbation_strength: [1, 8]
+        max_perturbations: [0, 4]
+      complexity_scale_terms:
+        - improvement_rounds
+        - route_count
+        - customer_count
+    evidence:
+      required_runtime_fields:
+        - acceptance_restart_surface_loaded
+        - acceptance_restart_active
+        - acceptance_restart_errors
+        - acceptance_threshold_schedule
+        - recovery_only_policy
+        - restart_triggers
+        - restart_count
+        - perturbation_schedule
+        - perturbation_count
+        - accepted_current_count
+        - accepted_recovery_only_count
+        - accepted_phase_best_count
+        - phase_best_refresh_count
+        - acceptance_restart_phase_delta_sum
+        - acceptance_restart_runtime_ms
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - acceptance_restart_pattern
+        - perturbation_pattern
+        - predicted_direction
+    prompt:
+      hypothesis_guidance: >-
+        State how acceptance, recovery-only handling, restart, or perturbation
+        should convert local movement into phase-best gain.
+      implementation_guidance: >-
+        Return only the declared bounded policy dict. The solver owns objective
+        recomputation, feasibility, phase-best tracking, restarts, and
+        perturbations.
+      anti_patterns: >-
+        Do not change promotion thresholds, bypass objective comparison, import
+        solver internals, read benchmark files, or use instance.customers.
+    target_files:
+      - "policies/acceptance_restart_policy.py"
+    prompt_hint: "Control bounded acceptance/restart/recovery policy inside main search."
+    required_functions:
+      - "acceptance_restart_plan"
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false

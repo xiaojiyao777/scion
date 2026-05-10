@@ -27,11 +27,16 @@ Current interpretation:
   surface, not permission to freely rewrite the original solver. It can choose
   and parameterize declared construction, baseline, improvement,
   acceptance/restart, perturbation, and optional post-baseline components.
-- The higher-ceiling v3 path is to expose deeper problem-owned operator and
-  policy surfaces with contracts and runtime audit, especially route-pair,
-  destroy/repair, ALNS/VNS neighborhoods, adaptive weights, and
-  acceptance/restart logic.
-- Latest smoke evidence still shows zero phase-best movement:
+- The higher-ceiling v3 path is no longer another small
+  `main_search_strategy` knob. The current development slice adds a deep
+  mechanism surface family with contracts, preview checks, and runtime audit:
+  ALNS/VNS policy, destroy/repair policy, route-pair candidate policy, and
+  acceptance/restart policy.
+- APS observation budget for CVRP deep-surface diagnostics now uses the 48k
+  default; the old 24k legacy budget is too tight once all mechanism contracts
+  are visible.
+- Latest campaign smoke evidence still predates that surface family and shows
+  zero phase-best movement:
   `main_search_component_phase_delta_sum`, phase-improvement counts, and
   improvement-loop objective delta stayed zero for every screened candidate
   pair in the latest run.
@@ -95,6 +100,10 @@ CVRP currently exposes these declared surfaces:
 - `neighborhood_portfolio`
 - `algorithm_blueprint`
 - `main_search_strategy`
+- `alns_vns_policy`
+- `destroy_repair_policy`
+- `route_pair_candidate_policy`
+- `acceptance_restart_policy`
 
 `main_search_strategy` is the preferred current diagnostic surface. It is a
 singleton policy in `policies/main_search_strategy.py` and can coordinate:
@@ -107,12 +116,33 @@ singleton policy in `policies/main_search_strategy.py` and can coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: this surface can orchestrate declared components but
-cannot synthesize new deep operators. To raise the ceiling, CVRP should expose
-deeper problem-owned surfaces for route-pair, destroy/repair, ALNS/VNS
-neighborhood schedules, adaptive weights, and acceptance/restart policies.
+Current limitation: `main_search_strategy` can orchestrate declared components
+but should not be treated as the whole research object. The deeper mechanism
+surface family now exposes controlled hooks for ALNS/VNS params, destroy/repair
+selection and repair budgets, route-pair candidate ranking, and
+acceptance/restart/perturbation behavior. Active destroy/repair, route-pair, or
+acceptance/restart mechanism policies can also trigger a package-owned default
+main-search diagnostic plan, so those surfaces can generate runtime evidence
+without simultaneously modifying `main_search_strategy.py`. Next validation
+should be short and diagnostic-focused, proving nonzero mechanism-level behavior
+before long formal CVRP validation.
 
 ## Latest Experiment
+
+Active diagnostic run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-deep-mechanism-surfaces-sonnet-8r-20260510T161028Z
+pid=2468567
+model=claude-sonnet-4-6
+protocol=formal
+rounds=8
+time_limit_sec=15
+agentic_proposal=true
+force_surface=none
+status=running
+analysis_doc=scion/docs/experiments/v0.4/v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md
+```
 
 Latest analyzed run:
 
@@ -205,12 +235,13 @@ P1:
   preview-visible, and actionable before final hypothesis acceptance.
 - Add proposal feedback reason tags for `MAIN_SEARCH_ZERO_PHASE_DELTA` and
   `RECOVERY_ONLY_ACCEPTED_MOVES`.
-- Continue CVRP component/surface work until a short forced diagnostic shows
-  nonzero `main_search_component_phase_delta_sum` and screening-quality
-  movement.
-- Move the next high-ceiling CVRP work from orchestration-only tuning toward
-  declared deeper surfaces for route-pair, destroy/repair, ALNS/VNS
-  neighborhoods, adaptive weights, and acceptance/restart policies.
+- Stop treating isolated orchestration tweaks as the next CVRP efficacy path.
+  Use the deep mechanism surface family (`alns_vns_policy`,
+  `destroy_repair_policy`, `route_pair_candidate_policy`, and
+  `acceptance_restart_policy`) for the next CVRP diagnostics.
+- Continue only short CVRP diagnostics until those surfaces show nonzero
+  phase-best movement or clearly attributed mechanism-level behavior beyond
+  component permutation.
 
 P2:
 
@@ -224,8 +255,9 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `main_search_strategy` may be too shallow to produce meaningful
-  algorithmic gains without deeper declared surfaces.
+- CVRP `main_search_strategy` is too shallow by itself to produce meaningful
+  algorithmic gains; without the deep mechanism surface family, agents mostly
+  permute a fixed algorithm.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.

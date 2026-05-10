@@ -6,7 +6,7 @@ Sources read: CVRP code/config under `scion/scion/problems/cvrp/` excluding raw 
 
 ## Package Role
 
-`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search/construction/portfolio/main-search/algorithm-blueprint policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
+`scion/scion/problems/cvrp/` is a problem package. It owns CVRP semantics: route model, instance loading, solver wrapper, operator interface, search/construction/portfolio/main-search/algorithm-blueprint policy surfaces, controlled deep mechanism policy surfaces, objective recomputation, feasibility/consistency checks, and CVRP-specific final evidence builders.
 
 Framework core should treat this package through `ProblemSpecV1`, `ProblemAdapter`, `Runner`, and objective metric specs.
 
@@ -54,9 +54,11 @@ Solver flow:
 2. Load instance through `CvrpAdapter`.
 3. Load `policies/main_search_strategy.py`,
    `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
-   `policies/baseline_policy.py`, and `policies/construction_policy.py` from
-   the workspace when present, validating returns and recording runtime audit
-   fields.
+   `policies/baseline_policy.py`, `policies/construction_policy.py`,
+   `policies/alns_vns_policy.py`, `policies/destroy_repair_policy.py`,
+   `policies/route_pair_candidate_policy.py`, and
+   `policies/acceptance_restart_policy.py` from the workspace when present,
+   validating returns and recording runtime audit fields.
 4. If `main_search_strategy` returns an enabled valid plan, let it take over
    the whole CVRP main-search lifecycle: construction ensemble, repo-local
    baseline budget and sanitized baseline params, package-owned improvement
@@ -64,6 +66,11 @@ Solver flow:
    perturbation timing, and optional post-baseline registry-operator scheduling.
    Invalid enabled plans record
    `main_search_strategy_errors` and do not take over.
+   If no main-search strategy is active but a deep mechanism policy surface is
+   active (`destroy_repair_policy`, `route_pair_candidate_policy`, or
+   `acceptance_restart_policy`), the solver activates a package-owned default
+   main-search diagnostic plan so the selected mechanism surface can produce
+   runtime evidence without also editing `main_search_strategy.py`.
 5. If no main-search strategy is active and `algorithm_blueprint` returns an
    enabled valid plan, let it coordinate
    bounded construction ensemble, baseline time fraction, package-owned local
@@ -78,6 +85,9 @@ Solver flow:
    - real `.vrp` formal runs can use repo-local `vrp/src` ALNS+VNS baseline when data root env is configured;
    - `baseline_policy` passes sanitized bounded ALNS+VNS kwargs into the
      repo-local baseline;
+   - active `alns_vns_policy` overlays the same sanitized baseline kwargs and
+     records ALNS/VNS component, segment, destroy-ratio, attempt, accepted,
+     runtime, and stop-reason telemetry;
    - active `main_search_strategy` baseline params reuse the same sanitization
      path before passing kwargs into the repo-local baseline, and conservative
      no-op/clamp evidence is recorded as a non-empty JSON-safe runtime object;
@@ -85,7 +95,12 @@ Solver flow:
 8. Run the main-search improvement loop, when active, after baseline and before
    registry operators. The solver owns bounded primitives:
    `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
-   `bounded_destroy_repair`. The main-search loop records selected,
+   `bounded_destroy_repair`. Active `route_pair_candidate_policy`,
+   `destroy_repair_policy`, and `acceptance_restart_policy` refine those owned
+   primitives through bounded candidate ranking, destroy/repair subset and
+   budget choices, recovery-only acceptance, restart triggers, and perturbation
+   timing without allowing generated route-edit code to enter the solver. The
+   main-search loop records selected,
    attempted, accepted, and skipped components, per-component skip reasons,
    best observed distance deltas, recovery-only accepted deltas/counts,
    phase-best deltas/counts, improvement counts, runtime, and destroy/repair
@@ -144,7 +159,10 @@ The solver validates/clamps numeric policy returns and records policy errors as 
 
 The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
 for `search_policy`, `baseline_policy`, `construction_policy`,
-`neighborhood_portfolio`, `main_search_strategy`, and `algorithm_blueprint` explicitly direct generated code to use
+`neighborhood_portfolio`, `main_search_strategy`, `algorithm_blueprint`,
+`alns_vns_policy`, `destroy_repair_policy`,
+`route_pair_candidate_policy`, and `acceptance_restart_policy` explicitly
+direct generated code to use
 `instance.customer_ids`,
 `instance.customer_count`, `instance.demands[customer_id]`,
 `instance.capacity`, and `instance.distance(i, j)`, and to avoid
@@ -201,6 +219,57 @@ components in `improvement.enabled_components`, keep registry operators off
 unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128
 for the next short smoke so selected/attempted/skipped/accepted coverage is
 visible before judging promotion evidence.
+
+`policies/alns_vns_policy.py` is a singleton deep mechanism research surface.
+Required function:
+
+- `alns_vns_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive. A valid enabled plan can select the
+bounded ALNS/VNS component set (`alns`, `vns`), component weights, and the same
+sanitized repo-local baseline parameters accepted by `baseline_policy`. The
+solver overlays those params onto baseline kwargs and records surface load,
+active/error status, normalized plan, components, weights, segment/destroy
+schedules, attempts, accepted flag, phase delta sum, runtime, and stop reason.
+
+`policies/destroy_repair_policy.py` is a singleton deep mechanism research
+surface. Required function:
+
+- `destroy_repair_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive. A valid enabled plan can choose from
+bounded destroy selectors (`worst_removal`, `route_diverse_worst`), repair
+selectors (`regret_2`, `cheapest`), subset strategy
+(`prefix_shifted_route_diverse`, `single_worst`, `route_diverse`),
+`max_destroy_customers`, per-customer repair budget, fallback-to-smaller-subsets
+flag, and phase-best preference. The solver still owns removal and regret
+repair code; policy only controls declared schedule/budget knobs and records
+subset, removed/reinserted, budget, fallback, accepted, skip, delta, and runtime
+telemetry.
+
+`policies/route_pair_candidate_policy.py` is a singleton deep mechanism
+research surface. Required function:
+
+- `route_pair_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive. A valid enabled plan can choose
+route-pair scoring terms (`route_distance`, `removal_saving`, `load_gap`,
+`distance_saving`), move families (`customer_swap`), and candidate limits
+(`pair_cap`, `position_cap`). The solver still owns route-pair swap execution;
+policy only controls bounded ranking and records generated/pruned candidates,
+attempts, accepted counts, skip reasons, phase delta, and runtime.
+
+`policies/acceptance_restart_policy.py` is a singleton deep mechanism research
+surface. Required function:
+
+- `acceptance_restart_plan(instance, time_limit_sec)`
+
+The default checked-in policy is inactive. A valid enabled plan can set
+`min_distance_improvement`, recovery-only policy (`allow`,
+`reject_recovery_only`, `phase_best_preferred`), restart triggers, and
+perturbation schedule/strength/count. This policy affects main-search
+candidate acceptance and perturbation timing only; protocol Decision thresholds
+and objective semantics remain unchanged.
 
 `policies/baseline_policy.py` is a singleton policy research surface. Required
 function:
@@ -270,7 +339,9 @@ invalid enabled plans do not take over the solver lifecycle.
 - operator interface signature: `execute(self, solution, instance, rng) -> CvrpSolution`;
 - research surfaces: `route_local`, `route_pair`, `ruin_recreate`,
   `search_policy`, `baseline_policy`, `construction_policy`,
-  `neighborhood_portfolio`, `algorithm_blueprint`, `main_search_strategy`;
+  `neighborhood_portfolio`, `algorithm_blueprint`, `main_search_strategy`,
+  `alns_vns_policy`, `destroy_repair_policy`,
+  `route_pair_candidate_policy`, and `acceptance_restart_policy`;
 - objective policy: lexicographic;
 - objectives: `fleet_violation` priority 1, `total_distance` priority 2;
 - family taxonomy and aliases;
@@ -309,8 +380,8 @@ These helpers feed final evidence refs and readiness summaries but do not make c
 ## Runtime Audit Fields
 
 CVRP solver runtime output includes baseline, baseline-policy, construction,
-operator, portfolio, policy, main-search-strategy, and algorithm-blueprint
-audit fields.
+operator, portfolio, policy, main-search-strategy, algorithm-blueprint, and
+deep mechanism policy audit fields.
 `runtime/audit.py`
 interprets:
 
@@ -379,5 +450,23 @@ Selected-surface audit fails closed when
 When `main_search_strategy` is the selected surface, `ExperimentProtocol`
 preserves these required `main_search_*` fields through the generic
 selected-surface runtime summary.
+
+The deep mechanism surfaces declare required runtime fields for selected-surface
+auditing:
+
+- `alns_vns_policy`: load/active/error status, normalized plan, components,
+  component weights, segment/destroy schedules, attempts, accepted count, phase
+  delta sum, runtime, and stop reason.
+- `destroy_repair_policy`: load/active/error status, selectors, subset
+  strategy, destroy/repair budgets, subset count, removed/reinserted counts,
+  repair budget/fallback counters, accepted current/recovery/phase-best counts,
+  phase delta, skip reasons, and runtime.
+- `route_pair_candidate_policy`: load/active/error status, scoring terms, move
+  families, candidate limits, generated/pruned candidates, attempts, accepted
+  current/recovery/phase-best counts, phase delta, skip reasons, and runtime.
+- `acceptance_restart_policy`: load/active/error status, normalized plan,
+  acceptance threshold schedule, recovery-only policy, restart triggers/count,
+  perturbation schedule/count, accepted current/recovery/phase-best counts,
+  phase-best refresh count, phase delta, and runtime.
 
 `ExperimentProtocol`, `VerificationGate`, and final evidence builders treat these as failed evidence rather than objective ties.

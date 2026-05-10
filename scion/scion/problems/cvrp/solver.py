@@ -33,6 +33,10 @@ _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
 _ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
 _MAIN_SEARCH_STRATEGY_RELATIVE_PATH = "policies/main_search_strategy.py"
+_ALNS_VNS_POLICY_RELATIVE_PATH = "policies/alns_vns_policy.py"
+_DESTROY_REPAIR_POLICY_RELATIVE_PATH = "policies/destroy_repair_policy.py"
+_ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH = "policies/route_pair_candidate_policy.py"
+_ACCEPTANCE_RESTART_POLICY_RELATIVE_PATH = "policies/acceptance_restart_policy.py"
 _DEFAULT_CONSTRUCTION_MODE = "nearest_neighbor"
 _DEFAULT_CONSTRUCTION_BIAS = 0.0
 _MIN_CONSTRUCTION_BIAS = 0.0
@@ -173,6 +177,42 @@ _DEFAULT_BASELINE_POLICY_PARAMS = {
     "max_destroy_customers": 200,
 }
 _BASELINE_POLICY_ALLOWED_KEYS = frozenset(_DEFAULT_BASELINE_POLICY_PARAMS)
+_ALNS_VNS_ALLOWED_COMPONENTS = frozenset({"alns", "vns"})
+_ROUTE_PAIR_ALLOWED_SCORING_TERMS = frozenset(
+    {
+        "route_distance",
+        "removal_saving",
+        "load_gap",
+        "distance_saving",
+    }
+)
+_ROUTE_PAIR_ALLOWED_MOVE_FAMILIES = frozenset({"customer_swap"})
+_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS = frozenset(
+    {
+        "worst_removal",
+        "route_diverse_worst",
+    }
+)
+_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS = frozenset(
+    {
+        "regret_2",
+        "cheapest",
+    }
+)
+_DESTROY_REPAIR_SUBSET_STRATEGIES = frozenset(
+    {
+        "prefix_shifted_route_diverse",
+        "single_worst",
+        "route_diverse",
+    }
+)
+_ACCEPTANCE_RECOVERY_POLICIES = frozenset(
+    {
+        "allow",
+        "reject_recovery_only",
+        "phase_best_preferred",
+    }
+)
 
 
 def solve(
@@ -267,6 +307,7 @@ def solve_baseline(
     baseline_time_fraction: float = _BASELINE_TIME_FRACTION,
     construction_policy: dict[str, Any] | None = None,
     baseline_policy: dict[str, Any] | None = None,
+    alns_vns_policy: dict[str, Any] | None = None,
     algorithm_blueprint: dict[str, Any] | None = None,
     main_search_strategy: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
@@ -291,6 +332,36 @@ def solve_baseline(
     baseline_policy_params = baseline_policy_audit.get("baseline_policy_params")
     if not isinstance(baseline_policy_params, Mapping):
         baseline_policy_params = dict(_DEFAULT_BASELINE_POLICY_PARAMS)
+    if alns_vns_policy and alns_vns_policy.get("alns_vns_active"):
+        alns_params = alns_vns_policy.get("alns_vns_baseline_params")
+        if isinstance(alns_params, Mapping):
+            baseline_policy_params = {**dict(baseline_policy_params), **dict(alns_params)}
+            baseline_policy_audit["baseline_policy_params"] = dict(baseline_policy_params)
+            baseline_policy_audit["baseline_destroy_ratio"] = list(
+                baseline_policy_params["destroy_ratio"]
+            )
+            baseline_policy_audit["baseline_segment_length"] = baseline_policy_params[
+                "segment_length"
+            ]
+            baseline_policy_audit["baseline_reaction_factor"] = baseline_policy_params[
+                "reaction_factor"
+            ]
+            baseline_policy_audit["baseline_vns_max_no_improve"] = baseline_policy_params[
+                "vns_max_no_improve"
+            ]
+            baseline_policy_audit["baseline_use_vns"] = baseline_policy_params["use_vns"]
+            baseline_policy_audit["baseline_cw_threshold"] = baseline_policy_params[
+                "cw_threshold"
+            ]
+            baseline_policy_audit["baseline_vns_threshold"] = baseline_policy_params[
+                "vns_threshold"
+            ]
+            baseline_policy_audit["baseline_alns_threshold"] = baseline_policy_params[
+                "alns_threshold"
+            ]
+            baseline_policy_audit["baseline_max_destroy_customers"] = baseline_policy_params[
+                "max_destroy_customers"
+            ]
     resolved = Path(instance_path).resolve(strict=False)
     is_vrp = resolved.suffix.lower() == ".vrp"
     baseline_root = _find_vrp_baseline_root()
@@ -321,18 +392,17 @@ def solve_baseline(
                 baseline_required=baseline_required,
                 baseline_policy_params=baseline_policy_params,
             )
+            alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, audit)
             return solution, {
                 **construction_audit,
                 **baseline_policy_audit,
+                **alns_audit,
                 **baseline_fraction_audit,
                 **audit,
             }
         except Exception as exc:
             fallback = construction_solution
-            return fallback, {
-                **construction_audit,
-                **baseline_policy_audit,
-                **baseline_fraction_audit,
+            baseline_error_audit = {
                 "baseline_mode": "scion_nearest_neighbor_fallback",
                 "baseline_required": baseline_required,
                 "baseline_error": f"{type(exc).__name__}: {exc}",
@@ -340,28 +410,49 @@ def solve_baseline(
                 "baseline_routes": len(fallback.routes),
                 "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
             }
+            alns_audit = _finalize_alns_vns_policy_audit(
+                alns_vns_policy,
+                baseline_error_audit,
+            )
+            return fallback, {
+                **construction_audit,
+                **baseline_policy_audit,
+                **alns_audit,
+                **baseline_fraction_audit,
+                **baseline_error_audit,
+            }
     if is_vrp and baseline_required:
         fallback = construction_solution
-        return fallback, {
-            **construction_audit,
-            **baseline_policy_audit,
-            **baseline_fraction_audit,
+        baseline_error_audit = {
             "baseline_mode": "scion_nearest_neighbor_fallback",
             "baseline_required": True,
             "baseline_error": "vrp/src baseline not available for configured CVRP data root",
             "baseline_routes": len(fallback.routes),
             "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
         }
+        alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, baseline_error_audit)
+        return fallback, {
+            **construction_audit,
+            **baseline_policy_audit,
+            **alns_audit,
+            **baseline_fraction_audit,
+            **baseline_error_audit,
+        }
 
     fallback = construction_solution
-    return fallback, {
-        **construction_audit,
-        **baseline_policy_audit,
-        **baseline_fraction_audit,
+    baseline_audit = {
         "baseline_mode": "scion_nearest_neighbor",
         "baseline_required": False,
         "baseline_routes": len(fallback.routes),
         "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
+    }
+    alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, baseline_audit)
+    return fallback, {
+        **construction_audit,
+        **baseline_policy_audit,
+        **alns_audit,
+        **baseline_fraction_audit,
+        **baseline_audit,
     }
 
 
@@ -568,16 +659,43 @@ def _main() -> None:
         instance=instance,
         time_limit_sec=args.time_limit,
     )
-    if _main_search_strategy_active(main_search_strategy):
-        _apply_main_search_strategy_baseline_policy(
-            baseline_policy,
-            main_search_strategy=main_search_strategy,
-        )
+    alns_vns_policy = _load_alns_vns_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
     neighborhood_portfolio = _load_neighborhood_portfolio(
         workspace_root=Path.cwd(),
         instance=instance,
         time_limit_sec=args.time_limit,
     )
+    destroy_repair_policy = _load_destroy_repair_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
+    route_pair_policy = _load_route_pair_candidate_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
+    acceptance_restart_policy = _load_acceptance_restart_policy(
+        workspace_root=Path.cwd(),
+        instance=instance,
+        time_limit_sec=args.time_limit,
+    )
+    _activate_main_search_strategy_for_mechanism_policies(
+        main_search_strategy,
+        instance=instance,
+        destroy_repair_policy=destroy_repair_policy,
+        route_pair_policy=route_pair_policy,
+        acceptance_restart_policy=acceptance_restart_policy,
+    )
+    if _main_search_strategy_active(main_search_strategy):
+        _apply_main_search_strategy_baseline_policy(
+            baseline_policy,
+            main_search_strategy=main_search_strategy,
+        )
     sol, baseline_audit = solve_baseline(
         instance=instance,
         instance_path=instance_path,
@@ -587,6 +705,7 @@ def _main() -> None:
         baseline_time_fraction=search_policy["baseline_time_fraction"],
         construction_policy=construction_policy,
         baseline_policy=baseline_policy,
+        alns_vns_policy=alns_vns_policy,
         algorithm_blueprint=(
             None if _main_search_strategy_active(main_search_strategy) else algorithm_blueprint
         ),
@@ -602,6 +721,9 @@ def _main() -> None:
             time_limit_sec=args.time_limit,
             start_time=start,
             main_search_strategy=main_search_strategy,
+            destroy_repair_policy=destroy_repair_policy,
+            route_pair_policy=route_pair_policy,
+            acceptance_restart_policy=acceptance_restart_policy,
         )
         algorithm_audit = {}
     else:
@@ -639,6 +761,10 @@ def _main() -> None:
         **search_policy,
         **algorithm_blueprint,
         **algorithm_audit,
+        **alns_vns_policy,
+        **destroy_repair_policy,
+        **route_pair_policy,
+        **acceptance_restart_policy,
         **main_search_strategy,
         **main_search_audit,
         **baseline_audit,
@@ -2142,6 +2268,86 @@ def _main_search_strategy_active(main_search_strategy: Mapping[str, Any] | None)
     )
 
 
+def _activate_main_search_strategy_for_mechanism_policies(
+    main_search_strategy: dict[str, Any],
+    *,
+    instance: CvrpInstance,
+    destroy_repair_policy: Mapping[str, Any] | None,
+    route_pair_policy: Mapping[str, Any] | None,
+    acceptance_restart_policy: Mapping[str, Any] | None,
+) -> None:
+    if _main_search_strategy_active(main_search_strategy):
+        return
+    if _as_nonnegative_int(main_search_strategy.get("main_search_strategy_errors")):
+        return
+
+    active_mechanisms: list[str] = []
+    components: list[str] = []
+    if route_pair_policy and route_pair_policy.get("route_pair_active"):
+        active_mechanisms.append("route_pair_candidate_policy")
+        components.append("route_pair_swap")
+    if destroy_repair_policy and destroy_repair_policy.get("destroy_repair_active"):
+        active_mechanisms.append("destroy_repair_policy")
+        components.append("bounded_destroy_repair")
+    if (
+        acceptance_restart_policy
+        and acceptance_restart_policy.get("acceptance_restart_active")
+    ):
+        active_mechanisms.append("acceptance_restart_policy")
+        components.extend(["route_pair_swap", "bounded_destroy_repair"])
+    if not active_mechanisms:
+        return
+
+    components = _schedule_main_search_components(
+        [component for component in dict.fromkeys(components)]
+    )
+    _normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": [_DEFAULT_CONSTRUCTION_MODE],
+                "keep_top_k": 1,
+                "bias": _DEFAULT_CONSTRUCTION_BIAS,
+            },
+            "baseline": {
+                "time_fraction": _MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR,
+                "params": {},
+            },
+            "improvement": {
+                "enabled_components": components,
+                "rounds": 5,
+                "top_k": 64,
+            },
+            "acceptance": {
+                "min_distance_improvement": 0.0,
+            },
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+                "schedule": _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=main_search_strategy,
+    )
+    _record_main_search_event(
+        main_search_strategy,
+        "info",
+        (
+            "default mechanism-surface main search activated for "
+            f"{active_mechanisms}"
+        ),
+    )
+
+
 def _main_search_bool(
     value: Any,
     *,
@@ -3036,12 +3242,28 @@ def improve_with_main_search_strategy(
     time_limit_sec: float,
     start_time: float,
     main_search_strategy: dict[str, Any] | None = None,
+    destroy_repair_policy: dict[str, Any] | None = None,
+    route_pair_policy: dict[str, Any] | None = None,
+    acceptance_restart_policy: dict[str, Any] | None = None,
 ) -> tuple[CvrpSolution, dict[str, Any]]:
     if not _main_search_strategy_active(main_search_strategy):
         return solution, {}
 
     assert main_search_strategy is not None
     audit = dict(main_search_strategy)
+    if destroy_repair_policy:
+        audit.update(destroy_repair_policy)
+    if route_pair_policy:
+        audit.update(route_pair_policy)
+    if acceptance_restart_policy:
+        audit.update(acceptance_restart_policy)
+    _apply_acceptance_restart_policy_to_main_search(audit)
+    if _main_search_mechanism_policy_error_count(audit):
+        audit["main_search_strategy_errors"] = _as_nonnegative_int(
+            audit.get("main_search_strategy_errors")
+        ) + _main_search_mechanism_policy_error_count(audit)
+        audit["main_search_stop_reason"] = "invalid_mechanism_policy"
+        return solution, audit
     _append_main_search_phase(audit, "baseline")
     audit.setdefault("main_search_phase_runtime_ms", {}).setdefault("baseline", 0)
 
@@ -3189,6 +3411,7 @@ def improve_with_main_search_strategy(
                             ),
                         )
                     ),
+                    mechanism_policies=audit,
                 )
                 _record_main_search_component_attempts(audit, component, attempts)
                 _record_main_search_component_repair_counts(
@@ -3248,11 +3471,25 @@ def improve_with_main_search_strategy(
                     round_phase_improved += 1
                     if component == "route_pair_swap":
                         round_route_pair_phase_improved = True
+                    _record_mechanism_acceptance(
+                        audit,
+                        component,
+                        phase_delta=phase_best_delta,
+                        recovery_delta=0.0,
+                        phase_best=True,
+                    )
                 else:
                     _record_main_search_component_recovery(
                         audit,
                         component,
                         candidate_delta,
+                    )
+                    _record_mechanism_acceptance(
+                        audit,
+                        component,
+                        phase_delta=0.0,
+                        recovery_delta=candidate_delta,
+                        phase_best=False,
                     )
             if stop_reason in {
                 "time_limit",
@@ -3329,7 +3566,135 @@ def improve_with_main_search_strategy(
         phase_delta=phase_delta,
         audit=audit,
     )
+    audit["restart_count"] = audit.get("main_search_restart_count", 0)
+    audit["perturbation_count"] = audit.get("main_search_perturbation_count", 0)
+    audit["acceptance_restart_phase_delta_sum"] = phase_delta
+    audit["acceptance_restart_runtime_ms"] = audit.get("main_search_elapsed_ms", 0)
     return best_solution, audit
+
+
+def _main_search_mechanism_policy_error_count(audit: Mapping[str, Any]) -> int:
+    return sum(
+        _as_nonnegative_int(audit.get(field))
+        for field in (
+            "destroy_repair_errors",
+            "route_pair_errors",
+            "acceptance_restart_errors",
+        )
+    )
+
+
+def _apply_acceptance_restart_policy_to_main_search(audit: dict[str, Any]) -> None:
+    if not bool(audit.get("acceptance_restart_active")):
+        return
+    plan = audit.get("acceptance_restart_plan")
+    if not isinstance(plan, Mapping):
+        return
+    threshold = float(plan.get("min_distance_improvement", 0.0))
+    audit["main_search_acceptance_min_distance_improvement"] = threshold
+    components = list(audit.get("main_search_components") or [])
+    audit["main_search_component_min_distance_improvement"] = {
+        component: _main_search_component_min_distance_improvement(component, threshold)
+        for component in components
+    }
+    restart = plan.get("restart")
+    if isinstance(restart, Mapping):
+        audit["main_search_restart_enabled"] = bool(restart.get("enabled", False))
+        audit["main_search_restart_stagnation_rounds"] = _as_nonnegative_int(
+            restart.get("stagnation_rounds")
+        )
+        main_plan = audit.get("main_search_plan")
+        if isinstance(main_plan, dict) and isinstance(main_plan.get("restart"), dict):
+            main_plan["restart"].update(
+                {
+                    "enabled": audit["main_search_restart_enabled"],
+                    "stagnation_rounds": audit[
+                        "main_search_restart_stagnation_rounds"
+                    ],
+                    "max_restarts": _as_nonnegative_int(restart.get("max_restarts")),
+                }
+            )
+    perturbation = plan.get("perturbation")
+    if isinstance(perturbation, Mapping):
+        audit["main_search_perturbation_enabled"] = bool(
+            perturbation.get("enabled", False)
+        )
+        audit["main_search_perturbation_schedule"] = str(
+            perturbation.get("schedule", _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE)
+        )
+        audit["main_search_perturbation_strength"] = _as_nonnegative_int(
+            perturbation.get("strength")
+        ) or 1
+        main_plan = audit.get("main_search_plan")
+        if isinstance(main_plan, dict) and isinstance(main_plan.get("perturbation"), dict):
+            main_plan["perturbation"].update(
+                {
+                    "enabled": audit["main_search_perturbation_enabled"],
+                    "schedule": audit["main_search_perturbation_schedule"],
+                    "strength": audit["main_search_perturbation_strength"],
+                    "max_perturbations": _as_nonnegative_int(
+                        perturbation.get("max_perturbations")
+                    ),
+                }
+            )
+
+
+def _record_mechanism_acceptance(
+    audit: dict[str, Any],
+    component: str,
+    *,
+    phase_delta: float,
+    recovery_delta: float,
+    phase_best: bool,
+) -> None:
+    audit["accepted_current_count"] = _as_nonnegative_int(
+        audit.get("accepted_current_count")
+    ) + 1
+    if phase_best:
+        audit["accepted_phase_best_count"] = _as_nonnegative_int(
+            audit.get("accepted_phase_best_count")
+        ) + 1
+        audit["phase_best_refresh_count"] = _as_nonnegative_int(
+            audit.get("phase_best_refresh_count")
+        ) + 1
+        audit["acceptance_restart_phase_delta_sum"] = float(
+            audit.get("acceptance_restart_phase_delta_sum", 0.0)
+        ) + float(phase_delta)
+    else:
+        audit["accepted_recovery_only_count"] = _as_nonnegative_int(
+            audit.get("accepted_recovery_only_count")
+        ) + 1
+    if component == "route_pair_swap":
+        if phase_best:
+            audit["route_pair_accepted_phase_best"] = _as_nonnegative_int(
+                audit.get("route_pair_accepted_phase_best")
+            ) + 1
+            audit["route_pair_phase_delta_sum"] = float(
+                audit.get("route_pair_phase_delta_sum", 0.0)
+            ) + float(phase_delta)
+        else:
+            audit["route_pair_accepted_recovery_only"] = _as_nonnegative_int(
+                audit.get("route_pair_accepted_recovery_only")
+            ) + 1
+        audit["route_pair_accepted_current"] = _as_nonnegative_int(
+            audit.get("route_pair_accepted_current")
+        ) + 1
+    if component == "bounded_destroy_repair":
+        if phase_best:
+            audit["destroy_repair_accepted_phase_best"] = _as_nonnegative_int(
+                audit.get("destroy_repair_accepted_phase_best")
+            ) + 1
+            audit["destroy_repair_phase_delta_sum"] = float(
+                audit.get("destroy_repair_phase_delta_sum", 0.0)
+            ) + float(phase_delta)
+        else:
+            audit["destroy_repair_accepted_recovery_only"] = _as_nonnegative_int(
+                audit.get("destroy_repair_accepted_recovery_only")
+            ) + 1
+        audit["destroy_repair_accepted_current"] = _as_nonnegative_int(
+            audit.get("destroy_repair_accepted_current")
+        ) + 1
+    del recovery_delta
 
 
 def _try_main_search_perturbation(
@@ -3406,6 +3771,7 @@ def _main_search_component_candidate(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
+    mechanism_policies: Mapping[str, Any] | None = None,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     if component == "intra_route_2opt":
         candidate, attempts = _best_intra_route_2opt(
@@ -3426,14 +3792,45 @@ def _main_search_component_candidate(
         )
         return candidate, attempts, {}
     if component == "route_pair_swap":
+        previous_generated = 0
+        previous_pruned = 0
+        if isinstance(mechanism_policies, Mapping):
+            previous_generated = _as_nonnegative_int(
+                mechanism_policies.get("route_pair_candidates_generated")
+            )
+            previous_pruned = _as_nonnegative_int(
+                mechanism_policies.get("route_pair_candidates_pruned")
+            )
         candidate, attempts = _best_route_pair_swap(
             solution,
             instance,
             adapter=adapter,
             current_objective=current_objective,
             top_k=top_k,
+            route_pair_policy=mechanism_policies,
         )
-        return candidate, attempts, {}
+        telemetry = {}
+        if isinstance(mechanism_policies, Mapping):
+            current_generated = _as_nonnegative_int(
+                mechanism_policies.get("route_pair_candidates_generated")
+            )
+            current_pruned = _as_nonnegative_int(
+                mechanism_policies.get("route_pair_candidates_pruned")
+            )
+            if isinstance(mechanism_policies, dict):
+                mechanism_policies["route_pair_candidates_generated"] = previous_generated
+                mechanism_policies["route_pair_candidates_pruned"] = previous_pruned
+            telemetry = {
+                "route_pair_candidates_generated": max(
+                    0,
+                    current_generated - previous_generated,
+                ),
+                "route_pair_candidates_pruned": max(
+                    0,
+                    current_pruned - previous_pruned,
+                ),
+            }
+        return candidate, attempts, telemetry
     if component == "bounded_destroy_repair":
         return _best_bounded_destroy_repair(
             solution,
@@ -3441,6 +3838,7 @@ def _main_search_component_candidate(
             adapter=adapter,
             current_objective=current_objective,
             top_k=top_k,
+            destroy_repair_policy=mechanism_policies,
         )
     return None, 0, {"skip_reason": "unknown_component"}
 
@@ -3456,6 +3854,7 @@ def _main_search_component_candidate_choice(
     best_objective: Mapping[str, int | float],
     top_k: int,
     min_distance_improvement: float,
+    mechanism_policies: Mapping[str, Any] | None = None,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any], dict[str, Any]]:
     """Choose a component move, preferring phase-best improvements over recovery."""
     total_attempts = 0
@@ -3477,6 +3876,7 @@ def _main_search_component_candidate_choice(
             adapter=adapter,
             current_objective=source_objective,
             top_k=top_k,
+            mechanism_policies=mechanism_policies,
         )
         total_attempts += attempts
         combined_telemetry = _merge_main_search_component_telemetry(
@@ -3500,6 +3900,12 @@ def _main_search_component_candidate_choice(
             best_objective,
             min_distance_improvement=min_distance_improvement,
         )
+        recovery_policy = ""
+        if isinstance(mechanism_policies, Mapping):
+            recovery_policy = str(mechanism_policies.get("recovery_only_policy") or "")
+        if recovery_policy == "reject_recovery_only" and not improves_phase:
+            combined_telemetry["skip_reason"] = "recovery_only_rejected"
+            continue
         if not (improves_current or improves_phase):
             continue
         options.append(
@@ -3544,7 +3950,14 @@ def _merge_main_search_component_telemetry(
     right: Mapping[str, Any],
 ) -> dict[str, Any]:
     combined = dict(left)
-    for key in ("removed_count", "reinserted_count", "repair_fallback_count"):
+    for key in (
+        "removed_count",
+        "reinserted_count",
+        "repair_fallback_count",
+        "destroy_subset_count",
+        "route_pair_candidates_generated",
+        "route_pair_candidates_pruned",
+    ):
         combined[key] = _as_nonnegative_int(combined.get(key)) + _as_nonnegative_int(
             right.get(key) if isinstance(right, Mapping) else 0
         )
@@ -3743,9 +4156,15 @@ def _best_route_pair_swap(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
+    route_pair_policy: Mapping[str, Any] | None = None,
 ) -> tuple[CvrpSolution | None, int]:
     routes = [list(route) for route in solution.routes]
-    ranked_swaps = _rank_route_pair_swap_candidates(routes, instance, top_k=top_k)
+    ranked_swaps = _rank_route_pair_swap_candidates(
+        routes,
+        instance,
+        top_k=top_k,
+        route_pair_policy=route_pair_policy,
+    )
     best_solution: CvrpSolution | None = None
     best_objective: Mapping[str, int | float] = current_objective
     attempts = 0
@@ -3787,6 +4206,7 @@ def _best_bounded_destroy_repair(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     routes = [list(route) for route in solution.routes]
     telemetry = {
@@ -3800,7 +4220,11 @@ def _best_bounded_destroy_repair(
         telemetry["skip_reason"] = "insufficient_destroy_budget"
         return None, 0, telemetry
 
-    destroy_count = _bounded_destroy_count(customer_count, top_k)
+    destroy_count = _bounded_destroy_count(
+        customer_count,
+        top_k,
+        destroy_repair_policy=destroy_repair_policy,
+    )
     removable = _rank_worst_removal_customers(routes, instance)
     if len(removable) < destroy_count:
         telemetry["skip_reason"] = "insufficient_removal_candidates"
@@ -3813,7 +4237,13 @@ def _best_bounded_destroy_repair(
     best_reinserted = 0
     last_reason = ""
 
-    for selected in _bounded_destroy_repair_subsets(removable, destroy_count):
+    subsets = _bounded_destroy_repair_subsets(
+        removable,
+        destroy_count,
+        destroy_repair_policy=destroy_repair_policy,
+    )
+    telemetry["destroy_subset_count"] = len(subsets)
+    for selected in subsets:
         remaining_budget = top_k - total_attempts
         if remaining_budget <= 0:
             if not last_reason:
@@ -3835,6 +4265,7 @@ def _best_bounded_destroy_repair(
                 removed_customers,
                 instance,
                 top_k=remaining_budget,
+                destroy_repair_policy=destroy_repair_policy,
             )
         )
         total_attempts += attempts
@@ -3883,11 +4314,28 @@ def _rank_route_pair_swap_candidates(
     instance: CvrpInstance,
     *,
     top_k: int,
+    route_pair_policy: Mapping[str, Any] | None = None,
 ) -> list[tuple[float, int, int, int, int]]:
     if len(routes) < 2 or top_k <= 0:
         return []
 
+    active_policy = bool(
+        route_pair_policy and route_pair_policy.get("route_pair_active")
+    )
+    scoring_terms = (
+        list(route_pair_policy.get("route_pair_scoring_terms", []))
+        if active_policy and isinstance(route_pair_policy, Mapping)
+        else ["route_distance", "removal_saving", "distance_saving"]
+    )
+    limits = (
+        route_pair_policy.get("route_pair_candidate_limits", {})
+        if active_policy and isinstance(route_pair_policy, Mapping)
+        else {}
+    )
+    if not isinstance(limits, Mapping):
+        limits = {}
     route_distances = [instance.route_distance(tuple(route)) for route in routes]
+    route_loads = [instance.route_load(tuple(route)) for route in routes]
     route_worst_savings = [
         max(
             (_route_removal_saving(route, pos, instance) for pos in range(len(route))),
@@ -3902,19 +4350,27 @@ def _rank_route_pair_swap_candidates(
         for right_index in range(left_index + 1, len(routes)):
             if not routes[right_index]:
                 continue
-            score = (
-                route_distances[left_index]
-                + route_distances[right_index]
-                + route_worst_savings[left_index]
-                + route_worst_savings[right_index]
-            )
+            score = 0.0
+            if "route_distance" in scoring_terms:
+                score += route_distances[left_index] + route_distances[right_index]
+            if "removal_saving" in scoring_terms:
+                score += route_worst_savings[left_index] + route_worst_savings[right_index]
+            if "load_gap" in scoring_terms:
+                score += abs(route_loads[left_index] - route_loads[right_index])
             route_pairs.append((float(score), left_index, right_index))
     route_pairs.sort(key=lambda item: (-item[0], item[1], item[2]))
 
-    pair_cap = max(1, min(len(route_pairs), max(8, top_k * 2)))
-    position_cap = max(2, min(8, top_k + 1))
+    requested_pair_cap = _as_nonnegative_int(limits.get("pair_cap")) if limits else 0
+    requested_position_cap = (
+        _as_nonnegative_int(limits.get("position_cap")) if limits else 0
+    )
+    pair_cap = requested_pair_cap or max(1, min(len(route_pairs), max(8, top_k * 2)))
+    pair_cap = max(1, min(len(route_pairs), pair_cap))
+    position_cap = requested_position_cap or max(2, min(8, top_k + 1))
+    position_cap = max(1, min(32, position_cap))
     ranked: list[tuple[float, int, int, int, int]] = []
     seen: set[tuple[int, int, int, int]] = set()
+    pruned = 0
     for _score, left_index, right_index in route_pairs[:pair_cap]:
         left_route = routes[left_index]
         right_route = routes[right_index]
@@ -3937,16 +4393,33 @@ def _rank_route_pair_swap_candidates(
                     instance.route_load(tuple(candidate_left)) > instance.capacity
                     or instance.route_load(tuple(candidate_right)) > instance.capacity
                 ):
+                    pruned += 1
                     estimated_delta = float("-inf")
                 else:
-                    after_distance = instance.route_distance(
-                        tuple(candidate_left)
-                    ) + instance.route_distance(tuple(candidate_right))
-                    estimated_delta = float(before_distance - after_distance)
+                    estimated_delta = 0.0
+                    if "distance_saving" in scoring_terms:
+                        after_distance = instance.route_distance(
+                            tuple(candidate_left)
+                        ) + instance.route_distance(tuple(candidate_right))
+                        estimated_delta += float(before_distance - after_distance)
+                    if "removal_saving" in scoring_terms:
+                        estimated_delta += (
+                            _route_removal_saving(left_route, left_pos, instance)
+                            + _route_removal_saving(right_route, right_pos, instance)
+                        )
                 ranked.append(
                     (estimated_delta, left_index, right_index, left_pos, right_pos)
                 )
     ranked.sort(key=lambda item: (-item[0], item[1], item[2], item[3], item[4]))
+    if active_policy and isinstance(route_pair_policy, dict):
+        route_pair_policy["route_pair_candidates_generated"] = (
+            _as_nonnegative_int(route_pair_policy.get("route_pair_candidates_generated"))
+            + len(ranked)
+        )
+        route_pair_policy["route_pair_candidates_pruned"] = (
+            _as_nonnegative_int(route_pair_policy.get("route_pair_candidates_pruned"))
+            + pruned
+        )
     return ranked[: max(0, top_k)]
 
 
@@ -3990,10 +4463,20 @@ def _rank_worst_removal_customers(
 def _bounded_destroy_repair_subsets(
     removable: list[tuple[float, int, int, int]],
     destroy_count: int,
+    *,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
 ) -> list[list[tuple[float, int, int, int]]]:
     max_count = min(len(removable), destroy_count)
     if max_count <= 0:
         return []
+    active_policy = bool(
+        destroy_repair_policy and destroy_repair_policy.get("destroy_repair_active")
+    )
+    strategy = (
+        str(destroy_repair_policy.get("destroy_subset_strategy"))
+        if active_policy and isinstance(destroy_repair_policy, Mapping)
+        else "prefix_shifted_route_diverse"
+    )
     sizes = [max_count]
     for size in (4, 3, 2, 1):
         if 0 < size < max_count and size not in sizes:
@@ -4013,6 +4496,8 @@ def _bounded_destroy_repair_subsets(
 
     for size in sizes:
         add_subset(removable[:size])
+        if strategy == "single_worst":
+            continue
         if len(removable) > size:
             add_subset(removable[1 : 1 + size])
         if len(removable) > size * 2:
@@ -4028,7 +4513,8 @@ def _bounded_destroy_repair_subsets(
             used_routes.add(route_index)
             if len(route_diverse) >= size:
                 break
-        add_subset(route_diverse)
+        if strategy in {"prefix_shifted_route_diverse", "route_diverse"}:
+            add_subset(route_diverse)
 
     return subsets[:8]
 
@@ -4069,10 +4555,20 @@ def _route_removal_saving(
     )
 
 
-def _bounded_destroy_count(customer_count: int, top_k: int) -> int:
+def _bounded_destroy_count(
+    customer_count: int,
+    top_k: int,
+    *,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
+) -> int:
     if customer_count <= 1:
         return customer_count
     budget_count = max(2, min(6, max(2, top_k // 4)))
+    if destroy_repair_policy and destroy_repair_policy.get("destroy_repair_active"):
+        budget_count = min(
+            budget_count,
+            _as_nonnegative_int(destroy_repair_policy.get("destroy_max_customers")) or budget_count,
+        )
     return min(max(2, customer_count - 1), budget_count)
 
 
@@ -4082,6 +4578,7 @@ def _repair_destroyed_customers_with_regret2(
     instance: CvrpInstance,
     *,
     top_k: int,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
 ) -> tuple[list[list[int]], int, int, str]:
     routes = [list(route) for route in base_routes]
     pending = list(removed_customers)
@@ -4094,6 +4591,7 @@ def _repair_destroyed_customers_with_regret2(
         per_customer_budget = _repair_candidate_budget_per_customer(
             remaining_budget,
             len(pending),
+            destroy_repair_policy=destroy_repair_policy,
         )
         ranked_customers: list[
             tuple[float, float, int, _RepairInsertion, list[_RepairInsertion]]
@@ -4134,10 +4632,19 @@ def _repair_destroyed_customers_with_regret2(
 def _repair_candidate_budget_per_customer(
     remaining_budget: int,
     pending_count: int,
+    *,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
 ) -> int:
     if remaining_budget <= 0 or pending_count <= 0:
         return 0
-    return max(1, min(4, remaining_budget // pending_count))
+    default_budget = max(1, min(4, remaining_budget // pending_count))
+    if destroy_repair_policy and destroy_repair_policy.get("destroy_repair_active"):
+        requested = _as_nonnegative_int(
+            destroy_repair_policy.get("repair_budget_per_customer")
+        )
+        if requested:
+            return max(1, min(requested, remaining_budget))
+    return default_budget
 
 
 class _RepairInsertion:
@@ -4273,6 +4780,17 @@ def _record_main_search_component_attempts(
     component_attempts[component] = (
         _as_nonnegative_int(component_attempts.get(component)) + attempts
     )
+    if component == "route_pair_swap":
+        audit["route_pair_attempts"] = _as_nonnegative_int(
+            audit.get("route_pair_attempts")
+        ) + attempts
+    if component == "bounded_destroy_repair":
+        audit["destroy_repair_attempts"] = _as_nonnegative_int(
+            audit.get("destroy_repair_attempts")
+        ) + attempts
+        audit["repair_budget_used"] = _as_nonnegative_int(
+            audit.get("repair_budget_used")
+        ) + attempts
 
 
 def _record_main_search_component_attempted(
@@ -4516,6 +5034,22 @@ def _record_main_search_component_skip(
     component_reasons[normalized_reason] = (
         _as_nonnegative_int(component_reasons.get(normalized_reason)) + 1
     )
+    if component == "route_pair_swap":
+        route_pair_reasons = audit.setdefault("route_pair_skip_reasons", {})
+        if route_pair_reasons == {"none": 0}:
+            route_pair_reasons = {}
+            audit["route_pair_skip_reasons"] = route_pair_reasons
+        route_pair_reasons[normalized_reason] = (
+            _as_nonnegative_int(route_pair_reasons.get(normalized_reason)) + 1
+        )
+    if component == "bounded_destroy_repair":
+        destroy_repair_reasons = audit.setdefault("destroy_repair_skip_reasons", {})
+        if destroy_repair_reasons == {"none": 0}:
+            destroy_repair_reasons = {}
+            audit["destroy_repair_skip_reasons"] = destroy_repair_reasons
+        destroy_repair_reasons[normalized_reason] = (
+            _as_nonnegative_int(destroy_repair_reasons.get(normalized_reason)) + 1
+        )
 
 
 def _main_search_skip_reason(
@@ -4578,6 +5112,27 @@ def _record_main_search_component_repair_counts(
         fallback_counts[component] = (
             _as_nonnegative_int(fallback_counts.get(component)) + fallback
         )
+    if component == "bounded_destroy_repair":
+        audit["removed_customers"] = _as_nonnegative_int(
+            audit.get("removed_customers")
+        ) + removed
+        audit["reinserted_customers"] = _as_nonnegative_int(
+            audit.get("reinserted_customers")
+        ) + reinserted
+        audit["repair_fallback_counts"] = _as_nonnegative_int(
+            audit.get("repair_fallback_counts")
+        ) + fallback
+        subset_count = _as_nonnegative_int(telemetry.get("destroy_subset_count"))
+        audit["destroy_subset_count"] = _as_nonnegative_int(
+            audit.get("destroy_subset_count")
+        ) + subset_count
+    if component == "route_pair_swap":
+        audit["route_pair_candidates_generated"] = _as_nonnegative_int(
+            audit.get("route_pair_candidates_generated")
+        ) + _as_nonnegative_int(telemetry.get("route_pair_candidates_generated"))
+        audit["route_pair_candidates_pruned"] = _as_nonnegative_int(
+            audit.get("route_pair_candidates_pruned")
+        ) + _as_nonnegative_int(telemetry.get("route_pair_candidates_pruned"))
 
 
 def _record_main_search_component_runtime(
@@ -4585,10 +5140,19 @@ def _record_main_search_component_runtime(
     component: str,
     start_ns: int,
 ) -> None:
+    elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
     runtime = audit.setdefault("main_search_component_runtime_ms", {})
     runtime[component] = _as_nonnegative_int(runtime.get(component)) + int(
-        (time.monotonic_ns() - start_ns) / 1_000_000
+        elapsed_ms
     )
+    if component == "route_pair_swap":
+        audit["route_pair_runtime_ms"] = _as_nonnegative_int(
+            audit.get("route_pair_runtime_ms")
+        ) + elapsed_ms
+    if component == "bounded_destroy_repair":
+        audit["destroy_repair_runtime_ms"] = _as_nonnegative_int(
+            audit.get("destroy_repair_runtime_ms")
+        ) + elapsed_ms
 
 
 def _append_main_search_phase(audit: dict[str, Any], phase: str) -> None:
@@ -4656,6 +5220,865 @@ def _objective_distance_delta(
         )
     return float(before.get("total_distance", 0.0)) - float(
         after.get("total_distance", 0.0)
+    )
+
+
+def _record_mechanism_event(
+    audit: dict[str, Any],
+    *,
+    event_key: str,
+    policy_path: str,
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault(event_key, [])
+    if len(events) >= 10:
+        return
+    events.append({"policy": policy_path, "status": status, "detail": detail})
+
+
+def _mechanism_bool(
+    value: Any,
+    *,
+    default: bool,
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    audit[error_key] += 1
+    event_recorder(audit, "error", f"{field_name} returned non-bool value {value!r}")
+    return default
+
+
+def _mechanism_int(
+    value: Any,
+    *,
+    minimum: int,
+    maximum: int,
+    default: int,
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} returned non-integer value {value!r}")
+        return default
+    clamped = min(max(value, minimum), maximum)
+    if clamped != value:
+        audit[error_key] += 1
+        event_recorder(
+            audit,
+            "error",
+            f"{field_name}={value!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _mechanism_float(
+    value: Any,
+    *,
+    minimum: float,
+    maximum: float,
+    default: float,
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} returned non-numeric value {value!r}")
+        return default
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} returned non-finite value {value!r}")
+        return default
+    clamped = min(max(numeric, minimum), maximum)
+    if clamped != numeric:
+        audit[error_key] += 1
+        event_recorder(
+            audit,
+            "error",
+            f"{field_name}={numeric!r} outside [{minimum}, {maximum}], clamped",
+        )
+    return clamped
+
+
+def _mechanism_choice(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: str,
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> str:
+    text = str(value).strip() if value is not None else ""
+    if text in allowed:
+        return text
+    audit[error_key] += 1
+    event_recorder(audit, "error", f"{field_name} contains unknown value {text!r}")
+    return default
+
+
+def _mechanism_string_sequence(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: list[str],
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> list[str]:
+    if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)):
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} returned non-sequence value {value!r}")
+        return list(default)
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = str(item).strip()
+        if text not in allowed:
+            audit[error_key] += 1
+            event_recorder(audit, "error", f"{field_name} contains unknown value {text!r}")
+            continue
+        if text not in seen:
+            seen.add(text)
+            result.append(text)
+    if not result:
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} produced no valid values")
+        return list(default)
+    return result
+
+
+def _mechanism_weight_mapping(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    default: dict[str, float],
+    field_name: str,
+    error_key: str,
+    event_recorder: Any,
+    audit: dict[str, Any],
+) -> dict[str, float]:
+    result = dict(default)
+    if not isinstance(value, Mapping):
+        audit[error_key] += 1
+        event_recorder(audit, "error", f"{field_name} returned non-mapping value {value!r}")
+        return result
+    for raw_key, raw_weight in value.items():
+        key = str(raw_key).strip()
+        if key not in allowed:
+            audit[error_key] += 1
+            event_recorder(audit, "error", f"{field_name} contains unknown key {key!r}")
+            continue
+        result[key] = _mechanism_float(
+            raw_weight,
+            minimum=0.0,
+            maximum=5.0,
+            default=result.get(key, 1.0),
+            field_name=f"{field_name}[{key}]",
+            error_key=error_key,
+            event_recorder=event_recorder,
+            audit=audit,
+        )
+    return result
+
+
+def _load_alns_vns_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _alns_vns_policy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _ALNS_VNS_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_alns_vns_event(audit, "error", "ALNS/VNS policy path escapes workspace")
+        audit["alns_vns_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["alns_vns_errors"] += 1
+        _record_alns_vns_event(audit, "error", f"ALNS/VNS policy load failed: {exc}")
+        return audit
+    audit["alns_vns_surface_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(module, "alns_vns_plan", instance, time_limit_sec)
+    except Exception as exc:
+        audit["alns_vns_errors"] += 1
+        _record_alns_vns_event(audit, "error", f"alns_vns_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["alns_vns_errors"] += 1
+        _record_alns_vns_event(
+            audit,
+            "error",
+            f"alns_vns_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+    _normalize_alns_vns_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _alns_vns_policy_defaults() -> dict[str, Any]:
+    return {
+        "alns_vns_policy_path": _ALNS_VNS_POLICY_RELATIVE_PATH,
+        "alns_vns_surface_loaded": False,
+        "alns_vns_active": False,
+        "alns_vns_errors": 0,
+        "alns_vns_events": [],
+        "alns_vns_plan": {"enabled": False, "params": {}},
+        "alns_vns_components": ["alns", "vns"],
+        "alns_vns_component_weights": {"alns": 1.0, "vns": 1.0},
+        "alns_vns_segment_schedule": {
+            "segment_length": _DEFAULT_BASELINE_POLICY_PARAMS["segment_length"],
+        },
+        "alns_vns_destroy_schedule": {
+            "destroy_ratio": list(_DEFAULT_BASELINE_POLICY_PARAMS["destroy_ratio"]),
+        },
+        "alns_vns_baseline_params": {},
+        "alns_vns_attempts": 0,
+        "alns_vns_accepted": 0,
+        "alns_vns_phase_delta_sum": 0.0,
+        "alns_vns_runtime_ms": 0,
+        "alns_vns_stop_reason": "inactive",
+    }
+
+
+def _normalize_alns_vns_plan(plan: dict[str, Any], *, audit: dict[str, Any]) -> None:
+    enabled = _mechanism_bool(
+        plan.get("enabled", False),
+        default=False,
+        field_name="alns_vns.enabled",
+        error_key="alns_vns_errors",
+        event_recorder=_record_alns_vns_event,
+        audit=audit,
+    )
+    params = plan.get("params", {})
+    if not isinstance(params, Mapping):
+        audit["alns_vns_errors"] += 1
+        _record_alns_vns_event(audit, "error", f"params returned non-mapping value {params!r}")
+        params = {}
+    baseline_audit = _baseline_policy_defaults()
+    _normalize_baseline_policy_params(dict(params), audit=baseline_audit)
+    for event in baseline_audit.get("baseline_policy_events", []):
+        if isinstance(event, Mapping) and event.get("detail"):
+            _record_alns_vns_event(audit, "error", f"params invalid: {event['detail']}")
+    audit["alns_vns_errors"] += _as_nonnegative_int(
+        baseline_audit.get("baseline_policy_errors")
+    )
+    normalized_params = dict(baseline_audit.get("baseline_policy_params") or {})
+    components = _mechanism_string_sequence(
+        plan.get("components", ["alns", "vns"]),
+        allowed=_ALNS_VNS_ALLOWED_COMPONENTS,
+        default=["alns", "vns"],
+        field_name="alns_vns.components",
+        error_key="alns_vns_errors",
+        event_recorder=_record_alns_vns_event,
+        audit=audit,
+    )
+    weights = _mechanism_weight_mapping(
+        plan.get("component_weights", {"alns": 1.0, "vns": 1.0}),
+        allowed=_ALNS_VNS_ALLOWED_COMPONENTS,
+        default={"alns": 1.0, "vns": 1.0},
+        field_name="alns_vns.component_weights",
+        error_key="alns_vns_errors",
+        event_recorder=_record_alns_vns_event,
+        audit=audit,
+    )
+    active = enabled and _as_nonnegative_int(audit.get("alns_vns_errors")) == 0
+    audit["alns_vns_active"] = active
+    audit["alns_vns_plan"] = {
+        "enabled": active,
+        "components": components,
+        "component_weights": weights,
+        "params": normalized_params,
+    }
+    audit["alns_vns_components"] = components
+    audit["alns_vns_component_weights"] = weights
+    audit["alns_vns_segment_schedule"] = {
+        "segment_length": int(normalized_params["segment_length"])
+    }
+    audit["alns_vns_destroy_schedule"] = {
+        "destroy_ratio": list(normalized_params["destroy_ratio"])
+    }
+    audit["alns_vns_baseline_params"] = normalized_params if active else {}
+    audit["alns_vns_stop_reason"] = "policy_loaded" if active else "inactive"
+
+
+def _finalize_alns_vns_policy_audit(
+    alns_vns_policy: Mapping[str, Any] | None,
+    baseline_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    audit = dict(alns_vns_policy or _alns_vns_policy_defaults())
+    if not bool(audit.get("alns_vns_active")):
+        return audit
+    mode = str(baseline_audit.get("baseline_mode") or "")
+    elapsed = baseline_audit.get("baseline_elapsed_s")
+    if isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool):
+        audit["alns_vns_runtime_ms"] = int(max(0.0, float(elapsed)) * 1000)
+    audit["alns_vns_attempts"] = _as_nonnegative_int(
+        baseline_audit.get("baseline_iterations")
+    )
+    audit["alns_vns_accepted"] = 1 if mode == "vrp_alns_vns" else 0
+    audit["alns_vns_stop_reason"] = mode or "baseline_not_run"
+    return audit
+
+
+def _record_alns_vns_event(audit: dict[str, Any], status: str, detail: str) -> None:
+    _record_mechanism_event(
+        audit,
+        event_key="alns_vns_events",
+        policy_path=_ALNS_VNS_POLICY_RELATIVE_PATH,
+        status=status,
+        detail=detail,
+    )
+
+
+def _load_destroy_repair_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _destroy_repair_policy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _DESTROY_REPAIR_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_destroy_repair_event(audit, "error", "destroy/repair policy path escapes workspace")
+        audit["destroy_repair_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["destroy_repair_errors"] += 1
+        _record_destroy_repair_event(audit, "error", f"destroy/repair policy load failed: {exc}")
+        return audit
+    audit["destroy_repair_surface_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(module, "destroy_repair_plan", instance, time_limit_sec)
+    except Exception as exc:
+        audit["destroy_repair_errors"] += 1
+        _record_destroy_repair_event(audit, "error", f"destroy_repair_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["destroy_repair_errors"] += 1
+        _record_destroy_repair_event(
+            audit,
+            "error",
+            f"destroy_repair_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+    _normalize_destroy_repair_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _destroy_repair_policy_defaults() -> dict[str, Any]:
+    return {
+        "destroy_repair_policy_path": _DESTROY_REPAIR_POLICY_RELATIVE_PATH,
+        "destroy_repair_surface_loaded": False,
+        "destroy_repair_active": False,
+        "destroy_repair_errors": 0,
+        "destroy_repair_events": [],
+        "destroy_repair_plan": {"enabled": False},
+        "destroy_selectors": ["worst_removal"],
+        "repair_selectors": ["regret_2"],
+        "destroy_subset_strategy": "prefix_shifted_route_diverse",
+        "destroy_max_customers": 6,
+        "repair_budget_per_customer": 4,
+        "repair_fallback_enabled": True,
+        "destroy_repair_phase_best_preference": True,
+        "destroy_subset_count": 0,
+        "removed_customers": 0,
+        "reinserted_customers": 0,
+        "repair_budget_used": 0,
+        "repair_fallback_counts": 0,
+        "destroy_repair_attempts": 0,
+        "destroy_repair_accepted_current": 0,
+        "destroy_repair_accepted_recovery_only": 0,
+        "destroy_repair_accepted_phase_best": 0,
+        "destroy_repair_phase_delta_sum": 0.0,
+        "destroy_repair_skip_reasons": {"none": 0},
+        "destroy_repair_runtime_ms": 0,
+    }
+
+
+def _normalize_destroy_repair_plan(plan: dict[str, Any], *, audit: dict[str, Any]) -> None:
+    enabled = _mechanism_bool(
+        plan.get("enabled", False),
+        default=False,
+        field_name="destroy_repair.enabled",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    destroy_selectors = _mechanism_string_sequence(
+        plan.get("destroy_selectors", ["worst_removal"]),
+        allowed=_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS,
+        default=["worst_removal"],
+        field_name="destroy_selectors",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    repair_selectors = _mechanism_string_sequence(
+        plan.get("repair_selectors", ["regret_2"]),
+        allowed=_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS,
+        default=["regret_2"],
+        field_name="repair_selectors",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    subset_strategy = _mechanism_choice(
+        plan.get("subset_strategy", "prefix_shifted_route_diverse"),
+        allowed=_DESTROY_REPAIR_SUBSET_STRATEGIES,
+        default="prefix_shifted_route_diverse",
+        field_name="subset_strategy",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    max_customers = _mechanism_int(
+        plan.get("max_destroy_customers", 6),
+        minimum=1,
+        maximum=12,
+        default=6,
+        field_name="max_destroy_customers",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    repair_budget = _mechanism_int(
+        plan.get("repair_budget_per_customer", 4),
+        minimum=1,
+        maximum=16,
+        default=4,
+        field_name="repair_budget_per_customer",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    fallback_enabled = _mechanism_bool(
+        plan.get("fallback_to_smaller_subsets", True),
+        default=True,
+        field_name="fallback_to_smaller_subsets",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    phase_best_preference = _mechanism_bool(
+        plan.get("phase_best_preference", True),
+        default=True,
+        field_name="phase_best_preference",
+        error_key="destroy_repair_errors",
+        event_recorder=_record_destroy_repair_event,
+        audit=audit,
+    )
+    active = enabled and _as_nonnegative_int(audit.get("destroy_repair_errors")) == 0
+    audit["destroy_repair_active"] = active
+    audit["destroy_repair_plan"] = {
+        "enabled": active,
+        "destroy_selectors": destroy_selectors,
+        "repair_selectors": repair_selectors,
+        "subset_strategy": subset_strategy,
+        "max_destroy_customers": max_customers,
+        "repair_budget_per_customer": repair_budget,
+        "fallback_to_smaller_subsets": fallback_enabled,
+        "phase_best_preference": phase_best_preference,
+    }
+    audit["destroy_selectors"] = destroy_selectors
+    audit["repair_selectors"] = repair_selectors
+    audit["destroy_subset_strategy"] = subset_strategy
+    audit["destroy_max_customers"] = max_customers
+    audit["repair_budget_per_customer"] = repair_budget
+    audit["repair_fallback_enabled"] = fallback_enabled
+    audit["destroy_repair_phase_best_preference"] = phase_best_preference
+
+
+def _record_destroy_repair_event(audit: dict[str, Any], status: str, detail: str) -> None:
+    _record_mechanism_event(
+        audit,
+        event_key="destroy_repair_events",
+        policy_path=_DESTROY_REPAIR_POLICY_RELATIVE_PATH,
+        status=status,
+        detail=detail,
+    )
+
+
+def _load_route_pair_candidate_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _route_pair_policy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_route_pair_event(audit, "error", "route-pair policy path escapes workspace")
+        audit["route_pair_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["route_pair_errors"] += 1
+        _record_route_pair_event(audit, "error", f"route-pair policy load failed: {exc}")
+        return audit
+    audit["route_pair_surface_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(module, "route_pair_plan", instance, time_limit_sec)
+    except Exception as exc:
+        audit["route_pair_errors"] += 1
+        _record_route_pair_event(audit, "error", f"route_pair_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["route_pair_errors"] += 1
+        _record_route_pair_event(
+            audit,
+            "error",
+            f"route_pair_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+    _normalize_route_pair_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _route_pair_policy_defaults() -> dict[str, Any]:
+    return {
+        "route_pair_policy_path": _ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH,
+        "route_pair_surface_loaded": False,
+        "route_pair_active": False,
+        "route_pair_errors": 0,
+        "route_pair_events": [],
+        "route_pair_plan": {"enabled": False},
+        "route_pair_scoring_terms": ["route_distance", "removal_saving", "distance_saving"],
+        "route_pair_move_families": ["customer_swap"],
+        "route_pair_candidate_limits": {"pair_cap": 0, "position_cap": 0},
+        "route_pair_candidates_generated": 0,
+        "route_pair_candidates_pruned": 0,
+        "route_pair_attempts": 0,
+        "route_pair_accepted_current": 0,
+        "route_pair_accepted_recovery_only": 0,
+        "route_pair_accepted_phase_best": 0,
+        "route_pair_phase_delta_sum": 0.0,
+        "route_pair_skip_reasons": {"none": 0},
+        "route_pair_runtime_ms": 0,
+    }
+
+
+def _normalize_route_pair_plan(plan: dict[str, Any], *, audit: dict[str, Any]) -> None:
+    enabled = _mechanism_bool(
+        plan.get("enabled", False),
+        default=False,
+        field_name="route_pair.enabled",
+        error_key="route_pair_errors",
+        event_recorder=_record_route_pair_event,
+        audit=audit,
+    )
+    scoring_terms = _mechanism_string_sequence(
+        plan.get("scoring_terms", ["route_distance", "removal_saving", "distance_saving"]),
+        allowed=_ROUTE_PAIR_ALLOWED_SCORING_TERMS,
+        default=["route_distance", "removal_saving", "distance_saving"],
+        field_name="scoring_terms",
+        error_key="route_pair_errors",
+        event_recorder=_record_route_pair_event,
+        audit=audit,
+    )
+    move_families = _mechanism_string_sequence(
+        plan.get("move_families", ["customer_swap"]),
+        allowed=_ROUTE_PAIR_ALLOWED_MOVE_FAMILIES,
+        default=["customer_swap"],
+        field_name="move_families",
+        error_key="route_pair_errors",
+        event_recorder=_record_route_pair_event,
+        audit=audit,
+    )
+    limits = plan.get("candidate_limits", {})
+    if not isinstance(limits, Mapping):
+        audit["route_pair_errors"] += 1
+        _record_route_pair_event(audit, "error", f"candidate_limits returned non-mapping value {limits!r}")
+        limits = {}
+    candidate_limits = {
+        "pair_cap": _mechanism_int(
+            limits.get("pair_cap", 0),
+            minimum=0,
+            maximum=500,
+            default=0,
+            field_name="candidate_limits.pair_cap",
+            error_key="route_pair_errors",
+            event_recorder=_record_route_pair_event,
+            audit=audit,
+        ),
+        "position_cap": _mechanism_int(
+            limits.get("position_cap", 0),
+            minimum=0,
+            maximum=32,
+            default=0,
+            field_name="candidate_limits.position_cap",
+            error_key="route_pair_errors",
+            event_recorder=_record_route_pair_event,
+            audit=audit,
+        ),
+    }
+    active = enabled and _as_nonnegative_int(audit.get("route_pair_errors")) == 0
+    audit["route_pair_active"] = active
+    audit["route_pair_plan"] = {
+        "enabled": active,
+        "scoring_terms": scoring_terms,
+        "move_families": move_families,
+        "candidate_limits": candidate_limits,
+    }
+    audit["route_pair_scoring_terms"] = scoring_terms
+    audit["route_pair_move_families"] = move_families
+    audit["route_pair_candidate_limits"] = candidate_limits
+
+
+def _record_route_pair_event(audit: dict[str, Any], status: str, detail: str) -> None:
+    _record_mechanism_event(
+        audit,
+        event_key="route_pair_events",
+        policy_path=_ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH,
+        status=status,
+        detail=detail,
+    )
+
+
+def _load_acceptance_restart_policy(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    time_limit_sec: float,
+) -> dict[str, Any]:
+    audit = _acceptance_restart_policy_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _ACCEPTANCE_RESTART_POLICY_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_acceptance_restart_event(audit, "error", "acceptance/restart policy path escapes workspace")
+        audit["acceptance_restart_errors"] += 1
+        return audit
+    if not policy_path.is_file():
+        return audit
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["acceptance_restart_errors"] += 1
+        _record_acceptance_restart_event(audit, "error", f"acceptance/restart policy load failed: {exc}")
+        return audit
+    audit["acceptance_restart_surface_loaded"] = True
+    try:
+        raw_plan = _call_policy_function(module, "acceptance_restart_plan", instance, time_limit_sec)
+    except Exception as exc:
+        audit["acceptance_restart_errors"] += 1
+        _record_acceptance_restart_event(audit, "error", f"acceptance_restart_plan failed: {exc}")
+        return audit
+    if not isinstance(raw_plan, Mapping):
+        audit["acceptance_restart_errors"] += 1
+        _record_acceptance_restart_event(
+            audit,
+            "error",
+            f"acceptance_restart_plan returned non-mapping value {raw_plan!r}",
+        )
+        return audit
+    _normalize_acceptance_restart_plan(dict(raw_plan), audit=audit)
+    return audit
+
+
+def _acceptance_restart_policy_defaults() -> dict[str, Any]:
+    return {
+        "acceptance_restart_policy_path": _ACCEPTANCE_RESTART_POLICY_RELATIVE_PATH,
+        "acceptance_restart_surface_loaded": False,
+        "acceptance_restart_active": False,
+        "acceptance_restart_errors": 0,
+        "acceptance_restart_events": [],
+        "acceptance_restart_plan": {"enabled": False},
+        "acceptance_threshold_schedule": {"min_distance_improvement": 0.0},
+        "recovery_only_policy": "allow",
+        "restart_triggers": {"enabled": False, "stagnation_rounds": 0, "max_restarts": 0},
+        "restart_count": 0,
+        "perturbation_schedule": {
+            "enabled": False,
+            "schedule": _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+        },
+        "perturbation_count": 0,
+        "accepted_current_count": 0,
+        "accepted_recovery_only_count": 0,
+        "accepted_phase_best_count": 0,
+        "phase_best_refresh_count": 0,
+        "acceptance_restart_phase_delta_sum": 0.0,
+        "acceptance_restart_runtime_ms": 0,
+    }
+
+
+def _normalize_acceptance_restart_plan(plan: dict[str, Any], *, audit: dict[str, Any]) -> None:
+    enabled = _mechanism_bool(
+        plan.get("enabled", False),
+        default=False,
+        field_name="acceptance_restart.enabled",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    min_improvement = _mechanism_float(
+        plan.get("min_distance_improvement", 0.0),
+        minimum=0.0,
+        maximum=_MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT,
+        default=0.0,
+        field_name="min_distance_improvement",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    recovery_policy = _mechanism_choice(
+        plan.get("recovery_only_policy", "allow"),
+        allowed=_ACCEPTANCE_RECOVERY_POLICIES,
+        default="allow",
+        field_name="recovery_only_policy",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    restart = plan.get("restart", {})
+    if not isinstance(restart, Mapping):
+        audit["acceptance_restart_errors"] += 1
+        _record_acceptance_restart_event(audit, "error", f"restart returned non-mapping value {restart!r}")
+        restart = {}
+    restart_enabled = _mechanism_bool(
+        restart.get("enabled", False),
+        default=False,
+        field_name="restart.enabled",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    restart_stagnation = _mechanism_int(
+        restart.get("stagnation_rounds", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_RESTART_STAGNATION_ROUNDS,
+        default=0,
+        field_name="restart.stagnation_rounds",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    restart_limit = _mechanism_int(
+        restart.get("max_restarts", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_RESTARTS,
+        default=0,
+        field_name="restart.max_restarts",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    perturbation = plan.get("perturbation", {})
+    if not isinstance(perturbation, Mapping):
+        audit["acceptance_restart_errors"] += 1
+        _record_acceptance_restart_event(audit, "error", f"perturbation returned non-mapping value {perturbation!r}")
+        perturbation = {}
+    perturbation_enabled = _mechanism_bool(
+        perturbation.get("enabled", False),
+        default=False,
+        field_name="perturbation.enabled",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    perturbation_schedule = _mechanism_choice(
+        perturbation.get("schedule", _DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE),
+        allowed=_MAIN_SEARCH_PERTURBATION_SCHEDULES,
+        default=_DEFAULT_MAIN_SEARCH_PERTURBATION_SCHEDULE,
+        field_name="perturbation.schedule",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    perturbation_strength = _mechanism_int(
+        perturbation.get("strength", 1),
+        minimum=1,
+        maximum=_MAX_MAIN_SEARCH_PERTURBATION_STRENGTH,
+        default=1,
+        field_name="perturbation.strength",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    max_perturbations = _mechanism_int(
+        perturbation.get("max_perturbations", 0),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_PERTURBATIONS,
+        default=0,
+        field_name="perturbation.max_perturbations",
+        error_key="acceptance_restart_errors",
+        event_recorder=_record_acceptance_restart_event,
+        audit=audit,
+    )
+    active = enabled and _as_nonnegative_int(audit.get("acceptance_restart_errors")) == 0
+    audit["acceptance_restart_active"] = active
+    audit["acceptance_restart_plan"] = {
+        "enabled": active,
+        "min_distance_improvement": min_improvement,
+        "recovery_only_policy": recovery_policy,
+        "restart": {
+            "enabled": restart_enabled,
+            "stagnation_rounds": restart_stagnation,
+            "max_restarts": restart_limit,
+        },
+        "perturbation": {
+            "enabled": perturbation_enabled,
+            "schedule": perturbation_schedule,
+            "strength": perturbation_strength,
+            "max_perturbations": max_perturbations,
+        },
+    }
+    audit["acceptance_threshold_schedule"] = {"min_distance_improvement": min_improvement}
+    audit["recovery_only_policy"] = recovery_policy
+    audit["restart_triggers"] = {
+        "enabled": restart_enabled,
+        "stagnation_rounds": restart_stagnation,
+        "max_restarts": restart_limit,
+    }
+    audit["perturbation_schedule"] = {
+        "enabled": perturbation_enabled,
+        "schedule": perturbation_schedule,
+        "strength": perturbation_strength,
+        "max_perturbations": max_perturbations,
+    }
+
+
+def _record_acceptance_restart_event(audit: dict[str, Any], status: str, detail: str) -> None:
+    _record_mechanism_event(
+        audit,
+        event_key="acceptance_restart_events",
+        policy_path=_ACCEPTANCE_RESTART_POLICY_RELATIVE_PATH,
+        status=status,
+        detail=detail,
     )
 
 

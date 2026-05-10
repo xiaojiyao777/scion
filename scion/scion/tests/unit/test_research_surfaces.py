@@ -377,6 +377,10 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "neighborhood_portfolio",
         "algorithm_blueprint",
         "main_search_strategy",
+        "alns_vns_policy",
+        "destroy_repair_policy",
+        "route_pair_candidate_policy",
+        "acceptance_restart_policy",
     ]
     assert "policies/*.py" in legacy.search_space.editable
     assert "solver.py" in legacy.search_space.frozen
@@ -417,6 +421,10 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "baseline_policy",
         "construction_policy",
         "neighborhood_portfolio",
+        "alns_vns_policy",
+        "destroy_repair_policy",
+        "route_pair_candidate_policy",
+        "acceptance_restart_policy",
         "search_policy",
     ]
     assert "route_local" in no_accepted_guidance.discouraged_surfaces
@@ -1187,6 +1195,10 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
         "policies/construction_policy.py",
         "policies/neighborhood_portfolio.py",
         "policies/main_search_strategy.py",
+        "policies/alns_vns_policy.py",
+        "policies/destroy_repair_policy.py",
+        "policies/route_pair_candidate_policy.py",
+        "policies/acceptance_restart_policy.py",
     ):
         result = gate.validate_patch(
             PatchProposal(

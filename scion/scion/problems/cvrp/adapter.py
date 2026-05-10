@@ -99,6 +99,16 @@ _MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
 _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS = frozenset(
     {"enabled", "strength", "max_perturbations"}
 )
+_MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS = frozenset(
+    {*_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS, "schedule"}
+)
+_MAIN_SEARCH_PERTURBATION_SCHEDULES = frozenset(
+    {
+        "after_no_improvement",
+        "before_first_round",
+        "before_each_round",
+    }
+)
 _BASELINE_POLICY_ALLOWED_KEYS = frozenset(
     {
         "destroy_ratio",
@@ -111,6 +121,52 @@ _BASELINE_POLICY_ALLOWED_KEYS = frozenset(
         "alns_threshold",
         "max_destroy_customers",
     }
+)
+_ALNS_VNS_POLICY_ALLOWED_KEYS = frozenset(
+    {"enabled", "components", "component_weights", "params"}
+)
+_ALNS_VNS_ALLOWED_COMPONENTS = frozenset({"alns", "vns"})
+_DESTROY_REPAIR_POLICY_ALLOWED_KEYS = frozenset(
+    {
+        "enabled",
+        "destroy_selectors",
+        "repair_selectors",
+        "subset_strategy",
+        "max_destroy_customers",
+        "repair_budget_per_customer",
+        "fallback_to_smaller_subsets",
+        "phase_best_preference",
+    }
+)
+_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS = frozenset(
+    {"worst_removal", "route_diverse_worst"}
+)
+_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS = frozenset({"regret_2", "cheapest"})
+_DESTROY_REPAIR_SUBSET_STRATEGIES = frozenset(
+    {"prefix_shifted_route_diverse", "single_worst", "route_diverse"}
+)
+_ROUTE_PAIR_POLICY_ALLOWED_KEYS = frozenset(
+    {"enabled", "scoring_terms", "move_families", "candidate_limits"}
+)
+_ROUTE_PAIR_ALLOWED_SCORING_TERMS = frozenset(
+    {"route_distance", "removal_saving", "load_gap", "distance_saving"}
+)
+_ROUTE_PAIR_ALLOWED_MOVE_FAMILIES = frozenset({"customer_swap"})
+_ROUTE_PAIR_CANDIDATE_LIMIT_RANGES = {
+    "pair_cap": (0, 500),
+    "position_cap": (0, 32),
+}
+_ACCEPTANCE_RESTART_POLICY_ALLOWED_KEYS = frozenset(
+    {
+        "enabled",
+        "min_distance_improvement",
+        "recovery_only_policy",
+        "restart",
+        "perturbation",
+    }
+)
+_ACCEPTANCE_RECOVERY_POLICIES = frozenset(
+    {"allow", "reject_recovery_only", "phase_best_preferred"}
 )
 _POLICY_INSTANCE_API_TEXT = (
     "Safe CvrpInstance API for policy functions: use "
@@ -390,6 +446,50 @@ class CvrpAdapter:
                 "solver then refuses lifecycle takeover and runtime audit fails "
                 "closed for selected_surface=algorithm_blueprint."
             )
+        if surface_name == "alns_vns_policy":
+            return (
+                "policies/alns_vns_policy.py is a module-level ALNS/VNS "
+                "mechanism policy file; no class is required.\n\n"
+                "Required function:\n"
+                "def alns_vns_plan(instance, time_limit_sec):\n"
+                "    return a dict with enabled bool, components drawn from "
+                "'alns'/'vns', component_weights in [0.0, 5.0], and bounded "
+                "baseline params.\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+            )
+        if surface_name == "destroy_repair_policy":
+            return (
+                "policies/destroy_repair_policy.py is a module-level "
+                "destroy/repair mechanism policy file; no class is required.\n\n"
+                "Required function:\n"
+                "def destroy_repair_plan(instance, time_limit_sec):\n"
+                "    return bounded destroy selectors, repair selectors, subset "
+                "strategy, max_destroy_customers, repair_budget_per_customer, "
+                "fallback flag, and phase_best_preference.\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+            )
+        if surface_name == "route_pair_candidate_policy":
+            return (
+                "policies/route_pair_candidate_policy.py is a module-level "
+                "route-pair candidate policy file; no class is required.\n\n"
+                "Required function:\n"
+                "def route_pair_plan(instance, time_limit_sec):\n"
+                "    return scoring_terms, move_families, and candidate_limits "
+                "for bounded route-pair candidate ranking.\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+            )
+        if surface_name == "acceptance_restart_policy":
+            return (
+                "policies/acceptance_restart_policy.py is a module-level "
+                "acceptance/restart policy file; no class is required.\n\n"
+                "Required function:\n"
+                "def acceptance_restart_plan(instance, time_limit_sec):\n"
+                "    return enabled bool, min_distance_improvement, "
+                "recovery_only_policy, restart dict, and perturbation dict. "
+                "This affects candidate search only; protocol and Decision "
+                "thresholds remain unchanged.\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+            )
         return self.render_operator_interface()
 
     def render_operator_interface(self) -> str:
@@ -441,6 +541,10 @@ class CvrpAdapter:
             "neighborhood_portfolio",
             "main_search_strategy",
             "algorithm_blueprint",
+            "alns_vns_policy",
+            "destroy_repair_policy",
+            "route_pair_candidate_policy",
+            "acceptance_restart_policy",
         }:
             return {
                 "passed": True,
@@ -485,6 +589,14 @@ class CvrpAdapter:
             _preview_main_search_strategy(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
             _preview_algorithm_blueprint(module, instance, issues, checks)
+        elif surface_name == "alns_vns_policy":
+            _preview_alns_vns_policy(module, instance, issues, checks)
+        elif surface_name == "destroy_repair_policy":
+            _preview_destroy_repair_policy(module, instance, issues, checks)
+        elif surface_name == "route_pair_candidate_policy":
+            _preview_route_pair_candidate_policy(module, instance, issues, checks)
+        elif surface_name == "acceptance_restart_policy":
+            _preview_acceptance_restart_policy(module, instance, issues, checks)
         return _policy_preview_result(surface_name, issues, checks)
 
     def load_instance(self, instance_path: str) -> Any:
@@ -654,6 +766,10 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
         "policies/main_search_strategy.py": "main_search_strategy",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
+        "policies/alns_vns_policy.py": "alns_vns_policy",
+        "policies/destroy_repair_policy.py": "destroy_repair_policy",
+        "policies/route_pair_candidate_policy.py": "route_pair_candidate_policy",
+        "policies/acceptance_restart_policy.py": "acceptance_restart_policy",
     }.get(normalized, "")
 
 
@@ -1100,7 +1216,7 @@ def _preview_main_search_strategy(
         _preview_section_keys(
             "perturbation",
             perturbation,
-            allowed=_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+            allowed=_MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS,
             required=_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
             require_missing=enabled,
             issues=issues,
@@ -1126,6 +1242,9 @@ def _preview_main_search_strategy(
             integral=True,
             issues=issues,
         )
+        schedule = str(perturbation.get("schedule", "after_no_improvement")).strip()
+        if schedule not in _MAIN_SEARCH_PERTURBATION_SCHEDULES:
+            issues.append(f"perturbation.schedule returned unknown value {schedule!r}")
 
     post_baseline = plan.get("post_baseline_operators_enabled", False)
     if not isinstance(post_baseline, bool):
@@ -1141,6 +1260,274 @@ def _preview_main_search_strategy(
         integral=True,
         issues=issues,
     )
+
+
+def _preview_alns_vns_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(module, "alns_vns_plan", instance, issues, checks)
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"alns_vns_plan returned non-mapping value {plan!r}")
+        return
+    _preview_policy_keys(
+        "alns_vns_plan",
+        plan,
+        allowed=_ALNS_VNS_POLICY_ALLOWED_KEYS,
+        issues=issues,
+    )
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(f"alns_vns_plan enabled returned non-bool value {enabled!r}")
+    _check_sequence_literals(
+        "alns_vns.components",
+        plan.get("components", ["alns", "vns"]),
+        allowed=_ALNS_VNS_ALLOWED_COMPONENTS,
+        allow_empty=False,
+        issues=issues,
+    )
+    weights = plan.get("component_weights", {"alns": 1.0, "vns": 1.0})
+    _preview_weight_mapping(
+        "alns_vns.component_weights",
+        weights,
+        allowed=_ALNS_VNS_ALLOWED_COMPONENTS,
+        issues=issues,
+    )
+    params = plan.get("params", {})
+    if not isinstance(params, Mapping):
+        issues.append(f"alns_vns.params returned non-mapping value {params!r}")
+    else:
+        _preview_baseline_params_mapping(params, issues)
+
+
+def _preview_destroy_repair_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(module, "destroy_repair_plan", instance, issues, checks)
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"destroy_repair_plan returned non-mapping value {plan!r}")
+        return
+    _preview_policy_keys(
+        "destroy_repair_plan",
+        plan,
+        allowed=_DESTROY_REPAIR_POLICY_ALLOWED_KEYS,
+        issues=issues,
+    )
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(f"destroy_repair_plan enabled returned non-bool value {enabled!r}")
+    _check_sequence_literals(
+        "destroy_selectors",
+        plan.get("destroy_selectors", ["worst_removal"]),
+        allowed=_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS,
+        allow_empty=False,
+        issues=issues,
+    )
+    _check_sequence_literals(
+        "repair_selectors",
+        plan.get("repair_selectors", ["regret_2"]),
+        allowed=_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS,
+        allow_empty=False,
+        issues=issues,
+    )
+    subset_strategy = str(
+        plan.get("subset_strategy", "prefix_shifted_route_diverse")
+    ).strip()
+    if subset_strategy not in _DESTROY_REPAIR_SUBSET_STRATEGIES:
+        issues.append(f"subset_strategy returned unknown value {subset_strategy!r}")
+    _check_number(
+        "max_destroy_customers",
+        plan.get("max_destroy_customers", 6),
+        minimum=1,
+        maximum=12,
+        integral=True,
+        issues=issues,
+    )
+    _check_number(
+        "repair_budget_per_customer",
+        plan.get("repair_budget_per_customer", 4),
+        minimum=1,
+        maximum=16,
+        integral=True,
+        issues=issues,
+    )
+    fallback = plan.get("fallback_to_smaller_subsets", True)
+    if not isinstance(fallback, bool):
+        issues.append(
+            f"fallback_to_smaller_subsets returned non-bool value {fallback!r}"
+        )
+    phase_best = plan.get("phase_best_preference", True)
+    if not isinstance(phase_best, bool):
+        issues.append(f"phase_best_preference returned non-bool value {phase_best!r}")
+
+
+def _preview_route_pair_candidate_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(module, "route_pair_plan", instance, issues, checks)
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"route_pair_plan returned non-mapping value {plan!r}")
+        return
+    _preview_policy_keys(
+        "route_pair_plan",
+        plan,
+        allowed=_ROUTE_PAIR_POLICY_ALLOWED_KEYS,
+        issues=issues,
+    )
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(f"route_pair_plan enabled returned non-bool value {enabled!r}")
+    _check_sequence_literals(
+        "route_pair.scoring_terms",
+        plan.get("scoring_terms", ["route_distance", "removal_saving", "distance_saving"]),
+        allowed=_ROUTE_PAIR_ALLOWED_SCORING_TERMS,
+        allow_empty=False,
+        issues=issues,
+    )
+    _check_sequence_literals(
+        "route_pair.move_families",
+        plan.get("move_families", ["customer_swap"]),
+        allowed=_ROUTE_PAIR_ALLOWED_MOVE_FAMILIES,
+        allow_empty=False,
+        issues=issues,
+    )
+    limits = plan.get("candidate_limits", {})
+    if not isinstance(limits, Mapping):
+        issues.append(f"route_pair.candidate_limits returned non-mapping value {limits!r}")
+    else:
+        _preview_limit_mapping(
+            "route_pair.candidate_limits",
+            limits,
+            ranges=_ROUTE_PAIR_CANDIDATE_LIMIT_RANGES,
+            issues=issues,
+        )
+
+
+def _preview_acceptance_restart_policy(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    plan = _call_preview_function(
+        module,
+        "acceptance_restart_plan",
+        instance,
+        issues,
+        checks,
+    )
+    if plan is _PREVIEW_FAILED:
+        return
+    if not isinstance(plan, Mapping):
+        issues.append(f"acceptance_restart_plan returned non-mapping value {plan!r}")
+        return
+    _preview_policy_keys(
+        "acceptance_restart_plan",
+        plan,
+        allowed=_ACCEPTANCE_RESTART_POLICY_ALLOWED_KEYS,
+        issues=issues,
+    )
+    enabled = plan.get("enabled", False)
+    if not isinstance(enabled, bool):
+        issues.append(
+            f"acceptance_restart_plan enabled returned non-bool value {enabled!r}"
+        )
+    _check_number(
+        "acceptance_restart.min_distance_improvement",
+        plan.get("min_distance_improvement", 0.0),
+        minimum=0.0,
+        maximum=10.0,
+        integral=False,
+        issues=issues,
+    )
+    recovery_policy = str(plan.get("recovery_only_policy", "allow")).strip()
+    if recovery_policy not in _ACCEPTANCE_RECOVERY_POLICIES:
+        issues.append(
+            f"recovery_only_policy returned unknown value {recovery_policy!r}"
+        )
+
+    restart = _preview_mapping_section("acceptance_restart.restart", plan.get("restart", {}), issues)
+    if restart is not None:
+        _preview_section_keys(
+            "acceptance_restart.restart",
+            restart,
+            allowed=_MAIN_SEARCH_RESTART_REQUIRED_KEYS,
+            required=_MAIN_SEARCH_RESTART_REQUIRED_KEYS,
+            require_missing=False,
+            issues=issues,
+        )
+        restart_enabled = restart.get("enabled", False)
+        if not isinstance(restart_enabled, bool):
+            issues.append(f"restart.enabled returned non-bool value {restart_enabled!r}")
+        _check_number(
+            "restart.stagnation_rounds",
+            restart.get("stagnation_rounds", 0),
+            minimum=0,
+            maximum=25,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "restart.max_restarts",
+            restart.get("max_restarts", 0),
+            minimum=0,
+            maximum=3,
+            integral=True,
+            issues=issues,
+        )
+
+    perturbation = _preview_mapping_section(
+        "acceptance_restart.perturbation",
+        plan.get("perturbation", {}),
+        issues,
+    )
+    if perturbation is not None:
+        _preview_section_keys(
+            "acceptance_restart.perturbation",
+            perturbation,
+            allowed=_MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS,
+            required=_MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+            require_missing=False,
+            issues=issues,
+        )
+        perturbation_enabled = perturbation.get("enabled", False)
+        if not isinstance(perturbation_enabled, bool):
+            issues.append(
+                f"perturbation.enabled returned non-bool value {perturbation_enabled!r}"
+            )
+        schedule = str(perturbation.get("schedule", "after_no_improvement")).strip()
+        if schedule not in _MAIN_SEARCH_PERTURBATION_SCHEDULES:
+            issues.append(f"perturbation.schedule returned unknown value {schedule!r}")
+        _check_number(
+            "perturbation.strength",
+            perturbation.get("strength", 1),
+            minimum=1,
+            maximum=8,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "perturbation.max_perturbations",
+            perturbation.get("max_perturbations", 0),
+            minimum=0,
+            maximum=4,
+            integral=True,
+            issues=issues,
+        )
 
 
 def _preview_mapping_section(
@@ -1170,6 +1557,66 @@ def _preview_section_keys(
         missing = sorted(key for key in required if key not in section)
         if missing:
             issues.append(f"enabled {name} missing required keys {missing}")
+
+
+def _preview_policy_keys(
+    name: str,
+    plan: Mapping[str, Any],
+    *,
+    allowed: frozenset[str],
+    issues: list[str],
+) -> None:
+    unknown = sorted(str(key) for key in plan if str(key) not in allowed)
+    if unknown:
+        issues.append(f"{name} returned unknown keys {unknown}")
+
+
+def _preview_weight_mapping(
+    name: str,
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    issues: list[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        issues.append(f"{name} returned non-mapping value {value!r}")
+        return
+    for key, weight in value.items():
+        item = str(key).strip()
+        if item not in allowed:
+            issues.append(f"{name} returned unknown key {item!r}")
+            continue
+        _check_number(
+            f"{name}[{item}]",
+            weight,
+            minimum=0.0,
+            maximum=5.0,
+            integral=False,
+            issues=issues,
+        )
+
+
+def _preview_limit_mapping(
+    name: str,
+    value: Mapping[str, Any],
+    *,
+    ranges: Mapping[str, tuple[int, int]],
+    issues: list[str],
+) -> None:
+    for key, limit in value.items():
+        item = str(key).strip()
+        if item not in ranges:
+            issues.append(f"{name} returned unknown key {item!r}")
+            continue
+        lo, hi = ranges[item]
+        _check_number(
+            f"{name}[{item}]",
+            limit,
+            minimum=lo,
+            maximum=hi,
+            integral=True,
+            issues=issues,
+        )
 
 
 def _preview_baseline_params_mapping(

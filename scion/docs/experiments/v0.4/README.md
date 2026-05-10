@@ -31,6 +31,7 @@ referenced, not copied into development prompts.
 - [Recovery phase probe Sonnet 5R smoke, 2026-05-10](v0.4-recovery-phase-probe-sonnet-5r-20260510.md)
 - [APS evidence render Sonnet 5R smoke, 2026-05-10](v0.4-aps-evidence-render-sonnet-5r-20260510.md)
 - [Perturbation schedule Sonnet 8R smoke, 2026-05-10](v0.4-perturbation-schedule-sonnet-8r-20260510.md)
+- [Deep mechanism surfaces Sonnet 8R smoke, 2026-05-10](v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md)
 
 ## Related
 

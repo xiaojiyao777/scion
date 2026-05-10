@@ -750,6 +750,140 @@ def test_modified_baseline_policy_changes_repo_local_baseline_kwargs(
     assert audit["baseline_use_vns"] is False
 
 
+def test_alns_vns_policy_overrides_repo_local_baseline_kwargs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path)
+    fake_root = tmp_path / "fake_vrp"
+    fake_src = fake_root / "src"
+    fake_src.mkdir(parents=True)
+    (fake_src / "__init__.py").write_text("", encoding="utf-8")
+    (fake_src / "parser.py").write_text(
+        "\n".join(
+            [
+                "from types import SimpleNamespace",
+                "",
+                "def parse_vrp(path):",
+                "    return SimpleNamespace(depot=0, dimension=4)",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    capture_path = tmp_path / "alns_vns_kwargs.json"
+    (fake_src / "solver.py").write_text(
+        "\n".join(
+            [
+                "import json",
+                "import os",
+                "from types import SimpleNamespace",
+                "",
+                "def solve(instance, **kwargs):",
+                "    capture = os.environ.get('SCION_FAKE_BASELINE_CAPTURE')",
+                "    if capture:",
+                "        with open(capture, 'w', encoding='utf-8') as f:",
+                "            json.dump(kwargs, f, sort_keys=True)",
+                "    route = SimpleNamespace(customers=[1, 2, 3])",
+                "    solution = SimpleNamespace(routes=[route])",
+                "    return SimpleNamespace(",
+                "        solution=solution,",
+                "        elapsed=0.02,",
+                "        iterations=4,",
+                "        best_cost=28.0,",
+                "    )",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    case_dir = fake_root / "cases"
+    case_dir.mkdir()
+    instance_path = case_dir / "case.vrp"
+    instance_path.write_text("", encoding="utf-8")
+    (workspace / "policies" / "alns_vns_policy.py").write_text(
+        "\n".join(
+            [
+                "def alns_vns_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'components': ['alns'],",
+                "        'component_weights': {'alns': 2.5, 'vns': 0.5},",
+                "        'params': {",
+                "            'destroy_ratio': (0.12, 0.2),",
+                "            'segment_length': 31,",
+                "            'reaction_factor': 0.25,",
+                "            'vns_max_no_improve': 19,",
+                "            'use_vns': False,",
+                "            'cw_threshold': 6,",
+                "            'vns_threshold': 7,",
+                "            'alns_threshold': 8,",
+                "            'max_destroy_customers': 9,",
+                "        },",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    instance = CvrpInstance(
+        name="fake_alns_vns_case",
+        capacity=10,
+        depot=0,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            CvrpNode(id=1, x=1.0, y=0.0, demand=1),
+            CvrpNode(id=2, x=2.0, y=0.0, demand=1),
+            CvrpNode(id=3, x=3.0, y=0.0, demand=1),
+        ),
+        allowed_routes=1,
+        use_integer_cost=True,
+    )
+    monkeypatch.setenv("SCION_CVRP_DATA_ROOT", str(fake_root))
+    monkeypatch.setenv("SCION_FAKE_BASELINE_CAPTURE", str(capture_path))
+    for module_name in ("src", "src.parser", "src.solver"):
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    alns_vns_policy = cvrp_solver._load_alns_vns_policy(
+        workspace_root=workspace,
+        instance=instance,
+        time_limit_sec=2.0,
+    )
+    solution, audit = cvrp_solver.solve_baseline(
+        instance=instance,
+        instance_path=str(instance_path),
+        seed=5,
+        rng=random.Random(5),
+        time_limit_sec=2.0,
+        baseline_time_fraction=0.5,
+        alns_vns_policy=alns_vns_policy,
+    )
+    if str(fake_root) in sys.path:
+        sys.path.remove(str(fake_root))
+
+    captured = json.loads(capture_path.read_text(encoding="utf-8"))
+    assert solution.routes == ((1, 2, 3),)
+    assert captured["destroy_ratio"] == [0.12, 0.2]
+    assert captured["segment_length"] == 31
+    assert captured["reaction_factor"] == 0.25
+    assert captured["vns_max_no_improve"] == 19
+    assert captured["use_vns"] is False
+    assert captured["cw_threshold"] == 6
+    assert captured["vns_threshold"] == 7
+    assert captured["alns_threshold"] == 8
+    assert captured["max_destroy_customers"] == 9
+    assert audit["baseline_policy_params"]["segment_length"] == 31
+    assert audit["alns_vns_surface_loaded"] is True
+    assert audit["alns_vns_active"] is True
+    assert audit["alns_vns_errors"] == 0
+    assert audit["alns_vns_components"] == ["alns"]
+    assert audit["alns_vns_component_weights"] == {"alns": 2.5, "vns": 0.5}
+    assert audit["alns_vns_attempts"] == 4
+    assert audit["alns_vns_accepted"] == 1
+    assert audit["alns_vns_runtime_ms"] == 20
+    assert audit["alns_vns_stop_reason"] == "vrp_alns_vns"
+
+
 def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1595,6 +1729,7 @@ def test_main_search_strategy_can_perturb_before_first_round(
         best_objective: dict[str, int | float],
         top_k: int,
         min_distance_improvement: float,
+        mechanism_policies: dict[str, Any] | None = None,
     ) -> tuple[None, int, dict[str, Any], dict[str, Any]]:
         del (
             component,
@@ -1605,6 +1740,7 @@ def test_main_search_strategy_can_perturb_before_first_round(
             best_objective,
             top_k,
             min_distance_improvement,
+            mechanism_policies,
         )
         seen_current.append(current_solution)
         return None, 1, {}, {}
@@ -1714,8 +1850,9 @@ def test_main_search_strategy_does_not_gate_bdr_after_non_phase_route_pair_accep
         adapter: CvrpAdapter,
         current_objective: dict[str, int | float],
         top_k: int,
+        mechanism_policies: dict[str, Any] | None = None,
     ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
-        del adapter, current_objective, top_k
+        del adapter, current_objective, top_k, mechanism_policies
         if solution.routes == best_solution.routes:
             return None, 1, {}
         if component == "route_pair_swap" and solution.routes == worse_solution.routes:
@@ -1871,9 +2008,10 @@ def test_main_search_strategy_phase_best_probe_prefers_true_improvement_over_rec
         adapter: CvrpAdapter,
         current_objective: dict[str, int | float],
         top_k: int,
+        mechanism_policies: dict[str, Any] | None = None,
     ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
         nonlocal best_probe_calls
-        del component, adapter, current_objective, top_k
+        del component, adapter, current_objective, top_k, mechanism_policies
         if solution.routes == best_solution.routes:
             best_probe_calls += 1
             if best_probe_calls == 1:
@@ -1918,6 +2056,139 @@ def test_main_search_strategy_phase_best_probe_prefers_true_improvement_over_rec
     )
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 2.0
     assert runtime["main_search_objective_trace"]["accepted_but_zero_phase_delta"] == {}
+
+
+def test_acceptance_restart_policy_can_reject_recovery_only_moves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="reject_recovery_only",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+            CvrpNode(3, 3, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    best_solution = CvrpSolution(routes=((1,),))
+    worse_solution = CvrpSolution(routes=((2,),))
+    recovered_solution = CvrpSolution(routes=((3,),))
+    objective_by_routes = {
+        best_solution.routes: 10.0,
+        worse_solution.routes: 20.0,
+        recovered_solution.routes: 15.0,
+    }
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pair_swap"],
+                "rounds": 1,
+                "top_k": 8,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": True,
+                "strength": 1,
+                "max_perturbations": 1,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+    acceptance_policy = cvrp_solver._acceptance_restart_policy_defaults()
+    cvrp_solver._normalize_acceptance_restart_plan(
+        {
+            "enabled": True,
+            "min_distance_improvement": 0.0,
+            "recovery_only_policy": "reject_recovery_only",
+            "restart": {"enabled": False, "stagnation_rounds": 0, "max_restarts": 0},
+            "perturbation": {
+                "enabled": True,
+                "schedule": "before_first_round",
+                "strength": 1,
+                "max_perturbations": 1,
+            },
+        },
+        audit=acceptance_policy,
+    )
+
+    def fake_objective(
+        _adapter: CvrpAdapter,
+        _instance: CvrpInstance,
+        solution: CvrpSolution,
+    ) -> dict[str, int | float]:
+        return {
+            "fleet_violation": 0,
+            "total_distance": objective_by_routes[solution.routes],
+        }
+
+    def fake_component_candidate(
+        component: str,
+        solution: CvrpSolution,
+        _instance: CvrpInstance,
+        *,
+        adapter: CvrpAdapter,
+        current_objective: dict[str, int | float],
+        top_k: int,
+        mechanism_policies: dict[str, Any] | None = None,
+    ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
+        del component, adapter, current_objective, top_k, mechanism_policies
+        if solution.routes == worse_solution.routes:
+            return recovered_solution, 1, {}
+        return None, 1, {}
+
+    monkeypatch.setattr(cvrp_solver, "_objective_for_solution", fake_objective)
+    monkeypatch.setattr(cvrp_solver, "_solution_is_valid", lambda *args: (True, ""))
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_perturb_solution",
+        lambda *args, **kwargs: worse_solution,
+    )
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_main_search_component_candidate",
+        fake_component_candidate,
+    )
+
+    returned, runtime = cvrp_solver.improve_with_main_search_strategy(
+        best_solution,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+        acceptance_restart_policy=acceptance_policy,
+    )
+
+    assert returned.routes == best_solution.routes
+    assert runtime["acceptance_restart_active"] is True
+    assert runtime["recovery_only_policy"] == "reject_recovery_only"
+    assert runtime["accepted_recovery_only_count"] == 0
+    assert runtime["main_search_component_recovery_counts"]["route_pair_swap"] == 0
+    assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {
+        "recovery_only_rejected": 1,
+    }
 
 
 def test_main_search_strategy_gates_destroy_repair_after_route_pair_improvement(
@@ -2039,6 +2310,195 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
             raw,
             problem_spec=legacy_spec,
             selected_surface="main_search_strategy",
+        )
+        is None
+    )
+
+
+def test_route_pair_candidate_policy_changes_main_search_candidate_telemetry(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_route_pair_swap_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 1, 'top_k': 1},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "route_pair_candidate_policy.py").write_text(
+        "\n".join(
+            [
+                "def route_pair_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'scoring_terms': ['route_distance', 'removal_saving', 'distance_saving'],",
+                "        'move_families': ['customer_swap'],",
+                "        'candidate_limits': {'pair_cap': 1, 'position_cap': 2},",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/route_pair_swap_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["route_pair_surface_loaded"] is True
+    assert runtime["route_pair_active"] is True
+    assert runtime["route_pair_errors"] == 0
+    assert runtime["route_pair_candidate_limits"] == {"pair_cap": 1, "position_cap": 2}
+    assert runtime["route_pair_candidates_generated"] > 0
+    assert runtime["route_pair_attempts"] == 1
+    assert runtime["route_pair_accepted_phase_best"] == 1
+    assert runtime["route_pair_phase_delta_sum"] == 198.0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="route_pair_candidate_policy",
+        )
+        is None
+    )
+
+
+def test_route_pair_policy_can_activate_default_mechanism_main_search(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_route_pair_swap_case(workspace)
+    (workspace / "policies" / "route_pair_candidate_policy.py").write_text(
+        "\n".join(
+            [
+                "def route_pair_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'scoring_terms': ['route_distance', 'removal_saving', 'distance_saving'],",
+                "        'move_families': ['customer_swap'],",
+                "        'candidate_limits': {'pair_cap': 1, 'position_cap': 2},",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/route_pair_swap_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["main_search_strategy_active"] is True
+    assert runtime["main_search_components"] == ["route_pair_swap"]
+    assert runtime["route_pair_active"] is True
+    assert runtime["route_pair_candidates_generated"] > 0
+    assert runtime["route_pair_attempts"] > 0
+    assert "default mechanism-surface main search activated" in json.dumps(
+        runtime["main_search_strategy_events"]
+    )
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="route_pair_candidate_policy",
+        )
+        is None
+    )
+
+
+def test_destroy_repair_policy_changes_main_search_repair_telemetry(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "destroy_repair_policy.py").write_text(
+        "\n".join(
+            [
+                "def destroy_repair_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'destroy_selectors': ['worst_removal'],",
+                "        'repair_selectors': ['regret_2'],",
+                "        'subset_strategy': 'single_worst',",
+                "        'max_destroy_customers': 2,",
+                "        'repair_budget_per_customer': 8,",
+                "        'fallback_to_smaller_subsets': False,",
+                "        'phase_best_preference': True,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["destroy_repair_surface_loaded"] is True
+    assert runtime["destroy_repair_active"] is True
+    assert runtime["destroy_repair_errors"] == 0
+    assert runtime["destroy_subset_strategy"] == "single_worst"
+    assert runtime["destroy_max_customers"] == 2
+    assert runtime["destroy_subset_count"] >= 1
+    assert runtime["destroy_repair_attempts"] > 0
+    assert runtime["destroy_repair_accepted_phase_best"] == 1
+    assert runtime["destroy_repair_phase_delta_sum"] == 4.0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="destroy_repair_policy",
         )
         is None
     )
