@@ -1,9 +1,12 @@
 # Scion v0.4 Design Index
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-10*
 
 These are active v0.4 design-source documents. Current implementation status is
 tracked in [docs/status/current-state.md](../../docs/status/current-state.md).
+For onboarding, do not read every file here by default. Start from
+[docs/READING_PROFILES.md](../../docs/READING_PROFILES.md) and choose the one
+or two design sources that match the task.
 
 ## Core Design Sources
 
@@ -31,5 +34,6 @@ tracked in [docs/status/current-state.md](../../docs/status/current-state.md).
 ## Related Docs
 
 - [v0.4 current state](../../docs/status/current-state.md)
+- [Reading profiles](../../docs/READING_PROFILES.md)
 - [v0.4 planning index](../../docs/planning/v0.4/README.md)
 - [Framework code map](../../docs/engineering/framework-code-map/README.md)

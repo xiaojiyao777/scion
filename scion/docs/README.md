@@ -1,6 +1,6 @@
 # Scion Documentation Index
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-10*
 
 This directory is the active documentation entry point for Scion. It is
 organized by document purpose, so a new development session can find the current
@@ -9,14 +9,14 @@ scanning every historical note.
 
 ## Read First
 
-For a new agent session, read in this order:
+For a new agent session, read only the base pack first:
 
-1. [Agent onboarding](AGENT_ONBOARDING.md) - project purpose, current status, development norms, and update rules.
-2. [Architecture v3](../design/scion-architecture-v3.md) - foundational Scion architecture and governance invariants.
-3. [v0.4 current state](status/current-state.md) - latest implementation and experiment status.
-4. [v0.4 algorithm design-space upgrade](../design/v0.4/v0.4-algorithm-design-space-upgrade.md) - current design source for research surfaces and agentic proposal.
-5. [Framework code map](engineering/framework-code-map/README.md) - code ownership map for development and review.
-6. [Extension points and risks](engineering/framework-code-map/07-extension-points-and-risks.md) - where to extend problem packages versus Scion core.
+1. [Agent onboarding](AGENT_ONBOARDING.md) - project model, Scion invariants, and hard rules.
+2. [v0.4 current state](status/current-state.md) - latest operating truth.
+3. [Reading profiles](READING_PROFILES.md) - choose the smallest additional context pack for the task.
+
+Do not automatically read all design docs, engineering docs, historical status
+logs, old experiments, or source trees. Load them through the relevant profile.
 
 ## Directory Contract
 
@@ -37,7 +37,9 @@ For a new agent session, read in this order:
 ### Status
 
 - [Agent onboarding](AGENT_ONBOARDING.md)
+- [Reading profiles](READING_PROFILES.md)
 - [v0.4 current state](status/current-state.md)
+- [v0.4 status history archive](status/v0.4-history.md)
 
 ### Design Sources
 
