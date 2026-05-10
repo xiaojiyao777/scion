@@ -197,9 +197,18 @@ fields, and CVRP `main_search_strategy` now distinguishes
 component-local accepted moves from component moves that refresh phase best.
 Route-pair recovery moves no longer suppress bounded destroy/repair or reset
 stagnation unless they improve phase best, and new phase-level component audit
-fields expose phase delta sums, best deltas, and improvement counts. Do not run
-long CVRP validation; the next short smoke should verify attribution use and
-phase/case propagation.
+fields expose phase delta sums, best deltas, and improvement counts. The
+follow-up five-round forced smoke from commit `17f89de` has now completed and
+is analyzed. It validated the control repairs: APS now sees accepted-delta,
+objective-trace, objective-delta-by-phase, phase-delta-sum, and
+phase-improvement-count attribution, and BDR was no longer suppressed by
+route-pair moves that did not improve phase best. It also confirmed that this
+is not yet an efficacy repair: R1-R4 all failed `SCREENING_FAIL_WIN_RATE`,
+mean case win rate regressed to `0.03125`, all screened rounds had
+`main_search_component_phase_delta_sum=0` and zero phase-improvement counts,
+and R5 drifted to `route_local` before being fail-closed by the forced-surface
+proposal guard. Do not run long CVRP validation; the next repair should focus
+on CVRP phase/case propagation and forced-surface prompt hygiene.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2939,50 +2948,53 @@ completion use same-campaign or forced-surface compact screening/runtime
 history after prior screening exists, and exposes bounded selected-surface
 runtime attribution from component fields, phase deltas, and screening stats.
 
-## Latest Experiment: Runtime Attribution Repair Smoke
+## Latest Experiment: Phase-Benefit Repair Smoke
 
-The five-round forced `main_search_strategy` smoke after the runtime
-attribution/accounting repair has completed and is analyzed:
+The five-round forced `main_search_strategy` smoke after the phase-benefit
+repair has completed and is analyzed:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-runtime-attribution-repair-sonnet-5r-20260510T065854Z
-scion_commit=d29b7e2
+run_root=/home/clawd/research/scion-experiments/v04-phase-benefit-repair-sonnet-5r-20260510T075049Z
+scion_commit=17f89de
 model=claude-sonnet-4-6
 rounds=5/5
 force_surface=main_search_strategy
 exit_code=0
-analysis_doc=scion/docs/experiments/v0.4/v0.4-runtime-attribution-repair-sonnet-5r-20260510.md
+analysis_doc=scion/docs/experiments/v0.4/v0.4-phase-benefit-repair-sonnet-5r-20260510.md
 ```
 
 Delegated raw-artifact analysis found:
 
-- Forced-surface governance held for all five candidates:
-  `modify/main_search_strategy -> policies/main_search_strategy.py`.
 - R1-R4 passed Contract, Verification, and canary, reached screening, and had
-  complete selected-surface runtime audit: 16/16 candidate pairs, 48/48
+  complete selected-surface runtime audit: 16/16 candidate pairs each, 51/51
   required runtime fields, no selected-surface audit failure.
 - R1-R4 all failed `SCREENING_FAIL_WIN_RATE`; case and pair W/L/T were:
-  - R1: case `1/0/7`, pair `4/1/11`, win_rate `0.125`, median_delta `0.0`;
-  - R2: case `1/0/7`, pair `4/1/11`, win_rate `0.125`, median_delta `0.0`;
-  - R3: case `2/0/6`, pair `5/0/11`, win_rate `0.25`, median_delta `0.0`;
-  - R4: case `0/0/8`, pair `3/2/11`, win_rate `0.0`, median_delta `0.0`.
-- R5 passed Contract but failed Verification before canary/screening because
-  the generated plan selected only `intra_route_2opt`; selected-surface audit
-  failed with `empty=main_search_deep_components_selected`.
-- Deterministic attribution existed in raw metrics and campaign summaries, but
-  APS feedback did not expose the accepted-delta/objective-phase chain clearly.
-  R1, R2, and R4 had positive accepted component deltas, yet
-  `improvement_loop` phase delta remained zero and case-level quality did not
-  improve.
-- Candidate code stayed on the CVRP problem-owned whole-algorithm policy
-  surface. No generated operator-layer code or Scion core decision code was
-  involved.
+  - R1: case `1/0/7`, pair `4/2/10`, win_rate `0.125`, median_delta `0.0`;
+  - R2: case `0/0/8`, pair `3/2/11`, win_rate `0.0`, median_delta `0.0`;
+  - R3: case `0/1/7`, pair `2/3/11`, win_rate `0.0`, median_delta `0.0`;
+  - R4: case `0/0/8`, pair `3/3/10`, win_rate `0.0`, median_delta `0.0`.
+- R5 did not reach code generation: APS proposed
+  `create_new/route_local -> operators/oropt_intra_route.py`, and the
+  forced-surface guard correctly failed it before Contract/Verification.
+- The repair improved proposal feedback visibility. R2-R5 hypothesis sessions
+  saw accepted-delta, objective-trace, objective-delta-by-phase,
+  phase-delta-sum, and phase-improvement-count attribution. R4 explicitly used
+  the diagnosis that accepted moves were nonzero while phase delta stayed zero.
+- The repair also fixed the BDR suppression diagnostic: the previous
+  `route_pair_phase_improved` skip reason did not recur, and BDR was attempted
+  alongside route-pair in R1/R3/R4.
+- Solver quality still did not improve. R1/R3/R4 had positive component-local
+  accepted deltas, but `main_search_component_phase_delta_sum`,
+  `main_search_component_phase_improvement_counts`, and
+  `main_search_objective_delta_by_phase.improvement_loop` remained zero.
 
-Interpretation: runtime attribution recording is mostly closed, but proposal
-feedback selection and CVRP phase-best semantics still needed repair. The
-follow-up repair now prioritizes objective-phase / accepted-delta fields
-in proposal feedback and changes CVRP main search so component-local accepted
-moves are not treated as phase improvement unless they refresh phase best.
+Interpretation: 17f89de should be accepted as a diagnostic/control repair, not
+as an efficacy repair. Attribution now reaches APS, and component-local
+acceptance is separated from phase-best improvement. The remaining blocker is
+CVRP `main_search_strategy` phase/case efficacy: accepted moves mostly recover
+current perturbed/local states without beating the phase baseline. Long
+validation remains blocked. Next repair should focus on CVRP component
+generation/acceptance and on forced-surface prompt hygiene.
 
 ## Remaining Optimization Backlog
 
@@ -3067,7 +3079,11 @@ P1:
   failed when it dropped deep components. The follow-up repair prioritizes
   those attribution fields in feedback text/payloads and separates
   component-local acceptance from phase-best improvement inside CVRP
-  `main_search_strategy`. Long validation remains blocked.
+  `main_search_strategy`. The 17f89de forced smoke validated those diagnostic
+  repairs but did not improve efficacy: APS saw the attribution, BDR suppress
+  disappeared, yet phase-improvement counts stayed zero and R5 drifted
+  off-surface before the proposal guard stopped it. Long validation remains
+  blocked.
 
 P2:
 
