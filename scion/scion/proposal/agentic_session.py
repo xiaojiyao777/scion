@@ -647,6 +647,11 @@ class AgenticProposalSession:
                     hypothesis_context["agentic_resume_context"] = (
                         _sanitize_agentic_value(request.resume_context)
                     )
+                constraints = self._hypothesis_constraints(tool_context)
+                if constraints:
+                    hypothesis_context["agentic_hypothesis_constraints"] = (
+                        _sanitize_agentic_value(constraints)
+                    )
                 if observations:
                     hypothesis_context["agentic_tool_observations"] = [
                         _observation_prompt_payload(observation)
@@ -678,6 +683,28 @@ class AgenticProposalSession:
                     evidence_used=tuple(evidence),
                 )
                 state.status = output.status
+                return self._persist(output, state)
+
+            forced_violation = self._forced_hypothesis_violation(
+                tool_context,
+                hypothesis,
+                request=request,
+            )
+            if forced_violation is not None:
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=forced_violation,
+                    evidence_used=tuple(evidence),
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Hypothesis generation violated the forced research-surface constraint.",
+                    metadata={"detail": forced_violation},
+                )
                 return self._persist(output, state)
 
             if tool_context is not None:
@@ -768,6 +795,27 @@ class AgenticProposalSession:
                 )
                 return self._persist(output, state)
         elif tool_context is not None:
+            forced_violation = self._forced_hypothesis_violation(
+                tool_context,
+                hypothesis,
+                request=request,
+            )
+            if forced_violation is not None:
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=forced_violation,
+                    evidence_used=tuple(evidence),
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Approved hypothesis violated the forced research-surface constraint.",
+                    metadata={"detail": forced_violation},
+                )
+                return self._persist(output, state)
             selected_surface_observations = self._run_selected_surface_observation_tool(
                 tool_context,
                 hypothesis,
@@ -931,6 +979,60 @@ class AgenticProposalSession:
             ),
             termination_reason=AgenticTerminationReason.COMPLETED,
         )
+
+    def _forced_hypothesis_violation(
+        self,
+        context: ProposalToolContext | None,
+        hypothesis: HypothesisProposal,
+        *,
+        request: AgenticProposalRequest | None = None,
+    ) -> str | None:
+        forced_surface = str(
+            getattr(context, "forced_surface", None)
+            or (
+                (request.hypothesis_context or {}).get("forced_surface")
+                if request is not None and request.hypothesis_context is not None
+                else ""
+            )
+            or ""
+        ).strip()
+        if not forced_surface:
+            return None
+        actual_surface = str(hypothesis.change_locus or "").strip()
+        if actual_surface != forced_surface:
+            return (
+                "forced_surface_constraint: change_locus must be "
+                f"{forced_surface!r}, got {actual_surface!r}"
+            )
+        forced_action = str(
+            getattr(context, "forced_action", None)
+            or (
+                (request.hypothesis_context or {}).get("forced_action")
+                if request is not None and request.hypothesis_context is not None
+                else ""
+            )
+            or ""
+        ).strip()
+        if forced_action and str(hypothesis.action or "").strip() != forced_action:
+            return (
+                "forced_surface_constraint: action must be "
+                f"{forced_action!r}, got {str(hypothesis.action or '').strip()!r}"
+            )
+        forced_target = str(
+            getattr(context, "forced_target_file", None)
+            or (
+                (request.hypothesis_context or {}).get("forced_target_file")
+                if request is not None and request.hypothesis_context is not None
+                else ""
+            )
+            or ""
+        ).strip()
+        if forced_target and str(hypothesis.target_file or "").strip() != forced_target:
+            return (
+                "forced_surface_constraint: target_file must be "
+                f"{forced_target!r}, got {str(hypothesis.target_file or '').strip()!r}"
+            )
+        return None
 
     def _partial_hypothesis_output(
         self,
@@ -1152,7 +1254,8 @@ class AgenticProposalSession:
                 "allowed_tool_specs": self.tool_registry.allowed_tool_specs(context)
                 if self.tool_registry is not None
                 else (),
-                "tool_arg_guidance": self._tool_arg_guidance(observations),
+                "tool_arg_guidance": self._tool_arg_guidance(context, observations),
+                "hypothesis_constraints": self._hypothesis_constraints(context),
                 "remaining_steps": max(
                     0, self._tool_loop_config.max_steps - state.tool_step_count
                 ),
@@ -1405,10 +1508,13 @@ class AgenticProposalSession:
             for observation in observations
             if not observation.is_error
         }
-        if observed_ok.isdisjoint(available_feedback):
+        missing_feedback = [
+            tool_name for tool_name in available_feedback if tool_name not in observed_ok
+        ]
+        if missing_feedback:
             return (
-                "missing compact proposal feedback tool: one of "
-                + ", ".join(available_feedback)
+                "missing compact proposal feedback tools: "
+                + ", ".join(missing_feedback)
             )
         return None
 
@@ -1419,13 +1525,30 @@ class AgenticProposalSession:
         if self.tool_registry is None:
             return ()
         allowed = set(self.tool_registry.allowed_tools(context))
-        return tuple(name for name in _COMPACT_FEEDBACK_TOOLS if name in allowed)
+        available: list[str] = []
+        if (
+            "memory.query" in allowed
+            and (context.search_memory is not None or context.research_log is not None)
+        ):
+            available.append("memory.query")
+        has_screening_steps = any(
+            _step_stage_name(step) == "screening"
+            for step in context.step_history
+            if getattr(step, "protocol_result", None) is not None
+        )
+        if "feedback.query_screening" in allowed and has_screening_steps:
+            available.append("feedback.query_screening")
+        if "feedback.query_runtime" in allowed and has_screening_steps:
+            available.append("feedback.query_runtime")
+        return tuple(available)
 
     def _tool_arg_guidance(
         self,
+        context: ProposalToolContext,
         observations: list[ProposalObservation],
     ) -> dict[str, Any]:
         surface_names = _surface_names_from_observations(observations)
+        forced_constraint = self._hypothesis_constraints(context)
         guidance: dict[str, Any] = {
             "context.read_surface": {
                 "surface_source": "context.list_surfaces observations",
@@ -1444,9 +1567,43 @@ class AgenticProposalSession:
                 ),
             }
         }
+        if forced_constraint:
+            forced_surface = forced_constraint.get("forced_surface")
+            guidance["context.read_surface"]["forced_surface_rule"] = (
+                "A forced research-surface diagnostic is active. Read and "
+                "draft only the forced surface."
+            )
+            guidance["context.read_surface"]["allowed_surface_ids"] = [forced_surface]
+            guidance["proposal.draft_hypothesis"] = forced_constraint
+            guidance["proposal.schema_preview"] = forced_constraint
+            guidance["proposal.target_permission_preview"] = forced_constraint
         if surface_names:
-            guidance["context.read_surface"]["allowed_surface_ids"] = surface_names
+            guidance["context.read_surface"].setdefault(
+                "allowed_surface_ids",
+                surface_names,
+            )
         return guidance
+
+    def _hypothesis_constraints(
+        self,
+        context: ProposalToolContext | None,
+    ) -> dict[str, Any]:
+        if context is None or not context.forced_surface:
+            return {}
+        return {
+            key: value
+            for key, value in {
+                "forced_surface": context.forced_surface,
+                "forced_action": context.forced_action,
+                "forced_target_file": context.forced_target_file,
+                "rule": (
+                    "Hypothesis generation must use exactly the forced "
+                    "surface/action/target when present. Off-surface output "
+                    "fails closed before code generation."
+                ),
+            }.items()
+            if value
+        }
 
     def _planner_observation_requires_fallback(
         self,
@@ -2531,6 +2688,13 @@ def _surface_names_from_observations(
                 if value:
                     names.append(str(value))
     return list(dict.fromkeys(names))
+
+
+def _step_stage_name(step: Any) -> str:
+    protocol = getattr(step, "protocol_result", None)
+    stage = getattr(protocol, "stage", None)
+    value = getattr(stage, "value", stage)
+    return str(value or "").strip().lower()
 
 
 def _has_successful_surface_read(

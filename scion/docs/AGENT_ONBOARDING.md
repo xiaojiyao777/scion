@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-10*
 
 This is the first document an agent or developer should read before working on
 Scion. It explains what the project is, where the current truth lives, what is
@@ -78,7 +78,15 @@ For experiment analysis:
 1. Read [v0.4 current state](status/current-state.md).
 2. Read the relevant post-run analysis under `experiments/`.
 3. Analyze raw experiment artifacts only in a delegated subagent task.
-4. Summarize bounded findings back into `status/current-state.md` and the
+4. For agentic-proposal runs, analyze every round's two APS phases:
+   hypothesis/research session and code/implementation session. The analysis
+   must identify tool calls, observed context, selected surface, hypothesis
+   identity, patch target, actual strategy/operator change, and whether the
+   agent used screening/runtime feedback or only surface text.
+5. Connect proposal behavior to deterministic gates and protocol results:
+   Contract, Verification, canary, screening/validation/frozen, Decision, and
+   reason codes. A run-level W/L/T summary is not sufficient.
+6. Summarize bounded findings back into `status/current-state.md` and the
    relevant experiment/audit document.
 
 ## Non-Negotiable Project Principles
@@ -332,6 +340,24 @@ Every implementation handoff should be reviewable on these axes:
   failure paths handled?
 - Maintainability: is the change local, understandable, and documented?
 
+Every experiment-analysis handoff should be reviewable on these axes:
+
+- APS behavior: did the hypothesis session and code session use the expected
+  tools, selected surface, forced constraints, feedback, and memory?
+- Actual change: did the candidate modify an operator, a policy/config surface,
+  or a whole-algorithm strategy, and what bounded behavior changed?
+- Gate causality: did the candidate fail because of agent surface drift,
+  Contract, Verification, runtime audit, canary, protocol thresholds, or
+  deterministic Decision vetoes?
+- Evidence semantics: do runtime audit fields represent valid no-op states
+  without creating false failures, and are component-local counters separated
+  from final candidate-vs-champion benefit?
+- Protocol interpretation: do pair wins survive seed/case aggregation, median
+  delta, runtime governance, and stage thresholds?
+- Next-action quality: does the analysis identify the boundary to repair
+  next, rather than only reporting aggregate W/L/T or a generic "screening
+  failed" outcome?
+
 For each changed boundary, state why the change belongs there. Examples:
 
 - Framework core: only for generic governance behavior shared across problems.
@@ -419,6 +445,9 @@ After experiment analysis:
 - Add or update a document under `docs/experiments/v0.4/`.
 - Update [v0.4 current state](status/current-state.md) with the run root,
   configuration, outcome, and interpretation.
+- For APS-backed runs, include a per-round chain:
+  hypothesis session behavior, code session behavior, actual patch/strategy
+  content, gate/protocol path, and causal diagnosis.
 - Keep raw metrics as refs; do not paste raw outputs into docs.
 
 After audits:

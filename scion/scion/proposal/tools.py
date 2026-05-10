@@ -155,6 +155,9 @@ class ProposalToolContext:
     policy: ContextExposurePolicy = field(default_factory=ContextExposurePolicy)
     problem_id: str | None = None
     problem_spec_hash: str | None = None
+    forced_surface: str | None = None
+    forced_action: str | None = None
+    forced_target_file: str | None = None
 
     @property
     def branch_id(self) -> str | None:
@@ -474,6 +477,7 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
             "surface_count": len(surfaces),
             "surfaces": [_surface_listing_payload(surface) for surface in surfaces],
             "detail": "compact",
+            "forced_surface_constraint": _forced_surface_constraint_payload(context),
         }
         return self._observation(
             context,
@@ -934,6 +938,23 @@ class DraftHypothesisTool(_BaseReadOnlyTool):
         context: ProposalToolContext,
     ) -> ProposalObservation:
         hypothesis = _hypothesis_from_input(args)
+        forced_violation = _forced_hypothesis_violation(context, hypothesis)
+        if forced_violation is not None:
+            return self._error(
+                context,
+                failure_code=ProposalToolFailureCode.SCHEMA_ERROR,
+                summary="Hypothesis draft violates forced research-surface constraint.",
+                structured_payload={
+                    "passed": False,
+                    "failure_reason": forced_violation,
+                    "forced_surface_constraint": _forced_surface_constraint_payload(
+                        context
+                    ),
+                    "hypothesis": _model_payload(hypothesis),
+                    "workspace_materialized": False,
+                },
+                repair_hint="Draft only the forced surface/action/target.",
+            )
         schema_result = _hypothesis_schema_preview(context, hypothesis)
         if not schema_result["passed"]:
             return self._error(
@@ -1095,6 +1116,15 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
                     f"target_file '{args.target_file}' is not declared for surface "
                     f"'{args.change_locus}'"
                 )
+        forced_violation = _forced_action_target_violation(
+            context,
+            change_locus=args.change_locus,
+            action=args.action,
+            target_file=args.target_file,
+        )
+        if forced_violation is not None:
+            passed = False
+            issues.append(forced_violation)
 
         payload = {
             "passed": passed,
@@ -1112,6 +1142,7 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
             },
             "allowed_actions": allowed_actions,
             "declared_targets": declared_targets,
+            "forced_surface_constraint": _forced_surface_constraint_payload(context),
             "permission": {
                 "surface_known": surface is not None,
                 "action_allowed": bool(
@@ -1417,6 +1448,9 @@ def _hypothesis_schema_preview(
     c1_checks = [check for check in result.checks if check.name == "C1_schema"]
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
+    forced_violation = _forced_hypothesis_violation(context, hypothesis)
+    if forced_violation is not None:
+        passed = False
     if novelty_guidance.get("required") and novelty_guidance.get("missing_fields"):
         passed = False
     return {
@@ -1425,10 +1459,14 @@ def _hypothesis_schema_preview(
         "failure_reason": None
         if passed
         else (
+            forced_violation
+            if forced_violation is not None
+            else
             novelty_guidance.get("detail")
             if novelty_guidance.get("missing_fields")
             else _first_failure(c1_checks)
         ),
+        "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "novelty_signature_guidance": novelty_guidance,
     }
 
@@ -1723,6 +1761,73 @@ def _surface_for_hypothesis(
         return surface
     if hypothesis.target_file:
         return _surface_for_patch_path(context, hypothesis.target_file)
+    return None
+
+
+def _forced_surface_constraint_payload(
+    context: ProposalToolContext,
+) -> dict[str, Any] | None:
+    surface = str(context.forced_surface or "").strip()
+    if not surface:
+        return None
+    return _drop_empty_items(
+        {
+            "surface": surface,
+            "action": str(context.forced_action or "").strip() or None,
+            "target_file": str(context.forced_target_file or "").strip() or None,
+            "rule": (
+                "Hypothesis outputs and proposal previews must use exactly this "
+                "research surface"
+                + (", action" if context.forced_action else "")
+                + (", and target_file" if context.forced_target_file else "")
+                + ". Off-surface hypotheses fail closed before code generation."
+            ),
+        }
+    )
+
+
+def _forced_hypothesis_violation(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> str | None:
+    return _forced_action_target_violation(
+        context,
+        change_locus=hypothesis.change_locus,
+        action=hypothesis.action,
+        target_file=hypothesis.target_file,
+    )
+
+
+def _forced_action_target_violation(
+    context: ProposalToolContext,
+    *,
+    change_locus: str | None,
+    action: str | None,
+    target_file: str | None,
+) -> str | None:
+    forced_surface = str(context.forced_surface or "").strip()
+    if not forced_surface:
+        return None
+    actual_surface = str(change_locus or "").strip()
+    if actual_surface != forced_surface:
+        return (
+            "forced_surface_constraint: change_locus must be "
+            f"{forced_surface!r}, got {actual_surface!r}"
+        )
+    forced_action = str(context.forced_action or "").strip()
+    if forced_action and str(action or "").strip() != forced_action:
+        return (
+            "forced_surface_constraint: action must be "
+            f"{forced_action!r}, got {str(action or '').strip()!r}"
+        )
+    forced_target = str(context.forced_target_file or "").strip()
+    if forced_target:
+        actual_target = str(target_file or "").strip()
+        if _normalize_rel_path(actual_target) != _normalize_rel_path(forced_target):
+            return (
+                "forced_surface_constraint: target_file must be "
+                f"{forced_target!r}, got {actual_target!r}"
+            )
     return None
 
 

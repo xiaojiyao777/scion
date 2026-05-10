@@ -29,6 +29,17 @@ hardcoding CVRP or `algorithm_blueprint` in framework core. This is an
 experiment-control hook for smoke coverage, not a Decision input and not
 solver-quality evidence.
 
+The forced-surface hook is enforced inside the proposal side before any code
+phase starts. `ProposalPipeline` rejects normal and APS hypothesis outputs whose
+`change_locus`, forced `action`, or forced `target_file` differ from the active
+constraint. `ProposalToolContext` carries the same forced surface/action/target
+as tainted proposal context, so APS planner guidance, `context.list_surfaces`,
+`proposal.draft_hypothesis`, `proposal.schema_preview`, and
+`proposal.target_permission_preview` all state or validate the same rule.
+Off-surface APS output becomes an explicit proposal failure; the code phase
+continues only from a ContractGate-approved hypothesis and does not try to
+repair surface selection.
+
 As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
 Session path (`use_agentic_proposal` or injected `agentic_session`). The default
 path above remains the normal behavior. The APS-1 skeleton wraps the current
@@ -82,12 +93,19 @@ write tools.
 Post-audit APS behavior keeps the planner generic but less shallow:
 planner-backed diagnosis is not considered complete after only
 `context.list_surfaces` and `context.read_problem` when compact memory,
-screening, or runtime-feedback tools are available. If the planner stops there,
-APS falls back to the fixed read-only plan. After a hypothesis selects a surface,
-APS performs a deterministic `context.read_surface` before code generation or
-partial-session finalization, unless that exact surface was already read. Surface
-tool observations are compact by default: `context.list_surfaces` exposes only
-selection-oriented metadata, and `context.read_surface` defaults to
+screening, or runtime-feedback data are available. Availability is determined
+generically from proposal-memory providers, research log providers, and
+screening-stage step history; no problem-specific surface names are hardcoded.
+If the planner stops there, APS falls back to the fixed read-only plan, which
+includes bounded `memory.query`, `feedback.query_screening`, and
+`feedback.query_runtime` calls when policy allows them. Planner context is not
+considered complete until all compact feedback tools with available data have
+returned successful observations. After a hypothesis selects a surface, APS
+performs a deterministic `context.read_surface` before code generation or
+partial-session finalization, unless that exact surface was already read.
+Surface tool observations are compact by default:
+`context.list_surfaces` exposes only selection-oriented metadata plus any active
+forced-surface constraint, and `context.read_surface` defaults to
 `detail="compact"` with a `surface-contract.v1` section view (`summary`,
 `interface`, `bounds`, `evidence`, `novelty`, `target_preview`) plus bounded
 interface text and champion-code preview. Compact surface reads omit full prompt

@@ -1423,7 +1423,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_baseline_quality_guard_applied": False,
         "main_search_baseline_params": params,
         "main_search_baseline_params_clamped": False,
-        "main_search_baseline_param_clamps": {},
+        "main_search_baseline_param_clamps": _main_search_baseline_clamp_evidence({}),
         "main_search_post_baseline_operators_enabled": False,
         "main_search_operator_round_limit": 0,
         "main_search_components": [],
@@ -1723,7 +1723,9 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_baseline_quality_guard_applied"] = False
     audit["main_search_baseline_params"] = baseline_params
     audit["main_search_baseline_params_clamped"] = bool(baseline_param_clamps)
-    audit["main_search_baseline_param_clamps"] = baseline_param_clamps
+    audit["main_search_baseline_param_clamps"] = (
+        _main_search_baseline_clamp_evidence(baseline_param_clamps)
+    )
     audit["main_search_post_baseline_operators_enabled"] = post_baseline_enabled
     audit["main_search_operator_round_limit"] = operator_round_limit
     audit["main_search_components"] = components
@@ -1971,6 +1973,32 @@ def _clamp_main_search_baseline_params(
         clamped["max_destroy_customers"] = adaptive_destroy_cap
 
     return clamped, changes
+
+
+def _main_search_baseline_clamp_evidence(
+    changes: Mapping[str, Any],
+) -> dict[str, Any]:
+    fields = sorted(str(field) for field in changes)
+    return {
+        "applied": bool(fields),
+        "status": "clamped" if fields else "no_clamps",
+        "count": len(fields),
+        "fields": fields,
+        "clamps": _json_safe_runtime_value(dict(changes)),
+    }
+
+
+def _json_safe_runtime_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _json_safe_runtime_value(nested)
+            for key, nested in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_runtime_value(nested) for nested in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def _schedule_main_search_components(components: list[str]) -> list[str]:

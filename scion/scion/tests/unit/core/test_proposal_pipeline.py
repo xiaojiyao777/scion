@@ -241,7 +241,15 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
 
 
 def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Modify the forced blueprint surface.",
+        change_locus="algorithm_blueprint",
+        action="modify",
+        target_file="policies/algorithm_blueprint.py",
+    )
     pipeline, branch, runtime, _, _, _ = _pipeline(
+        creative=creative,
         forced_locus="algorithm_blueprint",
         forced_surface_action="modify",
         forced_surface_target_file="policies/algorithm_blueprint.py",
@@ -265,7 +273,15 @@ def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> Non
 
 
 def test_generate_hypothesis_keeps_launch_forced_surface_across_rounds() -> None:
+    creative = FakeCreative()
+    creative.hypothesis = HypothesisProposal(
+        hypothesis_text="Modify the forced blueprint surface.",
+        change_locus="algorithm_blueprint",
+        action="modify",
+        target_file="policies/algorithm_blueprint.py",
+    )
     pipeline, branch, runtime, _, _, _ = _pipeline(
+        creative=creative,
         forced_locus=None,
         persistent_forced_locus="algorithm_blueprint",
         forced_surface_action="modify",
@@ -532,6 +548,50 @@ def test_agentic_completed_patch_before_approval_is_downgraded_and_cleared() -> 
     assert runtime.code_kwargs is None
     assert creative.code_calls == 0
     assert failures == []
+
+
+def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> None:
+    creative = FakeCreative()
+    off_surface = HypothesisProposal(
+        hypothesis_text="Try route-local work despite a forced policy surface.",
+        change_locus="route_local",
+        action="create_new",
+        target_file="operators/local_new.py",
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=off_surface,
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+    )
+    pipeline, branch, runtime, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+        forced_locus=None,
+        persistent_forced_locus="main_search_strategy",
+        forced_surface_action="modify",
+        forced_surface_target_file="policies/main_search_strategy.py",
+        forced_surface_diagnostic=True,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail is not None
+    assert "forced_surface_constraint" in detail
+    assert "main_search_strategy" in detail
+    assert len(failures) == 1
+    assert circuit.failures == [detail]
+    assert runtime.code_kwargs is None
+    assert creative.code_calls == 0
 
 
 def test_agentic_approved_continuation_can_build_code_context_and_patch() -> None:
@@ -935,6 +995,9 @@ def test_decision_features_do_not_include_agentic_rationale_or_memory() -> None:
     assert "rejected_alternatives" not in feature_names
     assert "tainted_artifact_refs" not in feature_names
     assert "session_memory" not in feature_names
+    assert "forced_surface" not in feature_names
+    assert "forced_action" not in feature_names
+    assert "forced_target_file" not in feature_names
 
 
 def test_agentic_lineage_records_tainted_session_without_decision_rationale() -> None:

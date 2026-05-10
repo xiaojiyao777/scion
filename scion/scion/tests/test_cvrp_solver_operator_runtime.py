@@ -20,6 +20,7 @@ from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 from scion.runtime.audit import runtime_audit_failure_from_raw, runtime_audit_failure_from_result
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
+from scion.verification.state_mutation import check_state_mutation
 
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
@@ -1085,6 +1086,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_deep_components_selected"] == []
     assert runtime["main_search_baseline_quality_guard_applied"] is False
     assert runtime["main_search_baseline_params_clamped"] is False
+    assert runtime["main_search_baseline_param_clamps"]["applied"] is False
+    assert runtime["main_search_baseline_param_clamps"]["status"] == "no_clamps"
     assert runtime["main_search_best_returned"] is False
     issue = runtime_audit_failure_from_raw(
         raw,
@@ -1109,7 +1112,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
                 "    return {",
                 "        'enabled': True,",
                 "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.0},",
-                "        'baseline': {'time_fraction': 0.5, 'params': {'destroy_ratio': (0.05, 0.20), 'use_vns': False}},",
+                "        'baseline': {'time_fraction': 0.5, 'params': {'destroy_ratio': (0.05, 0.20), 'use_vns': False, 'max_destroy_customers': 16}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 3, 'top_k': 64},",
                 "        'acceptance': {'min_distance_improvement': 0.0},",
                 "        'restart': {'enabled': True, 'stagnation_rounds': 1, 'max_restarts': 1},",
@@ -1141,6 +1144,14 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert runtime["baseline_time_fraction"] == 0.5
     assert runtime["main_search_baseline_time_fraction_effective"] == 0.5
     assert runtime["main_search_baseline_quality_guard_applied"] is False
+    assert runtime["main_search_baseline_params_clamped"] is False
+    assert runtime["main_search_baseline_param_clamps"] == {
+        "applied": False,
+        "status": "no_clamps",
+        "count": 0,
+        "fields": [],
+        "clamps": {},
+    }
     assert runtime["baseline_policy_params"]["destroy_ratio"] == [0.05, 0.2]
     assert runtime["baseline_use_vns"] is False
     assert runtime["post_baseline_operators_enabled"] is False
@@ -1195,6 +1206,90 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 4.0
     assert runtime["main_search_best_returned"] is True
     assert runtime["operator_attempts"] == 0
+    assert (
+        runtime_audit_failure_from_raw(
+            raw,
+            problem_spec=legacy_spec,
+            selected_surface="main_search_strategy",
+        )
+        is None
+    )
+    v5 = check_state_mutation(
+        legacy_spec,
+        _runner(),
+        str(workspace),
+        adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
+        selected_surface="main_search_strategy",
+    )
+    assert v5.passed, v5.detail
+    missing_field_raw = json.loads(json.dumps(raw))
+    del missing_field_raw["runtime"]["main_search_baseline_param_clamps"]
+    missing_issue = runtime_audit_failure_from_raw(
+        missing_field_raw,
+        problem_spec=legacy_spec,
+        selected_surface="main_search_strategy",
+    )
+    assert missing_issue is not None
+    assert missing_issue["error_category"] == "surface_runtime_contract_error"
+    assert "main_search_baseline_param_clamps" in (
+        missing_issue["missing_runtime_fields"]
+    )
+
+
+def test_main_search_strategy_records_clamp_details_in_selected_surface_runtime(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.75, 'params': {'destroy_ratio': (0.05, 0.50), 'segment_length': 400, 'reaction_factor': 0.05, 'vns_max_no_improve': 10000, 'max_destroy_customers': 200}},",
+                "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 3, 'top_k': 64},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        registry_path=str(workspace / "registry.yaml"),
+    )
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["main_search_baseline_params_clamped"] is True
+    clamp_evidence = runtime["main_search_baseline_param_clamps"]
+    assert clamp_evidence["applied"] is True
+    assert clamp_evidence["status"] == "clamped"
+    assert set(clamp_evidence["fields"]) == {
+        "destroy_ratio",
+        "segment_length",
+        "reaction_factor",
+        "vns_max_no_improve",
+        "max_destroy_customers",
+    }
+    assert clamp_evidence["clamps"]["destroy_ratio"] == {
+        "requested": [0.05, 0.5],
+        "effective": [0.05, 0.35],
+    }
+    assert clamp_evidence["clamps"]["max_destroy_customers"] == {
+        "requested": 200,
+        "effective": 16,
+    }
     assert (
         runtime_audit_failure_from_raw(
             raw,
@@ -1628,6 +1723,7 @@ def test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
     assert issue is not None
     assert issue["error_category"] == "surface_runtime_contract_error"
     assert "main_search_strategy_errors" in issue["detail"]
+    assert "main_search_strategy_errors" in issue["failed_runtime_fields"]
     assert "unknown_move" in json.dumps(raw["runtime"]["main_search_strategy_events"])
 
 

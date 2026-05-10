@@ -2187,12 +2187,24 @@ def test_cvrp_main_search_strategy_clamps_aggressive_baseline_params(
     assert policy["main_search_baseline_params"]["reaction_factor"] == 0.08
     assert policy["main_search_baseline_params"]["vns_max_no_improve"] == 7000
     assert policy["main_search_baseline_params"]["max_destroy_customers"] == 16
-    assert set(policy["main_search_baseline_param_clamps"]) == {
+    clamp_evidence = policy["main_search_baseline_param_clamps"]
+    assert clamp_evidence["applied"] is True
+    assert clamp_evidence["status"] == "clamped"
+    assert clamp_evidence["count"] == 5
+    assert set(clamp_evidence["fields"]) == {
         "destroy_ratio",
         "segment_length",
         "reaction_factor",
         "vns_max_no_improve",
         "max_destroy_customers",
+    }
+    assert clamp_evidence["clamps"]["destroy_ratio"] == {
+        "requested": [0.05, 0.5],
+        "effective": [0.05, 0.35],
+    }
+    assert clamp_evidence["clamps"]["max_destroy_customers"] == {
+        "requested": 200,
+        "effective": 16,
     }
 
 

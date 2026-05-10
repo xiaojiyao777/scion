@@ -108,7 +108,16 @@ doing deep evidence-driven strategy diagnosis. The next repair should first
 restore hard forced-surface control, stabilize the
 `main_search_baseline_param_clamps` runtime evidence contract, and make forced
 diagnostics consume bounded screening/runtime feedback before further CVRP
-strategy tuning.
+strategy tuning. That repair is now implemented in the working tree: forced
+surface/action/target constraints are carried into APS tool context and fail
+closed before code generation, APS planner context requires all available
+bounded memory/screening/runtime feedback tools, and CVRP
+`main_search_baseline_param_clamps` now records a non-empty no-clamp evidence
+object instead of `{}`. Focused, boundary, and full test suites pass. The next
+step is another five-round forced `main_search_strategy` smoke to confirm that
+no off-surface hypothesis reaches code generation, no no-clamp evidence false
+failure recurs, and APS traces show bounded feedback use before hypothesis
+finalization.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2480,6 +2489,59 @@ is present, make APS forced diagnostics use bounded screening/runtime feedback,
 and diagnose why accepted route-pair movement does not improve the final
 returned case-level objective.
 
+## 2026-05-10 APS Forced-Surface And No-Clamp Evidence Repair
+
+Implemented the immediate repair slice from the deep net-benefit APS analysis:
+
+- Persistent diagnostic forced-surface controls now propagate into
+  `ProposalToolContext` as forced surface/action/target constraints.
+- APS hypothesis outputs fail closed before code generation when
+  `change_locus`, forced action, or forced target file differs from the active
+  diagnostic constraint.
+- Normal non-APS hypothesis generation applies the same forced-surface
+  rejection before hypothesis records are created.
+- Proposal tools now expose or validate the forced constraint in
+  `context.list_surfaces`, `proposal.draft_hypothesis`,
+  `proposal.schema_preview`, and `proposal.target_permission_preview`.
+- APS planner context is not considered complete until all available compact
+  feedback tools have succeeded. Availability is generic: proposal memory or
+  research log enables `memory.query`, and screening-stage step history enables
+  `feedback.query_screening` and `feedback.query_runtime`.
+- The forced constraint remains proposal-side tainted context and is not added
+  to `DecisionFeatures`.
+- CVRP `main_search_baseline_param_clamps` is now always a non-empty JSON-safe
+  evidence object. The no-clamp case records `applied=false`,
+  `status=no_clamps`, `count=0`, and empty nested `fields`/`clamps`; clamp
+  cases still record requested/effective values for fields such as
+  `destroy_ratio` and `max_destroy_customers`.
+- The generic runtime audit rule was not loosened. CVRP fixed the valid no-op
+  representation at the problem-package boundary.
+- Experiment analysis rules in `AGENT_ONBOARDING.md` now require per-round APS
+  hypothesis/code chain analysis for APS-backed runs.
+
+Validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+99 passed in 1.69s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/test_research_surfaces.py -k 'main_search_strategy or cvrp_main_search' -q
+20 passed, 86 deselected in 3.85s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_verification.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_contract.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_protocol.py scion/scion/tests/unit/core/test_evaluation_pipeline.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/test_cvrp_controlled_campaign.py -q
+454 passed in 41.19s
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+1521 passed, 1 skipped in 63.29s
+```
+
+Next step: commit this slice and run another five-round forced
+`main_search_strategy` smoke. This smoke should be judged first on diagnostic
+control and APS behavior: all hypotheses must stay on `main_search_strategy`,
+no valid no-clamp strategy should fail runtime audit solely because
+`main_search_baseline_param_clamps` is empty, and APS artifacts should show
+bounded feedback reads before hypothesis finalization.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2534,10 +2596,11 @@ P1:
   improve screening quality: one forced diagnostic round drifted to
   `route_local`, all screened candidates had case-level `win_rate=0.0`,
   `bounded_destroy_repair` accepted zero moves, and accepted route-pair moves
-  did not become case-level wins. The next blocker is hard forced-surface
-  proposal control, APS use of bounded feedback/memory during hypothesis
-  research, no-clamp runtime evidence semantics, and net case-level efficacy of
-  route-pair and destroy/repair movement.
+  did not become case-level wins. The hard forced-surface proposal control,
+  APS compact feedback completeness, and no-clamp runtime evidence semantics
+  repairs are now implemented and validated. The next blocker is whether a new
+  five-round smoke confirms those controls in real APS artifacts, then net
+  case-level efficacy of route-pair and destroy/repair movement.
 
 P2:
 

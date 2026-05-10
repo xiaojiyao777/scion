@@ -1176,6 +1176,59 @@ def test_draft_and_preview_report_missing_semantic_novelty_signature(
     ] == ["budget_pattern", "round_limit_pattern"]
 
 
+def test_forced_surface_constraint_rejects_off_surface_draft_and_previews(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        forced_surface="search_policy",
+        forced_action="modify",
+        forced_target_file="policies/search_policy.py",
+    )
+    off_surface = _valid_hypothesis_payload(
+        change_locus="route_local",
+        action="create_new",
+        target_file="operators/local_new.py",
+        novelty_signature={},
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    draft = registry.call("proposal.draft_hypothesis", off_surface, context)
+    schema = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": off_surface},
+        context,
+    )
+    target = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "route_local",
+            "action": "create_new",
+            "target_file": "operators/local_new.py",
+        },
+        context,
+    )
+
+    assert listed.structured_payload["forced_surface_constraint"]["surface"] == (
+        "search_policy"
+    )
+    assert draft.is_error is True
+    assert draft.failure_code == ProposalToolFailureCode.SCHEMA_ERROR
+    assert "forced_surface_constraint" in draft.structured_payload["failure_reason"]
+    assert schema.is_error is False
+    assert schema.structured_payload["passed"] is False
+    assert "forced_surface_constraint" in (
+        schema.structured_payload["hypothesis"]["failure_reason"]
+    )
+    assert target.is_error is False
+    assert target.structured_payload["passed"] is False
+    assert any(
+        "forced_surface_constraint" in issue
+        for issue in target.structured_payload["issues"]
+    )
+
+
 def test_draft_patch_returns_artifact_without_workspace_write(tmp_path: Path) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = _context(tmp_path, policy=_tool_enabled_policy())
@@ -1917,10 +1970,62 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
         assert "structured_payload" not in event.metadata
 
 
+def test_agentic_session_forced_surface_fails_closed_before_partial_finalize(
+    tmp_path: Path,
+) -> None:
+    off_surface = HypothesisProposal(
+        hypothesis_text="Try a route-local move.",
+        change_locus="route_local",
+        action="create_new",
+        target_file="operators/local_new.py",
+    )
+    creative = FakeCreative(hypothesis=off_surface)
+    context = replace(
+        _context(tmp_path, policy=_tool_enabled_policy()),
+        forced_surface="search_policy",
+        forced_action="modify",
+        forced_target_file="policies/search_policy.py",
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={
+                "forced_surface": "search_policy",
+                "forced_action": "modify",
+                "forced_target_file": "policies/search_policy.py",
+            },
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert (
+        output.termination_reason
+        == AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED
+    )
+    assert output.hypothesis is None
+    assert output.patch is None
+    assert "forced_surface_constraint" in (output.failure_detail or "")
+    assert creative.code_contexts == []
+
+
 def test_agentic_session_reads_cvrp_main_search_strategy_under_legacy_budget(
     tmp_path: Path,
 ) -> None:
-    context = _cvrp_context_with_champion(tmp_path)
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        search_memory=UnsafeMemory(),
+    )
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="main_search_strategy",
@@ -2479,7 +2584,8 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         == "planner_stopped_before_required_context"
         for event in output.transcript
     )
-    assert any(name in tool_names for name in _COMPACT_FEEDBACK_TOOL_NAMES)
+    for feedback_tool in _COMPACT_FEEDBACK_TOOL_NAMES:
+        assert feedback_tool in tool_names
     assert any(
         event["tool_name"] == "context.read_surface"
         and event["selection_source"] == "selected_surface_required"
@@ -2492,10 +2598,64 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         and observation["structured_payload"]["current_artifact"]["max_chars"] == 1200
         for observation in code_observations
     )
-    assert any(
-        observation["tool_name"] in _COMPACT_FEEDBACK_TOOL_NAMES
+    hypothesis_observation_names = {
+        observation["tool_name"]
         for observation in creative.hypothesis_contexts[0]["agentic_tool_observations"]
+    }
+    assert _COMPACT_FEEDBACK_TOOL_NAMES.issubset(hypothesis_observation_names)
+
+
+def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"tool_name": "memory.query", "args": {}},
+            {"stop": True},
+        ]
     )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    tool_names = [
+        event.metadata["tool_name"]
+        for event in output.transcript
+        if event.metadata.get("tool_name")
+    ]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert any(
+        event.metadata.get("error_code")
+        == "planner_stopped_before_required_context"
+        and "feedback.query_screening" in event.metadata.get("detail", "")
+        and "feedback.query_runtime" in event.metadata.get("detail", "")
+        for event in output.transcript
+    )
+    assert "memory.query" in tool_names
+    assert "feedback.query_screening" in tool_names
+    assert "feedback.query_runtime" in tool_names
 
 
 def test_agentic_session_bounded_planner_rejects_forbidden_tool(

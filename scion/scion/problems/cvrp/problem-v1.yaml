@@ -844,7 +844,9 @@ research_surfaces:
         acceptance/restart/perturbation knobs, and optional post-baseline
         registry-operator scheduling. The solver audits component coverage with
         selected, attempted, accepted, skipped/skip-reason, objective-delta, and
-        destroy/repair count telemetry. Defaults are inactive and disable
+        destroy/repair count telemetry, and records conservative baseline-param
+        clamp telemetry as a non-empty JSON-safe evidence object even when no
+        clamp is applied. Defaults are inactive and disable
         post-baseline registry operators for this surface unless explicitly
         requested.
     targets:

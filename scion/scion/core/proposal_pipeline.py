@@ -239,6 +239,18 @@ class ProposalPipeline:
             self.circuit_breaker.record_failure(str(exc))
             return None, None
 
+        forced_detail = self._forced_hypothesis_violation(
+            hypothesis,
+            forced_surface=forced_locus,
+            forced_action=forced_action,
+            forced_target_file=forced_target_file,
+        )
+        if forced_detail is not None:
+            self.hypothesis_failure_details[bid] = forced_detail
+            self.handle_failure(branch, FailureEvent(category="proposal", detail=forced_detail))
+            self.circuit_breaker.record_failure(forced_detail)
+            return None, None
+
         self.circuit_breaker.record_success()
         return hypothesis, self._hypothesis_record(branch, hypothesis)
 
@@ -449,6 +461,19 @@ class ProposalPipeline:
         if adapter is None:
             adapter = _runtime_attr(self.problem_runtime, "_adapter")
 
+        forced_surface = (
+            str((hypothesis_context or {}).get("forced_surface") or "").strip()
+            or self.persistent_forced_locus
+        )
+        forced_action = (
+            str((hypothesis_context or {}).get("forced_action") or "").strip()
+            or (self.forced_surface_action if forced_surface else None)
+        )
+        forced_target_file = (
+            str((hypothesis_context or {}).get("forced_target_file") or "").strip()
+            or (self.forced_surface_target_file if forced_surface else None)
+        )
+
         return ProposalToolContext(
             session_id="pending",
             campaign_id=self.campaign_id,
@@ -462,6 +487,9 @@ class ProposalPipeline:
             policy=ContextExposurePolicy(allow_contract_preview=True),
             problem_id=self.problem_id,
             problem_spec_hash=self.problem_spec_hash,
+            forced_surface=forced_surface or None,
+            forced_action=forced_action or None,
+            forced_target_file=forced_target_file or None,
         )
 
     def _generate_agentic_hypothesis(
@@ -504,6 +532,17 @@ class ProposalPipeline:
             branch=branch,
             champion=champion,
             output=output,
+            forced_surface=(
+                request.tool_context.forced_surface if request.tool_context else None
+            ),
+            forced_action=(
+                request.tool_context.forced_action if request.tool_context else None
+            ),
+            forced_target_file=(
+                request.tool_context.forced_target_file
+                if request.tool_context
+                else None
+            ),
         )
         output = self._sanitize_pre_contract_agentic_output(output)
         self._record_agentic_lineage_event(output)
@@ -657,6 +696,9 @@ class ProposalPipeline:
         branch: Branch,
         champion: ChampionState,
         output: AgenticProposalOutput,
+        forced_surface: str | None = None,
+        forced_action: str | None = None,
+        forced_target_file: str | None = None,
     ) -> AgenticProposalOutput:
         failures: list[str] = []
         if output.branch_id != branch.branch_id:
@@ -701,6 +743,15 @@ class ProposalPipeline:
             failures.append(
                 f"campaign_id expected {self.campaign_id!r} got {output.campaign_id!r}"
             )
+        if output.hypothesis is not None:
+            forced_violation = self._forced_hypothesis_violation(
+                output.hypothesis,
+                forced_surface=forced_surface,
+                forced_action=forced_action,
+                forced_target_file=forced_target_file,
+            )
+            if forced_violation is not None:
+                failures.append(forced_violation)
 
         patch = output.patch
         failure_detail = output.failure_detail
@@ -723,6 +774,38 @@ class ProposalPipeline:
                 replace(output, patch=patch, failure_detail=failure_detail)
             )
         return ensure_agentic_output_audit_metadata(output)
+
+    @staticmethod
+    def _forced_hypothesis_violation(
+        hypothesis: HypothesisProposal,
+        *,
+        forced_surface: str | None,
+        forced_action: str | None,
+        forced_target_file: str | None,
+    ) -> str | None:
+        forced_surface = str(forced_surface or "").strip()
+        if not forced_surface:
+            return None
+        if str(hypothesis.change_locus or "").strip() != forced_surface:
+            return (
+                "forced_surface_constraint: change_locus must be "
+                f"{forced_surface!r}, got {hypothesis.change_locus!r}"
+            )
+        forced_action = str(forced_action or "").strip()
+        if forced_action and str(hypothesis.action or "").strip() != forced_action:
+            return (
+                "forced_surface_constraint: action must be "
+                f"{forced_action!r}, got {hypothesis.action!r}"
+            )
+        forced_target_file = str(forced_target_file or "").strip()
+        if forced_target_file:
+            target = str(hypothesis.target_file or "").strip()
+            if target != forced_target_file:
+                return (
+                    "forced_surface_constraint: target_file must be "
+                    f"{forced_target_file!r}, got {target!r}"
+                )
+        return None
 
     def _sanitize_pre_contract_agentic_output(
         self,

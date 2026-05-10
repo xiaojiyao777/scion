@@ -78,7 +78,8 @@ Solver flow:
    - `baseline_policy` passes sanitized bounded ALNS+VNS kwargs into the
      repo-local baseline;
    - active `main_search_strategy` baseline params reuse the same sanitization
-     path before passing kwargs into the repo-local baseline;
+     path before passing kwargs into the repo-local baseline, and conservative
+     no-op/clamp evidence is recorded as a non-empty JSON-safe runtime object;
    - smoke/synthetic/JSON paths use deterministic nearest-neighbor fallback.
 8. Run the main-search improvement loop, when active, after baseline and before
    registry operators. The solver owns bounded primitives:
@@ -326,6 +327,12 @@ distance deltas, improvement counts, bounded destroy/repair
 removed/reinserted counts and accept limit, global and per-component acceptance
 thresholds, restart/perturbation knobs and counts, phase objective deltas,
 phase runtime, elapsed runtime, whether the phase best was returned, and stop reason.
+`main_search_baseline_param_clamps` is always a non-empty JSON-safe evidence
+object. In the no-clamp case it records `applied=false`,
+`status=no_clamps`, `count=0`, and empty nested `fields`/`clamps`; when clamps
+fire it records `applied=true`, `status=clamped`, a bounded field list, and
+per-field requested/effective values such as `destroy_ratio` and
+`max_destroy_customers`.
 Selected-surface audit fails closed when
 `main_search_strategy_errors` is positive or these fields are missing/empty.
 When `main_search_strategy` is the selected surface, `ExperimentProtocol`
