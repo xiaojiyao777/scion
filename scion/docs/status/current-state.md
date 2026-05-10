@@ -98,10 +98,17 @@ failed `SCREENING_FAIL_WIN_RATE` with case-level `win_rate=0.0`. The
 net-benefit guards executed and reduced uncontrolled destroy/repair acceptance,
 but `bounded_destroy_repair` accepted zero moves and accepted route-pair moves
 did not translate into case-level wins. Long CVRP validation remains blocked.
-The next repair should first restore hard forced-surface control and stabilize
-the `main_search_baseline_param_clamps` runtime evidence contract, then
-diagnose why accepted route-pair movement is not improving final case-level
-outcomes.
+Deeper APS analysis found that the forced-surface drift occurred in the
+hypothesis phase, not code generation or summary reporting: the agent still had
+tool/task affordance to choose from all surfaces, then code generation
+implemented the already-approved `route_local` hypothesis. The same analysis
+also found that the APS sessions mostly read problem/surface context and did
+not call memory or screening/runtime feedback tools, so the agent was not yet
+doing deep evidence-driven strategy diagnosis. The next repair should first
+restore hard forced-surface control, stabilize the
+`main_search_baseline_param_clamps` runtime evidence contract, and make forced
+diagnostics consume bounded screening/runtime feedback before further CVRP
+strategy tuning.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2435,12 +2442,22 @@ Interpretation:
   `modify/main_search_strategy: 4` and `create_new/route_local: 1`. Round 4
   drifted to `operators/oropt_intra_route.py`, which should not happen in a
   forced main-search diagnostic.
+- Delegated APS trace analysis found that the drift happened in the hypothesis
+  phase. Command/launch artifacts carried `force_surface=main_search_strategy`,
+  but the hypothesis task and tool context still allowed all declared surfaces;
+  the code phase then implemented the approved off-surface `route_local`
+  hypothesis.
+- APS behavior was shallow relative to the intended research loop: sessions
+  mostly used problem/surface reads and did not call memory or
+  screening/runtime feedback tools in the analyzed artifacts.
 - C10 was healthy; no novelty rejection blocked the run.
 - Three candidates passed Contract, Verification, canary, and reached
   screening; all failed `SCREENING_FAIL_WIN_RATE`.
 - Two main-search candidates failed verification at `V5_solution_consistency`
   because selected-surface runtime audit found empty
-  `main_search_baseline_param_clamps`.
+  `main_search_baseline_param_clamps`. The deeper analysis indicates this is a
+  no-clamp representation issue: `{}` is a valid no-op value for the field but
+  the generic required-field audit treats empty objects as failure.
 - The two screened `main_search_strategy` candidates had complete
   selected-surface runtime audit: `main_search_strategy_loaded=true`,
   `main_search_strategy_active=true`, `main_search_strategy_errors=0`, and
@@ -2459,8 +2476,9 @@ Interpretation:
 This does not satisfy the long-validation condition. The next repair should
 restore hard forced-surface proposal control, make
 `main_search_baseline_param_clamps` stable runtime evidence even when no clamp
-is present, and diagnose why accepted route-pair movement does not improve the
-final returned case-level objective.
+is present, make APS forced diagnostics use bounded screening/runtime feedback,
+and diagnose why accepted route-pair movement does not improve the final
+returned case-level objective.
 
 ## Remaining Optimization Backlog
 
@@ -2517,8 +2535,9 @@ P1:
   `route_local`, all screened candidates had case-level `win_rate=0.0`,
   `bounded_destroy_repair` accepted zero moves, and accepted route-pair moves
   did not become case-level wins. The next blocker is hard forced-surface
-  proposal control plus net case-level efficacy of route-pair and
-  destroy/repair movement.
+  proposal control, APS use of bounded feedback/memory during hypothesis
+  research, no-clamp runtime evidence semantics, and net case-level efficacy of
+  route-pair and destroy/repair movement.
 
 P2:
 
