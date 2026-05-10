@@ -87,7 +87,10 @@ Solver flow:
    `bounded_destroy_repair`. The main-search loop records selected,
    attempted, accepted, and skipped components, per-component skip reasons,
    best observed distance deltas, improvement counts, runtime, and
-   destroy/repair removed/reinserted counts. It also emits a
+   destroy/repair removed/reinserted counts. It also records accepted-move
+   delta sums, accepted best deltas, accepted positive counts, and an objective
+   trace linking phase start objective, best objective, returned objective,
+   phase delta, and accepted-but-zero-phase-delta diagnostics. It also emits a
    `main_search_component_coverage_status` summary and
    `main_search_deep_components_selected` so forced diagnostics can audit
    whether `route_pair_swap` and `bounded_destroy_repair` were selected and
@@ -170,7 +173,10 @@ and if a multi-customer repair fails or produces no improvement it can spend
 remaining budget on bounded smaller destroy subsets before giving up. Runtime
 audit records removed, reinserted, and repair-fallback counts, while skip
 reasons distinguish budget exhaustion, infeasible insertion, below-threshold
-candidates, and repairs that produced no improvement.
+candidates, and repairs that produced no improvement. Main-search audit also
+records per-component accepted delta totals/best deltas/positive counts plus a
+phase objective trace so proposal feedback can distinguish "component accepted
+moves" from "phase-level or final case benefit."
 Forced diagnostic `main_search_strategy` candidates should select both deep
 components in `improvement.enabled_components`, keep registry operators off
 unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128

@@ -152,7 +152,11 @@ surfaces with declared `evidence.required_runtime_fields`, candidate-side pair
 metrics also preserve those required runtime fields with bounded JSON values,
 including non-scalar values such as structured plans or phase lists. The
 protocol result carries a bounded per-field surface runtime summary for
-reporting; `SafeFeatureExtractor` does not read those tainted runtime values.
+reporting. That summary includes representative values plus generic numeric
+summaries for scalar and mapping-shaped runtime fields, such as observed
+counts, weighted sums, zero/nonzero counts, and positive/negative counts. These
+summaries are reporting/proposal-feedback evidence only;
+`SafeFeatureExtractor` does not read those tainted runtime values.
 
 ## SafeFeatureExtractor
 

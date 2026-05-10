@@ -1086,6 +1086,17 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
                         "missing": 0,
                         "empty": 0,
                         "failed": 0,
+                        "numeric_summary": {
+                            "mapping": {
+                                "route_pair_swap": {
+                                    "observed_count": 2,
+                                    "weighted_sum": 43.0,
+                                    "nonzero_count": 1,
+                                    "positive_count": 1,
+                                    "zero_count": 1,
+                                }
+                            }
+                        },
                         "values": [
                             {
                                 "value": "{'route_pair_swap': 43, 'bounded_destroy_repair': 11}",
@@ -1119,6 +1130,8 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
     assert "candidate_surface_runtime_attribution" in rendered
     assert "screening_runtime_attribution" in runtime.structured_payload
     assert "main_search_component_accepted" in rendered
+    assert "numeric_summary" in rendered
+    assert "nonzero_count" in rendered
     assert "main_search_objective_delta_by_phase" in rendered
     assert "raw_metrics_ref" not in rendered
 

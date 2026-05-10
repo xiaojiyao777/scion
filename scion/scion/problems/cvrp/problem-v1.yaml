@@ -959,6 +959,9 @@ research_surfaces:
         - main_search_component_skip_reasons
         - main_search_component_best_delta
         - main_search_component_improvement_counts
+        - main_search_component_accepted_delta_sum
+        - main_search_component_accepted_best_delta
+        - main_search_component_accepted_positive_counts
         - main_search_component_removed_counts
         - main_search_component_reinserted_counts
         - main_search_component_repair_fallback_counts
@@ -972,6 +975,7 @@ research_surfaces:
         - main_search_perturbation_enabled
         - main_search_perturbation_strength
         - main_search_perturbation_count
+        - main_search_objective_trace
         - main_search_objective_delta_by_phase
         - main_search_phase_runtime_ms
         - main_search_elapsed_ms

@@ -52,9 +52,12 @@ enough to continue, validate, freeze, promote, or abandon.
   feedback-attribution fidelity plus CVRP problem-owned surface/component
   efficacy: compact runtime highlights can overemphasize modal zero accepted
   values, and accepted route-pair/destroy-repair moves still do not clearly
-  become phase-level or case-level benefit. Do not run a long CVRP
-  solver-quality validation until short diagnostics show stable case-level
-  quality evidence.
+  become phase-level or case-level benefit. The attribution repair is now
+  implemented and full tests pass: protocol selected-surface runtime summaries
+  include generic numeric scalar/mapping stats, proposal feedback exposes those
+  stats, and CVRP `main_search_strategy` records accepted-delta and objective
+  trace accounting. Do not run a long CVRP solver-quality validation until
+  short diagnostics show stable case-level quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

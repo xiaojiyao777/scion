@@ -174,7 +174,15 @@ blocker is now feedback-attribution fidelity plus CVRP problem-owned
 surface/component efficacy: APS can see feedback, but compact representative
 runtime highlights overemphasize modal zero accepted values and do not yet
 show the full chain from accepted component moves to phase delta and final
-case-level benefit. Do not run long CVRP validation.
+case-level benefit. Do not run long CVRP validation. The next attribution and
+runtime-accounting repair is now implemented in the working tree: protocol
+selected-surface runtime summaries compute generic numeric scalar/mapping
+statistics, proposal feedback exposes those stats, and CVRP
+`main_search_strategy` emits accepted-delta totals/best deltas/positive counts
+plus an objective trace from phase start to returned best. Focused CVRP and
+full Scion tests pass. The next step is another five-round forced
+`main_search_strategy` smoke to verify whether APS can now distinguish
+component accepted moves from phase-level and case-level benefit.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):

@@ -143,10 +143,11 @@ registry size guard, so available compact feedback can still succeed without
 exposing raw metric refs when runtime summaries are unusually large. Screening
 feedback returns recent rows first and includes the query scope plus a bounded
 selected-surface runtime attribution highlight derived from problem-declared
-runtime summary field names and representative values. Runtime feedback exposes
-the same bounded attribution highlights across recent screening steps so the
-proposal agent can connect component attempts/accepted moves, phase deltas, and
-case-level screening stats without reading raw metrics.
+runtime summary field names, representative values, and generic numeric
+summaries. Runtime feedback exposes the same bounded attribution highlights
+across recent screening steps so the proposal agent can connect component
+attempts/accepted moves, nonzero/positive counts, phase deltas, and case-level
+screening stats without reading raw metrics.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,

@@ -2600,7 +2600,11 @@ _RUNTIME_ATTRIBUTION_SUFFIXES = (
     "_skip_reasons",
     "_best_delta",
     "_improvement_counts",
+    "_accepted_delta_sum",
+    "_accepted_best_delta",
+    "_accepted_positive_counts",
     "_runtime_ms",
+    "_objective_trace",
     "_delta_by_phase",
     "_stop_reason",
     "_coverage_status",
@@ -2632,6 +2636,9 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
                 "missing": field_summary.get("missing"),
                 "empty": field_summary.get("empty"),
                 "failed": field_summary.get("failed"),
+                "numeric_summary": _strip_forbidden_value(
+                    field_summary.get("numeric_summary") or {}
+                ),
                 "values": _compact_runtime_attribution_values(
                     field_summary.get("values")
                 ),

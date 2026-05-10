@@ -551,6 +551,18 @@ def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
     assert summary["fields"]["algorithm_plan"]["present"] == 4
     assert summary["fields"]["algorithm_phases_executed"]["present"] == 4
     assert summary["fields"]["algorithm_blueprint_errors"]["failed"] == 0
+    accepted_numeric = summary["fields"]["algorithm_local_search_accepted"][
+        "numeric_summary"
+    ]["scalar"]
+    assert accepted_numeric["observed_count"] == 4
+    assert accepted_numeric["weighted_sum"] == 4.0
+    assert accepted_numeric["positive_count"] == 4
+    delta_numeric = summary["fields"]["algorithm_best_delta_by_phase"][
+        "numeric_summary"
+    ]["mapping"]["local_search"]
+    assert delta_numeric["observed_count"] == 4
+    assert delta_numeric["weighted_sum"] == 16.0
+    assert delta_numeric["positive_count"] == 4
 
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["candidate_surface_runtime_summary"] == summary

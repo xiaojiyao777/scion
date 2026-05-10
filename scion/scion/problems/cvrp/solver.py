@@ -1453,6 +1453,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_skip_reasons": {},
         "main_search_component_best_delta": {},
         "main_search_component_improvement_counts": {},
+        "main_search_component_accepted_delta_sum": {},
+        "main_search_component_accepted_best_delta": {},
+        "main_search_component_accepted_positive_counts": {},
         "main_search_component_removed_counts": {},
         "main_search_component_reinserted_counts": {},
         "main_search_component_repair_fallback_counts": {},
@@ -1468,6 +1471,11 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_perturbation_enabled": False,
         "main_search_perturbation_strength": 1,
         "main_search_perturbation_count": 0,
+        "main_search_objective_trace": {
+            "status": "inactive",
+            "phase_delta": 0.0,
+            "accepted_but_zero_phase_delta": {},
+        },
         "main_search_objective_delta_by_phase": {"inactive": 0.0},
         "main_search_phase_runtime_ms": {"inactive": 0},
         "main_search_elapsed_ms": 0,
@@ -1751,6 +1759,15 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_component_improvement_counts"] = {
         component: 0 for component in components
     }
+    audit["main_search_component_accepted_delta_sum"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_accepted_best_delta"] = {
+        component: 0.0 for component in components
+    }
+    audit["main_search_component_accepted_positive_counts"] = {
+        component: 0 for component in components
+    }
     audit["main_search_component_removed_counts"] = {
         component: 0 for component in components
     }
@@ -1783,12 +1800,22 @@ def _normalize_main_search_strategy_plan(
     if active:
         audit["main_search_phases"] = ["plan_loaded"]
         audit["main_search_objective_delta_by_phase"] = {"plan_loaded": 0.0}
+        audit["main_search_objective_trace"] = {
+            "status": "plan_loaded",
+            "phase_delta": 0.0,
+            "accepted_but_zero_phase_delta": {},
+        }
         audit["main_search_phase_runtime_ms"] = {"plan_loaded": 0}
         audit["main_search_best_returned"] = False
         audit["main_search_stop_reason"] = "plan_loaded"
     elif requested_active:
         audit["main_search_phases"] = ["plan_invalid"]
         audit["main_search_objective_delta_by_phase"] = {"plan_invalid": 0.0}
+        audit["main_search_objective_trace"] = {
+            "status": "plan_invalid",
+            "phase_delta": 0.0,
+            "accepted_but_zero_phase_delta": {},
+        }
         audit["main_search_phase_runtime_ms"] = {"plan_invalid": 0}
         audit["main_search_best_returned"] = False
         audit["main_search_stop_reason"] = "invalid_plan"
@@ -3089,6 +3116,11 @@ def improve_with_main_search_strategy(
             current = candidate
             current_objective = candidate_objective
             _record_main_search_component_accepted(audit, component)
+            _record_main_search_component_accepted_delta(
+                audit,
+                component,
+                candidate_delta,
+            )
             round_accepted += 1
             if component == "route_pair_swap":
                 round_route_pair_improved = True
@@ -3156,15 +3188,23 @@ def improve_with_main_search_strategy(
         break
 
     _set_main_search_phase_runtime(audit, "improvement_loop", phase_start_ns)
+    phase_delta = _objective_distance_delta(initial_objective, best_objective)
     audit.setdefault("main_search_objective_delta_by_phase", {})[
         "improvement_loop"
-    ] = _objective_distance_delta(initial_objective, best_objective)
+    ] = phase_delta
     audit["main_search_elapsed_ms"] = sum(
         _as_nonnegative_int(value)
         for value in audit.get("main_search_phase_runtime_ms", {}).values()
     )
     audit["main_search_best_returned"] = True
     audit["main_search_stop_reason"] = stop_reason
+    audit["main_search_objective_trace"] = _main_search_objective_trace(
+        initial_objective=initial_objective,
+        best_objective=best_objective,
+        returned_objective=_objective_for_solution(adapter, instance, best_solution),
+        phase_delta=phase_delta,
+        audit=audit,
+    )
     return best_solution, audit
 
 
@@ -4008,6 +4048,75 @@ def _record_main_search_component_accepted(
         audit["main_search_accepted_components"] = accepted
     if component not in accepted:
         accepted.append(component)
+
+
+def _record_main_search_component_accepted_delta(
+    audit: dict[str, Any],
+    component: str,
+    delta: float,
+) -> None:
+    delta_sum = audit.setdefault("main_search_component_accepted_delta_sum", {})
+    delta_sum[component] = round(float(delta_sum.get(component, 0.0) or 0.0) + delta, 6)
+    best_delta = audit.setdefault("main_search_component_accepted_best_delta", {})
+    best_delta[component] = max(
+        float(best_delta.get(component, 0.0) or 0.0),
+        round(float(delta), 6),
+    )
+    positive_counts = audit.setdefault(
+        "main_search_component_accepted_positive_counts",
+        {},
+    )
+    if delta > _OBJECTIVE_TOLERANCE:
+        positive_counts[component] = (
+            _as_nonnegative_int(positive_counts.get(component)) + 1
+        )
+
+
+def _main_search_objective_trace(
+    *,
+    initial_objective: Mapping[str, int | float],
+    best_objective: Mapping[str, int | float],
+    returned_objective: Mapping[str, int | float],
+    phase_delta: float,
+    audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    accepted = audit.get("main_search_component_accepted")
+    if not isinstance(accepted, Mapping):
+        accepted = {}
+    accepted_delta_sum = audit.get("main_search_component_accepted_delta_sum")
+    if not isinstance(accepted_delta_sum, Mapping):
+        accepted_delta_sum = {}
+    accepted_but_zero_phase_delta = {
+        str(component): _as_nonnegative_int(count)
+        for component, count in accepted.items()
+        if _as_nonnegative_int(count) > 0 and phase_delta <= _OBJECTIVE_TOLERANCE
+    }
+    return {
+        "status": "returned_best",
+        "initial_objective": _objective_audit_payload(initial_objective),
+        "best_objective": _objective_audit_payload(best_objective),
+        "returned_objective": _objective_audit_payload(returned_objective),
+        "phase_delta": round(float(phase_delta), 6),
+        "accepted_delta_sum_by_component": {
+            str(component): round(float(value or 0.0), 6)
+            for component, value in accepted_delta_sum.items()
+        },
+        "accepted_count_by_component": {
+            str(component): _as_nonnegative_int(count)
+            for component, count in accepted.items()
+        },
+        "accepted_but_zero_phase_delta": accepted_but_zero_phase_delta,
+    }
+
+
+def _objective_audit_payload(
+    objective: Mapping[str, int | float],
+) -> dict[str, int | float]:
+    return {
+        str(key): round(float(value), 6)
+        for key, value in objective.items()
+        if isinstance(value, (int, float))
+    }
 
 
 def _record_main_search_component_skip(

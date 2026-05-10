@@ -1077,6 +1077,10 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_min_distance_improvement" in required_fields
     assert "main_search_bounded_destroy_repair_accept_limit" in required_fields
     assert "main_search_best_returned" in required_fields
+    assert "main_search_objective_trace" in required_fields
+    assert "main_search_component_accepted_delta_sum" in required_fields
+    assert "main_search_component_accepted_best_delta" in required_fields
+    assert "main_search_component_accepted_positive_counts" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
@@ -1089,6 +1093,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_baseline_param_clamps"]["applied"] is False
     assert runtime["main_search_baseline_param_clamps"]["status"] == "no_clamps"
     assert runtime["main_search_best_returned"] is False
+    assert runtime["main_search_objective_trace"]["status"] == "inactive"
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
@@ -1181,6 +1186,20 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert sum(runtime["main_search_component_accepted"].values()) == 1
     assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] == 4.0
     assert (
+        runtime["main_search_component_accepted_delta_sum"]["bounded_destroy_repair"]
+        == 4.0
+    )
+    assert (
+        runtime["main_search_component_accepted_best_delta"]["bounded_destroy_repair"]
+        == 4.0
+    )
+    assert (
+        runtime["main_search_component_accepted_positive_counts"][
+            "bounded_destroy_repair"
+        ]
+        == 1
+    )
+    assert (
         runtime["main_search_component_min_distance_improvement"][
             "bounded_destroy_repair"
         ]
@@ -1205,6 +1224,9 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert "improvement_loop" in runtime["main_search_phases"]
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 4.0
     assert runtime["main_search_best_returned"] is True
+    assert runtime["main_search_objective_trace"]["status"] == "returned_best"
+    assert runtime["main_search_objective_trace"]["phase_delta"] == 4.0
+    assert runtime["main_search_objective_trace"]["accepted_but_zero_phase_delta"] == {}
     assert runtime["operator_attempts"] == 0
     assert (
         runtime_audit_failure_from_raw(
@@ -1356,6 +1378,10 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
         "no_candidates": 1,
     }
     assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
+    assert (
+        runtime["main_search_component_accepted_delta_sum"]["bounded_destroy_repair"]
+        > 0.0
+    )
 
 
 def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
@@ -1411,6 +1437,9 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
     assert runtime["main_search_component_attempts"]["route_pair_swap"] == 1
     assert runtime["main_search_component_accepted"]["route_pair_swap"] == 1
     assert runtime["main_search_component_best_delta"]["route_pair_swap"] == 198.0
+    assert runtime["main_search_component_accepted_delta_sum"]["route_pair_swap"] == 198.0
+    assert runtime["main_search_component_accepted_best_delta"]["route_pair_swap"] == 198.0
+    assert runtime["main_search_component_accepted_positive_counts"]["route_pair_swap"] == 1
     assert runtime["main_search_component_improvement_counts"]["route_pair_swap"] == 1
     assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {}
     assert (
@@ -1577,6 +1606,20 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
     assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
     assert runtime["main_search_component_best_delta"]["bounded_destroy_repair"] == 4.0
+    assert (
+        runtime["main_search_component_accepted_delta_sum"]["bounded_destroy_repair"]
+        == 4.0
+    )
+    assert (
+        runtime["main_search_component_accepted_best_delta"]["bounded_destroy_repair"]
+        == 4.0
+    )
+    assert (
+        runtime["main_search_component_accepted_positive_counts"][
+            "bounded_destroy_repair"
+        ]
+        == 1
+    )
     assert runtime["main_search_component_improvement_counts"]["bounded_destroy_repair"] == 1
     assert runtime["main_search_component_removed_counts"]["bounded_destroy_repair"] >= 2
     assert (

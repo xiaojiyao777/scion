@@ -1318,6 +1318,9 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
                 "missing": field_summary.get("missing", 0),
                 "empty": field_summary.get("empty", 0),
                 "failed": field_summary.get("failed", 0),
+                "numeric_summary": _surface_runtime_numeric_summary(
+                    field_summary.get("values") or {}
+                ),
                 "values": [
                     {"value": value, "count": count}
                     for value, count in sorted(
@@ -1329,6 +1332,144 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
             for field, field_summary in fields.items()
         },
     }
+
+
+def _surface_runtime_numeric_summary(values: dict[str, int]) -> dict[str, Any]:
+    scalar = _numeric_scalar_summary(values)
+    mapping = _numeric_mapping_summary(values)
+    summary: dict[str, Any] = {}
+    if scalar:
+        summary["scalar"] = scalar
+    if mapping:
+        summary["mapping"] = mapping
+    return summary
+
+
+def _numeric_scalar_summary(values: dict[str, int]) -> dict[str, Any]:
+    count = 0
+    zero_count = 0
+    nonzero_count = 0
+    positive_count = 0
+    negative_count = 0
+    weighted_sum = 0.0
+    minimum: float | None = None
+    maximum: float | None = None
+    for value_key, raw_count in values.items():
+        parsed = _parse_surface_runtime_value(value_key)
+        number = _coerce_number(parsed)
+        if number is None:
+            continue
+        item_count = _safe_int(raw_count)
+        if item_count <= 0:
+            continue
+        count += item_count
+        weighted_sum += number * item_count
+        minimum = number if minimum is None else min(minimum, number)
+        maximum = number if maximum is None else max(maximum, number)
+        if abs(number) <= 1e-12:
+            zero_count += item_count
+        else:
+            nonzero_count += item_count
+        if number > 0:
+            positive_count += item_count
+        if number < 0:
+            negative_count += item_count
+    if count == 0:
+        return {}
+    return {
+        "observed_count": count,
+        "weighted_sum": _round_runtime_number(weighted_sum),
+        "min": _round_runtime_number(minimum),
+        "max": _round_runtime_number(maximum),
+        "zero_count": zero_count,
+        "nonzero_count": nonzero_count,
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+    }
+
+
+def _numeric_mapping_summary(values: dict[str, int]) -> dict[str, Any]:
+    by_key: dict[str, dict[str, Any]] = {}
+    for value_key, raw_count in values.items():
+        parsed = _parse_surface_runtime_value(value_key)
+        if not isinstance(parsed, dict):
+            continue
+        item_count = _safe_int(raw_count)
+        if item_count <= 0:
+            continue
+        for key, raw_value in parsed.items():
+            if len(by_key) >= 16 and str(key) not in by_key:
+                continue
+            number = _coerce_number(raw_value)
+            if number is None:
+                continue
+            key_text = str(key)[:80]
+            stats = by_key.setdefault(
+                key_text,
+                {
+                    "observed_count": 0,
+                    "weighted_sum": 0.0,
+                    "min": None,
+                    "max": None,
+                    "zero_count": 0,
+                    "nonzero_count": 0,
+                    "positive_count": 0,
+                    "negative_count": 0,
+                },
+            )
+            stats["observed_count"] += item_count
+            stats["weighted_sum"] += number * item_count
+            stats["min"] = number if stats["min"] is None else min(stats["min"], number)
+            stats["max"] = number if stats["max"] is None else max(stats["max"], number)
+            if abs(number) <= 1e-12:
+                stats["zero_count"] += item_count
+            else:
+                stats["nonzero_count"] += item_count
+            if number > 0:
+                stats["positive_count"] += item_count
+            if number < 0:
+                stats["negative_count"] += item_count
+    compact: dict[str, Any] = {}
+    for key, stats in by_key.items():
+        compact[key] = {
+            "observed_count": stats["observed_count"],
+            "weighted_sum": _round_runtime_number(stats["weighted_sum"]),
+            "min": _round_runtime_number(stats["min"]),
+            "max": _round_runtime_number(stats["max"]),
+            "zero_count": stats["zero_count"],
+            "nonzero_count": stats["nonzero_count"],
+            "positive_count": stats["positive_count"],
+            "negative_count": stats["negative_count"],
+        }
+    return compact
+
+
+def _parse_surface_runtime_value(value_key: str) -> Any:
+    try:
+        return json.loads(value_key)
+    except (TypeError, ValueError):
+        return value_key
+
+
+def _coerce_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _round_runtime_number(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 6)
 
 
 def _surface_runtime_value_key(value: Any) -> str:
