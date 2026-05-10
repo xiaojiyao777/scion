@@ -227,14 +227,28 @@ and keeps Scion core free of CVRP/VRP semantics. It still did not produce
 solver-quality evidence: all candidates failed screening/Decision, all
 accepted moves remained recovery-only with zero phase-best delta, and R4/R5
 timed out after proposing a perturbation-first idea that the existing
-`main_search_strategy` surface could not actually express. The next repair is
-now implemented in the working tree: APS aggregates the latest non-empty
-runtime diagnosis and raises the default tool-call budget so target/contract
-preview is less likely to be skipped, while the CVRP problem package extends
-`main_search_strategy` with an explicit `perturbation.schedule` surface field
-(`after_no_improvement`, `before_first_round`, `before_each_round`) plus
-runtime evidence. The next smoke should be a larger short forced diagnostic,
-not long validation.
+`main_search_strategy` surface could not actually express. The follow-up
+repair added latest non-empty APS runtime diagnosis aggregation, more tool-call
+room for target/contract preview, and an explicit CVRP
+`main_search_strategy` `perturbation.schedule` surface field with runtime
+evidence. The eight-round forced perturbation-schedule smoke from commit
+`c0d0c57` has now completed and is analyzed. It validated persistent forced
+surface behavior, feedback/tool-observation rendering, and use of the new
+schedule values (`after_no_improvement`, `before_first_round`,
+`before_each_round`, and disabled perturbation). It still did not produce
+solver-quality evidence: all five screened candidates failed
+`SCREENING_FAIL_WIN_RATE`, `median_delta=0.0` throughout, and
+`main_search_component_phase_delta_sum` / phase-improvement counts stayed zero
+for every screened candidate pair. R4 exposed another missing
+`novelty_signature` proposal failure, while R5/R7 showed a contract mismatch:
+shallow-only plans can pass proposal Contract but later fail Verification
+because `main_search_deep_components_selected` is empty. Do not run long CVRP
+validation; the next repair should align proposal/schema preview with the
+selected-surface runtime contract and improve phase-best component efficacy.
+The design implication is that `main_search_strategy` should be treated as a
+controlled orchestration surface, not as permission to freely rewrite the
+original CVRP solver; the higher-ceiling v3 path is to expose deeper
+problem-owned operator and policy surfaces with contracts and runtime audit.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2973,53 +2987,61 @@ completion use same-campaign or forced-surface compact screening/runtime
 history after prior screening exists, and exposes bounded selected-surface
 runtime attribution from component fields, phase deltas, and screening stats.
 
-## Latest Experiment: Phase-Benefit Repair Smoke
+## Latest Experiment: Perturbation Schedule 8R Smoke
 
-The five-round forced `main_search_strategy` smoke after the phase-benefit
-repair has completed and is analyzed:
+The eight-round forced `main_search_strategy` smoke after adding
+`perturbation.schedule` has completed and is analyzed:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-phase-benefit-repair-sonnet-5r-20260510T075049Z
-scion_commit=17f89de
+run_root=/home/clawd/research/scion-experiments/v04-perturbation-schedule-sonnet-8r-20260510T125915Z
+scion_commit=c0d0c57
 model=claude-sonnet-4-6
-rounds=5/5
+rounds=8/8
+time_limit_sec=15
 force_surface=main_search_strategy
 exit_code=0
-analysis_doc=scion/docs/experiments/v0.4/v0.4-phase-benefit-repair-sonnet-5r-20260510.md
+analysis_doc=scion/docs/experiments/v0.4/v0.4-perturbation-schedule-sonnet-8r-20260510.md
 ```
 
 Delegated raw-artifact analysis found:
 
-- R1-R4 passed Contract, Verification, and canary, reached screening, and had
-  complete selected-surface runtime audit: 16/16 candidate pairs each, 51/51
-  required runtime fields, no selected-surface audit failure.
-- R1-R4 all failed `SCREENING_FAIL_WIN_RATE`; case and pair W/L/T were:
-  - R1: case `1/0/7`, pair `4/2/10`, win_rate `0.125`, median_delta `0.0`;
-  - R2: case `0/0/8`, pair `3/2/11`, win_rate `0.0`, median_delta `0.0`;
-  - R3: case `0/1/7`, pair `2/3/11`, win_rate `0.0`, median_delta `0.0`;
-  - R4: case `0/0/8`, pair `3/3/10`, win_rate `0.0`, median_delta `0.0`.
-- R5 did not reach code generation: APS proposed
-  `create_new/route_local -> operators/oropt_intra_route.py`, and the
-  forced-surface guard correctly failed it before Contract/Verification.
-- The repair improved proposal feedback visibility. R2-R5 hypothesis sessions
-  saw accepted-delta, objective-trace, objective-delta-by-phase,
-  phase-delta-sum, and phase-improvement-count attribution. R4 explicitly used
-  the diagnosis that accepted moves were nonzero while phase delta stayed zero.
-- The repair also fixed the BDR suppression diagnostic: the previous
-  `route_pair_phase_improved` skip reason did not recur, and BDR was attempted
-  alongside route-pair in R1/R3/R4.
-- Solver quality still did not improve. R1/R3/R4 had positive component-local
-  accepted deltas, but `main_search_component_phase_delta_sum`,
-  `main_search_component_phase_improvement_counts`, and
-  `main_search_objective_delta_by_phase.improvement_loop` remained zero.
+- Forced surface held for all hypotheses and code sessions:
+  `modify/main_search_strategy -> policies/main_search_strategy.py`.
+- APS used the two-phase path in every round except R4, which stopped after
+  hypothesis Contract. R2 onward read non-empty same-campaign
+  screening/runtime feedback, and hypothesis/code prompts rendered
+  diagnosis/tool-observation blocks.
+- The new `perturbation.schedule` field was exercised:
+  `after_no_improvement` in R1/R8, `before_first_round` in R2,
+  `before_each_round` in R3/R6, and disabled perturbation in R5/R7.
+- R1/R2/R3/R6/R8 passed Contract, Verification, and canary, reached screening,
+  and had complete selected-surface runtime audit: 16/16 candidate pairs each,
+  55/55 required runtime fields observed.
+- All screened candidates failed `SCREENING_FAIL_WIN_RATE`; case and pair
+  W/L/T were:
+  - R1: case `0/1/7`, pair `1/2/13`, win_rate `0.0`, median_delta `0.0`;
+  - R2: case `2/1/5`, pair `4/1/11`, win_rate `0.25`, median_delta `0.0`;
+  - R3: case `1/0/7`, pair `3/0/13`, win_rate `0.125`, median_delta `0.0`;
+  - R6: case `1/2/5`, pair `3/3/10`, win_rate `0.125`, median_delta `0.0`;
+  - R8: case `1/0/7`, pair `3/1/12`, win_rate `0.125`, median_delta `0.0`.
+- R4 failed at `C10_novelty` because the generated hypothesis lacked usable
+  structured `novelty_signature` fields.
+- R5 and R7 passed proposal Contract but failed Verification at
+  `V5_solution_consistency` because shallow-only strategies left
+  `main_search_deep_components_selected` empty.
+- Runtime evidence showed the same efficacy blocker as prior smokes:
+  route-pair, bounded destroy/repair, and shallow components sometimes
+  accepted local moves, but every screened candidate pair had zero
+  `main_search_component_phase_delta_sum`, zero phase-improvement counts, and
+  zero `improvement_loop` objective delta.
 
-Interpretation: 17f89de should be accepted as a diagnostic/control repair, not
-as an efficacy repair. Attribution now reaches APS, and component-local
-acceptance is separated from phase-best improvement. The remaining blocker is
-CVRP `main_search_strategy` phase/case efficacy: accepted moves mostly recover
-current perturbed/local states without beating the phase baseline. Long
-validation remains blocked. Next repair should focus on CVRP component
-generation/acceptance and on forced-surface prompt hygiene.
+Interpretation: `c0d0c57` validates the new perturbation-schedule surface
+field, forced APS control, and selected-surface runtime reporting, but it is
+not an efficacy repair. Long validation remains blocked. The next repair
+should align proposal/schema preview with the runtime evidence contract for
+shallow-only `main_search_strategy` plans, make missing `novelty_signature`
+fail earlier with compact guidance, and continue CVRP component work until a
+short diagnostic shows nonzero phase-best improvement.
 
 ## Remaining Optimization Backlog
 
@@ -3107,7 +3129,15 @@ P1:
   `main_search_strategy`. The 17f89de forced smoke validated those diagnostic
   repairs but did not improve efficacy: APS saw the attribution, BDR suppress
   disappeared, yet phase-improvement counts stayed zero and R5 drifted
-  off-surface before the proposal guard stopped it. Long validation remains
+  off-surface before the proposal guard stopped it. The later
+  perturbation-schedule smoke from commit `c0d0c57` validated the new
+  `perturbation.schedule` surface affordance and forced-surface control across
+  eight rounds, but it also showed two remaining control/contract gaps:
+  structured `novelty_signature` can still be omitted by APS, and shallow-only
+  `main_search_strategy` plans pass proposal Contract before failing
+  Verification because `main_search_deep_components_selected` is empty. Most
+  importantly, phase-improvement counts and improvement-loop objective delta
+  stayed zero in every screened candidate pair. Long validation remains
   blocked.
 
 P2:
