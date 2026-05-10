@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-09*
+*Last updated: 2026-05-10*
 
 ## Status
 
@@ -90,7 +90,18 @@ formal-like runs apply a baseline quality guard and conservative baseline-param
 clamps, route-pair improvement can gate bounded destroy/repair, destroy/repair
 has a per-search accepted-move cap and positive improvement floor, and the main
 loop explicitly returns the phase-best solution. The next smoke should test
-whether these net-benefit guards improve case-level outcomes.
+whether these net-benefit guards improve case-level outcomes. That smoke has
+now completed and is analyzed: it finished normally but did not improve
+case-level screening quality. The forced diagnostic control regressed once,
+with one round drifting to `route_local`; the three screened candidates all
+failed `SCREENING_FAIL_WIN_RATE` with case-level `win_rate=0.0`. The
+net-benefit guards executed and reduced uncontrolled destroy/repair acceptance,
+but `bounded_destroy_repair` accepted zero moves and accepted route-pair moves
+did not translate into case-level wins. Long CVRP validation remains blocked.
+The next repair should first restore hard forced-surface control and stabilize
+the `main_search_baseline_param_clamps` runtime evidence contract, then
+diagnose why accepted route-pair movement is not improving final case-level
+outcomes.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2374,6 +2385,83 @@ case-level outcome, not merely accepted component moves: screening should move
 beyond the previous `0.0` to `0.25` case-level win-rate range while preserving
 complete selected-surface runtime audit.
 
+## 2026-05-09 Main-Search Net-Benefit 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the
+main-search net-benefit guard slice:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-main-search-net-benefit-sonnet-5r-20260509T165217Z
+scion_commit=8d49abe
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+exit_code=0
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-main-search-net-benefit-sonnet-5r-20260509.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=3
+screened_candidates=3
+verification_failed_candidates=2
+promotions=0
+frozen_budget_used=0
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- This is valid short diagnostic evidence, not solver-quality evidence.
+- The run finished normally, but persistent `--force-surface
+  main_search_strategy` did not hold for every proposal: coverage was
+  `modify/main_search_strategy: 4` and `create_new/route_local: 1`. Round 4
+  drifted to `operators/oropt_intra_route.py`, which should not happen in a
+  forced main-search diagnostic.
+- C10 was healthy; no novelty rejection blocked the run.
+- Three candidates passed Contract, Verification, canary, and reached
+  screening; all failed `SCREENING_FAIL_WIN_RATE`.
+- Two main-search candidates failed verification at `V5_solution_consistency`
+  because selected-surface runtime audit found empty
+  `main_search_baseline_param_clamps`.
+- The two screened `main_search_strategy` candidates had complete
+  selected-surface runtime audit: `main_search_strategy_loaded=true`,
+  `main_search_strategy_active=true`, `main_search_strategy_errors=0`, and
+  no missing required runtime fields across 16/16 candidate-side pairs.
+- Net-benefit guards executed: effective baseline fractions were `0.8` and
+  `0.85`, baseline params were clamped, bounded destroy/repair had a positive
+  improvement floor and accept cap, route-pair gating produced
+  `route_pair_phase_improved` skips, and `main_search_best_returned=true`.
+- The guards did not improve case-level evidence. The screened candidates had
+  pair W/L/T of `2/3/11`, `3/2/11`, and `1/0/23`, but all three had
+  case-level `win_rate=0.0` and `median_delta=0.0`.
+- `bounded_destroy_repair` accepted zero moves in this smoke. `route_pair_swap`
+  accepted 22 moves in one screened main-search candidate, but those moves did
+  not translate into case-level wins.
+
+This does not satisfy the long-validation condition. The next repair should
+restore hard forced-surface proposal control, make
+`main_search_baseline_param_clamps` stable runtime evidence even when no clamp
+is present, and diagnose why accepted route-pair movement does not improve the
+final returned case-level objective.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2423,9 +2511,14 @@ P1:
   screening, but case-level screening quality still topped out at `0.25` and
   all candidates failed `SCREENING_FAIL_WIN_RATE`. Keep long validation blocked
   until accepted component moves translate into stronger case-level outcomes.
-  The main-search net-benefit guard slice is implemented and validated; the
-  next smoke should test whether conservative baseline guards, gated
-  destroy/repair, and phase-best return improve screening quality.
+  The main-search net-benefit guard slice is implemented and validated, and
+  the follow-up smoke from commit `8d49abe` finished normally, but it did not
+  improve screening quality: one forced diagnostic round drifted to
+  `route_local`, all screened candidates had case-level `win_rate=0.0`,
+  `bounded_destroy_repair` accepted zero moves, and accepted route-pair moves
+  did not become case-level wins. The next blocker is hard forced-surface
+  proposal control plus net case-level efficacy of route-pair and
+  destroy/repair movement.
 
 P2:
 
