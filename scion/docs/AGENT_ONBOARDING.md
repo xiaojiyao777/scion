@@ -25,28 +25,23 @@ enough to continue, validate, freeze, promote, or abandon.
   - `surrogate` / warehouse delivery: original v0.3 research object.
   - CVRP / VRP: v0.4 second real problem class used to validate Scion's
     adapter and algorithm-surface generality.
-- Current bottleneck: V2-V8 gate modernization is closed, CVRP policy-surface
-  API guidance has been repaired, APS observation-budget/recovery is fixed
-  enough to unblock proposal work, selected-surface reporting is validated in
-  real formal CVRP artifacts, and the first `baseline_policy` diagnostic has
-  completed. That diagnostic proved the problem-owned surface can be selected,
-  patched, loaded, audited, and screened, with all declared runtime fields
-  present for the evaluated candidate, but it did not produce solver-quality
-  evidence. CVRP now has `main_search_strategy`, a problem-owned
-  whole-algorithm surface in `policies/main_search_strategy.py`. The bottleneck
-  remains CVRP algorithm-surface efficacy. The first tightly forced
-  `main_search_strategy` diagnostic validated continuous forced-surface control
-  and active whole-algorithm runtime audit, but only one candidate reached
-  screening and it still failed `SCREENING_FAIL_WIN_RATE`. Do not run a long
-  solver-quality validation. Singleton semantic novelty has a code-level
-  repair, and APS surface reads now use compact `surface-contract.v1` payloads
-  with a 48000-character default observation cap. The clean-worktree
-  `main_search_strategy` diagnostic from commit `b98196b` validated those
-  control repairs: all three candidates reached screening on the forced
-  surface. It still did not produce solver-quality evidence; all three failed
-  `SCREENING_FAIL_WIN_RATE`, and none selected `route_pair_swap` or
-  `bounded_destroy_repair`. The current blocker is candidate use and efficacy
-  of the deeper problem-owned main-search components.
+- Current bottleneck: V2-V8 gate modernization is closed, selected-surface
+  reporting is validated in real formal CVRP artifacts, and CVRP now has
+  `main_search_strategy`, a problem-owned whole-algorithm surface in
+  `policies/main_search_strategy.py`. Forced `main_search_strategy`
+  diagnostics have validated persistent forced-surface control, compact APS
+  feedback/memory reads, selected-surface runtime audit, and deep-component
+  telemetry. The latest smoke from commit `d17c8b4` confirmed that APS
+  feedback/fallback observations now stay under the 48000-character budget and
+  all hypotheses remain on the forced surface, but only one patch reached
+  screening because rounds 2-5 failed `C10_novelty`. The current blocker is
+  singleton semantic novelty persistence: forced singleton hypotheses must
+  require and persist usable structured `novelty_signature` values so later
+  distinct `main_search_strategy` proposals are not collapsed to strict target
+  file identity. Do not run a long CVRP solver-quality validation until a
+  five-round forced smoke produces multiple code patches, multiple screened
+  candidates, complete selected-surface audit, and nontrivial case-level
+  quality evidence.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).

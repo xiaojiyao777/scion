@@ -124,7 +124,19 @@ screened candidate. The new blocker is APS observation-budget/fallback
 behavior: repeated feedback/list-surface reads can exceed the 48000-character
 observation budget before patch generation. The next repair should compact and
 deduplicate APS feedback/fallback observations before another CVRP strategy
-slice.
+slice. That repair is now implemented and the follow-up five-round smoke from
+commit `d17c8b4` has completed. The APS budget repair worked: no
+observation-budget failures recurred, feedback/memory tools were still used,
+and all five generated hypotheses stayed on forced `main_search_strategy`.
+However, the run produced only one code patch and one screened candidate
+because rounds 2-5 failed hypothesis Contract at `C10_novelty`. The causal
+blocker is now singleton semantic novelty persistence: round 1 passed without
+a structured `novelty_signature`, was later recorded as rejected after
+screening failure, and then caused later structured `main_search_strategy`
+proposals to fall back to strict target-file duplicate identity. Long CVRP
+validation remains blocked. The next repair should make APS/Contract require
+and persist usable structured novelty identity for forced singleton semantic
+surfaces before another strategy smoke.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):
@@ -2659,6 +2671,88 @@ Next step: commit this slice and run another five-round forced
 rounds can produce forced-surface hypotheses and multiple code patches without
 observation-budget failures, while still showing bounded feedback/memory use.
 
+## 2026-05-10 APS Feedback Budget Repair 5R Smoke Audited
+
+A detached five-round Sonnet CVRP formal-path smoke completed after the APS
+feedback/fallback budget repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-aps-feedback-budget-repair-sonnet-5r-20260510T032202Z
+scion_commit=d17c8b4
+worktree_dirty=false
+model=claude-sonnet-4-6
+problem=cvrp formal VRP
+rounds=5
+agentic_proposal=true
+disable_early_stop=true
+force_surface=main_search_strategy
+cvrp_time_limit_sec=10
+python=/home/clawd/miniconda3/envs/claw/bin/python
+data_root=/home/clawd/research/or-autoresearch-agent/vrp
+```
+
+Detailed delegated raw-artifact analysis is recorded in:
+
+```text
+scion/docs/experiments/v0.4/v0.4-aps-feedback-budget-repair-sonnet-5r-20260510.md
+```
+
+Outcome:
+
+```text
+rounds=5/5
+steps=5
+experiments=1
+champion=v1
+promotions=0
+frozen_budget_used=0/2
+formal_ready=false
+final_evidence_refs=missing
+stop=max_rounds_exhausted
+```
+
+Interpretation:
+
+- The run completed normally at the campaign level. `exit.txt` was missing,
+  but `run.log`, `status.json`, `campaign_summary.json`, and SQLite were
+  internally consistent.
+- The APS feedback/fallback budget repair worked. No `result_too_large`,
+  observation-budget exhaustion, or tool-budget failure recurred; session
+  observation usage stayed below the 48000-character cap.
+- Bounded feedback and memory were still used. APS sessions called
+  `memory.query`, `feedback.query_screening`, and `feedback.query_runtime`,
+  and runtime feedback became available after round 1.
+- Forced-surface control held. All five generated hypotheses were
+  `modify/main_search_strategy` targeting `policies/main_search_strategy.py`.
+- The acceptance condition for multiple code patches failed. Round 1 generated
+  one patch and reached screening; rounds 2-5 failed hypothesis Contract at
+  `C10_novelty` before code generation.
+- The new blocker is singleton semantic novelty persistence. Round 1 passed
+  without a structured `novelty_signature`; after it was rejected by screening,
+  later materially distinct structured proposals could not be compared
+  semantically against that empty-signature record, so C10 fell back to strict
+  `(locus, action, target_file)` duplicate identity.
+- The only screened candidate had 16/16 valid pairs, pair W/L/T `3/2/11`,
+  case-level `win_rate=0.0`, `median_delta=0.0`, median runtime ratio about
+  `0.9482`, and failed `SCREENING_FAIL_WIN_RATE`.
+- Selected-surface runtime audit was complete for the screened candidate:
+  `main_search_strategy_loaded=true`, `main_search_strategy_active=true`,
+  `main_search_strategy_errors=0`, and required runtime fields were present on
+  all candidate-side pairs. `main_search_baseline_param_clamps` was present
+  and non-empty for all pairs.
+- Deep components were selected and attempted in the screened candidate.
+  `route_pair_swap` accepted six moves across three pairs, but those benefits
+  did not survive case-level aggregation. `bounded_destroy_repair` accepted
+  zero moves and remained dominated by repair-budget exhaustion.
+
+This smoke validates the APS compaction repair but does not provide enough
+screened candidates to judge CVRP strategy efficacy. Do not enter long
+validation. The next repair should make APS/Contract require and persist
+usable structured `novelty_signature` values for forced singleton semantic
+surfaces, then rerun a five-round forced `main_search_strategy` smoke and
+require multiple code patches plus screened candidates before judging solver
+quality.
+
 ## Remaining Optimization Backlog
 
 The post-run P0 governance findings are closed in code: formal `.vrp`
@@ -2719,10 +2813,15 @@ P1:
   `3a4649f` confirmed those controls in real APS artifacts but produced only
   one screened candidate because repeated feedback/list observations exhausted
   APS observation budget in later rounds. APS feedback/fallback budget control
-  is now repaired and validated in focused and full suites. The next blocker is
-  whether a new five-round smoke confirms multiple code patches under bounded
-  feedback, then net case-level efficacy of route-pair and destroy/repair
-  movement.
+  is now repaired and validated in focused and full suites. The follow-up smoke
+  from commit `d17c8b4` confirmed bounded-feedback budget behavior and stable
+  forced-surface control, but still produced only one code patch because C10
+  rejected rounds 2-5 after comparing later structured singleton proposals
+  against a rejected round-1 hypothesis with empty structured novelty identity.
+  The next blocker is APS/Contract persistence of usable structured
+  `novelty_signature` values for singleton semantic surfaces; after that,
+  rerun the five-round smoke and require multiple code patches before judging
+  net case-level efficacy of route-pair and destroy/repair movement.
 
 P2:
 
