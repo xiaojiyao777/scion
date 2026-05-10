@@ -962,6 +962,10 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
                 )
                 if attribution
             ][: args.max_items],
+            "research_diagnosis": _research_diagnosis_payload(
+                safe_steps,
+                max_items=args.max_items,
+            ),
             "screening_only": True,
             "metrics_file_refs_exposed": False,
         }
@@ -2693,6 +2697,141 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
         "stats": _eval_stats_payload(protocol.stats),
         "runtime_field_highlights": highlights,
     }
+
+
+def _research_diagnosis_payload(
+    safe_steps: list[StepRecord],
+    *,
+    max_items: int,
+) -> dict[str, Any]:
+    screening_steps = [
+        step
+        for step in safe_steps
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+        )
+    ]
+    recent_steps = list(reversed(screening_steps))[:max_items]
+    reason_counts: dict[str, int] = {}
+    surface_counts: dict[str, int] = {}
+    gate_counts: dict[str, int] = {}
+    failure_tags: set[str] = set()
+    recent_rows: list[dict[str, Any]] = []
+    runtime_signal_rows: list[dict[str, Any]] = []
+
+    for step in recent_steps:
+        protocol = step.protocol_result
+        if protocol is None:
+            continue
+        surface = step.hypothesis.change_locus
+        surface_counts[surface] = surface_counts.get(surface, 0) + 1
+        gate = str(protocol.gate_outcome or "")
+        gate_counts[gate] = gate_counts.get(gate, 0) + 1
+        for reason in protocol.reason_codes or ():
+            reason_text = str(reason)
+            reason_counts[reason_text] = reason_counts.get(reason_text, 0) + 1
+            if "WIN_RATE" in reason_text.upper():
+                failure_tags.add("screening_win_rate_failure")
+            if "RUNTIME" in reason_text.upper():
+                failure_tags.add("runtime_related_failure")
+        stats = protocol.stats
+        if stats.win_rate is not None and float(stats.win_rate) <= 0.0:
+            failure_tags.add("zero_case_win_rate")
+        if (
+            stats.median_delta is not None
+            and abs(float(stats.median_delta)) <= 1e-12
+        ):
+            failure_tags.add("zero_median_delta")
+
+        attribution = _surface_runtime_attribution_payload(step)
+        runtime_fields = []
+        runtime_issue_fields = []
+        runtime_nonzero_fields = []
+        for highlight in attribution.get("runtime_field_highlights", []) or []:
+            if not isinstance(highlight, Mapping):
+                continue
+            field = str(highlight.get("field") or "")
+            if not field:
+                continue
+            runtime_fields.append(field)
+            if any(
+                _safe_positive_int(highlight.get(key))
+                for key in ("missing", "empty", "failed")
+            ):
+                runtime_issue_fields.append(field)
+            if _runtime_highlight_has_nonzero_numeric(highlight):
+                runtime_nonzero_fields.append(field)
+        if runtime_issue_fields:
+            failure_tags.add("runtime_evidence_contract_issue")
+        if runtime_nonzero_fields and gate != "pass":
+            failure_tags.add("runtime_signal_without_protocol_pass")
+        if runtime_fields:
+            runtime_signal_rows.append(
+                _drop_empty_items(
+                    {
+                        "round_num": step.round_num,
+                        "surface": surface,
+                        "gate_outcome": gate,
+                        "highlight_fields": runtime_fields[:8],
+                        "nonzero_numeric_fields": runtime_nonzero_fields[:8],
+                        "issue_fields": runtime_issue_fields[:8],
+                    }
+                )
+            )
+        recent_rows.append(
+            {
+                "round_num": step.round_num,
+                "surface": surface,
+                "target_file": step.hypothesis.target_file,
+                "gate_outcome": gate,
+                "reason_codes": list(protocol.reason_codes),
+                "stats": _eval_stats_payload(stats),
+            }
+        )
+
+    return {
+        "schema_version": "research-diagnosis.v1",
+        "screening_only": True,
+        "screening_step_count": len(screening_steps),
+        "recent_screening_steps": recent_rows,
+        "reason_code_counts": reason_counts,
+        "surface_counts": surface_counts,
+        "gate_outcome_counts": gate_counts,
+        "failure_mode_tags": sorted(failure_tags),
+        "runtime_signal_rows": runtime_signal_rows,
+        "next_hypothesis_requirements": [
+            "Name the screening/runtime evidence pattern being addressed.",
+            "State which declared surface evidence fields are expected to change.",
+            "Change the mechanism or bounded lever, not only wording or novelty text.",
+            "State how the implementation remains within declared interface and bounds.",
+        ],
+    }
+
+
+def _runtime_highlight_has_nonzero_numeric(highlight: Mapping[str, Any]) -> bool:
+    numeric = highlight.get("numeric_summary")
+    if not isinstance(numeric, Mapping):
+        return False
+    stack: list[Any] = [numeric]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, Mapping):
+            for key, nested in value.items():
+                if key in {"nonzero_count", "positive_count"} and _safe_positive_int(
+                    nested
+                ):
+                    return True
+                if key == "weighted_sum":
+                    try:
+                        if abs(float(nested or 0.0)) > 1e-12:
+                            return True
+                    except (TypeError, ValueError):
+                        pass
+                stack.append(nested)
+        elif isinstance(value, list):
+            stack.extend(value)
+    return False
 
 
 def _runtime_attribution_sort_key(

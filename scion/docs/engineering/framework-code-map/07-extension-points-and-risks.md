@@ -38,6 +38,11 @@ High-risk areas:
   `bounds.complexity_scale_terms`. Route/customer/order/vehicle names remain
   only as a legacy fallback when no v2 bounds metadata is available.
 - `ContextManager` is large and mixes generic prompt assembly with some heuristic guidance. It is adapter-aware, but new prompt guidance can easily become problem-specific if not routed through adapter/spec fields.
+- APS prompt extensions can now render feedback-derived research diagnoses and
+  tool observations into final hypothesis/code generation prompts. Keep those
+  blocks generic and screening-only; any problem semantics must arrive through
+  `ProblemSpecV1`, adapter rendering, declared surface metadata, or
+  problem-owned runtime field names.
 - `ExperimentProtocol` still has a legacy objective fallback. Production problem packages should pass metric specs and require them.
 - `ExperimentProtocol` now receives selected-surface metadata through
   `EvaluationRequest` for problem-spec-backed protocols and enforces
@@ -159,6 +164,10 @@ Before merging architecture changes, check:
 The following areas need targeted sub-agent review before large architecture changes:
 
 - Full prompt exposure audit in `ContextManager`, especially any future use of validation/frozen data.
+- APS prompt exposure audit for any new diagnosis/tool-observation blocks:
+  verify that planner-visible observations are also rendered into the final
+  generation call when intended, and that they remain screening-only proposal
+  context rather than Decision input.
 - ContractGate complexity guard generalization for non-route/non-warehouse problems.
 - Legacy verification fallback removal plan.
 - Weight optimization, stale branch reconciliation, and promotion concurrency invariants.

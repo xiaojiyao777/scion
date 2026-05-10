@@ -360,6 +360,8 @@ class _DefaultDict(dict):
 # ---------------------------------------------------------------------------
 
 _CACHE_5M = {"type": "ephemeral"}
+_AGENTIC_RESEARCH_DIAGNOSIS_CHARS = 12000
+_AGENTIC_TOOL_OBSERVATIONS_CHARS = 24000
 
 
 def _split_hypothesis_context(
@@ -475,6 +477,9 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Runtime Failure Guidance\n{D['runtime_failure_guidance']}"
         )
+    agentic_context = _agentic_research_context_block(D)
+    if agentic_context:
+        branch_context_parts.append(agentic_context)
 
     system_blocks = [
         {
@@ -600,6 +605,9 @@ def _split_code_context(
             f"{D['prior_code_failure']}\n"
             f"Avoid the same mistake.\n\n"
         )
+    agentic_context = _agentic_research_context_block(D, code_phase=True)
+    if agentic_context:
+        prior_failure_section += f"{agentic_context}\n\n"
 
     user_prompt = (
         f"{prior_failure_section}"
@@ -623,6 +631,53 @@ def _split_code_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _agentic_research_context_block(
+    context: Dict[str, Any],
+    *,
+    code_phase: bool = False,
+) -> str:
+    parts: list[str] = []
+    diagnosis = context.get("agentic_research_diagnosis")
+    if diagnosis:
+        heading = (
+            "## Evidence Diagnosis Behind This Hypothesis"
+            if code_phase
+            else "## Agentic Research Diagnosis"
+        )
+        parts.append(
+            f"{heading}\n"
+            "Screening/runtime observations below are tainted proposal context, "
+            "not Decision input. Use them to explain which declared surface "
+            "evidence should change and why the next mechanism differs from "
+            "prior failed attempts.\n\n"
+            f"{_bounded_json(diagnosis, _AGENTIC_RESEARCH_DIAGNOSIS_CHARS)}"
+        )
+    observations = context.get("agentic_tool_observations")
+    if observations:
+        parts.append(
+            "## Agentic Proposal Tool Observations\n"
+            "These are exposure-controlled tool observations gathered before "
+            "generation. Use screening/runtime feedback and selected-surface "
+            "metadata when forming the hypothesis or implementing the approved "
+            "change; do not treat raw refs or holdout detail as available.\n\n"
+            f"{_bounded_json(observations, _AGENTIC_TOOL_OBSERVATIONS_CHARS)}"
+        )
+    return "\n\n".join(parts)
+
+
+def _bounded_json(value: Any, max_chars: int) -> str:
+    try:
+        rendered = json.dumps(value, indent=2, sort_keys=True, default=str)
+    except TypeError:
+        rendered = str(value)
+    if len(rendered) <= max_chars:
+        return rendered
+    return (
+        rendered[: max(0, max_chars - 80)]
+        + "\n... <truncated agentic context>"
+    )
 
 
 def _split_fix_context(

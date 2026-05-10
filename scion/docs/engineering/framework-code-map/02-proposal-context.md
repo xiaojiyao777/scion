@@ -159,6 +159,21 @@ guidance suppresses suggestions to switch to unexplored surfaces or alternate
 actions, and runtime-failure guidance omits recommended/discouraged surface
 hints when they conflict with the forced surface while preserving the
 fail-closed forced-surface guard.
+Runtime feedback now also returns a generic `research_diagnosis` payload. It
+summarizes only screening-stage history, reason-code counts, gate outcomes,
+surface counts, generic failure-mode tags, and runtime-highlight fields with
+numeric signal or evidence-contract issues. It deliberately does not interpret
+problem-specific field names.
+
+APS stores a compact diagnosis derived from successful feedback observations
+on both hypothesis and code contexts. `CreativeLayer` renders this diagnosis
+and the bounded tool observations into the final hypothesis/code generation
+prompts. This closes the gap where the planner and tool loop had read
+screening/runtime feedback but the final LLM generation call did not actually
+see the resulting observations. The rendered block is still tainted proposal
+context: it can shape the next hypothesis or patch, but it is not a
+`DecisionFeatures` input and cannot expose validation/frozen detail or raw
+metric refs.
 Static preview observations are compact: target-permission previews return only
 surface name/kind/actions/targets and permission issues, while schema/contract
 patch previews omit `code_content` and expose path, action, char count, digest,
@@ -270,6 +285,10 @@ Family labels are problem-taxonomy aware. `HypothesisFamilyClassifier` accepts `
 - Hypothesis prompt: static role/problem/research surfaces/objective policy/solver mechanics, champion code/state, dynamic branch/search/history/task.
 - Code prompt: static role/problem/interface/import rules, champion code, dynamic hypothesis/target/current file/reference files.
 - Fix prompt: static problem/interface/import rules, dynamic failed code and verification details.
+- Agentic prompt extensions: when APS has gathered tool observations,
+  hypothesis and code prompts include a bounded generic research-diagnosis
+  block plus bounded tool-observation JSON. These blocks are screening-only
+  proposal evidence and must remain problem-agnostic.
 
 The split is an engineering optimization for prompt caching, but it also encodes stable separation between problem specification, champion state, and per-branch facts.
 
@@ -277,6 +296,7 @@ The split is an engineering optimization for prompt caching, but it also encodes
 
 The proposal side produces only `HypothesisProposal`, `HypothesisRecord`, and `PatchProposal` for the normal candidate path. Agentic session artifacts, rationale, transcript, and rejected alternatives are tainted audit/proposal-memory material and are not inputs to `SafeFeatureExtractor` or `DecisionEngine`. The first framework gate after hypothesis creation is `ContractGate`; the first framework gate after code generation is also `ContractGate`, followed by workspace materialization and `VerificationGate`.
 
-Current APS evidence integration stores only compact session refs in step and
-campaign summaries. Those refs are audit/proposal-memory handles, not decision
-inputs.
+Current APS evidence integration stores compact session refs in step and
+campaign summaries and may render bounded screening-derived observations back
+into future proposal prompts. Session refs, diagnoses, transcripts, and tool
+observations are audit/proposal-memory handles, not decision inputs.

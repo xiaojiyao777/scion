@@ -209,13 +209,24 @@ mean case win rate regressed to `0.03125`, all screened rounds had
 and R5 drifted to `route_local` before being fail-closed by the forced-surface
 proposal guard. Do not run long CVRP validation; the next repair should focus
 on CVRP phase/case propagation and forced-surface prompt hygiene. That repair
-is now implemented and full tests pass: CVRP `main_search_strategy` probes
-both current and phase-best baselines for each component and prefers
-phase-best improvements, recovery-only accepted moves are audited separately
-from phase-best gains, bounded destroy/repair evaluates a richer set of
-bounded subsets, and forced-surface proposal guidance suppresses conflicting
-off-surface/action-switch recommendations. The next step is another five-round
-forced `main_search_strategy` smoke, not long validation.
+was implemented and validated in a five-round forced smoke from commit
+`d4d899a`: all five candidates stayed on `main_search_strategy`, passed
+Contract/Verification/canary, reached screening, and had complete
+selected-surface runtime audit, but all still failed
+`SCREENING_FAIL_WIN_RATE`. The strongest new finding is a Scion core
+proposal-layer gap rather than a CVRP prompt gap: APS tool sessions gathered
+screening/runtime feedback, but `CreativeLayer` did not render
+`agentic_tool_observations` into the final hypothesis/code generation prompts.
+This means planner/tool research could be recorded without actually shaping
+the final LLM generation call. The follow-up generic core repair is now
+implemented and full tests pass: runtime feedback returns a screening-only
+`research_diagnosis`, APS derives an `agentic_research_diagnosis` from
+feedback observations, and hypothesis/code prompts render bounded diagnoses
+and tool observations as tainted proposal context. No CVRP/VRP semantics were
+added to Scion core. The next step is another five-round forced
+`main_search_strategy` smoke to test whether later rounds use the rendered
+diagnosis in hypothesis identity and implementation choices, not long
+validation.
 
 The broader design conclusion is now captured in
 [`v0.4-problem-algorithm-onboarding.md`](../../design/v0.4/v0.4-problem-algorithm-onboarding.md):

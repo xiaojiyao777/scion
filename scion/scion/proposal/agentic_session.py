@@ -658,6 +658,13 @@ class AgenticProposalSession:
                         _sanitize_agentic_value(constraints)
                     )
                 if observations:
+                    research_diagnosis = _research_diagnosis_from_observations(
+                        observations
+                    )
+                    if research_diagnosis:
+                        hypothesis_context["agentic_research_diagnosis"] = (
+                            research_diagnosis
+                        )
                     hypothesis_context["agentic_tool_observations"] = [
                         _observation_prompt_payload(observation)
                         for observation in observations
@@ -860,6 +867,11 @@ class AgenticProposalSession:
                     request.resume_context
                 )
             if observations:
+                research_diagnosis = _research_diagnosis_from_observations(
+                    observations
+                )
+                if research_diagnosis:
+                    code_context["agentic_research_diagnosis"] = research_diagnosis
                 code_context["agentic_tool_observations"] = [
                     _observation_prompt_payload(observation)
                     for observation in observations
@@ -2718,6 +2730,48 @@ def _evidence_from_observations(
         )
         for observation in observations
     ]
+
+
+def _research_diagnosis_from_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> dict[str, Any]:
+    runtime_diagnoses = []
+    screening_counts = {
+        "screening_observations": 0,
+        "runtime_observations": 0,
+    }
+    for observation in observations:
+        if observation.is_error:
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if observation.tool_name == "feedback.query_screening":
+            screening_counts["screening_observations"] += 1
+        if observation.tool_name != "feedback.query_runtime":
+            continue
+        screening_counts["runtime_observations"] += 1
+        diagnosis = payload.get("research_diagnosis")
+        if isinstance(diagnosis, Mapping):
+            runtime_diagnoses.append(_sanitize_agentic_value(diagnosis))
+    if not runtime_diagnoses and not any(screening_counts.values()):
+        return {}
+    latest = runtime_diagnoses[-1] if runtime_diagnoses else {}
+    return _json_ready(
+        {
+            "schema_version": "agentic-research-diagnosis.v1",
+            "source": "proposal_tool_observations",
+            "screening_only": True,
+            "observation_counts": screening_counts,
+            "latest_runtime_diagnosis": latest,
+            "research_protocol": [
+                "Use screening/runtime observations as tainted evidence for proposal reasoning only.",
+                "Identify the prior failure pattern before proposing a mechanism change.",
+                "Tie the hypothesis to declared surface evidence fields and expected protocol movement.",
+                "Do not use validation/frozen holdout detail or raw metric refs.",
+            ],
+        }
+    )
 
 
 def _observation_prompt_payload(observation: ProposalObservation) -> dict[str, Any]:

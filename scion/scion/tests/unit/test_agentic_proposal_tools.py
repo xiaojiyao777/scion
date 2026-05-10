@@ -116,6 +116,23 @@ class ToolSelectionClient:
         raise AssertionError(f"unexpected tool request: {tool['name']}")
 
 
+class CapturingToolClient:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.system_blocks: list[list[dict]] = []
+        self.tool_names: list[str] = []
+
+    def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+        self.prompts.append(prompt)
+        self.system_blocks.append(list(system_blocks or []))
+        self.tool_names.append(tool["name"])
+        if tool["name"] == "generate_hypothesis":
+            return _valid_hypothesis_payload()
+        if tool["name"] == "generate_patch":
+            return _valid_policy_patch_payload()
+        raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
 class _EmptyToolInput(BaseModel):
     pass
 
@@ -993,6 +1010,12 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     rendered = json.dumps(payload, sort_keys=True)
 
     assert "runtime_failure_guidance" in payload
+    assert payload["research_diagnosis"]["schema_version"] == "research-diagnosis.v1"
+    assert payload["research_diagnosis"]["screening_only"] is True
+    assert payload["research_diagnosis"]["reason_code_counts"] == {
+        "tie_dominated": 1
+    }
+    assert "zero_case_win_rate" in payload["research_diagnosis"]["failure_mode_tags"]
     assert "recommended_surfaces: search_policy" in payload["runtime_failure_guidance"]
     assert "discouraged_surfaces: route_local" in payload["runtime_failure_guidance"]
     assert "declared budget surface" in payload["runtime_failure_guidance"]
@@ -2249,6 +2272,12 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     assert output.self_check.schema_valid is True
     assert output.self_check.contract_preview_passed is True
     assert creative.hypothesis_contexts[0]["agentic_tool_observations"]
+    assert creative.hypothesis_contexts[0]["agentic_research_diagnosis"][
+        "schema_version"
+    ] == "agentic-research-diagnosis.v1"
+    assert creative.code_contexts[0]["agentic_research_diagnosis"][
+        "schema_version"
+    ] == "agentic-research-diagnosis.v1"
     for event in output.transcript:
         if "tool_name" not in event.metadata:
             continue
@@ -2262,6 +2291,54 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
             "error_code",
         }.issubset(event.metadata)
         assert "structured_payload" not in event.metadata
+
+
+def test_creative_layer_renders_agentic_observations_and_research_diagnosis() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+    diagnosis = {
+        "schema_version": "agentic-research-diagnosis.v1",
+        "latest_runtime_diagnosis": {
+            "failure_mode_tags": ["screening_win_rate_failure"],
+            "next_hypothesis_requirements": [
+                "State which declared surface evidence fields are expected to change."
+            ],
+        },
+    }
+    observations = [
+        {
+            "tool_name": "feedback.query_runtime",
+            "summary": "Returned screening-derived runtime feedback.",
+            "structured_payload": {
+                "research_diagnosis": diagnosis,
+                "metrics_file_refs_exposed": False,
+            },
+        }
+    ]
+
+    creative.generate_hypothesis(
+        {
+            "problem_summary": "Synthetic problem.",
+            "research_surfaces": "surface: search_policy",
+            "objective_policy_guidance": "Minimize distance.",
+            "solver_mechanics": "",
+            "champion_operators_code": "def baseline_time_fraction(...): ...",
+            "champion_stats": "champion v1",
+            "operator_categories": "search_policy",
+            "available_actions": "modify",
+            "targetable_files": "policies/search_policy.py",
+            "agentic_research_diagnosis": diagnosis,
+            "agentic_tool_observations": observations,
+        }
+    )
+
+    rendered = json.dumps(client.system_blocks, sort_keys=True) + "\n".join(
+        client.prompts
+    )
+    assert "## Agentic Research Diagnosis" in rendered
+    assert "## Agentic Proposal Tool Observations" in rendered
+    assert "feedback.query_runtime" in rendered
+    assert "screening_win_rate_failure" in rendered
 
 
 def test_agentic_session_forced_surface_fails_closed_before_partial_finalize(

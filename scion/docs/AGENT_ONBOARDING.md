@@ -31,52 +31,22 @@ enough to continue, validate, freeze, promote, or abandon.
   `policies/main_search_strategy.py`. Forced `main_search_strategy`
   diagnostics have validated persistent forced-surface control, compact APS
   feedback/memory reads, selected-surface runtime audit, and deep-component
-  telemetry. The latest smoke from commit `d17c8b4` confirmed that APS
-  feedback/fallback observations now stay under the 48000-character budget and
-  all hypotheses remain on the forced surface, but only one patch reached
-  screening because rounds 2-5 failed `C10_novelty`. The singleton semantic
-  novelty persistence repair from commit `7111d69` is validated in a five-round
-  forced smoke: C10 no longer blocked later structured singleton hypotheses,
-  four code patches reached screening, APS budget stayed healthy, and
-  selected-surface audit was complete. The current blocker is proposal
-  feedback and efficacy attribution. The APS feedback repair is now
-  implemented and full tests pass: fallback feedback queries use same-campaign
-  or forced-surface scope instead of current-branch scope, empty branch-scoped
-  feedback no longer satisfies required compact context, and feedback payloads
-  expose bounded selected-surface runtime attribution highlights. Accepted
-  main-search component moves still do not clearly become phase-level and
-  final case-level benefit. The follow-up five-round forced smoke from commit
-  `2de43fc` validated non-empty same-campaign forced-surface feedback retrieval
-  in rounds 2-5 and kept all five candidates on `main_search_strategy`, but all
-  five still failed `SCREENING_FAIL_WIN_RATE`. The current blocker is now
-  feedback-attribution fidelity plus CVRP problem-owned surface/component
-  efficacy: compact runtime highlights can overemphasize modal zero accepted
-  values, and accepted route-pair/destroy-repair moves still do not clearly
-  become phase-level or case-level benefit. The attribution repair is now
-  implemented and full tests pass: protocol selected-surface runtime summaries
-  include generic numeric scalar/mapping stats, proposal feedback exposes those
-  stats, and CVRP `main_search_strategy` records accepted-delta and objective
-  trace accounting. The follow-up five-round forced smoke from commit
-  `d29b7e2` showed that deterministic attribution was recorded with complete
-  selected-surface audit in R1-R4, but APS feedback still did not surface the
-  accepted-delta/objective-phase chain clearly, and R5 was correctly stopped
-  when it dropped both deep components. The follow-up repair prioritizes
-  objective-phase and accepted-delta fields in proposal feedback
-  and changes CVRP `main_search_strategy` so component-local accepted moves do
-  not count as phase improvement unless they refresh phase best. The
-  five-round forced smoke from commit `17f89de` validated that attribution now
-  reaches APS and that BDR is no longer suppressed by non-phase-best route-pair
-  accepted moves, but all screened candidates still failed
-  `SCREENING_FAIL_WIN_RATE`, phase-level component improvement stayed zero, and
-  R5 drifted off surface before being fail-closed by the forced-surface guard.
-  The current blocker is CVRP `main_search_strategy` phase/case efficacy plus
-  forced-surface prompt hygiene. The follow-up repair is now implemented and
-  full tests pass: CVRP main search probes both current and phase-best
-  baselines, records recovery-only accepted moves separately from phase-best
-  improvements, broadens bounded destroy/repair subsets, and generic
-  forced-surface guidance suppresses off-surface/action-switch suggestions.
-  Do not run a long CVRP solver-quality validation until short diagnostics
-  show stable case-level quality evidence.
+  telemetry. The latest five-round smoke from commit `d4d899a` kept all five
+  candidates on `main_search_strategy`, passed Contract/Verification/canary,
+  and reached screening with complete selected-surface runtime audit, but all
+  five still failed `SCREENING_FAIL_WIN_RATE`. The key new finding is generic
+  Scion proposal-layer behavior: APS tool sessions gathered feedback/runtime
+  observations, but those observations were not rendered into the final
+  `CreativeLayer` hypothesis/code prompts. So the v3 governance core remains
+  sound, while the APS evidence-to-generation loop was not yet deep enough.
+  The follow-up core repair is now implemented and full tests pass: runtime
+  feedback emits a screening-only `research_diagnosis`, APS derives an
+  `agentic_research_diagnosis`, and final hypothesis/code prompts render
+  bounded diagnoses and tool observations as tainted proposal context. No
+  CVRP/VRP semantics were added to Scion core. Do not run a long CVRP
+  solver-quality validation until short diagnostics show stable case-level
+  quality evidence and the APS diagnosis visibly changes later hypotheses and
+  implementation choices.
 - Design conclusion: problem/algorithm onboarding is a first-class Scion
   module, not incidental setup. See
   [v0.4 problem and algorithm onboarding](../design/v0.4/v0.4-problem-algorithm-onboarding.md).
@@ -113,10 +83,14 @@ For experiment analysis:
    must identify tool calls, observed context, selected surface, hypothesis
    identity, patch target, actual strategy/operator change, and whether the
    agent used screening/runtime feedback or only surface text.
-5. Connect proposal behavior to deterministic gates and protocol results:
+5. For APS-backed runs, do not stop at "the tool was called." Check whether
+   the resulting observations or diagnosis were rendered into the final
+   hypothesis/code generation prompt and whether the final output changed a
+   mechanism, bounded lever, or declared-surface evidence target in response.
+6. Connect proposal behavior to deterministic gates and protocol results:
    Contract, Verification, canary, screening/validation/frozen, Decision, and
    reason codes. A run-level W/L/T summary is not sufficient.
-6. Summarize bounded findings back into `status/current-state.md` and the
+7. Summarize bounded findings back into `status/current-state.md` and the
    relevant experiment/audit document.
 
 ## Non-Negotiable Project Principles
@@ -175,6 +149,10 @@ For experiment analysis:
 - APS planner mode now reads compact feedback when available, reads the selected
   surface before code generation/partial finalization, and uses compact static
   preview payloads that omit patch code.
+- APS final generation now receives the bounded screening-derived
+  `agentic_research_diagnosis` and tool observations gathered during the tool
+  loop, so proposal research is not lost between planning and hypothesis/code
+  generation.
 - APS observation-budget/recovery behavior is compact-first: surface reads use
   a bounded `surface-contract.v1` section view by default, optional oversized
   reads fail closed, and the default observation cap is now 48000 chars so the
@@ -235,27 +213,23 @@ Near-term CVRP research-space work:
   `docs/experiments/v0.4/v0.4-main-search-strategy-sonnet-3r-20260508.md`.
   It validated persistent force-surface behavior and complete active runtime
   audit for the selected surface, but only one candidate reached screening.
-- Treat APS budget/recovery as unblocked. The budget headroom is low and may
-  deserve later compaction, but the next work is not another compactness fix or
-  a longer run.
-- Improve CVRP surface efficacy before any long solver-quality validation. The
-  latest baseline-policy diagnostic passed Contract, Verification, canary, and
-  runtime audit for all evaluated candidates, but all candidates still failed
-  screening with `SCREENING_FAIL_WIN_RATE`. The latest main-search diagnostic
-  had one runtime-valid candidate fail screening and two later hypotheses fail
-  C10 novelty. C10 now allows distinct singleton semantic identities through
-  `novelty_signature`, and `context.read_surface(main_search_strategy)` is
-  compact by default. The next experiment step is to rerun a tightly forced
-  `main_search_strategy` diagnostic and check whether multiple candidates reach
-  screening and exercise route-pair-swap / bounded destroy-repair components,
-  not another generated post-baseline operator or a baseline-policy-only run.
-- A clean-worktree forced `main_search_strategy` diagnostic has been analyzed:
-  `/home/clawd/research/scion-experiments/v04-main-search-strategy-sonnet-3r-20260508T142513Z`.
+- Treat APS budget/recovery, forced-surface control, C10 singleton identity,
+  selected-surface audit, and compact feedback retrieval as unblocked for the
+  current short-diagnostic path.
+- Improve APS evidence-to-generation depth before any long solver-quality
+  validation. The latest forced `main_search_strategy` diagnostic from commit
+  `d4d899a` produced five governed screened candidates but all failed
+  `SCREENING_FAIL_WIN_RATE`; the decisive core finding is that tool
+  observations were gathered but not rendered into final hypothesis/code
+  generation prompts. The current repair renders bounded screening-derived
+  research diagnosis and tool observations into final APS generation prompts.
+  The next experiment is another five-round forced `main_search_strategy`
+  diagnostic that checks whether later hypotheses and patches visibly respond
+  to that diagnosis.
+- The latest analyzed `main_search_strategy` diagnostic is:
+  `/home/clawd/research/scion-experiments/v04-recovery-phase-probe-sonnet-5r-20260510T102653Z`.
   The analysis is recorded in
-  `docs/experiments/v0.4/v0.4-main-search-strategy-clean-sonnet-3r-20260508.md`.
-  It validated persistent forced-surface selection, C10 singleton novelty, APS
-  compact selected-surface reads, and active runtime audit across three
-  screened candidates.
+  `docs/experiments/v0.4/v0.4-recovery-phase-probe-sonnet-5r-20260510.md`.
 - The problem/algorithm onboarding design has been captured in
   `design/v0.4/v0.4-problem-algorithm-onboarding.md`. Treat CVRP's manual
   adapter/surface/component work as a prototype of a future onboarding module
