@@ -4238,7 +4238,11 @@ def _best_bounded_destroy_repair(
         top_k,
         destroy_repair_policy=destroy_repair_policy,
     )
-    removable = _rank_worst_removal_customers(routes, instance)
+    removable = _rank_destroy_repair_customers(
+        routes,
+        instance,
+        destroy_repair_policy=destroy_repair_policy,
+    )
     if len(removable) < destroy_count:
         telemetry["skip_reason"] = "insufficient_removal_candidates"
         return None, 0, telemetry
@@ -4273,7 +4277,7 @@ def _best_bounded_destroy_repair(
             return None, total_attempts, telemetry
 
         repaired_routes, attempts, reinserted_count, repair_reason = (
-            _repair_destroyed_customers_with_regret2(
+            _repair_destroyed_customers_with_policy(
                 base_routes,
                 removed_customers,
                 instance,
@@ -4473,6 +4477,63 @@ def _rank_worst_removal_customers(
     return removable
 
 
+def _rank_destroy_repair_customers(
+    routes: list[list[int]],
+    instance: CvrpInstance,
+    *,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
+) -> list[tuple[float, int, int, int]]:
+    worst_ranked = _rank_worst_removal_customers(routes, instance)
+    selectors = _active_destroy_repair_selectors(
+        destroy_repair_policy,
+        key="destroy_selectors",
+        default=("worst_removal",),
+    )
+    ranked: list[tuple[float, int, int, int]] = []
+    seen_customers: set[int] = set()
+    for selector in selectors:
+        if selector == "route_diverse_worst":
+            candidates = _rank_route_diverse_worst_customers(worst_ranked)
+        else:
+            candidates = worst_ranked
+        for item in candidates:
+            customer = item[3]
+            if customer in seen_customers:
+                continue
+            seen_customers.add(customer)
+            ranked.append(item)
+    return ranked or worst_ranked
+
+
+def _rank_route_diverse_worst_customers(
+    worst_ranked: list[tuple[float, int, int, int]],
+) -> list[tuple[float, int, int, int]]:
+    by_route: dict[int, list[tuple[float, int, int, int]]] = {}
+    for item in worst_ranked:
+        by_route.setdefault(item[1], []).append(item)
+    route_order = sorted(
+        by_route,
+        key=lambda route_index: (
+            -by_route[route_index][0][0],
+            route_index,
+        ),
+    )
+    diverse: list[tuple[float, int, int, int]] = []
+    depth = 0
+    while True:
+        added = False
+        for route_index in route_order:
+            route_items = by_route[route_index]
+            if depth >= len(route_items):
+                continue
+            diverse.append(route_items[depth])
+            added = True
+        if not added:
+            break
+        depth += 1
+    return diverse
+
+
 def _bounded_destroy_repair_subsets(
     removable: list[tuple[float, int, int, int]],
     destroy_count: int,
@@ -4585,7 +4646,7 @@ def _bounded_destroy_count(
     return min(max(2, customer_count - 1), budget_count)
 
 
-def _repair_destroyed_customers_with_regret2(
+def _repair_destroyed_customers_with_policy(
     base_routes: list[list[int]],
     removed_customers: list[int],
     instance: CvrpInstance,
@@ -4597,6 +4658,11 @@ def _repair_destroyed_customers_with_regret2(
     pending = list(removed_customers)
     attempts = 0
     reinserted_count = 0
+    repair_selector = _active_destroy_repair_selectors(
+        destroy_repair_policy,
+        key="repair_selectors",
+        default=("regret_2",),
+    )[0]
     while pending:
         if attempts >= top_k:
             return routes, attempts, reinserted_count, "repair_budget_exhausted"
@@ -4606,6 +4672,33 @@ def _repair_destroyed_customers_with_regret2(
             len(pending),
             destroy_repair_policy=destroy_repair_policy,
         )
+        if repair_selector == "cheapest":
+            customer = pending[0]
+            customer_budget = min(per_customer_budget, top_k - attempts)
+            if customer_budget <= 0:
+                return routes, attempts, reinserted_count, "repair_budget_exhausted"
+            insertions = _bounded_regret_insertions(
+                routes,
+                customer,
+                instance,
+                remaining_budget=customer_budget,
+            )
+            attempts += len(insertions)
+            if not insertions:
+                reason = (
+                    "repair_budget_exhausted"
+                    if attempts >= top_k
+                    else "no_feasible_insertion"
+                )
+                return routes, attempts, reinserted_count, reason
+            insertion = insertions[0]
+            if insertion.route_index == len(routes):
+                routes.append([customer])
+            else:
+                routes[insertion.route_index].insert(insertion.insert_pos, customer)
+            pending.remove(customer)
+            reinserted_count += 1
+            continue
         ranked_customers: list[
             tuple[float, float, int, _RepairInsertion, list[_RepairInsertion]]
         ] = []
@@ -4640,6 +4733,25 @@ def _repair_destroyed_customers_with_regret2(
         pending.remove(customer)
         reinserted_count += 1
     return routes, attempts, reinserted_count, ""
+
+
+def _active_destroy_repair_selectors(
+    destroy_repair_policy: Mapping[str, Any] | None,
+    *,
+    key: str,
+    default: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not (
+        destroy_repair_policy
+        and destroy_repair_policy.get("destroy_repair_active")
+        and isinstance(destroy_repair_policy, Mapping)
+    ):
+        return default
+    raw = destroy_repair_policy.get(key)
+    if not isinstance(raw, (list, tuple)):
+        return default
+    selectors = tuple(str(item).strip() for item in raw if str(item).strip())
+    return selectors or default
 
 
 def _repair_candidate_budget_per_customer(

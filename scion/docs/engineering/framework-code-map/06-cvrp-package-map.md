@@ -192,13 +192,15 @@ solver lifecycle and selected-surface runtime audit fails closed.
 The deep components are package-owned and audited. `route_pair_swap` ranks a
 bounded set of route-pair/customer-swap candidates before applying `top_k`,
 instead of relying on raw nested enumeration order. `bounded_destroy_repair`
-uses worst-removal over bounded customer subsets followed by regret-2 repair
-with cheapest insertion candidates; subset generation includes prefix,
-shifted, and route-diverse subsets so controlled formal-like cases are less
-dependent on a single worst-removal prefix. Its repair budget is split across
-pending customers instead of allowing one customer to exhaust the whole `top_k`
-budget, and if a multi-customer repair fails or produces no improvement it can
-spend remaining budget on bounded smaller destroy subsets before giving up.
+uses policy-selected removal ranking (`worst_removal` or
+`route_diverse_worst`) over bounded customer subsets and policy-selected repair
+(`regret_2` or low-budget `cheapest`) with cheapest insertion candidates;
+subset generation includes prefix, shifted, and route-diverse subsets so
+controlled formal-like cases are less dependent on a single worst-removal
+prefix. Its repair budget is split across pending customers instead of
+allowing one customer to exhaust the whole `top_k` budget, and if a
+multi-customer repair fails or produces no improvement it can spend remaining
+budget on bounded smaller destroy subsets before giving up.
 When the current solution has been perturbed away from phase best, the
 main-search loop probes the same component against both the current solution
 and the phase-best baseline, then prefers a candidate that refreshes phase
@@ -244,10 +246,11 @@ bounded destroy selectors (`worst_removal`, `route_diverse_worst`), repair
 selectors (`regret_2`, `cheapest`), subset strategy
 (`prefix_shifted_route_diverse`, `single_worst`, `route_diverse`),
 `max_destroy_customers`, per-customer repair budget, fallback-to-smaller-subsets
-flag, and phase-best preference. The solver still owns removal and regret
-repair code; policy only controls declared schedule/budget knobs and records
-subset, removed/reinserted, budget, fallback, accepted, skip, delta, and runtime
-telemetry.
+flag, and phase-best preference. The solver still owns removal and repair code,
+but the selector fields now drive the bounded mechanism implementation instead
+of only appearing in runtime audit. Runtime telemetry records subset,
+removed/reinserted, budget, fallback, accepted, skip, delta, and runtime
+fields.
 
 `policies/route_pair_candidate_policy.py` is a singleton deep mechanism
 research surface. Required function:

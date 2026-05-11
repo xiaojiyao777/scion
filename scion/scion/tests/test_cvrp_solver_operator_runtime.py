@@ -2539,6 +2539,86 @@ def test_destroy_repair_policy_changes_main_search_repair_telemetry(
     )
 
 
+def test_destroy_repair_policy_selectors_drive_ranking_and_repair_budget() -> None:
+    instance = CvrpInstance(
+        name="destroy_repair_selector_semantics",
+        capacity=99,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 100, 0, 1),
+            CvrpNode(2, 0, 100, 1),
+            CvrpNode(3, 100, 100, 1),
+            CvrpNode(4, 1, 0, 1),
+            CvrpNode(5, 2, 0, 1),
+            CvrpNode(6, 3, 0, 1),
+            CvrpNode(7, 10, 0, 1),
+            CvrpNode(8, 20, 0, 1),
+            CvrpNode(9, 30, 0, 1),
+        ),
+    )
+    routes = [[1, 2, 3], [4, 5, 6]]
+    worst_policy = {
+        "destroy_repair_active": True,
+        "destroy_selectors": ["worst_removal"],
+    }
+    diverse_policy = {
+        "destroy_repair_active": True,
+        "destroy_selectors": ["route_diverse_worst"],
+    }
+
+    worst_ranked = cvrp_solver._rank_destroy_repair_customers(
+        routes,
+        instance,
+        destroy_repair_policy=worst_policy,
+    )
+    diverse_ranked = cvrp_solver._rank_destroy_repair_customers(
+        routes,
+        instance,
+        destroy_repair_policy=diverse_policy,
+    )
+
+    assert [item[1] for item in worst_ranked[:2]] == [0, 0]
+    assert [item[1] for item in diverse_ranked[:2]] == [0, 1]
+
+    removed = [7, 8, 9]
+    repair_base_routes = [[1, 2, 3], [4, 5, 6]]
+    regret_policy = {
+        "destroy_repair_active": True,
+        "repair_selectors": ["regret_2"],
+        "repair_budget_per_customer": 2,
+    }
+    cheapest_policy = {
+        "destroy_repair_active": True,
+        "repair_selectors": ["cheapest"],
+        "repair_budget_per_customer": 2,
+    }
+    _routes, _attempts, regret_reinserted, regret_reason = (
+        cvrp_solver._repair_destroyed_customers_with_policy(
+            repair_base_routes,
+            removed,
+            instance,
+            top_k=4,
+            destroy_repair_policy=regret_policy,
+        )
+    )
+    _routes, _attempts, cheapest_reinserted, cheapest_reason = (
+        cvrp_solver._repair_destroyed_customers_with_policy(
+            repair_base_routes,
+            removed,
+            instance,
+            top_k=4,
+            destroy_repair_policy=cheapest_policy,
+        )
+    )
+
+    assert regret_reason == "repair_budget_exhausted"
+    assert cheapest_reason == "repair_budget_exhausted"
+    assert cheapest_reinserted > regret_reinserted
+
+
 def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget() -> None:
     instance = CvrpInstance(
         name="bounded_destroy_repair_formal_like",

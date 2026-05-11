@@ -15,12 +15,13 @@ produced reliable screening-quality improvement. The latest post-optimization
 smoke improved deep-surface selection and ALNS/VNS attribution, and the
 follow-up control-plane repair now compacts preview payloads and reserves
 self-check observation budget more aggressively. The latest forced
-`destroy_repair_policy` diagnostic validated preview visibility in real traces,
-but exposed a forced-surface prompt conflict after the forced surface was
-blacklisted. This slice repairs the final hypothesis task prompt so forced
-surface/action/target constraints dominate the last generation call; a rerun is
-still needed to validate that repair in a real campaign. Screening gates still
-fail.
+`destroy_repair_policy` prompt-repair diagnostic validates that final forced
+surface/action/target prompt narrowing holds in real traces: the rerun
+completed 8/8 rounds without forced-surface violations or circuit breaker
+failure. It still failed screening quality and exposed a CVRP package semantic
+gap where destroy/repair selector fields were audited but not fully honored by
+the implementation. The latest code repairs those selector semantics; rerun
+validation is still needed. Screening gates still fail.
 
 Current branch: `v0.4-dev`
 
@@ -59,8 +60,12 @@ Current interpretation:
   Contract preview in 2/2 completed code sessions without `result_too_large`.
 - Forced-surface controls fail closed, and the final hypothesis-generation task
   now narrows `change_locus`, `action`, and `target_file` to active forced
-  values instead of presenting the full surface list. This is unit-tested but
-  still needs rerun validation in a forced `destroy_repair_policy` campaign.
+  values instead of presenting the full surface list. The latest forced
+  `destroy_repair_policy` rerun validated this in real APS traces.
+- The latest code also makes `destroy_repair_policy` selector levers real:
+  `route_diverse_worst` changes destroy ranking and `cheapest` uses a
+  low-budget cheapest repair path instead of all selectors flowing through the
+  same worst-removal/regret-2 implementation.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -152,73 +157,79 @@ without simultaneously modifying `main_search_strategy.py`. Proposal feedback
 now exposes generic diagnostic priorities and tags deep/mechanism surfaces that
 have not yet been exercised, all-zero phase/objective-delta fields, and
 accepted/recovery movement without phase-level benefit. Next validation should
-be short and diagnostic-focused, forcing or otherwise prioritizing one deep
-mechanism surface at a time before any long formal CVRP validation.
+be short and diagnostic-focused. Rerun `destroy_repair_policy` once after the
+selector-semantics repair, then move to `route_pair_candidate_policy` if
+destroy/repair still shows no nonzero phase-best movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-sonnet-8r-20260511T062732Z
+run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511T073512Z
 model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
 rounds_requested=8
-rounds_completed=5
+rounds_completed=8
+time_limit_sec=20
+agentic_proposal=true
+agentic_session_timeout_sec=360
+force_surface=destroy_repair_policy
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md
+```
+
+Summary:
+
+- The run completed all 8 requested rounds and stopped by
+  `max_rounds_exhausted`; `circuit_breaker_tripped=false`.
+- All 8 hypotheses targeted `modify/destroy_repair_policy` and
+  `policies/destroy_repair_policy.py`. No forced-surface violation appeared in
+  `campaign_summary.json`.
+- The prompt repair is validated in real traces: all 8 hypothesis traces
+  contained the exact forced task line, and 0 hypothesis traces contained the
+  old generic "Choose a research surface from ..." task line.
+- APS preview-budget behavior remained healthy at larger volume:
+  schema/target previews reached 16/16 proposal sessions, Contract preview
+  reached 8/8 code sessions, all preview tools returned `ok`, and no
+  `result_too_large` or observation-budget exhaustion occurred.
+- Solver efficacy still failed: 5 candidates reached screening and all failed
+  `SCREENING_FAIL_WIN_RATE`; 3 candidates failed Verification with
+  `V5_solution_consistency`.
+- Screened candidates had win rates `0.125, 0.125, 0.125, 0.125, 0.25`, all
+  with `median_delta=0.0`.
+- Destroy/repair attribution was complete but non-beneficial across 80
+  screened pairs: 5,120 attempts, 5,120 repair-budget units used, zero accepted
+  current/recovery/phase-best moves, and
+  `destroy_repair_phase_delta_sum=0.0`.
+- The run exposed a CVRP problem-package semantic gap: selector fields were
+  visible to prompts and runtime audit, but the actual solver path still used
+  fixed worst-removal ranking and regret-2 repair. The latest code repairs this
+  by honoring `route_diverse_worst` and `cheapest`.
+
+Interpretation: the control-plane blocker is closed. The active blocker is now
+mechanism semantics and efficacy in `destroy_repair_policy`. Rerun the same
+forced diagnostic once after the selector repair before moving to
+`route_pair_candidate_policy`.
+
+Detailed analysis:
+[`v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)
+
+Previous analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-sonnet-8r-20260511T062732Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds=5/8
 time_limit_sec=20
 agentic_proposal=true
 agentic_session_timeout_sec=240
 force_surface=destroy_repair_policy
 stop_reason=circuit_breaker
 analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md
-```
-
-Summary:
-
-- The run did not complete eight rounds. It stopped at R5 after three
-  consecutive proposal failures tripped the circuit breaker.
-- R1 targeted `destroy_repair_policy`, passed Contract and Verification, then
-  failed screening with `SCREENING_FAIL_WIN_RATE`, pair profile 4 wins / 1 loss
-  / 11 ties, case win rate `0.125`, and `median_delta=0.0`.
-- R1 validated destroy/repair selected-surface attribution: all required
-  runtime fields were present across 16 pairs.
-- R1 also showed the mechanism was budget-starved: 1,024 destroy/repair
-  attempts, 1,024 repair budget used, `repair_budget_exhausted` once per pair,
-  zero accepted moves, and `destroy_repair_phase_delta_sum=0.0`.
-- R2 targeted `destroy_repair_policy` but failed Verification with
-  `V5_solution_consistency`; selected-surface runtime evidence failed for
-  `destroy_repair_active` and `destroy_repair_errors`.
-- R3-R5 failed hypothesis generation because the model proposed
-  `main_search_strategy` after `destroy_repair_policy` became blacklisted.
-  APS correctly rejected the off-surface hypothesis, but repeated failures
-  ended the diagnostic.
-- The preview-budget repair is validated in real traces: no
-  `result_too_large` or observation-budget exhaustion appeared for schema,
-  target/action, or Contract preview.
-
-Interpretation: preview compactness is no longer the active blocker. The run's
-new control-plane blocker was forced-surface prompt conflict during final
-hypothesis generation. The prompt path has now been repaired in code; rerun the
-same forced diagnostic before moving to another deep surface.
-
-Detailed analysis:
-[`v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
-
-Previous analyzed run:
-
-```text
-run_root=/home/clawd/research/scion-experiments/v04-post-optimization-validation-sonnet-8r-20260511T020518Z
-model=claude-sonnet-4-6
-problem=cvrp
-protocol=formal
-rounds=8/8
-time_limit_sec=20
-agentic_proposal=true
-agentic_session_timeout_sec=240
-force_surface=none
-stop_reason=max_rounds_exhausted
-analysis_doc=scion/docs/experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md
 ```
 
 ## Validation
@@ -293,18 +304,26 @@ Latest forced-prompt narrowing validation:
 198 passed in 3.03s
 ```
 
+Latest CVRP destroy/repair selector/proposal validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_sprint_j3_prompt_plumbing.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py -q
+```
+
+```text
+283 passed in 16.94s
+```
+
 ## Next Actions
 
 P1:
 
-- Rerun the forced `destroy_repair_policy` 8-round diagnostic to validate the
-  final-prompt narrowing repair before moving to `route_pair_candidate_policy`.
-- Judge the rerun first on forced-surface adherence, selected-surface coverage,
-  complete schema/target/interface/Contract preview visibility, and nonzero or
-  explainably-zero mechanism attribution; screening win rate remains secondary
-  until those signals are trustworthy.
-- For destroy/repair semantics, steer away from the R1 failure pattern:
-  reduce repair-budget exhaustion before increasing destroy size.
+- Rerun the forced `destroy_repair_policy` 8-round diagnostic after the
+  selector-semantics repair. Judge it first on whether `route_diverse_worst`
+  and `cheapest` reduce repair-budget exhaustion or produce nonzero accepted
+  phase-best movement.
+- If destroy/repair still shows zero phase movement after selector semantics
+  are real, stop forcing it and move to `route_pair_candidate_policy`.
 - Add a route-local runtime-summary bridge if future operator-surface runs keep
   showing useful generic operator telemetry but empty selected-surface summaries.
 - Continue only short CVRP diagnostics until those surfaces show nonzero
@@ -331,8 +350,8 @@ P2:
 - Deep-surface runtime attribution is improved for `alns_vns_policy`, but
   still thin for `acceptance_restart_policy`, `destroy_repair_policy`, and
   `route_pair_candidate_policy`.
-- The forced-prompt narrowing repair is unit-tested but not yet validated by a
-  real forced campaign after `destroy_repair_policy` becomes blacklisted.
+- The `destroy_repair_policy` selector-semantics repair is unit-tested but not
+  yet validated by a real forced campaign.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.
@@ -348,4 +367,4 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
+  [`v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)

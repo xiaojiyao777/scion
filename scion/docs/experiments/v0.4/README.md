@@ -34,6 +34,7 @@ referenced, not copied into development prompts.
 - [Deep mechanism surfaces Sonnet 8R smoke, 2026-05-10](v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md)
 - [Post-optimization validation Sonnet 8R smoke, 2026-05-11](v0.4-post-optimization-validation-sonnet-8r-20260511.md)
 - [Forced destroy repair policy Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
+- [Forced destroy repair policy prompt-repair Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)
 
 ## Related
 
