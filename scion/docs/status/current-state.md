@@ -12,8 +12,9 @@ handoff. Historical repair and experiment notes were moved to
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
 produced reliable screening-quality improvement. The latest post-optimization
-smoke improved deep-surface selection and ALNS/VNS attribution, but preview
-payloads are still too large and screening gates still fail.
+smoke improved deep-surface selection and ALNS/VNS attribution, and the
+follow-up control-plane repair now compacts preview payloads and reserves
+self-check observation budget more aggressively. Screening gates still fail.
 
 Current branch: `v0.4-dev`
 
@@ -46,9 +47,10 @@ Current interpretation:
   candidate recorded nonzero `alns_vns_phase_delta_sum`, construction-start
   distance, returned baseline distance, and objective deltas. This validates
   attribution plumbing, not solver efficacy.
-- APS self-check reservation now preserves tool calls, but schema/Contract
-  preview payloads still exceed the observation-char budget. Preview
-  compactness remains the primary control-plane blocker.
+- APS self-check reservation now preserves tool calls and observation-char
+  headroom for compact schema/target/interface/Contract previews. The next
+  short diagnostic should validate that those previews stay visible in real
+  APS traces.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -80,9 +82,9 @@ phase-best improvement and screening-quality movement.
 - APS feedback defaults to same-campaign or forced-surface history for forced
   diagnostics.
 - Tool observations are rendered into final hypothesis/code prompts.
-- Observation-budget pressure is only partially mitigated by compact surface
-  reads and a self-check/static-preview reserve. The latest smoke showed the
-  reserve fires, but preview payloads are still too large to read reliably.
+- Observation-budget pressure is mitigated by compact surface reads, compact
+  preview payloads, and a self-check/static-preview reserve. Optional planner
+  surface reads fail closed before consuming the reserve.
 
 ### CVRP Runtime
 
@@ -180,8 +182,9 @@ Summary:
   under observation budget pressure.
 
 Interpretation: this validates improved deep-surface discovery and ALNS/VNS
-runtime attribution, not solver efficacy. Preview payload compactness remains
-the next control-plane repair.
+runtime attribution, not solver efficacy. The post-analysis repair addresses
+preview payload compactness and stale surface-read guidance; it still needs a
+short forced-diagnostic validation run.
 
 Detailed analysis:
 [`v0.4-post-optimization-validation-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md)
@@ -250,20 +253,23 @@ Latest APS/CVRP optimization validation:
 ```
 
 ```text
-244 passed in 18.40s
+247 passed in 17.62s
+```
+
+Latest focused APS preview-budget validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+```
+
+```text
+86 passed in 1.97s
 ```
 
 ## Next Actions
 
 P1:
 
-- Compact `proposal.schema_preview` and `proposal.contract_preview` further so
-  they return useful pass/fail summaries under the reserved observation budget.
-- Align planner guidance with normalized surface reads: tool-selection prompts
-  still recommend `max_code_chars=1200` even though APS executes compact reads
-  with 800-character code previews.
-- Make `deep_surface_not_selected` visible when declared mechanism surfaces
-  remain unexercised after same-campaign screening history exists.
 - Run the next short CVRP diagnostics with one still-unexercised deep mechanism
   surface forced or strongly prioritized at a time:
   `destroy_repair_policy`, then `route_pair_candidate_policy`.
@@ -272,7 +278,7 @@ P1:
   explainably-zero mechanism attribution; screening win rate remains secondary
   until those signals are trustworthy.
 - If Contract preview still skips under APS, reduce nonessential planner reads
-  further before increasing the global observation cap.
+  further before increasing the global observation cap again.
 - Add a route-local runtime-summary bridge if future operator-surface runs keep
   showing useful generic operator telemetry but empty selected-surface summaries.
 - Continue only short CVRP diagnostics until those surfaces show nonzero
@@ -297,8 +303,9 @@ P2:
 - Deep-surface runtime attribution is improved for `alns_vns_policy`, but
   still thin for `acceptance_restart_policy`, `destroy_repair_policy`, and
   `route_pair_candidate_policy`.
-- APS preview observations still exceed the observation-char budget even after
-  self-check tool-call reservation.
+- APS preview compactness is fixed in unit validation, but a real CVRP
+  campaign trace still needs to confirm schema/target/interface/Contract
+  visibility under model-selected tool plans.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.

@@ -129,19 +129,23 @@ interface text and champion-code preview. Compact surface reads omit full prompt
 guidance blocks and full target-file content; `detail="full"`, `section`, and
 `max_code_chars` are explicit opt-ins for debug, paging, or deeper inspection.
 Within `AgenticProposalSession`, surface reads are further normalized to compact
-`max_code_chars=800` observations before execution. If a returned observation
-would exceed the remaining session observation budget, APS stores a bounded
+`max_code_chars=800` observations before execution, and planner guidance
+recommends the same 800-character cap. If a returned observation would exceed
+the remaining session observation budget, APS stores a bounded
 `result_too_large` summary instead of the original payload before incrementing
 `tool_budget_used.observation_chars`. Optional planner-selected
-`context.read_surface` calls also fail closed when the remaining budget is below
-the reserved floor, so persisted recovery artifacts stay within
-`AgenticToolLoopConfig.max_observation_chars` while the replay validator remains
-strict for genuinely invalid artifacts. The default APS tool loop allows 14
-steps and 12 tool calls so the normal read-feedback-schema-target-contract path
-has room after evidence diagnosis is rendered. The default APS observation
-budget is 48,000 chars; compactness is still enforced first, and the larger cap
-only gives room for the normal list/problem/feedback/selected-surface sequence.
-APS also reserves a small terminal budget for self-check/static-preview tools:
+`context.read_surface` calls also fail closed when the remaining budget is
+below the reserved floor, which includes the terminal self-check observation
+reserve plus the minimum observation margin. This prevents exploratory surface
+reads from consuming preview headroom while persisted recovery artifacts stay
+within `AgenticToolLoopConfig.max_observation_chars` and the replay validator
+remains strict for genuinely invalid artifacts. The default APS tool loop
+allows 14 steps and 12 tool calls so the normal
+read-feedback-schema-target-contract path has room after evidence diagnosis is
+rendered. The default APS observation budget is 48,000 chars; compactness is
+still enforced first, and the larger cap only gives room for the normal
+list/problem/feedback/selected-surface sequence. APS also reserves terminal
+budget for self-check/static-preview tools:
 after required diagnosis context has been collected, bounded planner and fixed
 fallback reads stop before consuming the tool-call, step, or observation-char
 reserve needed for schema, target/action, interface, and Contract previews.
@@ -188,9 +192,14 @@ proposal context: it can shape the next hypothesis or patch, but it is not a
 `DecisionFeatures` input and cannot expose validation/frozen detail or raw
 metric refs.
 Static preview observations are compact: target-permission previews return only
-surface name/kind/actions/targets and permission issues, while schema/contract
-patch previews omit `code_content` and expose path, action, char count, digest,
-discovered functions/classes, checks, and compact problem-preview issues.
+surface name/kind/actions/targets and permission issues, while schema previews
+return a compact hypothesis identity summary instead of the full hypothesis
+text. Schema/contract patch previews omit `code_content` and expose path,
+action, char count, digest, discovered functions/classes, checks, and compact
+problem-preview issues. Contract previews also avoid duplicating the full
+ContractGate result inside patch/hypothesis payloads: they expose a short
+contract summary plus bounded check details so the normal APS self-check path
+fits inside the reserved observation budget.
 Contract previews pass the hypothesis-selected surface into ContractGate patch
 checks, so C7 interface, C9d instance-identity, and C9c complexity previews use
 the same authoritative surface as the formal patch gate; standalone interface

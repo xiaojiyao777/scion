@@ -4,6 +4,7 @@ The session lives inside the tainted Creative Layer.  It may draft and persist
 proposal-session artifacts, but it returns only the existing proposal shapes
 that downstream Contract/Workspace/Verification services already understand.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,7 +60,7 @@ _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
 _APS_SURFACE_READ_CODE_CHARS = 800
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
-_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 8000
+_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
 
 
 class AgenticProposalStatus(str, Enum):
@@ -226,27 +227,22 @@ class AgenticProposalRequest:
 
 
 class CreativeProposalLike(Protocol):
-    def generate_hypothesis(self, context: Mapping[str, Any]) -> HypothesisProposal:
-        ...
+    def generate_hypothesis(self, context: Mapping[str, Any]) -> HypothesisProposal: ...
 
-    def generate_code(self, context: Mapping[str, Any]) -> PatchProposal:
-        ...
+    def generate_code(self, context: Mapping[str, Any]) -> PatchProposal: ...
 
 
 class AgenticSessionArtifactStore(Protocol):
-    def write_transcript(self, state: AgenticProposalSessionState) -> str:
-        ...
+    def write_transcript(self, state: AgenticProposalSessionState) -> str: ...
 
-    def write_output(self, output: AgenticProposalOutput) -> str:
-        ...
+    def write_output(self, output: AgenticProposalOutput) -> str: ...
 
     def write_scratch(
         self,
         session_id: str,
         name: str,
         payload: Mapping[str, Any],
-    ) -> str:
-        ...
+    ) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -324,7 +320,9 @@ class AgenticSessionStore:
         return entry
 
     def load_by_session_id(self, session_id: str) -> AgenticStoredSession | None:
-        matches = [entry for entry in self._read_entries() if entry.session_id == session_id]
+        matches = [
+            entry for entry in self._read_entries() if entry.session_id == session_id
+        ]
         if not matches:
             return None
         return self._load_stored_session(self._latest_entry(matches))
@@ -343,7 +341,9 @@ class AgenticSessionStore:
         return self._load_stored_session(self._latest_entry(matches))
 
     def latest_for_request(self, request_id: str) -> AgenticStoredSession | None:
-        matches = [entry for entry in self._read_entries() if entry.request_id == request_id]
+        matches = [
+            entry for entry in self._read_entries() if entry.request_id == request_id
+        ]
         if not matches:
             return None
         return self._load_stored_session(self._latest_entry(matches))
@@ -353,7 +353,11 @@ class AgenticSessionStore:
             self._load_stored_session(entry)
             for entry in sorted(
                 self._read_entries(),
-                key=lambda entry: (entry.updated_at, entry.created_at, entry.session_id),
+                key=lambda entry: (
+                    entry.updated_at,
+                    entry.created_at,
+                    entry.session_id,
+                ),
             )
         ]
 
@@ -372,7 +376,9 @@ class AgenticSessionStore:
                 ok=False,
                 errors=(f"artifact load failed: {exc}",),
             )
-        return AgenticStoredSession(entry=entry, artifact=artifact, validation=validation)
+        return AgenticStoredSession(
+            entry=entry, artifact=artifact, validation=validation
+        )
 
     def _read_entries(self) -> list[AgenticSessionIndexEntry]:
         if not self._index_path.exists():
@@ -394,8 +400,12 @@ class AgenticSessionStore:
                         session_id=str(item.get("session_id") or ""),
                         request_id=str(item.get("request_id") or ""),
                         idempotency_key=str(item.get("idempotency_key") or ""),
-                        artifact_ref=str(item.get("artifact_ref") or item.get("artifact_path") or ""),
-                        artifact_path=str(item.get("artifact_path") or item.get("artifact_ref") or ""),
+                        artifact_ref=str(
+                            item.get("artifact_ref") or item.get("artifact_path") or ""
+                        ),
+                        artifact_path=str(
+                            item.get("artifact_path") or item.get("artifact_ref") or ""
+                        ),
                         transcript_digest=str(item.get("transcript_digest") or ""),
                         termination_reason=str(item.get("termination_reason") or ""),
                         status=str(item.get("status") or ""),
@@ -509,9 +519,11 @@ class AgenticProposalSession:
         artifact_store: AgenticSessionArtifactStore | None = None,
         tool_registry: ProposalToolRegistry | None = None,
         tool_loop_config: AgenticToolLoopConfig | None = None,
-        injected_output: AgenticProposalOutput
-        | Callable[[AgenticProposalRequest], AgenticProposalOutput]
-        | None = None,
+        injected_output: (
+            AgenticProposalOutput
+            | Callable[[AgenticProposalRequest], AgenticProposalOutput]
+            | None
+        ) = None,
     ) -> None:
         self._creative = creative
         self._artifact_store = artifact_store
@@ -534,8 +546,12 @@ class AgenticProposalSession:
             branch_id=request.branch.branch_id,
             tool_loop_config=_tool_loop_config_payload(self._tool_loop_config),
         )
-        state.note(AgenticProposalPhase.ORIENT, "Loaded exposure-controlled proposal context.")
-        state.note(AgenticProposalPhase.DIAGNOSE, "Prepared deterministic APS-1 proposal path.")
+        state.note(
+            AgenticProposalPhase.ORIENT, "Loaded exposure-controlled proposal context."
+        )
+        state.note(
+            AgenticProposalPhase.DIAGNOSE, "Prepared deterministic APS-1 proposal path."
+        )
         evidence: list[AgenticEvidenceRef] = []
         observations: list[ProposalObservation] = []
         if self._session_timeout_reached(state):
@@ -631,7 +647,10 @@ class AgenticProposalSession:
                 detail="AgenticProposalSession requires a creative layer or injected output",
             )
             state.status = output.status
-            state.note(AgenticProposalPhase.FINALIZE, "Session failed before proposal generation.")
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Session failed before proposal generation.",
+            )
             return self._persist(output, state)
 
         hypothesis = request.approved_hypothesis
@@ -644,8 +663,12 @@ class AgenticProposalSession:
                 )
                 state.status = output.status
                 return self._persist(output, state)
-            state.note(AgenticProposalPhase.CHOOSE_SURFACE, "Delegating hypothesis generation.")
-            state.note(AgenticProposalPhase.DRAFT_HYPOTHESIS, "Generating hypothesis proposal.")
+            state.note(
+                AgenticProposalPhase.CHOOSE_SURFACE, "Delegating hypothesis generation."
+            )
+            state.note(
+                AgenticProposalPhase.DRAFT_HYPOTHESIS, "Generating hypothesis proposal."
+            )
             try:
                 hypothesis_context = dict(
                     _sanitize_agentic_value(request.hypothesis_context or {})
@@ -671,9 +694,7 @@ class AgenticProposalSession:
                         _observation_prompt_payload(observation)
                         for observation in observations
                     ]
-                hypothesis = self._creative.generate_hypothesis(
-                    hypothesis_context
-                )
+                hypothesis = self._creative.generate_hypothesis(hypothesis_context)
             except self._SESSION_ERROR_TYPES as exc:
                 output = self._failed_output(
                     request=request,
@@ -869,9 +890,7 @@ class AgenticProposalSession:
                     request.resume_context
                 )
             if observations:
-                research_diagnosis = _research_diagnosis_from_observations(
-                    observations
-                )
+                research_diagnosis = _research_diagnosis_from_observations(observations)
                 if research_diagnosis:
                     code_context["agentic_research_diagnosis"] = research_diagnosis
                 code_context["agentic_tool_observations"] = [
@@ -1222,7 +1241,9 @@ class AgenticProposalSession:
             "Collected fixed proposal tool observations.",
             metadata={
                 "tool_names": [observation.tool_name for observation in observations],
-                "error_count": sum(1 for observation in observations if observation.is_error),
+                "error_count": sum(
+                    1 for observation in observations if observation.is_error
+                ),
             },
         )
         return observations
@@ -1309,12 +1330,16 @@ class AgenticProposalSession:
             planner_context = {
                 "session_id": state.session_id,
                 "phase": state.phase.value,
-                "allowed_tools": self.tool_registry.allowed_tools(context)
-                if self.tool_registry is not None
-                else (),
-                "allowed_tool_specs": self.tool_registry.allowed_tool_specs(context)
-                if self.tool_registry is not None
-                else (),
+                "allowed_tools": (
+                    self.tool_registry.allowed_tools(context)
+                    if self.tool_registry is not None
+                    else ()
+                ),
+                "allowed_tool_specs": (
+                    self.tool_registry.allowed_tool_specs(context)
+                    if self.tool_registry is not None
+                    else ()
+                ),
                 "tool_arg_guidance": self._tool_arg_guidance(context, observations),
                 "hypothesis_constraints": self._hypothesis_constraints(context),
                 "remaining_steps": self._remaining_tool_steps(state),
@@ -1625,12 +1650,13 @@ class AgenticProposalSession:
             if _observation_satisfies_compact_requirement(context, observation)
         }
         missing_feedback = [
-            tool_name for tool_name in available_feedback if tool_name not in observed_ok
+            tool_name
+            for tool_name in available_feedback
+            if tool_name not in observed_ok
         ]
         if missing_feedback:
-            return (
-                "missing compact proposal feedback tools: "
-                + ", ".join(missing_feedback)
+            return "missing compact proposal feedback tools: " + ", ".join(
+                missing_feedback
             )
         return None
 
@@ -1642,9 +1668,8 @@ class AgenticProposalSession:
             return ()
         allowed = set(self.tool_registry.allowed_tools(context))
         available: list[str] = []
-        if (
-            "memory.query" in allowed
-            and (context.search_memory is not None or context.research_log is not None)
+        if "memory.query" in allowed and (
+            context.search_memory is not None or context.research_log is not None
         ):
             available.append("memory.query")
         has_screening_steps = _has_feedback_screening_history(context)
@@ -1671,7 +1696,7 @@ class AgenticProposalSession:
                 "detail_default": "compact",
                 "recommended_args": {
                     "detail": "compact",
-                    "max_code_chars": 1200,
+                    "max_code_chars": _APS_SURFACE_READ_CODE_CHARS,
                 },
                 "full_detail_rule": (
                     "request detail='full' only for explicit debugging after "
@@ -1815,7 +1840,7 @@ class AgenticProposalSession:
         args: dict[str, Any] = {
             "surface": hypothesis.change_locus,
             "detail": "compact",
-            "max_code_chars": 1200,
+            "max_code_chars": _APS_SURFACE_READ_CODE_CHARS,
         }
         if hypothesis.target_file:
             args["target_file"] = hypothesis.target_file
@@ -1879,7 +1904,9 @@ class AgenticProposalSession:
         assert self.tool_registry is not None
         args = self._budgeted_tool_args(name, args, selection_source=selection_source)
         if self._session_timeout_reached(state):
-            self._record_loop_stop(state, "session_timeout", error_code="session_timeout")
+            self._record_loop_stop(
+                state, "session_timeout", error_code="session_timeout"
+            )
             return ProposalObservation(
                 observation_id=str(uuid.uuid4()),
                 session_id=context.session_id,
@@ -2030,7 +2057,9 @@ class AgenticProposalSession:
         )
 
     def _remaining_tool_steps(self, state: AgenticProposalSessionState) -> int:
-        return max(0, int(self._tool_loop_config.max_steps) - int(state.tool_step_count))
+        return max(
+            0, int(self._tool_loop_config.max_steps) - int(state.tool_step_count)
+        )
 
     def _self_check_tool_call_reserve(self) -> int:
         max_calls = max(0, int(self._tool_loop_config.max_tool_calls))
@@ -2078,12 +2107,17 @@ class AgenticProposalSession:
         return _MIN_BUDGETED_OBSERVATION_CHARS
 
     def _optional_surface_read_budget_floor(self) -> int:
+        self_check_reserve = self._self_check_observation_reserve_chars()
+        minimum = self._minimum_budgeted_observation_chars()
+        optional_floor = min(
+            _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS,
+            max(0, int(self._tool_loop_config.max_observation_chars) // 8),
+        )
+        if self_check_reserve:
+            return max(minimum, optional_floor, self_check_reserve + minimum)
         return max(
-            self._minimum_budgeted_observation_chars(),
-            min(
-                _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS,
-                max(0, int(self._tool_loop_config.max_observation_chars) // 8),
-            ),
+            minimum,
+            optional_floor,
         )
 
     def _should_deny_optional_tool_for_budget(
@@ -2221,12 +2255,16 @@ class AgenticProposalSession:
             observation_type="tool_error",
             summary=summary,
             structured_payload=payload,
-            taint=source_observation.taint
-            if source_observation is not None
-            else ProposalTaint.PROPOSAL,
-            exposure_level=source_observation.exposure_level
-            if source_observation is not None
-            else ProposalExposureLevel.PUBLIC_SPEC,
+            taint=(
+                source_observation.taint
+                if source_observation is not None
+                else ProposalTaint.PROPOSAL
+            ),
+            exposure_level=(
+                source_observation.exposure_level
+                if source_observation is not None
+                else ProposalExposureLevel.PUBLIC_SPEC
+            ),
             is_error=True,
             failure_code=ProposalToolFailureCode.RESULT_TOO_LARGE,
             repair_hint=repair_hint,
@@ -2658,12 +2696,14 @@ def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
         "problem_spec_hash": output.problem_spec_hash,
         "champion_version": output.champion_version,
         "champion_weight_revision": output.champion_weight_revision,
-        "hypothesis": _proposal_payload(output.hypothesis)
-        if output.hypothesis is not None
-        else None,
-        "patch": _patch_artifact_payload(output.patch)
-        if output.patch is not None
-        else None,
+        "hypothesis": (
+            _proposal_payload(output.hypothesis)
+            if output.hypothesis is not None
+            else None
+        ),
+        "patch": (
+            _patch_artifact_payload(output.patch) if output.patch is not None else None
+        ),
         "evidence_used": [
             {
                 "observation_id": evidence.observation_id,
@@ -2756,12 +2796,16 @@ def compute_agentic_idempotency_key(
         },
         "champion": {
             "version": _champion_version(champion),
-            "code_snapshot_hash": getattr(champion, "code_snapshot_hash", None)
-            if champion is not None
-            else None,
-            "solver_config_hash": getattr(champion, "solver_config_hash", None)
-            if champion is not None
-            else None,
+            "code_snapshot_hash": (
+                getattr(champion, "code_snapshot_hash", None)
+                if champion is not None
+                else None
+            ),
+            "solver_config_hash": (
+                getattr(champion, "solver_config_hash", None)
+                if champion is not None
+                else None
+            ),
             "weight_revision": _champion_weight_revision(champion),
         },
         "problem": {
@@ -2770,9 +2814,11 @@ def compute_agentic_idempotency_key(
         },
         "request": {
             "kind": "code" if request.approved_hypothesis is not None else "hypothesis",
-            "approved_hypothesis": _proposal_payload(request.approved_hypothesis)
-            if request.approved_hypothesis is not None
-            else None,
+            "approved_hypothesis": (
+                _proposal_payload(request.approved_hypothesis)
+                if request.approved_hypothesis is not None
+                else None
+            ),
             "prior_failure": _sanitize_agentic_value(request.prior_failure),
         },
         "policy": policy_payload,
@@ -2912,9 +2958,7 @@ def _aggregate_runtime_diagnoses(
             failure_tags.update(str(tag) for tag in tags if tag)
         rows = diagnosis.get("runtime_signal_rows")
         if isinstance(rows, list):
-            runtime_signal_rows.extend(
-                row for row in rows if isinstance(row, Mapping)
-            )
+            runtime_signal_rows.extend(row for row in rows if isinstance(row, Mapping))
         steps = diagnosis.get("recent_screening_steps")
         if isinstance(steps, list):
             recent_screening_steps.extend(
@@ -2944,11 +2988,7 @@ def _merge_int_counts(target: dict[str, int], value: Any) -> None:
 
 
 def _drop_empty_dict(value: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: item
-        for key, item in value.items()
-        if item not in ({}, [], None)
-    }
+    return {key: item for key, item in value.items() if item not in ({}, [], None)}
 
 
 def _safe_positive_int(value: Any) -> bool:
@@ -3132,8 +3172,7 @@ def _self_check_from_previews(
                     if code
                 )
                 budget_error = (
-                    observation.failure_code
-                    == ProposalToolFailureCode.RESULT_TOO_LARGE
+                    observation.failure_code == ProposalToolFailureCode.RESULT_TOO_LARGE
                 )
                 contract_preview_passed = None if budget_error else False
             continue

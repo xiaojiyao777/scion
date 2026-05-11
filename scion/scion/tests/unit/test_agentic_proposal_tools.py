@@ -53,7 +53,6 @@ from scion.proposal.tools import (
     ProposalToolRegistry,
 )
 
-
 _COMPACT_FEEDBACK_TOOL_NAMES = {
     "memory.query",
     "feedback.query_screening",
@@ -668,8 +667,7 @@ def test_read_surface_defaults_to_compact_code_payload(tmp_path: Path) -> None:
         "def baseline_time_fraction(instance, time_limit_sec):\n"
         "    return 0.50\n\n"
         "def max_operator_rounds(instance, time_limit_sec):\n"
-        "    return 12\n\n"
-        + "\n".join(f"# filler {idx}" for idx in range(800)),
+        "    return 12\n\n" + "\n".join(f"# filler {idx}" for idx in range(800)),
         encoding="utf-8",
     )
 
@@ -700,8 +698,7 @@ def test_read_surface_full_and_explicit_max_code_chars(tmp_path: Path) -> None:
         "def baseline_time_fraction(instance, time_limit_sec):\n"
         "    return 0.50\n\n"
         "def max_operator_rounds(instance, time_limit_sec):\n"
-        "    return 12\n\n"
-        + "\n".join(f"# full filler {idx}" for idx in range(240))
+        "    return 12\n\n" + "\n".join(f"# full filler {idx}" for idx in range(240))
     )
     policy_file.write_text(full_code, encoding="utf-8")
 
@@ -778,9 +775,7 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     assert payload["detail"] == "compact"
     assert payload["section"] == "all"
     assert payload["surface"]["name"] == "main_search_strategy"
-    assert payload["surface"]["interface"]["required_functions"] == [
-        "main_search_plan"
-    ]
+    assert payload["surface"]["interface"]["required_functions"] == ["main_search_plan"]
     assert payload["surface_contract"]["schema_version"] == "surface-contract.v1"
     assert payload["surface_contract"]["available_sections"] == [
         "summary",
@@ -790,7 +785,9 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
         "novelty",
         "target_preview",
     ]
-    assert payload["surface_contract"]["target_preview"]["content_preview_chars"] <= 1200
+    assert (
+        payload["surface_contract"]["target_preview"]["content_preview_chars"] <= 1200
+    )
     assert "content_preview" not in payload["surface_contract"]["target_preview"]
     assert "prompt" not in payload["surface"]
     assert "State how the whole main-search strategy" not in rendered
@@ -851,7 +848,9 @@ def test_read_surface_wildcard_does_not_match_nested_path(tmp_path: Path) -> Non
     context = _context(tmp_path)
     archive = Path(context.champion.code_snapshot_path) / "operators" / "archive"
     archive.mkdir()
-    (archive / "secret.py").write_text("SECRET_NESTED_OPERATOR = True\n", encoding="utf-8")
+    (archive / "secret.py").write_text(
+        "SECRET_NESTED_OPERATOR = True\n", encoding="utf-8"
+    )
 
     observation = registry.call(
         "context.read_surface",
@@ -1013,9 +1012,7 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "runtime_failure_guidance" in payload
     assert payload["research_diagnosis"]["schema_version"] == "research-diagnosis.v1"
     assert payload["research_diagnosis"]["screening_only"] is True
-    assert payload["research_diagnosis"]["reason_code_counts"] == {
-        "tie_dominated": 1
-    }
+    assert payload["research_diagnosis"]["reason_code_counts"] == {"tie_dominated": 1}
     assert "zero_case_win_rate" in payload["research_diagnosis"]["failure_mode_tags"]
     assert "recommended_surfaces: search_policy" in payload["runtime_failure_guidance"]
     assert "discouraged_surfaces: route_local" in payload["runtime_failure_guidance"]
@@ -1075,6 +1072,40 @@ def test_runtime_diagnosis_tags_unselected_declared_mechanism_surfaces(
     assert diagnosis["declared_mechanism_surfaces"] == ["deep_policy"]
     assert diagnosis["unselected_mechanism_surfaces"] == ["deep_policy"]
     assert "deep_policy" in " ".join(diagnosis["next_hypothesis_requirements"])
+
+
+def test_list_surfaces_exposes_deep_surface_priority_tag_after_screening_history(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    spec_payload = _problem_spec(tmp_path).model_dump()
+    spec_payload["research_surfaces"].append(
+        {
+            "name": "deep_policy",
+            "kind": "policy",
+            "description": "Controlled mechanism surface.",
+            "algorithm": {
+                "role": "controlled_search_mechanism",
+                "invocation_point": "during_search",
+            },
+            "targets": {
+                "files": ["policies/deep_policy.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+                "singleton": True,
+            },
+        }
+    )
+    context = replace(context, problem_spec=ProblemSpecV1(**spec_payload))
+
+    observation = registry.call("context.list_surfaces", {}, context)
+    priorities = observation.structured_payload["diagnostic_surface_priorities"]
+
+    assert "deep_surface_not_selected" in priorities["failure_mode_tags"]
+    assert priorities["unselected_mechanism_surfaces"] == ["deep_policy"]
+    assert "deep_policy" in " ".join(priorities["next_requirements"])
 
 
 def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
@@ -1221,8 +1252,7 @@ def test_feedback_query_screening_bounds_large_compact_payload_without_error(
     protocol = context.step_history[0].protocol_result
     assert protocol is not None
     large_runtime_summary = {
-        f"component_{idx}": "accepted route-pair evidence " * 200
-        for idx in range(60)
+        f"component_{idx}": "accepted route-pair evidence " * 200 for idx in range(60)
     }
     large_step = replace(
         context.step_history[0],
@@ -1270,7 +1300,10 @@ def test_feedback_query_defaults_to_campaign_scope_across_branches(
 
     assert observation.structured_payload["available_screening_step_count"] == 1
     assert observation.structured_payload["matched_screening_step_count"] == 1
-    assert observation.structured_payload["screening_steps"][0]["branch_id"] == "branch-older"
+    assert (
+        observation.structured_payload["screening_steps"][0]["branch_id"]
+        == "branch-older"
+    )
     assert branch_scoped.structured_payload["matched_screening_step_count"] == 0
     assert branch_scoped.structured_payload["screening_steps"] == []
 
@@ -1322,9 +1355,7 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
                         "missing": 0,
                         "empty": 0,
                         "failed": 0,
-                        "values": [
-                            {"value": "{'improvement_loop': 0.0}", "count": 2}
-                        ],
+                        "values": [{"value": "{'improvement_loop': 0.0}", "count": 2}],
                     },
                 },
             },
@@ -1510,7 +1541,9 @@ def test_memory_query_rejects_default_render_without_safe_view(tmp_path: Path) -
         problem_spec_hash=context.problem_spec_hash,
     )
 
-    observation = ProposalToolRegistry.default_read_only().call("memory.query", {}, context)
+    observation = ProposalToolRegistry.default_read_only().call(
+        "memory.query", {}, context
+    )
     rendered = json.dumps(observation.structured_payload, sort_keys=True)
 
     assert observation.is_error is True
@@ -1536,7 +1569,9 @@ def test_memory_query_rejects_non_callable_render(tmp_path: Path) -> None:
         problem_spec_hash=context.problem_spec_hash,
     )
 
-    observation = ProposalToolRegistry.default_read_only().call("memory.query", {}, context)
+    observation = ProposalToolRegistry.default_read_only().call(
+        "memory.query", {}, context
+    )
 
     assert observation.is_error is True
     assert observation.failure_code == ProposalToolFailureCode.UNSUPPORTED
@@ -1707,7 +1742,10 @@ def test_draft_patch_returns_artifact_without_workspace_write(tmp_path: Path) ->
     assert observation.artifact_ref is not None
     assert observation.structured_payload["artifact_kind"] == "patch_draft"
     assert observation.structured_payload["workspace_materialized"] is False
-    assert observation.structured_payload["patch"]["file_path"] == "policies/search_policy.py"
+    assert (
+        observation.structured_payload["patch"]["file_path"]
+        == "policies/search_policy.py"
+    )
     assert after == before
 
 
@@ -1880,6 +1918,58 @@ def test_contract_preview_patch_payload_is_compact_without_code_content(
     assert "return 0.35" not in rendered
 
 
+def test_schema_and_contract_previews_stay_compact_for_large_inputs(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    hypothesis_payload = _valid_hypothesis_payload(
+        change_locus="construction_policy",
+        target_file="policies/construction_policy.py",
+        target_objectives=["total_distance"],
+        protected_objectives=["fleet_violation"],
+        hypothesis_text="Large diagnostic hypothesis. " * 120,
+        expected_effect="Improve construction seed quality. " * 120,
+        runtime_budget_strategy="Use bounded construction evaluation. " * 120,
+        novelty_signature={
+            "construction_mode": "savings" * 80,
+            "repair_budget": list(range(40)),
+        },
+    )
+    patch_payload = {
+        "file_path": "policies/construction_policy.py",
+        "action": "modify",
+        "code_content": (
+            "def construction_mode(instance, time_limit_sec):\n"
+            "    return 'savings'\n\n"
+            "def construction_bias(instance, time_limit_sec):\n"
+            "    return 0.5\n\n" + "\n".join(f"# filler {idx}" for idx in range(500))
+        ),
+    }
+
+    schema = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis_payload, "patch": patch_payload},
+        context,
+    )
+    contract = registry.call(
+        "proposal.contract_preview",
+        {"hypothesis": hypothesis_payload, "patch": patch_payload},
+        context,
+    )
+    rendered_schema = json.dumps(schema.structured_payload, sort_keys=True)
+    rendered_contract = json.dumps(contract.structured_payload, sort_keys=True)
+
+    assert schema.is_error is False
+    assert contract.is_error is False
+    assert len(rendered_schema) < 6000
+    assert len(rendered_contract) < 12000
+    assert "Large diagnostic hypothesis." not in rendered_schema
+    assert "Large diagnostic hypothesis." not in rendered_contract
+    assert "code_content" not in rendered_contract
+    assert "# filler" not in rendered_contract
+
+
 def test_contract_preview_uses_hypothesis_selected_surface_on_overlapping_targets(
     tmp_path: Path,
 ) -> None:
@@ -1930,9 +2020,9 @@ def test_cvrp_policy_preview_good_defaults_pass(tmp_path: Path) -> None:
         {
             "file_path": "policies/search_policy.py",
             "action": "modify",
-            "code_content": (
-                _CVRP_ROOT / "policies" / "search_policy.py"
-            ).read_text(encoding="utf-8"),
+            "code_content": (_CVRP_ROOT / "policies" / "search_policy.py").read_text(
+                encoding="utf-8"
+            ),
         },
         {
             "file_path": "policies/neighborhood_portfolio.py",
@@ -2131,7 +2221,9 @@ def test_aps3_tool_observations_remain_tainted_and_bounded(tmp_path: Path) -> No
     registry = ProposalToolRegistry.default_read_only()
     context = _context(tmp_path, policy=_tool_enabled_policy())
     observations = [
-        registry.call("proposal.draft_hypothesis", _valid_hypothesis_payload(), context),
+        registry.call(
+            "proposal.draft_hypothesis", _valid_hypothesis_payload(), context
+        ),
         registry.call("proposal.draft_patch", _valid_policy_patch_payload(), context),
         registry.call(
             "proposal.contract_preview",
@@ -2142,7 +2234,9 @@ def test_aps3_tool_observations_remain_tainted_and_bounded(tmp_path: Path) -> No
 
     for observation in observations:
         tool = registry.get(observation.tool_name)
-        rendered = json.dumps(observation.structured_payload, sort_keys=True, default=str)
+        rendered = json.dumps(
+            observation.structured_payload, sort_keys=True, default=str
+        )
         assert observation.taint == ProposalTaint.PROPOSAL
         assert len(rendered) <= tool.max_result_chars
     assert observations[0].exposure_level == ProposalExposureLevel.SCRATCH
@@ -2399,11 +2493,7 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     )
 
     transcript = [event.metadata for event in output.transcript]
-    tool_names = [
-        event["tool_name"]
-        for event in transcript
-        if "tool_name" in event
-    ]
+    tool_names = [event["tool_name"] for event in transcript if "tool_name" in event]
 
     assert output.status == AgenticProposalStatus.COMPLETED
     assert output.evidence_used
@@ -2417,12 +2507,14 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     assert output.self_check.schema_valid is True
     assert output.self_check.contract_preview_passed is True
     assert creative.hypothesis_contexts[0]["agentic_tool_observations"]
-    assert creative.hypothesis_contexts[0]["agentic_research_diagnosis"][
-        "schema_version"
-    ] == "agentic-research-diagnosis.v1"
-    assert creative.code_contexts[0]["agentic_research_diagnosis"][
-        "schema_version"
-    ] == "agentic-research-diagnosis.v1"
+    assert (
+        creative.hypothesis_contexts[0]["agentic_research_diagnosis"]["schema_version"]
+        == "agentic-research-diagnosis.v1"
+    )
+    assert (
+        creative.code_contexts[0]["agentic_research_diagnosis"]["schema_version"]
+        == "agentic-research-diagnosis.v1"
+    )
     for event in output.transcript:
         if "tool_name" not in event.metadata:
             continue
@@ -2532,9 +2624,10 @@ def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> No
     assert diagnosis["aggregate_runtime_diagnosis"]["reason_code_counts"] == {
         "SCREENING_FAIL_WIN_RATE": 2
     }
-    assert "screening_win_rate_failure" in diagnosis["aggregate_runtime_diagnosis"][
-        "failure_mode_tags"
-    ]
+    assert (
+        "screening_win_rate_failure"
+        in diagnosis["aggregate_runtime_diagnosis"]["failure_mode_tags"]
+    )
 
 
 def test_agentic_session_forced_surface_fails_closed_before_partial_finalize(
@@ -2632,9 +2725,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
         )
     )
     tool_events = [
-        event.metadata
-        for event in output.transcript
-        if event.metadata.get("tool_name")
+        event.metadata for event in output.transcript if event.metadata.get("tool_name")
     ]
     rendered_context = json.dumps(
         creative.hypothesis_contexts[0]["agentic_tool_observations"],
@@ -2651,8 +2742,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
         for event in tool_events
     )
     assert not any(
-        event.get("error_code") == "result_too_large"
-        for event in tool_events
+        event.get("error_code") == "result_too_large" for event in tool_events
     )
     assert "main_search_strategy" in rendered_context
     assert "raw_metrics_ref" not in rendered_context
@@ -2686,9 +2776,12 @@ def test_agentic_session_tool_loop_limits_are_enforced(tmp_path: Path) -> None:
         )
     )
 
-    tool_events = [event for event in output.transcript if event.metadata.get("tool_name")]
+    tool_events = [
+        event for event in output.transcript if event.metadata.get("tool_name")
+    ]
     stop_events = [
-        event for event in output.transcript
+        event
+        for event in output.transcript
         if event.metadata.get("stop_reason") == "tool_loop_limit"
     ]
 
@@ -2752,7 +2845,9 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
         )
     )
 
-    output_ref = next(ref for ref in output.tainted_artifact_refs if ref.endswith("output.json"))
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
     artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
     huge_events = [
         event.metadata
@@ -2807,6 +2902,38 @@ def test_optional_read_surface_near_budget_returns_bounded_error(
         and event.metadata.get("selection_source") == "planner_selected"
         for event in state.transcript
     )
+
+
+def test_optional_read_surface_preserves_self_check_observation_reserve(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_observation_chars=48000)
+    state = AgenticProposalSessionState(
+        session_id="session-reserve",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        observation_chars_used=36000,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+
+    observation = session._call_tool(
+        context,
+        state,
+        AgenticProposalPhase.DIAGNOSE,
+        "context.read_surface",
+        {"surface": "search_policy"},
+        selection_source="planner_selected",
+    )
+
+    assert observation.is_error is True
+    assert observation.failure_code == ProposalToolFailureCode.RESULT_TOO_LARGE
+    assert observation.structured_payload["budget_action"] == "tool_denied"
+    assert state.observation_chars_used <= config.max_observation_chars
 
 
 def test_agentic_session_wall_time_timeout_returns_typed_failure(
@@ -3088,7 +3215,8 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
     )
 
     planner_events = [
-        event.metadata for event in output.transcript
+        event.metadata
+        for event in output.transcript
         if event.metadata.get("selection_source") == "planner_selected"
     ]
     assert output.status == AgenticProposalStatus.COMPLETED
@@ -3134,9 +3262,7 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         )
     )
     tool_events = [
-        event.metadata
-        for event in output.transcript
-        if event.metadata.get("tool_name")
+        event.metadata for event in output.transcript if event.metadata.get("tool_name")
     ]
     tool_names = [event["tool_name"] for event in tool_events]
     code_observations = creative.code_contexts[0]["agentic_tool_observations"]
@@ -3146,9 +3272,14 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         output.tool_budget_used["observation_chars"]
         <= output.tool_loop_config["max_observation_chars"]
     )
+    assert (
+        creative.planner_contexts[0]["tool_arg_guidance"]["context.read_surface"][
+            "recommended_args"
+        ]["max_code_chars"]
+        == 800
+    )
     assert any(
-        event.metadata.get("error_code")
-        == "planner_stopped_before_required_context"
+        event.metadata.get("error_code") == "planner_stopped_before_required_context"
         for event in output.transcript
     )
     for feedback_tool in _COMPACT_FEEDBACK_TOOL_NAMES:
@@ -3159,12 +3290,12 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         for event in tool_events
     )
     assert any(
-            observation["tool_name"] == "context.read_surface"
-            and observation["structured_payload"]["surface"]["name"] == "search_policy"
-            and observation["structured_payload"]["detail"] == "compact"
-            and observation["structured_payload"]["current_artifact"]["max_chars"] == 800
-            for observation in code_observations
-        )
+        observation["tool_name"] == "context.read_surface"
+        and observation["structured_payload"]["surface"]["name"] == "search_policy"
+        and observation["structured_payload"]["detail"] == "compact"
+        and observation["structured_payload"]["current_artifact"]["max_chars"] == 800
+        for observation in code_observations
+    )
     hypothesis_observation_names = {
         observation["tool_name"]
         for observation in creative.hypothesis_contexts[0]["agentic_tool_observations"]
@@ -3214,8 +3345,7 @@ def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback
 
     assert output.status == AgenticProposalStatus.COMPLETED
     assert any(
-        event.metadata.get("error_code")
-        == "planner_stopped_before_required_context"
+        event.metadata.get("error_code") == "planner_stopped_before_required_context"
         and "feedback.query_screening" in event.metadata.get("detail", "")
         and "feedback.query_runtime" in event.metadata.get("detail", "")
         for event in output.transcript
@@ -3257,7 +3387,8 @@ def test_agentic_session_bounded_planner_rejects_forbidden_tool(
     )
 
     contract_events = [
-        event.metadata for event in output.transcript
+        event.metadata
+        for event in output.transcript
         if event.metadata.get("tool_name") == "proposal.contract_preview"
     ]
     assert output.status == AgenticProposalStatus.COMPLETED
@@ -3266,10 +3397,11 @@ def test_agentic_session_bounded_planner_rejects_forbidden_tool(
     assert contract_events[0]["error_code"] == "invalid_tool_selection"
     assert contract_events[0]["fallback"] == "fixed_tool_plan"
     assert not any(
-        event.get("selection_source") == "planner_selected"
-        for event in contract_events
+        event.get("selection_source") == "planner_selected" for event in contract_events
     )
-    assert "proposal.contract_preview" not in creative.planner_contexts[0]["allowed_tools"]
+    assert (
+        "proposal.contract_preview" not in creative.planner_contexts[0]["allowed_tools"]
+    )
 
 
 def test_model_side_forbidden_tool_selection_is_rejected_before_execution(
@@ -3309,11 +3441,13 @@ def test_model_side_forbidden_tool_selection_is_rejected_before_execution(
     )
 
     invalid_events = [
-        event.metadata for event in output.transcript
+        event.metadata
+        for event in output.transcript
         if event.metadata.get("error_code") == "invalid_tool_selection"
     ]
     forbidden_tool_events = [
-        event.metadata for event in output.transcript
+        event.metadata
+        for event in output.transcript
         if event.metadata.get("tool_name") == "proposal.contract_preview"
     ]
     assert output.status == AgenticProposalStatus.COMPLETED
@@ -3625,13 +3759,10 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         )
     )
     tool_events = [
-        event.metadata
-        for event in output.transcript
-        if event.metadata.get("step_id")
+        event.metadata for event in output.transcript if event.metadata.get("step_id")
     ]
     read_surface_events = [
-        event for event in tool_events
-        if event["tool_name"] == "context.read_surface"
+        event for event in tool_events if event["tool_name"] == "context.read_surface"
     ]
 
     assert listed.is_error is False
@@ -3689,7 +3820,9 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     )
 
     rendered = json.dumps(output, default=str, sort_keys=True)
-    output_ref = next(ref for ref in output.tainted_artifact_refs if ref.endswith("output.json"))
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
     artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
     rendered_artifact = json.dumps(artifact, default=str, sort_keys=True)
     read_surface_events = [
@@ -3794,7 +3927,9 @@ def test_agentic_session_does_not_emit_raw_refs_in_artifacts(tmp_path: Path) -> 
     )
 
     rendered_output = json.dumps(output, default=str, sort_keys=True)
-    rendered_prompt = json.dumps(creative.hypothesis_contexts, default=str, sort_keys=True)
+    rendered_prompt = json.dumps(
+        creative.hypothesis_contexts, default=str, sort_keys=True
+    )
 
     assert "raw_metrics_ref" not in rendered_output
     assert "SECRET_VALIDATION" not in rendered_output
@@ -3838,7 +3973,9 @@ def test_agentic_session_artifact_schema_version_and_digest_exist(
         )
     )
 
-    output_ref = next(ref for ref in output.tainted_artifact_refs if ref.endswith("output.json"))
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
     artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
 
     assert artifact["schema_version"] == AGENTIC_SESSION_SCHEMA_VERSION
@@ -3847,7 +3984,10 @@ def test_agentic_session_artifact_schema_version_and_digest_exist(
     assert artifact["idempotency_key"] == output.idempotency_key
     assert artifact["idempotency_key"].startswith("aps:")
     assert artifact["termination_reason"] == "completed"
-    assert artifact["tool_loop_config"]["max_tool_calls"] >= artifact["tool_budget_used"]["tool_calls"]
+    assert (
+        artifact["tool_loop_config"]["max_tool_calls"]
+        >= artifact["tool_budget_used"]["tool_calls"]
+    )
     assert artifact["transcript_digest"] == output.transcript_digest
     assert artifact["tainted"] is True
     assert artifact["patch"]["patch_body_omitted"] is True
@@ -3977,7 +4117,9 @@ def test_resume_from_artifact_returns_sanitized_length_bounded_context(
             tool_context=context,
         )
     )
-    output_ref = next(ref for ref in output.tainted_artifact_refs if ref.endswith("output.json"))
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
 
     resume_context = resume_from_artifact(output_ref, max_chars=600)
     rendered = json.dumps(resume_context, sort_keys=True)

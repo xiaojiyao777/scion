@@ -4,6 +4,7 @@ These tools live inside the tainted proposal layer.  They return typed
 observations for an agentic proposal session, but they do not write candidate
 workspaces and they do not expose validation/frozen raw metrics.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -55,6 +56,11 @@ _COMPACT_FEEDBACK_TEXT_CHARS = 8000
 _COMPACT_FEEDBACK_STRING_CHARS = 1200
 _COMPACT_FEEDBACK_LIST_ITEMS = 8
 _COMPACT_FEEDBACK_MAP_ITEMS = 32
+_PREVIEW_CHECK_DETAIL_CHARS = 500
+_PREVIEW_FAILURE_REASON_CHARS = 800
+_PREVIEW_MAX_CHECKS = 12
+_PREVIEW_PROBLEM_ISSUE_CHARS = 500
+_PREVIEW_PROBLEM_MAX_CHECKS = 8
 _COMPACT_SURFACE_SECTIONS = (
     "summary",
     "interface",
@@ -199,8 +205,9 @@ class ProposalTool(Protocol):
     concurrency_safe: bool
     max_result_chars: int
 
-    def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
-        ...
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation: ...
 
 
 class _StrictInput(BaseModel):
@@ -290,7 +297,9 @@ class ProposalToolRegistry:
         if tool.name in self._tools:
             raise ValueError(f"duplicate proposal tool: {tool.name}")
         if not tool.read_only:
-            raise ValueError(f"APS-2 registry accepts read-only tools only: {tool.name}")
+            raise ValueError(
+                f"APS-2 registry accepts read-only tools only: {tool.name}"
+            )
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> ProposalTool:
@@ -312,7 +321,9 @@ class ProposalToolRegistry:
             )
         )
 
-    def allowed_tool_specs(self, context: ProposalToolContext) -> tuple[dict[str, Any], ...]:
+    def allowed_tool_specs(
+        self, context: ProposalToolContext
+    ) -> tuple[dict[str, Any], ...]:
         """Return model-facing specs for tools allowed by the active policy."""
         specs: list[dict[str, Any]] = []
         for name in self.allowed_tools(context):
@@ -475,7 +486,9 @@ class _BaseReadOnlyTool:
 class ContextListSurfacesTool(_BaseReadOnlyTool):
     name = "context.list_surfaces"
 
-    def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation:
         declared_surfaces = _surfaces(context)
         surfaces = _surface_list_for_context(context, declared_surfaces)
         payload = {
@@ -502,7 +515,9 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
 class ContextReadProblemTool(_BaseReadOnlyTool):
     name = "context.read_problem"
 
-    def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation:
         summary = _problem_summary(context)
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
@@ -522,8 +537,12 @@ class ContextReadProblemTool(_BaseReadOnlyTool):
 class ContextReadObjectivePolicyTool(_BaseReadOnlyTool):
     name = "context.read_objective_policy"
 
-    def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
-        adapter_spec = _get_adapter_problem_spec(context.adapter) or context.problem_spec
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation:
+        adapter_spec = (
+            _get_adapter_problem_spec(context.adapter) or context.problem_spec
+        )
         rendered = _build_objective_policy_guidance(adapter_spec)
         objectives = [
             _model_payload(obj)
@@ -548,7 +567,9 @@ class ContextReadChampionSummaryTool(_BaseReadOnlyTool):
     name = "context.read_champion_summary"
     permission = ProposalToolPermission.READ_CHAMPION_ARTIFACT
 
-    def call(self, args: BaseModel, context: ProposalToolContext) -> ProposalObservation:
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation:
         champion = context.champion
         if champion is None:
             return self._error(
@@ -716,7 +737,7 @@ class MemoryQueryTool(_BaseReadOnlyTool):
                     repair_hint=(
                         "Provide a render(view='hypothesis') implementation for "
                         "proposal memory reads."
-                    )
+                    ),
                 )
             if text:
                 sections.append(str(text))
@@ -742,7 +763,7 @@ class MemoryQueryTool(_BaseReadOnlyTool):
                     repair_hint=(
                         "Provide a render(view='hypothesis') implementation for "
                         "proposal memory reads."
-                    )
+                    ),
                 )
             if text:
                 sections.append(str(text))
@@ -892,9 +913,11 @@ class FeedbackQueryHoldoutSummaryTool(_BaseReadOnlyTool):
         exposure_level = (
             ProposalExposureLevel.VALIDATION_AGGREGATE
             if any(row.get("stage") == "validation" for row in rows)
-            else ProposalExposureLevel.FROZEN_AGGREGATE
-            if rows
-            else ProposalExposureLevel.NONE
+            else (
+                ProposalExposureLevel.FROZEN_AGGREGATE
+                if rows
+                else ProposalExposureLevel.NONE
+            )
         )
         return self._observation(
             context,
@@ -1190,13 +1213,15 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
 
         payload = {
             "passed": passed,
-            "surface": _surface_permission_summary(
-                surface,
-                allowed_actions=allowed_actions,
-                declared_targets=declared_targets,
-            )
-            if surface is not None
-            else None,
+            "surface": (
+                _surface_permission_summary(
+                    surface,
+                    allowed_actions=allowed_actions,
+                    declared_targets=declared_targets,
+                )
+                if surface is not None
+                else None
+            ),
             "requested": {
                 "change_locus": args.change_locus,
                 "action": args.action,
@@ -1352,12 +1377,15 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     [],
                     current_champion_version=_champion_version(context.champion),
                 )
-                hypothesis_preview["contract"] = _contract_result_payload(result)
+                hypothesis_preview["contract"] = _contract_summary_payload(result)
+                hypothesis_preview["checks"] = _checks_payload(
+                    result.checks,
+                    detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
+                    max_checks=_PREVIEW_MAX_CHECKS,
+                )
                 hypothesis_preview["passed"] = result.passed
             payload["hypothesis"] = hypothesis_preview
-            payload["passed"] = payload["passed"] and bool(
-                hypothesis_preview["passed"]
-            )
+            payload["passed"] = payload["passed"] and bool(hypothesis_preview["passed"])
         if args.patch is not None:
             patch_preview = _schema_preview_patch_payload(args.patch)
             if patch_preview["passed"]:
@@ -1372,8 +1400,12 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     patch_preview["patch_object"],
                     approved_hypothesis=hypothesis_object,
                 )
-                contract_payload = _contract_result_payload(result)
-                patch_preview["contract"] = contract_payload
+                contract_payload = _contract_result_payload(
+                    result,
+                    detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
+                    max_checks=_PREVIEW_MAX_CHECKS,
+                )
+                patch_preview["contract"] = _contract_summary_payload(result)
                 patch_preview["checks"] = contract_payload["checks"]
                 patch_preview["passed"] = result.passed
                 if result.passed:
@@ -1412,9 +1444,11 @@ class ContractPreviewTool(_BaseReadOnlyTool):
             summary=(
                 "Static contract preview passed."
                 if payload["passed"]
-                else "Static contract preview needs an approved hypothesis."
-                if payload.get("needs_hypothesis")
-                else "Static contract preview found issues."
+                else (
+                    "Static contract preview needs an approved hypothesis."
+                    if payload.get("needs_hypothesis")
+                    else "Static contract preview found issues."
+                )
             ),
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
@@ -1467,9 +1501,73 @@ def _schema_preview_hypothesis_payload(
     schema_result = _hypothesis_schema_preview(context, hypothesis)
     return {
         **schema_result,
-        "hypothesis": _model_payload(hypothesis),
+        "hypothesis": _hypothesis_preview_summary(hypothesis),
         "hypothesis_object": hypothesis,
     }
+
+
+def _hypothesis_preview_summary(
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    novelty_signature = (
+        hypothesis.novelty_signature
+        if isinstance(hypothesis.novelty_signature, Mapping)
+        else {}
+    )
+    novelty_payload: dict[str, Any] = {}
+    for idx, (key, value) in enumerate(
+        sorted(novelty_signature.items(), key=lambda item: str(item[0]))
+    ):
+        if idx >= _PREVIEW_MAX_CHECKS:
+            break
+        novelty_payload[str(key)] = _compact_preview_value(value)
+    return _drop_empty_items(
+        {
+            "change_locus": hypothesis.change_locus,
+            "action": hypothesis.action,
+            "target_file": hypothesis.target_file,
+            "predicted_direction": hypothesis.predicted_direction,
+            "target_objectives": list(hypothesis.target_objectives),
+            "protected_objectives": list(hypothesis.protected_objectives),
+            "target_runtime_effect": hypothesis.target_runtime_effect,
+            "suggested_weight": hypothesis.suggested_weight,
+            "novelty_signature_keys": [
+                str(key)
+                for key in sorted(novelty_signature.keys(), key=str)[
+                    :_PREVIEW_MAX_CHECKS
+                ]
+            ],
+            "novelty_signature": novelty_payload,
+            "hypothesis_text_chars": len(hypothesis.hypothesis_text or ""),
+            "expected_effect_chars": len(hypothesis.expected_effect or ""),
+            "runtime_budget_strategy_chars": len(
+                hypothesis.runtime_budget_strategy or ""
+            ),
+        }
+    )
+
+
+def _compact_preview_value(value: Any, *, max_chars: int = 160) -> Any:
+    value = _strip_forbidden_value(value)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return _limit_text(value, max_chars)
+    if isinstance(value, Mapping):
+        compact: dict[str, Any] = {}
+        for idx, (key, item) in enumerate(
+            sorted(value.items(), key=lambda pair: str(pair[0]))
+        ):
+            if idx >= _COMPACT_FEEDBACK_LIST_ITEMS:
+                break
+            compact[str(key)] = _compact_preview_value(item, max_chars=max_chars)
+        return compact
+    if isinstance(value, (list, tuple)):
+        return [
+            _compact_preview_value(item, max_chars=max_chars)
+            for item in list(value)[:_COMPACT_FEEDBACK_LIST_ITEMS]
+        ]
+    return _limit_text(str(value), max_chars)
 
 
 def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -1517,16 +1615,25 @@ def _hypothesis_schema_preview(
         passed = False
     return {
         "passed": passed,
-        "checks": _checks_payload(c1_checks),
-        "failure_reason": None
-        if passed
-        else (
-            forced_violation
-            if forced_violation is not None
-            else
-            novelty_guidance.get("detail")
-            if novelty_guidance.get("missing_fields")
-            else _first_failure(c1_checks)
+        "checks": _checks_payload(
+            c1_checks,
+            detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
+            max_checks=4,
+        ),
+        "failure_reason": (
+            None
+            if passed
+            else (
+                forced_violation
+                if forced_violation is not None
+                else (
+                    novelty_guidance.get("detail")
+                    if novelty_guidance.get("missing_fields")
+                    else _limit_text(
+                        _first_failure(c1_checks) or "", _PREVIEW_FAILURE_REASON_CHARS
+                    )
+                )
+            )
         ),
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "novelty_signature_guidance": novelty_guidance,
@@ -1559,11 +1666,16 @@ def _semantic_signature_preview_guidance(
                 missing.append(name)
             continue
         values = hypothesis.novelty_signature
-        if not isinstance(values, dict) or name not in values or values[name] in (
-            None,
-            "",
-            [],
-            {},
+        if (
+            not isinstance(values, dict)
+            or name not in values
+            or values[name]
+            in (
+                None,
+                "",
+                [],
+                {},
+            )
         ):
             missing.append(name)
 
@@ -1609,7 +1721,9 @@ def _contract_problem_spec(context: ProposalToolContext) -> Any:
         raise ValueError("proposal tool context has no problem_spec")
     if hasattr(spec, "operator_categories"):
         return spec
-    if _attr(spec, "spec_version") == "problem-v1" or hasattr(spec, "operator_interface"):
+    if _attr(spec, "spec_version") == "problem-v1" or hasattr(
+        spec, "operator_interface"
+    ):
         return legacy_problem_spec_from_v1(spec)
     return spec
 
@@ -1624,24 +1738,71 @@ def _operator_execute_signature(context: ProposalToolContext) -> str | None:
     return None
 
 
-def _contract_result_payload(result: ContractResult) -> dict[str, Any]:
+def _contract_result_payload(
+    result: ContractResult,
+    *,
+    detail_chars: int = 2000,
+    max_checks: int | None = None,
+) -> dict[str, Any]:
     return {
         "passed": result.passed,
-        "failure_reason": result.failure_reason,
-        "checks": _checks_payload(result.checks),
+        "failure_reason": (
+            _limit_text(
+                str(result.failure_reason or ""),
+                max(detail_chars, _PREVIEW_FAILURE_REASON_CHARS),
+            )
+            if result.failure_reason
+            else None
+        ),
+        "checks": _checks_payload(
+            result.checks,
+            detail_chars=detail_chars,
+            max_checks=max_checks,
+        ),
     }
 
 
-def _checks_payload(checks: Any) -> list[dict[str, Any]]:
+def _contract_summary_payload(result: ContractResult) -> dict[str, Any]:
+    failed_checks = [
+        str(_attr(check, "name"))
+        for check in result.checks
+        if not bool(_attr(check, "passed"))
+    ]
+    return _drop_empty_items(
+        {
+            "passed": result.passed,
+            "failure_reason": (
+                _limit_text(
+                    str(result.failure_reason or ""),
+                    _PREVIEW_FAILURE_REASON_CHARS,
+                )
+                if result.failure_reason
+                else None
+            ),
+            "check_count": len(result.checks),
+            "failed_checks": failed_checks[:_PREVIEW_MAX_CHECKS],
+        }
+    )
+
+
+def _checks_payload(
+    checks: Any,
+    *,
+    detail_chars: int = 2000,
+    max_checks: int | None = None,
+) -> list[dict[str, Any]]:
+    check_list = list(checks)
+    if max_checks is not None:
+        check_list = check_list[:max_checks]
     return [
         {
             "name": _attr(check, "name"),
             "passed": bool(_attr(check, "passed")),
             "severity": _attr(check, "severity"),
-            "detail": _limit_text(str(_attr(check, "detail", "")), 2000),
+            "detail": _limit_text(str(_attr(check, "detail", "")), detail_chars),
             "elapsed_ms": _attr(check, "elapsed_ms"),
         }
-        for check in checks
+        for check in check_list
     ]
 
 
@@ -1716,7 +1877,9 @@ def _patch_preview_summary(patch: PatchProposal) -> dict[str, Any]:
     }
 
 
-def _compact_problem_preview(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+def _compact_problem_preview(
+    preview: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
     if preview is None:
         return None
     return {
@@ -1738,21 +1901,27 @@ def _problem_preview_issues(preview: Mapping[str, Any]) -> list[str]:
             values = [str(issue) for issue in issues if str(issue)]
         except TypeError:
             values = []
-    return [_limit_text(issue, 1000) for issue in values[:12]]
+    return [
+        _limit_text(issue, _PREVIEW_PROBLEM_ISSUE_CHARS)
+        for issue in values[:_PREVIEW_PROBLEM_MAX_CHECKS]
+    ]
 
 
 def _compact_problem_preview_checks(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     checks: list[dict[str, Any]] = []
-    for item in value[:12]:
+    for item in value[:_PREVIEW_PROBLEM_MAX_CHECKS]:
         if not isinstance(item, Mapping):
             continue
         checks.append(
             {
                 "name": item.get("name"),
                 "passed": bool(item.get("passed")),
-                "detail": _limit_text(str(item.get("detail", "")), 1000),
+                "detail": _limit_text(
+                    str(item.get("detail", "")),
+                    _PREVIEW_PROBLEM_ISSUE_CHARS,
+                ),
             }
         )
     return checks
@@ -2013,7 +2182,9 @@ def _find_surface(context: ProposalToolContext, name: str) -> Any | None:
 
 
 def _problem_summary(context: ProposalToolContext) -> str:
-    if context.adapter is not None and hasattr(context.adapter, "render_problem_summary"):
+    if context.adapter is not None and hasattr(
+        context.adapter, "render_problem_summary"
+    ):
         return str(context.adapter.render_problem_summary())
     spec = context.problem_spec
     if spec is None:
@@ -2030,7 +2201,8 @@ def _problem_summary(context: ProposalToolContext) -> str:
     surfaces = _surfaces(context)
     if surfaces:
         lines.append(
-            "Research loci: " + ", ".join(str(_attr(surface, "name")) for surface in surfaces)
+            "Research loci: "
+            + ", ".join(str(_attr(surface, "name")) for surface in surfaces)
         )
     search_space = _attr(spec, "search_space")
     editable = _attr(search_space, "editable", [])
@@ -2038,7 +2210,9 @@ def _problem_summary(context: ProposalToolContext) -> str:
     if editable:
         lines.append("Editable files: " + ", ".join(str(v) for v in editable))
     if frozen:
-        lines.append("Frozen files (do not modify): " + ", ".join(str(v) for v in frozen))
+        lines.append(
+            "Frozen files (do not modify): " + ", ".join(str(v) for v in frozen)
+        )
     return "\n".join(lines)
 
 
@@ -2195,9 +2369,7 @@ def _compact_interface_payload(surface: Any) -> dict[str, Any]:
             "required_functions": _surface_required_functions(surface),
             "function_signatures": _surface_function_signatures(surface),
             "return_contract": _compact_text(
-                _attr(interface, "return_contract", "")
-                if interface is not None
-                else ""
+                _attr(interface, "return_contract", "") if interface is not None else ""
             ),
             "return_values": _surface_return_values(surface),
         }
@@ -2344,9 +2516,7 @@ def _compact_surface_interface_summary(surface: Any, *, section: str = "all") ->
     ]
     lines.append(
         "compact_contract_sections: "
-        + ", ".join(
-            [section] if section != "all" else list(_COMPACT_SURFACE_SECTIONS)
-        )
+        + ", ".join([section] if section != "all" else list(_COMPACT_SURFACE_SECTIONS))
     )
     description = compact.get("description")
     if description:
@@ -2727,11 +2897,18 @@ def _research_diagnosis_payload(
     recent_steps = list(reversed(screening_steps))[:max_items]
     reason_counts: dict[str, int] = {}
     surface_counts: dict[str, int] = {}
+    all_screening_surface_counts: dict[str, int] = {}
     gate_counts: dict[str, int] = {}
     failure_tags: set[str] = set()
     recent_rows: list[dict[str, Any]] = []
     runtime_signal_rows: list[dict[str, Any]] = []
     declared_mechanism_surfaces = _declared_mechanism_surface_names(problem_spec)
+
+    for step in screening_steps:
+        surface = step.hypothesis.change_locus
+        all_screening_surface_counts[surface] = (
+            all_screening_surface_counts.get(surface, 0) + 1
+        )
 
     for step in recent_steps:
         protocol = step.protocol_result
@@ -2751,10 +2928,7 @@ def _research_diagnosis_payload(
         stats = protocol.stats
         if stats.win_rate is not None and float(stats.win_rate) <= 0.0:
             failure_tags.add("zero_case_win_rate")
-        if (
-            stats.median_delta is not None
-            and abs(float(stats.median_delta)) <= 1e-12
-        ):
+        if stats.median_delta is not None and abs(float(stats.median_delta)) <= 1e-12:
             failure_tags.add("zero_median_delta")
 
         attribution = _surface_runtime_attribution_payload(step)
@@ -2783,9 +2957,8 @@ def _research_diagnosis_payload(
                 if "recovery" in field:
                     recovery_signal_fields.append(field)
             if (
-                ("phase_delta" in field or field.endswith("_delta_by_phase"))
-                and _runtime_highlight_is_all_zero_numeric(highlight)
-            ):
+                "phase_delta" in field or field.endswith("_delta_by_phase")
+            ) and _runtime_highlight_is_all_zero_numeric(highlight):
                 zero_phase_delta_fields.append(field)
         if runtime_issue_fields:
             failure_tags.add("runtime_evidence_contract_issue")
@@ -2827,7 +3000,7 @@ def _research_diagnosis_payload(
     unselected_mechanism_surfaces = [
         surface
         for surface in declared_mechanism_surfaces
-        if surface not in surface_counts
+        if surface not in all_screening_surface_counts
     ]
     if declared_mechanism_surfaces and unselected_mechanism_surfaces:
         failure_tags.add("deep_surface_not_selected")
@@ -2841,8 +3014,7 @@ def _research_diagnosis_payload(
     if unselected_mechanism_surfaces:
         next_requirements.append(
             "Exercise an unselected mechanism surface before repeating older "
-            "orchestration surfaces: "
-            + ", ".join(unselected_mechanism_surfaces[:8])
+            "orchestration surfaces: " + ", ".join(unselected_mechanism_surfaces[:8])
         )
     if "zero_phase_delta" in failure_tags:
         next_requirements.append(
@@ -2881,15 +3053,31 @@ def _diagnostic_surface_priorities(
             and step.protocol_result.stage == ExperimentStage.SCREENING
         )
     }
-    unselected = [surface for surface in mechanism_surfaces if surface not in screened_surfaces]
+    has_screening_history = bool(screened_surfaces)
+    unselected = [
+        surface for surface in mechanism_surfaces if surface not in screened_surfaces
+    ]
+    failure_mode_tags = (
+        ["deep_surface_not_selected"] if has_screening_history and unselected else []
+    )
+    next_requirements = (
+        [
+            "Exercise one unselected mechanism surface before repeating "
+            "orchestration or legacy policy surfaces: " + ", ".join(unselected[:8])
+        ]
+        if has_screening_history and unselected
+        else []
+    )
     return _drop_empty_items(
         {
             "mechanism_surfaces": mechanism_surfaces,
             "unselected_mechanism_surfaces": unselected,
+            "failure_mode_tags": failure_mode_tags,
+            "next_requirements": next_requirements,
             "recommendation": (
                 "Prioritize one unselected mechanism surface for the next short "
                 "diagnostic before repeating orchestration or legacy policy surfaces."
-                if unselected
+                if has_screening_history and unselected
                 else None
             ),
         }
@@ -2947,7 +3135,9 @@ def _runtime_highlight_is_all_zero_numeric(highlight: Mapping[str, Any]) -> bool
     return observed
 
 
-def _runtime_numeric_leaf_summaries(numeric: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _runtime_numeric_leaf_summaries(
+    numeric: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
     summaries: list[Mapping[str, Any]] = []
     stack: list[Any] = [numeric]
     while stack:
@@ -3078,8 +3268,7 @@ def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
         ),
         "pattern_summary": _model_payload(protocol.pattern_summary),
         "case_feedback": [
-            _model_payload(feedback)
-            for feedback in (protocol.case_feedback or ())[:6]
+            _model_payload(feedback) for feedback in (protocol.case_feedback or ())[:6]
         ],
         "metrics_file_ref_exposed": False,
     }
@@ -3168,7 +3357,10 @@ def _bound_compact_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any
         return bounded
     compact = _compact_feedback_value(payload)
     compact_estimated = _json_size(compact)
-    if isinstance(compact, Mapping) and compact_estimated <= _COMPACT_FEEDBACK_PAYLOAD_CHARS:
+    if (
+        isinstance(compact, Mapping)
+        and compact_estimated <= _COMPACT_FEEDBACK_PAYLOAD_CHARS
+    ):
         bounded = dict(compact)
         bounded["payload_truncated"] = True
         bounded["original_estimated_chars"] = estimated
