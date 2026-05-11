@@ -117,6 +117,58 @@ class TestLocusConstraintInPrompt:
         assert "MANDATORY SEARCH CONSTRAINT" in text
 
 
+class TestForcedSurfaceTaskPrompt:
+    def test_forced_context_narrows_final_task(self):
+        ctx = _make_context(
+            operator_categories="main_search_strategy, destroy_repair_policy",
+            available_actions="create_new, modify, remove",
+            targetable_files=(
+                "policies/main_search_strategy.py, "
+                "policies/destroy_repair_policy.py"
+            ),
+            forced_surface="destroy_repair_policy",
+            forced_action="modify",
+            forced_target_file="policies/destroy_repair_policy.py",
+        )
+        text = _user_text(ctx)
+        assert (
+            "Set `change_locus` exactly to `destroy_repair_policy`." in text
+        )
+        assert "Set `action` exactly to `modify`." in text
+        assert (
+            "Set `target_file` exactly to `policies/destroy_repair_policy.py`."
+            in text
+        )
+        assert "Choose a research surface from" not in text
+        assert "Do not choose any other research surface" in text
+
+    def test_agentic_constraints_narrow_final_task_without_base_fields(self):
+        ctx = _make_context(
+            operator_categories="main_search_strategy, destroy_repair_policy",
+            available_actions="create_new, modify, remove",
+            targetable_files=(
+                "policies/main_search_strategy.py, "
+                "policies/destroy_repair_policy.py"
+            ),
+            agentic_hypothesis_constraints={
+                "forced_surface": "destroy_repair_policy",
+                "forced_action": "modify",
+                "forced_target_file": "policies/destroy_repair_policy.py",
+            },
+        )
+        text = _user_text(ctx)
+        assert (
+            "Set `change_locus` exactly to `destroy_repair_policy`." in text
+        )
+        assert "Set `action` exactly to `modify`." in text
+        assert (
+            "Set `target_file` exactly to `policies/destroy_repair_policy.py`."
+            in text
+        )
+        assert "Choose a research surface from" not in text
+        assert "main_search_strategy as `change_locus`" not in text
+
+
 class TestCodeContextPriorFailure:
     def test_prior_failure_in_user_prompt(self):
         ctx = {

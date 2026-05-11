@@ -6,7 +6,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from pydantic import ValidationError
 
@@ -518,14 +518,70 @@ def _split_hypothesis_context(
         f"enumeration over problem entities; describe any top-k, "
         f"sampling, or early-stop cap needed to keep runtime comparable to the champion.\n\n"
         f"If your hypothesis duplicates an existing surface's capability (even partially), it will be REJECTED.\n\n"
-        f"## Task\n"
-        f"Propose ONE new hypothesis for improving the solver.\n"
-        f"Choose a research surface from {D['operator_categories']} as `change_locus`.\n"
-        f"Set `action` to one of: {D['available_actions'] or 'create_new, modify, remove'}.\n"
-        f"If action is \"modify\" or \"remove\", provide `target_file` from the targetable files when available: {D['targetable_files']}.\n"
+        f"{_hypothesis_task_prompt(D)}"
     )
 
     return system_blocks, user_prompt
+
+
+def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
+    forced_surface = str(context.get("forced_surface") or "").strip()
+    forced_action = str(context.get("forced_action") or "").strip()
+    forced_target_file = str(context.get("forced_target_file") or "").strip()
+    constraints = context.get("agentic_hypothesis_constraints")
+    if isinstance(constraints, Mapping):
+        forced_surface = forced_surface or str(
+            constraints.get("forced_surface") or ""
+        ).strip()
+        forced_action = forced_action or str(
+            constraints.get("forced_action") or ""
+        ).strip()
+        forced_target_file = forced_target_file or str(
+            constraints.get("forced_target_file") or ""
+        ).strip()
+    if forced_surface:
+        lines = [
+            "## Task",
+            (
+                "Propose ONE new hypothesis for improving the solver within "
+                "the active forced research-surface constraint."
+            ),
+            f"Set `change_locus` exactly to `{forced_surface}`.",
+            (
+                "Do not choose any other research surface, even if prior "
+                "attempts on the forced surface failed or were blacklisted; "
+                "vary the in-surface mechanism instead."
+            ),
+        ]
+        if forced_action:
+            lines.append(f"Set `action` exactly to `{forced_action}`.")
+        else:
+            lines.append(
+                "Set `action` to one legal action for the forced surface."
+            )
+        if forced_target_file:
+            lines.append(
+                f"Set `target_file` exactly to `{forced_target_file}`."
+            )
+        else:
+            lines.append(
+                "If the forced action is \"modify\" or \"remove\", provide a "
+                "target_file declared by the forced surface."
+            )
+        return "\n".join(lines) + "\n"
+    operator_categories = str(context.get("operator_categories") or "")
+    available_actions = str(
+        context.get("available_actions") or "create_new, modify, remove"
+    )
+    targetable_files = str(context.get("targetable_files") or "")
+    return (
+        "## Task\n"
+        "Propose ONE new hypothesis for improving the solver.\n"
+        f"Choose a research surface from {operator_categories} as `change_locus`.\n"
+        f"Set `action` to one of: {available_actions}.\n"
+        "If action is \"modify\" or \"remove\", provide `target_file` from "
+        f"the targetable files when available: {targetable_files}.\n"
+    )
 
 
 def _split_code_context(

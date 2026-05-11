@@ -2838,6 +2838,17 @@ def test_forced_singleton_config_surface_context_derives_modify_target(
     assert "Set `change_locus` to `algorithm_blueprint`." in prompt_text
     assert "Set `action` to `modify`." in prompt_text
     assert "Set `target_file` to `policies/algorithm_blueprint.py`." in prompt_text
+    assert (
+        "Set `change_locus` exactly to `algorithm_blueprint`."
+        in user_prompt
+    )
+    assert "Set `action` exactly to `modify`." in user_prompt
+    assert (
+        "Set `target_file` exactly to `policies/algorithm_blueprint.py`."
+        in user_prompt
+    )
+    assert "Choose a research surface from" not in user_prompt
+    assert "Do not choose any other research surface" in user_prompt
     assert "This surface uses structured semantic novelty." in prompt_text
     assert (
         "novelty.signature_fields`: component_pattern, budget_pattern"
@@ -2939,6 +2950,13 @@ def test_forced_surface_context_suppresses_off_surface_switch_guidance(
     assert ctx["forced_action"] == "modify"
     assert "Set `change_locus` to `algorithm_blueprint`." in prompt_text
     assert "Set `action` to `modify`." in prompt_text
+    assert (
+        "Set `change_locus` exactly to `algorithm_blueprint`."
+        in user_prompt
+    )
+    assert "Set `action` exactly to `modify`." in user_prompt
+    assert "Choose a research surface from" not in user_prompt
+    assert "Do not choose any other research surface" in user_prompt
     assert "Unexplored research surfaces" not in prompt_text
     assert "Consider trying action='modify'" not in prompt_text
     assert "Consider trying action='create_new'" not in prompt_text

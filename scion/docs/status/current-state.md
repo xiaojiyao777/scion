@@ -17,7 +17,10 @@ follow-up control-plane repair now compacts preview payloads and reserves
 self-check observation budget more aggressively. The latest forced
 `destroy_repair_policy` diagnostic validated preview visibility in real traces,
 but exposed a forced-surface prompt conflict after the forced surface was
-blacklisted. Screening gates still fail.
+blacklisted. This slice repairs the final hypothesis task prompt so forced
+surface/action/target constraints dominate the last generation call; a rerun is
+still needed to validate that repair in a real campaign. Screening gates still
+fail.
 
 Current branch: `v0.4-dev`
 
@@ -54,10 +57,10 @@ Current interpretation:
   headroom for compact schema/target/interface/Contract previews. The latest
   forced diagnostic reached schema/target previews in 4/4 eligible sessions and
   Contract preview in 2/2 completed code sessions without `result_too_large`.
-- Forced-surface controls fail closed, but final hypothesis-generation prompts
-  still contain a generic "choose from all surfaces" task line. After a forced
-  surface becomes blacklisted, this can make the model propose another surface
-  and trip the proposal circuit breaker.
+- Forced-surface controls fail closed, and the final hypothesis-generation task
+  now narrows `change_locus`, `action`, and `target_file` to active forced
+  values instead of presenting the full surface list. This is unit-tested but
+  still needs rerun validation in a forced `destroy_repair_policy` campaign.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -92,10 +95,9 @@ phase-best improvement and screening-quality movement.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
-- Campaign-level forced-surface diagnostics still need stronger final prompt
-  narrowing. APS tool selection and preview tools receive the forced
-  surface/action/target, but the final hypothesis prompt can still present the
-  full surface list.
+- Campaign-level forced-surface diagnostics now carry the forced
+  surface/action/target into APS tools and the final CreativeLayer hypothesis
+  task. APS still fails closed if a model produces an off-surface hypothesis.
 
 ### CVRP Runtime
 
@@ -195,9 +197,10 @@ Summary:
   `result_too_large` or observation-budget exhaustion appeared for schema,
   target/action, or Contract preview.
 
-Interpretation: preview compactness is no longer the active blocker. The new
-control-plane blocker is forced-surface prompt conflict during final hypothesis
-generation. Fix that before rerunning forced deep-surface diagnostics.
+Interpretation: preview compactness is no longer the active blocker. The run's
+new control-plane blocker was forced-surface prompt conflict during final
+hypothesis generation. The prompt path has now been repaired in code; rerun the
+same forced diagnostic before moving to another deep surface.
 
 Detailed analysis:
 [`v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
@@ -280,16 +283,22 @@ Latest focused APS preview-budget validation:
 86 passed in 1.97s
 ```
 
+Latest forced-prompt narrowing validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_sprint_j3_prompt_plumbing.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py -q
+```
+
+```text
+198 passed in 3.03s
+```
+
 ## Next Actions
 
 P1:
 
-- Make forced-surface constraints dominate final hypothesis-generation prompts,
-  not only APS tool-selection guidance and preview tools. The final task line
-  should narrow `change_locus`, `action`, and `target_file` to the forced
-  values when a campaign-level forced surface is active.
-- Rerun the forced `destroy_repair_policy` 8-round diagnostic after that repair
-  before moving to `route_pair_candidate_policy`.
+- Rerun the forced `destroy_repair_policy` 8-round diagnostic to validate the
+  final-prompt narrowing repair before moving to `route_pair_candidate_policy`.
 - Judge the rerun first on forced-surface adherence, selected-surface coverage,
   complete schema/target/interface/Contract preview visibility, and nonzero or
   explainably-zero mechanism attribution; screening win rate remains secondary
@@ -322,9 +331,8 @@ P2:
 - Deep-surface runtime attribution is improved for `alns_vns_policy`, but
   still thin for `acceptance_restart_policy`, `destroy_repair_policy`, and
   `route_pair_candidate_policy`.
-- Campaign-level forced-surface diagnostics can still fail early because final
-  hypothesis prompts show generic surface choices after the forced surface is
-  blacklisted.
+- The forced-prompt narrowing repair is unit-tested but not yet validated by a
+  real forced campaign after `destroy_repair_policy` becomes blacklisted.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.

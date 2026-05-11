@@ -36,9 +36,12 @@ constraint. `ProposalToolContext` carries the same forced surface/action/target
 as tainted proposal context, so APS planner guidance, `context.list_surfaces`,
 `proposal.draft_hypothesis`, `proposal.schema_preview`, and
 `proposal.target_permission_preview` all state or validate the same rule.
-Off-surface APS output becomes an explicit proposal failure; the code phase
-continues only from a ContractGate-approved hypothesis and does not try to
-repair surface selection.
+`CreativeLayer` also narrows the final hypothesis-generation task from the same
+forced values, including constraints handed back by APS as
+`agentic_hypothesis_constraints`, so the last model call no longer presents the
+full surface list during a forced campaign. Off-surface APS output becomes an
+explicit proposal failure; the code phase continues only from a
+ContractGate-approved hypothesis and does not try to repair surface selection.
 
 As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
 Session path (`use_agentic_proposal` or injected `agentic_session`). The default
