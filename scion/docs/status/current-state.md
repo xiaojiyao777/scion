@@ -11,17 +11,13 @@ handoff. Historical repair and experiment notes were moved to
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest forced
-`destroy_repair_policy` enum-interface rerun validates the governance and
-adapter plumbing, but it also shows that the recent direction has become too
-incremental: Scion is being asked to optimize one exposed policy hook at a
-time. That is not the intended research object. The next direction is a
-problem-object adaptation pivot: Scion should receive a coherent CVRP problem
-object and solver-design boundary through the adapter, then reason about the
-solver at the problem level. The first exposure slice now renders that problem
-object into proposal prompts and APS `context.read_problem`. Do not start
-another forced single-policy diagnostic while the top-level solver-design
-boundary is still being completed.
+produced reliable screening-quality improvement. The latest solver-design
+problem-object diagnostic was terminated early because it exposed a control
+loop bug: after one `solver_design` candidate failed heavy Verification, APS
+treated the top-level surface as globally blacklisted and fell back to
+component-policy exploration. That is not a valid test of the problem-object
+research boundary. Repair the blacklisting/feedback semantics before running
+another solver-design diagnostic.
 
 Current branch: `v0.4-dev`
 
@@ -37,6 +33,11 @@ Current interpretation:
   by `policies/main_search_strategy.py`. Deep mechanism policies remain useful
   implementation hooks and attribution sources, but they are not standalone
   research goals.
+- The first free solver-design diagnostic did select `solver_design` in round
+  1, but a `V5_solution_consistency` failure made later APS sessions reason
+  from "`solver_design` is blacklisted" and return to component surfaces. This
+  is a governance/proposal-feedback failure, not evidence that the surface is
+  exhausted.
 - The higher-ceiling v3 path should be a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
@@ -156,15 +157,60 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary is now declared, but it has not yet
-been validated in a fresh short diagnostic. Stop forced component-policy
-diagnostics; the next run should let Scion target `solver_design` from the
-problem object and judge whether it produces solver-level hypotheses with
-attributable whole-solver movement.
+Current limitation: the top-level boundary is declared, but the first free
+diagnostic did not validly evaluate it. Stop forced component-policy
+diagnostics; next repair the branch/hypothesis blacklisting and APS feedback so
+a failed candidate implementation under `solver_design` causes another
+solver-design attempt rather than a fallback to isolated component surfaces.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-problem-object-sonnet-12r-20260511T140118Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=12
+rounds_completed_before_termination=11
+screened_experiments=9
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=720
+force_surface=none
+stop_reason=manual_termination_invalid_control_loop
+analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md
+```
+
+Summary:
+
+- The run was launched from clean commit `7d78f2f` and manually terminated with
+  `EXIT_CODE:143` during round 12.
+- Round 1 selected `solver_design` and targeted
+  `policies/main_search_strategy.py`; APS Contract preview passed with
+  `main_search_problem_object_evidence_alignment`.
+- The first solver-design implementation failed heavy Verification
+  `V5_solution_consistency`.
+- After that, `solver_design` was treated as blacklisted. Subsequent hypotheses
+  repeatedly stated that premise and selected component surfaces instead:
+  `baseline_policy`, `route_local`, `algorithm_blueprint`,
+  `destroy_repair_policy`, `acceptance_restart_policy`, `alns_vns_policy`,
+  `route_pair_candidate_policy`, `construction_policy`,
+  `neighborhood_portfolio`, and active `search_policy` when terminated.
+- All 9 screened non-`solver_design` candidates passed Contract and
+  Verification but failed screening with `win_rate=0.0` and `median_delta=0.0`.
+
+Interpretation: this is not solver-efficacy evidence. It is a control-loop
+failure: a single candidate verification failure must not globally blacklist
+the top-level problem-object surface. APS should retry `solver_design` with a
+different lifecycle implementation and keep component policies as
+implementation/attribution hooks, not fallback research goals.
+
+Detailed analysis:
+[`v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511T114551Z
@@ -328,12 +374,14 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
+- Repair solver-design blacklisting semantics: one heavy Verification failure
+  should blacklist or abandon that candidate implementation, not the top-level
+  `solver_design` research boundary.
+- Repair APS feedback so future solver-design diagnostics explicitly retry the
+  problem-object boundary with a different lifecycle implementation instead of
+  falling back to component-policy surfaces.
 - Stop forced single-policy diagnostics for now, including
-  `route_pair_candidate_policy`.
-- Run one short diagnostic campaign targeting the new problem-object
-  `solver_design` boundary, without forcing a singleton component policy.
-- Validate whether Scion now produces solver-level hypotheses with attributable
-  whole-solver runtime movement.
+  `route_pair_candidate_policy`, until the solver-design control loop is fixed.
 
 P2:
 
@@ -349,9 +397,9 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `solver_design` has not yet been validated in a fresh short diagnostic;
-  it may still produce plans that are too shallow to move phase-best objective
-  fields.
+- CVRP `solver_design` has not yet been validly evaluated. The latest free
+  diagnostic reached the surface but then misclassified it as blacklisted after
+  one failed implementation.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
