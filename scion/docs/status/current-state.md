@@ -14,7 +14,10 @@ governance path is largely behaving, but CVRP short diagnostics still have not
 produced reliable screening-quality improvement. The latest post-optimization
 smoke improved deep-surface selection and ALNS/VNS attribution, and the
 follow-up control-plane repair now compacts preview payloads and reserves
-self-check observation budget more aggressively. Screening gates still fail.
+self-check observation budget more aggressively. The latest forced
+`destroy_repair_policy` diagnostic validated preview visibility in real traces,
+but exposed a forced-surface prompt conflict after the forced surface was
+blacklisted. Screening gates still fail.
 
 Current branch: `v0.4-dev`
 
@@ -48,9 +51,13 @@ Current interpretation:
   distance, returned baseline distance, and objective deltas. This validates
   attribution plumbing, not solver efficacy.
 - APS self-check reservation now preserves tool calls and observation-char
-  headroom for compact schema/target/interface/Contract previews. The next
-  short diagnostic should validate that those previews stay visible in real
-  APS traces.
+  headroom for compact schema/target/interface/Contract previews. The latest
+  forced diagnostic reached schema/target previews in 4/4 eligible sessions and
+  Contract preview in 2/2 completed code sessions without `result_too_large`.
+- Forced-surface controls fail closed, but final hypothesis-generation prompts
+  still contain a generic "choose from all surfaces" task line. After a forced
+  surface becomes blacklisted, this can make the model propose another surface
+  and trip the proposal circuit breaker.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -85,6 +92,10 @@ phase-best improvement and screening-quality movement.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
+- Campaign-level forced-surface diagnostics still need stronger final prompt
+  narrowing. APS tool selection and preview tools receive the forced
+  surface/action/target, but the final hypothesis prompt can still present the
+  full surface list.
 
 ### CVRP Runtime
 
@@ -147,6 +158,53 @@ mechanism surface at a time before any long formal CVRP validation.
 Latest analyzed run:
 
 ```text
+run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-sonnet-8r-20260511T062732Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+rounds_completed=5
+time_limit_sec=20
+agentic_proposal=true
+agentic_session_timeout_sec=240
+force_surface=destroy_repair_policy
+stop_reason=circuit_breaker
+analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md
+```
+
+Summary:
+
+- The run did not complete eight rounds. It stopped at R5 after three
+  consecutive proposal failures tripped the circuit breaker.
+- R1 targeted `destroy_repair_policy`, passed Contract and Verification, then
+  failed screening with `SCREENING_FAIL_WIN_RATE`, pair profile 4 wins / 1 loss
+  / 11 ties, case win rate `0.125`, and `median_delta=0.0`.
+- R1 validated destroy/repair selected-surface attribution: all required
+  runtime fields were present across 16 pairs.
+- R1 also showed the mechanism was budget-starved: 1,024 destroy/repair
+  attempts, 1,024 repair budget used, `repair_budget_exhausted` once per pair,
+  zero accepted moves, and `destroy_repair_phase_delta_sum=0.0`.
+- R2 targeted `destroy_repair_policy` but failed Verification with
+  `V5_solution_consistency`; selected-surface runtime evidence failed for
+  `destroy_repair_active` and `destroy_repair_errors`.
+- R3-R5 failed hypothesis generation because the model proposed
+  `main_search_strategy` after `destroy_repair_policy` became blacklisted.
+  APS correctly rejected the off-surface hypothesis, but repeated failures
+  ended the diagnostic.
+- The preview-budget repair is validated in real traces: no
+  `result_too_large` or observation-budget exhaustion appeared for schema,
+  target/action, or Contract preview.
+
+Interpretation: preview compactness is no longer the active blocker. The new
+control-plane blocker is forced-surface prompt conflict during final hypothesis
+generation. Fix that before rerunning forced deep-surface diagnostics.
+
+Detailed analysis:
+[`v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
+
+Previous analyzed run:
+
+```text
 run_root=/home/clawd/research/scion-experiments/v04-post-optimization-validation-sonnet-8r-20260511T020518Z
 model=claude-sonnet-4-6
 problem=cvrp
@@ -158,50 +216,6 @@ agentic_session_timeout_sec=240
 force_surface=none
 stop_reason=max_rounds_exhausted
 analysis_doc=scion/docs/experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md
-```
-
-Summary:
-
-- The run completed normally with eight screened candidates, no promotions,
-  champion still `v1`, and frozen budget unused.
-- All candidates failed `SCREENING_FAIL_WIN_RATE`; best case-level win rate was
-  `0.125` in R8, and `median_delta=0.0` in every round.
-- Free-surface APS selected `main_search_strategy`, `baseline_policy`,
-  `route_local`, `algorithm_blueprint`, `alns_vns_policy`, and
-  `acceptance_restart_policy`.
-- Two newly added deep mechanism surfaces were exercised:
-  `alns_vns_policy` and `acceptance_restart_policy`.
-- R6 validated the new ALNS/VNS attribution fields: nonzero
-  `alns_vns_phase_delta_sum=5171` across 16 pairs plus complete before/after
-  distance/objective-delta fields.
-- R8 selected `acceptance_restart_policy` and had the best pair profile
-  (4 wins / 1 loss / 11 ties), but its accepted/recovery/phase-best counts and
-  phase delta all stayed zero.
-- APS self-check budget reservation worked at the tool-call level, but schema
-  and Contract preview observations were still `result_too_large` or skipped
-  under observation budget pressure.
-
-Interpretation: this validates improved deep-surface discovery and ALNS/VNS
-runtime attribution, not solver efficacy. The post-analysis repair addresses
-preview payload compactness and stale surface-read guidance; it still needs a
-short forced-diagnostic validation run.
-
-Detailed analysis:
-[`v0.4-post-optimization-validation-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md)
-
-Previous analyzed run:
-
-```text
-run_root=/home/clawd/research/scion-experiments/v04-deep-mechanism-surfaces-sonnet-8r-20260510T161028Z
-model=claude-sonnet-4-6
-problem=cvrp
-protocol=formal
-rounds=8/8
-time_limit_sec=15
-agentic_proposal=true
-force_surface=none
-stop_reason=max_rounds_exhausted
-analysis_doc=scion/docs/experiments/v0.4/v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md
 ```
 
 ## Validation
@@ -270,15 +284,18 @@ Latest focused APS preview-budget validation:
 
 P1:
 
-- Run the next short CVRP diagnostics with one still-unexercised deep mechanism
-  surface forced or strongly prioritized at a time:
-  `destroy_repair_policy`, then `route_pair_candidate_policy`.
-- Judge the next run first on selected-surface coverage, complete
-  schema/target/interface/Contract preview visibility, and nonzero or
+- Make forced-surface constraints dominate final hypothesis-generation prompts,
+  not only APS tool-selection guidance and preview tools. The final task line
+  should narrow `change_locus`, `action`, and `target_file` to the forced
+  values when a campaign-level forced surface is active.
+- Rerun the forced `destroy_repair_policy` 8-round diagnostic after that repair
+  before moving to `route_pair_candidate_policy`.
+- Judge the rerun first on forced-surface adherence, selected-surface coverage,
+  complete schema/target/interface/Contract preview visibility, and nonzero or
   explainably-zero mechanism attribution; screening win rate remains secondary
   until those signals are trustworthy.
-- If Contract preview still skips under APS, reduce nonessential planner reads
-  further before increasing the global observation cap again.
+- For destroy/repair semantics, steer away from the R1 failure pattern:
+  reduce repair-budget exhaustion before increasing destroy size.
 - Add a route-local runtime-summary bridge if future operator-surface runs keep
   showing useful generic operator telemetry but empty selected-surface summaries.
 - Continue only short CVRP diagnostics until those surfaces show nonzero
@@ -294,6 +311,8 @@ P2:
 - Consider a typed-collaborator pass for campaign composition to reduce
   callback coupling.
 - Add a dedicated CLI/readiness command for formal campaign closeout.
+- Fix model-facing tool-selection prompt sanitization that can render
+  `feedback.query_holdout_summary` as an empty allowed tool name.
 
 ## Remaining Risks
 
@@ -303,9 +322,9 @@ P2:
 - Deep-surface runtime attribution is improved for `alns_vns_policy`, but
   still thin for `acceptance_restart_policy`, `destroy_repair_policy`, and
   `route_pair_candidate_policy`.
-- APS preview compactness is fixed in unit validation, but a real CVRP
-  campaign trace still needs to confirm schema/target/interface/Contract
-  visibility under model-selected tool plans.
+- Campaign-level forced-surface diagnostics can still fail early because final
+  hypothesis prompts show generic surface choices after the forced surface is
+  blacklisted.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.
@@ -321,4 +340,4 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-post-optimization-validation-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md)
+  [`v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
