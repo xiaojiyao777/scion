@@ -519,11 +519,14 @@ class ContextReadProblemTool(_BaseReadOnlyTool):
         self, args: BaseModel, context: ProposalToolContext
     ) -> ProposalObservation:
         summary = _problem_summary(context)
+        problem_object = _problem_object(context)
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
             "problem_spec_hash": context.problem_spec_hash,
             "summary": _limit_text(summary, 12000),
             "summary_truncated": len(summary) > 12000,
+            "problem_object": _limit_text(problem_object, 20000),
+            "problem_object_truncated": len(problem_object) > 20000,
         }
         return self._observation(
             context,
@@ -2214,6 +2217,14 @@ def _problem_summary(context: ProposalToolContext) -> str:
             "Frozen files (do not modify): " + ", ".join(str(v) for v in frozen)
         )
     return "\n".join(lines)
+
+
+def _problem_object(context: ProposalToolContext) -> str:
+    if context.adapter is not None and hasattr(
+        context.adapter, "render_problem_object"
+    ):
+        return str(context.adapter.render_problem_object())
+    return ""
 
 
 def _surface_payload(surface: Any) -> dict[str, Any]:

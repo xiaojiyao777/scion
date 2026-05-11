@@ -224,6 +224,9 @@ with forbidden APIs is not imported or executed during preview.
 Hypothesis context includes:
 
 - problem summary, preferably from `ProblemAdapter.render_problem_summary()`;
+- problem object, when the adapter implements `render_problem_object()`, with
+  instance/solution/objective/lifecycle/move/evidence semantics kept behind
+  the problem boundary;
 - solver mechanics, preferably from adapter `render_solver_mechanics()`;
 - declared research surfaces from `ProblemSpec.research_surfaces` or `ProblemSpecV1.research_surfaces`;
 - champion research-surface code and policy surface code;
@@ -239,7 +242,10 @@ Hypothesis context includes:
   a diagnostic `--force-surface` run steers every hypothesis-generation
   proposal to a declared research surface.
 
-Code and fix contexts deliberately exclude experiment history and protocol stats. They are implementation contexts, not research decision contexts.
+Code and fix contexts include the problem summary, optional problem object,
+solver mechanics, active surface interface, import whitelist, and target code.
+They deliberately exclude experiment history and protocol stats. They are
+implementation contexts, not research decision contexts.
 
 ## Exposure Control
 
@@ -308,8 +314,8 @@ Family labels are problem-taxonomy aware. `HypothesisFamilyClassifier` accepts `
 `CreativeLayer` splits context into cacheable system blocks and dynamic user prompts:
 
 - Hypothesis prompt: static role/problem/research surfaces/objective policy/solver mechanics, champion code/state, dynamic branch/search/history/task.
-- Code prompt: static role/problem/interface/import rules, champion code, dynamic hypothesis/target/current file/reference files.
-- Fix prompt: static problem/interface/import rules, dynamic failed code and verification details.
+- Code prompt: static role/problem/problem-object/interface/import rules, champion code, dynamic hypothesis/target/current file/reference files.
+- Fix prompt: static problem/problem-object/interface/import rules, dynamic failed code and verification details.
 - Agentic prompt extensions: when APS has gathered tool observations,
   hypothesis and code prompts include a bounded generic research-diagnosis
   block plus bounded tool-observation JSON. These blocks are screening-only

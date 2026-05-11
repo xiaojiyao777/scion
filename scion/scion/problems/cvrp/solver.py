@@ -84,7 +84,7 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
-_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS = frozenset(
+_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = frozenset(
     {
         "route_pair_swap",
         "bounded_destroy_repair",
@@ -1581,15 +1581,15 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_coverage_status": {
             "status": "inactive",
             "required_deep_components": sorted(
-                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+                _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
             ),
             "selected_deep_components": [],
             "missing_deep_components": sorted(
-                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+                _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
             ),
             "attempted_deep_components": [],
             "unattempted_deep_components": sorted(
-                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+                _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
             ),
         },
         "main_search_deep_components_selected": [],
@@ -4941,16 +4941,16 @@ def _refresh_main_search_component_coverage_status(
         else list(audit.get("main_search_selected_components") or [])
     )
     attempted = list(audit.get("main_search_attempted_components") or [])
-    required = sorted(_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS)
+    required = sorted(_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS)
     selected_deep = [
         component
         for component in selected
-        if component in _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+        if component in _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
     ]
     attempted_deep = [
         component
         for component in attempted
-        if component in _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+        if component in _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
     ]
     missing = [
         component

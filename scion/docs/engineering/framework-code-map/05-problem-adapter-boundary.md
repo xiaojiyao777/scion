@@ -41,6 +41,9 @@ The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces 
 `ProblemAdapter` in `scion/scion/problem/contracts.py` is the framework/problem boundary. Core expects:
 
 - prompt rendering: `render_problem_summary()`, `render_operator_interface()`;
+- optional problem-object rendering: `render_problem_object()` for adapters
+  that can expose instance model, solution model, objective policy, solver
+  lifecycle, move/design grammar, and runtime evidence as one coherent object;
 - instance loading: `load_instance(instance_path)`;
 - solver output normalization: `deserialize_solver_output(raw_output, instance) -> SolverArtifact`;
 - verification: `check_solution_consistency()`, `check_feasibility()`, `recompute_objective()`;
@@ -49,6 +52,10 @@ The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces 
 `SolverArtifact` carries raw output, objective mapping, feasible boolean, and optional problem-native normalized solution. Core should treat normalized solution as opaque.
 
 `load_problem_adapter()` in `scion/scion/problem/loader.py` imports and instantiates adapters only from `scion.problems.<id>.*`.
+
+`ContextManager` and APS `context.read_problem` consume optional
+`render_problem_object()` when present. This is still adapter-owned prompt
+context; core does not interpret the problem semantics inside that text.
 
 ## Metric Specs and Objective Policy
 

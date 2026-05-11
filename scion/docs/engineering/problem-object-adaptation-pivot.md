@@ -39,6 +39,24 @@ The core framework should still stay problem-agnostic. The richer problem object
 belongs in `ProblemSpecV1`, adapter rendering/preview, and the problem package's
 solver wrapper.
 
+## Implemented First Slice
+
+As of 2026-05-11, CVRP has an initial problem-object exposure slice:
+
+- `CvrpAdapter.render_problem_object()` describes the instance model, solution
+  model, objective policy, solver lifecycle, move/design grammar, and
+  whole-solver runtime evidence.
+- `ContextManager` adds that object to hypothesis, code, and fix contexts.
+- `CreativeLayer` renders it as a `Problem Object` section before surface
+  details and solver mechanics.
+- `context.read_problem` returns the adapter-rendered object for APS sessions.
+- CVRP prompt metadata no longer asks for one deep mechanism policy at a time
+  as the default short-diagnostic path.
+
+This is an exposure/adaptation slice only. It does not prove solver efficacy,
+and it does not yet replace the current surface list with a cleaner top-level
+solver-design boundary.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -53,9 +71,9 @@ That pattern optimizes what is easy to expose, not what is important for the
 problem. It also burns experiment budget proving that isolated knobs do not
 move a mature baseline.
 
-## Next Slice
+## Remaining Slice
 
-The next engineering slice should design a whole-problem CVRP adaptation
+The next engineering slice should finish the whole-problem CVRP adaptation
 surface before more experiments:
 
 1. Define the CVRP problem object Scion should see: instance structure,
@@ -63,8 +81,8 @@ surface before more experiments:
    solver lifecycle.
 2. Decide the top-level research target. Prefer a broad problem-owned
    solver-design surface over more singleton component policies.
-3. Render that object through the adapter so proposal agents reason from the
-   problem and solver lifecycle, not from a menu of disconnected hooks.
+3. Keep rendering the object through the adapter so proposal agents reason from
+   the problem and solver lifecycle, not from a menu of disconnected hooks.
 4. Make runtime evidence summarize whole-solver behavior and phase-level
    movement, with component details as attribution rather than the primary
    research target.

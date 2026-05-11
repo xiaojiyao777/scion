@@ -59,6 +59,25 @@ def test_cvrp_problem_spec_loads(cvrp_spec: ProblemSpecV1, cvrp_adapter: Problem
     assert "implicit depot" in cvrp_adapter.render_operator_interface()
 
 
+def test_cvrp_adapter_renders_problem_object_for_solver_level_research(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    rendered = cvrp_adapter.render_problem_object()
+
+    assert "Instance model:" in rendered
+    assert "Solution model:" in rendered
+    assert "Objective policy:" in rendered
+    assert "Solver lifecycle:" in rendered
+    assert "Move/design grammar:" in rendered
+    assert "Runtime evidence for problem-level hypotheses:" in rendered
+    assert "`instance.customer_ids`" in rendered
+    assert "`instance.route_distance(route)`" in rendered
+    assert "`CvrpSolution(routes=...)`" in rendered
+    assert "fleet_violation first, then total_distance" in rendered
+    assert "Component policies are implementation hooks" in rendered
+    assert "Do not claim success from active flags" in rendered
+
+
 def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None:
     inst = CvrpInstance(
         name="api_smoke",
@@ -313,12 +332,12 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
     coverage_check = next(
         check
         for check in preview["checks"]
-        if check["name"] == "main_search_forced_diagnostic_deep_component_coverage"
+        if check["name"] == "main_search_problem_object_evidence_alignment"
     )
     assert coverage_check["passed"] is True
     assert coverage_check["missing_components"] == []
-    assert "baseline time_fraction 0.75" in coverage_check["guidance"]
-    assert "top_k 64" in coverage_check["guidance"]
+    assert "solver-level CVRP designs" in coverage_check["guidance"]
+    assert "diagnostic only" in coverage_check["guidance"]
 
 
 def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_components_missing(
@@ -353,7 +372,7 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
     coverage_check = next(
         check
         for check in preview["checks"]
-        if check["name"] == "main_search_forced_diagnostic_deep_component_coverage"
+        if check["name"] == "main_search_problem_object_evidence_alignment"
     )
     assert coverage_check["passed"] is False
     assert coverage_check["severity"] == "diagnostic_warning"

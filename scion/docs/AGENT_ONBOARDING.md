@@ -60,10 +60,13 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 Active version: v0.4 on `v0.4-dev`.
 
 Current work centers on CVRP as the second real problem class after the
-warehouse/surrogate path. The immediate direction is a problem-object
-adaptation pivot: Scion should receive a coherent CVRP problem object and
-solver-design boundary through the adapter, rather than being driven through
-one forced singleton policy at a time.
+warehouse/surrogate path. The current direction is a problem-object adaptation
+pivot: Scion should receive a coherent CVRP problem object and solver-design
+boundary through the adapter, rather than being driven through one forced
+singleton policy at a time. The first exposure slice now renders the CVRP
+problem object into proposal contexts and `context.read_problem`; the next
+slice is to decide the top-level solver-design boundary and validate it with a
+short diagnostic.
 
 Important current interpretation:
 
@@ -78,8 +81,8 @@ Important current interpretation:
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.
 - Do not start another forced single-policy diagnostic, including
-  `route_pair_candidate_policy`, before the problem-object adaptation slice is
-  designed.
+  `route_pair_candidate_policy`, while the problem-object/top-level
+  solver-design adaptation is still being completed.
 - Do not run long CVRP solver-quality validation until a short diagnostic shows
   nonzero phase-best improvement and screening-quality movement.
 

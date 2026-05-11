@@ -82,6 +82,7 @@ class ContextManager:
         any failure code has a streak >= 2.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        problem_object = _build_problem_object(adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
@@ -252,6 +253,7 @@ class ContextManager:
 
         return {
             "problem_summary": problem_summary,
+            "problem_object": problem_object,
             "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
@@ -312,6 +314,7 @@ class ContextManager:
         this hypothesis — the failure detail is included so the LLM can learn.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        problem_object = _build_problem_object(adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         hypothesis_detail = _format_hypothesis(hypothesis)
         adapter_spec = _get_adapter_problem_spec(self._adapter)
@@ -343,6 +346,7 @@ class ContextManager:
 
         ctx: Dict[str, Any] = {
             "problem_summary": problem_summary,
+            "problem_object": problem_object,
             "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
@@ -380,6 +384,7 @@ class ContextManager:
         If failure_streak is provided, injects a failure pattern warning.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
+        problem_object = _build_problem_object(adapter=self._adapter)
         solver_mechanics = _build_solver_mechanics(adapter=self._adapter)
         failed_checks = [c for c in verification_result.checks if not c.passed]
         failure_detail = (
@@ -400,6 +405,7 @@ class ContextManager:
 
         ctx = {
             "problem_summary": problem_summary,
+            "problem_object": problem_object,
             "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "original_code": (
@@ -1276,6 +1282,13 @@ def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
         f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
     ]
     return "\n".join(lines)
+
+
+def _build_problem_object(*, adapter=None) -> str:
+    """Render the problem-owned object model through the adapter boundary."""
+    if adapter is not None and hasattr(adapter, "render_problem_object"):
+        return str(adapter.render_problem_object())
+    return ""
 
 
 def _build_solver_mechanics(*, adapter=None) -> str:

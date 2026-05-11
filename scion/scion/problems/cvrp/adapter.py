@@ -43,7 +43,7 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
-_FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS = frozenset(
+_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = frozenset(
     {
         "route_pair_swap",
         "bounded_destroy_repair",
@@ -209,6 +209,66 @@ class CvrpAdapter:
             "from a depot to visit each customer exactly once while respecting "
             "vehicle capacity. Promotion objective is lexicographic: minimize "
             "fleet_violation first, then total_distance."
+        )
+
+    def render_problem_object(self) -> str:
+        return (
+            "CVRP problem object for solver-level research.\n\n"
+            "Instance model:\n"
+            "- One depot and a fixed set of customers with coordinates and "
+            "integer demands.\n"
+            "- Vehicle capacity is a hard route constraint; every non-depot "
+            "customer must be served exactly once.\n"
+            "- Safe structural APIs are `instance.customer_ids`, "
+            "`instance.customer_count`, `instance.capacity`, "
+            "`instance.demands[customer_id]`, `instance.demand(customer_id)`, "
+            "`instance.distance(i, j)`, `instance.route_load(route)`, and "
+            "`instance.route_distance(route)`. Do not use case identifiers or "
+            "`instance.customers`.\n"
+            "- Main size terms are customer_count, route_count, route_length, "
+            "removed_customer_count, candidate_pair_count, and time_limit_sec.\n\n"
+            "Solution model:\n"
+            "- A solution is `CvrpSolution(routes=...)`; routes use implicit "
+            "depot format and contain customer ids only.\n"
+            "- A valid solution preserves the customer multiset exactly once, "
+            "has no depot ids inside routes, respects capacity on every route, "
+            "and reports a finite objective.\n"
+            "- Objective recomputation is adapter-owned: fleet_violation is "
+            "derived from route-count/reference-route constraints when "
+            "available, and total_distance is recomputed from the route order.\n\n"
+            "Objective policy:\n"
+            "- Lexicographic minimization: fleet_violation first, then "
+            "total_distance.\n"
+            "- BKS/gap is diagnostic context only; it is not an acceptance "
+            "criterion for generated research changes.\n\n"
+            "Solver lifecycle:\n"
+            "- Construct an initial route set, run the repo-local ALNS+VNS "
+            "baseline when available, then run package-owned improvement "
+            "phases and optional registry operators under the remaining time "
+            "budget.\n"
+            "- Candidate solutions are accepted only when feasible and strictly "
+            "better under the lexicographic objective.\n"
+            "- Recovery-only or current-state movements are not solver-quality "
+            "evidence unless they create phase-best objective movement.\n\n"
+            "Move/design grammar:\n"
+            "- Useful designs should reason about route construction, route "
+            "pair restructuring, bounded local search, ruin/recreate, "
+            "acceptance/restart/perturbation, and baseline-budget allocation "
+            "as parts of one solver lifecycle.\n"
+            "- Component policies are implementation hooks. They should support "
+            "a solver-level hypothesis, not become isolated research goals.\n"
+            "- Any route edit must preserve customers, capacity, and implicit "
+            "depot representation and must have explicit candidate caps.\n\n"
+            "Runtime evidence for problem-level hypotheses:\n"
+            "- Whole-solver fields: construction distance/routes, baseline "
+            "mode/cost/routes/iterations, operator attempts/accepted/skipped, "
+            "component phase deltas, objective deltas, stop reasons, runtime, "
+            "and selected-surface load/active/error fields.\n"
+            "- A useful proposal should predict which lifecycle phase changes, "
+            "which objective field moves, and which runtime evidence should "
+            "show nonzero accepted phase-best movement.\n"
+            "- Do not claim success from active flags, attempts, or selector "
+            "values alone."
         )
 
     def render_solver_mechanics(self) -> str:
@@ -1173,30 +1233,28 @@ def _preview_main_search_strategy(
         ):
             selected = {str(component) for component in components}
             missing_deep = sorted(
-                _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS - selected
+                _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS - selected
             )
             checks.append(
                 {
-                    "name": "main_search_forced_diagnostic_deep_component_coverage",
+                    "name": "main_search_problem_object_evidence_alignment",
                     "passed": not missing_deep,
                     "severity": "diagnostic_warning",
                     "required_components": sorted(
-                        _FORCED_DIAGNOSTIC_MAIN_SEARCH_DEEP_COMPONENTS
+                        _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
                     ),
                     "selected_components": sorted(selected),
                     "missing_components": missing_deep,
                     "guidance": (
-                        "Forced main_search_strategy diagnostics should select both "
-                        "route_pair_swap and bounded_destroy_repair, with "
-                        "route_pair_swap first, so runtime can audit "
-                        "selected/attempted/deep-component coverage. Prefer "
-                        "R1-like safe defaults for formal-like smoke: baseline "
-                        "time_fraction 0.75, conservative ALNS/VNS params, 5 "
-                        "improvement rounds, top_k 64, perturbation strength "
-                        "2-3/max_perturbations 2, and bounded destroy/repair "
-                        "as a gated limited follow-up. This preview advisory "
-                        "does not make an otherwise valid normal promotion plan "
-                        "fail."
+                        "Main-search plans should be evaluated as solver-level "
+                        "CVRP designs. Explain how selected components, baseline "
+                        "budget, restart/perturbation, and caps work together; "
+                        "predict phase-best objective movement and whole-solver "
+                        "runtime fields. The preview reports whether both "
+                        "package-owned deep components are selected because they "
+                        "are useful attribution hooks, but missing components "
+                        "are diagnostic only and do not make an otherwise valid "
+                        "problem-level plan fail."
                     ),
                 }
             )

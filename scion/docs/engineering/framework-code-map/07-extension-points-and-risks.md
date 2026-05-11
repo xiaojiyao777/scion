@@ -12,7 +12,10 @@ Prefer these problem-owned extension points:
   `targets`, `interface`, bounds, evidence, novelty, prompt metadata, and
   legacy-compatible surface fields.
 - `ProblemSpecV1.operator_interface`: update execute signature and categories.
-- `ProblemAdapter.render_problem_summary()`, `render_operator_interface()`, and package-specific interface rendering: teach LLMs the problem model without changing core prompts.
+- `ProblemAdapter.render_problem_summary()`, optional
+  `render_problem_object()`, `render_operator_interface()`, and
+  package-specific interface rendering: teach LLMs the problem model without
+  changing core semantics.
 - `ProblemAdapter` verification methods: define solution consistency, feasibility, and objective recomputation.
 - `ProblemSpecV1.objectives` and `objective_policy`: add metrics, priorities, directions, tie tolerances, or weighted-sum behavior.
 - Problem package solver wrapper: define how generated operators/policies are executed and audited.
@@ -142,10 +145,11 @@ interface/preview, solver execution and audit, selected-surface runtime
 evidence, focused tests, and engineering docs were updated without adding CVRP
 semantics to core governance. Future surfaces should keep the same boundary.
 
-Current next implementation slice: do not force another singleton policy.
-Define the CVRP problem object Scion should see through the adapter: instance
-structure, solution representation, constraints, objective policy, move/design
-affordances, solver lifecycle, and whole-solver evidence. See
+Current next implementation slice: do not force another singleton policy. The
+first CVRP problem-object exposure slice now renders the adapter-owned problem
+object into prompts and APS `context.read_problem`; next, finish the top-level
+solver-design boundary and runtime evidence contract before running another
+short diagnostic. See
 [`problem-object-adaptation-pivot.md`](../problem-object-adaptation-pivot.md).
 
 ## Design Review Checklist

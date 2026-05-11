@@ -18,8 +18,10 @@ incremental: Scion is being asked to optimize one exposed policy hook at a
 time. That is not the intended research object. The next direction is a
 problem-object adaptation pivot: Scion should receive a coherent CVRP problem
 object and solver-design boundary through the adapter, then reason about the
-solver at the problem level. Do not start another forced single-policy
-diagnostic until that adaptation slice is designed.
+solver at the problem level. The first exposure slice now renders that problem
+object into proposal prompts and APS `context.read_problem`. Do not start
+another forced single-policy diagnostic while the top-level solver-design
+boundary is still being completed.
 
 Current branch: `v0.4-dev`
 
@@ -33,8 +35,9 @@ Current interpretation:
   path.
 - CVRP `main_search_strategy` and the deep mechanism policy family are useful
   implementation hooks, but they are not the right research abstraction by
-  themselves. The next slice should expose the CVRP problem object and a
-  top-level solver-design boundary, not another isolated policy knob.
+  themselves. The first adapter exposure slice now gives Scion the CVRP problem
+  object; the next slice should finish the top-level solver-design boundary,
+  not another isolated policy knob.
 - The higher-ceiling v3 path should be a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
@@ -154,12 +157,11 @@ singleton policy in `policies/main_search_strategy.py` and can coordinate:
 - optional registry-operator round limit.
 
 Current limitation: this surface list is now too component-centric. It exposes
-many legal hooks, but it does not yet give Scion a coherent CVRP problem object
-to research. The next slice should redesign adapter/problem-spec rendering so
-Scion sees the instance model, solution representation, constraints, objective
-policy, move/design affordances, solver lifecycle, and whole-solver evidence
-as one problem-owned research object. Stop forced policy diagnostics until that
-slice is designed.
+many legal hooks. The first adaptation slice now renders the coherent CVRP
+problem object through the adapter and into APS problem reads, but the surface
+set still needs a cleaner top-level solver-design boundary. Stop forced policy
+diagnostics until that boundary is designed and a short diagnostic can validate
+solver-level hypotheses.
 
 ## Latest Experiment
 
@@ -280,7 +282,7 @@ Latest APS/CVRP optimization validation:
 ```
 
 ```text
-247 passed in 17.62s
+252 passed in 18.19s
 ```
 
 Latest focused APS preview-budget validation:
@@ -319,17 +321,14 @@ P1:
 
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
-- Design the CVRP problem-object adaptation slice: what Scion should see about
-  the instance model, solution model, constraints, objective policy,
-  route/move affordances, solver lifecycle, and whole-solver evidence.
-- Decide whether the next top-level research target is a broad
-  solver-design/problem-object surface rather than the existing singleton
-  component policies.
-- Update adapter rendering and problem-spec metadata so the Creative Layer
-  reasons from that problem object instead of a menu of local knobs.
-- After that slice exists, run one short diagnostic campaign to validate that
-  Scion can produce solver-level hypotheses with attributable whole-solver
-  runtime movement.
+- Finish the top-level CVRP solver-design boundary now that the adapter renders
+  the instance model, solution model, objective policy, move/design grammar,
+  solver lifecycle, and whole-solver evidence as one problem object.
+- Decide whether the next research target is a broad solver-design/problem
+  surface rather than the existing singleton component policies.
+- Run one short diagnostic campaign only after that boundary exists, validating
+  that Scion can produce solver-level hypotheses with attributable
+  whole-solver runtime movement.
 
 P2:
 

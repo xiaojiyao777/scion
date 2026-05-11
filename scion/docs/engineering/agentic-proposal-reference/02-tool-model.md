@@ -82,6 +82,7 @@ Minimum read-only tools:
 ```text
 list_research_surfaces()
 read_problem_summary()
+read_problem_object()
 read_solver_mechanics()
 read_objective_policy()
 read_champion_summary()
@@ -227,6 +228,7 @@ Safe parallel group:
 
 ```text
 read_problem_summary
+read_problem_object
 list_research_surfaces
 read_champion_summary
 query_search_memory
@@ -251,7 +253,7 @@ Suggested MVP tool set:
 
 | Tool | Permission | Notes |
 |---|---|---|
-| `context.read_problem` | read_public_context | Adapter-rendered summary/mechanics/objectives. |
+| `context.read_problem` | read_public_context | Adapter-rendered summary plus optional problem object for instance/solution/objective/lifecycle/move/evidence semantics. |
 | `context.list_surfaces` | read_public_context | Compact selection metadata from `ProblemSpecV1.research_surfaces`. |
 | `context.read_surface` | read_champion_artifact | Compact-by-default surface contract with `summary` / `interface` / `bounds` / `evidence` / `novelty` / `target_preview` sections plus a bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=1200`, and optional reads fail closed near the observation budget. |
 | `memory.query` | read_tainted_memory | Search memory, research log, failed hypotheses. |

@@ -2385,6 +2385,29 @@ def test_tool_result_size_guard_returns_error(tmp_path: Path) -> None:
     assert observation.structured_payload["max_result_chars"] == 10
 
 
+def test_read_problem_returns_adapter_problem_object(tmp_path: Path) -> None:
+    class AdapterWithProblemObject:
+        def render_problem_summary(self) -> str:
+            return "Adapter-rendered problem summary."
+
+        def render_problem_object(self) -> str:
+            return "Problem object: solver lifecycle and move grammar."
+
+    context = replace(_context(tmp_path), adapter=AdapterWithProblemObject())
+    registry = ProposalToolRegistry.default_read_only()
+
+    observation = registry.call("context.read_problem", {}, context)
+
+    assert observation.is_error is False
+    assert observation.structured_payload["summary"] == (
+        "Adapter-rendered problem summary."
+    )
+    assert observation.structured_payload["problem_object"] == (
+        "Problem object: solver lifecycle and move grammar."
+    )
+    assert observation.structured_payload["problem_object_truncated"] is False
+
+
 def test_holdout_aggregate_does_not_expose_malicious_raw_refs_or_case_ids(
     tmp_path: Path,
 ) -> None:

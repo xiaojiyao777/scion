@@ -4,8 +4,8 @@ id: cvrp
 display_name: "Capacitated Vehicle Routing Problem"
 root_dir: PLACEHOLDER
 description: >-
-  CVRP adapter skeleton for v0.4 route-native verification and runtime
-  evidence hardening.
+  CVRP problem package for route-native verification, runtime evidence
+  hardening, and solver-level problem-object adaptation.
 
 search_space:
   editable:
@@ -1013,20 +1013,17 @@ research_surfaces:
         which construction ensemble, repo-local baseline params/budget,
         package-owned improvement components, acceptance threshold, restart or
         perturbation knobs, and optional registry-operator setting should work
-        together. Prefer this surface for forced diagnostics after
-        post-baseline operator work has shown low accepted-move value. In
-        forced diagnostic runs, prefer the R1-like safe schedule: baseline
-        time_fraction around 0.75, conservative baseline params, route_pair_swap
-        before bounded_destroy_repair, 5 improvement rounds, top_k 64, and
-        perturbation strength 2-3 with max_perturbations 2. If runtime
-        feedback shows recovery-only moves, explicitly choose perturbation
-        schedule after_no_improvement, before_first_round, or
-        before_each_round and explain why the selected timing can turn recovery
-        into phase-best gain. The solver gates bounded_destroy_repair after
-        same-round route-pair phase-best improvements and separately audits
-        recovery moves that only improve a perturbed/current solution, so
-        runtime evidence distinguishes recovery-only accepted deltas from
-        phase-best objective gain.
+        together. Use this surface when the hypothesis needs coordinated
+        lifecycle design rather than a standalone component knob. Predict the
+        lifecycle phase, objective field, and whole-solver runtime evidence the
+        change should move. If runtime feedback shows recovery-only moves,
+        explicitly choose perturbation schedule after_no_improvement,
+        before_first_round, or before_each_round and explain why the selected
+        timing can turn recovery into phase-best gain. The solver gates
+        bounded_destroy_repair after same-round route-pair phase-best
+        improvements and separately audits recovery moves that only improve a
+        perturbed/current solution, so runtime evidence distinguishes
+        recovery-only accepted deltas from phase-best objective gain.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict. The solver owns construction,
@@ -1042,10 +1039,11 @@ research_surfaces:
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
         post_baseline_operators_enabled false unless the hypothesis explicitly
-        needs generated registry operators after the owned main loop. For
-        forced diagnostics, include novelty_signature fields that distinguish
-        selected_components, deep_components_selected, budget_pattern, and
-        destroy_repair_pattern from prior whole-algorithm strategies. Avoid
+        needs generated registry operators after the owned main loop. Include
+        novelty_signature fields that distinguish selected_components,
+        deep_components_selected, budget_pattern, and destroy_repair_pattern
+        from prior whole-algorithm strategies when those dimensions are part of
+        the solver-level plan. Avoid
         aggressive baseline params such as global max_destroy_customers=200 on
         smaller formal cases; active main-search params are conservatively
         clamped and audited by the solver.
@@ -1060,14 +1058,11 @@ research_surfaces:
       - "policies/main_search_strategy.py"
     prompt_hint: >-
       Govern the whole CVRP main-search lifecycle through a bounded plan;
-      registry post-baseline operators are off by default. Forced diagnostic
-      candidates should select route_pair_swap and bounded_destroy_repair for
-      5 improvement rounds, use top_k 64 or 128 for destroy/repair budget, and
-      expose that choice in the novelty signature; prefer baseline.time_fraction
-      around 0.75 with conservative ALNS/VNS params, route_pair_swap before
-      bounded_destroy_repair, and perturbation strength 2-3/max 2. When using
-      a perturbation-first idea, implement it through perturbation.schedule
-      rather than only describing it in prose.
+      registry post-baseline operators are off by default. Choose components,
+      baseline budget, restart/perturbation, and caps as one solver-level
+      hypothesis; expose the intended phase/objective movement in the novelty
+      signature. When using a perturbation-first idea, implement it through
+      perturbation.schedule rather than only describing it in prose.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false
@@ -1459,11 +1454,12 @@ llm_hints:
     route_distance(route). Use demands[customer_id] for direct demand lookup.
     Do not use nonexistent attributes such as vehicle_capacity,
     distance_matrix, customers, or num_customers. Never use instance.customers.
-    main_search_strategy is the bounded orchestration surface. For current
-    short efficacy diagnostics, prefer one declared deep mechanism surface at
-    a time (alns_vns_policy, destroy_repair_policy,
-    route_pair_candidate_policy, or acceptance_restart_policy) before repeating
-    orchestration-only changes. Do not edit solver.py.
+    Treat individual policy files as implementation hooks behind the CVRP
+    problem object, not standalone research goals. Prefer hypotheses that
+    explain a solver-level CVRP design: which lifecycle phase changes, which
+    objective field should move, and what whole-solver runtime evidence should
+    become nonzero. If a component policy is selected, state how it supports
+    that solver-level plan. Do not edit solver.py.
 
 family_taxonomy:
   version: "cvrp-route-v1"

@@ -374,6 +374,10 @@ def _split_hypothesis_context(
     """
     D = _DefaultDict(context)
     solver_mechanics = str(D["solver_mechanics"]).strip()
+    problem_object = str(D["problem_object"]).strip()
+    problem_object_text = (
+        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+    )
     if solver_mechanics:
         solver_mechanics_text = (
             f"## Solver Execution Model\n{solver_mechanics}\n\n"
@@ -400,6 +404,7 @@ def _split_hypothesis_context(
         "You are a research agent optimising declared research surfaces of a combinatorial optimisation solver.\n"
         "Your goal is to propose ONE novel hypothesis that, if implemented, would improve solver quality.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{problem_object_text}"
         f"{D['research_surfaces']}\n\n"
         f"{D['objective_policy_guidance']}\n\n"
         f"{solver_mechanics_text}"
@@ -594,6 +599,10 @@ def _split_code_context(
     """
     D = _DefaultDict(context)
     solver_mechanics = str(D["solver_mechanics"]).strip()
+    problem_object = str(D["problem_object"]).strip()
+    problem_object_section = (
+        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+    )
     solver_mechanics_section = (
         f"## Solver Execution Model\n{solver_mechanics}\n\n"
         if solver_mechanics
@@ -623,6 +632,7 @@ def _split_code_context(
         "An operator surface that produces infeasible solutions is worse than no change. "
         "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{problem_object_section}"
         f"{solver_mechanics_section}"
         f"## Research Surface Interface Specification\n"
         f"Active surface: {surface_label}\n"
@@ -746,6 +756,10 @@ def _split_fix_context(
     """
     D = _DefaultDict(context)
     solver_mechanics = str(D["solver_mechanics"]).strip()
+    problem_object = str(D["problem_object"]).strip()
+    problem_object_section = (
+        f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
+    )
     solver_mechanics_section = (
         f"## Solver Execution Model\n{solver_mechanics}\n\n"
         if solver_mechanics
@@ -756,6 +770,7 @@ def _split_fix_context(
         "You are a software engineer fixing an optimisation research-surface file that failed verification.\n"
         "Correct the code so it passes, while preserving the intended logic.\n\n"
         f"## Problem Summary\n{D['problem_summary']}\n\n"
+        f"{problem_object_section}"
         f"{solver_mechanics_section}"
         f"## Research Surface Interface Specification\n"
         f"Follow this interface exactly:\n\n"

@@ -5,16 +5,14 @@ can enable it to let the CVRP package own the complete construction, baseline,
 improvement-loop, restart/perturbation, and optional registry-operator schedule
 without editing solver.py.
 
-Forced diagnostic candidates should keep this file as the only edited target,
-set enabled=True, select both deep components route_pair_swap and
-bounded_destroy_repair, and use 5 improvement rounds with top_k 64 or 128 so
-runtime audit can show selected, attempted, skipped, and accepted coverage.
-Formal-like .vrp diagnostics should keep baseline.time_fraction at 0.75 or
-higher so accepted moves compete against a strong repo-local baseline. The
-perturbation schedule can be after_no_improvement, before_first_round, or
-before_each_round; use a pre-improvement schedule only when the hypothesis
-needs to test whether recovery moves can escape a strong baseline local
-optimum. The checked-in default remains inactive.
+Candidate proposals should treat this as a solver-level lifecycle plan, not a
+place to force one component recipe. If enabled, the plan should explain how
+construction, baseline budget, package-owned improvement components,
+acceptance, restart/perturbation, and caps work together, and which
+phase-best objective and whole-solver runtime evidence should move. Deep
+components such as route_pair_swap and bounded_destroy_repair remain useful
+attribution hooks, but they are implementation details of a broader CVRP
+solver hypothesis. The checked-in default remains inactive.
 """
 from __future__ import annotations
 

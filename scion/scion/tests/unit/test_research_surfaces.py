@@ -2412,6 +2412,13 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
 
     assert "## Research Surfaces" in prompt_text
+    assert "## Problem Object" in prompt_text
+    assert "Instance model:" in prompt_text
+    assert "Solution model:" in prompt_text
+    assert "Solver lifecycle:" in prompt_text
+    assert "Move/design grammar:" in prompt_text
+    assert "Runtime evidence for problem-level hypotheses:" in prompt_text
+    assert "Component policies are implementation hooks" in prompt_text
     assert "search_policy [policy]" in prompt_text
     assert "construction_policy [construction]" in prompt_text
     assert "neighborhood_portfolio [portfolio]" in prompt_text
@@ -2470,6 +2477,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Never use instance.customers" in prompt_text
     assert ctx["available_actions"] == "create_new, modify"
     assert "remove" not in ctx["available_actions"]
+    assert "Move/design grammar:" in ctx["problem_object"]
 
     hypothesis = HypothesisProposal(
         hypothesis_text="Tune baseline/operator budget.",
@@ -2489,6 +2497,8 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     code_prompt_text = "\n".join(block["text"] for block in system_blocks)
 
     assert "Active surface: search_policy [policy]" in code_prompt_text
+    assert "## Problem Object" in code_prompt_text
+    assert "Solver lifecycle:" in code_prompt_text
     assert "module-level policy file; no class is required" in code_prompt_text
     assert "def baseline_time_fraction" in code_prompt_text
     assert "`instance.customer_count`" in code_prompt_text

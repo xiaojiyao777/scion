@@ -17,6 +17,8 @@ Framework core should treat this package through `ProblemSpecV1`, `ProblemAdapte
 Responsibilities:
 
 - render CVRP problem summary for prompts;
+- render a solver-level CVRP problem object for proposal contexts and APS
+  `context.read_problem`;
 - render solver mechanics, including baseline plus post-baseline operator loop;
 - render operator interface and policy surface interface;
 - load `.json` instances via `CvrpInstance.from_json()`;
@@ -114,9 +116,10 @@ Solver flow:
    recorded as `main_search_perturbation_schedule`.
    It also emits a
    `main_search_component_coverage_status` summary and
-   `main_search_deep_components_selected` so forced diagnostics can audit
-   whether `route_pair_swap` and `bounded_destroy_repair` were selected and
-   attempted without changing normal promotion semantics.
+   `main_search_deep_components_selected` so solver-level evidence can audit
+   whether deep attribution hooks such as `route_pair_swap` and
+   `bounded_destroy_repair` were selected and attempted without changing normal
+   promotion semantics.
 9. Run the algorithm-blueprint local-search phase, when active, after baseline
    and before registry operators. The solver owns the bounded primitives:
    `intra_route_2opt` and `inter_route_relocate`.
@@ -217,11 +220,12 @@ Perturbation timing is an explicit surface dimension: the default
 `before_first_round` and `before_each_round` let candidates implement a real
 pre-improvement perturbation hypothesis instead of only describing it in
 prose.
-Forced diagnostic `main_search_strategy` candidates should select both deep
-components in `improvement.enabled_components`, keep registry operators off
-unless explicitly needed, and use 5 improvement rounds with `top_k` 64 or 128
-for the next short smoke so selected/attempted/skipped/accepted coverage is
-visible before judging promotion evidence.
+Main-search plans are now framed as solver-level CVRP designs. Deep component
+coverage remains useful attribution evidence, but missing a particular
+component is a diagnostic advisory rather than the research target itself. A
+candidate should explain how construction, baseline budget, package-owned
+components, restart/perturbation, and caps work together and which phase-best
+objective and whole-solver runtime fields should move.
 
 `policies/alns_vns_policy.py` is a singleton deep mechanism research surface.
 Required function:
