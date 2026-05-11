@@ -2595,6 +2595,82 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Solver lifecycle:" in solver_design_prompt_text
 
 
+def test_solver_design_verification_failure_guides_retry_not_surface_fallback() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-solver-design",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Try a coordinated solver-design lifecycle.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/main_search_strategy.py",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+    )
+    failed_step = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=(
+                "def main_search_plan(instance, time_limit_sec):\n"
+                "    return {}\n"
+            ),
+        ),
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="verification",
+        failure_detail="V5_solution_consistency",
+        verification_detail=(
+            "V5_solution_consistency: candidate routes changed infeasibly"
+        ),
+    )
+    rejected = HypothesisRecord(
+        hypothesis_id="h-solver-design",
+        branch_id=branch.branch_id,
+        change_locus="solver_design",
+        action="modify",
+        status="rejected",
+        target_file="policies/main_search_strategy.py",
+        hypothesis_text=hypothesis.hypothesis_text,
+        base_champion_version=1,
+    )
+    manager = ContextManager(adapter=CvrpAdapter(spec_v1))
+
+    ctx = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        rejected_hypotheses=[rejected],
+        step_history=[failed_step],
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "## Solver-Design Boundary Control" in prompt_text
+    assert "retry the solver-design boundary" in prompt_text
+    assert "Component policies" in prompt_text
+    assert "## Globally Failed / Blacklisted Approaches\n(none)" in prompt_text
+
+
 def test_context_still_renders_legacy_v1_surface_metadata(tmp_path: Path) -> None:
     payload = _problem_payload(str(tmp_path))
     payload["research_surfaces"] = [

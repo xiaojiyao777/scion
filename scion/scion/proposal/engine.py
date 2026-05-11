@@ -452,6 +452,8 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Strategy Guidance\n{D['strategy_guidance']}"
         )
+    if D["solver_design_boundary_guidance"]:
+        branch_context_parts.append(D["solver_design_boundary_guidance"])
     if D["search_control_guidance"]:
         branch_context_parts.append(D["search_control_guidance"])
     if D["champion_baselines"]:

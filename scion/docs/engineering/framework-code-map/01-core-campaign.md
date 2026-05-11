@@ -88,6 +88,14 @@ Branch states and decisions are declared in `scion/scion/core/models.py`. Legal 
 
 Every early failure path writes a `StepRecord` with `decision=None` and a `failure_stage`, so proposal/code/contract/workspace/verification failures are visible in campaign summaries and future context.
 
+Heavy verification failures usually blacklist the failed hypothesis as a
+globally failed approach. `ExploreStepPipeline` treats declared
+`solver_design` surfaces differently: a heavy failure under that top-level
+problem-object boundary marks only the candidate implementation rejected, then
+routes the branch failure normally. This preserves generic failure accounting
+while preventing one invalid solver-design implementation from retiring the
+whole problem-level research boundary.
+
 ## Eval-Only Path
 
 Validation, validation expand, frozen, and screening expand reuse candidate workspaces via `BranchStepRunner.run_eval_step()`. This path expects branch workspace, hypothesis, patch, and canonical `HypothesisRecord` to exist. It then:

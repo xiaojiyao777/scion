@@ -66,14 +66,18 @@ boundary through the adapter, rather than being driven through one forced
 singleton policy at a time. The first exposure slice now renders the CVRP
 problem object into proposal contexts and `context.read_problem`; the second
 slice declares `solver_design` as the top-level CVRP research boundary. The
-next step is a short diagnostic that does not force a singleton component
-policy.
+latest repair makes solver-design candidate failures candidate-scoped instead
+of globally blacklisting the problem-object boundary. The next step is a short
+diagnostic that does not force a singleton component policy.
 
 Important current interpretation:
 
 - `solver_design` is the top-level CVRP research object. It is backed by the
   existing `policies/main_search_strategy.py` execution hook, but component
   policies are implementation details, not standalone research goals.
+- A failed `solver_design` implementation should be retried with a different
+  solver lifecycle; it should not make APS fall back to isolated component
+  policy goals.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.

@@ -74,6 +74,24 @@ This still does not prove solver efficacy. It prepares the next short
 diagnostic so Scion targets the problem-level solver design instead of forcing
 one component policy.
 
+## Implemented Boundary-Control Repair
+
+The first free solver-design diagnostic selected `solver_design`, but one heavy
+Verification failure caused APS to treat the surface as globally blacklisted
+and fall back to component policies. The repair keeps that failure scoped to
+the candidate implementation:
+
+- Heavy Verification failures under a declared `solver_design` surface mark the
+  failed hypothesis `rejected`, not globally `blacklisted`.
+- Hypothesis context renders solver-design boundary-control guidance after a
+  pre-screening candidate failure.
+- APS feedback tools tag `solver_design_pre_protocol_failure` and recommend
+  retrying the problem-object boundary with a different lifecycle
+  implementation.
+
+This is still a control-loop repair, not solver-efficacy evidence. It should
+be validated by a short free-surface diagnostic before any longer run.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -90,8 +108,8 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice should validate the whole-problem CVRP adaptation
-surface with a short experiment:
+The next engineering slice should validate the repaired whole-problem CVRP
+adaptation surface with a short experiment:
 
 1. Define the CVRP problem object Scion should see: instance structure,
    solution representation, route/move affordances, objective semantics, and
@@ -103,13 +121,14 @@ surface with a short experiment:
 4. Make runtime evidence summarize whole-solver behavior and phase-level
    movement, with component details as attribution rather than the primary
    research target.
-5. Only then run a short diagnostic campaign. It should not force one narrow
-   policy unless the purpose is specifically to validate a new adapter or
-   contract boundary.
+5. Run a short free-surface diagnostic. It should not force one narrow policy
+   unless the purpose is specifically to validate a new adapter or contract
+   boundary.
 
 ## Current CVRP Implication
 
 Stop forced `destroy_repair_policy` and `route_pair_candidate_policy`
 diagnostics for now. The former has been exhausted; the latter would continue
-the same incremental-hook pattern. The next useful work is to redesign CVRP's
-problem-object exposure and top-level solver-design surface.
+the same incremental-hook pattern. The next useful work is to validate that
+the repaired control loop keeps CVRP on the problem-object `solver_design`
+boundary after a failed candidate implementation.

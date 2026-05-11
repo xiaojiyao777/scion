@@ -38,6 +38,40 @@ def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
     )
 
 
+def _is_candidate_scoped_heavy_failure(
+    hypothesis: HypothesisProposal,
+    *,
+    problem_spec: Any | None,
+) -> bool:
+    """Return whether a heavy failure should retire only this candidate.
+
+    Top-level solver-design surfaces are problem-object boundaries, not narrow
+    mechanisms. A single invalid implementation should not globally blacklist
+    the boundary and push later proposal rounds back to component surfaces.
+    """
+    surface = _surface_for_hypothesis(problem_spec, hypothesis)
+    if surface is None:
+        return False
+    kind = str(getattr(surface, "kind", "") or "").strip().lower()
+    role = str(getattr(getattr(surface, "algorithm", None), "role", "") or "").lower()
+    return kind == "solver_design" or "solver_design" in role
+
+
+def _surface_for_hypothesis(
+    problem_spec: Any | None,
+    hypothesis: HypothesisProposal,
+) -> Any | None:
+    if problem_spec is None:
+        return None
+    target_name = str(getattr(hypothesis, "change_locus", "") or "").strip()
+    if not target_name:
+        return None
+    for surface in getattr(problem_spec, "research_surfaces", []) or []:
+        if str(getattr(surface, "name", "") or "").strip() == target_name:
+            return surface
+    return None
+
+
 @dataclass(frozen=True)
 class _VerificationOutcome:
     step_result: Optional[StepResult]
@@ -567,7 +601,15 @@ class ExploreStepPipeline:
                 verification_result=vresult,
             )
 
-        self.hypothesis_store.mark_status(h_record.hypothesis_id, "blacklisted")
+        failed_status = (
+            "rejected"
+            if _is_candidate_scoped_heavy_failure(
+                hypothesis,
+                problem_spec=getattr(self.contract_gate, "_spec", None),
+            )
+            else "blacklisted"
+        )
+        self.hypothesis_store.mark_status(h_record.hypothesis_id, failed_status)
         self.handle_failure(branch, failure, hypothesis_already_recorded=True)
         archive_ref = self.archive_failed_workspace(workspace, bid, rnum)
         self._record_verification_fail_event(

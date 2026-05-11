@@ -16,8 +16,9 @@ problem-object diagnostic was terminated early because it exposed a control
 loop bug: after one `solver_design` candidate failed heavy Verification, APS
 treated the top-level surface as globally blacklisted and fell back to
 component-policy exploration. That is not a valid test of the problem-object
-research boundary. Repair the blacklisting/feedback semantics before running
-another solver-design diagnostic.
+research boundary. A repair now keeps heavy solver-design candidate failures
+candidate-scoped and adds APS/context guidance; run one short free-surface
+diagnostic to validate boundary control before solver-quality validation.
 
 Current branch: `v0.4-dev`
 
@@ -38,6 +39,10 @@ Current interpretation:
   from "`solver_design` is blacklisted" and return to component surfaces. This
   is a governance/proposal-feedback failure, not evidence that the surface is
   exhausted.
+- Heavy Verification failures under declared `solver_design` surfaces now mark
+  only the candidate implementation `rejected`; hypothesis context and APS
+  feedback explicitly recommend retrying the problem-object boundary rather
+  than falling back to component policies.
 - The higher-ceiling v3 path should be a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
@@ -110,6 +115,9 @@ phase-best improvement and screening-quality movement.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
+- Solver-design pre-screening failures are rendered as boundary-control
+  guidance: rejected or blacklisted solver-design entries are candidate
+  failures, not retirement of the problem-level surface.
 - Campaign-level forced-surface diagnostics now carry the forced
   surface/action/target into APS tools and the final CreativeLayer hypothesis
   task. APS still fails closed if a model produces an off-surface hypothesis.
@@ -157,11 +165,12 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary is declared, but the first free
-diagnostic did not validly evaluate it. Stop forced component-policy
-diagnostics; next repair the branch/hypothesis blacklisting and APS feedback so
-a failed candidate implementation under `solver_design` causes another
-solver-design attempt rather than a fallback to isolated component surfaces.
+Current limitation: the top-level boundary is declared and the control-loop
+repair is implemented, but it has not yet been validated in a live diagnostic.
+Stop forced component-policy diagnostics; next run a short free-surface
+diagnostic and verify that a failed candidate implementation under
+`solver_design` causes another solver-design attempt rather than a fallback to
+isolated component surfaces.
 
 ## Latest Experiment
 
@@ -280,14 +289,14 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selec
 
 ## Validation
 
-Latest solver-design boundary validation:
+Latest solver-design boundary-control repair validation:
 
 ```bash
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_protocol.py::test_run_experiment_preserves_selected_surface_required_runtime_metrics -q
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_sprint_m.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
 ```
 
 ```text
-282 passed in 17.83s
+301 passed in 18.24s
 ```
 
 Latest full Scion test suite:
@@ -297,7 +306,7 @@ Latest full Scion test suite:
 ```
 
 ```text
-1564 passed, 1 skipped in 64.99s
+1567 passed, 1 skipped in 62.12s
 ```
 
 Latest focused phase-benefit / forced-surface validation:
@@ -374,14 +383,13 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Repair solver-design blacklisting semantics: one heavy Verification failure
-  should blacklist or abandon that candidate implementation, not the top-level
-  `solver_design` research boundary.
-- Repair APS feedback so future solver-design diagnostics explicitly retry the
-  problem-object boundary with a different lifecycle implementation instead of
-  falling back to component-policy surfaces.
+- Run a short free-surface diagnostic validating the repaired solver-design
+  control loop; terminate early if APS falls back to component surfaces after a
+  solver-design candidate failure.
+- If control holds, inspect whether solver-level hypotheses generate
+  whole-solver evidence and nonzero phase-best movement.
 - Stop forced single-policy diagnostics for now, including
-  `route_pair_candidate_policy`, until the solver-design control loop is fixed.
+  `route_pair_candidate_policy`.
 
 P2:
 
@@ -397,9 +405,9 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `solver_design` has not yet been validly evaluated. The latest free
-  diagnostic reached the surface but then misclassified it as blacklisted after
-  one failed implementation.
+- CVRP `solver_design` has not yet been validly evaluated. The control-loop
+  repair is implemented in tests but not yet validated by a live short
+  diagnostic.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
@@ -424,6 +432,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md)
+  [`v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

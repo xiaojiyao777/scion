@@ -4,6 +4,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, List, Optional
 from unittest.mock import MagicMock, patch
 
@@ -67,6 +68,32 @@ def _make_problem_spec(root_dir: str) -> ProblemSpec:
     )
 
 
+def _make_solver_design_problem_spec(root_dir: str) -> ProblemSpec:
+    return ProblemSpec(
+        name="test_cvrp_solver_design",
+        root_dir=root_dir,
+        operator_categories=["solver_design"],
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver_design",
+                kind="solver_design",
+                algorithm=SimpleNamespace(role="problem_object_solver_design"),
+                targets=SimpleNamespace(
+                    files=["policies/main_search_strategy.py"],
+                    create_new_allowed=False,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                ),
+            )
+        ],
+        search_space=SearchSpace(
+            editable=["policies/*.py"],
+            frozen=["solver.py", "oracle.py"],
+            import_whitelist=["math"],
+        ),
+    )
+
+
 def _make_champion(code_dir: str) -> ChampionState:
     return ChampionState(
         version=1,
@@ -101,6 +128,56 @@ def _make_seed_ledger() -> SeedLedgerConfig:
         screening=[1, 2],
         validation=[3, 4],
         frozen=[5, 6],
+    )
+
+
+def _solver_design_campaign(
+    tmp_path: Path,
+    *,
+    verification_gate: Any = None,
+) -> CampaignManager:
+    code_dir = tmp_path / "solver_design_champion"
+    (code_dir / "policies").mkdir(parents=True)
+    (code_dir / "policies" / "main_search_strategy.py").write_text(
+        "def main_search_plan(instance, time_limit_sec):\n"
+        "    return {'enabled': False}\n",
+        encoding="utf-8",
+    )
+    spec = _make_solver_design_problem_spec(str(code_dir))
+    champion = _make_champion(str(code_dir))
+    hypothesis = {
+        "hypothesis_text": "Try a different solver-design lifecycle.",
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/main_search_strategy.py",
+        "predicted_direction": "improve",
+        "target_weakness": "candidate lifecycle",
+        "expected_effect": "better total_distance",
+        "target_objectives": ["total_distance"],
+        "protected_objectives": ["fleet_violation"],
+    }
+    patch = {
+        "file_path": "policies/main_search_strategy.py",
+        "action": "modify",
+        "code_content": (
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {'enabled': False}\n"
+        ),
+        "test_hint": None,
+    }
+    return CampaignManager(
+        problem_spec=spec,
+        protocol_config=_make_protocol_config(),
+        split_manifest=_make_split_manifest(),
+        seed_ledger=_make_seed_ledger(),
+        llm_client=MockLLMClient(
+            hypothesis_response=hypothesis,
+            patch_response=patch,
+        ),
+        champion=champion,
+        campaign_dir=str(tmp_path / "solver_design_campaign"),
+        verification_gate=verification_gate or AlwaysPassVerificationGate(),
+        termination_config=TerminationConfig(max_experiments=100, stagnation_limit=50),
     )
 
 
@@ -195,6 +272,25 @@ class TestT1BlacklistDoubleWrite:
             f"Expected exactly 1 blacklisted record, got {len(rows)}. "
             "This indicates the double-write bug is still present."
         )
+
+    def test_solver_design_heavy_failure_rejects_candidate_not_boundary(
+        self,
+        tmp_path,
+    ):
+        """A failed solver-design implementation must not blacklist the surface."""
+        cm = _solver_design_campaign(
+            tmp_path,
+            verification_gate=HeavyFailVerificationGate(),
+        )
+
+        cm.run_one_step()
+
+        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT change_locus, status FROM hypotheses"
+            ).fetchall()
+        assert rows == [("solver_design", "rejected")]
 
     def test_hypothesis_already_recorded_prevents_duplicate(self, tmp_path):
         """Direct _handle_failure calls: flag=True skips write, flag=False writes."""

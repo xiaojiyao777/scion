@@ -1161,6 +1161,73 @@ def test_cvrp_prioritizes_solver_design_over_component_policy_diagnostics(
     assert "solver_design" in " ".join(diagnosis["next_hypothesis_requirements"])
 
 
+def test_cvrp_solver_design_preprotocol_failure_requests_boundary_retry(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    failed_solver_design = StepRecord(
+        round_num=1,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Try the top-level solver design.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/main_search_strategy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="verification",
+        failure_detail="V5_solution_consistency",
+        verification_detail="V5_solution_consistency: invalid candidate output",
+    )
+    component_screening = StepRecord(
+        round_num=2,
+        branch_id="branch-cvrp-2",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Tune a component policy.",
+            change_locus="destroy_repair_policy",
+            action="modify",
+            target_file="policies/destroy_repair_policy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=1, ties=1, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    context = replace(
+        _cvrp_context(tmp_path),
+        step_history=(failed_solver_design, component_screening),
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    priorities = listed.structured_payload["diagnostic_surface_priorities"]
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    diagnosis = runtime.structured_payload["research_diagnosis"]
+
+    assert priorities["failed_solver_design_surfaces"] == ["solver_design"]
+    assert "solver_design_pre_protocol_failure" in priorities["failure_mode_tags"]
+    assert "candidate failure" in priorities["recommendation"]
+    assert "component policies remain attribution hooks" in priorities["recommendation"]
+    assert diagnosis["failed_solver_design_surfaces"] == ["solver_design"]
+    assert "solver_design_pre_protocol_failure" in diagnosis["failure_mode_tags"]
+    assert "pre-screening candidate failure" in " ".join(
+        diagnosis["next_hypothesis_requirements"]
+    )
+
+
 def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
     tmp_path: Path,
 ) -> None:

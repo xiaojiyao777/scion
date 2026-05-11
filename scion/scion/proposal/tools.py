@@ -2916,6 +2916,10 @@ def _research_diagnosis_payload(
     declared_solver_design_surfaces = _declared_solver_design_surface_names(
         problem_spec
     )
+    failed_solver_design_surfaces = _pre_protocol_failed_solver_design_surface_names(
+        safe_steps,
+        declared_solver_design_surfaces,
+    )
     declared_mechanism_surfaces = (
         []
         if declared_solver_design_surfaces
@@ -3027,6 +3031,8 @@ def _research_diagnosis_payload(
     ]
     if declared_solver_design_surfaces and unselected_solver_design_surfaces:
         failure_tags.add("solver_design_not_selected")
+    if failed_solver_design_surfaces:
+        failure_tags.add("solver_design_pre_protocol_failure")
     if declared_mechanism_surfaces and unselected_mechanism_surfaces:
         failure_tags.add("deep_surface_not_selected")
 
@@ -3036,7 +3042,14 @@ def _research_diagnosis_payload(
         "Change the mechanism or bounded lever, not only wording or novelty text.",
         "State how the implementation remains within declared interface and bounds.",
     ]
-    if unselected_solver_design_surfaces:
+    if failed_solver_design_surfaces:
+        next_requirements.append(
+            "Retry the solver-design boundary with a different lifecycle "
+            "implementation; a pre-screening candidate failure does not retire "
+            "the problem-object surface: "
+            + ", ".join(failed_solver_design_surfaces[:8])
+        )
+    elif unselected_solver_design_surfaces:
         next_requirements.append(
             "Use a solver-design surface that reasons from the problem object "
             "before repeating component policies: "
@@ -3061,6 +3074,7 @@ def _research_diagnosis_payload(
         "reason_code_counts": reason_counts,
         "surface_counts": surface_counts,
         "declared_solver_design_surfaces": declared_solver_design_surfaces,
+        "failed_solver_design_surfaces": failed_solver_design_surfaces,
         "unselected_solver_design_surfaces": unselected_solver_design_surfaces,
         "declared_mechanism_surfaces": declared_mechanism_surfaces,
         "unselected_mechanism_surfaces": unselected_mechanism_surfaces,
@@ -3077,6 +3091,10 @@ def _diagnostic_surface_priorities(
 ) -> dict[str, Any]:
     solver_design_surfaces = _declared_solver_design_surface_names(
         context.problem_spec
+    )
+    failed_solver_design = _pre_protocol_failed_solver_design_surface_names(
+        list(context.step_history),
+        solver_design_surfaces,
     )
     mechanism_surfaces = _declared_mechanism_surface_names(context.problem_spec)
     if not mechanism_surfaces:
@@ -3096,33 +3114,46 @@ def _diagnostic_surface_priorities(
             for surface in solver_design_surfaces
             if surface not in screened_surfaces
         ]
-        failure_mode_tags = (
-            ["solver_design_not_selected"]
-            if has_screening_history and unselected_solver_design
-            else []
-        )
-        next_requirements = (
-            [
+        failure_mode_tags = []
+        if has_screening_history and unselected_solver_design:
+            failure_mode_tags.append("solver_design_not_selected")
+        if failed_solver_design:
+            failure_mode_tags.append("solver_design_pre_protocol_failure")
+        next_requirements = []
+        if failed_solver_design:
+            next_requirements.append(
+                "Retry the problem-object solver-design surface with a "
+                "different lifecycle implementation; the prior failure was a "
+                "candidate failure, not a surface retirement: "
+                + ", ".join(failed_solver_design[:8])
+            )
+        elif has_screening_history and unselected_solver_design:
+            next_requirements.append(
                 "Prioritize a solver-design surface that reasons from the "
                 "problem object before repeating component policies: "
                 + ", ".join(unselected_solver_design[:8])
-            ]
-            if has_screening_history and unselected_solver_design
-            else []
-        )
+            )
+        recommendation = None
+        if failed_solver_design:
+            recommendation = (
+                "Retry the problem-object solver-design boundary; the prior "
+                "pre-protocol result is a candidate failure, and component "
+                "policies remain attribution hooks, not fallback research goals."
+            )
+        elif has_screening_history and unselected_solver_design:
+            recommendation = (
+                "Prioritize the problem-object solver-design surface; "
+                "component policies are attribution hooks, not isolated "
+                "research targets."
+            )
         return _drop_empty_items(
             {
                 "solver_design_surfaces": solver_design_surfaces,
+                "failed_solver_design_surfaces": failed_solver_design,
                 "unselected_solver_design_surfaces": unselected_solver_design,
                 "failure_mode_tags": failure_mode_tags,
                 "next_requirements": next_requirements,
-                "recommendation": (
-                    "Prioritize the problem-object solver-design surface; "
-                    "component policies are attribution hooks, not isolated "
-                    "research targets."
-                    if has_screening_history and unselected_solver_design
-                    else None
-                ),
+                "recommendation": recommendation,
             }
         )
     unselected = [
@@ -3169,6 +3200,26 @@ def _declared_solver_design_surface_names(problem_spec: Any) -> list[str]:
         if kind == "solver_design" or "solver_design" in haystack:
             names.append(name)
     return names
+
+
+def _pre_protocol_failed_solver_design_surface_names(
+    steps: list[StepRecord],
+    solver_design_surfaces: list[str],
+) -> list[str]:
+    if not solver_design_surfaces:
+        return []
+    allowed = set(solver_design_surfaces)
+    failed: list[str] = []
+    for step in _filter_hypothesis_prompt_steps(steps):
+        surface = str(step.hypothesis.change_locus or "").strip()
+        if surface not in allowed:
+            continue
+        if step.protocol_result is not None:
+            continue
+        if step.failure_stage in {"verification", "patch_contract", "workspace"}:
+            if surface not in failed:
+                failed.append(surface)
+    return failed
 
 
 def _declared_mechanism_surface_names(problem_spec: Any) -> list[str]:

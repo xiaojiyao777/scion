@@ -111,6 +111,12 @@ class ContextManager:
             safe_hypothesis_steps, branch.branch_id, taxonomy=family_taxonomy
         )
         blacklist_summary = _summarise_blacklist(blacklist)
+        solver_design_boundary_guidance = _build_solver_design_boundary_guidance(
+            safe_hypothesis_steps,
+            research_surfaces=research_surfaces,
+            blacklist=blacklist,
+            rejected_hypotheses=rejected_hypotheses or [],
+        )
         sibling_summary = _summarise_siblings(sibling_branches or [])
         champion_stats = _build_champion_stats(champion)
         branch_code = (
@@ -267,6 +273,7 @@ class ContextManager:
             "champion_stats": champion_stats,
             "experiment_history": experiment_history,
             "blacklist_summary": blacklist_summary,
+            "solver_design_boundary_guidance": solver_design_boundary_guidance,
             "sibling_summary": sibling_summary,
             "branch_code": branch_code,
             "branch_direction": branch_direction,
@@ -2813,6 +2820,93 @@ def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:
             + (f" → {h.target_file}" if h.target_file else "")
         )
     return "\n".join(lines)
+
+
+def _build_solver_design_boundary_guidance(
+    steps: List[StepRecord],
+    *,
+    research_surfaces: List[Any],
+    blacklist: List[HypothesisRecord],
+    rejected_hypotheses: List[HypothesisRecord],
+) -> str:
+    solver_design_names = _solver_design_surface_names(research_surfaces)
+    if not solver_design_names:
+        return ""
+    failed_solver_design_steps = [
+        step
+        for step in _filter_hypothesis_prompt_steps(steps)
+        if (
+            step.hypothesis.change_locus in solver_design_names
+            and step.failure_stage in {"verification", "patch_contract", "workspace"}
+        )
+    ]
+    blacklisted_solver_design = [
+        item.change_locus
+        for item in blacklist
+        if item.change_locus in solver_design_names
+    ]
+    rejected_solver_design = [
+        item.change_locus
+        for item in rejected_hypotheses
+        if item.change_locus in solver_design_names
+    ]
+    if (
+        not failed_solver_design_steps
+        and not blacklisted_solver_design
+        and not rejected_solver_design
+    ):
+        return ""
+
+    names = ", ".join(solver_design_names)
+    lines = [
+        "## Solver-Design Boundary Control",
+        (
+            "The declared solver-design surface is the problem-level research "
+            f"boundary: {names}."
+        ),
+    ]
+    if failed_solver_design_steps:
+        latest = failed_solver_design_steps[-1]
+        detail = latest.verification_detail or latest.failure_detail or "pre-protocol failure"
+        lines.append(
+            "A prior solver-design candidate failed before screening "
+            f"(round {latest.round_num}, stage={latest.failure_stage}, "
+            f"detail={_first_line(detail)})."
+        )
+    if blacklisted_solver_design:
+        lines.append(
+            "If a solver-design entry appears in the global blacklist, treat "
+            "that as a failed candidate implementation, not as evidence that "
+            "the solver-design boundary is retired."
+        )
+    elif rejected_solver_design:
+        lines.append(
+            "Rejected solver-design entries are candidate implementations only; "
+            "they do not retire the solver-design boundary."
+        )
+    lines.append(
+        "For the next hypothesis, retry the solver-design boundary with a "
+        "different lifecycle implementation before falling back to isolated "
+        "component policies."
+    )
+    lines.append(
+        "Component policies may be used as implementation hooks or attribution "
+        "evidence, but they are not replacement research goals for this diagnostic."
+    )
+    return "\n".join(lines)
+
+
+def _solver_design_surface_names(research_surfaces: List[Any]) -> list[str]:
+    names: list[str] = []
+    for surface in research_surfaces:
+        name = str(getattr(surface, "name", "") or "").strip()
+        if not name:
+            continue
+        kind = str(getattr(surface, "kind", "") or "").strip().lower()
+        role = str(getattr(getattr(surface, "algorithm", None), "role", "") or "").lower()
+        if kind == "solver_design" or "solver_design" in role:
+            names.append(name)
+    return names
 
 
 def _summarise_siblings(siblings: List[Branch]) -> str:

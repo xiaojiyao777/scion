@@ -179,8 +179,12 @@ surface counts, generic failure-mode tags, and runtime-highlight fields with
 numeric signal or evidence-contract issues. When a problem declares a
 `solver_design` surface, diagnosis prioritizes that problem-object boundary
 before component policies; otherwise it can fall back to mechanism-surface
-coverage from declared metadata. It also tags all-zero phase/objective delta
-fields and accepted/recovery movement that lacks phase-level benefit. It
+coverage from declared metadata. If a solver-design candidate failed before
+screening, diagnosis tags `solver_design_pre_protocol_failure` and recommends
+retrying that boundary with a different lifecycle implementation; component
+policies remain implementation/attribution hooks, not fallback research goals.
+It also tags all-zero phase/objective delta fields and accepted/recovery
+movement that lacks phase-level benefit. It
 deliberately avoids reading validation/frozen detail or raw metric refs.
 
 APS stores a compact diagnosis derived from successful feedback observations
@@ -233,6 +237,8 @@ Hypothesis context includes:
 - champion research-surface code and policy surface code;
 - branch-specific history from `StepRecord`;
 - blacklist and active hypothesis summaries;
+- solver-design boundary-control guidance when a top-level solver-design
+  candidate failed before screening;
 - sibling branch summary;
 - exploration coverage and strategy guidance;
 - recent screening objective feedback and objective opportunity profile;
