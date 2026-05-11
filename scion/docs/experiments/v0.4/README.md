@@ -36,6 +36,7 @@ referenced, not copied into development prompts.
 - [Forced destroy repair policy Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md)
 - [Forced destroy repair policy prompt-repair Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)
 - [Forced destroy repair policy selector-repair Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md)
+- [Forced destroy repair policy enum-interface Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md)
 
 ## Related
 

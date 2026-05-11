@@ -74,10 +74,11 @@ Important current interpretation:
   `destroy_repair_policy` selector semantics.
 - They do not yet validate solver efficacy. Screened candidates still fail
   quality thresholds, and phase-best movement remains zero.
-- The current `destroy_repair_policy` follow-up is interface clarity: valid
-  `destroy_selectors`, `repair_selectors`, and `subset_strategy` values are
-  now rendered explicitly after the latest run showed agents mixing those enum
-  sets.
+- The latest forced `destroy_repair_policy` enum-interface rerun validates
+  selector clarity but exhausts that surface for the current solver-owned
+  mechanism: valid candidates still produced zero accepted movement.
+- The next short forced diagnostic should target `route_pair_candidate_policy`,
+  not another `destroy_repair_policy` run.
 - Do not run long CVRP solver-quality validation until a short diagnostic shows
   nonzero phase-best improvement and screening-quality movement.
 
