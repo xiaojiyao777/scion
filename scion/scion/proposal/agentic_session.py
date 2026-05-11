@@ -57,7 +57,9 @@ _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
 )
 _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
-_APS_SURFACE_READ_CODE_CHARS = 1200
+_APS_SURFACE_READ_CODE_CHARS = 800
+_SELF_CHECK_TOOL_CALL_RESERVE = 4
+_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 8000
 
 
 class AgenticProposalStatus(str, Enum):
@@ -1180,6 +1182,27 @@ class AgenticProposalSession:
                     },
                 )
                 continue
+            if self._diagnosis_budget_reserved(state) and (
+                self._missing_required_context_error(observations) is None
+                or name not in {"context.list_surfaces", "context.read_problem"}
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Stopped fixed proposal tool plan to reserve self-check budget.",
+                    metadata={
+                        "tool_name": name,
+                        "status": "skipped",
+                        "selection_source": selection_source,
+                        "fallback": "fixed_tool_plan",
+                        "skip_reason": "self_check_budget_reserved",
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                        "remaining_steps": self._remaining_tool_steps(state),
+                        "remaining_observation_chars": self._remaining_observation_chars(
+                            state
+                        ),
+                    },
+                )
+                break
             if self._tool_loop_limit_reached(state):
                 self._record_loop_stop(state, self._current_loop_stop_reason(state))
                 break
@@ -1263,6 +1286,26 @@ class AgenticProposalSession:
             if self._planner_context_satisfied(context, observations):
                 self._record_loop_stop(state, "required_context_satisfied")
                 break
+            if (
+                self._diagnosis_budget_reserved(state)
+                and self._missing_required_context_error(observations) is None
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Stopped planner proposal tool loop to reserve self-check budget.",
+                    metadata={
+                        "stop_reason": "self_check_budget_reserved",
+                        "tool_steps": state.tool_step_count,
+                        "tool_calls": state.tool_call_count,
+                        "observation_chars_used": state.observation_chars_used,
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                        "remaining_steps": self._remaining_tool_steps(state),
+                        "remaining_observation_chars": self._remaining_observation_chars(
+                            state
+                        ),
+                    },
+                )
+                break
             planner_context = {
                 "session_id": state.session_id,
                 "phase": state.phase.value,
@@ -1274,12 +1317,17 @@ class AgenticProposalSession:
                 else (),
                 "tool_arg_guidance": self._tool_arg_guidance(context, observations),
                 "hypothesis_constraints": self._hypothesis_constraints(context),
-                "remaining_steps": max(
-                    0, self._tool_loop_config.max_steps - state.tool_step_count
-                ),
-                "remaining_tool_calls": max(
-                    0, self._tool_loop_config.max_tool_calls - state.tool_call_count
-                ),
+                "remaining_steps": self._remaining_tool_steps(state),
+                "remaining_tool_calls": self._remaining_tool_calls(state),
+                "reserved_for_self_check": {
+                    "tool_calls": self._self_check_tool_call_reserve(),
+                    "steps": self._self_check_step_reserve(),
+                    "observation_chars": self._self_check_observation_reserve_chars(),
+                    "purpose": (
+                        "selected surface read plus schema, target/action, and "
+                        "Contract preview"
+                    ),
+                },
                 "observations": [
                     _observation_selection_payload(observation)
                     for observation in observations
@@ -1974,6 +2022,48 @@ class AgenticProposalSession:
             int(self._tool_loop_config.max_observation_chars)
             - int(state.observation_chars_used),
         )
+
+    def _remaining_tool_calls(self, state: AgenticProposalSessionState) -> int:
+        return max(
+            0,
+            int(self._tool_loop_config.max_tool_calls) - int(state.tool_call_count),
+        )
+
+    def _remaining_tool_steps(self, state: AgenticProposalSessionState) -> int:
+        return max(0, int(self._tool_loop_config.max_steps) - int(state.tool_step_count))
+
+    def _self_check_tool_call_reserve(self) -> int:
+        max_calls = max(0, int(self._tool_loop_config.max_tool_calls))
+        if max_calls < 8:
+            return 0
+        return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_calls // 3)
+
+    def _self_check_step_reserve(self) -> int:
+        max_steps = max(0, int(self._tool_loop_config.max_steps))
+        if max_steps < 8:
+            return 0
+        return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_steps // 3)
+
+    def _self_check_observation_reserve_chars(self) -> int:
+        max_chars = max(0, int(self._tool_loop_config.max_observation_chars))
+        if max_chars < _SELF_CHECK_OBSERVATION_RESERVE_CHARS * 2:
+            return 0
+        return min(_SELF_CHECK_OBSERVATION_RESERVE_CHARS, max_chars // 4)
+
+    def _diagnosis_budget_reserved(self, state: AgenticProposalSessionState) -> bool:
+        call_reserve = self._self_check_tool_call_reserve()
+        if call_reserve and self._remaining_tool_calls(state) <= call_reserve:
+            return True
+        step_reserve = self._self_check_step_reserve()
+        if step_reserve and self._remaining_tool_steps(state) <= step_reserve:
+            return True
+        observation_reserve = self._self_check_observation_reserve_chars()
+        if (
+            observation_reserve
+            and self._remaining_observation_chars(state) <= observation_reserve
+        ):
+            return True
+        return False
 
     def _observation_budget_exhausted(
         self,

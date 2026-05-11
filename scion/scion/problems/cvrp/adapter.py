@@ -455,6 +455,11 @@ class CvrpAdapter:
                 "    return a dict with enabled bool, components drawn from "
                 "'alns'/'vns', component_weights in [0.0, 5.0], and bounded "
                 "baseline params.\n\n"
+                "Runtime evidence records attempts, active baseline mode, "
+                "initial distance, returned distance, objective delta, phase "
+                "delta sum, runtime, and stop reason. A useful diagnostic "
+                "should predict which before/after objective field changes, "
+                "not only attempts or active flags.\n\n"
                 + _POLICY_INSTANCE_API_TEXT
             )
         if surface_name == "destroy_repair_policy":

@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-05-11*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -32,6 +32,7 @@ referenced, not copied into development prompts.
 - [APS evidence render Sonnet 5R smoke, 2026-05-10](v0.4-aps-evidence-render-sonnet-5r-20260510.md)
 - [Perturbation schedule Sonnet 8R smoke, 2026-05-10](v0.4-perturbation-schedule-sonnet-8r-20260510.md)
 - [Deep mechanism surfaces Sonnet 8R smoke, 2026-05-10](v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md)
+- [Post-optimization validation Sonnet 8R smoke, 2026-05-11](v0.4-post-optimization-validation-sonnet-8r-20260511.md)
 
 ## Related
 

@@ -392,7 +392,11 @@ def solve_baseline(
                 baseline_required=baseline_required,
                 baseline_policy_params=baseline_policy_params,
             )
-            alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, audit)
+            alns_audit = _finalize_alns_vns_policy_audit(
+                alns_vns_policy,
+                audit,
+                construction_audit=construction_audit,
+            )
             return solution, {
                 **construction_audit,
                 **baseline_policy_audit,
@@ -413,6 +417,7 @@ def solve_baseline(
             alns_audit = _finalize_alns_vns_policy_audit(
                 alns_vns_policy,
                 baseline_error_audit,
+                construction_audit=construction_audit,
             )
             return fallback, {
                 **construction_audit,
@@ -430,7 +435,11 @@ def solve_baseline(
             "baseline_routes": len(fallback.routes),
             "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
         }
-        alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, baseline_error_audit)
+        alns_audit = _finalize_alns_vns_policy_audit(
+            alns_vns_policy,
+            baseline_error_audit,
+            construction_audit=construction_audit,
+        )
         return fallback, {
             **construction_audit,
             **baseline_policy_audit,
@@ -446,7 +455,11 @@ def solve_baseline(
         "baseline_routes": len(fallback.routes),
         "baseline_cost": sum(instance.route_distance(r) for r in fallback.routes),
     }
-    alns_audit = _finalize_alns_vns_policy_audit(alns_vns_policy, baseline_audit)
+    alns_audit = _finalize_alns_vns_policy_audit(
+        alns_vns_policy,
+        baseline_audit,
+        construction_audit=construction_audit,
+    )
     return fallback, {
         **construction_audit,
         **baseline_policy_audit,
@@ -5455,6 +5468,9 @@ def _alns_vns_policy_defaults() -> dict[str, Any]:
         "alns_vns_baseline_params": {},
         "alns_vns_attempts": 0,
         "alns_vns_accepted": 0,
+        "alns_vns_initial_distance": 0.0,
+        "alns_vns_returned_distance": 0.0,
+        "alns_vns_objective_delta": {},
         "alns_vns_phase_delta_sum": 0.0,
         "alns_vns_runtime_ms": 0,
         "alns_vns_stop_reason": "inactive",
@@ -5525,6 +5541,8 @@ def _normalize_alns_vns_plan(plan: dict[str, Any], *, audit: dict[str, Any]) -> 
 def _finalize_alns_vns_policy_audit(
     alns_vns_policy: Mapping[str, Any] | None,
     baseline_audit: Mapping[str, Any],
+    *,
+    construction_audit: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     audit = dict(alns_vns_policy or _alns_vns_policy_defaults())
     if not bool(audit.get("alns_vns_active")):
@@ -5537,8 +5555,40 @@ def _finalize_alns_vns_policy_audit(
         baseline_audit.get("baseline_iterations")
     )
     audit["alns_vns_accepted"] = 1 if mode == "vrp_alns_vns" else 0
+    start_distance = _coerce_optional_float(
+        (construction_audit or {}).get("construction_distance")
+    )
+    returned_distance = _coerce_optional_float(baseline_audit.get("baseline_cost"))
+    if start_distance is not None:
+        audit["alns_vns_initial_distance"] = round(start_distance, 6)
+    if returned_distance is not None:
+        audit["alns_vns_returned_distance"] = round(returned_distance, 6)
+    phase_delta = 0.0
+    if mode == "vrp_alns_vns" and start_distance is not None and returned_distance is not None:
+        phase_delta = max(0.0, start_distance - returned_distance)
+    audit["alns_vns_phase_delta_sum"] = round(phase_delta, 6)
+    audit["alns_vns_objective_delta"] = {
+        "baseline_phase": round(phase_delta, 6),
+        "initial_distance": (
+            round(start_distance, 6) if start_distance is not None else None
+        ),
+        "returned_distance": (
+            round(returned_distance, 6) if returned_distance is not None else None
+        ),
+    }
     audit["alns_vns_stop_reason"] = mode or "baseline_not_run"
     return audit
+
+
+def _coerce_optional_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _record_alns_vns_event(audit: dict[str, Any], status: str, detail: str) -> None:

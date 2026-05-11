@@ -87,7 +87,8 @@ Solver flow:
      repo-local baseline;
    - active `alns_vns_policy` overlays the same sanitized baseline kwargs and
      records ALNS/VNS component, segment, destroy-ratio, attempt, accepted,
-     runtime, and stop-reason telemetry;
+     runtime, stop-reason, construction-start distance, returned baseline
+     distance, baseline phase delta, and objective-delta telemetry;
    - active `main_search_strategy` baseline params reuse the same sanitization
      path before passing kwargs into the repo-local baseline, and conservative
      no-op/clamp evidence is recorded as a non-empty JSON-safe runtime object;
@@ -230,7 +231,8 @@ bounded ALNS/VNS component set (`alns`, `vns`), component weights, and the same
 sanitized repo-local baseline parameters accepted by `baseline_policy`. The
 solver overlays those params onto baseline kwargs and records surface load,
 active/error status, normalized plan, components, weights, segment/destroy
-schedules, attempts, accepted flag, phase delta sum, runtime, and stop reason.
+schedules, attempts, accepted flag, construction-start distance, returned
+baseline distance, objective deltas, phase delta sum, runtime, and stop reason.
 
 `policies/destroy_repair_policy.py` is a singleton deep mechanism research
 surface. Required function:
@@ -456,7 +458,8 @@ auditing:
 
 - `alns_vns_policy`: load/active/error status, normalized plan, components,
   component weights, segment/destroy schedules, attempts, accepted count, phase
-  delta sum, runtime, and stop reason.
+  delta sum, construction-start distance, returned baseline distance,
+  objective deltas, runtime, and stop reason.
 - `destroy_repair_policy`: load/active/error status, selectors, subset
   strategy, destroy/repair budgets, subset count, removed/reinserted counts,
   repair budget/fallback counters, accepted current/recovery/phase-best counts,

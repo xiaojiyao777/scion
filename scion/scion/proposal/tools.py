@@ -483,6 +483,10 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
             "surface_count": len(surfaces),
             "total_declared_surface_count": len(declared_surfaces),
             "surfaces": [_surface_listing_payload(surface) for surface in surfaces],
+            "diagnostic_surface_priorities": _diagnostic_surface_priorities(
+                context,
+                declared_surfaces,
+            ),
             "detail": "compact",
             "forced_surface_constraint": _forced_surface_constraint_payload(context),
         }
@@ -965,6 +969,7 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
             "research_diagnosis": _research_diagnosis_payload(
                 safe_steps,
                 max_items=args.max_items,
+                problem_spec=context.problem_spec,
             ),
             "screening_only": True,
             "metrics_file_refs_exposed": False,
@@ -2597,6 +2602,9 @@ def _path_has_symlink_component(root: Path, normalized_rel_path: str) -> bool:
 
 
 _RUNTIME_ATTRIBUTION_SUFFIXES = (
+    "_initial_distance",
+    "_returned_distance",
+    "_objective_delta",
     "_active",
     "_loaded",
     "_errors",
@@ -2626,8 +2634,11 @@ _RUNTIME_ATTRIBUTION_SUFFIXES = (
 
 _RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES = (
     "_objective_trace",
+    "_objective_delta",
     "_delta_by_phase",
     "_phase_delta_sum",
+    "_initial_distance",
+    "_returned_distance",
     "_phase_best_delta",
     "_phase_improvement_counts",
     "_recovery_delta_sum",
@@ -2703,6 +2714,7 @@ def _research_diagnosis_payload(
     safe_steps: list[StepRecord],
     *,
     max_items: int,
+    problem_spec: Any = None,
 ) -> dict[str, Any]:
     screening_steps = [
         step
@@ -2719,6 +2731,7 @@ def _research_diagnosis_payload(
     failure_tags: set[str] = set()
     recent_rows: list[dict[str, Any]] = []
     runtime_signal_rows: list[dict[str, Any]] = []
+    declared_mechanism_surfaces = _declared_mechanism_surface_names(problem_spec)
 
     for step in recent_steps:
         protocol = step.protocol_result
@@ -2748,6 +2761,9 @@ def _research_diagnosis_payload(
         runtime_fields = []
         runtime_issue_fields = []
         runtime_nonzero_fields = []
+        zero_phase_delta_fields = []
+        accepted_signal_fields = []
+        recovery_signal_fields = []
         for highlight in attribution.get("runtime_field_highlights", []) or []:
             if not isinstance(highlight, Mapping):
                 continue
@@ -2762,10 +2778,25 @@ def _research_diagnosis_payload(
                 runtime_issue_fields.append(field)
             if _runtime_highlight_has_nonzero_numeric(highlight):
                 runtime_nonzero_fields.append(field)
+                if "accepted" in field:
+                    accepted_signal_fields.append(field)
+                if "recovery" in field:
+                    recovery_signal_fields.append(field)
+            if (
+                ("phase_delta" in field or field.endswith("_delta_by_phase"))
+                and _runtime_highlight_is_all_zero_numeric(highlight)
+            ):
+                zero_phase_delta_fields.append(field)
         if runtime_issue_fields:
             failure_tags.add("runtime_evidence_contract_issue")
         if runtime_nonzero_fields and gate != "pass":
             failure_tags.add("runtime_signal_without_protocol_pass")
+        if zero_phase_delta_fields:
+            failure_tags.add("zero_phase_delta")
+        if zero_phase_delta_fields and accepted_signal_fields:
+            failure_tags.add("accepted_signal_without_phase_delta")
+        if zero_phase_delta_fields and recovery_signal_fields:
+            failure_tags.add("recovery_only_accepted_moves")
         if runtime_fields:
             runtime_signal_rows.append(
                 _drop_empty_items(
@@ -2775,6 +2806,9 @@ def _research_diagnosis_payload(
                         "gate_outcome": gate,
                         "highlight_fields": runtime_fields[:8],
                         "nonzero_numeric_fields": runtime_nonzero_fields[:8],
+                        "zero_phase_delta_fields": zero_phase_delta_fields[:8],
+                        "accepted_signal_fields": accepted_signal_fields[:8],
+                        "recovery_signal_fields": recovery_signal_fields[:8],
                         "issue_fields": runtime_issue_fields[:8],
                     }
                 )
@@ -2790,6 +2824,32 @@ def _research_diagnosis_payload(
             }
         )
 
+    unselected_mechanism_surfaces = [
+        surface
+        for surface in declared_mechanism_surfaces
+        if surface not in surface_counts
+    ]
+    if declared_mechanism_surfaces and unselected_mechanism_surfaces:
+        failure_tags.add("deep_surface_not_selected")
+
+    next_requirements = [
+        "Name the screening/runtime evidence pattern being addressed.",
+        "State which declared surface evidence fields are expected to change.",
+        "Change the mechanism or bounded lever, not only wording or novelty text.",
+        "State how the implementation remains within declared interface and bounds.",
+    ]
+    if unselected_mechanism_surfaces:
+        next_requirements.append(
+            "Exercise an unselected mechanism surface before repeating older "
+            "orchestration surfaces: "
+            + ", ".join(unselected_mechanism_surfaces[:8])
+        )
+    if "zero_phase_delta" in failure_tags:
+        next_requirements.append(
+            "Explain how the candidate should move phase-best/objective-delta "
+            "runtime fields, not only attempts or accepted counts."
+        )
+
     return {
         "schema_version": "research-diagnosis.v1",
         "screening_only": True,
@@ -2797,16 +2857,110 @@ def _research_diagnosis_payload(
         "recent_screening_steps": recent_rows,
         "reason_code_counts": reason_counts,
         "surface_counts": surface_counts,
+        "declared_mechanism_surfaces": declared_mechanism_surfaces,
+        "unselected_mechanism_surfaces": unselected_mechanism_surfaces,
         "gate_outcome_counts": gate_counts,
         "failure_mode_tags": sorted(failure_tags),
         "runtime_signal_rows": runtime_signal_rows,
-        "next_hypothesis_requirements": [
-            "Name the screening/runtime evidence pattern being addressed.",
-            "State which declared surface evidence fields are expected to change.",
-            "Change the mechanism or bounded lever, not only wording or novelty text.",
-            "State how the implementation remains within declared interface and bounds.",
-        ],
+        "next_hypothesis_requirements": next_requirements,
     }
+
+
+def _diagnostic_surface_priorities(
+    context: ProposalToolContext,
+    declared_surfaces: tuple[Any, ...],
+) -> dict[str, Any]:
+    mechanism_surfaces = _declared_mechanism_surface_names(context.problem_spec)
+    if not mechanism_surfaces:
+        mechanism_surfaces = _mechanism_surface_names_from_surfaces(declared_surfaces)
+    screened_surfaces = {
+        step.hypothesis.change_locus
+        for step in _filter_hypothesis_prompt_steps(list(context.step_history))
+        if (
+            step.protocol_result is not None
+            and step.protocol_result.stage == ExperimentStage.SCREENING
+        )
+    }
+    unselected = [surface for surface in mechanism_surfaces if surface not in screened_surfaces]
+    return _drop_empty_items(
+        {
+            "mechanism_surfaces": mechanism_surfaces,
+            "unselected_mechanism_surfaces": unselected,
+            "recommendation": (
+                "Prioritize one unselected mechanism surface for the next short "
+                "diagnostic before repeating orchestration or legacy policy surfaces."
+                if unselected
+                else None
+            ),
+        }
+    )
+
+
+def _declared_mechanism_surface_names(problem_spec: Any) -> list[str]:
+    if problem_spec is None:
+        return []
+    return _mechanism_surface_names_from_surfaces(_get_research_surfaces(problem_spec))
+
+
+def _mechanism_surface_names_from_surfaces(surfaces: Any) -> list[str]:
+    names: list[str] = []
+    for surface in surfaces or ():
+        name = str(_attr(surface, "name") or "").strip()
+        if not name:
+            continue
+        role = _attr(_attr(surface, "algorithm"), "role", "")
+        description = _attr(_attr(surface, "algorithm"), "description", "")
+        kind = str(_attr(surface, "kind", "") or "")
+        haystack = f"{role} {description} {kind} {name}".lower()
+        if (
+            "mechanism" in haystack
+            or "candidate_generation" in haystack
+            or kind == "acceptance_restart"
+        ):
+            names.append(name)
+    return names
+
+
+def _runtime_highlight_is_all_zero_numeric(highlight: Mapping[str, Any]) -> bool:
+    numeric = highlight.get("numeric_summary")
+    if not isinstance(numeric, Mapping):
+        return False
+    summaries = _runtime_numeric_leaf_summaries(numeric)
+    if not summaries:
+        return False
+    observed = False
+    for summary in summaries:
+        try:
+            count = int(summary.get("observed_count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count <= 0:
+            continue
+        observed = True
+        if _safe_positive_int(summary.get("nonzero_count")):
+            return False
+        try:
+            if abs(float(summary.get("weighted_sum") or 0.0)) > 1e-12:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return observed
+
+
+def _runtime_numeric_leaf_summaries(numeric: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    summaries: list[Mapping[str, Any]] = []
+    stack: list[Any] = [numeric]
+    while stack:
+        value = stack.pop()
+        if not isinstance(value, Mapping):
+            continue
+        if "observed_count" in value and (
+            "nonzero_count" in value or "weighted_sum" in value
+        ):
+            summaries.append(value)
+            continue
+        stack.extend(value.values())
+    return summaries
 
 
 def _runtime_highlight_has_nonzero_numeric(highlight: Mapping[str, Any]) -> bool:

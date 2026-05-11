@@ -117,8 +117,9 @@ reread an already successful selected `context.read_surface`.
 Planner-selected duplicate reads of reusable observations switch to the same
 missing-only fallback instead of consuming another large observation.
 Surface tool observations are compact by default:
-`context.list_surfaces` exposes only selection-oriented metadata plus any active
-forced-surface constraint. During forced-surface diagnostics,
+`context.list_surfaces` exposes only selection-oriented metadata, generic
+diagnostic surface priorities, plus any active forced-surface constraint.
+During forced-surface diagnostics,
 `context.list_surfaces` returns the forced surface's compact listing plus the
 total declared-surface count, avoiding repeated full design-space listings
 while preserving the constraint record. `context.read_surface` defaults to
@@ -128,7 +129,7 @@ interface text and champion-code preview. Compact surface reads omit full prompt
 guidance blocks and full target-file content; `detail="full"`, `section`, and
 `max_code_chars` are explicit opt-ins for debug, paging, or deeper inspection.
 Within `AgenticProposalSession`, surface reads are further normalized to compact
-`max_code_chars=1200` observations before execution. If a returned observation
+`max_code_chars=800` observations before execution. If a returned observation
 would exceed the remaining session observation budget, APS stores a bounded
 `result_too_large` summary instead of the original payload before incrementing
 `tool_budget_used.observation_chars`. Optional planner-selected
@@ -140,6 +141,10 @@ steps and 12 tool calls so the normal read-feedback-schema-target-contract path
 has room after evidence diagnosis is rendered. The default APS observation
 budget is 48,000 chars; compactness is still enforced first, and the larger cap
 only gives room for the normal list/problem/feedback/selected-surface sequence.
+APS also reserves a small terminal budget for self-check/static-preview tools:
+after required diagnosis context has been collected, bounded planner and fixed
+fallback reads stop before consuming the tool-call, step, or observation-char
+reserve needed for schema, target/action, interface, and Contract previews.
 Screening and runtime feedback tools also bound their compact JSON payloads before the
 registry size guard, so available compact feedback can still succeed without
 exposing raw metric refs when runtime summaries are unusually large. Screening
@@ -164,8 +169,11 @@ fail-closed forced-surface guard.
 Runtime feedback now also returns a generic `research_diagnosis` payload. It
 summarizes only screening-stage history, reason-code counts, gate outcomes,
 surface counts, generic failure-mode tags, and runtime-highlight fields with
-numeric signal or evidence-contract issues. It deliberately does not interpret
-problem-specific field names.
+numeric signal or evidence-contract issues. It derives mechanism-surface
+coverage from declared research-surface metadata, not hardcoded CVRP surface
+names, and can tag unexercised deep/mechanism surfaces, all-zero phase/objective
+delta fields, and accepted/recovery movement that lacks phase-level benefit. It
+deliberately avoids reading validation/frozen detail or raw metric refs.
 
 APS stores a compact diagnosis derived from successful feedback observations
 on both hypothesis and code contexts. `CreativeLayer` renders this diagnosis

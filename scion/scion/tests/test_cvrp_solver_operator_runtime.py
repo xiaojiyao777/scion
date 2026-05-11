@@ -880,8 +880,43 @@ def test_alns_vns_policy_overrides_repo_local_baseline_kwargs(
     assert audit["alns_vns_component_weights"] == {"alns": 2.5, "vns": 0.5}
     assert audit["alns_vns_attempts"] == 4
     assert audit["alns_vns_accepted"] == 1
+    assert audit["alns_vns_initial_distance"] == 6.0
+    assert audit["alns_vns_returned_distance"] == 28.0
+    assert audit["alns_vns_phase_delta_sum"] == 0.0
+    assert audit["alns_vns_objective_delta"] == {
+        "baseline_phase": 0.0,
+        "initial_distance": 6.0,
+        "returned_distance": 28.0,
+    }
     assert audit["alns_vns_runtime_ms"] == 20
     assert audit["alns_vns_stop_reason"] == "vrp_alns_vns"
+
+
+def test_alns_vns_policy_audit_records_positive_baseline_phase_delta() -> None:
+    policy = cvrp_solver._alns_vns_policy_defaults()
+    policy["alns_vns_active"] = True
+
+    audit = cvrp_solver._finalize_alns_vns_policy_audit(
+        policy,
+        {
+            "baseline_mode": "vrp_alns_vns",
+            "baseline_elapsed_s": 0.5,
+            "baseline_iterations": 12,
+            "baseline_cost": 90.0,
+        },
+        construction_audit={"construction_distance": 125.0},
+    )
+
+    assert audit["alns_vns_attempts"] == 12
+    assert audit["alns_vns_accepted"] == 1
+    assert audit["alns_vns_initial_distance"] == 125.0
+    assert audit["alns_vns_returned_distance"] == 90.0
+    assert audit["alns_vns_phase_delta_sum"] == 35.0
+    assert audit["alns_vns_objective_delta"] == {
+        "baseline_phase": 35.0,
+        "initial_distance": 125.0,
+        "returned_distance": 90.0,
+    }
 
 
 def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(

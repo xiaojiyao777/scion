@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-05-11*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -10,8 +10,11 @@ handoff. Historical repair and experiment notes were moved to
 ## Status
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
-governance path is largely behaving, but CVRP `main_search_strategy` has not
-yet produced case-level improvement.
+governance path is largely behaving, but CVRP short diagnostics still have not
+produced reliable phase-best movement or screening-quality improvement.
+The post-run optimization slice now targets the main control-plane gaps found
+in the latest smoke: budget pressure before previews, shallow repeated surface
+selection, and weak deep-mechanism attribution.
 
 Current branch: `v0.4-dev`
 
@@ -32,14 +35,23 @@ Current interpretation:
   mechanism surface family with contracts, preview checks, and runtime audit:
   ALNS/VNS policy, destroy/repair policy, route-pair candidate policy, and
   acceptance/restart policy.
-- APS observation budget for CVRP deep-surface diagnostics now uses the 48k
-  default; the old 24k legacy budget is too tight once all mechanism contracts
-  are visible.
-- Latest campaign smoke evidence still predates that surface family and shows
-  zero phase-best movement:
-  `main_search_component_phase_delta_sum`, phase-improvement counts, and
-  improvement-loop objective delta stayed zero for every screened candidate
-  pair in the latest run.
+- APS observation handling for CVRP deep-surface diagnostics now uses the 48k
+  default, compact 800-character surface code previews, and an explicit
+  terminal reserve for schema/target/interface/Contract previews after
+  required diagnosis context has been gathered.
+- The latest free-surface deep-mechanism smoke exercised the expanded surface
+  set but selected only one new deep mechanism surface, `alns_vns_policy`.
+  `destroy_repair_policy`, `route_pair_candidate_policy`, and
+  `acceptance_restart_policy` were not selected.
+- Latest campaign smoke evidence still shows zero attributed phase-best
+  movement in the raw pre-optimization artifacts.
+  `main_search_component_phase_delta_sum`,
+  `main_search_component_phase_improvement_counts`,
+  `main_search_objective_delta_by_phase.improvement_loop`, and
+  `alns_vns_phase_delta_sum` stayed zero in the relevant screened candidates.
+  New ALNS/VNS audit fields now also record construction-start distance,
+  returned baseline distance, and objective deltas so the next diagnostic can
+  distinguish true zero mechanism benefit from missing phase attribution.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -71,8 +83,10 @@ phase-best improvement and screening-quality movement.
 - APS feedback defaults to same-campaign or forced-surface history for forced
   diagnostics.
 - Tool observations are rendered into final hypothesis/code prompts.
-- Observation-budget pressure is improved but still a recurring risk for large
-  schema/contract previews.
+- Observation-budget pressure is mitigated by compact surface reads and a
+  self-check/static-preview reserve; the current eight-round
+  post-optimization smoke is validating whether that holds in a live APS
+  campaign.
 
 ### CVRP Runtime
 
@@ -105,7 +119,7 @@ CVRP currently exposes these declared surfaces:
 - `route_pair_candidate_policy`
 - `acceptance_restart_policy`
 
-`main_search_strategy` is the preferred current diagnostic surface. It is a
+`main_search_strategy` is the orchestration diagnostic surface. It is a
 singleton policy in `policies/main_search_strategy.py` and can coordinate:
 
 - bounded construction ensemble;
@@ -123,64 +137,80 @@ selection and repair budgets, route-pair candidate ranking, and
 acceptance/restart/perturbation behavior. Active destroy/repair, route-pair, or
 acceptance/restart mechanism policies can also trigger a package-owned default
 main-search diagnostic plan, so those surfaces can generate runtime evidence
-without simultaneously modifying `main_search_strategy.py`. Next validation
-should be short and diagnostic-focused, proving nonzero mechanism-level behavior
-before long formal CVRP validation.
+without simultaneously modifying `main_search_strategy.py`. Proposal feedback
+now exposes generic diagnostic priorities and tags deep/mechanism surfaces that
+have not yet been exercised, all-zero phase/objective-delta fields, and
+accepted/recovery movement without phase-level benefit. Next validation should
+be short and diagnostic-focused, forcing or otherwise prioritizing one deep
+mechanism surface at a time before any long formal CVRP validation.
 
 ## Latest Experiment
 
-Active diagnostic run:
+Latest launched run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-deep-mechanism-surfaces-sonnet-8r-20260510T161028Z
-pid=2468567
+run_root=/home/clawd/research/scion-experiments/v04-post-optimization-validation-sonnet-8r-20260511T020518Z
 model=claude-sonnet-4-6
+problem=cvrp
 protocol=formal
-rounds=8
-time_limit_sec=15
+rounds=8 requested
+time_limit_sec=20
 agentic_proposal=true
+agentic_session_timeout_sec=240
 force_surface=none
 status=running
-analysis_doc=scion/docs/experiments/v0.4/v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md
+tmux_session=scion_v04_postopt_8r_20260511T020518Z
+tracking_doc=scion/docs/experiments/v0.4/v0.4-post-optimization-validation-sonnet-8r-20260511.md
 ```
+
+This run uses the post-optimization dirty worktree intentionally. It is a
+short diagnostic to validate preview visibility, deep-surface selection
+guidance, runtime diagnosis tags, and ALNS/VNS before/after attribution. It is
+not long CVRP solver-quality validation.
 
 Latest analyzed run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-perturbation-schedule-sonnet-8r-20260510T125915Z
-scion_commit=c0d0c57
+run_root=/home/clawd/research/scion-experiments/v04-deep-mechanism-surfaces-sonnet-8r-20260510T161028Z
 model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
 rounds=8/8
 time_limit_sec=15
-force_surface=main_search_strategy
-exit_code=0
-analysis_doc=scion/docs/experiments/v0.4/v0.4-perturbation-schedule-sonnet-8r-20260510.md
+agentic_proposal=true
+force_surface=none
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md
 ```
 
 Summary:
 
-- The run completed normally with five candidates reaching screening.
-- Forced surface held for all hypotheses and code sessions:
-  `modify/main_search_strategy -> policies/main_search_strategy.py`.
-- APS used same-campaign screening/runtime feedback after prior rounds and
-  rendered diagnosis/tool observations into prompts.
-- The new `perturbation.schedule` field was exercised:
-  `after_no_improvement`, `before_first_round`, `before_each_round`, and
-  disabled perturbation.
+- The run completed normally with seven candidates reaching screening.
+- Free-surface APS selected several declared surfaces:
+  `main_search_strategy`, `baseline_policy`, `route_local`,
+  `algorithm_blueprint`, `construction_policy`, and `alns_vns_policy`.
+- Only one newly added deep mechanism surface was selected:
+  `alns_vns_policy` in R8. The other new deep surfaces were not exercised.
+- R1 failed hypothesis Contract at `C10_novelty` because
+  `novelty_signature` was empty. R2-R8 passed Contract and Verification.
 - All screened candidates failed `SCREENING_FAIL_WIN_RATE`; best case-level
-  win rate was `0.25`, and `median_delta=0.0` throughout.
-- R4 failed hypothesis Contract at `C10_novelty` because the hypothesis omitted
-  usable structured `novelty_signature` fields.
-- R5/R7 passed proposal Contract but failed Verification because shallow-only
-  plans left `main_search_deep_components_selected` empty.
-- Runtime evidence showed accepted local moves did not become phase-best or
-  case-level benefit.
+  win rate was `0.125`, and `median_delta=0.0` throughout.
+- `main_search_strategy` still produced recovery-only local movement:
+  accepted route-pair moves did not update phase-best evidence, and
+  `bounded_destroy_repair` accepted zero moves.
+- R8 activated `alns_vns_policy` and produced three seed-level wins with no
+  losses, but `alns_vns_phase_delta_sum` stayed zero for all 16 pairs.
+- Before this optimization slice, the 48k APS observation budget still left
+  many context observations truncated and every completed code session skipped
+  Contract preview.
 
-Interpretation: `c0d0c57` validates perturbation-schedule surface control and
-runtime reporting, not solver efficacy.
+Interpretation: this validates basic deep-surface discovery and
+`alns_vns_policy` screening plumbing, not solver efficacy or the full deep
+mechanism family. The follow-up optimization has been implemented in code and
+tests, but it has not yet been validated by a new campaign run.
 
 Detailed analysis:
-[`v0.4-perturbation-schedule-sonnet-8r-20260510.md`](../experiments/v0.4/v0.4-perturbation-schedule-sonnet-8r-20260510.md)
+[`v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md`](../experiments/v0.4/v0.4-deep-mechanism-surfaces-sonnet-8r-20260510.md)
 
 ## Validation
 
@@ -224,21 +254,38 @@ Broader CVRP/protocol subset:
 227 passed in 34.29s
 ```
 
+Latest APS/CVRP optimization validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_adapter.py -q
+```
+
+```text
+244 passed in 18.40s
+```
+
 ## Next Actions
 
 P1:
 
-- Align proposal/schema preview with the selected-surface runtime contract so
-  shallow-only `main_search_strategy` plans either fail before code generation
-  or encode an explicit valid no-deep-components state.
 - Make missing or empty structured `novelty_signature` failures compact,
   preview-visible, and actionable before final hypothesis acceptance.
-- Add proposal feedback reason tags for `MAIN_SEARCH_ZERO_PHASE_DELTA` and
-  `RECOVERY_ONLY_ACCEPTED_MOVES`.
-- Stop treating isolated orchestration tweaks as the next CVRP efficacy path.
-  Use the deep mechanism surface family (`alns_vns_policy`,
-  `destroy_repair_policy`, `route_pair_candidate_policy`, and
-  `acceptance_restart_policy`) for the next CVRP diagnostics.
+- Run the next short CVRP diagnostics with one deep mechanism surface forced
+  or strongly prioritized at a time: `alns_vns_policy`,
+  `destroy_repair_policy`, `route_pair_candidate_policy`, then
+  `acceptance_restart_policy`.
+- After the running free-surface post-optimization smoke completes, analyze it
+  before launching forced one-surface diagnostics.
+- Judge the next run first on selected-surface coverage, complete
+  schema/target/interface/Contract preview visibility, and nonzero or
+  explainably-zero mechanism attribution; screening win rate remains secondary
+  until those signals are trustworthy.
+- If Contract preview still skips under APS, reduce nonessential planner reads
+  further before increasing the global observation cap.
+- Add a route-local runtime-summary bridge if future operator-surface runs keep
+  showing useful generic operator telemetry but empty selected-surface summaries.
+- Validate that the new ALNS/VNS before/after objective fields make seed-level
+  wins and accepted/active signals explainable when the next short smoke runs.
 - Continue only short CVRP diagnostics until those surfaces show nonzero
   phase-best movement or clearly attributed mechanism-level behavior beyond
   component permutation.
@@ -256,8 +303,11 @@ P2:
 ## Remaining Risks
 
 - CVRP `main_search_strategy` is too shallow by itself to produce meaningful
-  algorithmic gains; without the deep mechanism surface family, agents mostly
-  permute a fixed algorithm.
+  algorithmic gains; without explicit deep-surface prioritization, agents
+  mostly revisit orchestration and legacy policy surfaces.
+- Deep-surface runtime attribution is still thin: R8 showed small
+  `alns_vns_policy` seed-level wins while the selected-surface phase-delta
+  field remained zero.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.

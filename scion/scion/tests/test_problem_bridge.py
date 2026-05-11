@@ -90,6 +90,10 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "neighborhood_portfolio",
         "algorithm_blueprint",
         "main_search_strategy",
+        "alns_vns_policy",
+        "destroy_repair_policy",
+        "route_pair_candidate_policy",
+        "acceptance_restart_policy",
     ]
     assert [surface.name for surface in legacy.research_surfaces] == [
         "route_local",
@@ -101,6 +105,10 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "neighborhood_portfolio",
         "algorithm_blueprint",
         "main_search_strategy",
+        "alns_vns_policy",
+        "destroy_repair_policy",
+        "route_pair_candidate_policy",
+        "acceptance_restart_policy",
     ]
     assert legacy.family_taxonomy.families == [
         "route_local",
@@ -112,10 +120,15 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "neighborhood_portfolio",
         "algorithm_blueprint",
         "main_search_strategy",
+        "alns_vns_policy",
+        "destroy_repair_policy",
+        "route_pair_candidate_policy",
+        "acceptance_restart_policy",
     ]
     assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
     assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]
     assert "ruin" in legacy.family_taxonomy.aliases["ruin_recreate"]
+    assert "alns/vns policy" in legacy.family_taxonomy.aliases["alns_vns_policy"]
     assert legacy.search_space.frozen == [
         "adapter.py",
         "cvrplib.py",

@@ -1024,6 +1024,150 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "SECRET_RAW_REF" not in rendered
 
 
+def test_runtime_diagnosis_tags_unselected_declared_mechanism_surfaces(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    spec_payload = _problem_spec(tmp_path).model_dump()
+    spec_payload["research_surfaces"].append(
+        {
+            "name": "deep_policy",
+            "kind": "policy",
+            "description": "Controlled mechanism surface.",
+            "algorithm": {
+                "role": "controlled_search_mechanism",
+                "invocation_point": "during_search",
+            },
+            "targets": {
+                "files": ["policies/deep_policy.py"],
+                "create_new_allowed": False,
+                "modify_allowed": True,
+                "remove_allowed": False,
+                "singleton": True,
+            },
+        }
+    )
+    context = replace(context, problem_spec=ProblemSpecV1(**spec_payload))
+    runtime_step = replace(
+        context.step_history[0],
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Only revisit local moves.",
+            change_locus="route_local",
+            action="create_new",
+            target_file="operators/local_new.py",
+        ),
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=0, ties=2, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
+        ),
+    )
+    context = replace(context, step_history=(runtime_step,))
+
+    observation = registry.call("feedback.query_runtime", {}, context)
+    diagnosis = observation.structured_payload["research_diagnosis"]
+
+    assert "deep_surface_not_selected" in diagnosis["failure_mode_tags"]
+    assert diagnosis["declared_mechanism_surfaces"] == ["deep_policy"]
+    assert diagnosis["unselected_mechanism_surfaces"] == ["deep_policy"]
+    assert "deep_policy" in " ".join(diagnosis["next_hypothesis_requirements"])
+
+
+def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    runtime_step = replace(
+        context.step_history[0],
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Accepted moves do not refresh phase best.",
+            change_locus="main_search_strategy",
+            action="modify",
+            target_file="policies/main_search_strategy.py",
+        ),
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=0, ties=2, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
+            selected_surface="main_search_strategy",
+            candidate_surface_runtime_summary={
+                "selected_surface": "main_search_strategy",
+                "required_runtime_fields": [
+                    "main_search_component_accepted_delta_sum",
+                    "main_search_component_recovery_delta_sum",
+                    "main_search_component_phase_delta_sum",
+                ],
+                "fields": {
+                    "main_search_component_accepted_delta_sum": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                        "numeric_summary": {
+                            "mapping": {
+                                "route_pair_swap": {
+                                    "observed_count": 2,
+                                    "weighted_sum": 12.0,
+                                    "nonzero_count": 2,
+                                }
+                            }
+                        },
+                    },
+                    "main_search_component_recovery_delta_sum": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                        "numeric_summary": {
+                            "mapping": {
+                                "route_pair_swap": {
+                                    "observed_count": 2,
+                                    "weighted_sum": 12.0,
+                                    "nonzero_count": 2,
+                                }
+                            }
+                        },
+                    },
+                    "main_search_component_phase_delta_sum": {
+                        "present": 2,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                        "numeric_summary": {
+                            "mapping": {
+                                "route_pair_swap": {
+                                    "observed_count": 2,
+                                    "weighted_sum": 0.0,
+                                    "nonzero_count": 0,
+                                }
+                            }
+                        },
+                    },
+                },
+            },
+        ),
+    )
+    context = replace(context, step_history=(runtime_step,))
+
+    observation = registry.call("feedback.query_runtime", {}, context)
+    diagnosis = observation.structured_payload["research_diagnosis"]
+
+    assert "zero_phase_delta" in diagnosis["failure_mode_tags"]
+    assert "accepted_signal_without_phase_delta" in diagnosis["failure_mode_tags"]
+    assert "recovery_only_accepted_moves" in diagnosis["failure_mode_tags"]
+    assert diagnosis["runtime_signal_rows"][0]["zero_phase_delta_fields"] == [
+        "main_search_component_phase_delta_sum"
+    ]
+
+
 def test_forced_runtime_feedback_omits_conflicting_surface_guidance(
     tmp_path: Path,
 ) -> None:
@@ -3015,12 +3159,12 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
         for event in tool_events
     )
     assert any(
-        observation["tool_name"] == "context.read_surface"
-        and observation["structured_payload"]["surface"]["name"] == "search_policy"
-        and observation["structured_payload"]["detail"] == "compact"
-        and observation["structured_payload"]["current_artifact"]["max_chars"] == 1200
-        for observation in code_observations
-    )
+            observation["tool_name"] == "context.read_surface"
+            and observation["structured_payload"]["surface"]["name"] == "search_policy"
+            and observation["structured_payload"]["detail"] == "compact"
+            and observation["structured_payload"]["current_artifact"]["max_chars"] == 800
+            for observation in code_observations
+        )
     hypothesis_observation_names = {
         observation["tool_name"]
         for observation in creative.hypothesis_contexts[0]["agentic_tool_observations"]

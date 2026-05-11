@@ -1132,6 +1132,9 @@ research_surfaces:
         - alns_vns_destroy_schedule
         - alns_vns_attempts
         - alns_vns_accepted
+        - alns_vns_initial_distance
+        - alns_vns_returned_distance
+        - alns_vns_objective_delta
         - alns_vns_phase_delta_sum
         - alns_vns_runtime_ms
         - alns_vns_stop_reason
@@ -1155,7 +1158,12 @@ research_surfaces:
         use instance.customers, return unknown params, or widen bounds.
     target_files:
       - "policies/alns_vns_policy.py"
-    prompt_hint: "Tune bounded ALNS/VNS mechanism policy without editing solver internals."
+    prompt_hint: >-
+      Tune bounded ALNS/VNS mechanism policy without editing solver internals.
+      For short diagnostics, explain the expected before/after objective
+      attribution through alns_vns_initial_distance,
+      alns_vns_returned_distance, alns_vns_objective_delta, and
+      alns_vns_phase_delta_sum; do not optimize only attempts or active flags.
     required_functions:
       - "alns_vns_plan"
     create_new_allowed: false
@@ -1451,9 +1459,11 @@ llm_hints:
     route_distance(route). Use demands[customer_id] for direct demand lookup.
     Do not use nonexistent attributes such as vehicle_capacity,
     distance_matrix, customers, or num_customers. Never use instance.customers.
-    The preferred whole-algorithm research surface is main_search_strategy:
-    change only policies/main_search_strategy.py and return a bounded
-    main_search_plan; do not edit solver.py.
+    main_search_strategy is the bounded orchestration surface. For current
+    short efficacy diagnostics, prefer one declared deep mechanism surface at
+    a time (alns_vns_policy, destroy_repair_policy,
+    route_pair_candidate_policy, or acceptance_restart_policy) before repeating
+    orchestration-only changes. Do not edit solver.py.
 
 family_taxonomy:
   version: "cvrp-route-v1"
@@ -1467,6 +1477,10 @@ family_taxonomy:
     - neighborhood_portfolio
     - algorithm_blueprint
     - main_search_strategy
+    - alns_vns_policy
+    - destroy_repair_policy
+    - route_pair_candidate_policy
+    - acceptance_restart_policy
   aliases:
     route_local:
       - route local
@@ -1569,6 +1583,39 @@ family_taxonomy:
       - restart
       - package owned main loop
       - post baseline off
+    alns_vns_policy:
+      - alns vns policy
+      - alns/vns policy
+      - adaptive large neighborhood search
+      - variable neighborhood search
+      - segment length
+      - destroy ratio
+      - reaction factor
+      - baseline mechanism
+    destroy_repair_policy:
+      - destroy repair policy
+      - destroy/repair policy
+      - bounded destroy repair
+      - worst removal
+      - regret repair
+      - subset strategy
+      - repair budget
+    route_pair_candidate_policy:
+      - route pair candidate policy
+      - route-pair candidate policy
+      - route pair ranking
+      - candidate generation
+      - pair cap
+      - position cap
+      - load gap
+    acceptance_restart_policy:
+      - acceptance restart policy
+      - acceptance/restart policy
+      - recovery only
+      - phase best
+      - restart cadence
+      - perturbation schedule
+      - reject recovery only
 
 adapter:
   import_path: "scion.problems.cvrp.adapter:CvrpAdapter"
