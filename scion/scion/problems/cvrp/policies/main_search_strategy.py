@@ -1,4 +1,4 @@
-"""Default CVRP main-search strategy surface.
+"""Default CVRP solver-design execution hook.
 
 This singleton policy is intentionally inactive by default. Candidate proposals
 can enable it to let the CVRP package own the complete construction, baseline,

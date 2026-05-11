@@ -142,9 +142,10 @@ Known current risk areas:
 - `scion/scion/contract/gate.py` also enforces generic research-surface
   governance before candidate code runs: file-read APIs are forbidden even in
   read-only mode, and non-operator policy/config/portfolio/construction/
-  acceptance_restart or singleton surfaces cannot access `instance.name` or
-  direct `getattr`/`hasattr` probes for that name. Problem packages should
-  expose safe structural instance APIs instead of case identifiers.
+  acceptance_restart/solver_design or singleton surfaces cannot access
+  `instance.name` or direct `getattr`/`hasattr` probes for that name. Problem
+  packages should expose safe structural instance APIs instead of case
+  identifiers.
 - Custom protocol stubs or legacy protocols that do not carry problem specs with
   declared research surfaces remain on the compatibility path and do not receive
   automatic selected-surface forwarding from `EvaluationPipeline`.

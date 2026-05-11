@@ -171,6 +171,7 @@ SUPPORTED_RESEARCH_SURFACE_KINDS = frozenset(
         "portfolio",
         "construction",
         "acceptance_restart",
+        "solver_design",
     }
 )
 

@@ -76,8 +76,9 @@ Medium-risk areas:
   writes. `open()`, `*.open()`, `*.read_text()`, and `*.read_bytes()` fail
   closed for generated research-surface patches.
 - ContractGate blocks `instance.name` on non-operator policy/config/portfolio/
-  construction/acceptance_restart and singleton surfaces, including direct
-  `getattr(instance, "name")` / `hasattr(instance, "name")` probes. This
+  construction/acceptance_restart/solver_design and singleton surfaces,
+  including direct `getattr(instance, "name")` / `hasattr(instance, "name")`
+  probes. This
   reduces case-specific policy behavior while preserving safe structural APIs
   declared by the problem package.
 - Hypothesis context may include screening aggregates, but validation/frozen
@@ -88,12 +89,12 @@ Medium-risk areas:
   algorithm lifecycle surface. Its solver integration stays inside the CVRP
   package: Scion core sees only declared surface metadata and generic required
   runtime fields, not CVRP construction modes or local-search component names.
-- CVRP now exposes `main_search_strategy` as the preferred problem-owned
-  whole-algorithm surface. Its solver integration stays inside the CVRP
-  package: Scion core sees only declared surface metadata and generic required
-  runtime fields, not CVRP construction modes, ALNS/VNS params, route-pair
-  swaps, bounded destroy/repair, restart, perturbation, or registry-toggle
-  semantics.
+- CVRP now exposes `solver_design` as the preferred problem-owned
+  problem-object solver-design surface. It is backed by the existing
+  `policies/main_search_strategy.py` execution hook, but Scion core sees only
+  declared surface metadata and generic required runtime fields, not CVRP
+  construction modes, ALNS/VNS params, route-pair swaps, bounded
+  destroy/repair, restart, perturbation, or registry-toggle semantics.
 - CVRP now exposes `baseline_policy` as a problem-owned baseline/main-search
   policy surface. Its solver integration stays inside the CVRP package: Scion
   core sees only declared surface metadata and selected-surface runtime fields,
@@ -138,9 +139,9 @@ For future algorithm design space expansion, use a thin vertical slice:
 7. Add focused tests around bridge loading, context rendering, contract validation, solver runtime audit, and one campaign smoke.
 8. Add or update problem-specific final evidence only if final reporting needs new domain fields.
 
-The CVRP `main_search_strategy`, `algorithm_blueprint`, and `baseline_policy`
-slices follow this pattern for whole-algorithm, top-level lifecycle, and
-main-search parameter surfaces: problem spec declaration, adapter
+The CVRP `solver_design`, `algorithm_blueprint`, and `baseline_policy`
+slices follow this pattern for problem-object solver design, top-level
+lifecycle, and main-search parameter surfaces: problem spec declaration, adapter
 interface/preview, solver execution and audit, selected-surface runtime
 evidence, focused tests, and engineering docs were updated without adding CVRP
 semantics to core governance. Future surfaces should keep the same boundary.
@@ -162,8 +163,8 @@ Before merging architecture changes, check:
 - Does verification fail closed when adapter/runtime config is missing?
 - Does selected-surface runtime audit fail closed when declared evidence fields
   are missing in both Verification and candidate-side Protocol/Canary runs?
-- Do generated policy/config/portfolio/construction surfaces avoid external
-  file reads and case-identity checks such as `instance.name`?
+- Do generated policy/config/portfolio/construction/solver_design surfaces
+  avoid external file reads and case-identity checks such as `instance.name`?
 - Are raw metrics and final evidence represented as refs, not copied into step schemas?
 - Does promotion still snapshot immutable candidate code before stale-marking other branches?
 - Does stale/reconcile re-run contract, verification, and screening after champion changes?

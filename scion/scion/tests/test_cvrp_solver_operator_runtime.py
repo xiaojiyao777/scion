@@ -1226,7 +1226,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     surface = next(
         surface
         for surface in spec_v1.research_surfaces or []
-        if surface.name == "main_search_strategy"
+        if surface.name == "solver_design"
     )
     required_fields = tuple(surface.evidence.required_runtime_fields)
 
@@ -1273,7 +1273,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
-        selected_surface="main_search_strategy",
+        selected_surface="solver_design",
     )
     assert issue is not None
     assert issue["error_category"] == "surface_runtime_contract_error"
@@ -1422,7 +1422,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="main_search_strategy",
+            selected_surface="solver_design",
         )
         is None
     )
@@ -1431,7 +1431,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         _runner(),
         str(workspace),
         adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
-        selected_surface="main_search_strategy",
+        selected_surface="solver_design",
     )
     assert v5.passed, v5.detail
     missing_field_raw = json.loads(json.dumps(raw))
@@ -1439,7 +1439,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     missing_issue = runtime_audit_failure_from_raw(
         missing_field_raw,
         problem_spec=legacy_spec,
-        selected_surface="main_search_strategy",
+        selected_surface="solver_design",
     )
     assert missing_issue is not None
     assert missing_issue["error_category"] == "surface_runtime_contract_error"
@@ -1506,7 +1506,7 @@ def test_main_search_strategy_records_clamp_details_in_selected_surface_runtime(
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="main_search_strategy",
+            selected_surface="solver_design",
         )
         is None
     )
@@ -1636,7 +1636,7 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="main_search_strategy",
+            selected_surface="solver_design",
         )
         is None
     )
@@ -2344,7 +2344,7 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="main_search_strategy",
+            selected_surface="solver_design",
         )
         is None
     )
@@ -2739,7 +2739,7 @@ def test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
-        selected_surface="main_search_strategy",
+        selected_surface="solver_design",
     )
 
     assert raw["runtime"]["main_search_strategy_errors"] >= 1

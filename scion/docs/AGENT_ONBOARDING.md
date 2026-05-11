@@ -49,7 +49,7 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
   and problem-owned tests.
 - A research surface is the declared object the agent may modify or tune:
   operator, policy, config, portfolio, construction, acceptance/restart, or a
-  bounded whole-algorithm strategy.
+  solver-design boundary.
 - Runtime evidence is part of the contract. Missing, empty, or invalid required
   fields fail closed when the selected surface declares them.
 - Frozen/holdout detail is exposure-controlled. Proposal agents should receive
@@ -64,14 +64,16 @@ warehouse/surrogate path. The current direction is a problem-object adaptation
 pivot: Scion should receive a coherent CVRP problem object and solver-design
 boundary through the adapter, rather than being driven through one forced
 singleton policy at a time. The first exposure slice now renders the CVRP
-problem object into proposal contexts and `context.read_problem`; the next
-slice is to decide the top-level solver-design boundary and validate it with a
-short diagnostic.
+problem object into proposal contexts and `context.read_problem`; the second
+slice declares `solver_design` as the top-level CVRP research boundary. The
+next step is a short diagnostic that does not force a singleton component
+policy.
 
 Important current interpretation:
 
-- `main_search_strategy` is a controlled orchestration hook, but it is not the
-  whole research object.
+- `solver_design` is the top-level CVRP research object. It is backed by the
+  existing `policies/main_search_strategy.py` execution hook, but component
+  policies are implementation details, not standalone research goals.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.

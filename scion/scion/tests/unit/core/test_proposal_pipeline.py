@@ -574,7 +574,7 @@ def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> 
         creative=creative,
         agentic_session=AgenticProposalSession(injected_output=output),
         forced_locus=None,
-        persistent_forced_locus="main_search_strategy",
+        persistent_forced_locus="solver_design",
         forced_surface_action="modify",
         forced_surface_target_file="policies/main_search_strategy.py",
         forced_surface_diagnostic=True,
@@ -587,7 +587,7 @@ def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> 
     detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
     assert detail is not None
     assert "forced_surface_constraint" in detail
-    assert "main_search_strategy" in detail
+    assert "solver_design" in detail
     assert len(failures) == 1
     assert circuit.failures == [detail]
     assert runtime.code_kwargs is None

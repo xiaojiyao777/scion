@@ -653,6 +653,11 @@ def test_list_surfaces_returns_compact_payload_for_large_surface_specs(
     assert surfaces["algorithm_blueprint"]["algorithm"]["role"] == (
         "top_level_algorithm_lifecycle"
     )
+    assert "solver_design" in surfaces
+    assert surfaces["solver_design"]["kind"] == "solver_design"
+    assert surfaces["solver_design"]["algorithm"]["role"] == (
+        "problem_object_solver_design"
+    )
     assert "prompt" not in rendered
     assert len(rendered) < AgenticToolLoopConfig().max_observation_chars // 2
 
@@ -764,7 +769,7 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
 
     observation = registry.call(
         "context.read_surface",
-        {"surface": "main_search_strategy"},
+        {"surface": "solver_design"},
         context,
     )
     payload = observation.structured_payload
@@ -774,7 +779,7 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     assert observation.failure_code is None
     assert payload["detail"] == "compact"
     assert payload["section"] == "all"
-    assert payload["surface"]["name"] == "main_search_strategy"
+    assert payload["surface"]["name"] == "solver_design"
     assert payload["surface"]["interface"]["required_functions"] == ["main_search_plan"]
     assert payload["surface_contract"]["schema_version"] == "surface-contract.v1"
     assert payload["surface_contract"]["available_sections"] == [
@@ -805,7 +810,7 @@ def test_read_surface_section_mode_returns_interface_slice(
 
     observation = registry.call(
         "context.read_surface",
-        {"surface": "main_search_strategy", "section": "interface"},
+        {"surface": "solver_design", "section": "interface"},
         context,
     )
     payload = observation.structured_payload
@@ -814,8 +819,8 @@ def test_read_surface_section_mode_returns_interface_slice(
     assert observation.is_error is False
     assert payload["section"] == "interface"
     assert payload["surface"] == {
-        "name": "main_search_strategy",
-        "kind": "config",
+        "name": "solver_design",
+        "kind": "solver_design",
         "section": "interface",
         "interface": payload["surface"]["interface"],
     }
@@ -1108,6 +1113,54 @@ def test_list_surfaces_exposes_deep_surface_priority_tag_after_screening_history
     assert "deep_policy" in " ".join(priorities["next_requirements"])
 
 
+def test_cvrp_prioritizes_solver_design_over_component_policy_diagnostics(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    screening_step = StepRecord(
+        round_num=1,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Tune a component policy.",
+            change_locus="destroy_repair_policy",
+            action="modify",
+            target_file="policies/destroy_repair_policy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=1, ties=1, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    context = replace(context, step_history=(screening_step,))
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    priorities = listed.structured_payload["diagnostic_surface_priorities"]
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    diagnosis = runtime.structured_payload["research_diagnosis"]
+
+    assert priorities["solver_design_surfaces"] == ["solver_design"]
+    assert priorities["unselected_solver_design_surfaces"] == ["solver_design"]
+    assert priorities["failure_mode_tags"] == ["solver_design_not_selected"]
+    assert "component policies are attribution hooks" in priorities["recommendation"]
+    assert "unselected_mechanism_surfaces" not in priorities
+    assert diagnosis["declared_solver_design_surfaces"] == ["solver_design"]
+    assert diagnosis["declared_mechanism_surfaces"] == []
+    assert "solver_design_not_selected" in diagnosis["failure_mode_tags"]
+    assert "deep_surface_not_selected" not in diagnosis["failure_mode_tags"]
+    assert "solver_design" in " ".join(diagnosis["next_hypothesis_requirements"])
+
+
 def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
     tmp_path: Path,
 ) -> None:
@@ -1117,7 +1170,7 @@ def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
         context.step_history[0],
         hypothesis=HypothesisProposal(
             hypothesis_text="Accepted moves do not refresh phase best.",
-            change_locus="main_search_strategy",
+            change_locus="solver_design",
             action="modify",
             target_file="policies/main_search_strategy.py",
         ),
@@ -1128,9 +1181,9 @@ def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
             reason_codes=("SCREENING_FAIL_WIN_RATE",),
             exposed_summary="screening safe summary",
             raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
-            selected_surface="main_search_strategy",
+            selected_surface="solver_design",
             candidate_surface_runtime_summary={
-                "selected_surface": "main_search_strategy",
+                "selected_surface": "solver_design",
                 "required_runtime_fields": [
                     "main_search_component_accepted_delta_sum",
                     "main_search_component_recovery_delta_sum",
@@ -1316,7 +1369,7 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
     protocol = context.step_history[0].protocol_result
     assert protocol is not None
     main_search_hypothesis = replace(
-        _hyp("main_search_strategy"),
+        _hyp("solver_design"),
         target_file="policies/main_search_strategy.py",
     )
     attributed_step = replace(
@@ -1325,7 +1378,7 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
         protocol_result=replace(
             protocol,
             candidate_surface_runtime_summary={
-                "selected_surface": "main_search_strategy",
+                "selected_surface": "solver_design",
                 "fields": {
                     "main_search_component_accepted": {
                         "present": 2,
@@ -1467,13 +1520,13 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
     attributed_step = replace(
         context.step_history[0],
         hypothesis=replace(
-            _hyp("main_search_strategy"),
+            _hyp("solver_design"),
             target_file="policies/main_search_strategy.py",
         ),
         protocol_result=replace(
             protocol,
             candidate_surface_runtime_summary={
-                "selected_surface": "main_search_strategy",
+                "selected_surface": "solver_design",
                 "fields": fields,
             },
         ),
@@ -2711,7 +2764,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
     )
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
-            change_locus="main_search_strategy",
+            change_locus="solver_design",
             target_file="policies/main_search_strategy.py",
             target_objectives=["total_distance"],
         )
@@ -2722,7 +2775,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
             {"tool_name": "context.read_problem", "args": {}},
             {
                 "tool_name": "context.read_surface",
-                "args": {"surface": "main_search_strategy"},
+                "args": {"surface": "solver_design"},
             },
             {"tool_name": "memory.query", "args": {}},
         ],
@@ -2767,7 +2820,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
     assert not any(
         event.get("error_code") == "result_too_large" for event in tool_events
     )
-    assert "main_search_strategy" in rendered_context
+    assert "solver_design" in rendered_context
     assert "raw_metrics_ref" not in rendered_context
     assert "SECRET_VALIDATION" not in rendered_context
     assert "SECRET_FROZEN" not in rendered_context
@@ -3733,7 +3786,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
 ) -> None:
     context = replace(
         _cvrp_context_with_champion(tmp_path),
-        forced_surface="main_search_strategy",
+        forced_surface="solver_design",
         forced_action="modify",
         forced_target_file="policies/main_search_strategy.py",
     )
@@ -3745,7 +3798,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     rendered_list = json.dumps(listed.structured_payload, sort_keys=True, default=str)
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
-            change_locus="main_search_strategy",
+            change_locus="solver_design",
             target_file="policies/main_search_strategy.py",
             target_objectives=["total_distance"],
         )
@@ -3754,7 +3807,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         [
             {
                 "tool_name": "context.read_surface",
-                "args": {"surface": "main_search_strategy"},
+                "args": {"surface": "solver_design"},
             },
             {"stop": True},
         ],
@@ -3791,7 +3844,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     assert listed.is_error is False
     assert listed.structured_payload["surface_count"] == 1
     assert listed.structured_payload["total_declared_surface_count"] > 1
-    assert listed.structured_payload["surfaces"][0]["name"] == "main_search_strategy"
+    assert listed.structured_payload["surfaces"][0]["name"] == "solver_design"
     assert len(rendered_list) < 12000
     assert output.status == AgenticProposalStatus.COMPLETED
     assert len(read_surface_events) == 1

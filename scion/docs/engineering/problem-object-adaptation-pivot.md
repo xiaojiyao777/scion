@@ -57,6 +57,23 @@ This is an exposure/adaptation slice only. It does not prove solver efficacy,
 and it does not yet replace the current surface list with a cleaner top-level
 solver-design boundary.
 
+## Implemented Solver-Design Boundary
+
+The next slice declares `solver_design` as the CVRP top-level research surface:
+
+- `ProblemSpecV1` supports the generic `solver_design` surface kind.
+- CVRP `problem-v1.yaml` names `solver_design` as the problem-owned
+  solver-design boundary while keeping `policies/main_search_strategy.py` and
+  `main_search_plan()` as the execution hook.
+- Adapter interface/preview logic treats `solver_design` as the
+  main-search-plan surface.
+- APS diagnosis and `context.list_surfaces` prioritize the solver-design
+  problem-object boundary before component policies when it is declared.
+
+This still does not prove solver efficacy. It prepares the next short
+diagnostic so Scion targets the problem-level solver design instead of forcing
+one component policy.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -73,14 +90,14 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice should finish the whole-problem CVRP adaptation
-surface before more experiments:
+The next engineering slice should validate the whole-problem CVRP adaptation
+surface with a short experiment:
 
 1. Define the CVRP problem object Scion should see: instance structure,
    solution representation, route/move affordances, objective semantics, and
    solver lifecycle.
-2. Decide the top-level research target. Prefer a broad problem-owned
-   solver-design surface over more singleton component policies.
+2. Use `solver_design` as the top-level research target. Do not force a
+   singleton component policy.
 3. Keep rendering the object through the adapter so proposal agents reason from
    the problem and solver lifecycle, not from a menu of disconnected hooks.
 4. Make runtime evidence summarize whole-solver behavior and phase-level

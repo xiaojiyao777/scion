@@ -61,13 +61,13 @@ Solver flow:
    `policies/route_pair_candidate_policy.py`, and
    `policies/acceptance_restart_policy.py` from the workspace when present,
    validating returns and recording runtime audit fields.
-4. If `main_search_strategy` returns an enabled valid plan, let it take over
-   the whole CVRP main-search lifecycle: construction ensemble, repo-local
-   baseline budget and sanitized baseline params, package-owned improvement
-   loop, bounded acceptance/restart/perturbation knobs including explicit
-   perturbation timing, and optional post-baseline registry-operator scheduling.
-   Invalid enabled plans record
-   `main_search_strategy_errors` and do not take over.
+4. If the `solver_design` surface's `main_search_strategy.py` execution file
+   returns an enabled valid `main_search_plan`, let it take over the whole CVRP
+   main-search lifecycle: construction ensemble, repo-local baseline budget and
+   sanitized baseline params, package-owned improvement loop, bounded
+   acceptance/restart/perturbation knobs including explicit perturbation
+   timing, and optional post-baseline registry-operator scheduling. Invalid
+   enabled plans record `main_search_strategy_errors` and do not take over.
    If no main-search strategy is active but a deep mechanism policy surface is
    active (`destroy_repair_policy`, `route_pair_candidate_policy`, or
    `acceptance_restart_policy`), the solver activates a package-owned default
@@ -91,8 +91,8 @@ Solver flow:
      records ALNS/VNS component, segment, destroy-ratio, attempt, accepted,
      runtime, stop-reason, construction-start distance, returned baseline
      distance, baseline phase delta, and objective-delta telemetry;
-   - active `main_search_strategy` baseline params reuse the same sanitization
-     path before passing kwargs into the repo-local baseline, and conservative
+   - active `solver_design` baseline params reuse the same sanitization path
+     before passing kwargs into the repo-local baseline, and conservative
      no-op/clamp evidence is recorded as a non-empty JSON-safe runtime object;
    - smoke/synthetic/JSON paths use deterministic nearest-neighbor fallback.
 8. Run the main-search improvement loop, when active, after baseline and before
@@ -163,7 +163,7 @@ The solver validates/clamps numeric policy returns and records policy errors as 
 
 The adapter-rendered policy interfaces and `problem-v1.yaml` prompt guidance
 for `search_policy`, `baseline_policy`, `construction_policy`,
-`neighborhood_portfolio`, `main_search_strategy`, `algorithm_blueprint`,
+`neighborhood_portfolio`, `solver_design`, `algorithm_blueprint`,
 `alns_vns_policy`, `destroy_repair_policy`,
 `route_pair_candidate_policy`, and `acceptance_restart_policy` explicitly
 direct generated code to use
@@ -173,13 +173,13 @@ direct generated code to use
 `instance.customers`. Adapter preview and runtime audit still fail reached uses
 of the nonexistent `instance.customers` attribute.
 
-`policies/main_search_strategy.py` is the current singleton whole-algorithm
-CVRP research surface. Required function:
+`solver_design` is the current problem-owned CVRP solver-design research
+surface. It is backed by `policies/main_search_strategy.py`. Required function:
 
 - `main_search_plan(instance, time_limit_sec)`
 
-The default checked-in policy is inactive (`enabled=False`) and disables
-post-baseline registry operators for this surface. A valid enabled plan can
+The default checked-in execution file is inactive (`enabled=False`) and
+disables post-baseline registry operators for this surface. A valid enabled plan can
 only select bounded package-owned knobs and components: construction methods,
 repo-local baseline time fraction and sanitized baseline params, improvement
 components `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
@@ -352,7 +352,7 @@ invalid enabled plans do not take over the solver lifecycle.
 - operator interface signature: `execute(self, solution, instance, rng) -> CvrpSolution`;
 - research surfaces: `route_local`, `route_pair`, `ruin_recreate`,
   `search_policy`, `baseline_policy`, `construction_policy`,
-  `neighborhood_portfolio`, `algorithm_blueprint`, `main_search_strategy`,
+  `neighborhood_portfolio`, `algorithm_blueprint`, `solver_design`,
   `alns_vns_policy`, `destroy_repair_policy`,
   `route_pair_candidate_policy`, and `acceptance_restart_policy`;
 - objective policy: lexicographic;
@@ -425,7 +425,7 @@ When `algorithm_blueprint` is the selected surface, `ExperimentProtocol`
 preserves these required `algorithm_*` fields in candidate-side pair metrics
 and campaign summaries through the generic selected-surface runtime summary.
 
-The `main_search_strategy` surface declares required runtime fields covering
+The `solver_design` surface declares required runtime fields covering
 load/active/error status, normalized plan, phases executed, construction
 methods, requested/effective baseline fraction and params, whether the formal
 baseline quality guard and conservative baseline-param clamps were applied,
@@ -460,7 +460,7 @@ per-field requested/effective values such as `destroy_ratio` and
 `max_destroy_customers`.
 Selected-surface audit fails closed when
 `main_search_strategy_errors` is positive or these fields are missing/empty.
-When `main_search_strategy` is the selected surface, `ExperimentProtocol`
+When `solver_design` is the selected surface, `ExperimentProtocol`
 preserves these required `main_search_*` fields through the generic
 selected-surface runtime summary.
 

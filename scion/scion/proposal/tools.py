@@ -2913,7 +2913,14 @@ def _research_diagnosis_payload(
     failure_tags: set[str] = set()
     recent_rows: list[dict[str, Any]] = []
     runtime_signal_rows: list[dict[str, Any]] = []
-    declared_mechanism_surfaces = _declared_mechanism_surface_names(problem_spec)
+    declared_solver_design_surfaces = _declared_solver_design_surface_names(
+        problem_spec
+    )
+    declared_mechanism_surfaces = (
+        []
+        if declared_solver_design_surfaces
+        else _declared_mechanism_surface_names(problem_spec)
+    )
 
     for step in screening_steps:
         surface = step.hypothesis.change_locus
@@ -3008,11 +3015,18 @@ def _research_diagnosis_payload(
             }
         )
 
+    unselected_solver_design_surfaces = [
+        surface
+        for surface in declared_solver_design_surfaces
+        if surface not in all_screening_surface_counts
+    ]
     unselected_mechanism_surfaces = [
         surface
         for surface in declared_mechanism_surfaces
         if surface not in all_screening_surface_counts
     ]
+    if declared_solver_design_surfaces and unselected_solver_design_surfaces:
+        failure_tags.add("solver_design_not_selected")
     if declared_mechanism_surfaces and unselected_mechanism_surfaces:
         failure_tags.add("deep_surface_not_selected")
 
@@ -3022,7 +3036,13 @@ def _research_diagnosis_payload(
         "Change the mechanism or bounded lever, not only wording or novelty text.",
         "State how the implementation remains within declared interface and bounds.",
     ]
-    if unselected_mechanism_surfaces:
+    if unselected_solver_design_surfaces:
+        next_requirements.append(
+            "Use a solver-design surface that reasons from the problem object "
+            "before repeating component policies: "
+            + ", ".join(unselected_solver_design_surfaces[:8])
+        )
+    elif unselected_mechanism_surfaces:
         next_requirements.append(
             "Exercise an unselected mechanism surface before repeating older "
             "orchestration surfaces: " + ", ".join(unselected_mechanism_surfaces[:8])
@@ -3040,6 +3060,8 @@ def _research_diagnosis_payload(
         "recent_screening_steps": recent_rows,
         "reason_code_counts": reason_counts,
         "surface_counts": surface_counts,
+        "declared_solver_design_surfaces": declared_solver_design_surfaces,
+        "unselected_solver_design_surfaces": unselected_solver_design_surfaces,
         "declared_mechanism_surfaces": declared_mechanism_surfaces,
         "unselected_mechanism_surfaces": unselected_mechanism_surfaces,
         "gate_outcome_counts": gate_counts,
@@ -3053,6 +3075,9 @@ def _diagnostic_surface_priorities(
     context: ProposalToolContext,
     declared_surfaces: tuple[Any, ...],
 ) -> dict[str, Any]:
+    solver_design_surfaces = _declared_solver_design_surface_names(
+        context.problem_spec
+    )
     mechanism_surfaces = _declared_mechanism_surface_names(context.problem_spec)
     if not mechanism_surfaces:
         mechanism_surfaces = _mechanism_surface_names_from_surfaces(declared_surfaces)
@@ -3065,6 +3090,41 @@ def _diagnostic_surface_priorities(
         )
     }
     has_screening_history = bool(screened_surfaces)
+    if solver_design_surfaces:
+        unselected_solver_design = [
+            surface
+            for surface in solver_design_surfaces
+            if surface not in screened_surfaces
+        ]
+        failure_mode_tags = (
+            ["solver_design_not_selected"]
+            if has_screening_history and unselected_solver_design
+            else []
+        )
+        next_requirements = (
+            [
+                "Prioritize a solver-design surface that reasons from the "
+                "problem object before repeating component policies: "
+                + ", ".join(unselected_solver_design[:8])
+            ]
+            if has_screening_history and unselected_solver_design
+            else []
+        )
+        return _drop_empty_items(
+            {
+                "solver_design_surfaces": solver_design_surfaces,
+                "unselected_solver_design_surfaces": unselected_solver_design,
+                "failure_mode_tags": failure_mode_tags,
+                "next_requirements": next_requirements,
+                "recommendation": (
+                    "Prioritize the problem-object solver-design surface; "
+                    "component policies are attribution hooks, not isolated "
+                    "research targets."
+                    if has_screening_history and unselected_solver_design
+                    else None
+                ),
+            }
+        )
     unselected = [
         surface for surface in mechanism_surfaces if surface not in screened_surfaces
     ]
@@ -3093,6 +3153,22 @@ def _diagnostic_surface_priorities(
             ),
         }
     )
+
+
+def _declared_solver_design_surface_names(problem_spec: Any) -> list[str]:
+    if problem_spec is None:
+        return []
+    names: list[str] = []
+    for surface in _get_research_surfaces(problem_spec):
+        name = str(_attr(surface, "name") or "").strip()
+        if not name:
+            continue
+        role = _attr(_attr(surface, "algorithm"), "role", "")
+        kind = str(_attr(surface, "kind", "") or "")
+        haystack = f"{kind} {role}".lower()
+        if kind == "solver_design" or "solver_design" in haystack:
+            names.append(name)
+    return names
 
 
 def _declared_mechanism_surface_names(problem_spec: Any) -> list[str]:

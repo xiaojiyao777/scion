@@ -107,7 +107,7 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
         "baseline_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
-        "main_search_strategy",
+        "solver_design",
         "alns_vns_policy",
         "destroy_repair_policy",
         "route_pair_candidate_policy",
@@ -323,11 +323,11 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="main_search_strategy"),
+        surface=SimpleNamespace(name="solver_design"),
     )
 
     assert preview["passed"] is True
-    assert preview["surface"] == "main_search_strategy"
+    assert preview["surface"] == "solver_design"
     assert preview["issues"] == []
     coverage_check = next(
         check
@@ -364,7 +364,7 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="main_search_strategy"),
+        surface=SimpleNamespace(name="solver_design"),
     )
 
     assert preview["passed"] is True
@@ -406,7 +406,7 @@ def test_cvrp_main_search_strategy_preview_rejects_bad_plan(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="main_search_strategy"),
+        surface=SimpleNamespace(name="solver_design"),
     )
 
     assert preview["passed"] is False
@@ -429,7 +429,7 @@ def test_cvrp_main_search_strategy_preview_rejects_instance_customers_alias(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="main_search_strategy"),
+        surface=SimpleNamespace(name="solver_design"),
     )
 
     assert preview["passed"] is False

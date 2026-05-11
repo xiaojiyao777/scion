@@ -1500,6 +1500,7 @@ class ContractGate:
             "portfolio",
             "construction",
             "acceptance_restart",
+            "solver_design",
         }:
             return True
         if kind == "operator":

@@ -176,10 +176,11 @@ fail-closed forced-surface guard.
 Runtime feedback now also returns a generic `research_diagnosis` payload. It
 summarizes only screening-stage history, reason-code counts, gate outcomes,
 surface counts, generic failure-mode tags, and runtime-highlight fields with
-numeric signal or evidence-contract issues. It derives mechanism-surface
-coverage from declared research-surface metadata, not hardcoded CVRP surface
-names, and can tag unexercised deep/mechanism surfaces, all-zero phase/objective
-delta fields, and accepted/recovery movement that lacks phase-level benefit. It
+numeric signal or evidence-contract issues. When a problem declares a
+`solver_design` surface, diagnosis prioritizes that problem-object boundary
+before component policies; otherwise it can fall back to mechanism-surface
+coverage from declared metadata. It also tags all-zero phase/objective delta
+fields and accepted/recovery movement that lacks phase-level benefit. It
 deliberately avoids reading validation/frozen detail or raw metric refs.
 
 APS stores a compact diagnosis derived from successful feedback observations
@@ -277,8 +278,8 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
   module-function surface interfaces, including policy, config, portfolio,
   construction, and acceptance/restart surfaces.
 - Surface kind typos fail closed; supported generic kinds are `operator`,
-  `policy`, `config`, `portfolio`, `construction`, and
-  `acceptance_restart`.
+  `policy`, `config`, `portfolio`, `construction`, `acceptance_restart`, and
+  `solver_design`.
 - `semantic_signature` novelty uses declared direct fields and optional
   `novelty_signature` mapping values persisted on proposals/records. Forced
   diagnostic context for such surfaces renders the declared

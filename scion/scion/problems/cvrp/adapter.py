@@ -299,12 +299,13 @@ class CvrpAdapter:
             "construction ensemble, baseline budget, package-owned local "
             "search, restart knobs, and post-baseline registry-operator "
             "toggle/round limit.\n"
-            "- The `main_search_strategy` research surface is the current "
-            "problem-owned whole-algorithm surface. It is inactive by default. "
-            "When enabled with a valid plan, it takes over construction "
-            "ensemble selection, repo-local baseline budget and sanitized "
-            "baseline params, package-owned main improvement components "
-            "including route-pair swap and bounded destroy/repair, bounded "
+            "- The `solver_design` research surface is the problem-owned "
+            "solver-design boundary. It is backed by "
+            "`policies/main_search_strategy.py` and inactive by default. When "
+            "enabled with a valid plan, it takes over construction ensemble "
+            "selection, repo-local baseline budget and sanitized baseline "
+            "params, package-owned main improvement components including "
+            "route-pair swap and bounded destroy/repair, bounded "
             "acceptance/restart/perturbation knobs, and the optional "
             "post-baseline registry-operator toggle. Registry operators are "
             "disabled by default for this surface unless explicitly enabled.\n"
@@ -430,10 +431,10 @@ class CvrpAdapter:
                 "failures. The solver owns route moves and uses this policy only "
                 "to schedule already-declared bounded components."
             )
-        if surface_name == "main_search_strategy":
+        if surface_name in {"solver_design", "main_search_strategy"}:
             return (
                 "policies/main_search_strategy.py is a module-level "
-                "whole-algorithm strategy surface; no class is required.\n\n"
+                "CVRP solver-design surface; no class is required.\n\n"
                 "Declared signature:\n"
                 "main_search_plan(instance, time_limit_sec)\n\n"
                 "Required function:\n"
@@ -444,7 +445,7 @@ class CvrpAdapter:
                 "operator_round_limit.\n\n"
                 "Plan contract:\n"
                 "- enabled: bool. The default must be False. Only enabled=True "
-                "and a valid plan lets this surface take over the main CVRP "
+                "and a valid plan lets this surface take over the CVRP "
                 "algorithm lifecycle.\n"
                 "- construction: dict with methods, keep_top_k, and bias. "
                 "methods is drawn from 'nearest_neighbor', "
@@ -455,16 +456,16 @@ class CvrpAdapter:
                 "mapping. params accepts the same sanitized bounded keys as "
                 "baseline_policy.baseline_params. For formal-like .vrp runs, "
                 "the solver applies a bounded quality guard so active "
-                "main_search_strategy uses an effective baseline fraction of "
+                "solver_design uses an effective baseline fraction of "
                 "at least 0.75.\n"
                 "- improvement: dict with enabled_components, rounds, and top_k. "
                 "enabled_components is drawn from 'intra_route_2opt', "
                 "'inter_route_relocate', 'route_pair_swap', and "
                 "'bounded_destroy_repair'; enabled plans must include at least "
                 "one component, rounds in [1, 8], and top_k in [1, 128]. "
-                "Forced destroy/repair diagnostics should usually use top_k "
-                "64 or 128 so bounded repair can evaluate enough insertion "
-                "candidates.\n"
+                "Choose top_k and component caps as part of the solver-level "
+                "hypothesis, and predict the phase/objective evidence they "
+                "should move.\n"
                 "- acceptance: dict with min_distance_improvement finite number "
                 "in [0.0, 10.0]. bounded_destroy_repair also has a "
                 "problem-owned 1.0 minimum distance-improvement floor.\n"
@@ -638,6 +639,7 @@ class CvrpAdapter:
             "search_policy",
             "baseline_policy",
             "neighborhood_portfolio",
+            "solver_design",
             "main_search_strategy",
             "algorithm_blueprint",
             "alns_vns_policy",
@@ -684,7 +686,7 @@ class CvrpAdapter:
             _preview_baseline_policy(module, instance, issues, checks)
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
-        elif surface_name == "main_search_strategy":
+        elif surface_name in {"solver_design", "main_search_strategy"}:
             _preview_main_search_strategy(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
             _preview_algorithm_blueprint(module, instance, issues, checks)
@@ -863,7 +865,7 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/search_policy.py": "search_policy",
         "policies/baseline_policy.py": "baseline_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
-        "policies/main_search_strategy.py": "main_search_strategy",
+        "policies/main_search_strategy.py": "solver_design",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
         "policies/alns_vns_policy.py": "alns_vns_policy",
         "policies/destroy_repair_policy.py": "destroy_repair_policy",

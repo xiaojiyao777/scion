@@ -129,9 +129,9 @@ Keep the boundary clear:
 - Scion core may add generic surface/governance hooks.
 - CVRP package owns solver hooks, allowed components, policy files, runtime
   field meanings, and controlled fixtures.
-- `main_search_strategy` can orchestrate declared components but cannot invent
-  deeper ALNS/VNS/destroy-repair/route-pair mechanisms unless those are
-  exposed as separate declared surfaces.
+- `solver_design` is the top-level problem-object boundary. It is backed by
+  `policies/main_search_strategy.py`, and component policies should support
+  that solver-level hypothesis rather than define the research target.
 
 ## Profile: New Problem Or Solver Onboarding
 

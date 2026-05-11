@@ -376,7 +376,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "construction_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
-        "main_search_strategy",
+        "solver_design",
         "alns_vns_policy",
         "destroy_repair_policy",
         "route_pair_candidate_policy",
@@ -416,7 +416,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert no_accepted_guidance.failure_categories == ["no_accepted_moves"]
     assert no_accepted_guidance.applies_to_surface_kinds == ["operator"]
     assert no_accepted_guidance.recommended_surfaces == [
-        "main_search_strategy",
+        "solver_design",
         "algorithm_blueprint",
         "baseline_policy",
         "construction_policy",
@@ -599,51 +599,51 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "target_objectives",
     ]
 
-    main_search_strategy = next(
+    solver_design = next(
         surface
         for surface in spec.research_surfaces or []
-        if surface.name == "main_search_strategy"
+        if surface.name == "solver_design"
     )
-    assert main_search_strategy.kind == "config"
-    assert main_search_strategy.algorithm is not None
-    assert main_search_strategy.algorithm.role == "whole_algorithm_main_search_strategy"
-    assert main_search_strategy.targets is not None
-    assert main_search_strategy.targets.files == ["policies/main_search_strategy.py"]
-    assert main_search_strategy.targets.singleton is True
-    assert main_search_strategy.targets.create_new_allowed is False
-    assert main_search_strategy.targets.remove_allowed is False
-    assert main_search_strategy.interface is not None
-    assert main_search_strategy.interface.required_functions == ["main_search_plan"]
-    assert main_search_strategy.interface.function_signatures == {
+    assert solver_design.kind == "solver_design"
+    assert solver_design.algorithm is not None
+    assert solver_design.algorithm.role == "problem_object_solver_design"
+    assert solver_design.targets is not None
+    assert solver_design.targets.files == ["policies/main_search_strategy.py"]
+    assert solver_design.targets.singleton is True
+    assert solver_design.targets.create_new_allowed is False
+    assert solver_design.targets.remove_allowed is False
+    assert solver_design.interface is not None
+    assert solver_design.interface.required_functions == ["main_search_plan"]
+    assert solver_design.interface.function_signatures == {
         "main_search_plan": ["instance", "time_limit_sec"],
     }
-    assert main_search_strategy.bounds is not None
-    assert "route_pair_swap" in main_search_strategy.bounds.allowed_components
-    assert "bounded_destroy_repair" in main_search_strategy.bounds.allowed_components
-    assert main_search_strategy.evidence is not None
+    assert solver_design.bounds is not None
+    assert "route_pair_swap" in solver_design.bounds.allowed_components
+    assert "bounded_destroy_repair" in solver_design.bounds.allowed_components
+    assert solver_design.evidence is not None
     assert "main_search_strategy_errors" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_component_attempts" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_component_coverage_status" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_deep_components_selected" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_component_repair_fallback_counts" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_component_recovery_delta_sum" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
     assert "main_search_component_recovery_counts" in (
-        main_search_strategy.evidence.required_runtime_fields
+        solver_design.evidence.required_runtime_fields
     )
-    assert main_search_strategy.novelty is not None
-    assert main_search_strategy.novelty.signature_fields == [
+    assert solver_design.novelty is not None
+    assert solver_design.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
         "selected_components",
@@ -726,7 +726,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
         HypothesisRecord(
             hypothesis_id="h1",
             branch_id="b1",
-            change_locus="main_search_strategy",
+            change_locus="solver_design",
             action="modify",
             status="active",
             target_file="policies/main_search_strategy.py",
@@ -746,7 +746,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
         HypothesisRecord(
             hypothesis_id="h2",
             branch_id="b2",
-            change_locus="main_search_strategy",
+            change_locus="solver_design",
             action="modify",
             status="active",
             target_file="policies/main_search_strategy.py",
@@ -766,7 +766,7 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
     ]
     candidate = HypothesisProposal(
         hypothesis_text="Use two-opt and relocate after a medium baseline fraction.",
-        change_locus="main_search_strategy",
+        change_locus="solver_design",
         action="modify",
         target_file="policies/main_search_strategy.py",
         predicted_direction="improve",
@@ -804,7 +804,7 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
     existing = HypothesisRecord(
         hypothesis_id="h1",
         branch_id="b1",
-        change_locus="main_search_strategy",
+        change_locus="solver_design",
         action="modify",
         status="active",
         target_file="policies/main_search_strategy.py",
@@ -815,7 +815,7 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
     )
     candidate = HypothesisProposal(
         hypothesis_text="Same structured main search plan with different prose.",
-        change_locus="main_search_strategy",
+        change_locus="solver_design",
         action="modify",
         target_file="policies/main_search_strategy.py",
         predicted_direction="improve",
@@ -957,7 +957,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
 
     create_hypothesis = HypothesisProposal(
         hypothesis_text="Create a second main-search strategy.",
-        change_locus="main_search_strategy",
+        change_locus="solver_design",
         action="create_new",
         target_file="policies/other_main_search_strategy.py",
     )
@@ -968,7 +968,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
 
     wrong_target = HypothesisProposal(
         hypothesis_text="Modify main search through an operator file.",
-        change_locus="main_search_strategy",
+        change_locus="solver_design",
         action="modify",
         target_file="operators/not_strategy.py",
     )
@@ -2423,7 +2423,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "construction_policy [construction]" in prompt_text
     assert "neighborhood_portfolio [portfolio]" in prompt_text
     assert "algorithm_blueprint [config]" in prompt_text
-    assert "main_search_strategy [config]" in prompt_text
+    assert "solver_design [solver_design]" in prompt_text
     assert "policies/search_policy.py" in prompt_text
     assert "policies/construction_policy.py" in prompt_text
     assert "policies/neighborhood_portfolio.py" in prompt_text
@@ -2568,6 +2568,31 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "def algorithm_plan" in blueprint_prompt_text
     assert "intra_route_2opt" in blueprint_prompt_text
     assert "Never use `instance.customers`" in blueprint_prompt_text
+
+    solver_design_hypothesis = HypothesisProposal(
+        hypothesis_text="Coordinate the solver design from the problem object.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/main_search_strategy.py",
+        target_weakness="component hooks are not moving phase-best objective",
+        expected_effect="better whole-solver phase movement",
+    )
+    solver_design_code_ctx = manager.build_code_context(
+        branch=branch,
+        hypothesis=solver_design_hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    system_blocks, _ = _split_code_context(solver_design_code_ctx)
+    solver_design_prompt_text = "\n".join(block["text"] for block in system_blocks)
+
+    assert (
+        "Active surface: solver_design [solver_design]"
+        in solver_design_prompt_text
+    )
+    assert "CVRP solver-design surface" in solver_design_prompt_text
+    assert "def main_search_plan" in solver_design_prompt_text
+    assert "Solver lifecycle:" in solver_design_prompt_text
 
 
 def test_context_still_renders_legacy_v1_surface_metadata(tmp_path: Path) -> None:

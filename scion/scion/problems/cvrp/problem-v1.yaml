@@ -48,7 +48,7 @@ runtime_failure_guidance:
     min_category_fraction: 0.5
     min_count: 2
     recommended_surfaces:
-      - main_search_strategy
+      - solver_design
       - algorithm_blueprint
       - baseline_policy
       - construction_policy
@@ -834,14 +834,16 @@ research_surfaces:
     create_new_allowed: false
     modify_allowed: true
     remove_allowed: false
-  - name: main_search_strategy
-    kind: config
-    description: "Problem-owned whole-algorithm CVRP main-search strategy."
+  - name: solver_design
+    kind: solver_design
+    description: "Problem-owned CVRP solver-design boundary backed by main_search_plan."
     algorithm:
-      role: whole_algorithm_main_search_strategy
+      role: problem_object_solver_design
       invocation_point: construction_baseline_internal_main_loop_before_optional_registry_operators
       description: >-
-        Takes over the CVRP package's main algorithm lifecycle when enabled:
+        Declares the solver-level CVRP design boundary. It is backed by the
+        existing main_search_plan execution hook and takes over the package's
+        main algorithm lifecycle when enabled:
         bounded construction ensemble, repo-local baseline time budget and
         sanitized baseline params, package-owned improvement loop components
         including route-pair swap and bounded destroy/repair, bounded
@@ -1009,12 +1011,14 @@ research_surfaces:
         - perturbation_pattern
     prompt:
       hypothesis_guidance: >-
-        State how the whole main-search strategy should improve CVRP evidence:
+        State how the whole CVRP solver design should improve problem-level
+        evidence:
         which construction ensemble, repo-local baseline params/budget,
         package-owned improvement components, acceptance threshold, restart or
         perturbation knobs, and optional registry-operator setting should work
         together. Use this surface when the hypothesis needs coordinated
-        lifecycle design rather than a standalone component knob. Predict the
+        lifecycle design rather than a standalone component knob. Treat
+        component policies as implementation hooks, not research goals. Predict the
         lifecycle phase, objective field, and whole-solver runtime evidence the
         change should move. If runtime feedback shows recovery-only moves,
         explicitly choose perturbation schedule after_no_improvement,
@@ -1057,7 +1061,7 @@ research_surfaces:
     target_files:
       - "policies/main_search_strategy.py"
     prompt_hint: >-
-      Govern the whole CVRP main-search lifecycle through a bounded plan;
+      Govern the whole CVRP solver lifecycle through a bounded plan;
       registry post-baseline operators are off by default. Choose components,
       baseline budget, restart/perturbation, and caps as one solver-level
       hypothesis; expose the intended phase/objective movement in the novelty
@@ -1472,7 +1476,7 @@ family_taxonomy:
     - construction_policy
     - neighborhood_portfolio
     - algorithm_blueprint
-    - main_search_strategy
+    - solver_design
     - alns_vns_policy
     - destroy_repair_policy
     - route_pair_candidate_policy
@@ -1565,7 +1569,11 @@ family_taxonomy:
       - restart policy
       - post baseline toggle
       - package owned local search
-    main_search_strategy:
+    solver_design:
+      - solver design
+      - problem object
+      - problem-level solver
+      - solver-level design
       - main search strategy
       - whole algorithm strategy
       - whole-algorithm strategy

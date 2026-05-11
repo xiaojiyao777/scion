@@ -58,7 +58,7 @@ Patch checks:
   helpers such as `Path.read_text()`, `Path.read_bytes()`, and `Path.open()`;
 - case-identity access rejection for the approved selected surface when present,
   otherwise for the path-resolved non-operator policy/config/portfolio/
-  construction/acceptance_restart surface or singleton surface:
+  construction/acceptance_restart/solver_design surface or singleton surface:
   generated surface code must not branch on `instance.name` or direct
   `getattr(instance, "name")` / `hasattr(instance, "name")` probes;
 - non-`rng` randomness detection;

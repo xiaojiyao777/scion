@@ -33,11 +33,10 @@ Current interpretation:
 - Forced single-surface diagnostics have done their job for governance and
   runtime-audit validation. They should not continue as the main optimization
   path.
-- CVRP `main_search_strategy` and the deep mechanism policy family are useful
-  implementation hooks, but they are not the right research abstraction by
-  themselves. The first adapter exposure slice now gives Scion the CVRP problem
-  object; the next slice should finish the top-level solver-design boundary,
-  not another isolated policy knob.
+- CVRP now declares `solver_design` as the top-level research boundary backed
+  by `policies/main_search_strategy.py`. Deep mechanism policies remain useful
+  implementation hooks and attribution sources, but they are not standalone
+  research goals.
 - The higher-ceiling v3 path should be a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
@@ -139,14 +138,15 @@ CVRP currently exposes these declared surfaces:
 - `construction_policy`
 - `neighborhood_portfolio`
 - `algorithm_blueprint`
-- `main_search_strategy`
+- `solver_design`
 - `alns_vns_policy`
 - `destroy_repair_policy`
 - `route_pair_candidate_policy`
 - `acceptance_restart_policy`
 
-`main_search_strategy` is the orchestration diagnostic surface. It is a
-singleton policy in `policies/main_search_strategy.py` and can coordinate:
+`solver_design` is the problem-owned solver-design surface. It is backed by
+the singleton execution file `policies/main_search_strategy.py` and can
+coordinate:
 
 - bounded construction ensemble;
 - repo-local baseline budget and sanitized baseline params;
@@ -156,12 +156,11 @@ singleton policy in `policies/main_search_strategy.py` and can coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: this surface list is now too component-centric. It exposes
-many legal hooks. The first adaptation slice now renders the coherent CVRP
-problem object through the adapter and into APS problem reads, but the surface
-set still needs a cleaner top-level solver-design boundary. Stop forced policy
-diagnostics until that boundary is designed and a short diagnostic can validate
-solver-level hypotheses.
+Current limitation: the top-level boundary is now declared, but it has not yet
+been validated in a fresh short diagnostic. Stop forced component-policy
+diagnostics; the next run should let Scion target `solver_design` from the
+problem object and judge whether it produces solver-level hypotheses with
+attributable whole-solver movement.
 
 ## Latest Experiment
 
@@ -235,6 +234,16 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selec
 
 ## Validation
 
+Latest solver-design boundary validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_protocol.py::test_run_experiment_preserves_selected_surface_required_runtime_metrics -q
+```
+
+```text
+282 passed in 17.83s
+```
+
 Latest full Scion test suite:
 
 ```bash
@@ -242,7 +251,7 @@ Latest full Scion test suite:
 ```
 
 ```text
-1533 passed, 1 skipped in 57.89s
+1564 passed, 1 skipped in 64.99s
 ```
 
 Latest focused phase-benefit / forced-surface validation:
@@ -321,13 +330,9 @@ P1:
 
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
-- Finish the top-level CVRP solver-design boundary now that the adapter renders
-  the instance model, solution model, objective policy, move/design grammar,
-  solver lifecycle, and whole-solver evidence as one problem object.
-- Decide whether the next research target is a broad solver-design/problem
-  surface rather than the existing singleton component policies.
-- Run one short diagnostic campaign only after that boundary exists, validating
-  that Scion can produce solver-level hypotheses with attributable
+- Run one short diagnostic campaign targeting the new problem-object
+  `solver_design` boundary, without forcing a singleton component policy.
+- Validate whether Scion now produces solver-level hypotheses with attributable
   whole-solver runtime movement.
 
 P2:
@@ -344,11 +349,12 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `main_search_strategy` is too shallow by itself to produce meaningful
-  algorithmic gains; without explicit deep-surface prioritization, agents
-  mostly revisit orchestration and legacy policy surfaces.
-- CVRP's current research-surface set is over-fragmented. It risks optimizing
-  whatever hook is exposed rather than the problem's solver design.
+- CVRP `solver_design` has not yet been validated in a fresh short diagnostic;
+  it may still produce plans that are too shallow to move phase-best objective
+  fields.
+- CVRP's current research-surface set still contains many component hooks. It
+  risks optimizing whatever hook is exposed unless APS keeps prioritizing the
+  problem-object solver-design boundary.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.
