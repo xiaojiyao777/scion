@@ -14,14 +14,14 @@ governance path is largely behaving, but CVRP short diagnostics still have not
 produced reliable screening-quality improvement. The latest post-optimization
 smoke improved deep-surface selection and ALNS/VNS attribution, and the
 follow-up control-plane repair now compacts preview payloads and reserves
-self-check observation budget more aggressively. The latest forced
-`destroy_repair_policy` prompt-repair diagnostic validates that final forced
-surface/action/target prompt narrowing holds in real traces: the rerun
-completed 8/8 rounds without forced-surface violations or circuit breaker
-failure. It still failed screening quality and exposed a CVRP package semantic
-gap where destroy/repair selector fields were audited but not fully honored by
-the implementation. The latest code repairs those selector semantics; rerun
-validation is still needed. Screening gates still fail.
+self-check observation budget more aggressively. Forced
+`destroy_repair_policy` diagnostics now complete 8/8 rounds without
+forced-surface violations or circuit breaker failure. The selector-semantics
+rerun confirmed the selector fields are real, but still failed screening
+quality and exposed a model-facing interface gap: candidates repeatedly put
+`subset_strategy` values such as `route_diverse` and `single_worst` into
+`destroy_selectors`. The latest code repairs the rendered surface interface by
+listing the disjoint enum sets explicitly. Screening gates still fail.
 
 Current branch: `v0.4-dev`
 
@@ -56,8 +56,9 @@ Current interpretation:
   attribution plumbing, not solver efficacy.
 - APS self-check reservation now preserves tool calls and observation-char
   headroom for compact schema/target/interface/Contract previews. The latest
-  forced diagnostic reached schema/target previews in 4/4 eligible sessions and
-  Contract preview in 2/2 completed code sessions without `result_too_large`.
+  forced diagnostics reached final self-checks without `result_too_large`; the
+  selector-semantics rerun's Contract preview found issues in 6/8 completed
+  code sessions before real Verification failed those candidates.
 - Forced-surface controls fail closed, and the final hypothesis-generation task
   now narrows `change_locus`, `action`, and `target_file` to active forced
   values instead of presenting the full surface list. The latest forced
@@ -66,6 +67,13 @@ Current interpretation:
   `route_diverse_worst` changes destroy ranking and `cheapest` uses a
   low-budget cheapest repair path instead of all selectors flowing through the
   same worst-removal/regret-2 implementation.
+- The latest selector-semantics rerun shows those levers still do not produce
+  useful movement by themselves: two screened candidates exhausted all
+  destroy/repair budgets with zero accepted current or phase-best moves.
+- The CVRP adapter-rendered `destroy_repair_policy` interface now lists valid
+  `destroy_selectors`, `repair_selectors`, and `subset_strategy` values
+  explicitly, including a warning not to put `single_worst` or `route_diverse`
+  in `destroy_selectors`.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
 phase-best improvement and screening-quality movement.
@@ -158,15 +166,15 @@ now exposes generic diagnostic priorities and tags deep/mechanism surfaces that
 have not yet been exercised, all-zero phase/objective-delta fields, and
 accepted/recovery movement without phase-level benefit. Next validation should
 be short and diagnostic-focused. Rerun `destroy_repair_policy` once after the
-selector-semantics repair, then move to `route_pair_candidate_policy` if
-destroy/repair still shows no nonzero phase-best movement.
+enum-interface repair, then move to `route_pair_candidate_policy` if valid
+destroy/repair candidates still show no nonzero phase-best movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511T073512Z
+run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511T092047Z
 model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
@@ -177,7 +185,7 @@ agentic_proposal=true
 agentic_session_timeout_sec=360
 force_surface=destroy_repair_policy
 stop_reason=max_rounds_exhausted
-analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md
+analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md
 ```
 
 Summary:
@@ -187,49 +195,49 @@ Summary:
 - All 8 hypotheses targeted `modify/destroy_repair_policy` and
   `policies/destroy_repair_policy.py`. No forced-surface violation appeared in
   `campaign_summary.json`.
-- The prompt repair is validated in real traces: all 8 hypothesis traces
-  contained the exact forced task line, and 0 hypothesis traces contained the
-  old generic "Choose a research surface from ..." task line.
-- APS preview-budget behavior remained healthy at larger volume:
-  schema/target previews reached 16/16 proposal sessions, Contract preview
-  reached 8/8 code sessions, all preview tools returned `ok`, and no
-  `result_too_large` or observation-budget exhaustion occurred.
-- Solver efficacy still failed: 5 candidates reached screening and all failed
-  `SCREENING_FAIL_WIN_RATE`; 3 candidates failed Verification with
+- The forced task line remains validated in real traces: all 8 hypothesis
+  traces contained the forced `destroy_repair_policy` task line, and 0
+  contained the old generic "Choose a research surface from ..." task line.
+- Solver efficacy still failed: 2 candidates reached screening and both failed
+  `SCREENING_FAIL_WIN_RATE`; 6 candidates failed Verification with
   `V5_solution_consistency`.
-- Screened candidates had win rates `0.125, 0.125, 0.125, 0.125, 0.25`, all
-  with `median_delta=0.0`.
-- Destroy/repair attribution was complete but non-beneficial across 80
-  screened pairs: 5,120 attempts, 5,120 repair-budget units used, zero accepted
+- Screened candidates had win rates `0.125` and `0.25`, both with
+  `median_delta=0.0`.
+- Destroy/repair attribution was complete but non-beneficial across 32
+  screened pairs: 2,048 attempts, 2,048 repair-budget units used, zero accepted
   current/recovery/phase-best moves, and
   `destroy_repair_phase_delta_sum=0.0`.
-- The run exposed a CVRP problem-package semantic gap: selector fields were
-  visible to prompts and runtime audit, but the actual solver path still used
-  fixed worst-removal ranking and regret-2 repair. The latest code repairs this
-  by honoring `route_diverse_worst` and `cheapest`.
+- `proposal.contract_preview` found issues for 6/8 completed code sessions,
+  but preview remains advisory; real Verification caught the selected-surface
+  runtime evidence failures.
+- Failed workspaces repeatedly used `route_diverse` or `single_worst` as
+  `destroy_selectors`, even though those values belong only in
+  `subset_strategy`. The latest code repairs the rendered interface by listing
+  these enum sets explicitly.
 
-Interpretation: the control-plane blocker is closed. The active blocker is now
-mechanism semantics and efficacy in `destroy_repair_policy`. Rerun the same
-forced diagnostic once after the selector repair before moving to
+Interpretation: forced-surface routing and selector implementation are no
+longer the active blockers. The active blocker is valid, useful mechanism
+variation in `destroy_repair_policy`. Rerun once after the enum-interface
+repair; if valid candidates still show zero phase movement, move to
 `route_pair_candidate_policy`.
 
 Detailed analysis:
-[`v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)
+[`v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md)
 
 Previous analyzed run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-sonnet-8r-20260511T062732Z
+run_root=/home/clawd/research/scion-experiments/v04-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511T073512Z
 model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
-rounds=5/8
+rounds=8/8
 time_limit_sec=20
 agentic_proposal=true
-agentic_session_timeout_sec=240
+agentic_session_timeout_sec=360
 force_surface=destroy_repair_policy
-stop_reason=circuit_breaker
-analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-sonnet-8r-20260511.md
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md
 ```
 
 ## Validation
@@ -311,7 +319,7 @@ Latest CVRP destroy/repair selector/proposal validation:
 ```
 
 ```text
-283 passed in 16.94s
+285 passed in 18.53s
 ```
 
 ## Next Actions
@@ -319,11 +327,12 @@ Latest CVRP destroy/repair selector/proposal validation:
 P1:
 
 - Rerun the forced `destroy_repair_policy` 8-round diagnostic after the
-  selector-semantics repair. Judge it first on whether `route_diverse_worst`
-  and `cheapest` reduce repair-budget exhaustion or produce nonzero accepted
-  phase-best movement.
-- If destroy/repair still shows zero phase movement after selector semantics
-  are real, stop forcing it and move to `route_pair_candidate_policy`.
+  enum-interface repair. Judge it first on whether invalid selector
+  Verification failures disappear and whether valid `route_diverse_worst` or
+  `cheapest` variants reduce repair-budget exhaustion or produce nonzero
+  accepted phase-best movement.
+- If valid destroy/repair policies still show zero phase movement, stop forcing
+  `destroy_repair_policy` and move to `route_pair_candidate_policy`.
 - Add a route-local runtime-summary bridge if future operator-surface runs keep
   showing useful generic operator telemetry but empty selected-surface summaries.
 - Continue only short CVRP diagnostics until those surfaces show nonzero
@@ -347,11 +356,11 @@ P2:
 - CVRP `main_search_strategy` is too shallow by itself to produce meaningful
   algorithmic gains; without explicit deep-surface prioritization, agents
   mostly revisit orchestration and legacy policy surfaces.
-- Deep-surface runtime attribution is improved for `alns_vns_policy`, but
-  still thin for `acceptance_restart_policy`, `destroy_repair_policy`, and
-  `route_pair_candidate_policy`.
-- The `destroy_repair_policy` selector-semantics repair is unit-tested but not
-  yet validated by a real forced campaign.
+- Deep-surface runtime attribution is improved for `alns_vns_policy` and
+  mechanically complete for `destroy_repair_policy`, but still thin for
+  `acceptance_restart_policy` and `route_pair_candidate_policy`.
+- The `destroy_repair_policy` enum-interface repair is unit-tested but not yet
+  validated by a real forced campaign.
 - Proposal preview and runtime audit can still disagree for strategies that
   are syntactically valid but semantically incompatible with diagnostic
   expectations.
@@ -367,4 +376,4 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-prompt-repair-sonnet-8r-20260511.md)
+  [`v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md)

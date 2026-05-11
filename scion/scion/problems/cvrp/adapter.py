@@ -138,12 +138,24 @@ _DESTROY_REPAIR_POLICY_ALLOWED_KEYS = frozenset(
         "phase_best_preference",
     }
 )
-_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS = frozenset(
-    {"worst_removal", "route_diverse_worst"}
+_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTOR_VALUES = (
+    "worst_removal",
+    "route_diverse_worst",
 )
-_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS = frozenset({"regret_2", "cheapest"})
+_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTORS = frozenset(
+    _DESTROY_REPAIR_ALLOWED_DESTROY_SELECTOR_VALUES
+)
+_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTOR_VALUES = ("regret_2", "cheapest")
+_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTORS = frozenset(
+    _DESTROY_REPAIR_ALLOWED_REPAIR_SELECTOR_VALUES
+)
+_DESTROY_REPAIR_SUBSET_STRATEGY_VALUES = (
+    "prefix_shifted_route_diverse",
+    "single_worst",
+    "route_diverse",
+)
 _DESTROY_REPAIR_SUBSET_STRATEGIES = frozenset(
-    {"prefix_shifted_route_diverse", "single_worst", "route_diverse"}
+    _DESTROY_REPAIR_SUBSET_STRATEGY_VALUES
 )
 _ROUTE_PAIR_POLICY_ALLOWED_KEYS = frozenset(
     {"enabled", "scoring_terms", "move_families", "candidate_limits"}
@@ -177,6 +189,10 @@ _POLICY_INSTANCE_API_TEXT = (
     "attribute is intentionally not defined and will fail synthetic preview or "
     "runtime audit when reached."
 )
+
+
+def _format_literal_values(values: Sequence[str]) -> str:
+    return ", ".join(f"'{value}'" for value in values)
 
 
 class CvrpAdapter:
@@ -471,6 +487,24 @@ class CvrpAdapter:
                 "    return bounded destroy selectors, repair selectors, subset "
                 "strategy, max_destroy_customers, repair_budget_per_customer, "
                 "fallback flag, and phase_best_preference.\n\n"
+                "Return contract:\n"
+                "- enabled: bool\n"
+                "- destroy_selectors: non-empty sequence containing only "
+                + _format_literal_values(_DESTROY_REPAIR_ALLOWED_DESTROY_SELECTOR_VALUES)
+                + ". These values select the customer-removal ranking.\n"
+                "- repair_selectors: non-empty sequence containing only "
+                + _format_literal_values(_DESTROY_REPAIR_ALLOWED_REPAIR_SELECTOR_VALUES)
+                + ". These values select the reinsertion scoring path.\n"
+                "- subset_strategy: one of "
+                + _format_literal_values(_DESTROY_REPAIR_SUBSET_STRATEGY_VALUES)
+                + ". This chooses the bounded subset extraction strategy.\n"
+                "- max_destroy_customers: int in [1, 12]\n"
+                "- repair_budget_per_customer: int in [1, 16]\n"
+                "- fallback_to_smaller_subsets: bool\n"
+                "- phase_best_preference: bool\n\n"
+                "Do not put subset strategies such as 'single_worst' or "
+                "'route_diverse' in destroy_selectors; unknown selector values "
+                "fail selected-surface runtime audit.\n\n"
                 + _POLICY_INSTANCE_API_TEXT
             )
         if surface_name == "route_pair_candidate_policy":

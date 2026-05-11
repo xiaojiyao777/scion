@@ -109,6 +109,29 @@ def test_cvrp_policy_surface_interfaces_render_safe_instance_api(
     assert "Never use `instance.customers`" in rendered
 
 
+def test_cvrp_destroy_repair_policy_interface_lists_disjoint_selector_enums(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    rendered = cvrp_adapter.render_research_surface_interface("destroy_repair_policy")
+
+    assert (
+        "destroy_selectors: non-empty sequence containing only 'worst_removal', "
+        "'route_diverse_worst'"
+    ) in rendered
+    assert (
+        "repair_selectors: non-empty sequence containing only 'regret_2', "
+        "'cheapest'"
+    ) in rendered
+    assert (
+        "subset_strategy: one of 'prefix_shifted_route_diverse', 'single_worst', "
+        "'route_diverse'"
+    ) in rendered
+    assert (
+        "Do not put subset strategies such as 'single_worst' or 'route_diverse' "
+        "in destroy_selectors"
+    ) in rendered
+
+
 def test_cvrp_policy_preview_rejects_instance_customers_alias(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
@@ -507,6 +530,39 @@ def test_cvrp_deep_mechanism_policy_preview_rejects_bad_values(
     assert "made_up_score" in issues
     assert "pair_cap" in issues
     assert "unknown" in issues
+
+
+def test_cvrp_destroy_repair_policy_preview_rejects_subset_values_as_destroy_selectors(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/destroy_repair_policy.py",
+        action="modify",
+        code_content=(
+            "def destroy_repair_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'destroy_selectors': ['route_diverse', 'single_worst'],\n"
+            "        'repair_selectors': ['cheapest'],\n"
+            "        'subset_strategy': 'route_diverse',\n"
+            "        'max_destroy_customers': 4,\n"
+            "        'repair_budget_per_customer': 16,\n"
+            "        'fallback_to_smaller_subsets': True,\n"
+            "        'phase_best_preference': True,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="destroy_repair_policy"),
+    )
+
+    assert preview["passed"] is False
+    issues = json.dumps(preview["issues"])
+    assert "destroy_selectors returned unknown values" in issues
+    assert "route_diverse" in issues
+    assert "single_worst" in issues
 
 
 def test_valid_route_solution_passes_all_adapter_checks(

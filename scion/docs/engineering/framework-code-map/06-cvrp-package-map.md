@@ -252,6 +252,10 @@ of only appearing in runtime audit. Runtime telemetry records subset,
 removed/reinserted, budget, fallback, accepted, skip, delta, and runtime
 fields.
 
+The adapter-rendered interface for this surface lists the destroy selector,
+repair selector, and subset-strategy enum sets separately. `single_worst` and
+`route_diverse` are valid subset strategies, not valid `destroy_selectors`.
+
 `policies/route_pair_candidate_policy.py` is a singleton deep mechanism
 research surface. Required function:
 

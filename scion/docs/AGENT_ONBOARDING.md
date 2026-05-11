@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-05-11*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -70,9 +70,14 @@ Important current interpretation:
 - `main_search_strategy` is a controlled whole-algorithm orchestration surface,
   not permission to freely rewrite the original CVRP solver.
 - Latest short diagnostics validate forced-surface control, APS feedback,
-  perturbation-schedule runtime evidence, and selected-surface audit.
+  perturbation-schedule runtime evidence, selected-surface audit, and real
+  `destroy_repair_policy` selector semantics.
 - They do not yet validate solver efficacy. Screened candidates still fail
   quality thresholds, and phase-best movement remains zero.
+- The current `destroy_repair_policy` follow-up is interface clarity: valid
+  `destroy_selectors`, `repair_selectors`, and `subset_strategy` values are
+  now rendered explicitly after the latest run showed agents mixing those enum
+  sets.
 - Do not run long CVRP solver-quality validation until a short diagnostic shows
   nonzero phase-best improvement and screening-quality movement.
 
