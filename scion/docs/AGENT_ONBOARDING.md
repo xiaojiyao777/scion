@@ -60,15 +60,15 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 Active version: v0.4 on `v0.4-dev`.
 
 Current work centers on CVRP as the second real problem class after the
-warehouse/surrogate path. CVRP now exposes a preferred diagnostic surface,
-`main_search_strategy`, which can orchestrate declared construction, baseline,
-improvement, acceptance/restart, perturbation, and optional post-baseline
-components.
+warehouse/surrogate path. The immediate direction is a problem-object
+adaptation pivot: Scion should receive a coherent CVRP problem object and
+solver-design boundary through the adapter, rather than being driven through
+one forced singleton policy at a time.
 
 Important current interpretation:
 
-- `main_search_strategy` is a controlled whole-algorithm orchestration surface,
-  not permission to freely rewrite the original CVRP solver.
+- `main_search_strategy` is a controlled orchestration hook, but it is not the
+  whole research object.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.
@@ -77,8 +77,9 @@ Important current interpretation:
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.
-- The next short forced diagnostic should target `route_pair_candidate_policy`,
-  not another `destroy_repair_policy` run.
+- Do not start another forced single-policy diagnostic, including
+  `route_pair_candidate_policy`, before the problem-object adaptation slice is
+  designed.
 - Do not run long CVRP solver-quality validation until a short diagnostic shows
   nonzero phase-best improvement and screening-quality movement.
 

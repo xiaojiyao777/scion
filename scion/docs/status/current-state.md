@@ -11,18 +11,15 @@ handoff. Historical repair and experiment notes were moved to
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest post-optimization
-smoke improved deep-surface selection and ALNS/VNS attribution, and the
-follow-up control-plane repair now compacts preview payloads and reserves
-self-check observation budget more aggressively. Forced
-`destroy_repair_policy` diagnostics now complete 8/8 rounds without
-forced-surface violations or circuit breaker failure. The latest enum-interface
-rerun validates the rendered selector guidance: invalid selector Verification
-failures disappeared and 7 candidates reached screening. All 7 still failed
-screening with zero accepted destroy/repair movement, so
-`destroy_repair_policy` should be considered exhausted for the current
-solver-owned mechanism. Screening gates still fail; the next short diagnostic
-should force `route_pair_candidate_policy`.
+produced reliable screening-quality improvement. The latest forced
+`destroy_repair_policy` enum-interface rerun validates the governance and
+adapter plumbing, but it also shows that the recent direction has become too
+incremental: Scion is being asked to optimize one exposed policy hook at a
+time. That is not the intended research object. The next direction is a
+problem-object adaptation pivot: Scion should receive a coherent CVRP problem
+object and solver-design boundary through the adapter, then reason about the
+solver at the problem level. Do not start another forced single-policy
+diagnostic until that adaptation slice is designed.
 
 Current branch: `v0.4-dev`
 
@@ -31,18 +28,17 @@ Current interpretation:
 - Scion core remains problem-agnostic: proposal observations are tainted,
   Decision does not read proposal text, and problem semantics stay behind
   adapters/problem packages.
-- Forced `main_search_strategy` diagnostics now stay on the selected surface,
-  collect APS feedback, render tool observations into hypothesis/code prompts,
-  and enforce selected-surface runtime audit.
-- CVRP `main_search_strategy` is a controlled whole-algorithm orchestration
-  surface, not permission to freely rewrite the original solver. It can choose
-  and parameterize declared construction, baseline, improvement,
-  acceptance/restart, perturbation, and optional post-baseline components.
-- The higher-ceiling v3 path is no longer another small
-  `main_search_strategy` knob. The current development slice adds a deep
-  mechanism surface family with contracts, preview checks, and runtime audit:
-  ALNS/VNS policy, destroy/repair policy, route-pair candidate policy, and
-  acceptance/restart policy.
+- Forced single-surface diagnostics have done their job for governance and
+  runtime-audit validation. They should not continue as the main optimization
+  path.
+- CVRP `main_search_strategy` and the deep mechanism policy family are useful
+  implementation hooks, but they are not the right research abstraction by
+  themselves. The next slice should expose the CVRP problem object and a
+  top-level solver-design boundary, not another isolated policy knob.
+- The higher-ceiling v3 path should be a problem-object adaptation path:
+  instance model, solution model, objective policy, move/design affordances,
+  solver lifecycle, and whole-solver evidence should be rendered by the adapter
+  as one coherent object for Scion to reason over.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 48k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -72,10 +68,10 @@ Current interpretation:
   `destroy_selectors`, `repair_selectors`, and `subset_strategy` values
   explicitly, including a warning not to put `single_worst` or `route_diverse`
   in `destroy_selectors`.
-- The latest enum-interface rerun validates that model-facing repair but
-  exhausts `destroy_repair_policy` as a useful diagnostic target: 7 valid
-  screened candidates made 7,168 destroy/repair attempts across 112 pairs with
-  zero accepted current/recovery/phase-best moves and
+- The latest enum-interface rerun validates that model-facing repair but also
+  demonstrates the limit of policy-by-policy exposure: 7 valid screened
+  `destroy_repair_policy` candidates made 7,168 destroy/repair attempts across
+  112 pairs with zero accepted current/recovery/phase-best moves and
   `destroy_repair_phase_delta_sum=0.0`.
 
 Do not run long CVRP validation until a short diagnostic shows nonzero
@@ -157,20 +153,13 @@ singleton policy in `policies/main_search_strategy.py` and can coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: `main_search_strategy` can orchestrate declared components
-but should not be treated as the whole research object. The deeper mechanism
-surface family now exposes controlled hooks for ALNS/VNS params, destroy/repair
-selection and repair budgets, route-pair candidate ranking, and
-acceptance/restart/perturbation behavior. Active destroy/repair, route-pair, or
-acceptance/restart mechanism policies can also trigger a package-owned default
-main-search diagnostic plan, so those surfaces can generate runtime evidence
-without simultaneously modifying `main_search_strategy.py`. Proposal feedback
-now exposes generic diagnostic priorities and tags deep/mechanism surfaces that
-have not yet been exercised, all-zero phase/objective-delta fields, and
-accepted/recovery movement without phase-level benefit. Next validation should
-be short and diagnostic-focused. Stop forcing `destroy_repair_policy` unless
-the solver-owned mechanism changes; the next forced diagnostic should target
-`route_pair_candidate_policy`.
+Current limitation: this surface list is now too component-centric. It exposes
+many legal hooks, but it does not yet give Scion a coherent CVRP problem object
+to research. The next slice should redesign adapter/problem-spec rendering so
+Scion sees the instance model, solution representation, constraints, objective
+policy, move/design affordances, solver lifecycle, and whole-solver evidence
+as one problem-owned research object. Stop forced policy diagnostics until that
+slice is designed.
 
 ## Latest Experiment
 
@@ -218,8 +207,10 @@ Summary:
 
 Interpretation: `destroy_repair_policy` is no longer blocked by prompt routing,
 selector implementation, or selector enum clarity. It is exhausted as a forced
-diagnostic target for the current solver-owned mechanism. Move the next short
-forced diagnostic to `route_pair_candidate_policy`.
+diagnostic target for the current solver-owned mechanism. More importantly,
+this run confirms that continuing to force one policy hook at a time is the
+wrong optimization strategy. The next step is the problem-object adaptation
+pivot, not another forced policy run.
 
 Detailed analysis:
 [`v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md)
@@ -326,17 +317,19 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Run a forced `route_pair_candidate_policy` 8-round diagnostic next. Judge it
-  first on whether selected-surface runtime attribution records generated
-  candidates, accepted route-pair swaps, or nonzero route-pair phase delta.
-- Do not force `destroy_repair_policy` again unless the solver-owned bounded
-  destroy/repair mechanism changes; valid policy variants have shown zero
-  accepted movement across 112 screened pairs.
-- Add a route-local runtime-summary bridge if future operator-surface runs keep
-  showing useful generic operator telemetry but empty selected-surface summaries.
-- Continue only short CVRP diagnostics until those surfaces show nonzero
-  phase-best movement or clearly attributed mechanism-level behavior beyond
-  component permutation.
+- Stop forced single-policy diagnostics for now, including
+  `route_pair_candidate_policy`.
+- Design the CVRP problem-object adaptation slice: what Scion should see about
+  the instance model, solution model, constraints, objective policy,
+  route/move affordances, solver lifecycle, and whole-solver evidence.
+- Decide whether the next top-level research target is a broad
+  solver-design/problem-object surface rather than the existing singleton
+  component policies.
+- Update adapter rendering and problem-spec metadata so the Creative Layer
+  reasons from that problem object instead of a menu of local knobs.
+- After that slice exists, run one short diagnostic campaign to validate that
+  Scion can produce solver-level hypotheses with attributable whole-solver
+  runtime movement.
 
 P2:
 
@@ -355,6 +348,8 @@ P2:
 - CVRP `main_search_strategy` is too shallow by itself to produce meaningful
   algorithmic gains; without explicit deep-surface prioritization, agents
   mostly revisit orchestration and legacy policy surfaces.
+- CVRP's current research-surface set is over-fragmented. It risks optimizing
+  whatever hook is exposed rather than the problem's solver design.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.
@@ -377,3 +372,5 @@ P2:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
   [`v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md`](../experiments/v0.4/v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md)
+- Problem-object adaptation pivot:
+  [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

@@ -96,6 +96,11 @@ Medium-risk areas:
   core sees only declared surface metadata and selected-surface runtime fields,
   not ALNS/VNS parameter semantics.
 - Promotion and weight optimization mutate champion state asynchronously/synchronously. Any new design surface that changes registry semantics should be checked against promotion snapshot and stale/reconcile behavior.
+- CVRP's current surface set is becoming over-fragmented. Adding or forcing
+  more singleton component policies is a risk: Scion starts optimizing exposed
+  knobs instead of the problem's solver design. The next CVRP slice should
+  expose a coherent problem object through the adapter before adding more
+  component-level surfaces.
 
 ## Places to Avoid Editing for Problem Features
 
@@ -137,10 +142,11 @@ interface/preview, solver execution and audit, selected-surface runtime
 evidence, focused tests, and engineering docs were updated without adding CVRP
 semantics to core governance. Future surfaces should keep the same boundary.
 
-Current next diagnostic: force `main_search_strategy` and evaluate whether the
-new whole-algorithm surface produces nontrivial main-search movement before
-spending more budget on post-baseline generated operators or baseline-policy
-only tuning.
+Current next implementation slice: do not force another singleton policy.
+Define the CVRP problem object Scion should see through the adapter: instance
+structure, solution representation, constraints, objective policy, move/design
+affordances, solver lifecycle, and whole-solver evidence. See
+[`problem-object-adaptation-pivot.md`](../problem-object-adaptation-pivot.md).
 
 ## Design Review Checklist
 
