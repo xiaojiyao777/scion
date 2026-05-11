@@ -138,6 +138,7 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
         termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
+        force_surface="route_local",
     )
 
 

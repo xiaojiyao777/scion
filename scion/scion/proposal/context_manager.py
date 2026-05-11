@@ -98,6 +98,14 @@ class ContextManager:
             else None
         )
         research_surfaces_block = _build_research_surfaces_block(research_surfaces)
+        declared_problem_boundary_surfaces = _solver_design_surface_names(
+            research_surfaces
+        )
+        active_problem_boundary_surfaces = (
+            []
+            if forced_request is not None
+            else declared_problem_boundary_surfaces
+        )
         champion_operators_code = _read_champion_research_code(
             champion,
             research_surfaces=research_surfaces,
@@ -136,6 +144,20 @@ class ContextManager:
         targetable_surface_files = _list_champion_surface_files(
             champion,
             research_surfaces=research_surfaces,
+        )
+        active_boundary_target_files = _surface_target_files_for_names(
+            research_surfaces,
+            active_problem_boundary_surfaces,
+        )
+        effective_operator_categories = (
+            active_problem_boundary_surfaces
+            if active_problem_boundary_surfaces
+            else list(problem_spec.operator_categories)
+        )
+        effective_targetable_files = (
+            active_boundary_target_files
+            if active_boundary_target_files
+            else sorted(set(targetable_operator_files) | set(targetable_surface_files))
         )
         available_actions = _available_hypothesis_actions(
             targetable_operator_files,
@@ -263,11 +285,12 @@ class ContextManager:
             "solver_mechanics": solver_mechanics,
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
-            "operator_categories": ", ".join(problem_spec.operator_categories),
+            "operator_categories": ", ".join(effective_operator_categories),
             "research_surfaces": research_surfaces_block,
             "available_actions": ", ".join(sorted(available_actions)),
-            "targetable_files": ", ".join(
-                sorted(set(targetable_operator_files) | set(targetable_surface_files))
+            "targetable_files": ", ".join(effective_targetable_files),
+            "active_problem_boundary_surfaces": ", ".join(
+                active_problem_boundary_surfaces
             ),
             "champion_operators_code": champion_operators_code,
             "champion_stats": champion_stats,
@@ -2907,6 +2930,24 @@ def _solver_design_surface_names(research_surfaces: List[Any]) -> list[str]:
         if kind == "solver_design" or "solver_design" in role:
             names.append(name)
     return names
+
+
+def _surface_target_files_for_names(
+    research_surfaces: List[Any],
+    names: List[str],
+) -> list[str]:
+    allowed = {str(name or "").strip() for name in names if str(name or "").strip()}
+    if not allowed:
+        return []
+    files: list[str] = []
+    for surface in research_surfaces:
+        name = str(getattr(surface, "name", "") or "").strip()
+        if name not in allowed:
+            continue
+        for target in surface_target_files(surface):
+            if target not in files:
+                files.append(target)
+    return sorted(files)
 
 
 def _summarise_siblings(siblings: List[Branch]) -> str:

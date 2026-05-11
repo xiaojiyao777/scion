@@ -536,6 +536,9 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
     forced_action = str(context.get("forced_action") or "").strip()
     forced_target_file = str(context.get("forced_target_file") or "").strip()
     constraints = context.get("agentic_hypothesis_constraints")
+    active_boundary = str(
+        context.get("active_problem_boundary_surfaces") or ""
+    ).strip()
     if isinstance(constraints, Mapping):
         forced_surface = forced_surface or str(
             constraints.get("forced_surface") or ""
@@ -546,6 +549,13 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         forced_target_file = forced_target_file or str(
             constraints.get("forced_target_file") or ""
         ).strip()
+        boundary_value = constraints.get("active_problem_boundary_surfaces")
+        if not active_boundary and isinstance(boundary_value, (list, tuple)):
+            active_boundary = ", ".join(
+                str(item).strip() for item in boundary_value if str(item).strip()
+            )
+        elif not active_boundary:
+            active_boundary = str(boundary_value or "").strip()
     if forced_surface:
         lines = [
             "## Task",
@@ -574,6 +584,28 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             lines.append(
                 "If the forced action is \"modify\" or \"remove\", provide a "
                 "target_file declared by the forced surface."
+            )
+        return "\n".join(lines) + "\n"
+    if active_boundary:
+        targetable_files = str(context.get("targetable_files") or "")
+        lines = [
+            "## Task",
+            (
+                "Propose ONE new hypothesis for improving the solver within "
+                "the active problem-object research boundary."
+            ),
+            f"Set `change_locus` to one of: {active_boundary}.",
+            (
+                "Do not choose a component policy as `change_locus`; component "
+                "policies may be referenced only as implementation hooks or "
+                "attribution evidence inside the problem-level solver design."
+            ),
+            "Set `action` to one legal action for the active boundary.",
+        ]
+        if targetable_files:
+            lines.append(
+                "If action is \"modify\" or \"remove\", provide `target_file` "
+                f"from the active boundary files: {targetable_files}."
             )
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")

@@ -62,6 +62,68 @@ def _runtime_attr(runtime: Any, name: str) -> Any:
         return None
 
 
+def _active_problem_boundary_surfaces_for_runtime(runtime: Any) -> tuple[str, ...]:
+    problem_spec = _runtime_attr(runtime, "spec")
+    if problem_spec is None:
+        problem_spec = _runtime_attr(runtime, "_spec")
+    adapter = _runtime_attr(runtime, "adapter")
+    if adapter is None:
+        adapter = _runtime_attr(runtime, "_adapter")
+    adapter_spec = _runtime_attr(adapter, "spec")
+    if adapter_spec is None:
+        adapter_spec = _runtime_attr(adapter, "_spec")
+    names = _declared_solver_design_surface_names(problem_spec)
+    if not names:
+        names = _declared_solver_design_surface_names(adapter_spec)
+    return tuple(names)
+
+
+def _declared_solver_design_surface_names(problem_spec: Any) -> list[str]:
+    if problem_spec is None:
+        return []
+    names: list[str] = []
+    for surface in getattr(problem_spec, "research_surfaces", []) or []:
+        name = str(getattr(surface, "name", "") or "").strip()
+        if not name:
+            continue
+        kind = str(getattr(surface, "kind", "") or "").strip().lower()
+        role = str(getattr(getattr(surface, "algorithm", None), "role", "") or "").lower()
+        if kind == "solver_design" or "solver_design" in role:
+            names.append(name)
+    return names
+
+
+def _agentic_self_check_failure_detail(
+    output: AgenticProposalOutput,
+) -> str | None:
+    self_check = output.self_check
+    has_self_check_transcript = any(
+        str(getattr(event, "phase", "") or "") == "self_check"
+        or str(getattr(event, "metadata", {}).get("tool_name", "") or "").startswith(
+            "proposal."
+        )
+        for event in output.transcript
+    )
+    has_self_check_evidence = bool(
+        has_self_check_transcript
+        or self_check.contract_preview_passed is not None
+        or self_check.contract_preview_codes
+    )
+    if not has_self_check_evidence:
+        return None
+    if not self_check.schema_valid:
+        return "agentic_self_check_failed: schema or target preview did not pass"
+    if output.status == AgenticProposalStatus.COMPLETED:
+        if self_check.contract_preview_passed is not True:
+            codes = ", ".join(self_check.contract_preview_codes)
+            suffix = f" ({codes})" if codes else ""
+            return (
+                "agentic_self_check_failed: contract preview did not pass"
+                f"{suffix}"
+            )
+    return None
+
+
 class CreativeLayerLike(Protocol):
     def generate_hypothesis(self, context: dict[str, Any]) -> HypothesisProposal:
         ...
@@ -250,6 +312,25 @@ class ProposalPipeline:
             self.hypothesis_failure_details[bid] = forced_detail
             self.handle_failure(branch, FailureEvent(category="proposal", detail=forced_detail))
             self.circuit_breaker.record_failure(forced_detail)
+            return None, None
+        boundary_detail = self._active_problem_boundary_violation(
+            hypothesis,
+            active_problem_boundary_surfaces=(
+                ()
+                if forced_locus
+                else _active_problem_boundary_surfaces_for_runtime(
+                    self.problem_runtime,
+                )
+            ),
+            forced_surface=forced_locus,
+        )
+        if boundary_detail is not None:
+            self.hypothesis_failure_details[bid] = boundary_detail
+            self.handle_failure(
+                branch,
+                FailureEvent(category="proposal", detail=boundary_detail),
+            )
+            self.circuit_breaker.record_failure(boundary_detail)
             return None, None
 
         self.circuit_breaker.record_success()
@@ -475,6 +556,13 @@ class ProposalPipeline:
             or (self.forced_surface_target_file if forced_surface else None)
         )
 
+        active_boundary = _declared_solver_design_surface_names(problem_spec)
+        if not active_boundary and adapter is not None:
+            adapter_spec = _runtime_attr(adapter, "spec")
+            if adapter_spec is None:
+                adapter_spec = _runtime_attr(adapter, "_spec")
+            active_boundary = _declared_solver_design_surface_names(adapter_spec)
+
         return ProposalToolContext(
             session_id="pending",
             campaign_id=self.campaign_id,
@@ -491,6 +579,11 @@ class ProposalPipeline:
             forced_surface=forced_surface or None,
             forced_action=forced_action or None,
             forced_target_file=forced_target_file or None,
+            active_problem_boundary_surfaces=(
+                ()
+                if forced_surface
+                else tuple(active_boundary)
+            ),
         )
 
     def _generate_agentic_hypothesis(
@@ -544,6 +637,11 @@ class ProposalPipeline:
                 if request.tool_context
                 else None
             ),
+            active_problem_boundary_surfaces=(
+                request.tool_context.active_problem_boundary_surfaces
+                if request.tool_context
+                else ()
+            ),
         )
         output = self._sanitize_pre_contract_agentic_output(output)
         self._record_agentic_lineage_event(output)
@@ -579,6 +677,11 @@ class ProposalPipeline:
                 branch=branch,
                 champion=self._champion_snapshot(),
                 output=output,
+                active_problem_boundary_surfaces=(
+                    _active_problem_boundary_surfaces_for_runtime(
+                        self.problem_runtime,
+                    )
+                ),
             )
             if output.status == AgenticProposalStatus.FAILED:
                 detail = self._agentic_failure_detail(output)
@@ -650,6 +753,11 @@ class ProposalPipeline:
             branch=branch,
             champion=self._champion_snapshot(),
             output=output,
+            active_problem_boundary_surfaces=(
+                request.tool_context.active_problem_boundary_surfaces
+                if request.tool_context
+                else ()
+            ),
         )
         self._record_agentic_lineage_event(output)
         self._record_agentic_session_ref(output)
@@ -700,6 +808,7 @@ class ProposalPipeline:
         forced_surface: str | None = None,
         forced_action: str | None = None,
         forced_target_file: str | None = None,
+        active_problem_boundary_surfaces: tuple[str, ...] = (),
     ) -> AgenticProposalOutput:
         failures: list[str] = []
         if output.branch_id != branch.branch_id:
@@ -753,6 +862,18 @@ class ProposalPipeline:
             )
             if forced_violation is not None:
                 failures.append(forced_violation)
+            boundary_violation = self._active_problem_boundary_violation(
+                output.hypothesis,
+                active_problem_boundary_surfaces=active_problem_boundary_surfaces,
+                forced_surface=forced_surface,
+            )
+            if boundary_violation is not None:
+                failures.append(boundary_violation)
+
+        if output.status != AgenticProposalStatus.FAILED:
+            self_check_failure = _agentic_self_check_failure_detail(output)
+            if self_check_failure is not None:
+                failures.append(self_check_failure)
 
         patch = output.patch
         failure_detail = output.failure_detail
@@ -807,6 +928,30 @@ class ProposalPipeline:
                     f"{forced_target_file!r}, got {target!r}"
                 )
         return None
+
+    @staticmethod
+    def _active_problem_boundary_violation(
+        hypothesis: HypothesisProposal,
+        *,
+        active_problem_boundary_surfaces: tuple[str, ...],
+        forced_surface: str | None = None,
+    ) -> str | None:
+        if str(forced_surface or "").strip():
+            return None
+        boundary = [
+            str(surface or "").strip()
+            for surface in active_problem_boundary_surfaces
+            if str(surface or "").strip()
+        ]
+        if not boundary:
+            return None
+        actual = str(hypothesis.change_locus or "").strip()
+        if actual in set(boundary):
+            return None
+        return (
+            "active_problem_boundary_constraint: change_locus must stay within "
+            f"{boundary!r}; got {actual!r}"
+        )
 
     def _sanitize_pre_contract_agentic_output(
         self,

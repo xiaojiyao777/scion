@@ -247,6 +247,7 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
         termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
+        force_surface="route_local",
     )
 
     result = campaign.run_one_step()

@@ -38,6 +38,7 @@ referenced, not copied into development prompts.
 - [Forced destroy repair policy selector-repair Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-selector-repair-sonnet-8r-20260511.md)
 - [Forced destroy repair policy enum-interface Sonnet 8R diagnostic, 2026-05-11](v0.4-forced-destroy-repair-policy-enum-interface-sonnet-8r-20260511.md)
 - [Solver-design problem-object Sonnet 12R diagnostic, terminated early, 2026-05-11](v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md)
+- [Solver-design boundary-repair Sonnet 4R diagnostic, terminated early, 2026-05-11](v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
 
 ## Related
 

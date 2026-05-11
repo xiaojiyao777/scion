@@ -377,6 +377,19 @@ def _valid_hypothesis_payload(**overrides) -> dict:
         },
     }
     payload.update(overrides)
+    if payload.get("change_locus") == "solver_design":
+        if "target_objectives" not in overrides:
+            payload["target_objectives"] = ["total_distance"]
+        if "protected_objectives" not in overrides:
+            payload["protected_objectives"] = ["fleet_violation"]
+        signature = dict(payload.get("novelty_signature") or {})
+        signature.setdefault("selected_components", ["main_search_strategy"])
+        signature.setdefault("deep_components_selected", ["route_pair_swap"])
+        signature.setdefault("destroy_repair_pattern", "bounded")
+        signature.setdefault("baseline_fraction_pattern", "bounded_baseline")
+        signature.setdefault("acceptance_restart_pattern", "strict_no_restart")
+        signature.setdefault("perturbation_pattern", "none")
+        payload["novelty_signature"] = signature
     return payload
 
 
@@ -1224,6 +1237,100 @@ def test_cvrp_solver_design_preprotocol_failure_requests_boundary_retry(
     assert diagnosis["failed_solver_design_surfaces"] == ["solver_design"]
     assert "solver_design_pre_protocol_failure" in diagnosis["failure_mode_tags"]
     assert "pre-screening candidate failure" in " ".join(
+        diagnosis["next_hypothesis_requirements"]
+    )
+
+
+def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    payload = listed.structured_payload
+    assert [surface["name"] for surface in payload["surfaces"]] == ["solver_design"]
+    assert payload["total_declared_surface_count"] > payload["surface_count"]
+    assert payload["active_problem_boundary_constraint"]["surfaces"] == [
+        "solver_design"
+    ]
+
+    rejected = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "baseline_policy",
+            "action": "modify",
+            "target_file": "policies/baseline_policy.py",
+        },
+        context,
+    )
+    assert rejected.structured_payload["passed"] is False
+    assert "active_problem_boundary_constraint" in " ".join(
+        rejected.structured_payload["issues"]
+    )
+
+    accepted = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/main_search_strategy.py",
+        },
+        context,
+    )
+    assert accepted.structured_payload["passed"] is True
+
+
+def test_cvrp_solver_design_screening_failure_keeps_boundary_priority(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    solver_design_screening = StepRecord(
+        round_num=1,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Try the top-level solver design.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/main_search_strategy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=2, ties=0, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening safe summary",
+            raw_metrics_ref="/SECRET/raw/metrics/SECRET_RAW_REF.json",
+            selected_surface="solver_design",
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    context = replace(
+        _cvrp_context(tmp_path),
+        step_history=(solver_design_screening,),
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    priorities = listed.structured_payload["diagnostic_surface_priorities"]
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    diagnosis = runtime.structured_payload["research_diagnosis"]
+
+    assert priorities["screening_failed_solver_design_surfaces"] == [
+        "solver_design"
+    ]
+    assert "solver_design_screening_failure" in priorities["failure_mode_tags"]
+    assert "component policies" in priorities["recommendation"]
+    assert diagnosis["screening_failed_solver_design_surfaces"] == ["solver_design"]
+    assert "solver_design_screening_failure" in diagnosis["failure_mode_tags"]
+    assert "replacement research goals" in " ".join(
         diagnosis["next_hypothesis_requirements"]
     )
 
@@ -2928,7 +3035,8 @@ def test_agentic_session_tool_loop_limits_are_enforced(tmp_path: Path) -> None:
         if event.metadata.get("stop_reason") == "tool_loop_limit"
     ]
 
-    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.failure_detail == "schema or target preview did not pass"
     assert [event.metadata["tool_name"] for event in tool_events] == [
         "context.list_surfaces",
         "context.read_problem",
@@ -3879,6 +3987,13 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
             {"stop": True},
         ],
         hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path="policies/main_search_strategy.py",
+            action="modify",
+            code_content=(_CVRP_ROOT / "policies" / "main_search_strategy.py").read_text(
+                encoding="utf-8"
+            ),
+        ),
     )
     session = AgenticProposalSession(
         creative,
@@ -4003,7 +4118,7 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     assert "SECRET_FROZEN" not in rendered_artifact
 
 
-def test_agentic_session_contract_preview_does_not_replace_real_gate(
+def test_agentic_session_contract_preview_failure_fails_closed(
     tmp_path: Path,
 ) -> None:
     bad_patch = PatchProposal(
@@ -4035,8 +4150,10 @@ def test_agentic_session_contract_preview_does_not_replace_real_gate(
         )
     )
 
-    assert output.status == AgenticProposalStatus.COMPLETED
-    assert output.patch == bad_patch
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert output.failure_detail is not None
+    assert "contract preview did not pass" in output.failure_detail
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
 

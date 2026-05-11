@@ -12,13 +12,15 @@ handoff. Historical repair and experiment notes were moved to
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
 produced reliable screening-quality improvement. The latest solver-design
-problem-object diagnostic was terminated early because it exposed a control
-loop bug: after one `solver_design` candidate failed heavy Verification, APS
-treated the top-level surface as globally blacklisted and fell back to
-component-policy exploration. That is not a valid test of the problem-object
-research boundary. A repair now keeps heavy solver-design candidate failures
-candidate-scoped and adds APS/context guidance; run one short free-surface
-diagnostic to validate boundary control before solver-quality validation.
+boundary-repair diagnostic was terminated early because it exposed the
+remaining control leak: after two valid `solver_design` candidates reached
+screening and failed with zero movement, APS selected `baseline_policy` as the
+next top-level research target, and the completed code session had a failed
+self-check. That is still not a valid test of the problem-object research
+boundary. A deeper repair now enforces `solver_design` as the active
+problem-object boundary when declared and fails closed on APS self-check
+failures; run one short free-surface diagnostic to validate this before
+solver-quality validation.
 
 Current branch: `v0.4-dev`
 
@@ -43,6 +45,15 @@ Current interpretation:
   only the candidate implementation `rejected`; hypothesis context and APS
   feedback explicitly recommend retrying the problem-object boundary rather
   than falling back to component policies.
+- The follow-up boundary-repair diagnostic selected `solver_design` twice and
+  reached screening both times, but then drifted to `baseline_policy` after
+  zero-movement screening failures. The latest code now makes `solver_design`
+  an active problem boundary: proposal context, APS tools, target preview, and
+  final hypothesis prompts reject component-policy `change_locus` values when
+  no forced diagnostic surface is active.
+- APS self-check failures now fail closed for real sessions. Schema/target
+  preview failures, skipped Contract previews, or failed Contract previews stop
+  the completed output before the patch enters evaluation.
 - The higher-ceiling v3 path should be a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
@@ -109,15 +120,22 @@ phase-best improvement and screening-quality movement.
   implementation.
 - Forced-surface controls are carried into APS tool context and fail closed
   before code generation.
+- When declared and not overridden by `--force-surface`, `solver_design` is
+  carried as an active problem-object boundary into proposal context, APS tool
+  context, target previews, and output validation. Component policies are
+  implementation hooks or attribution evidence, not top-level `change_locus`
+  replacements.
+- Real APS sessions fail closed when schema/target/Contract self-check
+  previews fail or are skipped.
 - APS feedback defaults to same-campaign or forced-surface history for forced
   diagnostics.
 - Tool observations are rendered into final hypothesis/code prompts.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
-- Solver-design pre-screening failures are rendered as boundary-control
-  guidance: rejected or blacklisted solver-design entries are candidate
-  failures, not retirement of the problem-level surface.
+- Solver-design pre-screening and screening failures are rendered as
+  boundary-control guidance: rejected or blacklisted solver-design entries are
+  candidate failures, not retirement of the problem-level surface.
 - Campaign-level forced-surface diagnostics now carry the forced
   surface/action/target into APS tools and the final CreativeLayer hypothesis
   task. APS still fails closed if a model produces an off-surface hypothesis.
@@ -165,16 +183,57 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary is declared and the control-loop
-repair is implemented, but it has not yet been validated in a live diagnostic.
-Stop forced component-policy diagnostics; next run a short free-surface
-diagnostic and verify that a failed candidate implementation under
-`solver_design` causes another solver-design attempt rather than a fallback to
-isolated component surfaces.
+Current limitation: the top-level boundary is declared and now enforced in
+code, but the active-boundary repair has not yet been validated in a live
+diagnostic. Stop forced component-policy diagnostics; next run a short
+free-surface diagnostic and verify that both failed candidate implementations
+and zero-movement screening failures under `solver_design` cause another
+solver-design attempt, or fail closed, rather than falling back to isolated
+component surfaces.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-boundary-repair-sonnet-4r-20260511T164524Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=4
+rounds_completed_before_termination=3
+screened_experiments=2
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=600
+force_surface=none
+stop_reason=manual_termination_invalid_active_boundary
+analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md
+```
+
+Summary:
+
+- The run was launched from clean commit `3318a30` and manually terminated with
+  `EXIT_CODE:143` after round 3 exposed a remaining boundary leak.
+- Rounds 1 and 2 selected `solver_design`, targeted
+  `policies/main_search_strategy.py`, passed Contract and Verification, then
+  failed screening with `win_rate=0.0` and `median_delta=0.0`.
+- Round 3 selected `baseline_policy` and targeted
+  `policies/baseline_policy.py`; it was active when terminated.
+- The completed round-3 APS code session reported `schema_valid=false` and
+  `contract_preview_passed=false` with `unsupported,tool_skipped`, but the
+  completed output was still accepted far enough to become the active branch.
+
+Interpretation: the previous repair fixed the pre-screening blacklist path but
+left screening-failure fallback and APS self-check acceptance unresolved.
+`solver_design` must be an active problem-object boundary, not only guidance.
+Component policies can be implementation hooks or attribution evidence inside
+solver design, but not replacement top-level `change_locus` values.
+
+Detailed analysis:
+[`v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-solver-design-problem-object-sonnet-12r-20260511T140118Z
@@ -289,14 +348,14 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selec
 
 ## Validation
 
-Latest solver-design boundary-control repair validation:
+Latest solver-design active-boundary repair validation:
 
 ```bash
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_sprint_m.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
 ```
 
 ```text
-301 passed in 18.24s
+305 passed in 19.85s
 ```
 
 Latest full Scion test suite:
@@ -306,7 +365,7 @@ Latest full Scion test suite:
 ```
 
 ```text
-1567 passed, 1 skipped in 62.12s
+1571 passed, 1 skipped in 69.38s
 ```
 
 Latest focused phase-benefit / forced-surface validation:
@@ -384,8 +443,9 @@ Latest CVRP destroy/repair selector/proposal validation:
 P1:
 
 - Run a short free-surface diagnostic validating the repaired solver-design
-  control loop; terminate early if APS falls back to component surfaces after a
-  solver-design candidate failure.
+  active boundary; terminate early if APS falls back to component surfaces
+  after either a solver-design candidate failure or a zero-movement
+  solver-design screening failure.
 - If control holds, inspect whether solver-level hypotheses generate
   whole-solver evidence and nonzero phase-best movement.
 - Stop forced single-policy diagnostics for now, including
@@ -405,7 +465,7 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `solver_design` has not yet been validly evaluated. The control-loop
+- CVRP `solver_design` has not yet been validly evaluated. The active-boundary
   repair is implemented in tests but not yet validated by a live short
   diagnostic.
 - CVRP's current research-surface set still contains many component hooks. It
@@ -432,6 +492,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md)
+  [`v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

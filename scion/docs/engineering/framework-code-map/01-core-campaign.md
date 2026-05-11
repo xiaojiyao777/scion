@@ -88,6 +88,16 @@ Branch states and decisions are declared in `scion/scion/core/models.py`. Legal 
 
 Every early failure path writes a `StepRecord` with `decision=None` and a `failure_stage`, so proposal/code/contract/workspace/verification failures are visible in campaign summaries and future context.
 
+`ProposalPipeline` now enforces two proposal-side research-boundary guards
+before code generation. Forced-surface diagnostics still require the exact
+declared surface/action/target. Separately, when a problem declares a
+`solver_design` surface and no forced diagnostic is active, CVRP-style
+problem-object hypotheses must keep `change_locus` on that active boundary.
+APS tool context and final hypothesis prompts carry the same rule, and
+completed APS outputs with failed schema/target/Contract self-check evidence
+are converted to proposal failures before a patch reaches workspace
+materialization.
+
 Heavy verification failures usually blacklist the failed hypothesis as a
 globally failed approach. `ExploreStepPipeline` treats declared
 `solver_design` surfaces differently: a heavy failure under that top-level

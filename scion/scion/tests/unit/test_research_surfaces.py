@@ -2669,6 +2669,13 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "retry the solver-design boundary" in prompt_text
     assert "Component policies" in prompt_text
     assert "## Globally Failed / Blacklisted Approaches\n(none)" in prompt_text
+    assert ctx["active_problem_boundary_surfaces"] == "solver_design"
+    assert ctx["operator_categories"] == "solver_design"
+    assert "policies/main_search_strategy.py" in ctx["targetable_files"]
+    assert "policies/baseline_policy.py" not in ctx["targetable_files"]
+    assert "Set `change_locus` to one of: solver_design." in user_prompt
+    assert "Do not choose a component policy" in user_prompt
+    assert "Choose a research surface from" not in user_prompt
 
 
 def test_context_still_renders_legacy_v1_surface_metadata(tmp_path: Path) -> None:

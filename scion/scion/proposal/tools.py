@@ -169,6 +169,7 @@ class ProposalToolContext:
     forced_surface: str | None = None
     forced_action: str | None = None
     forced_target_file: str | None = None
+    active_problem_boundary_surfaces: tuple[str, ...] = ()
 
     @property
     def branch_id(self) -> str | None:
@@ -502,6 +503,9 @@ class ContextListSurfacesTool(_BaseReadOnlyTool):
             ),
             "detail": "compact",
             "forced_surface_constraint": _forced_surface_constraint_payload(context),
+            "active_problem_boundary_constraint": (
+                _active_problem_boundary_constraint_payload(context)
+            ),
         }
         return self._observation(
             context,
@@ -1213,6 +1217,13 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
         if forced_violation is not None:
             passed = False
             issues.append(forced_violation)
+        boundary_violation = _active_problem_boundary_violation(
+            context,
+            change_locus=args.change_locus,
+        )
+        if boundary_violation is not None:
+            passed = False
+            issues.append(boundary_violation)
 
         payload = {
             "passed": passed,
@@ -1233,6 +1244,9 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
             "allowed_actions": allowed_actions,
             "declared_targets": declared_targets,
             "forced_surface_constraint": _forced_surface_constraint_payload(context),
+            "active_problem_boundary_constraint": (
+                _active_problem_boundary_constraint_payload(context)
+            ),
             "permission": {
                 "surface_known": surface is not None,
                 "action_allowed": bool(
@@ -2020,15 +2034,66 @@ def _forced_surface_constraint_payload(
     )
 
 
+def _active_problem_boundary_constraint_payload(
+    context: ProposalToolContext,
+) -> dict[str, Any] | None:
+    surfaces = [
+        str(surface or "").strip()
+        for surface in context.active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    ]
+    if not surfaces:
+        return None
+    return {
+        "surfaces": surfaces,
+        "rule": (
+            "Hypothesis outputs must keep change_locus on the active "
+            "problem-object boundary. Component policies may appear only as "
+            "implementation hooks or attribution evidence, not replacement "
+            "research goals."
+        ),
+    }
+
+
 def _forced_hypothesis_violation(
     context: ProposalToolContext,
     hypothesis: HypothesisProposal,
 ) -> str | None:
-    return _forced_action_target_violation(
+    forced = _forced_action_target_violation(
         context,
         change_locus=hypothesis.change_locus,
         action=hypothesis.action,
         target_file=hypothesis.target_file,
+    )
+    if forced is not None:
+        return forced
+    return _active_problem_boundary_violation(
+        context,
+        change_locus=hypothesis.change_locus,
+    )
+
+
+def _active_problem_boundary_violation(
+    context: ProposalToolContext,
+    *,
+    change_locus: str | None,
+) -> str | None:
+    if context.forced_surface:
+        return None
+    boundary = [
+        str(surface or "").strip()
+        for surface in context.active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    ]
+    if not boundary:
+        return None
+    actual = str(change_locus or "").strip()
+    if actual in set(boundary):
+        return None
+    return (
+        "active_problem_boundary_constraint: change_locus must stay within "
+        f"{boundary!r}; got {actual!r}. Component policies are implementation "
+        "hooks or attribution evidence, not replacement research goals."
     )
 
 
@@ -2167,12 +2232,24 @@ def _surface_list_for_context(
     surfaces: list[Any],
 ) -> list[Any]:
     forced_surface = str(context.forced_surface or "").strip()
-    if not forced_surface:
+    if forced_surface:
+        constrained = [
+            surface
+            for surface in surfaces
+            if str(_attr(surface, "name") or "").strip() == forced_surface
+        ]
+        return constrained or surfaces
+    boundary = {
+        str(surface or "").strip()
+        for surface in context.active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    }
+    if not boundary:
         return surfaces
     constrained = [
         surface
         for surface in surfaces
-        if str(_attr(surface, "name") or "").strip() == forced_surface
+        if str(_attr(surface, "name") or "").strip() in boundary
     ]
     return constrained or surfaces
 
@@ -2920,6 +2997,12 @@ def _research_diagnosis_payload(
         safe_steps,
         declared_solver_design_surfaces,
     )
+    screening_failed_solver_design_surfaces = (
+        _screening_failed_solver_design_surface_names(
+            safe_steps,
+            declared_solver_design_surfaces,
+        )
+    )
     declared_mechanism_surfaces = (
         []
         if declared_solver_design_surfaces
@@ -3033,6 +3116,8 @@ def _research_diagnosis_payload(
         failure_tags.add("solver_design_not_selected")
     if failed_solver_design_surfaces:
         failure_tags.add("solver_design_pre_protocol_failure")
+    if screening_failed_solver_design_surfaces:
+        failure_tags.add("solver_design_screening_failure")
     if declared_mechanism_surfaces and unselected_mechanism_surfaces:
         failure_tags.add("deep_surface_not_selected")
 
@@ -3048,6 +3133,14 @@ def _research_diagnosis_payload(
             "implementation; a pre-screening candidate failure does not retire "
             "the problem-object surface: "
             + ", ".join(failed_solver_design_surfaces[:8])
+        )
+    elif screening_failed_solver_design_surfaces:
+        next_requirements.append(
+            "Keep change_locus on the solver-design boundary and change the "
+            "whole-lifecycle implementation; screening failure means the "
+            "candidate design failed, not that component policies should become "
+            "replacement research goals: "
+            + ", ".join(screening_failed_solver_design_surfaces[:8])
         )
     elif unselected_solver_design_surfaces:
         next_requirements.append(
@@ -3075,6 +3168,9 @@ def _research_diagnosis_payload(
         "surface_counts": surface_counts,
         "declared_solver_design_surfaces": declared_solver_design_surfaces,
         "failed_solver_design_surfaces": failed_solver_design_surfaces,
+        "screening_failed_solver_design_surfaces": (
+            screening_failed_solver_design_surfaces
+        ),
         "unselected_solver_design_surfaces": unselected_solver_design_surfaces,
         "declared_mechanism_surfaces": declared_mechanism_surfaces,
         "unselected_mechanism_surfaces": unselected_mechanism_surfaces,
@@ -3093,6 +3189,10 @@ def _diagnostic_surface_priorities(
         context.problem_spec
     )
     failed_solver_design = _pre_protocol_failed_solver_design_surface_names(
+        list(context.step_history),
+        solver_design_surfaces,
+    )
+    screening_failed_solver_design = _screening_failed_solver_design_surface_names(
         list(context.step_history),
         solver_design_surfaces,
     )
@@ -3119,6 +3219,8 @@ def _diagnostic_surface_priorities(
             failure_mode_tags.append("solver_design_not_selected")
         if failed_solver_design:
             failure_mode_tags.append("solver_design_pre_protocol_failure")
+        if screening_failed_solver_design:
+            failure_mode_tags.append("solver_design_screening_failure")
         next_requirements = []
         if failed_solver_design:
             next_requirements.append(
@@ -3126,6 +3228,14 @@ def _diagnostic_surface_priorities(
                 "different lifecycle implementation; the prior failure was a "
                 "candidate failure, not a surface retirement: "
                 + ", ".join(failed_solver_design[:8])
+            )
+        elif screening_failed_solver_design:
+            next_requirements.append(
+                "Keep the next change_locus on the problem-object "
+                "solver-design surface; prior screening failures are candidate "
+                "design failures, not a reason to switch research goals to "
+                "component policies: "
+                + ", ".join(screening_failed_solver_design[:8])
             )
         elif has_screening_history and unselected_solver_design:
             next_requirements.append(
@@ -3140,6 +3250,12 @@ def _diagnostic_surface_priorities(
                 "pre-protocol result is a candidate failure, and component "
                 "policies remain attribution hooks, not fallback research goals."
             )
+        elif screening_failed_solver_design:
+            recommendation = (
+                "Keep change_locus on the problem-object solver-design "
+                "boundary; use component policies only as implementation hooks "
+                "or attribution evidence inside the solver design."
+            )
         elif has_screening_history and unselected_solver_design:
             recommendation = (
                 "Prioritize the problem-object solver-design surface; "
@@ -3150,6 +3266,9 @@ def _diagnostic_surface_priorities(
             {
                 "solver_design_surfaces": solver_design_surfaces,
                 "failed_solver_design_surfaces": failed_solver_design,
+                "screening_failed_solver_design_surfaces": (
+                    screening_failed_solver_design
+                ),
                 "unselected_solver_design_surfaces": unselected_solver_design,
                 "failure_mode_tags": failure_mode_tags,
                 "next_requirements": next_requirements,
@@ -3219,6 +3338,30 @@ def _pre_protocol_failed_solver_design_surface_names(
         if step.failure_stage in {"verification", "patch_contract", "workspace"}:
             if surface not in failed:
                 failed.append(surface)
+    return failed
+
+
+def _screening_failed_solver_design_surface_names(
+    steps: list[StepRecord],
+    solver_design_surfaces: list[str],
+) -> list[str]:
+    if not solver_design_surfaces:
+        return []
+    allowed = set(solver_design_surfaces)
+    failed: list[str] = []
+    for step in _filter_hypothesis_prompt_steps(steps):
+        surface = str(step.hypothesis.change_locus or "").strip()
+        if surface not in allowed:
+            continue
+        result = step.protocol_result
+        if result is None:
+            continue
+        if step.decision is not None and getattr(step.decision, "value", "") == "promote":
+            continue
+        if getattr(result, "gate_outcome", None) == "pass":
+            continue
+        if surface not in failed:
+            failed.append(surface)
     return failed
 
 

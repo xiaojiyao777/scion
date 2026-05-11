@@ -66,9 +66,13 @@ boundary through the adapter, rather than being driven through one forced
 singleton policy at a time. The first exposure slice now renders the CVRP
 problem object into proposal contexts and `context.read_problem`; the second
 slice declares `solver_design` as the top-level CVRP research boundary. The
-latest repair makes solver-design candidate failures candidate-scoped instead
-of globally blacklisting the problem-object boundary. The next step is a short
-diagnostic that does not force a singleton component policy.
+latest repair makes that boundary active when no forced diagnostic surface is
+set: proposal context, APS tools, target preview, and output validation keep
+`change_locus` on `solver_design`, while component policies remain
+implementation hooks or attribution evidence. APS self-check failures now fail
+closed before completed patches are accepted. The next step is a short
+free-surface diagnostic that validates this active boundary before any solver
+quality run.
 
 Important current interpretation:
 
@@ -78,6 +82,9 @@ Important current interpretation:
 - A failed `solver_design` implementation should be retried with a different
   solver lifecycle; it should not make APS fall back to isolated component
   policy goals.
+- A zero-movement `solver_design` screening failure is also a candidate design
+  failure, not permission to switch the top-level research goal to a component
+  policy.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.

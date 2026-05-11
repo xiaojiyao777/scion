@@ -32,6 +32,7 @@ from scion.proposal.tools import (
     ProposalTaint,
     ProposalToolContext,
     ProposalToolFailureCode,
+    ProposalToolPermission,
     ProposalToolRegistry,
 )
 
@@ -762,6 +763,29 @@ class AgenticProposalSession:
                 )
                 observations.extend(preview_observations)
                 evidence.extend(_evidence_from_observations(preview_observations))
+                self_check = _self_check_from_previews(observations)
+                self_check_detail = _self_check_failure_detail(
+                    self_check,
+                    require_schema_preview=_self_check_required(tool_context),
+                    require_contract_preview=False,
+                )
+                if self_check_detail is not None:
+                    output = self._self_check_failed_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        detail=self_check_detail,
+                        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                        evidence_used=tuple(evidence),
+                        self_check=self_check,
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Hypothesis self-check failed closed before approval.",
+                        metadata={"detail": self_check_detail},
+                    )
+                    return self._persist(output, state)
 
             if request.approve_hypothesis is None:
                 output = self._partial_hypothesis_output(
@@ -866,6 +890,29 @@ class AgenticProposalSession:
             )
             observations.extend(preview_observations)
             evidence.extend(_evidence_from_observations(preview_observations))
+            self_check = _self_check_from_previews(observations)
+            self_check_detail = _self_check_failure_detail(
+                self_check,
+                require_schema_preview=_self_check_required(tool_context),
+                require_contract_preview=False,
+            )
+            if self_check_detail is not None:
+                output = self._self_check_failed_output(
+                    request=request,
+                    session_id=session_id,
+                    hypothesis=hypothesis,
+                    detail=self_check_detail,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    evidence_used=tuple(evidence),
+                    self_check=self_check,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Approved hypothesis self-check failed closed before code context.",
+                    metadata={"detail": self_check_detail},
+                )
+                return self._persist(output, state)
 
         state.note(
             AgenticProposalPhase.INSPECT_INTERFACE,
@@ -935,13 +982,40 @@ class AgenticProposalSession:
             evidence.extend(_evidence_from_observations((patch_preview,)))
 
         state.note(AgenticProposalPhase.SELF_CHECK, "Recorded APS-1 schema self-check.")
+        self_check = (
+            _self_check_from_previews(observations)
+            if tool_context is not None
+            else AgenticSelfCheck(schema_valid=True)
+        )
+        self_check_detail = _self_check_failure_detail(
+            self_check,
+            require_schema_preview=_self_check_required(tool_context),
+            require_contract_preview=_self_check_required(tool_context),
+        )
+        if self_check_detail is not None:
+            output = self._self_check_failed_output(
+                request=request,
+                session_id=session_id,
+                hypothesis=hypothesis,
+                detail=self_check_detail,
+                termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+                evidence_used=tuple(evidence),
+                self_check=self_check,
+            )
+            state.status = output.status
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Patch self-check failed closed before completed output.",
+                metadata={"detail": self_check_detail},
+            )
+            return self._persist(output, state)
         output = self._completed_output(
             request=request,
             session_id=session_id,
             hypothesis=hypothesis,
             patch=patch,
             evidence_used=tuple(evidence),
-            self_check=_self_check_from_previews(observations),
+            self_check=self_check,
         )
         state.status = output.status
         state.note(AgenticProposalPhase.FINALIZE, "Session completed.")
@@ -1035,6 +1109,39 @@ class AgenticProposalSession:
             or ""
         ).strip()
         if not forced_surface:
+            boundary = tuple(
+                str(surface or "").strip()
+                for surface in getattr(
+                    context,
+                    "active_problem_boundary_surfaces",
+                    (),
+                )
+                if str(surface or "").strip()
+            )
+            if not boundary and request is not None and request.hypothesis_context:
+                constraints = request.hypothesis_context.get(
+                    "agentic_hypothesis_constraints"
+                )
+                if isinstance(constraints, Mapping):
+                    raw = constraints.get("active_problem_boundary_surfaces")
+                    if isinstance(raw, str):
+                        boundary = tuple(
+                            item.strip() for item in raw.split(",") if item.strip()
+                        )
+                    elif isinstance(raw, (list, tuple)):
+                        boundary = tuple(
+                            str(item).strip() for item in raw if str(item).strip()
+                        )
+            if boundary:
+                actual_surface = str(hypothesis.change_locus or "").strip()
+                if actual_surface not in set(boundary):
+                    return (
+                        "active_problem_boundary_constraint: change_locus must "
+                        f"stay within {list(boundary)!r}; got "
+                        f"{actual_surface!r}. Component policies are "
+                        "implementation hooks or attribution evidence, not "
+                        "replacement research goals."
+                    )
             return None
         actual_surface = str(hypothesis.change_locus or "").strip()
         if actual_surface != forced_surface:
@@ -1104,6 +1211,40 @@ class AgenticProposalSession:
             patch=None,
             evidence_used=evidence_used,
             self_check=self_check or AgenticSelfCheck(schema_valid=True),
+            termination_reason=termination_reason,
+            failure_detail=detail,
+        )
+
+    def _self_check_failed_output(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        hypothesis: HypothesisProposal,
+        detail: str,
+        termination_reason: AgenticTerminationReason,
+        evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+        self_check: AgenticSelfCheck | None = None,
+    ) -> AgenticProposalOutput:
+        return AgenticProposalOutput(
+            status=AgenticProposalStatus.FAILED,
+            session_id=session_id,
+            campaign_id=request.campaign_id,
+            branch_id=request.branch.branch_id,
+            idempotency_key=self._idempotency_key_for_hypothesis(
+                request,
+                hypothesis,
+            ),
+            champion_version=_champion_version(request.champion),
+            champion_weight_revision=_champion_weight_revision(request.champion),
+            problem_id=request.problem_id,
+            problem_spec_hash=request.problem_spec_hash,
+            selected_surface=hypothesis.change_locus,
+            action=hypothesis.action,
+            hypothesis=hypothesis,
+            patch=None,
+            evidence_used=evidence_used,
+            self_check=self_check or AgenticSelfCheck(schema_valid=False),
             termination_reason=termination_reason,
             failure_detail=detail,
         )
@@ -1748,8 +1889,25 @@ class AgenticProposalSession:
         self,
         context: ProposalToolContext | None,
     ) -> dict[str, Any]:
-        if context is None or not context.forced_surface:
+        if context is None:
             return {}
+        active_boundary = tuple(
+            surface
+            for surface in context.active_problem_boundary_surfaces
+            if str(surface or "").strip()
+        )
+        if not context.forced_surface:
+            if not active_boundary:
+                return {}
+            return {
+                "active_problem_boundary_surfaces": active_boundary,
+                "rule": (
+                    "Hypothesis generation must keep change_locus on the "
+                    "active problem-object boundary. Component policies are "
+                    "implementation hooks or attribution evidence, not "
+                    "replacement research goals."
+                ),
+            }
         return {
             key: value
             for key, value in {
@@ -1761,6 +1919,7 @@ class AgenticProposalSession:
                     "surface/action/target when present. Off-surface output "
                     "fails closed before code generation."
                 ),
+                "active_problem_boundary_surfaces": active_boundary or None,
             }.items()
             if value
         }
@@ -3159,9 +3318,8 @@ def _self_check_from_previews(
                 "proposal.schema_preview",
                 "proposal.target_permission_preview",
             }:
-                if observation.failure_code != ProposalToolFailureCode.RESULT_TOO_LARGE:
-                    schema_valid = False
-                    schema_preview_evaluated = True
+                schema_valid = False
+                schema_preview_evaluated = True
             if observation.tool_name == "proposal.contract_preview":
                 contract_preview_codes = tuple(
                     code
@@ -3190,6 +3348,28 @@ def _self_check_from_previews(
         schema_valid=schema_valid if schema_preview_evaluated else False,
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
+    )
+
+
+def _self_check_failure_detail(
+    self_check: AgenticSelfCheck,
+    *,
+    require_schema_preview: bool,
+    require_contract_preview: bool,
+) -> str | None:
+    if require_schema_preview and not self_check.schema_valid:
+        return "schema or target preview did not pass"
+    if require_contract_preview and self_check.contract_preview_passed is not True:
+        codes = ", ".join(self_check.contract_preview_codes)
+        suffix = f" ({codes})" if codes else ""
+        return f"contract preview did not pass{suffix}"
+    return None
+
+
+def _self_check_required(context: ProposalToolContext | None) -> bool:
+    return bool(
+        context is not None
+        and context.policy.allows_permission(ProposalToolPermission.CONTRACT_PREVIEW)
     )
 
 

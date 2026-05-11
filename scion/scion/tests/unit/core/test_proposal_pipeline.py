@@ -37,7 +37,8 @@ from scion.proposal.tools import ProposalToolContext, ProposalToolRegistry
 
 
 class FakeProblemRuntime:
-    def __init__(self) -> None:
+    def __init__(self, spec=None) -> None:
+        self.spec = spec
         self.hypothesis_kwargs = None
         self.code_kwargs = None
         self.fix_kwargs = None
@@ -73,11 +74,26 @@ class FakeCreative:
             action="create_new",
             target_file="operators/bounded.py",
             suggested_weight=0.5,
+            predicted_direction="improve",
+            target_weakness="The current search lacks a bounded route-pair move.",
+            expected_effect="Improve distance on screening cases without changing feasibility.",
+            target_objectives=("distance",),
+            protected_objectives=("feasibility",),
+            objective_tradeoff_policy="Protect feasibility before distance.",
+            no_op_condition="Do nothing when no improving route-pair move exists.",
+            risk_to_higher_priority="May spend budget without finding an improving move.",
+            target_runtime_effect="neutral",
+            complexity_claim="O(k) candidate route-pair checks.",
+            runtime_budget_strategy="Use a fixed top-k candidate cap.",
         )
         self.patch = PatchProposal(
             file_path="operators/bounded.py",
             action="create",
-            code_content="class Bounded: pass\n",
+            code_content=(
+                "class Bounded:\n"
+                "    def execute(self, solution, rng):\n"
+                "        return solution\n"
+            ),
         )
         self.fix = PatchProposal(
             file_path="operators/bounded.py",
@@ -170,10 +186,30 @@ def _pipeline(
     forced_surface_action: str | None = None,
     forced_surface_target_file: str | None = None,
     forced_surface_diagnostic: bool = False,
+    problem_spec=None,
 ):
     branch = _branch()
     sibling = _branch("sibling")
-    runtime = FakeProblemRuntime()
+    if problem_spec is None:
+        problem_spec = SimpleNamespace(
+            operator_categories=["local_search"],
+            search_space=SimpleNamespace(
+                editable=["operators/*.py"],
+                frozen=[],
+                import_whitelist=[],
+            ),
+            research_surfaces=[
+                SimpleNamespace(
+                    name="local_search",
+                    kind="operator",
+                    target_files=["operators/*.py"],
+                    create_new_allowed=True,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                )
+            ]
+        )
+    runtime = FakeProblemRuntime(spec=problem_spec)
     circuit = FakeCircuitBreaker()
     failures: list[tuple[Branch, FailureEvent]] = []
     balance_exhausted = {"value": False}
@@ -594,6 +630,61 @@ def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> 
     assert creative.code_calls == 0
 
 
+def test_agentic_active_problem_boundary_rejects_component_hypothesis() -> None:
+    creative = FakeCreative()
+    component = HypothesisProposal(
+        hypothesis_text="Tune a component policy outside the active boundary.",
+        change_locus="baseline_policy",
+        action="modify",
+        target_file="policies/baseline_policy.py",
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=component,
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+    )
+    solver_design_spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver_design",
+                kind="solver_design",
+                algorithm=SimpleNamespace(role="problem_object_solver_design"),
+            ),
+            SimpleNamespace(
+                name="baseline_policy",
+                kind="policy",
+                algorithm=SimpleNamespace(role="component_policy"),
+            ),
+        ]
+    )
+    pipeline, branch, runtime, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+        forced_locus=None,
+        problem_spec=solver_design_spec,
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail is not None
+    assert "active_problem_boundary_constraint" in detail
+    assert "solver_design" in detail
+    assert len(failures) == 1
+    assert circuit.failures == [detail]
+    assert runtime.code_kwargs is None
+    assert creative.code_calls == 0
+
+
 def test_agentic_approved_continuation_can_build_code_context_and_patch() -> None:
     creative = FakeCreative()
     events: list[str] = []
@@ -649,6 +740,47 @@ def test_agentic_approved_continuation_can_build_code_context_and_patch() -> Non
     assert events == ["hypothesis", "continuation", "code_context"]
     assert runtime.code_kwargs["hypothesis"] == creative.hypothesis
     assert failures == []
+
+
+def test_agentic_completed_output_failed_self_check_rejected_before_patch_use() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-code",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        patch=creative.patch,
+        transcript=(
+            AgenticTranscriptEvent(
+                phase="self_check",
+                message="preview failed",
+                metadata={"tool_name": "proposal.contract_preview"},
+            ),
+        ),
+        self_check=AgenticSelfCheck(
+            schema_valid=False,
+            contract_preview_passed=False,
+            contract_preview_codes=("result_too_large", "tool_skipped"),
+        ),
+        tool_budget_used={"tool_calls": 8, "tool_steps": 8},
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+
+    assert patch is None
+    assert len(failures) == 1
+    assert "agentic_self_check_failed" in failures[0][1].detail
+    assert circuit.failures == [failures[0][1].detail]
 
 
 def test_agentic_completed_output_produces_existing_hypothesis_and_patch_shapes(

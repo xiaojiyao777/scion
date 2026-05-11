@@ -54,8 +54,8 @@ As of 2026-05-11, CVRP has an initial problem-object exposure slice:
   as the default short-diagnostic path.
 
 This is an exposure/adaptation slice only. It does not prove solver efficacy,
-and it does not yet replace the current surface list with a cleaner top-level
-solver-design boundary.
+but it now feeds a cleaner top-level solver-design boundary instead of leaving
+the whole component surface list as the default research menu.
 
 ## Implemented Solver-Design Boundary
 
@@ -89,8 +89,29 @@ the candidate implementation:
   retrying the problem-object boundary with a different lifecycle
   implementation.
 
-This is still a control-loop repair, not solver-efficacy evidence. It should
-be validated by a short free-surface diagnostic before any longer run.
+The next short diagnostic validated that pre-screening failure no longer caused
+immediate blacklisting, but it exposed a second boundary leak: after two valid
+`solver_design` candidates reached screening and failed with zero movement,
+APS selected `baseline_policy` as the next top-level `change_locus`, and the
+completed code session carried a failed self-check. The deeper repair now makes
+the boundary active rather than advisory:
+
+- Hypothesis context narrows `operator_categories` and targetable files to the
+  declared `solver_design` boundary when no forced surface is active.
+- APS `context.list_surfaces` lists only the active problem-object boundary in
+  that mode while retaining the total declared-surface count for audit.
+- APS and normal proposal validation reject hypotheses whose `change_locus`
+  moves to a component policy outside the active boundary.
+- `proposal.target_permission_preview` reports the active-boundary rule, and
+  APS fails closed when schema/target/Contract preview self-checks fail or are
+  skipped in real sessions.
+- Screening failures under `solver_design` produce
+  `solver_design_screening_failure` diagnosis, but the recommended next action
+  remains another problem-level solver-design attempt with component policies
+  used only as implementation hooks or attribution evidence.
+
+This is still a control-loop repair, not solver-efficacy evidence. It needs a
+new short free-surface diagnostic before any longer solver-quality run.
 
 ## Anti-Pattern
 
@@ -108,8 +129,8 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice should validate the repaired whole-problem CVRP
-adaptation surface with a short experiment:
+The next engineering slice should validate the active-boundary whole-problem
+CVRP adaptation surface with a short experiment:
 
 1. Define the CVRP problem object Scion should see: instance structure,
    solution representation, route/move affordances, objective semantics, and
@@ -123,12 +144,13 @@ adaptation surface with a short experiment:
    research target.
 5. Run a short free-surface diagnostic. It should not force one narrow policy
    unless the purpose is specifically to validate a new adapter or contract
-   boundary.
+   boundary. If APS tries to select a component policy as the top-level
+   `change_locus`, the proposal should fail closed before code evaluation.
 
 ## Current CVRP Implication
 
 Stop forced `destroy_repair_policy` and `route_pair_candidate_policy`
 diagnostics for now. The former has been exhausted; the latter would continue
 the same incremental-hook pattern. The next useful work is to validate that
-the repaired control loop keeps CVRP on the problem-object `solver_design`
-boundary after a failed candidate implementation.
+the active-boundary control loop keeps CVRP on the problem-object
+`solver_design` boundary after both pre-screening and screening failures.

@@ -43,6 +43,18 @@ full surface list during a forced campaign. Off-surface APS output becomes an
 explicit proposal failure; the code phase continues only from a
 ContractGate-approved hypothesis and does not try to repair surface selection.
 
+When a problem declares a `solver_design` research surface and no forced
+diagnostic surface is active, `ProposalPipeline` treats that surface as the
+active problem-object boundary. Normal and APS hypothesis outputs must keep
+`change_locus` within that boundary. Component policy surfaces remain visible
+as target implementation hooks or attribution evidence inside solver design,
+but they are not valid replacement research goals. The same active-boundary
+constraint is carried through hypothesis context, APS tool context,
+`context.list_surfaces`, `proposal.target_permission_preview`, and final
+CreativeLayer hypothesis prompts. For CVRP this means the default free
+diagnostic task targets `solver_design` and `policies/main_search_strategy.py`
+instead of offering every component policy as a top-level choice.
+
 As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
 Session path (`use_agentic_proposal` or injected `agentic_session`). The default
 path above remains the normal behavior. The APS-1 skeleton wraps the current
@@ -121,7 +133,8 @@ Planner-selected duplicate reads of reusable observations switch to the same
 missing-only fallback instead of consuming another large observation.
 Surface tool observations are compact by default:
 `context.list_surfaces` exposes only selection-oriented metadata, generic
-diagnostic surface priorities, plus any active forced-surface constraint.
+diagnostic surface priorities, plus any active forced-surface or
+problem-boundary constraint.
 During forced-surface diagnostics,
 `context.list_surfaces` returns the forced surface's compact listing plus the
 total declared-surface count, avoiding repeated full design-space listings
@@ -181,8 +194,11 @@ numeric signal or evidence-contract issues. When a problem declares a
 before component policies; otherwise it can fall back to mechanism-surface
 coverage from declared metadata. If a solver-design candidate failed before
 screening, diagnosis tags `solver_design_pre_protocol_failure` and recommends
-retrying that boundary with a different lifecycle implementation; component
-policies remain implementation/attribution hooks, not fallback research goals.
+retrying that boundary with a different lifecycle implementation. If a
+solver-design candidate reaches screening and still has no win-rate or median
+delta movement, diagnosis tags `solver_design_screening_failure` and still
+keeps the next proposal on the problem-object boundary. Component policies
+remain implementation/attribution hooks, not fallback research goals.
 It also tags all-zero phase/objective delta fields and accepted/recovery
 movement that lacks phase-level benefit. It
 deliberately avoids reading validation/frozen detail or raw metric refs.
@@ -217,6 +233,12 @@ back to a path-resolved surface.
 Problem-owned preview hooks run only after the full ContractGate patch result
 passes, not merely after interface-shape checks, so tainted policy/config code
 with forbidden APIs is not imported or executed during preview.
+APS self-check results also fail closed now: schema/target preview errors,
+observation-budget preview failures, skipped Contract previews, or failed
+Contract previews stop the session before a completed patch is accepted for
+evaluation. Legacy injected test outputs without any self-check transcript are
+still tolerated, but real APS sessions with preview evidence must pass their
+self-check boundary.
 
 ## ContextManager Inputs
 
@@ -239,6 +261,8 @@ Hypothesis context includes:
 - blacklist and active hypothesis summaries;
 - solver-design boundary-control guidance when a top-level solver-design
   candidate failed before screening;
+- active problem-boundary surfaces and target files when a top-level
+  solver-design surface is declared;
 - sibling branch summary;
 - exploration coverage and strategy guidance;
 - recent screening objective feedback and objective opportunity profile;
