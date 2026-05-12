@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-12*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -11,15 +11,16 @@ handoff. Historical repair and experiment notes were moved to
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest solver-design
-boundary-repair diagnostic was terminated early because it exposed the
-remaining control leak: after two valid `solver_design` candidates reached
-screening and failed with zero movement, APS selected `baseline_policy` as the
-next top-level research target, and the completed code session had a failed
-self-check. That is still not a valid test of the problem-object research
-boundary. A deeper repair now enforces `solver_design` as the active
-problem-object boundary when declared and fails closed on APS self-check
-failures; run one short free-surface diagnostic to validate this before
+produced reliable screening-quality improvement. The latest active
+solver-design boundary diagnostic validated the new boundary control: after a
+heavy Verification failure and a zero-movement screening failure, every
+persisted hypothesis and APS output still stayed on `solver_design`. The run
+then exposed a different APS control-plane blocker: terminal Contract preview
+could be deterministically valid but replaced by `result_too_large` when the
+remaining observation budget was too small, causing the new fail-closed
+self-check to reject the patch. The current repair raises the default APS
+observation budget to 64k and preserves compact Contract-preview pass/fail
+summaries under budget pressure. Rerun a short free-surface diagnostic before
 solver-quality validation.
 
 Current branch: `v0.4-dev`
@@ -51,6 +52,9 @@ Current interpretation:
   an active problem boundary: proposal context, APS tools, target preview, and
   final hypothesis prompts reject component-policy `change_locus` values when
   no forced diagnostic surface is active.
+- The latest active-boundary diagnostic confirms that boundary control in a
+  live free-surface run: all hypotheses and APS outputs stayed on
+  `solver_design` after both pre-screening and screening failures.
 - APS self-check failures now fail closed for real sessions. Schema/target
   preview failures, skipped Contract previews, or failed Contract previews stop
   the completed output before the patch enters evaluation.
@@ -58,10 +62,12 @@ Current interpretation:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence should be rendered by the adapter
   as one coherent object for Scion to reason over.
-- APS observation handling for CVRP deep-surface diagnostics now uses the 48k
+- APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
-  required diagnosis context has been gathered.
+  required diagnosis context has been gathered. Terminal Contract preview keeps
+  compact deterministic pass/fail evidence if the full preview payload would
+  exceed the remaining observation budget.
 - The latest free-surface post-optimization smoke selected two newly added
   deep mechanism surfaces: `alns_vns_policy` and
   `acceptance_restart_policy`. `destroy_repair_policy` and
@@ -183,17 +189,55 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary is declared and now enforced in
-code, but the active-boundary repair has not yet been validated in a live
-diagnostic. Stop forced component-policy diagnostics; next run a short
-free-surface diagnostic and verify that both failed candidate implementations
-and zero-movement screening failures under `solver_design` cause another
-solver-design attempt, or fail closed, rather than falling back to isolated
-component surfaces.
+Current limitation: the top-level boundary is live-validated, but the
+Contract-preview budget repair has not yet been validated in a live diagnostic.
+Stop forced component-policy diagnostics; next run a short free-surface
+diagnostic and verify that hypotheses stay on `solver_design`, valid terminal
+Contract previews are retained as compact pass/fail evidence, and screened
+solver-design candidates start producing nonzero phase-best movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-active-solver-design-boundary-sonnet-4r-20260511T180413Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=4
+rounds_completed=4
+screened_experiments=1
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=600
+force_surface=none
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-active-solver-design-boundary-sonnet-4r-20260511.md
+```
+
+Summary:
+
+- The run launched from clean commit `1c79c1e` and completed with
+  `EXIT_CODE:0`.
+- All persisted hypotheses and APS outputs stayed on `solver_design` targeting
+  `policies/main_search_strategy.py`. No component-policy fallback occurred.
+- The first candidate failed heavy Verification `V5_solution_consistency`.
+- The second candidate passed Contract and Verification, then failed screening
+  with `win_rate=0.0` and `median_delta=0.0`.
+- The third hypothesis stayed on `solver_design`, but two code sessions failed
+  closed because Contract preview was replaced by `result_too_large,
+  tool_error` after APS had consumed about `44.3k/48k` observation chars.
+
+Interpretation: active boundary control is validated. The remaining blocker is
+APS preview-budget handling: deterministic Contract preview pass/fail evidence
+must survive as a compact self-check observation even when full preview detail
+does not fit.
+
+Detailed analysis:
+[`v0.4-active-solver-design-boundary-sonnet-4r-20260511.md`](../experiments/v0.4/v0.4-active-solver-design-boundary-sonnet-4r-20260511.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-solver-design-boundary-repair-sonnet-4r-20260511T164524Z
@@ -210,28 +254,6 @@ force_surface=none
 stop_reason=manual_termination_invalid_active_boundary
 analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md
 ```
-
-Summary:
-
-- The run was launched from clean commit `3318a30` and manually terminated with
-  `EXIT_CODE:143` after round 3 exposed a remaining boundary leak.
-- Rounds 1 and 2 selected `solver_design`, targeted
-  `policies/main_search_strategy.py`, passed Contract and Verification, then
-  failed screening with `win_rate=0.0` and `median_delta=0.0`.
-- Round 3 selected `baseline_policy` and targeted
-  `policies/baseline_policy.py`; it was active when terminated.
-- The completed round-3 APS code session reported `schema_valid=false` and
-  `contract_preview_passed=false` with `unsupported,tool_skipped`, but the
-  completed output was still accepted far enough to become the active branch.
-
-Interpretation: the previous repair fixed the pre-screening blacklist path but
-left screening-failure fallback and APS self-check acceptance unresolved.
-`solver_design` must be an active problem-object boundary, not only guidance.
-Component policies can be implementation hooks or attribution evidence inside
-solver design, but not replacement top-level `change_locus` values.
-
-Detailed analysis:
-[`v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
 
 Previous analyzed run:
 
@@ -348,14 +370,14 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selec
 
 ## Validation
 
-Latest solver-design active-boundary repair validation:
+Latest solver-design active-boundary / APS preview-budget validation:
 
 ```bash
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_sprint_m.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
 ```
 
 ```text
-305 passed in 19.85s
+306 passed in 19.42s
 ```
 
 Latest full Scion test suite:
@@ -365,7 +387,7 @@ Latest full Scion test suite:
 ```
 
 ```text
-1571 passed, 1 skipped in 69.38s
+1572 passed, 1 skipped in 63.91s
 ```
 
 Latest focused phase-benefit / forced-surface validation:

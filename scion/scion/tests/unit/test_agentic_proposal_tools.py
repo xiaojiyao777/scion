@@ -38,7 +38,11 @@ from scion.proposal.agentic_session import (
     compute_agentic_idempotency_key,
     resume_from_artifact,
     validate_agentic_session_artifact,
+    _compact_contract_preview_observation,
+    _json_size,
+    _observation_prompt_payload,
     _research_diagnosis_from_observations,
+    _self_check_from_previews,
 )
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.tools import (
@@ -3115,6 +3119,55 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
         "test.huge_error",
     }
     assert all(event["error_code"] == "result_too_large" for event in huge_events)
+
+
+def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_budget(
+) -> None:
+    observation = ProposalObservation(
+        observation_id="contract-preview-1",
+        session_id="session-1",
+        tool_name="proposal.contract_preview",
+        tool_call_id="tool-9",
+        observation_type="contract_preview",
+        summary="Static contract preview passed.",
+        structured_payload={
+            "passed": True,
+            "static_only": False,
+            "workspace_materialized": False,
+            "verification_run": False,
+            "protocol_run": False,
+            "decision_run": False,
+            "hypothesis": {
+                "passed": True,
+                "hypothesis_text": "x" * 8000,
+                "contract": {"passed": True, "check_count": 6},
+                "checks": [{"name": "C2_locus", "passed": True}],
+            },
+            "patch": {
+                "passed": True,
+                "code_content": "x" * 24000,
+                "contract": {"passed": True, "check_count": 10},
+                "checks": [{"name": "C7_interface", "passed": True}],
+                "problem_preview": {
+                    "passed": True,
+                    "surface": "solver_design",
+                    "checks": [{"name": "preview", "passed": True}],
+                    "workspace_materialized": False,
+                },
+            },
+        },
+    )
+
+    compact = _compact_contract_preview_observation(observation)
+
+    assert compact is not None
+    assert compact.is_error is False
+    assert _json_size(_observation_prompt_payload(compact)) < 1200
+    assert compact.structured_payload["passed"] is True
+    assert compact.structured_payload["patch"]["contract"]["check_count"] == 10
+    assert compact.structured_payload["patch"]["problem_preview"]["passed"] is True
+    assert compact.structured_payload["compact_due_to_budget"] is True
+    assert _self_check_from_previews([compact]).contract_preview_passed is True
 
 
 def test_optional_read_surface_near_budget_returns_bounded_error(

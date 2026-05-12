@@ -158,13 +158,17 @@ within `AgenticToolLoopConfig.max_observation_chars` and the replay validator
 remains strict for genuinely invalid artifacts. The default APS tool loop
 allows 14 steps and 12 tool calls so the normal
 read-feedback-schema-target-contract path has room after evidence diagnosis is
-rendered. The default APS observation budget is 48,000 chars; compactness is
+rendered. The default APS observation budget is 64,000 chars; compactness is
 still enforced first, and the larger cap only gives room for the normal
 list/problem/feedback/selected-surface sequence. APS also reserves terminal
 budget for self-check/static-preview tools:
 after required diagnosis context has been collected, bounded planner and fixed
 fallback reads stop before consuming the tool-call, step, or observation-char
 reserve needed for schema, target/action, interface, and Contract previews.
+When a `proposal.contract_preview` result itself would exceed the remaining
+observation budget, APS now keeps a compact deterministic pass/fail summary
+instead of replacing the preview with `result_too_large`; this preserves the
+self-check gate while still omitting bulky preview details from the prompt.
 Screening and runtime feedback tools also bound their compact JSON payloads before the
 registry size guard, so available compact feedback can still succeed without
 exposing raw metric refs when runtime summaries are unusually large. Screening

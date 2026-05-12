@@ -279,7 +279,9 @@ budget.
 It omits full prompt guidance blocks and full target-file content, returns a
 deterministic `surface-contract.v1` section map, and caps long text/list/map
 fields before the APS boundary sees the observation. `detail="full"` remains an
-explicit debug opt-in. The default APS observation budget is 48,000 chars: large
+explicit debug opt-in. The default APS observation budget is 64,000 chars: large
 enough for list/problem/feedback plus one compact whole-algorithm surface read,
 while individual tool observations remain bounded and raw metrics refs remain
-stripped.
+stripped. Terminal Contract preview keeps a compact deterministic pass/fail
+summary when the full preview payload would exceed the remaining session
+observation budget.
