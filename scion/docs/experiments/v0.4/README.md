@@ -41,6 +41,7 @@ referenced, not copied into development prompts.
 - [Solver-design boundary-repair Sonnet 4R diagnostic, terminated early, 2026-05-11](v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
 - [Active solver-design boundary Sonnet 4R diagnostic, 2026-05-11](v0.4-active-solver-design-boundary-sonnet-4r-20260511.md)
 - [Active boundary Contract-preview budget Sonnet 4R diagnostic, 2026-05-12](v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md)
+- [Solver-design semantic-identity guidance Sonnet 4R diagnostic, 2026-05-12](v0.4-solver-design-semantic-identity-guidance-sonnet-4r-20260512.md)
 
 ## Related
 

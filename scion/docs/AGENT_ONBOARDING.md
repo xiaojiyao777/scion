@@ -66,15 +66,18 @@ boundary through the adapter, rather than being driven through one forced
 singleton policy at a time. The first exposure slice now renders the CVRP
 problem object into proposal contexts and `context.read_problem`; the second
 slice declares `solver_design` as the top-level CVRP research boundary. The
-latest repair makes that boundary active when no forced diagnostic surface is
-set: proposal context, APS tools, target preview, and output validation keep
-`change_locus` on `solver_design`, while component policies remain
-implementation hooks or attribution evidence. APS self-check failures now fail
-closed before completed patches are accepted. The latest short free-surface
-diagnostic validated that active boundary and the Contract-preview budget
-repair. The current blocker is solver-design candidate quality: screened
-candidates still show zero solver-quality movement, and APS can still generate
-shallow lifecycle hypotheses that fail semantic-signature self-checks.
+latest repairs make that boundary active when no forced diagnostic surface is
+set, distinguish active-boundary tool guidance from forced-surface diagnostics,
+and require non-empty solver-design semantic identity. Proposal context, APS
+tools, target preview, and output validation keep `change_locus` on
+`solver_design`, while component policies remain implementation hooks or
+attribution evidence. APS self-check failures now fail closed before completed
+patches are accepted. The latest short free-surface diagnostic validated active
+boundary control, Contract-preview budget retention, active-boundary tool
+guidance, and non-empty semantic identity. The current blocker is still
+solver-design candidate quality: screened candidates show at most small
+win-rate movement, median movement remains zero, and main-search phase-best
+movement remains zero.
 
 Important current interpretation:
 
@@ -89,19 +92,26 @@ Important current interpretation:
   policy.
 - Active `solver_design` boundary control is now live-validated: free-surface
   APS sessions stayed on `solver_design` after heavy Verification and
-  zero-movement screening failures.
+  zero/low-movement screening failures.
+- Active-boundary tool guidance is now live-validated as an active problem
+  boundary, not a fake forced-surface diagnostic.
 - The APS Contract-preview budget repair is now live-validated: completed code
   sessions retained terminal Contract-preview pass/fail evidence under the
   64k observation budget instead of failing as `result_too_large`.
+- `solver_design` semantic identity is now fail-closed: required
+  `novelty_signature.selected_components` and
+  `novelty_signature.deep_components_selected` must be non-empty arrays.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.
 - They do not yet validate solver efficacy. Screened candidates still fail
-  quality thresholds, and phase-best movement remains zero.
+  quality thresholds, median movement remains zero, and phase-best movement
+  remains zero.
 - Do not spend more rounds on the same shallow solver-design pattern. Next
-  optimization should improve problem adaptation and complete solver lifecycle
-  hypotheses, including non-empty deep component identity when required by the
-  surface contract.
+  optimization should improve solver lifecycle quality: accepted/recovery moves
+  need to refresh phase best, bounded destroy/repair needs to stop exhausting
+  repair budget, and extra baseline budget should not be the only source of
+  isolated wins.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

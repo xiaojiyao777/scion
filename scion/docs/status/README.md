@@ -1,6 +1,6 @@
 # Status Docs
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-05-12*
 
 - [Current state](current-state.md)
 - [v0.4 history archive](v0.4-history.md)

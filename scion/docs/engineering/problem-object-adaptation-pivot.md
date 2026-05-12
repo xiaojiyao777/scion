@@ -113,6 +113,28 @@ the boundary active rather than advisory:
 This is still a control-loop repair, not solver-efficacy evidence. It needs a
 new short free-surface diagnostic before any longer solver-quality run.
 
+## Implemented Semantic-Identity Guidance Repair
+
+The next repair tightened the solver-design identity contract:
+
+- `solver_design` novelty requirements are carried into hypothesis context, APS
+  tool guidance, schema preview, and final hypothesis prompts.
+- `novelty_signature.selected_components` and
+  `novelty_signature.deep_components_selected` must be non-empty arrays of
+  component names.
+- Missing, false, empty-string, empty-object, and empty-array identity values
+  fail closed before completed code is accepted.
+- APS active-boundary tool guidance now renders an active problem-boundary rule
+  with `allowed_surface_ids=["solver_design"]`; it no longer mislabels the
+  default boundary as a forced-surface diagnostic.
+
+The 2026-05-12 short diagnostic validated those controls. Four persisted
+hypotheses stayed on `solver_design`, carried non-empty semantic identity, and
+tried distinct solver-lifecycle patterns. Three reached screening, but still
+failed quality thresholds; the only nonzero win-rate signal was `0.125` with
+`median_delta=0.0` and runtime regression. Main-search phase-best movement
+remained zero.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -129,28 +151,26 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice should validate the active-boundary whole-problem
-CVRP adaptation surface with a short experiment:
+The next engineering slice is solver-lifecycle quality, not more boundary
+control:
 
-1. Define the CVRP problem object Scion should see: instance structure,
-   solution representation, route/move affordances, objective semantics, and
-   solver lifecycle.
-2. Use `solver_design` as the top-level research target. Do not force a
-   singleton component policy.
-3. Keep rendering the object through the adapter so proposal agents reason from
-   the problem and solver lifecycle, not from a menu of disconnected hooks.
-4. Make runtime evidence summarize whole-solver behavior and phase-level
-   movement, with component details as attribution rather than the primary
-   research target.
-5. Run a short free-surface diagnostic. It should not force one narrow policy
-   unless the purpose is specifically to validate a new adapter or contract
-   boundary. If APS tries to select a component policy as the top-level
-   `change_locus`, the proposal should fail closed before code evaluation.
+1. Keep `solver_design` as the top-level research target. Do not force a
+   singleton component policy unless validating a new adapter or contract
+   boundary.
+2. Diagnose why current/recovery accepted moves do not refresh phase best.
+3. Improve bounded destroy/repair so it does not mostly exhaust repair budget
+   without phase-level improvement.
+4. Make runtime feedback steer APS away from simply increasing repo-local
+   baseline time fraction when that creates isolated wins with runtime
+   regression and no median movement.
+5. Run another short free-surface diagnostic only after the repair should be
+   able to produce nonzero main-search phase-best movement.
 
 ## Current CVRP Implication
 
 Stop forced `destroy_repair_policy` and `route_pair_candidate_policy`
 diagnostics for now. The former has been exhausted; the latter would continue
-the same incremental-hook pattern. The next useful work is to validate that
-the active-boundary control loop keeps CVRP on the problem-object
-`solver_design` boundary after both pre-screening and screening failures.
+the same incremental-hook pattern. The active-boundary control loop now keeps
+CVRP on the problem-object `solver_design` boundary after both pre-screening
+and screening failures. The next useful work is to make that boundary produce
+real solver movement.

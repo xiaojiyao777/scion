@@ -12,14 +12,16 @@ handoff. Historical repair and experiment notes were moved to
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
 produced reliable screening-quality improvement. The latest free-surface
-solver-design diagnostic validates both active boundary control and the
-Contract-preview budget repair: every completed or partial APS session stayed
-on `solver_design`, and completed code sessions retained terminal
-Contract-preview pass/fail evidence under the 64k observation budget. The run
-still produced no screening-quality movement: two screened candidates failed
-with `win_rate=0.0` and `median_delta=0.0`, one candidate failed heavy
-Verification, and the final hypothesis failed closed because
-`novelty_signature.deep_components_selected` was empty.
+solver-design diagnostic validates active boundary control, active-boundary
+tool guidance, Contract-preview budget retention, and non-empty solver-design
+semantic identity. All APS sessions stayed on `solver_design`, all persisted
+hypotheses supplied non-empty `selected_components` and
+`deep_components_selected`, and completed code sessions retained terminal
+Contract-preview evidence under the 64k observation budget. Solver quality
+improved only slightly: three screened candidates had win rates `0.0`,
+`0.125`, and `0.0`, all with `median_delta=0.0`; a fourth candidate failed
+heavy Verification because runtime evidence left
+`main_search_deep_components_selected` empty.
 
 Current branch: `v0.4-dev`
 
@@ -50,10 +52,17 @@ Current interpretation:
   an active problem boundary: proposal context, APS tools, target preview, and
   final hypothesis prompts reject component-policy `change_locus` values when
   no forced diagnostic surface is active.
-- The latest active-boundary and Contract-preview budget diagnostic confirms
-  that boundary control in a live free-surface run: all completed or partial
-  APS outputs stayed on `solver_design` after heavy Verification and
-  zero-movement screening failures.
+- The latest active-boundary and semantic-identity diagnostics confirm boundary
+  control in live free-surface runs: all completed or partial APS outputs stayed
+  on `solver_design` after heavy Verification and zero/low-movement screening
+  failures.
+- Active-boundary APS tool guidance now distinguishes a problem-object boundary
+  from `--force-surface`: traces render `active_problem_boundary_rule` with
+  `allowed_surface_ids=["solver_design"]`, not a fake forced-surface rule with
+  `[null]`.
+- For semantic-signature solver-design hypotheses, `selected_components` and
+  `deep_components_selected` must be non-empty arrays. Schema preview and
+  ContractGate fail closed on missing, false, empty, or empty-sequence identity.
 - APS self-check failures now fail closed for real sessions. Schema/target
   preview failures, skipped Contract previews, or failed Contract previews stop
   the completed output before the patch enters evaluation.
@@ -66,9 +75,9 @@ Current interpretation:
   terminal reserve for schema/target/interface/Contract previews after
   required diagnosis context has been gathered. Terminal Contract preview keeps
   compact deterministic pass/fail evidence if the full preview payload would
-  exceed the remaining observation budget. This is now validated in a live
-  free-surface run: three completed code sessions passed Contract preview and
-  no APS `output.json` contained `result_too_large`.
+  exceed the remaining observation budget. This is now validated in live
+  free-surface runs: completed code sessions passed Contract preview and no APS
+  `output.json` in the latest run contained `result_too_large`.
 - The latest free-surface post-optimization smoke selected two newly added
   deep mechanism surfaces: `alns_vns_policy` and
   `acceptance_restart_policy`. `destroy_repair_policy` and
@@ -190,17 +199,68 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary and Contract-preview budget repair
-are live-validated, but solver-design candidate quality is still too weak.
-Stop forced component-policy diagnostics and stop merely increasing rounds on
-the same shallow lifecycle patterns. The next repair should improve
-problem-object adaptation and model-facing feedback so `solver_design`
-hypotheses produce complete lifecycle plans, non-empty required semantic
-identity, and nonzero phase-best movement.
+Current limitation: the top-level boundary, active-boundary tool guidance,
+Contract-preview budget repair, and non-empty semantic identity are
+live-validated, but solver-design candidate quality is still too weak. Stop
+forced component-policy diagnostics and stop merely increasing rounds on the
+same shallow lifecycle patterns. The next repair should improve solver
+lifecycle quality so accepted/recovery moves refresh phase best, bounded
+destroy/repair stops exhausting repair budget, and extra baseline budget does
+not create only isolated wins without median movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-semantic-identity-guidance-sonnet-4r-20260512T020020Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=4
+rounds_completed=4
+screened_experiments=3
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=600
+force_surface=none
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-semantic-identity-guidance-sonnet-4r-20260512.md
+```
+
+Summary:
+
+- The run launched from clean commit `8618917` and completed with
+  `EXIT_CODE:0`.
+- All persisted hypotheses and completed/partial APS outputs stayed on
+  `solver_design` targeting `policies/main_search_strategy.py`. No
+  component-policy fallback occurred.
+- The repaired active-boundary trace used `active_problem_boundary_rule` with
+  `allowed_surface_ids=["solver_design"]`; the invalid pre-run bug
+  (`forced_surface_rule`, `allowed_surface_ids=[null]`) did not recur.
+- All four persisted hypotheses supplied non-empty `selected_components` and
+  `deep_components_selected`.
+- Four code sessions completed with `schema_valid=true` and
+  `contract_preview_passed=true`; no APS `output.json` contained
+  `result_too_large`.
+- Three candidates passed Contract and Verification, then failed screening with
+  `win_rate` values `0.0`, `0.125`, and `0.0`; all had `median_delta=0.0`.
+- The fourth candidate passed Contract but failed heavy Verification
+  `V5_solution_consistency` because selected-surface runtime evidence had empty
+  `main_search_deep_components_selected`.
+- Candidate diversity improved: the run tried different baseline fractions,
+  component sets, restart/perturbation patterns, rounds, and top-k values.
+
+Interpretation: active boundary control, active-boundary tool guidance,
+Contract-preview budget retention, and non-empty semantic identity are
+live-validated. Solver-design quality remains the blocker: screened candidates
+still had zero main-search phase-best movement, and the only nonzero win-rate
+signal came with runtime regression.
+
+Detailed analysis:
+[`v0.4-solver-design-semantic-identity-guidance-sonnet-4r-20260512.md`](../experiments/v0.4/v0.4-solver-design-semantic-identity-guidance-sonnet-4r-20260512.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-active-boundary-contract-preview-budget-sonnet-4r-20260512T003103Z
@@ -223,24 +283,19 @@ Summary:
 - The run launched from clean commit `4e88a2d` and completed with
   `EXIT_CODE:0`.
 - All persisted hypotheses and completed/partial APS outputs stayed on
-  `solver_design` targeting `policies/main_search_strategy.py`. No
-  component-policy fallback occurred.
+  `solver_design` targeting `policies/main_search_strategy.py`.
 - Three code sessions completed with `schema_valid=true` and
   `contract_preview_passed=true`; no APS `output.json` contained
   `result_too_large`.
 - Two candidates passed Contract and Verification, then failed screening with
-  `win_rate=0.0` and `median_delta=0.0`.
-- One candidate passed Contract but failed heavy Verification
-  `V5_solution_consistency`.
+  `win_rate=0.0` and `median_delta=0.0`; one candidate passed Contract but
+  failed heavy Verification.
 - The final hypothesis session failed closed before approval because schema
-  preview found `novelty_signature.deep_components_selected=[]`; target
-  permission preview passed.
+  preview found `novelty_signature.deep_components_selected=[]`.
 
 Interpretation: active boundary control and Contract-preview budget retention
-are both live-validated. The remaining blocker is solver-design candidate
-quality: APS needs better problem adaptation and feedback so it proposes
-complete lifecycle changes with required semantic identity and actual
-phase-best movement.
+were live-validated. The next repair tightened semantic identity and
+active-boundary tool guidance.
 
 Detailed analysis:
 [`v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md`](../experiments/v0.4/v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md)

@@ -255,7 +255,7 @@ Suggested MVP tool set:
 |---|---|---|
 | `context.read_problem` | read_public_context | Adapter-rendered summary plus optional problem object for instance/solution/objective/lifecycle/move/evidence semantics. |
 | `context.list_surfaces` | read_public_context | Compact selection metadata from `ProblemSpecV1.research_surfaces`. |
-| `context.read_surface` | read_champion_artifact | Compact-by-default surface contract with `summary` / `interface` / `bounds` / `evidence` / `novelty` / `target_preview` sections plus a bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=1200`, and optional reads fail closed near the observation budget. |
+| `context.read_surface` | read_champion_artifact | Compact-by-default surface contract with `summary` / `interface` / `bounds` / `evidence` / `novelty` / `target_preview` sections plus a bounded current target-file preview; APS normalizes session reads to compact `max_code_chars=800`, and optional reads fail closed near the observation budget. |
 | `memory.query` | read_tainted_memory | Search memory, research log, failed hypotheses. |
 | `feedback.query_screening` | read_tainted_memory | Screening-only detailed feedback. |
 | `feedback.query_holdout_summary` | read_tainted_memory | Validation aggregate, frozen pass/fail/budget only. |
@@ -285,3 +285,14 @@ while individual tool observations remain bounded and raw metrics refs remain
 stripped. Terminal Contract preview keeps a compact deterministic pass/fail
 summary when the full preview payload would exceed the remaining session
 observation budget.
+
+Active problem-object boundary guidance is separate from forced-surface
+diagnostics. During `--force-surface` campaigns, tool guidance renders the
+forced surface/action/target rule. When no forced surface is active and the
+problem declares a `solver_design` boundary, tool guidance renders an
+`active_problem_boundary_rule` and limits surface reads to
+`allowed_surface_ids=["solver_design"]`. The same guidance carries semantic
+novelty requirements into schema/target/Contract previews. For CVRP
+`solver_design`, `selected_components` and `deep_components_selected` must be
+non-empty arrays; schema preview fails closed before code generation when they
+are missing, false, empty, or not arrays of component names.

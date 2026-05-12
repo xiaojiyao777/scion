@@ -186,6 +186,12 @@ components `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
 `bounded_destroy_repair`, strict-improvement acceptance threshold, restart
 stagnation/max-restart controls, bounded perturbation controls with explicit
 schedule, and optional post-baseline registry-operator toggle/round limit.
+The model-facing interface and `problem-v1.yaml` also require solver-design
+hypotheses to populate semantic identity through
+`novelty_signature.selected_components` and
+`novelty_signature.deep_components_selected` as non-empty arrays of component
+names. Those fields identify the solver lifecycle being changed; empty or false
+values fail schema/Contract preview before code generation.
 Unknown keys, missing
 required keys for enabled plans, invalid baseline params, bad types,
 non-finite values, unknown components, and out-of-range values increment
@@ -226,6 +232,12 @@ component is a diagnostic advisory rather than the research target itself. A
 candidate should explain how construction, baseline budget, package-owned
 components, restart/perturbation, and caps work together and which phase-best
 objective and whole-solver runtime fields should move.
+The latest short diagnostic validated that APS can keep this as the active
+problem-object boundary and generate non-empty solver-design semantic
+identities across multiple rounds. It did not validate solver efficacy:
+screened candidates still had zero main-search phase-best movement, and the
+only nonzero screening win-rate signal came from a baseline-heavy variant with
+runtime regression.
 
 `policies/alns_vns_policy.py` is a singleton deep mechanism research surface.
 Required function:

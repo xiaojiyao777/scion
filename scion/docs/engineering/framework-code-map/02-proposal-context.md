@@ -54,6 +54,14 @@ constraint is carried through hypothesis context, APS tool context,
 CreativeLayer hypothesis prompts. For CVRP this means the default free
 diagnostic task targets `solver_design` and `policies/main_search_strategy.py`
 instead of offering every component policy as a top-level choice.
+APS tool guidance distinguishes this active problem-object boundary from a
+diagnostic `--force-surface` run: forced campaigns render a forced-surface rule
+and exact forced target, while active-boundary campaigns render
+`active_problem_boundary_rule` and `allowed_surface_ids=["solver_design"]`.
+Active-boundary novelty requirements are also carried into
+`proposal.draft_hypothesis`, `proposal.schema_preview`, and final hypothesis
+generation so the model sees the same semantic identity contract before code
+generation.
 
 As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
 Session path (`use_agentic_proposal` or injected `agentic_session`). The default
@@ -243,6 +251,13 @@ Contract previews stop the session before a completed patch is accepted for
 evaluation. Legacy injected test outputs without any self-check transcript are
 still tolerated, but real APS sessions with preview evidence must pass their
 self-check boundary.
+For active `solver_design` boundaries, schema preview also checks declared
+semantic identity quality before code generation. Required structured fields
+must be present, and fields declared as non-empty sequences, currently
+`selected_components` and `deep_components_selected`, must be non-empty arrays
+of non-empty strings. Missing, false, empty-string, empty-object, and
+empty-sequence values fail closed instead of being treated as usable semantic
+novelty.
 
 ## ContextManager Inputs
 
@@ -328,6 +343,12 @@ Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged in
   records that lack usable structured identity do not poison later candidates
   that provide valid structured identities; duplicate structured identities
   still fail closed.
+  Some semantic fields can be declared or carried as non-empty sequence
+  identity. For CVRP `solver_design`, `selected_components` and
+  `deep_components_selected` must be non-empty sequences of component names;
+  empty arrays, false, null, empty objects, or empty strings are not usable
+  identity. Nested false values inside otherwise non-empty pattern objects
+  remain valid when they describe a real pattern, for example a restart flag.
 
 This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
 
