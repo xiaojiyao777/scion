@@ -135,6 +135,36 @@ failed quality thresholds; the only nonzero win-rate signal was `0.125` with
 `median_delta=0.0` and runtime regression. Main-search phase-best movement
 remained zero.
 
+## Implemented Problem-Adaptation Contract Repair
+
+The next short experiment exposed a codegen/Contract mismatch rather than a
+research-quality failure: generated `main_search_plan()` code copied
+proposal-only `novelty_signature` into the returned plan, used lifecycle
+targets in `problem_adaptation.component_roles`, and named real runtime audit
+fields in `evidence_targets` that the previous whitelist rejected. The repair
+keeps these concerns separated:
+
+- `novelty_signature` is rendered to code generation as
+  `hypothesis_metadata_novelty_signature` and must not be copied into returned
+  policy/config dictionaries unless a surface explicitly declares it.
+- `main_search_plan()` has an exact top-level key contract and rejects extra
+  keys such as `novelty_signature`.
+- `problem_adaptation.component_roles` accepts lifecycle role targets:
+  construction modes, repo-local baseline, strict-improvement acceptance,
+  restart, perturbation, post-baseline operator toggles, and package-owned
+  main-search components.
+- `problem_adaptation.evidence_targets` accepts the runtime audit fields the
+  solver actually emits, including accepted current moves, phase-improvement
+  counts, restart/perturbation counts, objective deltas by phase, and objective
+  trace.
+
+The follow-up validation reached Contract, Verification, and screening twice
+with declared problem adaptation and `main_search_strategy_errors=0`. Both
+screened candidates still had `win_rate=0.0`, `median_delta=0.0`, and zero
+main-search phase-best movement. This validates the problem-adaptation
+contract and confirms that the next bottleneck is CVRP main-search execution
+semantics.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -151,8 +181,8 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice is solver-lifecycle quality, not more boundary
-control:
+The next engineering slice is solver-lifecycle quality, not more boundary,
+identity, or prompt exposure control:
 
 1. Keep `solver_design` as the top-level research target. Do not force a
    singleton component policy unless validating a new adapter or contract

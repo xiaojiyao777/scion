@@ -191,7 +191,22 @@ hypotheses to populate semantic identity through
 `novelty_signature.selected_components` and
 `novelty_signature.deep_components_selected` as non-empty arrays of component
 names. Those fields identify the solver lifecycle being changed; empty or false
-values fail schema/Contract preview before code generation.
+values fail schema/Contract preview before code generation. The
+`novelty_signature` object is proposal metadata only; it must not be returned
+from `main_search_plan()` because the plan contract has a fixed top-level key
+set.
+`problem_adaptation.component_roles` can describe the whole lifecycle rather
+than only selected improvement components. Accepted role targets include
+construction modes, repo-local baseline/baseline params, strict-improvement
+acceptance, restart, perturbation, post-baseline operator toggles, and the
+package-owned main-search components. The solver preserves those roles in
+`main_search_component_roles`, but only package-owned improvement components
+participate in main-search scheduling and disabled-selected-component checks.
+`problem_adaptation.fallback_order` remains limited to package-owned
+improvement components. `problem_adaptation.evidence_targets` is checked
+against the runtime audit fields the solver actually emits, including accepted
+current moves, accepted positive counts, phase-improvement counts,
+restart/perturbation counts, objective deltas by phase, and objective trace.
 Unknown keys, missing
 required keys for enabled plans, invalid baseline params, bad types,
 non-finite values, unknown components, and out-of-range values increment
@@ -232,12 +247,13 @@ component is a diagnostic advisory rather than the research target itself. A
 candidate should explain how construction, baseline budget, package-owned
 components, restart/perturbation, and caps work together and which phase-best
 objective and whole-solver runtime fields should move.
-The latest short diagnostic validated that APS can keep this as the active
-problem-object boundary and generate non-empty solver-design semantic
-identities across multiple rounds. It did not validate solver efficacy:
-screened candidates still had zero main-search phase-best movement, and the
-only nonzero screening win-rate signal came from a baseline-heavy variant with
-runtime regression.
+The latest short diagnostics validate that APS can keep this as the active
+problem-object boundary, generate non-empty solver-design semantic identities,
+carry lifecycle `problem_adaptation`, pass Contract preview, and reach
+screening with `main_search_strategy_errors=0`. They do not validate solver
+efficacy: screened candidates still have zero main-search phase-best movement.
+The next engineering target is the package-owned execution semantics of the
+main-search loop and primitives, not another exposure-only prompt repair.
 
 `policies/alns_vns_policy.py` is a singleton deep mechanism research surface.
 Required function:

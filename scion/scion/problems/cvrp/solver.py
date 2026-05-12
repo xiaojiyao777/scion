@@ -85,6 +85,23 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
     }
 )
 _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
+_ALLOWED_MAIN_SEARCH_ROLE_TARGETS = (
+    _ALLOWED_MAIN_SEARCH_COMPONENTS
+    | _ALLOWED_CONSTRUCTION_MODES
+    | frozenset(
+        {
+            "repo_local_baseline",
+            "repo_local_baseline_params",
+            "baseline_policy",
+            "strict_improvement_acceptance",
+            "restart_stagnation",
+            "bounded_perturbation",
+            "pre_improvement_perturbation",
+            "post_baseline_operators",
+            "post_baseline_operator_toggle",
+        }
+    )
+)
 _ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES = frozenset(
     {
         "balanced_lifecycle",
@@ -124,9 +141,17 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
     {
         "construction_distance",
         "baseline_cost",
+        "main_search_component_attempts",
+        "main_search_component_accepted",
         "main_search_component_accepted_delta_sum",
+        "main_search_component_accepted_best_delta",
+        "main_search_component_accepted_positive_counts",
         "main_search_component_recovery_delta_sum",
+        "main_search_component_recovery_counts",
         "main_search_component_phase_delta_sum",
+        "main_search_component_phase_improvement_counts",
+        "main_search_restart_count",
+        "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
         "main_search_objective_trace",
         "main_search_stop_reason",
@@ -2551,12 +2576,13 @@ def _main_search_component_roles(
     for key, raw_role in value.items():
         component = str(key).strip()
         role = str(raw_role).strip()
-        if component not in _ALLOWED_MAIN_SEARCH_COMPONENTS:
+        if component not in _ALLOWED_MAIN_SEARCH_ROLE_TARGETS:
             audit["main_search_strategy_errors"] += 1
             _record_main_search_event(
                 audit,
                 "error",
-                f"problem_adaptation.component_roles contains unknown component {component!r}",
+                "problem_adaptation.component_roles contains unknown role target "
+                f"{component!r}",
             )
             continue
         if role not in _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES:

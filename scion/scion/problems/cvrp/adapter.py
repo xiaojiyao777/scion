@@ -44,6 +44,23 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
     }
 )
 _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
+_ALLOWED_MAIN_SEARCH_ROLE_TARGETS = (
+    _ALLOWED_MAIN_SEARCH_COMPONENTS
+    | _ALLOWED_CONSTRUCTION_MODES
+    | frozenset(
+        {
+            "repo_local_baseline",
+            "repo_local_baseline_params",
+            "baseline_policy",
+            "strict_improvement_acceptance",
+            "restart_stagnation",
+            "bounded_perturbation",
+            "pre_improvement_perturbation",
+            "post_baseline_operators",
+            "post_baseline_operator_toggle",
+        }
+    )
+)
 _ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES = frozenset(
     {
         "balanced_lifecycle",
@@ -81,9 +98,17 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
     {
         "construction_distance",
         "baseline_cost",
+        "main_search_component_attempts",
+        "main_search_component_accepted",
         "main_search_component_accepted_delta_sum",
+        "main_search_component_accepted_best_delta",
+        "main_search_component_accepted_positive_counts",
         "main_search_component_recovery_delta_sum",
+        "main_search_component_recovery_counts",
         "main_search_component_phase_delta_sum",
+        "main_search_component_phase_improvement_counts",
+        "main_search_restart_count",
+        "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
         "main_search_objective_trace",
         "main_search_stop_reason",
@@ -508,7 +533,9 @@ class CvrpAdapter:
                 "problem_adaptation, construction, baseline, improvement, "
                 "acceptance, restart, perturbation, "
                 "post_baseline_operators_enabled, and "
-                "operator_round_limit.\n\n"
+                "operator_round_limit. Do not return any other top-level key; "
+                "`novelty_signature` belongs only to the approved hypothesis "
+                "payload, not to code returned by main_search_plan.\n\n"
                 "Plan contract:\n"
                 "- enabled: bool. The default must be False. Only enabled=True "
                 "and a valid plan lets this surface take over the CVRP "
@@ -523,10 +550,16 @@ class CvrpAdapter:
                 "distance_structure, route_count_hint, or customer_count. "
                 "phase_objective is one of construction_distance, "
                 "baseline_distance, phase_best_distance, recovery_to_phase_best, "
-                "or runtime_neutrality. component_roles maps allowed "
-                "components to primary/support/probe/disabled, fallback_order "
-                "orders allowed components, and evidence_targets lists runtime "
-                "fields expected to move.\n"
+                "or runtime_neutrality. component_roles maps lifecycle role "
+                "targets to primary/support/probe/disabled; role targets are "
+                + _format_literal_values(sorted(_ALLOWED_MAIN_SEARCH_ROLE_TARGETS))
+                + ". fallback_order orders only package-owned improvement "
+                "components drawn from "
+                + _format_literal_values(sorted(_ALLOWED_MAIN_SEARCH_COMPONENTS))
+                + ". evidence_targets lists runtime fields expected to move "
+                "and must be drawn from "
+                + _format_literal_values(sorted(_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS))
+                + ".\n"
                 "- construction: dict with methods, keep_top_k, and bias. "
                 "methods is drawn from 'nearest_neighbor', "
                 "'nearest_neighbor_demand_bias', 'demand_descending', and "
@@ -546,11 +579,12 @@ class CvrpAdapter:
                 "Choose top_k and component caps as part of the solver-level "
                 "hypothesis, and predict the phase/objective evidence they "
                 "should move.\n"
-                "- Solver-design semantic identity is part of the proposal "
+                "- Proposal-only semantic identity is part of the hypothesis "
                 "contract: `novelty_signature.selected_components` and "
                 "`novelty_signature.deep_components_selected` must be "
                 "non-empty JSON arrays of component names. Do not use false, "
-                "null, or empty arrays for these fields.\n"
+                "null, or empty arrays for these fields. Never include "
+                "`novelty_signature` in main_search_plan's returned dict.\n"
                 "- acceptance: dict with min_distance_improvement finite number "
                 "in [0.0, 10.0]. It may also include "
                 "component_min_distance_improvement, "
@@ -1282,10 +1316,10 @@ def _preview_main_search_strategy(
             )
         else:
             for component, role in component_roles.items():
-                if str(component) not in _ALLOWED_MAIN_SEARCH_COMPONENTS:
+                if str(component) not in _ALLOWED_MAIN_SEARCH_ROLE_TARGETS:
                     issues.append(
                         "problem_adaptation.component_roles returned unknown "
-                        f"component {component!r}"
+                        f"role target {component!r}"
                     )
                 if str(role) not in _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES:
                     issues.append(

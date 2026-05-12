@@ -57,6 +57,15 @@ The CLI in `scion/scion/cli/main.py` reads legacy `problem.yaml`, then replaces 
 `render_problem_object()` when present. This is still adapter-owned prompt
 context; core does not interpret the problem semantics inside that text.
 
+Problem-owned preview hooks may validate surface-specific contracts before
+candidate code reaches runtime, while still staying behind the adapter
+boundary. For CVRP `solver_design`, the adapter preview imports only the
+candidate `main_search_plan()` under static ContractGate success, checks that
+the returned plan has exactly the declared top-level keys, rejects leaked
+proposal-only `novelty_signature`, accepts lifecycle role targets in
+`problem_adaptation.component_roles`, and validates `evidence_targets` against
+the package-owned runtime audit field allowlist.
+
 ## Metric Specs and Objective Policy
 
 Objective comparison is problem-agnostic when metric specs are present. `scion/scion/problem/objectives.py` supports:

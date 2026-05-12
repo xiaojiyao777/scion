@@ -11,17 +11,16 @@ handoff. Historical repair and experiment notes were moved to
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest free-surface
-solver-design diagnostic validates active boundary control, active-boundary
-tool guidance, Contract-preview budget retention, and non-empty solver-design
-semantic identity. All APS sessions stayed on `solver_design`, all persisted
-hypotheses supplied non-empty `selected_components` and
-`deep_components_selected`, and completed code sessions retained terminal
-Contract-preview evidence under the 64k observation budget. Solver quality
-improved only slightly: three screened candidates had win rates `0.0`,
-`0.125`, and `0.0`, all with `median_delta=0.0`; a fourth candidate failed
-heavy Verification because runtime evidence left
-`main_search_deep_components_selected` empty.
+produced reliable screening-quality improvement. The latest solver-design
+problem-adaptation repair validates the live codegen/Contract path: APS can
+generate `solver_design` patches whose `problem_adaptation.component_roles`
+describe lifecycle role targets, whose `evidence_targets` name actual runtime
+audit fields, and whose returned `main_search_plan()` does not leak
+proposal-only `novelty_signature` metadata. Two consecutive completed code
+sessions passed APS schema/target/Contract previews, formal Contract,
+Verification, and selected-surface runtime audit with
+`main_search_strategy_errors=0`, then failed screening with `win_rate=0.0`,
+`median_delta=0.0`, and zero main-search phase-best movement.
 
 Current branch: `v0.4-dev`
 
@@ -37,6 +36,14 @@ Current interpretation:
   by `policies/main_search_strategy.py`. Deep mechanism policies remain useful
   implementation hooks and attribution sources, but they are not standalone
   research goals.
+- The latest contract repair is a framework/problem-boundary repair, not a
+  solver-quality improvement. `novelty_signature` is hypothesis metadata only;
+  generated policy/config dictionaries must not copy it unless a surface
+  explicitly declares that key. `problem_adaptation.component_roles` may now
+  describe lifecycle targets such as construction, repo-local baseline,
+  strict-improvement acceptance, restart, perturbation, and package-owned
+  main-search components. `evidence_targets` may name the actual
+  `main_search_*` audit fields that proposal feedback uses.
 - The first free solver-design diagnostic did select `solver_design` in round
   1, but a `V5_solution_consistency` failure made later APS sessions reason
   from "`solver_design` is blacklisted" and return to component surfaces. This
@@ -66,10 +73,13 @@ Current interpretation:
 - APS self-check failures now fail closed for real sessions. Schema/target
   preview failures, skipped Contract previews, or failed Contract previews stop
   the completed output before the patch enters evaluation.
-- The higher-ceiling v3 path should be a problem-object adaptation path:
+- The higher-ceiling v3 path is now a problem-object adaptation path:
   instance model, solution model, objective policy, move/design affordances,
-  solver lifecycle, and whole-solver evidence should be rendered by the adapter
-  as one coherent object for Scion to reason over.
+  solver lifecycle, and whole-solver evidence are rendered by the adapter as
+  one coherent object for Scion to reason over. The current blocker is no
+  longer failure to expose that object; it is that the package-owned CVRP
+  main-search execution path still does not produce phase-best improvement over
+  the repo-local baseline.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -200,17 +210,62 @@ coordinate:
 - optional registry-operator round limit.
 
 Current limitation: the top-level boundary, active-boundary tool guidance,
-Contract-preview budget repair, and non-empty semantic identity are
-live-validated, but solver-design candidate quality is still too weak. Stop
-forced component-policy diagnostics and stop merely increasing rounds on the
-same shallow lifecycle patterns. The next repair should improve solver
-lifecycle quality so accepted/recovery moves refresh phase best, bounded
-destroy/repair stops exhausting repair budget, and extra baseline budget does
-not create only isolated wins without median movement.
+Contract-preview budget repair, non-empty semantic identity, and
+problem-adaptation codegen contract are live-validated. Solver-design candidate
+quality is still too weak. Stop forced component-policy diagnostics and stop
+spending cycles on prompt-only exposure repairs unless a new live contract
+failure appears. The next repair should change CVRP main-search execution
+semantics so accepted/recovery moves refresh phase best, bounded destroy/repair
+stops producing zero phase-level benefit, and extra baseline budget does not
+create only isolated wins without median movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-problem-adaptation-contract-repair-sonnet-4r-20260512T091752Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=4
+rounds_completed_before_termination=2
+screened_experiments=2
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=600
+force_surface=none
+stop_reason=manual_termination_after_two_valid_zero_movement_screenings
+analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md
+```
+
+Summary:
+
+- The run was terminated early after two completed screenings because both
+  candidates validated the repaired Contract path and both repeated the same
+  zero-movement quality failure.
+- Both completed APS code sessions stayed on `solver_design`, targeted
+  `policies/main_search_strategy.py`, passed schema/target/Contract previews,
+  and did not copy `novelty_signature` into the returned plan dict.
+- Both candidates passed formal Contract and Verification with
+  `main_search_strategy_errors=0` and
+  `main_search_problem_adaptation_source=declared`.
+- Both candidates failed screening with `win_rate=0.0`,
+  `median_delta=0.0`, `main_search_objective_delta_by_phase.improvement_loop=0`,
+  and zero component phase-best deltas across all 16 screening pairs.
+- The validated repair expands `problem_adaptation.component_roles` to
+  lifecycle role targets and expands `evidence_targets` to the real runtime
+  audit fields seen by proposal feedback.
+
+Interpretation: the problem-object adaptation contract is no longer the
+blocker. The next useful optimization must change CVRP main-search execution
+semantics enough to produce phase-best movement; adding more prompt exposure or
+forcing another singleton policy is the wrong loop.
+
+Detailed analysis:
+[`v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-solver-design-semantic-identity-guidance-sonnet-4r-20260512T020020Z
@@ -471,24 +526,34 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-forced-destroy-repair-policy-selec
 
 ## Validation
 
-Latest solver-design active-boundary / APS preview-budget validation:
+Latest solver-design problem-adaptation contract validation:
 
 ```bash
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_sprint_m.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/unit/test_agentic_proposal_tools.py scion/scion/tests/unit/core/test_proposal_pipeline.py scion/scion/tests/test_problem_bridge.py scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests/test_cvrp_adapter.py::test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_targets scion/scion/tests/test_cvrp_adapter.py::test_cvrp_main_search_strategy_preview_rejects_novelty_signature_in_plan scion/scion/tests/unit/test_research_surfaces.py::test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_thresholds scion/scion/tests/unit/test_research_surfaces.py::test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool scion/scion/tests/test_proposal_validation.py::test_hypothesis_runtime_intent_fields_parse_and_format
 ```
 
 ```text
-306 passed in 19.42s
+5 passed in 0.42s
+```
+
+Latest related proposal/CVRP subset:
+
+```bash
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/unit/test_research_surfaces.py scion/scion/tests/test_proposal_validation.py
+```
+
+```text
+133 passed in 4.66s
 ```
 
 Latest full Scion test suite:
 
 ```bash
-/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests
 ```
 
 ```text
-1572 passed, 1 skipped in 63.91s
+1581 passed, 1 skipped in 63.34s
 ```
 
 Latest focused phase-benefit / forced-surface validation:
@@ -565,14 +630,14 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Improve solver-design problem adaptation and feedback so APS proposes
-  complete lifecycle changes instead of shallow parameter variants.
-- Make required semantic identity hard to omit in model-facing solver-design
-  hypothesis generation, especially non-empty `deep_components_selected` when
-  the surface contract requires it.
+- Repair CVRP main-search execution semantics so package-owned components can
+  produce phase-best movement over the repo-local baseline under the screening
+  budget.
+- Diagnose why route-pair accepted current moves and destroy/repair probes do
+  not refresh phase best in the latest valid `solver_design` candidates.
 - Run another short free-surface diagnostic only after that repair; success
-  requires hypotheses staying on `solver_design`, valid self-checks, and
-  nonzero phase-best movement.
+  requires hypotheses staying on `solver_design`, valid self-checks,
+  `main_search_strategy_errors=0`, and nonzero phase-best movement.
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
 
@@ -590,14 +655,15 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `solver_design` is now validly routed and self-checked, but screened
-  candidates still have zero win-rate and zero median movement.
+- CVRP `solver_design` is now validly routed, self-checked, and contract-valid
+  with declared problem adaptation, but screened candidates still have zero
+  win-rate, zero median movement, and zero main-search phase-best movement.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
-- APS can still produce shallow solver-design hypotheses that omit required
-  semantic identity, as shown by the latest
-  `deep_components_selected=[]` schema-preview failure.
+- APS can still produce shallow solver-design hypotheses that satisfy the
+  contract but only reshuffle lifecycle knobs around weak package-owned
+  primitives.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.

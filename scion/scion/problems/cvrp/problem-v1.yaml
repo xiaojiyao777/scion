@@ -920,11 +920,14 @@ research_surfaces:
         - inter_route_relocate
         - route_pair_swap
         - bounded_destroy_repair
+        - repo_local_baseline
+        - baseline_policy
         - repo_local_baseline_params
         - strict_improvement_acceptance
         - restart_stagnation
         - bounded_perturbation
         - pre_improvement_perturbation
+        - post_baseline_operators
         - post_baseline_operator_toggle
         - balanced_lifecycle
         - baseline_intensification
@@ -1063,26 +1066,43 @@ research_surfaces:
         recovery-only accepted deltas from phase-best objective gain.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
-        the declared bounded plan dict. Include problem_adaptation with
-        strategy_family, instance_profile intent, phase_objective,
-        component_roles, fallback_order, and evidence_targets so the candidate
-        studies the whole problem object rather than forcing a single component
-        recipe. The solver computes and audits the runtime instance profile and
-        applies strategy_family/component roles to component ordering, bounded
-        destroy/repair acceptance limit defaults, and per-component acceptance
-        thresholds. The solver owns construction, repo-local baseline
-        invocation, route edits, feasibility checks, strict-improvement
-        acceptance, a formal-run baseline quality guard, component-coverage
-        telemetry, restarts, perturbations, and optional registry operators. The
-        perturbation schedule only changes when perturbation is applied;
-        after_no_improvement is the legacy default, before_first_round perturbs
-        once before the first improvement round, and before_each_round perturbs
-        before each round while perturbation budget remains. For instance features,
-        use instance.customer_ids,
+        the declared bounded plan dict: enabled, problem_adaptation,
+        construction, baseline, improvement, acceptance, restart, perturbation,
+        post_baseline_operators_enabled, and operator_round_limit.
+        novelty_signature is proposal-only hypothesis identity; never include
+        novelty_signature in the dict returned by main_search_plan. Include
+        problem_adaptation with strategy_family, instance_profile intent,
+        phase_objective, component_roles, fallback_order, and evidence_targets
+        so the candidate studies the whole problem object rather than forcing a
+        single component recipe. component_roles may describe lifecycle role
+        targets such as nearest_neighbor, demand_descending, repo_local_baseline,
+        strict_improvement_acceptance, restart_stagnation,
+        bounded_perturbation, pre_improvement_perturbation, and the
+        package-owned improvement components; fallback_order orders only
+        package-owned improvement components. evidence_targets should use
+        actual runtime audit fields such as main_search_component_accepted,
+        main_search_component_accepted_delta_sum,
+        main_search_component_accepted_positive_counts,
+        main_search_component_phase_delta_sum,
+        main_search_component_phase_improvement_counts,
+        main_search_restart_count, main_search_perturbation_count,
+        main_search_objective_delta_by_phase, main_search_objective_trace, or
+        main_search_stop_reason. The solver computes and audits the runtime
+        instance profile and applies strategy_family/component roles to
+        component ordering, bounded destroy/repair acceptance limit defaults,
+        and per-component acceptance thresholds. The solver owns construction,
+        repo-local baseline invocation, route edits, feasibility checks,
+        strict-improvement acceptance, a formal-run baseline quality guard,
+        component-coverage telemetry, restarts, perturbations, and optional
+        registry operators. The perturbation schedule only changes when
+        perturbation is applied; after_no_improvement is the legacy default,
+        before_first_round perturbs once before the first improvement round,
+        and before_each_round perturbs before each round while perturbation
+        budget remains. For instance features, use instance.customer_ids,
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
         post_baseline_operators_enabled false unless the hypothesis explicitly
-        needs generated registry operators after the owned main loop. Include
+        needs generated registry operators after the owned main loop. Provide
         novelty_signature fields that distinguish selected_components,
         deep_components_selected, strategy_family_pattern,
         problem_adaptation_pattern, evidence_target_pattern, budget_pattern, and

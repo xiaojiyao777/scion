@@ -341,6 +341,91 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
     assert "diagnostic only" in coverage_check["guidance"]
 
 
+def test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_targets(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'problem_adaptation': {\n"
+            "            'strategy_family': 'baseline_intensification',\n"
+            "            'instance_profile': {'customer_count': instance.customer_count, 'scale': 'medium'},\n"
+            "            'phase_objective': 'phase_best_distance',\n"
+            "            'component_roles': {\n"
+            "                'nearest_neighbor': 'primary',\n"
+            "                'demand_descending': 'support',\n"
+            "                'repo_local_baseline': 'primary',\n"
+            "                'route_pair_swap': 'primary',\n"
+            "                'bounded_destroy_repair': 'support',\n"
+            "                'intra_route_2opt': 'support',\n"
+            "                'strict_improvement_acceptance': 'primary',\n"
+            "                'restart_stagnation': 'support',\n"
+            "                'bounded_perturbation': 'support',\n"
+            "                'pre_improvement_perturbation': 'probe',\n"
+            "            },\n"
+            "            'fallback_order': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'],\n"
+            "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
+            "        },\n"
+            "        'construction': {'methods': ['nearest_neighbor', 'demand_descending'], 'keep_top_k': 2, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.78, 'params': {'destroy_ratio': (0.10, 0.30), 'segment_length': 150, 'max_destroy_customers': 8}},\n"
+            "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 5, 'top_k': 20},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0, 'component_min_distance_improvement': {'bounded_destroy_repair': 1.0}, 'bounded_destroy_repair_accept_limit': 1, 'recovery_only_policy': 'allow'},\n"
+            "        'restart': {'enabled': True, 'stagnation_rounds': 5, 'max_restarts': 2},\n"
+            "        'perturbation': {'enabled': True, 'strength': 2, 'max_perturbations': 2, 'schedule': 'before_first_round'},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["issues"] == []
+
+
+def test_cvrp_main_search_strategy_preview_rejects_novelty_signature_in_plan(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': False,\n"
+            "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+            "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "        'novelty_signature': {'selected_components': ['route_pair_swap']},\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "main_search_plan returned unknown keys ['novelty_signature']" in json.dumps(
+        preview["issues"]
+    )
+
+
 def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_components_missing(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

@@ -74,9 +74,12 @@ computed runtime instance profile and uses the adaptation to order components,
 set bounded destroy/repair defaults, and apply per-component thresholds.
 Proposal context, APS tools, target preview, and output validation still keep
 `change_locus` on `solver_design`, while component policies remain
-implementation hooks or attribution evidence. The current blocker is now
-empirical solver quality, not missing exposure of the whole problem object:
-screened candidates still need to prove phase-best objective movement.
+implementation hooks or attribution evidence. The latest repair fixed the live
+codegen contract for this path: lifecycle role targets and actual runtime
+evidence targets are accepted, and proposal-only `novelty_signature` metadata
+is no longer allowed in returned plan dictionaries. The current blocker is now
+CVRP main-search execution quality, not missing exposure of the whole problem
+object: screened candidates still need to prove phase-best objective movement.
 
 Important current interpretation:
 
@@ -89,6 +92,20 @@ Important current interpretation:
   `main_search_problem_adaptation`, `main_search_instance_profile`,
   `main_search_component_order`, `main_search_component_roles`, and related
   evidence fields.
+- `problem_adaptation.component_roles` may describe lifecycle role targets,
+  not only improvement components: construction modes, repo-local baseline,
+  strict-improvement acceptance, restart, perturbation, post-baseline operator
+  toggle, and package-owned main-search components. `fallback_order` remains
+  limited to package-owned improvement components.
+- `problem_adaptation.evidence_targets` must use actual runtime audit fields
+  such as `main_search_component_accepted`,
+  `main_search_component_phase_delta_sum`,
+  `main_search_component_phase_improvement_counts`,
+  `main_search_restart_count`, `main_search_perturbation_count`, and
+  `main_search_objective_delta_by_phase`.
+- `novelty_signature` is hypothesis identity metadata only. Do not copy it
+  into `main_search_plan()` or other generated policy/config return
+  dictionaries unless a surface interface explicitly declares that key.
 - `deep_components_selected` now means selected package-owned problem-object
   components across all main-search components, not just route-pair swap and
   bounded destroy/repair. This fixes the prior false runtime-contract failure
@@ -116,11 +133,16 @@ Important current interpretation:
 - They do not yet validate solver efficacy. Screened candidates still fail
   quality thresholds, median movement remains zero, and phase-best movement
   remains zero.
-- Do not spend more rounds on the same shallow solver-design pattern. Next
-  optimization should use the whole problem-object adaptation surface:
-  strategy family, instance profile, component roles/order, per-component
-  thresholds, recovery policy, perturbation schedule, and evidence targets
-  should form one hypothesis.
+- Do not spend more rounds on the same shallow solver-design pattern or on
+  prompt-only exposure repairs. The latest short validation passed Contract
+  and Verification twice with declared problem adaptation and
+  `main_search_strategy_errors=0`, but both candidates still had
+  `win_rate=0.0`, `median_delta=0.0`, and zero main-search phase-best
+  movement.
+- Next optimization should change CVRP main-search execution semantics:
+  accepted/recovery moves must refresh phase best when useful, destroy/repair
+  must stop producing zero phase-level benefit, and baseline budget changes
+  must not be the only source of isolated wins.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

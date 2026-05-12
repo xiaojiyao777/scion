@@ -297,6 +297,13 @@ solver mechanics, active surface interface, import whitelist, and target code.
 They deliberately exclude experiment history and protocol stats. They are
 implementation contexts, not research decision contexts.
 
+`_format_hypothesis()` renders structured novelty as
+`hypothesis_metadata_novelty_signature` plus an implementation rule explaining
+that the value is proposal identity, not policy/config return data. This keeps
+code-generation prompts from copying solver-design semantic identity such as
+`novelty_signature.selected_components` into `main_search_plan()` return
+dictionaries unless a problem surface explicitly declares that key.
+
 ## Exposure Control
 
 The context manager enforces a data exposure matrix:

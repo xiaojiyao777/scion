@@ -2267,9 +2267,9 @@ def test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_threshold
                 "            'strategy_family': 'destroy_repair_recovery',",
                 "            'instance_profile': {'scale': 'small', 'route_pressure': 'medium'},",
                 "            'phase_objective': 'recovery_to_phase_best',",
-                "            'component_roles': {'bounded_destroy_repair': 'primary', 'route_pair_swap': 'support'},",
+                "            'component_roles': {'nearest_neighbor': 'support', 'repo_local_baseline': 'support', 'bounded_destroy_repair': 'primary', 'route_pair_swap': 'support', 'strict_improvement_acceptance': 'primary', 'bounded_perturbation': 'probe'},",
                 "            'fallback_order': [],",
-                "            'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_objective_trace'],",
+                "            'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_component_phase_improvement_counts', 'main_search_component_accepted', 'main_search_restart_count', 'main_search_objective_trace'],",
                 "        },",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {}},",
@@ -2309,6 +2309,15 @@ def test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_threshold
         "bounded_destroy_repair",
         "route_pair_swap",
     ]
+    assert policy["main_search_component_roles"]["nearest_neighbor"] == "support"
+    assert policy["main_search_component_roles"]["strict_improvement_acceptance"] == (
+        "primary"
+    )
+    assert "main_search_component_phase_improvement_counts" in policy[
+        "main_search_evidence_targets"
+    ]
+    assert "main_search_restart_count" in policy["main_search_evidence_targets"]
+    assert policy["main_search_strategy_errors"] == 0
     assert policy["main_search_component_min_distance_improvement"][
         "bounded_destroy_repair"
     ] == 0.0
@@ -2707,6 +2716,14 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "CVRP solver-design surface" in solver_design_prompt_text
     assert "def main_search_plan" in solver_design_prompt_text
     assert "Solver lifecycle:" in solver_design_prompt_text
+    assert "Do not return any other top-level key" in solver_design_prompt_text
+    assert "Never include `novelty_signature` in main_search_plan" in (
+        solver_design_prompt_text
+    )
+    assert "component_roles maps lifecycle role targets" in solver_design_prompt_text
+    assert "main_search_component_phase_improvement_counts" in (
+        solver_design_prompt_text
+    )
 
 
 def test_solver_design_verification_failure_guides_retry_not_surface_fallback() -> None:

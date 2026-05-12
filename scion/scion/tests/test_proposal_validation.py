@@ -112,7 +112,8 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
     assert "target_runtime_effect: neutral" in formatted
     assert "complexity_claim: O(k * routes)" in formatted
     assert "runtime_budget_strategy: top-k route pairs" in formatted
-    assert "novelty_signature:" in formatted
+    assert "hypothesis_metadata_novelty_signature:" in formatted
+    assert "do not copy novelty_signature into code" in formatted
 
 
 def test_hypothesis_runtime_intent_fields_default_when_missing():
