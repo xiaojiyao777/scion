@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-12*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -70,9 +70,11 @@ latest repair makes that boundary active when no forced diagnostic surface is
 set: proposal context, APS tools, target preview, and output validation keep
 `change_locus` on `solver_design`, while component policies remain
 implementation hooks or attribution evidence. APS self-check failures now fail
-closed before completed patches are accepted. The next step is a short
-free-surface diagnostic that validates this active boundary before any solver
-quality run.
+closed before completed patches are accepted. The latest short free-surface
+diagnostic validated that active boundary and the Contract-preview budget
+repair. The current blocker is solver-design candidate quality: screened
+candidates still show zero solver-quality movement, and APS can still generate
+shallow lifecycle hypotheses that fail semantic-signature self-checks.
 
 Important current interpretation:
 
@@ -85,11 +87,21 @@ Important current interpretation:
 - A zero-movement `solver_design` screening failure is also a candidate design
   failure, not permission to switch the top-level research goal to a component
   policy.
+- Active `solver_design` boundary control is now live-validated: free-surface
+  APS sessions stayed on `solver_design` after heavy Verification and
+  zero-movement screening failures.
+- The APS Contract-preview budget repair is now live-validated: completed code
+  sessions retained terminal Contract-preview pass/fail evidence under the
+  64k observation budget instead of failing as `result_too_large`.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.
 - They do not yet validate solver efficacy. Screened candidates still fail
   quality thresholds, and phase-best movement remains zero.
+- Do not spend more rounds on the same shallow solver-design pattern. Next
+  optimization should improve problem adaptation and complete solver lifecycle
+  hypotheses, including non-empty deep component identity when required by the
+  surface contract.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

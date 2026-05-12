@@ -11,17 +11,15 @@ handoff. Historical repair and experiment notes were moved to
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
 governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest active
-solver-design boundary diagnostic validated the new boundary control: after a
-heavy Verification failure and a zero-movement screening failure, every
-persisted hypothesis and APS output still stayed on `solver_design`. The run
-then exposed a different APS control-plane blocker: terminal Contract preview
-could be deterministically valid but replaced by `result_too_large` when the
-remaining observation budget was too small, causing the new fail-closed
-self-check to reject the patch. The current repair raises the default APS
-observation budget to 64k and preserves compact Contract-preview pass/fail
-summaries under budget pressure. Rerun a short free-surface diagnostic before
-solver-quality validation.
+produced reliable screening-quality improvement. The latest free-surface
+solver-design diagnostic validates both active boundary control and the
+Contract-preview budget repair: every completed or partial APS session stayed
+on `solver_design`, and completed code sessions retained terminal
+Contract-preview pass/fail evidence under the 64k observation budget. The run
+still produced no screening-quality movement: two screened candidates failed
+with `win_rate=0.0` and `median_delta=0.0`, one candidate failed heavy
+Verification, and the final hypothesis failed closed because
+`novelty_signature.deep_components_selected` was empty.
 
 Current branch: `v0.4-dev`
 
@@ -52,9 +50,10 @@ Current interpretation:
   an active problem boundary: proposal context, APS tools, target preview, and
   final hypothesis prompts reject component-policy `change_locus` values when
   no forced diagnostic surface is active.
-- The latest active-boundary diagnostic confirms that boundary control in a
-  live free-surface run: all hypotheses and APS outputs stayed on
-  `solver_design` after both pre-screening and screening failures.
+- The latest active-boundary and Contract-preview budget diagnostic confirms
+  that boundary control in a live free-surface run: all completed or partial
+  APS outputs stayed on `solver_design` after heavy Verification and
+  zero-movement screening failures.
 - APS self-check failures now fail closed for real sessions. Schema/target
   preview failures, skipped Contract previews, or failed Contract previews stop
   the completed output before the patch enters evaluation.
@@ -67,7 +66,9 @@ Current interpretation:
   terminal reserve for schema/target/interface/Contract previews after
   required diagnosis context has been gathered. Terminal Contract preview keeps
   compact deterministic pass/fail evidence if the full preview payload would
-  exceed the remaining observation budget.
+  exceed the remaining observation budget. This is now validated in a live
+  free-surface run: three completed code sessions passed Contract preview and
+  no APS `output.json` contained `result_too_large`.
 - The latest free-surface post-optimization smoke selected two newly added
   deep mechanism surfaces: `alns_vns_policy` and
   `acceptance_restart_policy`. `destroy_repair_policy` and
@@ -189,16 +190,62 @@ coordinate:
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
 
-Current limitation: the top-level boundary is live-validated, but the
-Contract-preview budget repair has not yet been validated in a live diagnostic.
-Stop forced component-policy diagnostics; next run a short free-surface
-diagnostic and verify that hypotheses stay on `solver_design`, valid terminal
-Contract previews are retained as compact pass/fail evidence, and screened
-solver-design candidates start producing nonzero phase-best movement.
+Current limitation: the top-level boundary and Contract-preview budget repair
+are live-validated, but solver-design candidate quality is still too weak.
+Stop forced component-policy diagnostics and stop merely increasing rounds on
+the same shallow lifecycle patterns. The next repair should improve
+problem-object adaptation and model-facing feedback so `solver_design`
+hypotheses produce complete lifecycle plans, non-empty required semantic
+identity, and nonzero phase-best movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-active-boundary-contract-preview-budget-sonnet-4r-20260512T003103Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=4
+rounds_completed=4
+screened_experiments=2
+time_limit_sec=30
+agentic_proposal=true
+agentic_session_timeout_sec=600
+force_surface=none
+stop_reason=max_rounds_exhausted
+analysis_doc=scion/docs/experiments/v0.4/v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md
+```
+
+Summary:
+
+- The run launched from clean commit `4e88a2d` and completed with
+  `EXIT_CODE:0`.
+- All persisted hypotheses and completed/partial APS outputs stayed on
+  `solver_design` targeting `policies/main_search_strategy.py`. No
+  component-policy fallback occurred.
+- Three code sessions completed with `schema_valid=true` and
+  `contract_preview_passed=true`; no APS `output.json` contained
+  `result_too_large`.
+- Two candidates passed Contract and Verification, then failed screening with
+  `win_rate=0.0` and `median_delta=0.0`.
+- One candidate passed Contract but failed heavy Verification
+  `V5_solution_consistency`.
+- The final hypothesis session failed closed before approval because schema
+  preview found `novelty_signature.deep_components_selected=[]`; target
+  permission preview passed.
+
+Interpretation: active boundary control and Contract-preview budget retention
+are both live-validated. The remaining blocker is solver-design candidate
+quality: APS needs better problem adaptation and feedback so it proposes
+complete lifecycle changes with required semantic identity and actual
+phase-best movement.
+
+Detailed analysis:
+[`v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md`](../experiments/v0.4/v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-active-solver-design-boundary-sonnet-4r-20260511T180413Z
@@ -229,10 +276,9 @@ Summary:
   closed because Contract preview was replaced by `result_too_large,
   tool_error` after APS had consumed about `44.3k/48k` observation chars.
 
-Interpretation: active boundary control is validated. The remaining blocker is
-APS preview-budget handling: deterministic Contract preview pass/fail evidence
-must survive as a compact self-check observation even when full preview detail
-does not fit.
+Interpretation: active boundary control was validated. The remaining blocker
+was APS preview-budget handling; this has since been repaired and validated in
+the 2026-05-12 short diagnostic.
 
 Detailed analysis:
 [`v0.4-active-solver-design-boundary-sonnet-4r-20260511.md`](../experiments/v0.4/v0.4-active-solver-design-boundary-sonnet-4r-20260511.md)
@@ -464,12 +510,14 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Run a short free-surface diagnostic validating the repaired solver-design
-  active boundary; terminate early if APS falls back to component surfaces
-  after either a solver-design candidate failure or a zero-movement
-  solver-design screening failure.
-- If control holds, inspect whether solver-level hypotheses generate
-  whole-solver evidence and nonzero phase-best movement.
+- Improve solver-design problem adaptation and feedback so APS proposes
+  complete lifecycle changes instead of shallow parameter variants.
+- Make required semantic identity hard to omit in model-facing solver-design
+  hypothesis generation, especially non-empty `deep_components_selected` when
+  the surface contract requires it.
+- Run another short free-surface diagnostic only after that repair; success
+  requires hypotheses staying on `solver_design`, valid self-checks, and
+  nonzero phase-best movement.
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
 
@@ -487,12 +535,14 @@ P2:
 
 ## Remaining Risks
 
-- CVRP `solver_design` has not yet been validly evaluated. The active-boundary
-  repair is implemented in tests but not yet validated by a live short
-  diagnostic.
+- CVRP `solver_design` is now validly routed and self-checked, but screened
+  candidates still have zero win-rate and zero median movement.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
+- APS can still produce shallow solver-design hypotheses that omit required
+  semantic identity, as shown by the latest
+  `deep_components_selected=[]` schema-preview failure.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.
@@ -514,6 +564,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md`](../experiments/v0.4/v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
+  [`v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md`](../experiments/v0.4/v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-12*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -40,6 +40,7 @@ referenced, not copied into development prompts.
 - [Solver-design problem-object Sonnet 12R diagnostic, terminated early, 2026-05-11](v0.4-solver-design-problem-object-sonnet-12r-terminated-20260511.md)
 - [Solver-design boundary-repair Sonnet 4R diagnostic, terminated early, 2026-05-11](v0.4-solver-design-boundary-repair-sonnet-4r-terminated-20260511.md)
 - [Active solver-design boundary Sonnet 4R diagnostic, 2026-05-11](v0.4-active-solver-design-boundary-sonnet-4r-20260511.md)
+- [Active boundary Contract-preview budget Sonnet 4R diagnostic, 2026-05-12](v0.4-active-boundary-contract-preview-budget-sonnet-4r-20260512.md)
 
 ## Related
 
