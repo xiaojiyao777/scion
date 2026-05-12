@@ -225,17 +225,37 @@ prefix. Its repair budget is split across pending customers instead of
 allowing one customer to exhaust the whole `top_k` budget, and if a
 multi-customer repair fails or produces no improvement it can spend remaining
 budget on bounded smaller destroy subsets before giving up.
+The current implementation ranks each customer's feasible insertion candidates
+globally across routes before applying the bounded budget, instead of letting
+earlier routes consume the budget. Fallback-enabled destroy/repair enumerates
+prefix subsets for each fallback size before shifted/diverse variants, so
+small 3/2/1-customer repairs are actually reached, and per-subset budgeting
+reserves repair attempts for later smaller subsets.
 When the current solution has been perturbed away from phase best, the
 main-search loop probes the same component against both the current solution
 and the phase-best baseline, then prefers a candidate that refreshes phase
-best over a recovery-only current improvement. Runtime audit records removed,
-reinserted, and repair-fallback counts, while skip reasons distinguish budget
-exhaustion, infeasible insertion, below-threshold candidates, and repairs that
-produced no improvement. Main-search audit records per-component accepted
-delta totals/best deltas/positive counts, recovery-only delta totals/best
+best over a recovery-only current improvement. Recovery-only accepted moves do
+not consume the phase-best accept limit and get a follow-up round from the
+recovered current solution instead of stopping immediately. Runtime audit
+records removed, reinserted, and repair-fallback counts, while skip reasons
+distinguish budget exhaustion, infeasible insertion, below-threshold
+candidates, and repairs that produced no improvement. Main-search audit
+records per-component accepted delta totals/best deltas/positive counts,
+recovery-only delta totals/best
 deltas/counts, phase-best delta totals/best deltas/counts, and a phase
 objective trace so proposal feedback can distinguish "component accepted
 moves" from "current recovery" and "phase-level or final case benefit."
+`route_pool_recombination` is the current whole-solution main-search
+component. For formal `.vrp` runs it uses remaining time to collect short
+repo-local baseline samples, keeps the incumbent phase-best routes, and solves
+a bounded route-set recombination problem over the resulting pool. This gives
+`solver_design` a package-owned way to recombine complete CVRP solution
+objects instead of only tuning individual route-pair or destroy/repair knobs.
+Runtime audit records source-solution count, route-pool size, branch calls,
+and recombined route count. These fields are part of the `solver_design`
+required-runtime contract, so screening metrics and APS feedback can
+distinguish "route-pool was not exposed" from "route-pool built a pool but
+found no accepted recombination."
 Perturbation timing is an explicit surface dimension: the default
 `after_no_improvement` schedule preserves legacy behavior, while
 `before_first_round` and `before_each_round` let candidates implement a real

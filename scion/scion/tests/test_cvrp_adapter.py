@@ -309,10 +309,10 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
             "def main_search_plan(instance, time_limit_sec):\n"
             "    return {\n"
             "        'enabled': True,\n"
-            "        'problem_adaptation': {'strategy_family': 'route_structure_repair', 'instance_profile': {'scale': 'small'}, 'phase_objective': 'phase_best_distance', 'component_roles': {'intra_route_2opt': 'support', 'inter_route_relocate': 'support', 'route_pair_swap': 'primary', 'bounded_destroy_repair': 'support'}, 'fallback_order': ['route_pair_swap', 'inter_route_relocate', 'bounded_destroy_repair', 'intra_route_2opt'], 'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_objective_delta_by_phase']},\n"
+            "        'problem_adaptation': {'strategy_family': 'route_structure_repair', 'instance_profile': {'scale': 'small'}, 'phase_objective': 'phase_best_distance', 'component_roles': {'intra_route_2opt': 'support', 'inter_route_relocate': 'support', 'route_pair_swap': 'primary', 'bounded_destroy_repair': 'support', 'route_pool_recombination': 'support'}, 'fallback_order': ['route_pair_swap', 'inter_route_relocate', 'bounded_destroy_repair', 'route_pool_recombination', 'intra_route_2opt'], 'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_objective_delta_by_phase']},\n"
             "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.1},\n"
             "        'baseline': {'time_fraction': 0.6, 'params': {'destroy_ratio': (0.05, 0.25)}},\n"
-            "        'improvement': {'enabled_components': ['intra_route_2opt', 'inter_route_relocate', 'route_pair_swap', 'bounded_destroy_repair'], 'rounds': 2, 'top_k': 24},\n"
+            "        'improvement': {'enabled_components': ['intra_route_2opt', 'inter_route_relocate', 'route_pair_swap', 'bounded_destroy_repair', 'route_pool_recombination'], 'rounds': 2, 'top_k': 24},\n"
             "        'acceptance': {'min_distance_improvement': 0.0, 'component_min_distance_improvement': {'bounded_destroy_repair': 0.0}, 'bounded_destroy_repair_accept_limit': 2, 'recovery_only_policy': 'phase_best_preferred'},\n"
             "        'restart': {'enabled': True, 'stagnation_rounds': 1, 'max_restarts': 1},\n"
             "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
@@ -368,7 +368,7 @@ def test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_t
             "                'pre_improvement_perturbation': 'probe',\n"
             "            },\n"
             "            'fallback_order': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'],\n"
-            "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
+            "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_route_pool_size', 'main_search_route_pool_recombined_routes', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
             "        },\n"
             "        'construction': {'methods': ['nearest_neighbor', 'demand_descending'], 'keep_top_k': 2, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.78, 'params': {'destroy_ratio': (0.10, 0.30), 'segment_length': 150, 'max_destroy_customers': 8}},\n"
@@ -465,6 +465,7 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
     assert coverage_check["missing_components"] == [
         "bounded_destroy_repair",
         "route_pair_swap",
+        "route_pool_recombination",
     ]
 
 

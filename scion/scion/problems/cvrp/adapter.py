@@ -41,6 +41,7 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "inter_route_relocate",
         "route_pair_swap",
         "bounded_destroy_repair",
+        "route_pool_recombination",
     }
 )
 _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
@@ -107,6 +108,10 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_component_recovery_counts",
         "main_search_component_phase_delta_sum",
         "main_search_component_phase_improvement_counts",
+        "main_search_route_pool_source_solutions",
+        "main_search_route_pool_size",
+        "main_search_route_pool_branch_calls",
+        "main_search_route_pool_recombined_routes",
         "main_search_restart_count",
         "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
@@ -574,11 +579,21 @@ class CvrpAdapter:
                 "- improvement: dict with enabled_components, rounds, and top_k. "
                 "enabled_components is drawn from 'intra_route_2opt', "
                 "'inter_route_relocate', 'route_pair_swap', and "
-                "'bounded_destroy_repair'; enabled plans must include at least "
-                "one component, rounds in [1, 8], and top_k in [1, 128]. "
+                "'bounded_destroy_repair', and 'route_pool_recombination'; "
+                "enabled plans must include at least one component, rounds in "
+                "[1, 8], and top_k in [1, 128]. "
                 "Choose top_k and component caps as part of the solver-level "
                 "hypothesis, and predict the phase/objective evidence they "
-                "should move.\n"
+                "should move. route_pool_recombination is a solver-owned "
+                "whole-solution route-set recombination step; it is intended "
+                "for phase-best movement from complete CVRP solutions, not for "
+                "single-policy diagnostics. Current formal evidence has already "
+                "shown that route_pair_swap + bounded_destroy_repair without "
+                "route_pool_recombination can accept recovery moves while still "
+                "producing zero phase-best movement; for a whole-problem "
+                "solver_design hypothesis, include route_pool_recombination "
+                "unless the proposal explicitly tests why route-pool "
+                "recombination should be disabled.\n"
                 "- Proposal-only semantic identity is part of the hypothesis "
                 "contract: `novelty_signature.selected_components` and "
                 "`novelty_signature.deep_components_selected` must be "
@@ -1494,7 +1509,11 @@ def _preview_main_search_strategy(
                         "problem-object components are selected because missing "
                         "components "
                         "are diagnostic only and do not make an otherwise valid "
-                        "problem-level plan fail."
+                        "problem-level plan fail. Current screening evidence has "
+                        "already falsified route_pair_swap + "
+                        "bounded_destroy_repair-only plans as a path to "
+                        "phase-best movement; use route_pool_recombination when "
+                        "testing whole-solution CVRP adaptation."
                     ),
                 }
             )

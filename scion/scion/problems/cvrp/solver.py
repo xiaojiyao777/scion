@@ -82,6 +82,7 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "inter_route_relocate",
         "route_pair_swap",
         "bounded_destroy_repair",
+        "route_pool_recombination",
     }
 )
 _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
@@ -150,6 +151,10 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_component_recovery_counts",
         "main_search_component_phase_delta_sum",
         "main_search_component_phase_improvement_counts",
+        "main_search_route_pool_source_solutions",
+        "main_search_route_pool_size",
+        "main_search_route_pool_branch_calls",
+        "main_search_route_pool_recombined_routes",
         "main_search_restart_count",
         "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
@@ -829,6 +834,8 @@ def _main() -> None:
             rng=rng,
             time_limit_sec=args.time_limit,
             start_time=start,
+            instance_path=instance_path,
+            seed=args.seed,
             main_search_strategy=main_search_strategy,
             destroy_repair_policy=destroy_repair_policy,
             route_pair_policy=route_pair_policy,
@@ -1743,6 +1750,10 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_reinserted_counts": {},
         "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
+        "main_search_route_pool_source_solutions": 0,
+        "main_search_route_pool_size": 0,
+        "main_search_route_pool_branch_calls": 0,
+        "main_search_route_pool_recombined_routes": 0,
         "main_search_acceptance_min_distance_improvement": 0.0,
         "recovery_only_policy": "allow",
         "main_search_component_min_distance_improvement": {},
@@ -1918,8 +1929,30 @@ def _normalize_main_search_strategy_plan(
         audit=audit,
         allow_empty=not requested_active,
     )
+    component_roles_raw = problem_adaptation.get("component_roles", {})
+    route_pool_disabled = (
+        isinstance(component_roles_raw, Mapping)
+        and str(component_roles_raw.get("route_pool_recombination", "")).strip()
+        == "disabled"
+    )
+    route_pool_auto_added = False
+    if (
+        requested_active
+        and "route_pair_swap" in components
+        and "bounded_destroy_repair" in components
+        and "route_pool_recombination" not in components
+        and not route_pool_disabled
+    ):
+        components.append("route_pool_recombination")
+        _record_main_search_event(
+            audit,
+            "info",
+            "route_pool_recombination auto-added for solver-level route-pair "
+            "and bounded destroy/repair plan",
+        )
+        route_pool_auto_added = True
     component_roles = _main_search_component_roles(
-        problem_adaptation.get("component_roles", {}),
+        component_roles_raw,
         selected_components=components,
         audit=audit,
     )
@@ -1932,6 +1965,8 @@ def _normalize_main_search_strategy_plan(
         audit=audit,
         allow_empty=True,
     )
+    if route_pool_auto_added and "route_pool_recombination" not in fallback_order:
+        fallback_order = ["route_pool_recombination", *fallback_order]
     components = _schedule_main_search_components(
         components,
         strategy_family=strategy_family,
@@ -2695,42 +2730,49 @@ def _schedule_main_search_components(
             "inter_route_relocate": 1,
             "route_pair_swap": 2,
             "bounded_destroy_repair": 3,
+            "route_pool_recombination": 4,
         },
         "baseline_intensification": {
-            "route_pair_swap": 0,
-            "bounded_destroy_repair": 1,
-            "inter_route_relocate": 2,
-            "intra_route_2opt": 3,
+            "route_pool_recombination": 0,
+            "route_pair_swap": 1,
+            "bounded_destroy_repair": 2,
+            "inter_route_relocate": 3,
+            "intra_route_2opt": 4,
         },
         "construction_diversification": {
             "intra_route_2opt": 0,
             "inter_route_relocate": 1,
             "route_pair_swap": 2,
             "bounded_destroy_repair": 3,
+            "route_pool_recombination": 4,
         },
         "improvement_intensification": {
             "intra_route_2opt": 0,
             "inter_route_relocate": 1,
             "route_pair_swap": 2,
             "bounded_destroy_repair": 3,
+            "route_pool_recombination": 4,
         },
         "destroy_repair_recovery": {
             "bounded_destroy_repair": 0,
             "inter_route_relocate": 1,
             "route_pair_swap": 2,
-            "intra_route_2opt": 3,
+            "route_pool_recombination": 3,
+            "intra_route_2opt": 4,
         },
         "route_structure_repair": {
             "route_pair_swap": 0,
             "inter_route_relocate": 1,
-            "bounded_destroy_repair": 2,
-            "intra_route_2opt": 3,
+            "route_pool_recombination": 2,
+            "bounded_destroy_repair": 3,
+            "intra_route_2opt": 4,
         },
         "local_search_cleanup": {
             "intra_route_2opt": 0,
             "inter_route_relocate": 1,
             "route_pair_swap": 2,
             "bounded_destroy_repair": 3,
+            "route_pool_recombination": 4,
         },
     }
     priority = family_priorities.get(
@@ -3783,6 +3825,8 @@ def improve_with_main_search_strategy(
     rng: random.Random,
     time_limit_sec: float,
     start_time: float,
+    instance_path: str | Path | None = None,
+    seed: int | None = None,
     main_search_strategy: dict[str, Any] | None = None,
     destroy_repair_policy: dict[str, Any] | None = None,
     route_pair_policy: dict[str, Any] | None = None,
@@ -3895,6 +3939,7 @@ def improve_with_main_search_strategy(
                     )
             round_phase_improved = 0
             round_route_pair_phase_improved = False
+            round_current_accepted = 0
             for component in components:
                 if _time_exhausted(start_time, time_limit_sec):
                     stop_reason = "time_limit"
@@ -3913,7 +3958,10 @@ def improve_with_main_search_strategy(
                 if (
                     component == "bounded_destroy_repair"
                     and _as_nonnegative_int(
-                        audit.get("main_search_component_accepted", {}).get(
+                        audit.get(
+                            "main_search_component_phase_improvement_counts",
+                            {},
+                        ).get(
                             "bounded_destroy_repair",
                             0,
                         )
@@ -3933,21 +3981,14 @@ def improve_with_main_search_strategy(
                     continue
                 component_start_ns = time.monotonic_ns()
                 _record_main_search_component_attempted(audit, component)
-                (
-                    candidate,
-                    attempts,
-                    component_telemetry,
-                    candidate_context,
-                ) = _main_search_component_candidate_choice(
-                    component,
-                    instance,
-                    current_solution=current,
-                    best_solution=best_solution,
-                    adapter=adapter,
-                    current_objective=current_objective,
-                    best_objective=best_objective,
-                    top_k=top_k,
-                    min_distance_improvement=float(
+                choice_kwargs: dict[str, Any] = {
+                    "current_solution": current,
+                    "best_solution": best_solution,
+                    "adapter": adapter,
+                    "current_objective": current_objective,
+                    "best_objective": best_objective,
+                    "top_k": top_k,
+                    "min_distance_improvement": float(
                         component_min_distance_improvement.get(
                             component,
                             _main_search_component_min_distance_improvement(
@@ -3957,7 +3998,27 @@ def improve_with_main_search_strategy(
                             ),
                         )
                     ),
-                    mechanism_policies=audit,
+                    "mechanism_policies": audit,
+                }
+                if component == "route_pool_recombination":
+                    choice_kwargs.update(
+                        {
+                            "rng": rng,
+                            "time_limit_sec": time_limit_sec,
+                            "start_time": start_time,
+                            "instance_path": instance_path,
+                            "seed": seed,
+                        }
+                    )
+                (
+                    candidate,
+                    attempts,
+                    component_telemetry,
+                    candidate_context,
+                ) = _main_search_component_candidate_choice(
+                    component,
+                    instance,
+                    **choice_kwargs,
                 )
                 _record_main_search_component_attempts(audit, component, attempts)
                 _record_main_search_component_repair_counts(
@@ -4001,6 +4062,7 @@ def improve_with_main_search_strategy(
                 current = candidate
                 current_objective = candidate_objective
                 _record_main_search_component_accepted(audit, component)
+                round_current_accepted += 1
                 _record_main_search_component_accepted_delta(
                     audit,
                     component,
@@ -4045,6 +4107,9 @@ def improve_with_main_search_strategy(
                 break
             if round_phase_improved > 0:
                 no_improvement_rounds = 0
+                continue
+            if round_current_accepted > 0:
+                no_improvement_rounds += 1
                 continue
             no_improvement_rounds += 1
             stagnation_limit = _as_nonnegative_int(
@@ -4329,6 +4394,11 @@ def _main_search_component_candidate(
     current_objective: Mapping[str, int | float],
     top_k: int,
     mechanism_policies: Mapping[str, Any] | None = None,
+    rng: random.Random | None = None,
+    time_limit_sec: float | None = None,
+    start_time: float | None = None,
+    instance_path: str | Path | None = None,
+    seed: int | None = None,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     if component == "intra_route_2opt":
         candidate, attempts = _best_intra_route_2opt(
@@ -4397,6 +4467,20 @@ def _main_search_component_candidate(
             top_k=top_k,
             destroy_repair_policy=mechanism_policies,
         )
+    if component == "route_pool_recombination":
+        return _best_route_pool_recombination(
+            solution,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=top_k,
+            mechanism_policies=mechanism_policies,
+            rng=rng,
+            time_limit_sec=time_limit_sec,
+            start_time=start_time,
+            instance_path=instance_path,
+            seed=seed,
+        )
     return None, 0, {"skip_reason": "unknown_component"}
 
 
@@ -4412,6 +4496,11 @@ def _main_search_component_candidate_choice(
     top_k: int,
     min_distance_improvement: float,
     mechanism_policies: Mapping[str, Any] | None = None,
+    rng: random.Random | None = None,
+    time_limit_sec: float | None = None,
+    start_time: float | None = None,
+    instance_path: str | Path | None = None,
+    seed: int | None = None,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any], dict[str, Any]]:
     """Choose a component move, preferring phase-best improvements over recovery."""
     total_attempts = 0
@@ -4423,17 +4512,32 @@ def _main_search_component_candidate_choice(
     ]
     if best_solution.routes != current_solution.routes:
         probes.append(("phase_best", best_solution, best_objective))
+    if component == "route_pool_recombination" and best_solution.routes != current_solution.routes:
+        probes = [("phase_best", best_solution, best_objective)]
 
     saw_candidate = False
     for source, source_solution, source_objective in probes:
+        candidate_kwargs: dict[str, Any] = {
+            "adapter": adapter,
+            "current_objective": source_objective,
+            "top_k": top_k,
+            "mechanism_policies": mechanism_policies,
+        }
+        if component == "route_pool_recombination":
+            candidate_kwargs.update(
+                {
+                    "rng": rng,
+                    "time_limit_sec": time_limit_sec,
+                    "start_time": start_time,
+                    "instance_path": instance_path,
+                    "seed": seed,
+                }
+            )
         candidate, attempts, telemetry = _main_search_component_candidate(
             component,
             source_solution,
             instance,
-            adapter=adapter,
-            current_objective=source_objective,
-            top_k=top_k,
-            mechanism_policies=mechanism_policies,
+            **candidate_kwargs,
         )
         total_attempts += attempts
         combined_telemetry = _merge_main_search_component_telemetry(
@@ -4514,6 +4618,11 @@ def _merge_main_search_component_telemetry(
         "destroy_subset_count",
         "route_pair_candidates_generated",
         "route_pair_candidates_pruned",
+        "route_pool_source_solutions",
+        "route_pool_size",
+        "route_pool_branch_calls",
+        "route_pool_recombined_routes",
+        "route_pool_sample_count",
     ):
         combined[key] = _as_nonnegative_int(combined.get(key)) + _as_nonnegative_int(
             right.get(key) if isinstance(right, Mapping) else 0
@@ -4804,7 +4913,7 @@ def _best_bounded_destroy_repair(
         destroy_repair_policy=destroy_repair_policy,
     )
     telemetry["destroy_subset_count"] = len(subsets)
-    for selected in subsets:
+    for subset_index, selected in enumerate(subsets):
         remaining_budget = top_k - total_attempts
         if remaining_budget <= 0:
             if not last_reason:
@@ -4820,12 +4929,18 @@ def _best_bounded_destroy_repair(
             telemetry["skip_reason"] = removal_reason
             return None, total_attempts, telemetry
 
+        subset_budget = _bounded_destroy_repair_subset_budget(
+            remaining_budget,
+            selected_count=len(selected),
+            remaining_subsets=len(subsets) - subset_index,
+            destroy_repair_policy=destroy_repair_policy,
+        )
         repaired_routes, attempts, reinserted_count, repair_reason = (
             _repair_destroyed_customers_with_policy(
                 base_routes,
                 removed_customers,
                 instance,
-                top_k=remaining_budget,
+                top_k=subset_budget,
                 destroy_repair_policy=destroy_repair_policy,
             )
         )
@@ -5095,10 +5210,16 @@ def _bounded_destroy_repair_subsets(
         if active_policy and isinstance(destroy_repair_policy, Mapping)
         else "prefix_shifted_route_diverse"
     )
+    fallback_enabled = True
+    if active_policy and isinstance(destroy_repair_policy, Mapping):
+        fallback_enabled = bool(
+            destroy_repair_policy.get("repair_fallback_enabled", True)
+        )
     sizes = [max_count]
-    for size in (4, 3, 2, 1):
-        if 0 < size < max_count and size not in sizes:
-            sizes.append(size)
+    if fallback_enabled:
+        for size in (4, 3, 2, 1):
+            if 0 < size < max_count and size not in sizes:
+                sizes.append(size)
 
     subsets: list[list[tuple[float, int, int, int]]] = []
     seen: set[tuple[int, ...]] = set()
@@ -5116,6 +5237,10 @@ def _bounded_destroy_repair_subsets(
         add_subset(removable[:size])
         if strategy == "single_worst":
             continue
+    if strategy == "single_worst":
+        return subsets[:8]
+
+    for size in sizes:
         if len(removable) > size:
             add_subset(removable[1 : 1 + size])
         if len(removable) > size * 2:
@@ -5135,6 +5260,275 @@ def _bounded_destroy_repair_subsets(
             add_subset(route_diverse)
 
     return subsets[:8]
+
+
+def _bounded_destroy_repair_subset_budget(
+    remaining_budget: int,
+    *,
+    selected_count: int,
+    remaining_subsets: int,
+    destroy_repair_policy: Mapping[str, Any] | None = None,
+) -> int:
+    if remaining_budget <= 0:
+        return 0
+    if remaining_subsets <= 1:
+        return remaining_budget
+    fallback_enabled = True
+    repair_budget = 4
+    if destroy_repair_policy and destroy_repair_policy.get("destroy_repair_active"):
+        fallback_enabled = bool(
+            destroy_repair_policy.get("repair_fallback_enabled", True)
+        )
+        repair_budget = (
+            _as_nonnegative_int(destroy_repair_policy.get("repair_budget_per_customer"))
+            or repair_budget
+        )
+    if not fallback_enabled:
+        return remaining_budget
+    minimum_completion_budget = max(
+        selected_count,
+        selected_count * (selected_count + 1) // 2,
+    )
+    if remaining_budget <= minimum_completion_budget:
+        return remaining_budget
+    reserve_per_later_subset = max(1, min(8, repair_budget))
+    reserve = min(
+        remaining_budget - minimum_completion_budget,
+        remaining_budget // 2,
+        max(0, remaining_subsets - 1) * reserve_per_later_subset,
+    )
+    return max(minimum_completion_budget, remaining_budget - reserve)
+
+
+def _best_route_pool_recombination(
+    solution: CvrpSolution,
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+    mechanism_policies: Mapping[str, Any] | None = None,
+    rng: random.Random | None = None,
+    time_limit_sec: float | None = None,
+    start_time: float | None = None,
+    instance_path: str | Path | None = None,
+    seed: int | None = None,
+) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
+    telemetry: dict[str, Any] = {
+        "route_pool_source_solutions": 1,
+        "route_pool_size": 0,
+        "route_pool_branch_calls": 0,
+        "route_pool_recombined_routes": 0,
+        "route_pool_sample_count": 0,
+        "skip_reason": "",
+    }
+    if top_k <= 0:
+        telemetry["skip_reason"] = "route_pool_budget_exhausted"
+        return None, 0, telemetry
+
+    pool_solutions = [solution]
+    sample_attempts = 0
+    sample_rng = rng if rng is not None else random.Random(seed)
+    baseline_root = _find_vrp_baseline_root()
+    resolved_instance_path = (
+        Path(instance_path).resolve(strict=False) if instance_path is not None else None
+    )
+    remaining_time = 0.0
+    if time_limit_sec is not None and start_time is not None:
+        remaining_time = max(0.0, float(time_limit_sec) - (time.perf_counter() - start_time))
+    if (
+        baseline_root is not None
+        and resolved_instance_path is not None
+        and resolved_instance_path.suffix.lower() == ".vrp"
+        and remaining_time > 0.35
+    ):
+        sample_cap = max(1, min(6, max(1, top_k // 20)))
+        usable_time = max(0.0, remaining_time - 0.10)
+        per_sample_budget = max(0.20, min(1.25, usable_time / (sample_cap + 1)))
+        baseline_params = {}
+        if isinstance(mechanism_policies, Mapping):
+            raw_params = mechanism_policies.get("main_search_baseline_params")
+            if isinstance(raw_params, Mapping):
+                baseline_params = dict(raw_params)
+        for sample_index in range(sample_cap):
+            elapsed = time.perf_counter() - start_time if start_time is not None else 0.0
+            remaining = (
+                max(0.0, float(time_limit_sec) - elapsed)
+                if time_limit_sec is not None
+                else 0.0
+            )
+            if remaining <= per_sample_budget + 0.05:
+                break
+            base_seed = (
+                _as_nonnegative_int(seed)
+                if seed is not None
+                else sample_rng.randrange(1_000_000)
+            )
+            sample_seed = base_seed + 1000 * (sample_index + 1)
+            try:
+                sampled_solution, _sample_audit = _solve_with_vrp_baseline(
+                    instance=instance,
+                    instance_path=resolved_instance_path,
+                    seed=sample_seed,
+                    time_limit_sec=per_sample_budget,
+                    baseline_root=baseline_root,
+                    baseline_required=_baseline_required_for_instance(
+                        resolved_instance_path
+                    ),
+                    baseline_policy_params=baseline_params,
+                )
+            except Exception:
+                continue
+            sample_attempts += 1
+            valid, _reason = _solution_is_valid(adapter, instance, sampled_solution)
+            if valid:
+                pool_solutions.append(sampled_solution)
+    telemetry["route_pool_sample_count"] = sample_attempts
+
+    candidate, branch_calls, pool_telemetry = _route_pool_recombination_from_solutions(
+        solution,
+        pool_solutions,
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=top_k,
+    )
+    telemetry.update(pool_telemetry)
+    attempts = sample_attempts + branch_calls
+    if candidate is None:
+        if not telemetry.get("skip_reason"):
+            telemetry["skip_reason"] = "route_pool_no_improvement"
+        return None, attempts, telemetry
+    return candidate, attempts, telemetry
+
+
+def _route_pool_recombination_from_solutions(
+    solution: CvrpSolution,
+    pool_solutions: list[CvrpSolution],
+    instance: CvrpInstance,
+    *,
+    adapter: CvrpAdapter,
+    current_objective: Mapping[str, int | float],
+    top_k: int,
+) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
+    customers = frozenset(instance.customer_ids)
+    route_by_customers: dict[frozenset[int], tuple[float, tuple[int, ...]]] = {}
+    for pool_solution in pool_solutions:
+        for route in pool_solution.routes:
+            route_tuple = tuple(route)
+            route_customers = frozenset(route_tuple)
+            if (
+                not route_customers
+                or len(route_customers) != len(route_tuple)
+                or not route_customers <= customers
+                or instance.route_load(route_tuple) > instance.capacity
+            ):
+                continue
+            route_cost = float(instance.route_distance(route_tuple))
+            previous = route_by_customers.get(route_customers)
+            if previous is None or route_cost < previous[0] - _OBJECTIVE_TOLERANCE:
+                route_by_customers[route_customers] = (route_cost, route_tuple)
+
+    route_entries = [
+        (cost, route, route_customers)
+        for route_customers, (cost, route) in route_by_customers.items()
+    ]
+    route_entries.sort(key=lambda item: (item[0] / len(item[2]), item[0], item[1]))
+    telemetry: dict[str, Any] = {
+        "route_pool_source_solutions": len(pool_solutions),
+        "route_pool_size": len(route_entries),
+        "route_pool_branch_calls": 0,
+        "route_pool_recombined_routes": 0,
+    }
+    if not route_entries:
+        telemetry["skip_reason"] = "route_pool_empty"
+        return None, 0, telemetry
+
+    allowed_routes = instance.allowed_routes
+    if allowed_routes is None:
+        allowed_routes = instance.bks_routes
+    route_limit = allowed_routes if allowed_routes is not None else len(solution.routes)
+    route_limit = max(1, route_limit)
+    current_distance = float(current_objective.get("total_distance", 0.0))
+    current_fleet = float(current_objective.get("fleet_violation", 0.0))
+    best_solution: CvrpSolution | None = None
+    best_objective: Mapping[str, int | float] = current_objective
+    best_distance = current_distance
+
+    by_customer: dict[int, list[int]] = {customer: [] for customer in customers}
+    for index, (_cost, _route, route_customers) in enumerate(route_entries):
+        for customer in route_customers:
+            by_customer[customer].append(index)
+    for indices in by_customer.values():
+        indices.sort(
+            key=lambda index: (
+                route_entries[index][0] / len(route_entries[index][2]),
+                route_entries[index][0],
+                route_entries[index][1],
+            )
+        )
+
+    branch_calls = 0
+    branch_call_limit = max(1000, min(250_000, max(1, top_k) * 1000))
+    option_cap = max(8, min(64, max(1, top_k)))
+
+    def dfs(
+        uncovered: frozenset[int],
+        chosen: list[int],
+        distance: float,
+    ) -> None:
+        nonlocal branch_calls, best_solution, best_objective, best_distance
+        if branch_calls >= branch_call_limit:
+            return
+        branch_calls += 1
+        if current_fleet <= 0.0 and distance >= best_distance - _OBJECTIVE_TOLERANCE:
+            return
+        if len(chosen) > route_limit:
+            return
+        if not uncovered:
+            candidate = CvrpSolution(
+                routes=tuple(route_entries[index][1] for index in chosen)
+            )
+            valid, _reason = _solution_is_valid(adapter, instance, candidate)
+            if not valid:
+                return
+            objective = _objective_for_solution(adapter, instance, candidate)
+            if _lexicographic_improves(objective, best_objective):
+                best_solution = candidate
+                best_objective = objective
+                best_distance = float(objective.get("total_distance", best_distance))
+            return
+        if len(chosen) >= route_limit:
+            return
+
+        def feasible_count(customer: int) -> int:
+            return sum(
+                1
+                for index in by_customer.get(customer, [])
+                if route_entries[index][2] <= uncovered
+            )
+
+        pivot = min(uncovered, key=lambda customer: (feasible_count(customer), customer))
+        options = [
+            index
+            for index in by_customer.get(pivot, [])
+            if route_entries[index][2] <= uncovered
+        ][:option_cap]
+        if not options:
+            return
+        for index in options:
+            cost, _route, route_customers = route_entries[index]
+            dfs(uncovered - route_customers, [*chosen, index], distance + cost)
+            if branch_calls >= branch_call_limit:
+                return
+
+    dfs(customers, [], 0.0)
+    telemetry["route_pool_branch_calls"] = branch_calls
+    if best_solution is None:
+        telemetry["skip_reason"] = "route_pool_no_improvement"
+        return None, branch_calls, telemetry
+    telemetry["route_pool_recombined_routes"] = len(best_solution.routes)
+    return best_solution, branch_calls, telemetry
 
 
 def _remove_destroy_subset(
@@ -5313,7 +5707,8 @@ def _repair_candidate_budget_per_customer(
         )
         if requested:
             return max(1, min(requested, remaining_budget))
-    return default_budget
+    completion_budget = pending_count * (pending_count + 1) // 2
+    return max(1, min(default_budget, remaining_budget // max(1, completion_budget)))
 
 
 class _RepairInsertion:
@@ -5336,8 +5731,6 @@ def _bounded_regret_insertions(
     demand = instance.demand(customer)
     per_route_cap = max(1, min(8, remaining_budget))
     for route_index, route in enumerate(routes):
-        if len(records) >= remaining_budget:
-            break
         if instance.route_load(tuple(route)) + demand > instance.capacity:
             continue
         route_records = [
@@ -5351,9 +5744,9 @@ def _bounded_regret_insertions(
         route_records.sort(
             key=lambda item: (item.delta, -item.insert_pos, item.route_index)
         )
-        take = min(per_route_cap, remaining_budget - len(records))
+        take = min(per_route_cap, remaining_budget)
         records.extend(route_records[:take])
-    if len(records) < remaining_budget and demand <= instance.capacity:
+    if demand <= instance.capacity:
         records.append(
             _RepairInsertion(
                 len(routes),
@@ -5804,6 +6197,19 @@ def _record_main_search_component_repair_counts(
         audit["route_pair_candidates_pruned"] = _as_nonnegative_int(
             audit.get("route_pair_candidates_pruned")
         ) + _as_nonnegative_int(telemetry.get("route_pair_candidates_pruned"))
+    if component == "route_pool_recombination":
+        audit["main_search_route_pool_source_solutions"] = _as_nonnegative_int(
+            audit.get("main_search_route_pool_source_solutions")
+        ) + _as_nonnegative_int(telemetry.get("route_pool_source_solutions"))
+        audit["main_search_route_pool_size"] = _as_nonnegative_int(
+            audit.get("main_search_route_pool_size")
+        ) + _as_nonnegative_int(telemetry.get("route_pool_size"))
+        audit["main_search_route_pool_branch_calls"] = _as_nonnegative_int(
+            audit.get("main_search_route_pool_branch_calls")
+        ) + _as_nonnegative_int(telemetry.get("route_pool_branch_calls"))
+        audit["main_search_route_pool_recombined_routes"] = _as_nonnegative_int(
+            audit.get("main_search_route_pool_recombined_routes")
+        ) + _as_nonnegative_int(telemetry.get("route_pool_recombined_routes"))
 
 
 def _record_main_search_component_runtime(

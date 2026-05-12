@@ -1262,6 +1262,10 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_phase_delta_sum" in required_fields
     assert "main_search_component_phase_best_delta" in required_fields
     assert "main_search_component_phase_improvement_counts" in required_fields
+    assert "main_search_route_pool_source_solutions" in required_fields
+    assert "main_search_route_pool_size" in required_fields
+    assert "main_search_route_pool_branch_calls" in required_fields
+    assert "main_search_route_pool_recombined_routes" in required_fields
     assert "main_search_perturbation_schedule" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
@@ -1363,6 +1367,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
         "inter_route_relocate",
         "route_pair_swap",
+        "route_pool_recombination",
     ]
     assert runtime["main_search_attempted_components"] == [
         "bounded_destroy_repair",
@@ -1556,14 +1561,17 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
     runtime = raw["runtime"]
 
     assert runtime["main_search_selected_components"] == [
+        "route_pool_recombination",
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
     assert runtime["main_search_attempted_components"] == [
+        "route_pool_recombination",
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
     assert runtime["main_search_deep_components_selected"] == [
+        "route_pool_recombination",
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
@@ -1575,8 +1583,12 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
         "intra_route_2opt",
     ]
     assert runtime["main_search_component_coverage_status"]["unattempted_deep_components"] == []
+    assert runtime["main_search_component_attempts"]["route_pool_recombination"] > 0
     assert runtime["main_search_component_attempts"]["route_pair_swap"] == 0
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
+    assert runtime["main_search_component_skip_reasons"]["route_pool_recombination"] == {
+        "route_pool_no_improvement": 1,
+    }
     assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {
         "no_candidates": 1,
     }
@@ -1636,6 +1648,7 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
         "bounded_destroy_repair",
         "inter_route_relocate",
         "intra_route_2opt",
+        "route_pool_recombination",
     ]
     assert runtime["main_search_attempted_components"] == ["route_pair_swap"]
     assert runtime["main_search_accepted_components"] == ["route_pair_swap"]
@@ -1732,6 +1745,9 @@ def test_main_search_strategy_can_perturb_before_first_round(
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "problem_adaptation": {
+                "component_roles": {"route_pool_recombination": "disabled"},
+            },
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -1901,8 +1917,9 @@ def test_main_search_strategy_does_not_gate_bdr_after_non_phase_route_pair_accep
         current_objective: dict[str, int | float],
         top_k: int,
         mechanism_policies: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
-        del adapter, current_objective, top_k, mechanism_policies
+        del adapter, current_objective, top_k, mechanism_policies, kwargs
         if solution.routes == best_solution.routes:
             return None, 1, {}
         if component == "route_pair_swap" and solution.routes == worse_solution.routes:
@@ -2059,9 +2076,10 @@ def test_main_search_strategy_phase_best_probe_prefers_true_improvement_over_rec
         current_objective: dict[str, int | float],
         top_k: int,
         mechanism_policies: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
         nonlocal best_probe_calls
-        del component, adapter, current_objective, top_k, mechanism_policies
+        del component, adapter, current_objective, top_k, mechanism_policies, kwargs
         if solution.routes == best_solution.routes:
             best_probe_calls += 1
             if best_probe_calls == 1:
@@ -2106,6 +2124,444 @@ def test_main_search_strategy_phase_best_probe_prefers_true_improvement_over_rec
     )
     assert runtime["main_search_objective_delta_by_phase"]["improvement_loop"] == 2.0
     assert runtime["main_search_objective_trace"]["accepted_but_zero_phase_delta"] == {}
+
+
+def test_bounded_destroy_repair_recovery_does_not_consume_phase_accept_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="bdr_recovery_limit",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+            CvrpNode(3, 3, 0, 1),
+            CvrpNode(4, 4, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    best_solution = CvrpSolution(routes=((1,),))
+    worse_solution = CvrpSolution(routes=((2,),))
+    recovered_solution = CvrpSolution(routes=((3,),))
+    phase_improved_solution = CvrpSolution(routes=((4,),))
+    objective_by_routes = {
+        best_solution.routes: 10.0,
+        worse_solution.routes: 20.0,
+        recovered_solution.routes: 15.0,
+        phase_improved_solution.routes: 8.0,
+    }
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["bounded_destroy_repair"],
+                "rounds": 3,
+                "top_k": 8,
+            },
+            "acceptance": {
+                "min_distance_improvement": 0.0,
+                "bounded_destroy_repair_accept_limit": 1,
+            },
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": True,
+                "strength": 1,
+                "max_perturbations": 1,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+    best_probe_calls = 0
+
+    def fake_objective(
+        _adapter: CvrpAdapter,
+        _instance: CvrpInstance,
+        solution: CvrpSolution,
+    ) -> dict[str, int | float]:
+        return {
+            "fleet_violation": 0,
+            "total_distance": objective_by_routes[solution.routes],
+        }
+
+    def fake_component_candidate(
+        component: str,
+        solution: CvrpSolution,
+        _instance: CvrpInstance,
+        *,
+        adapter: CvrpAdapter,
+        current_objective: dict[str, int | float],
+        top_k: int,
+        mechanism_policies: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
+        nonlocal best_probe_calls
+        del component, adapter, current_objective, top_k, mechanism_policies, kwargs
+        if solution.routes == worse_solution.routes:
+            return recovered_solution, 1, {
+                "removed_count": 2,
+                "reinserted_count": 2,
+                "repair_fallback_count": 0,
+            }
+        if solution.routes == recovered_solution.routes:
+            return phase_improved_solution, 1, {
+                "removed_count": 2,
+                "reinserted_count": 2,
+                "repair_fallback_count": 0,
+            }
+        if solution.routes == best_solution.routes:
+            best_probe_calls += 1
+            if best_probe_calls >= 3:
+                return phase_improved_solution, 1, {
+                    "removed_count": 2,
+                    "reinserted_count": 2,
+                    "repair_fallback_count": 0,
+                }
+        return None, 1, {}
+
+    monkeypatch.setattr(cvrp_solver, "_objective_for_solution", fake_objective)
+    monkeypatch.setattr(cvrp_solver, "_solution_is_valid", lambda *args: (True, ""))
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_perturb_solution",
+        lambda *args, **kwargs: worse_solution,
+    )
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_main_search_component_candidate",
+        fake_component_candidate,
+    )
+
+    returned, runtime = cvrp_solver.improve_with_main_search_strategy(
+        best_solution,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+    )
+
+    assert returned.routes == phase_improved_solution.routes
+    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 2
+    assert runtime["main_search_component_recovery_counts"]["bounded_destroy_repair"] == 1
+    assert (
+        runtime["main_search_component_phase_improvement_counts"][
+            "bounded_destroy_repair"
+        ]
+        == 1
+    )
+    assert (
+        runtime["main_search_component_skip_reasons"]["bounded_destroy_repair"].get(
+            "bounded_destroy_repair_accept_limit_reached",
+            0,
+        )
+        == 0
+    )
+
+
+def test_route_pool_recombination_combines_routes_from_solution_pool() -> None:
+    instance = CvrpInstance(
+        name="route_pool_recombination",
+        capacity=3,
+        depot=0,
+        allowed_routes=3,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 100, 10, 1),
+            CvrpNode(4, 100, 11, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 3), (2, 4)))
+    pool_a = CvrpSolution(routes=((1, 2), (3,), (4,)))
+    pool_b = CvrpSolution(routes=((3, 4), (1,), (2,)))
+    current_objective = cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        current,
+    )
+
+    candidate, calls, telemetry = cvrp_solver._route_pool_recombination_from_solutions(
+        current,
+        [current, pool_a, pool_b],
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=32,
+    )
+
+    assert candidate is not None
+    assert {frozenset(route) for route in candidate.routes} == {
+        frozenset({1, 2}),
+        frozenset({3, 4}),
+    }
+    assert calls > 0
+    assert telemetry["route_pool_size"] >= 6
+    assert telemetry["route_pool_recombined_routes"] == 2
+    assert cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        candidate,
+    )["total_distance"] < current_objective["total_distance"]
+
+
+def test_main_search_strategy_auto_adds_route_pool_for_old_deep_pair() -> None:
+    instance = CvrpInstance(
+        name="auto_route_pool",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    audit = cvrp_solver._main_search_strategy_defaults()
+
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "problem_adaptation": {
+                "strategy_family": "baseline_intensification",
+                "instance_profile": {},
+                "phase_objective": "phase_best_distance",
+                "component_roles": {
+                    "route_pair_swap": "primary",
+                    "bounded_destroy_repair": "support",
+                },
+                "fallback_order": ["route_pair_swap", "bounded_destroy_repair"],
+                "evidence_targets": [
+                    "main_search_component_phase_delta_sum",
+                    "main_search_objective_delta_by_phase",
+                ],
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pair_swap", "bounded_destroy_repair"],
+                "rounds": 1,
+                "top_k": 16,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+
+    assert audit["main_search_strategy_errors"] == 0
+    assert audit["main_search_components"] == [
+        "route_pool_recombination",
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert (
+        audit["main_search_component_roles"]["route_pool_recombination"]
+        == "support"
+    )
+
+
+def test_main_search_strategy_respects_explicit_route_pool_disabled_role() -> None:
+    instance = CvrpInstance(
+        name="disabled_route_pool",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    audit = cvrp_solver._main_search_strategy_defaults()
+
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "problem_adaptation": {
+                "strategy_family": "baseline_intensification",
+                "instance_profile": {},
+                "phase_objective": "phase_best_distance",
+                "component_roles": {
+                    "route_pair_swap": "primary",
+                    "bounded_destroy_repair": "support",
+                    "route_pool_recombination": "disabled",
+                },
+                "fallback_order": ["route_pair_swap", "bounded_destroy_repair"],
+                "evidence_targets": [
+                    "main_search_component_phase_delta_sum",
+                    "main_search_objective_delta_by_phase",
+                ],
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pair_swap", "bounded_destroy_repair"],
+                "rounds": 1,
+                "top_k": 16,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+
+    assert audit["main_search_strategy_errors"] == 0
+    assert audit["main_search_components"] == [
+        "route_pair_swap",
+        "bounded_destroy_repair",
+    ]
+    assert audit["main_search_component_roles"]["route_pool_recombination"] == "disabled"
+
+
+def test_main_search_strategy_route_pool_recombination_records_phase_improvement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="route_pool_main_search",
+        capacity=3,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 100, 10, 1),
+            CvrpNode(4, 100, 11, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 3), (2, 4)))
+    recombined = CvrpSolution(routes=((1, 2), (3, 4)))
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pool_recombination"],
+                "rounds": 1,
+                "top_k": 32,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+
+    def fake_route_pool_recombination(
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[CvrpSolution, int, dict[str, Any]]:
+        del args, kwargs
+        return recombined, 5, {
+            "route_pool_source_solutions": 3,
+            "route_pool_size": 8,
+            "route_pool_branch_calls": 4,
+            "route_pool_recombined_routes": 2,
+        }
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_best_route_pool_recombination",
+        fake_route_pool_recombination,
+    )
+
+    returned, runtime = cvrp_solver.improve_with_main_search_strategy(
+        current,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+    )
+
+    assert returned.routes == recombined.routes
+    assert runtime["main_search_component_accepted"]["route_pool_recombination"] == 1
+    assert (
+        runtime["main_search_component_phase_improvement_counts"][
+            "route_pool_recombination"
+        ]
+        == 1
+    )
+    assert runtime["main_search_route_pool_source_solutions"] == 3
+    assert runtime["main_search_route_pool_size"] == 8
+    assert runtime["main_search_route_pool_branch_calls"] == 4
+    assert runtime["main_search_route_pool_recombined_routes"] == 2
 
 
 def test_acceptance_restart_policy_can_reject_recovery_only_moves(
@@ -2252,6 +2708,7 @@ def test_main_search_strategy_gates_destroy_repair_after_route_pair_improvement(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'problem_adaptation': {'component_roles': {'route_pool_recombination': 'disabled'}},",
                 "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'route_pair_swap'], 'rounds': 1, 'top_k': 64},",
@@ -2330,6 +2787,7 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
         "inter_route_relocate",
         "intra_route_2opt",
         "route_pair_swap",
+        "route_pool_recombination",
     ]
     assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_accepted_components"] == ["bounded_destroy_repair"]
@@ -2634,6 +3092,88 @@ def test_destroy_repair_policy_selectors_drive_ranking_and_repair_budget() -> No
     assert regret_reason == "repair_budget_exhausted"
     assert cheapest_reason == "repair_budget_exhausted"
     assert cheapest_reinserted > regret_reinserted
+
+
+def test_bounded_regret_insertions_rank_globally_across_routes() -> None:
+    instance = CvrpInstance(
+        name="global_repair_insertion",
+        capacity=99,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 100, 0, 1),
+            CvrpNode(2, 0, 100, 1),
+            CvrpNode(3, 0, 101, 1),
+        ),
+    )
+
+    insertions = cvrp_solver._bounded_regret_insertions(
+        [[1], [2]],
+        3,
+        instance,
+        remaining_budget=1,
+    )
+
+    assert len(insertions) == 1
+    assert insertions[0].route_index == 1
+    assert insertions[0].delta == 2.0
+
+
+def test_bounded_destroy_repair_preserves_budget_for_fallback_subsets() -> None:
+    policy = {
+        "destroy_repair_active": True,
+        "repair_fallback_enabled": True,
+        "repair_budget_per_customer": 4,
+    }
+    disabled_policy = {
+        "destroy_repair_active": True,
+        "repair_fallback_enabled": False,
+        "repair_budget_per_customer": 4,
+    }
+
+    reserved_budget = cvrp_solver._bounded_destroy_repair_subset_budget(
+        64,
+        selected_count=6,
+        remaining_subsets=5,
+        destroy_repair_policy=policy,
+    )
+    unreserved_budget = cvrp_solver._bounded_destroy_repair_subset_budget(
+        64,
+        selected_count=6,
+        remaining_subsets=5,
+        destroy_repair_policy=disabled_policy,
+    )
+
+    assert 6 <= reserved_budget < 64
+    assert unreserved_budget == 64
+
+
+def test_bounded_destroy_repair_fallback_flag_controls_smaller_subsets() -> None:
+    removable = [(float(10 - i), 0, i, i + 1) for i in range(6)]
+
+    enabled = cvrp_solver._bounded_destroy_repair_subsets(
+        removable,
+        6,
+        destroy_repair_policy={
+            "destroy_repair_active": True,
+            "repair_fallback_enabled": True,
+            "destroy_subset_strategy": "single_worst",
+        },
+    )
+    disabled = cvrp_solver._bounded_destroy_repair_subsets(
+        removable,
+        6,
+        destroy_repair_policy={
+            "destroy_repair_active": True,
+            "repair_fallback_enabled": False,
+            "destroy_subset_strategy": "single_worst",
+        },
+    )
+
+    assert [len(subset) for subset in enabled] == [6, 4, 3, 2, 1]
+    assert [len(subset) for subset in disabled] == [6]
 
 
 def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget() -> None:

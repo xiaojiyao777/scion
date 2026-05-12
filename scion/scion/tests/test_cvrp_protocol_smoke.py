@@ -185,6 +185,71 @@ def test_cvrp_protocol_algorithm_blueprint_metrics_preserve_required_runtime_fie
     assert pair_runtime["algorithm_local_search_components"] == ["intra_route_2opt"]
 
 
+def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
+    tmp_path: Path,
+) -> None:
+    candidate_ws = tmp_path / "cvrp_candidate"
+    shutil.copytree(CVRP_DIR, candidate_ws)
+    (candidate_ws / "policies" / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'problem_adaptation': {",
+                "            'strategy_family': 'baseline_intensification',",
+                "            'instance_profile': {'customer_count': instance.customer_count},",
+                "            'phase_objective': 'phase_best_distance',",
+                "            'component_roles': {'route_pool_recombination': 'primary'},",
+                "            'fallback_order': ['route_pool_recombination'],",
+                "            'evidence_targets': ['main_search_route_pool_size', 'main_search_route_pool_branch_calls', 'main_search_route_pool_recombined_routes'],",
+                "        },",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.2, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pool_recombination'], 'rounds': 1, 'top_k': 16},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    proto, _ = _make_protocol(tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        candidate_ws=str(candidate_ws),
+        champion_ws=str(CVRP_DIR),
+        hypothesis_action="modify",
+        selected_surface="solver_design",
+    )
+
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["selected_surface"] == "solver_design"
+    assert surface_summary["fields"]["main_search_route_pool_size"]["present"] == 4
+    assert (
+        surface_summary["fields"]["main_search_route_pool_branch_calls"]["present"]
+        == 4
+    )
+    assert (
+        surface_summary["fields"]["main_search_route_pool_recombined_routes"][
+            "present"
+        ]
+        == 4
+    )
+
+    raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
+    pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
+    assert pair_runtime["main_search_components"] == ["route_pool_recombination"]
+    assert "main_search_route_pool_size" in pair_runtime
+    assert "main_search_route_pool_branch_calls" in pair_runtime
+    assert "main_search_route_pool_recombined_routes" in pair_runtime
+
+
 def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Path) -> None:
     proto, spec_v1 = _make_protocol(tmp_path)
     bridge = bridge_problem_spec_v1(spec_v1)

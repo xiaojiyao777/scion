@@ -204,7 +204,8 @@ coordinate:
 - bounded construction ensemble;
 - repo-local baseline budget and sanitized baseline params;
 - package-owned improvement components: `intra_route_2opt`,
-  `inter_route_relocate`, `route_pair_swap`, `bounded_destroy_repair`;
+  `inter_route_relocate`, `route_pair_swap`, `bounded_destroy_repair`,
+  `route_pool_recombination`;
 - strict-improvement acceptance threshold;
 - restart and perturbation knobs, including explicit perturbation schedule;
 - optional registry-operator round limit.
@@ -212,58 +213,65 @@ coordinate:
 Current limitation: the top-level boundary, active-boundary tool guidance,
 Contract-preview budget repair, non-empty semantic identity, and
 problem-adaptation codegen contract are live-validated. Solver-design candidate
-quality is still too weak. Stop forced component-policy diagnostics and stop
-spending cycles on prompt-only exposure repairs unless a new live contract
-failure appears. The next repair should change CVRP main-search execution
-semantics so accepted/recovery moves refresh phase best, bounded destroy/repair
-stops producing zero phase-level benefit, and extra baseline budget does not
-create only isolated wins without median movement.
+quality is still too weak. The bounded destroy/repair execution repair is
+complete but insufficient: live screening showed accepted/recovery movement
+and clean runtime attribution, yet zero phase-best movement. The route-pool
+repair now gives `solver_design` a package-owned whole-solution component and
+feedback telemetry, but live screening did not validate quality:
+`route_pool_recombination` built route pools and branch-searched on 16/16
+pairs, yet accepted zero recombined route sets and produced zero route-pool
+phase-best movement. Do not run long CVRP validation until route-pool
+candidate generation/recombination can produce local and short-screening
+phase-best movement.
 
 ## Latest Experiment
 
 Latest analyzed run:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-solver-design-problem-adaptation-contract-repair-sonnet-4r-20260512T091752Z
+run_root=/home/clawd/research/scion-experiments/v04-route-pool-recombination-telemetry-sonnet-8r-20260512T121501Z
 model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
-rounds_requested=4
-rounds_completed_before_termination=2
-screened_experiments=2
-time_limit_sec=30
+rounds_requested=8
+rounds_completed_before_termination=1
+screened_experiments=1
+time_limit_sec=45
 agentic_proposal=true
-agentic_session_timeout_sec=600
+agentic_session_timeout_sec=900
 force_surface=none
-stop_reason=manual_termination_after_two_valid_zero_movement_screenings
-analysis_doc=scion/docs/experiments/v0.4/v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md
+stop_reason=manual_termination_after_first_complete_screening_route_pool_telemetry_valid_but_zero_recombination_phase
+analysis_doc=scion/docs/experiments/v0.4/v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md
 ```
 
 Summary:
 
-- The run was terminated early after two completed screenings because both
-  candidates validated the repaired Contract path and both repeated the same
-  zero-movement quality failure.
-- Both completed APS code sessions stayed on `solver_design`, targeted
-  `policies/main_search_strategy.py`, passed schema/target/Contract previews,
-  and did not copy `novelty_signature` into the returned plan dict.
-- Both candidates passed formal Contract and Verification with
-  `main_search_strategy_errors=0` and
-  `main_search_problem_adaptation_source=declared`.
-- Both candidates failed screening with `win_rate=0.0`,
-  `median_delta=0.0`, `main_search_objective_delta_by_phase.improvement_loop=0`,
-  and zero component phase-best deltas across all 16 screening pairs.
-- The validated repair expands `problem_adaptation.component_roles` to
-  lifecycle role targets and expands `evidence_targets` to the real runtime
-  audit fields seen by proposal feedback.
+- The run was terminated early after one complete screening because it
+  validated route-pool execution/telemetry but repeated the same zero route-pool
+  quality failure; continuing the same 8-round campaign would spend budget on a
+  known-bad lifecycle shape.
+- The completed candidate stayed on `solver_design`, targeted
+  `policies/main_search_strategy.py`, passed screening execution with
+  `main_search_strategy_errors=0`, and produced 16/16 valid pairs.
+- Screening result: 1 win, 3 losses, 12 ties, `median_delta=0.0`, and decision
+  abandon (`T4: win_rate < 0.3`). Median runtime ratio was 1.083 and runtime
+  regression rate was 1.0.
+- Runtime result: runtime selected and attempted `route_pool_recombination`,
+  `route_pair_swap`, and `bounded_destroy_repair` on all 16 pairs.
+  Route-pool telemetry was present on all pairs:
+  source-solution counts 6-8, route-pool sizes 16-64, and 580 total branch
+  calls. `main_search_route_pool_recombined_routes=0` and
+  `main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
+  16 pairs.
 
-Interpretation: the problem-object adaptation contract is no longer the
-blocker. The next useful optimization must change CVRP main-search execution
-semantics enough to produce phase-best movement; adding more prompt exposure or
-forcing another singleton policy is the wrong loop.
+Interpretation: the route-pool repair fixed the exposure/feedback problem.
+Scion can now see and execute the whole-solution primitive. The remaining
+blocker is route-pool solver quality: generated pools are too weak or the
+bounded recombination search is too restrictive to produce accepted route-set
+recombinations over the repo-local phase best.
 
 Detailed analysis:
-[`v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md)
+[`v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md)
 
 Previous analyzed run:
 
@@ -553,7 +561,27 @@ PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/
 ```
 
 ```text
-1581 passed, 1 skipped in 63.34s
+1590 passed, 1 skipped in 67.22s
+```
+
+Latest main-search route-pool telemetry contract validation:
+
+```bash
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_cvrp_protocol_smoke.py scion/scion/tests/unit/test_research_surfaces.py
+```
+
+```text
+179 passed in 30.00s
+```
+
+Previous main-search route-pool/execution validation:
+
+```bash
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests/test_cvrp_solver_operator_runtime.py
+```
+
+```text
+53 passed in 12.49s
 ```
 
 Latest focused phase-benefit / forced-surface validation:
@@ -630,14 +658,13 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Repair CVRP main-search execution semantics so package-owned components can
-  produce phase-best movement over the repo-local baseline under the screening
-  budget.
-- Diagnose why route-pair accepted current moves and destroy/repair probes do
-  not refresh phase best in the latest valid `solver_design` candidates.
-- Run another short free-surface diagnostic only after that repair; success
-  requires hypotheses staying on `solver_design`, valid self-checks,
-  `main_search_strategy_errors=0`, and nonzero phase-best movement.
+- Repair route-pool candidate generation/recombination so source pools produce
+  accepted recombined route sets. Success requires nonzero
+  `main_search_route_pool_recombined_routes` and nonzero
+  `main_search_component_phase_delta_sum.route_pool_recombination` locally
+  before another short formal diagnostic.
+- Keep the top-level target on `solver_design`; do not add another forced
+  singleton mechanism-policy diagnostic to work around route-pool quality.
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
 
@@ -656,8 +683,10 @@ P2:
 ## Remaining Risks
 
 - CVRP `solver_design` is now validly routed, self-checked, and contract-valid
-  with declared problem adaptation, but screened candidates still have zero
-  win-rate, zero median movement, and zero main-search phase-best movement.
+  with declared problem adaptation. Code-level main-search execution semantics
+  are repaired, and route-pool recombination has runtime/feedback coverage, but
+  live screening shows zero accepted route-pool recombinations and zero
+  route-pool phase-best movement.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.

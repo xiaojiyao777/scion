@@ -2234,10 +2234,12 @@ def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
     assert policy["main_search_baseline_params"]["destroy_ratio"] == (0.05, 0.25)
     assert policy["main_search_baseline_params"]["use_vns"] is False
     assert policy["main_search_components"] == [
+        "route_pool_recombination",
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
     assert policy["main_search_deep_components_selected"] == [
+        "route_pool_recombination",
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
@@ -2267,7 +2269,7 @@ def test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_threshold
                 "            'strategy_family': 'destroy_repair_recovery',",
                 "            'instance_profile': {'scale': 'small', 'route_pressure': 'medium'},",
                 "            'phase_objective': 'recovery_to_phase_best',",
-                "            'component_roles': {'nearest_neighbor': 'support', 'repo_local_baseline': 'support', 'bounded_destroy_repair': 'primary', 'route_pair_swap': 'support', 'strict_improvement_acceptance': 'primary', 'bounded_perturbation': 'probe'},",
+                "            'component_roles': {'nearest_neighbor': 'support', 'repo_local_baseline': 'support', 'bounded_destroy_repair': 'primary', 'route_pair_swap': 'support', 'route_pool_recombination': 'disabled', 'strict_improvement_acceptance': 'primary', 'bounded_perturbation': 'probe'},",
                 "            'fallback_order': [],",
                 "            'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_component_phase_improvement_counts', 'main_search_component_accepted', 'main_search_restart_count', 'main_search_objective_trace'],",
                 "        },",

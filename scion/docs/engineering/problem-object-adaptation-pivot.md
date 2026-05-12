@@ -165,6 +165,65 @@ main-search phase-best movement. This validates the problem-adaptation
 contract and confirms that the next bottleneck is CVRP main-search execution
 semantics.
 
+## Implemented Main-Search Execution-Semantics Repair
+
+The next code slice targets package-owned CVRP execution rather than more
+prompt exposure. The latest failed screening candidates showed many
+main-search attempts but no phase-best movement: route-pair moves were mostly
+recovery-only after perturbation, and bounded destroy/repair was dominated by
+`repair_budget_exhausted`.
+
+The repair changes the owned mechanism semantics:
+
+- repair insertion candidates are ranked globally across feasible routes before
+  the bounded budget is applied;
+- fallback-enabled destroy/repair reaches small fallback subsets before the
+  shifted/diverse variants consume the subset cap;
+- large destroy subsets reserve repair budget for later smaller fallback
+  subsets;
+- `fallback_to_smaller_subsets=False` now really disables smaller fallback
+  subsets;
+- recovery-only accepted moves do not consume the phase-best accept limit and
+  do not immediately stop the improvement loop.
+
+This is code-validated by focused CVRP runtime tests, but the follow-up live
+screening still produced zero main-search phase-best movement. The repair made
+the existing components execute cleanly, but it did not make them strong
+enough to beat the repo-local phase best.
+
+## Implemented Route-Pool Recombination Repair
+
+The next slice adds a package-owned whole-solution primitive instead of
+another policy knob. `route_pool_recombination` belongs to the
+`solver_design` main-search component set. It keeps the incumbent phase-best
+routes, uses remaining formal-run time to collect short repo-local baseline
+samples, builds a feasible route pool, and solves a bounded route-set
+recombination problem over complete CVRP solution objects.
+
+This changes the research object from "which small component policy should
+Scion tune" to "how should the solver lifecycle combine complete CVRP
+solutions under the problem constraints." Runtime evidence records source
+solution count, route-pool size, branch calls, recombined route count, and
+normal phase-best component deltas.
+
+Validation so far:
+
+- focused route-pool and main-search runtime tests pass;
+- related CVRP adapter/proposal subset passes;
+- full Scion tests pass with `1590 passed, 1 skipped`;
+- local formal probes show nonzero route-pool phase-best movement on
+  P-n101-k4;
+- the short formal diagnostic validates route-pool execution and feedback:
+  runtime auto-added/selected `route_pool_recombination`, screening metrics
+  preserved source-solution count, pool size, branch calls, and recombined
+  route count on 16/16 pairs.
+
+The same short diagnostic did not validate solver quality:
+`main_search_route_pool_recombined_routes=0` and
+`main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
+16 pairs. This means the remaining issue is route-pool candidate-generation
+and recombination quality, not Scion exposure or runtime attribution.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -181,20 +240,21 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice is solver-lifecycle quality, not more boundary,
-identity, or prompt exposure control:
+The next engineering slice remains solver-lifecycle quality, not more
+boundary, identity, or prompt exposure control:
 
 1. Keep `solver_design` as the top-level research target. Do not force a
    singleton component policy unless validating a new adapter or contract
    boundary.
-2. Diagnose why current/recovery accepted moves do not refresh phase best.
-3. Improve bounded destroy/repair so it does not mostly exhaust repair budget
-   without phase-level improvement.
+2. Repair route-pool candidate generation/recombination so pools that are built
+   from complete solutions can actually produce accepted recombined route sets.
+3. Success requires nonzero main-search phase-best movement attributable to
+   `route_pool_recombination`, not only isolated baseline-budget wins.
 4. Make runtime feedback steer APS away from simply increasing repo-local
    baseline time fraction when that creates isolated wins with runtime
    regression and no median movement.
-5. Run another short free-surface diagnostic only after the repair should be
-   able to produce nonzero main-search phase-best movement.
+5. Run another short free-surface diagnostic only after route-pool can produce
+   nonzero recombined-route and phase-best evidence locally.
 
 ## Current CVRP Implication
 

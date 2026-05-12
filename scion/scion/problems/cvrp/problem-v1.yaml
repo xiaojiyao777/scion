@@ -1012,6 +1012,10 @@ research_surfaces:
         - main_search_component_reinserted_counts
         - main_search_component_repair_fallback_counts
         - main_search_component_runtime_ms
+        - main_search_route_pool_source_solutions
+        - main_search_route_pool_size
+        - main_search_route_pool_branch_calls
+        - main_search_route_pool_recombined_routes
         - main_search_acceptance_min_distance_improvement
         - recovery_only_policy
         - main_search_component_min_distance_improvement
@@ -1085,6 +1089,9 @@ research_surfaces:
         main_search_component_accepted_positive_counts,
         main_search_component_phase_delta_sum,
         main_search_component_phase_improvement_counts,
+        main_search_route_pool_source_solutions, main_search_route_pool_size,
+        main_search_route_pool_branch_calls,
+        main_search_route_pool_recombined_routes,
         main_search_restart_count, main_search_perturbation_count,
         main_search_objective_delta_by_phase, main_search_objective_trace, or
         main_search_stop_reason. The solver computes and audits the runtime
