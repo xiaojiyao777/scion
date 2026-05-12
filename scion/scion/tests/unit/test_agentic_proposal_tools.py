@@ -1310,6 +1310,50 @@ def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
     assert "non-empty arrays" in requirements["rule"]
 
 
+def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/main_search_strategy.py",
+        )
+    )
+    creative = PlanningCreative(
+        [{"stop": True}],
+        hypothesis=hypothesis,
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    read_surface_guidance = creative.planner_contexts[0]["tool_arg_guidance"][
+        "context.read_surface"
+    ]
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert read_surface_guidance["allowed_surface_ids"] == ["solver_design"]
+    assert "active_problem_boundary_rule" in read_surface_guidance
+    assert "forced_surface_rule" not in read_surface_guidance
+
+
 def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
     tmp_path: Path,
 ) -> None:

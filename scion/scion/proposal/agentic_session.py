@@ -1847,12 +1847,32 @@ class AgenticProposalSession:
             }
         }
         if forced_constraint:
-            forced_surface = forced_constraint.get("forced_surface")
-            guidance["context.read_surface"]["forced_surface_rule"] = (
-                "A forced research-surface diagnostic is active. Read and "
-                "draft only the forced surface."
-            )
-            guidance["context.read_surface"]["allowed_surface_ids"] = [forced_surface]
+            forced_surface = str(forced_constraint.get("forced_surface") or "").strip()
+            active_boundary = [
+                str(surface or "").strip()
+                for surface in forced_constraint.get(
+                    "active_problem_boundary_surfaces",
+                    (),
+                )
+                if str(surface or "").strip()
+            ]
+            if forced_surface:
+                guidance["context.read_surface"]["forced_surface_rule"] = (
+                    "A forced research-surface diagnostic is active. Read and "
+                    "draft only the forced surface."
+                )
+                guidance["context.read_surface"]["allowed_surface_ids"] = [
+                    forced_surface
+                ]
+            elif active_boundary:
+                guidance["context.read_surface"]["active_problem_boundary_rule"] = (
+                    "An active problem-object boundary is present. Read and "
+                    "draft one of these boundary surfaces; component policies "
+                    "are implementation hooks, not replacement research goals."
+                )
+                guidance["context.read_surface"]["allowed_surface_ids"] = (
+                    active_boundary
+                )
             guidance["proposal.draft_hypothesis"] = forced_constraint
             guidance["proposal.schema_preview"] = forced_constraint
             guidance["proposal.target_permission_preview"] = forced_constraint
