@@ -203,26 +203,32 @@ recombination problem over complete CVRP solution objects.
 This changes the research object from "which small component policy should
 Scion tune" to "how should the solver lifecycle combine complete CVRP
 solutions under the problem constraints." Runtime evidence records source
-solution count, route-pool size, branch calls, recombined route count, and
-normal phase-best component deltas.
+solution count, route-pool sample count, route-pool size, branch calls,
+recombined route count, and normal phase-best component deltas.
 
 Validation so far:
 
 - focused route-pool and main-search runtime tests pass;
 - related CVRP adapter/proposal subset passes;
-- full Scion tests pass with `1590 passed, 1 skipped`;
+- full Scion tests pass with `1593 passed, 1 skipped`;
 - local formal probes show nonzero route-pool phase-best movement on
   P-n101-k4;
-- the short formal diagnostic validates route-pool execution and feedback:
+- the telemetry short diagnostic validated route-pool execution and feedback:
   runtime auto-added/selected `route_pool_recombination`, screening metrics
   preserved source-solution count, pool size, branch calls, and recombined
-  route count on 16/16 pairs.
+  route count on 16/16 pairs;
+- the follow-up quality/boundary diagnostic produced the first formal positive
+  route-pool signal: 16/16 valid pairs, 0 timeouts, 2 wins, 14 ties,
+  `main_search_route_pool_recombined_routes=12`, and
+  `main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
 
-The same short diagnostic did not validate solver quality:
-`main_search_route_pool_recombined_routes=0` and
-`main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
-16 pairs. This means the remaining issue is route-pool candidate-generation
-and recombination quality, not Scion exposure or runtime attribution.
+The current result validates direction, not readiness. Route-pool is now a
+useful internal whole-solution mechanism, but treating route-pool itself as
+the research object would repeat the same incremental-hook anti-pattern at a
+larger scale. The object Scion should study is the CVRP solver lifecycle and
+algorithm body: construction, repo-local baseline sampling, complete-solution
+pooling, route-set recombination, local repair, acceptance, restart, and
+runtime tradeoff as a single problem-owned design.
 
 ## Anti-Pattern
 
@@ -246,15 +252,19 @@ boundary, identity, or prompt exposure control:
 1. Keep `solver_design` as the top-level research target. Do not force a
    singleton component policy unless validating a new adapter or contract
    boundary.
-2. Repair route-pool candidate generation/recombination so pools that are built
-   from complete solutions can actually produce accepted recombined route sets.
-3. Success requires nonzero main-search phase-best movement attributable to
-   `route_pool_recombination`, not only isolated baseline-budget wins.
+2. Expose the CVRP algorithm body/lifecycle more completely to Scion so it can
+   reason across construction, baseline sampling, route-pool recombination,
+   local repair, acceptance, restart, and runtime tradeoff rather than tuning
+   another isolated mechanism hook.
+3. Use route-pool evidence as one feedback channel inside the lifecycle:
+   `sample_count`, recombined routes, accepted route-pool moves, and
+   route-pool phase-best delta should explain when complete-solution
+   recombination is helping.
 4. Make runtime feedback steer APS away from simply increasing repo-local
    baseline time fraction when that creates isolated wins with runtime
    regression and no median movement.
-5. Run another short free-surface diagnostic only after route-pool can produce
-   nonzero recombined-route and phase-best evidence locally.
+5. Run another short free-surface diagnostic only after the next patch changes
+   the whole solver-design lifecycle, not just route-pool constants.
 
 ## Current CVRP Implication
 
@@ -262,5 +272,6 @@ Stop forced `destroy_repair_policy` and `route_pair_candidate_policy`
 diagnostics for now. The former has been exhausted; the latter would continue
 the same incremental-hook pattern. The active-boundary control loop now keeps
 CVRP on the problem-object `solver_design` boundary after both pre-screening
-and screening failures. The next useful work is to make that boundary produce
+and screening failures. Route-pool quality now has formal positive signal, so
+the next useful work is to make the whole boundary produce
 real solver movement.

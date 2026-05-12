@@ -1263,6 +1263,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_phase_best_delta" in required_fields
     assert "main_search_component_phase_improvement_counts" in required_fields
     assert "main_search_route_pool_source_solutions" in required_fields
+    assert "main_search_route_pool_sample_count" in required_fields
     assert "main_search_route_pool_size" in required_fields
     assert "main_search_route_pool_branch_calls" in required_fields
     assert "main_search_route_pool_recombined_routes" in required_fields
@@ -1586,15 +1587,21 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
     assert runtime["main_search_component_attempts"]["route_pool_recombination"] > 0
     assert runtime["main_search_component_attempts"]["route_pair_swap"] == 0
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
-    assert runtime["main_search_component_skip_reasons"]["route_pool_recombination"] == {
-        "route_pool_no_improvement": 1,
-    }
+    assert runtime["main_search_component_skip_reasons"].get(
+        "route_pool_recombination",
+        {},
+    ) in ({}, {"route_pool_no_improvement": 1})
     assert runtime["main_search_component_skip_reasons"]["route_pair_swap"] == {
         "no_candidates": 1,
     }
-    assert runtime["main_search_component_accepted"]["bounded_destroy_repair"] == 1
     assert (
-        runtime["main_search_component_accepted_delta_sum"]["bounded_destroy_repair"]
+        runtime["main_search_component_accepted"]["route_pool_recombination"]
+        + runtime["main_search_component_accepted"]["bounded_destroy_repair"]
+        >= 1
+    )
+    assert (
+        runtime["main_search_component_accepted_delta_sum"]["route_pool_recombination"]
+        + runtime["main_search_component_accepted_delta_sum"]["bounded_destroy_repair"]
         > 0.0
     )
 
@@ -2326,6 +2333,186 @@ def test_route_pool_recombination_combines_routes_from_solution_pool() -> None:
     )["total_distance"] < current_objective["total_distance"]
 
 
+def test_route_pool_samples_multiple_distinct_baseline_seeds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    instance = CvrpInstance(
+        name="route_pool_sample_seeds",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 2),))
+    current_objective = cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        current,
+    )
+    seen_seeds: list[int] = []
+
+    def fake_baseline_root() -> Path:
+        return tmp_path
+
+    def fake_solve_with_vrp_baseline(*args: Any, **kwargs: Any) -> tuple[CvrpSolution, dict[str, Any]]:
+        del args
+        seen_seeds.append(int(kwargs["seed"]))
+        return current, {}
+
+    monkeypatch.setattr(cvrp_solver, "_find_vrp_baseline_root", fake_baseline_root)
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_solve_with_vrp_baseline",
+        fake_solve_with_vrp_baseline,
+    )
+    rng = random.Random(11)
+
+    for _call in range(2):
+        cvrp_solver._best_route_pool_recombination(
+            current,
+            instance,
+            adapter=adapter,
+            current_objective=current_objective,
+            top_k=32,
+            rng=rng,
+            time_limit_sec=20.0,
+            start_time=time.perf_counter(),
+            instance_path=tmp_path / "sample.vrp",
+            seed=29,
+        )
+
+    assert len(seen_seeds) == 8
+    assert len(set(seen_seeds)) == len(seen_seeds)
+    assert cvrp_solver._route_pool_sample_cap(32) == 4
+
+
+def test_route_pool_sampling_keeps_exit_time_reserve(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    instance = CvrpInstance(
+        name="route_pool_time_reserve",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 2),))
+    current_objective = cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        current,
+    )
+    budgets: list[float] = []
+
+    def fake_baseline_root() -> Path:
+        return tmp_path
+
+    def fake_solve_with_vrp_baseline(
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[CvrpSolution, dict[str, Any]]:
+        del args
+        budgets.append(float(kwargs["time_limit_sec"]))
+        return current, {}
+
+    monkeypatch.setattr(cvrp_solver, "_find_vrp_baseline_root", fake_baseline_root)
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_solve_with_vrp_baseline",
+        fake_solve_with_vrp_baseline,
+    )
+
+    cvrp_solver._best_route_pool_recombination(
+        current,
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=32,
+        rng=random.Random(11),
+        time_limit_sec=20.0,
+        start_time=time.perf_counter() - 17.0,
+        instance_path=tmp_path / "sample.vrp",
+        seed=29,
+    )
+
+    assert len(budgets) == 4
+    assert max(budgets) < 0.5
+
+    budgets.clear()
+    cvrp_solver._best_route_pool_recombination(
+        current,
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=32,
+        rng=random.Random(11),
+        time_limit_sec=20.0,
+        start_time=time.perf_counter() - 18.7,
+        instance_path=tmp_path / "sample.vrp",
+        seed=29,
+    )
+
+    assert budgets == []
+
+
+def test_route_pool_can_complete_pool_route_with_incumbent_residual() -> None:
+    instance = CvrpInstance(
+        name="route_pool_residual_completion",
+        capacity=10,
+        depot=0,
+        allowed_routes=3,
+        use_integer_cost=False,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 100, 0, 1),
+            CvrpNode(2, 101, 0, 1),
+            CvrpNode(3, 100, 1, 1),
+            CvrpNode(4, 101, 1, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 4), (2,), (3,)))
+    partial_pool = CvrpSolution(routes=((1, 2),))
+    current_objective = cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        current,
+    )
+
+    candidate, calls, telemetry = cvrp_solver._route_pool_recombination_from_solutions(
+        current,
+        [current, partial_pool],
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=16,
+    )
+
+    assert candidate is not None
+    assert calls > 0
+    assert (1, 2) in candidate.routes
+    assert telemetry["route_pool_recombined_routes"] == 3
+    assert cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        candidate,
+    )["total_distance"] < current_objective["total_distance"]
+
+
 def test_main_search_strategy_auto_adds_route_pool_for_old_deep_pair() -> None:
     instance = CvrpInstance(
         name="auto_route_pool",
@@ -2529,6 +2716,7 @@ def test_main_search_strategy_route_pool_recombination_records_phase_improvement
         del args, kwargs
         return recombined, 5, {
             "route_pool_source_solutions": 3,
+            "route_pool_sample_count": 2,
             "route_pool_size": 8,
             "route_pool_branch_calls": 4,
             "route_pool_recombined_routes": 2,
@@ -2559,6 +2747,7 @@ def test_main_search_strategy_route_pool_recombination_records_phase_improvement
         == 1
     )
     assert runtime["main_search_route_pool_source_solutions"] == 3
+    assert runtime["main_search_route_pool_sample_count"] == 2
     assert runtime["main_search_route_pool_size"] == 8
     assert runtime["main_search_route_pool_branch_calls"] == 4
     assert runtime["main_search_route_pool_recombined_routes"] == 2

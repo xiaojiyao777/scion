@@ -10,17 +10,14 @@ handoff. Historical repair and experiment notes were moved to
 ## Status
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
-governance path is largely behaving, but CVRP short diagnostics still have not
-produced reliable screening-quality improvement. The latest solver-design
-problem-adaptation repair validates the live codegen/Contract path: APS can
-generate `solver_design` patches whose `problem_adaptation.component_roles`
-describe lifecycle role targets, whose `evidence_targets` name actual runtime
-audit fields, and whose returned `main_search_plan()` does not leak
-proposal-only `novelty_signature` metadata. Two consecutive completed code
-sessions passed APS schema/target/Contract previews, formal Contract,
-Verification, and selected-surface runtime audit with
-`main_search_strategy_errors=0`, then failed screening with `win_rate=0.0`,
-`median_delta=0.0`, and zero main-search phase-best movement.
+governance path is largely behaving, and the latest CVRP route-pool quality
+repair produced the first formal positive signal from the top-level
+`solver_design` boundary. One complete screening had 16/16 valid pairs,
+0 timeouts, 2 wins, 14 ties,
+`main_search_route_pool_recombined_routes=12`, and
+`main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
+The candidate still abandoned on screening win rate and median movement, so
+this is short-validation evidence, not readiness for long validation.
 
 Current branch: `v0.4-dev`
 
@@ -77,9 +74,16 @@ Current interpretation:
   instance model, solution model, objective policy, move/design affordances,
   solver lifecycle, and whole-solver evidence are rendered by the adapter as
   one coherent object for Scion to reason over. The current blocker is no
-  longer failure to expose that object; it is that the package-owned CVRP
-  main-search execution path still does not produce phase-best improvement over
-  the repo-local baseline.
+  longer failure to expose that object or total absence of phase-best movement;
+  it is that the package-owned CVRP main-search execution path still produces
+  sparse, runtime-expensive wins rather than repeated solver-quality movement.
+- The latest route-pool quality repair is a useful mechanism inside the
+  problem-object boundary, but not the final research object. The next
+  optimization should keep `solver_design` as the object and expose the CVRP
+  algorithm body/lifecycle more completely, so Scion studies construction,
+  baseline sampling, complete-solution recombination, local repair,
+  acceptance, restart, and runtime tradeoff together instead of tuning another
+  singleton hook.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -212,21 +216,70 @@ coordinate:
 
 Current limitation: the top-level boundary, active-boundary tool guidance,
 Contract-preview budget repair, non-empty semantic identity, and
-problem-adaptation codegen contract are live-validated. Solver-design candidate
-quality is still too weak. The bounded destroy/repair execution repair is
-complete but insufficient: live screening showed accepted/recovery movement
-and clean runtime attribution, yet zero phase-best movement. The route-pool
-repair now gives `solver_design` a package-owned whole-solution component and
-feedback telemetry, but live screening did not validate quality:
-`route_pool_recombination` built route pools and branch-searched on 16/16
-pairs, yet accepted zero recombined route sets and produced zero route-pool
-phase-best movement. Do not run long CVRP validation until route-pool
-candidate generation/recombination can produce local and short-screening
-phase-best movement.
+problem-adaptation codegen contract are live-validated. The bounded
+destroy/repair execution repair is complete but insufficient on its own.
+The route-pool quality repair now gives `solver_design` a package-owned
+whole-solution component that can produce formal phase-best movement:
+the latest short screening recorded 12 recombined routes and 5.0 route-pool
+phase-best delta. The signal is still sparse, runtime-expensive, and below the
+promotion threshold. Do not run long CVRP validation until `solver_design`
+produces repeated screening wins or median movement from the whole solver
+lifecycle, not only isolated route-pool successes.
 
 ## Latest Experiment
 
 Latest analyzed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-route-pool-quality-boundary-sonnet-8r-20260512T132735Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+rounds_completed_before_termination=1
+screened_experiments=1
+time_limit_sec=45
+agentic_proposal=true
+agentic_session_timeout_sec=900
+force_surface=none
+stop_reason=manual_termination_after_first_complete_screening_and_followup_proposal_infra_block
+analysis_doc=scion/docs/experiments/v0.4/v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md
+```
+
+Summary:
+
+- The run was terminated after one complete positive screening and repeated
+  follow-up agentic proposal failures before code generation. The completed
+  screening answered the intended short-validation question; the later
+  proposal failures were infra/codegen-blocking noise, not solver failures.
+- The completed candidate stayed on `solver_design`, targeted
+  `policies/main_search_strategy.py`, passed Contract/Verification, passed
+  screening execution with `main_search_strategy_errors=0`, and produced
+  16/16 valid pairs with no timeouts.
+- Screening pair result: 2 wins, 0 losses, 14 ties, `median_delta=0.0`, and
+  decision abandon (`SCREENING_FAIL_WIN_RATE`). Positive deltas were `+3.0`
+  on `E-n101-k8` seed 11 and `+6.0` on `P-n101-k4` seed 11. Median runtime
+  ratio was 1.211 and runtime regression rate was 1.0.
+- Runtime selected and attempted `route_pool_recombination`,
+  `route_pair_swap`, and `bounded_destroy_repair` through the top-level
+  `solver_design` lifecycle. Route-pool telemetry recorded
+  `main_search_route_pool_sample_count=112`,
+  `main_search_route_pool_recombined_routes=12`, and 4288 total branch calls.
+  Route-pool produced two accepted candidates and
+  `main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
+
+Interpretation: the route-pool quality repair moved the system past pure
+exposure. Scion can now see, execute, and receive quality evidence from a
+whole-solution primitive under `solver_design`. The remaining blocker is not
+"make route-pool visible"; it is raising the research object to the full CVRP
+algorithm body/lifecycle so Scion can decide when and how to spend time on
+baseline sampling, route-pool recombination, local repair, acceptance, and
+restart as one solver design.
+
+Detailed analysis:
+[`v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md)
+
+Previous analyzed run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-route-pool-recombination-telemetry-sonnet-8r-20260512T121501Z
@@ -244,31 +297,10 @@ stop_reason=manual_termination_after_first_complete_screening_route_pool_telemet
 analysis_doc=scion/docs/experiments/v0.4/v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md
 ```
 
-Summary:
-
-- The run was terminated early after one complete screening because it
-  validated route-pool execution/telemetry but repeated the same zero route-pool
-  quality failure; continuing the same 8-round campaign would spend budget on a
-  known-bad lifecycle shape.
-- The completed candidate stayed on `solver_design`, targeted
-  `policies/main_search_strategy.py`, passed screening execution with
-  `main_search_strategy_errors=0`, and produced 16/16 valid pairs.
-- Screening result: 1 win, 3 losses, 12 ties, `median_delta=0.0`, and decision
-  abandon (`T4: win_rate < 0.3`). Median runtime ratio was 1.083 and runtime
-  regression rate was 1.0.
-- Runtime result: runtime selected and attempted `route_pool_recombination`,
-  `route_pair_swap`, and `bounded_destroy_repair` on all 16 pairs.
-  Route-pool telemetry was present on all pairs:
-  source-solution counts 6-8, route-pool sizes 16-64, and 580 total branch
-  calls. `main_search_route_pool_recombined_routes=0` and
-  `main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
-  16 pairs.
-
-Interpretation: the route-pool repair fixed the exposure/feedback problem.
-Scion can now see and execute the whole-solution primitive. The remaining
-blocker is route-pool solver quality: generated pools are too weak or the
-bounded recombination search is too restrictive to produce accepted route-set
-recombinations over the repo-local phase best.
+Summary: validated route-pool execution/telemetry on 16/16 pairs, but
+`main_search_route_pool_recombined_routes=0` and
+`main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
+pairs.
 
 Detailed analysis:
 [`v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md)
@@ -561,7 +593,17 @@ PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/
 ```
 
 ```text
-1590 passed, 1 skipped in 67.22s
+1593 passed, 1 skipped in 67.54s
+```
+
+Latest route-pool quality/boundary validation:
+
+```bash
+PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests/test_cvrp_solver_operator_runtime.py -k 'route_pool'
+```
+
+```text
+7 passed, 51 deselected in 0.51s
 ```
 
 Latest main-search route-pool telemetry contract validation:
@@ -571,7 +613,7 @@ PYTHONPATH=scion /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/
 ```
 
 ```text
-179 passed in 30.00s
+182 passed in 29.81s
 ```
 
 Previous main-search route-pool/execution validation:
@@ -658,13 +700,21 @@ Latest CVRP destroy/repair selector/proposal validation:
 
 P1:
 
-- Repair route-pool candidate generation/recombination so source pools produce
-  accepted recombined route sets. Success requires nonzero
-  `main_search_route_pool_recombined_routes` and nonzero
-  `main_search_component_phase_delta_sum.route_pool_recombination` locally
-  before another short formal diagnostic.
-- Keep the top-level target on `solver_design`; do not add another forced
-  singleton mechanism-policy diagnostic to work around route-pool quality.
+- Continue the current `solver_design` direction, but raise the research
+  object from route-pool internals to the full CVRP algorithm body/lifecycle.
+  Scion should study construction, baseline sampling, complete-solution
+  recombination, local repair, acceptance, restart, and runtime tradeoff as one
+  solver design.
+- Keep route-pool telemetry as evidence inside that lifecycle:
+  `main_search_route_pool_sample_count`,
+  `main_search_route_pool_recombined_routes`, and
+  `main_search_component_phase_delta_sum.route_pool_recombination` should
+  remain first-class feedback fields.
+- Fix or mitigate the follow-up agentic proposal Contract-preview failures
+  seen after the positive screening so additional solver-design candidates can
+  reach evaluation.
+- Do not add another forced singleton mechanism-policy diagnostic to work
+  around solver-design quality.
 - Stop forced single-policy diagnostics for now, including
   `route_pair_candidate_policy`.
 
@@ -684,15 +734,16 @@ P2:
 
 - CVRP `solver_design` is now validly routed, self-checked, and contract-valid
   with declared problem adaptation. Code-level main-search execution semantics
-  are repaired, and route-pool recombination has runtime/feedback coverage, but
-  live screening shows zero accepted route-pool recombinations and zero
-  route-pool phase-best movement.
+  are repaired, and route-pool recombination has formal positive signal, but
+  the signal is still sparse: 2 wins, 14 ties, zero losses, median movement
+  zero, and a 21% median runtime regression in the latest short screening.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
 - APS can still produce shallow solver-design hypotheses that satisfy the
-  contract but only reshuffle lifecycle knobs around weak package-owned
-  primitives.
+  contract but only reshuffle lifecycle knobs around package-owned primitives.
+  The next repair should expose and steer the whole algorithm body, not merely
+  add another component policy.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.

@@ -109,6 +109,7 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_component_phase_delta_sum",
         "main_search_component_phase_improvement_counts",
         "main_search_route_pool_source_solutions",
+        "main_search_route_pool_sample_count",
         "main_search_route_pool_size",
         "main_search_route_pool_branch_calls",
         "main_search_route_pool_recombined_routes",

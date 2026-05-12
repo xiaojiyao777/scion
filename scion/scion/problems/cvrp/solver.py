@@ -152,6 +152,7 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_component_phase_delta_sum",
         "main_search_component_phase_improvement_counts",
         "main_search_route_pool_source_solutions",
+        "main_search_route_pool_sample_count",
         "main_search_route_pool_size",
         "main_search_route_pool_branch_calls",
         "main_search_route_pool_recombined_routes",
@@ -185,6 +186,10 @@ _MAX_MAIN_SEARCH_BDR_ACCEPT_LIMIT = 3
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR = 16
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING = 96
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION = 0.12
+_MAIN_SEARCH_EXIT_RESERVE_SEC = 0.75
+_ROUTE_POOL_EXIT_RESERVE_SEC = 1.25
+_ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC = 0.20
+_ROUTE_POOL_MAX_SAMPLE_BUDGET_SEC = 2.50
 _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
     {
         "enabled",
@@ -638,7 +643,7 @@ def improve_with_registry_operators(
         round_completed = True
         audit["operator_rounds"] = round_index + 1
         for operator in operators:
-            if _time_exhausted(start_time, time_limit_sec):
+            if _main_search_time_exhausted(start_time, time_limit_sec):
                 audit["operator_stop_reason"] = "time_limit"
                 audit["portfolio_stop_reason"] = "time_limit"
                 round_completed = False
@@ -1751,6 +1756,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
         "main_search_route_pool_source_solutions": 0,
+        "main_search_route_pool_sample_count": 0,
         "main_search_route_pool_size": 0,
         "main_search_route_pool_branch_calls": 0,
         "main_search_route_pool_recombined_routes": 0,
@@ -3941,7 +3947,7 @@ def improve_with_main_search_strategy(
             round_route_pair_phase_improved = False
             round_current_accepted = 0
             for component in components:
-                if _time_exhausted(start_time, time_limit_sec):
+                if _main_search_time_exhausted(start_time, time_limit_sec):
                     stop_reason = "time_limit"
                     break
                 if (
@@ -5333,56 +5339,57 @@ def _best_route_pool_recombination(
     resolved_instance_path = (
         Path(instance_path).resolve(strict=False) if instance_path is not None else None
     )
-    remaining_time = 0.0
-    if time_limit_sec is not None and start_time is not None:
-        remaining_time = max(0.0, float(time_limit_sec) - (time.perf_counter() - start_time))
+    remaining_time = _remaining_time_sec(start_time, time_limit_sec)
     if (
         baseline_root is not None
         and resolved_instance_path is not None
         and resolved_instance_path.suffix.lower() == ".vrp"
-        and remaining_time > 0.35
+        and remaining_time
+        > _ROUTE_POOL_EXIT_RESERVE_SEC + _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC
     ):
-        sample_cap = max(1, min(6, max(1, top_k // 20)))
-        usable_time = max(0.0, remaining_time - 0.10)
-        per_sample_budget = max(0.20, min(1.25, usable_time / (sample_cap + 1)))
+        sample_cap = _route_pool_sample_cap(top_k)
+        usable_time = max(0.0, remaining_time - _ROUTE_POOL_EXIT_RESERVE_SEC)
+        per_sample_budget = min(
+            _ROUTE_POOL_MAX_SAMPLE_BUDGET_SEC,
+            usable_time / max(1.0, sample_cap + 0.5),
+        )
         baseline_params = {}
         if isinstance(mechanism_policies, Mapping):
             raw_params = mechanism_policies.get("main_search_baseline_params")
             if isinstance(raw_params, Mapping):
                 baseline_params = dict(raw_params)
-        for sample_index in range(sample_cap):
-            elapsed = time.perf_counter() - start_time if start_time is not None else 0.0
-            remaining = (
-                max(0.0, float(time_limit_sec) - elapsed)
-                if time_limit_sec is not None
-                else 0.0
-            )
-            if remaining <= per_sample_budget + 0.05:
-                break
-            base_seed = (
-                _as_nonnegative_int(seed)
-                if seed is not None
-                else sample_rng.randrange(1_000_000)
-            )
-            sample_seed = base_seed + 1000 * (sample_index + 1)
-            try:
-                sampled_solution, _sample_audit = _solve_with_vrp_baseline(
-                    instance=instance,
-                    instance_path=resolved_instance_path,
-                    seed=sample_seed,
-                    time_limit_sec=per_sample_budget,
-                    baseline_root=baseline_root,
-                    baseline_required=_baseline_required_for_instance(
-                        resolved_instance_path
-                    ),
-                    baseline_policy_params=baseline_params,
+        if per_sample_budget >= _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC:
+            for sample_index in range(sample_cap):
+                remaining = _remaining_time_sec(start_time, time_limit_sec)
+                sample_budget = min(
+                    per_sample_budget,
+                    max(0.0, remaining - _ROUTE_POOL_EXIT_RESERVE_SEC),
                 )
-            except Exception:
-                continue
-            sample_attempts += 1
-            valid, _reason = _solution_is_valid(adapter, instance, sampled_solution)
-            if valid:
-                pool_solutions.append(sampled_solution)
+                if sample_budget < _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC:
+                    break
+                sample_seed = _route_pool_sample_seed(
+                    seed,
+                    sample_index,
+                    sample_rng,
+                )
+                try:
+                    sampled_solution, _sample_audit = _solve_with_vrp_baseline(
+                        instance=instance,
+                        instance_path=resolved_instance_path,
+                        seed=sample_seed,
+                        time_limit_sec=sample_budget,
+                        baseline_root=baseline_root,
+                        baseline_required=_baseline_required_for_instance(
+                            resolved_instance_path
+                        ),
+                        baseline_policy_params=baseline_params,
+                    )
+                except Exception:
+                    continue
+                sample_attempts += 1
+                valid, _reason = _solution_is_valid(adapter, instance, sampled_solution)
+                if valid:
+                    pool_solutions.append(sampled_solution)
     telemetry["route_pool_sample_count"] = sample_attempts
 
     candidate, branch_calls, pool_telemetry = _route_pool_recombination_from_solutions(
@@ -5402,6 +5409,22 @@ def _best_route_pool_recombination(
     return candidate, attempts, telemetry
 
 
+def _route_pool_sample_cap(top_k: int) -> int:
+    if top_k <= 0:
+        return 0
+    return max(4, min(8, max(4, top_k // 16)))
+
+
+def _route_pool_sample_seed(
+    seed: int | None,
+    sample_index: int,
+    sample_rng: random.Random,
+) -> int:
+    base_seed = _as_nonnegative_int(seed) if seed is not None else 0
+    round_offset = sample_rng.randrange(1, 1_000_000)
+    return base_seed + 1000 * (sample_index + 1) + round_offset
+
+
 def _route_pool_recombination_from_solutions(
     solution: CvrpSolution,
     pool_solutions: list[CvrpSolution],
@@ -5416,18 +5439,25 @@ def _route_pool_recombination_from_solutions(
     for pool_solution in pool_solutions:
         for route in pool_solution.routes:
             route_tuple = tuple(route)
-            route_customers = frozenset(route_tuple)
-            if (
-                not route_customers
-                or len(route_customers) != len(route_tuple)
-                or not route_customers <= customers
-                or instance.route_load(route_tuple) > instance.capacity
-            ):
-                continue
-            route_cost = float(instance.route_distance(route_tuple))
-            previous = route_by_customers.get(route_customers)
-            if previous is None or route_cost < previous[0] - _OBJECTIVE_TOLERANCE:
-                route_by_customers[route_customers] = (route_cost, route_tuple)
+            polished_route, _polish_attempts = _route_pool_polish_route_order(
+                route_tuple,
+                instance,
+                max_attempts=max(16, min(256, max(1, top_k) * 8)),
+            )
+            route_variants = (route_tuple, polished_route)
+            for variant in route_variants:
+                route_customers = frozenset(variant)
+                if (
+                    not route_customers
+                    or len(route_customers) != len(variant)
+                    or not route_customers <= customers
+                    or instance.route_load(variant) > instance.capacity
+                ):
+                    continue
+                route_cost = float(instance.route_distance(variant))
+                previous = route_by_customers.get(route_customers)
+                if previous is None or route_cost < previous[0] - _OBJECTIVE_TOLERANCE:
+                    route_by_customers[route_customers] = (route_cost, variant)
 
     route_entries = [
         (cost, route, route_customers)
@@ -5472,6 +5502,53 @@ def _route_pool_recombination_from_solutions(
     branch_call_limit = max(1000, min(250_000, max(1, top_k) * 1000))
     option_cap = max(8, min(64, max(1, top_k)))
 
+    def maybe_update_best(candidate: CvrpSolution) -> None:
+        nonlocal best_solution, best_objective, best_distance
+        valid, _reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            return
+        objective = _objective_for_solution(adapter, instance, candidate)
+        if _lexicographic_improves(objective, best_objective):
+            best_solution = candidate
+            best_objective = objective
+            best_distance = float(objective.get("total_distance", best_distance))
+
+    def try_incumbent_residual_completion(chosen: list[int]) -> None:
+        if not chosen:
+            return
+        covered: set[int] = set()
+        candidate_routes: list[tuple[int, ...]] = []
+        for index in chosen:
+            _cost, route, route_customers = route_entries[index]
+            if covered & route_customers:
+                return
+            covered.update(route_customers)
+            candidate_routes.append(route)
+        for route in solution.routes:
+            residual = tuple(customer for customer in route if customer not in covered)
+            if residual:
+                candidate_routes.append(residual)
+        if len(candidate_routes) > route_limit:
+            return
+        maybe_update_best(CvrpSolution(routes=tuple(candidate_routes)))
+
+    injection_index_limit = min(len(route_entries), max(8, min(64, max(1, top_k) * 2)))
+    injection_pair_limit = min(len(route_entries), max(8, min(40, max(1, top_k))))
+    for left in range(injection_index_limit):
+        branch_calls += 1
+        try_incumbent_residual_completion([left])
+        if branch_calls >= branch_call_limit:
+            break
+    if branch_calls < branch_call_limit:
+        for left in range(injection_pair_limit):
+            for right in range(left + 1, injection_pair_limit):
+                branch_calls += 1
+                try_incumbent_residual_completion([left, right])
+                if branch_calls >= branch_call_limit:
+                    break
+            if branch_calls >= branch_call_limit:
+                break
+
     def dfs(
         uncovered: frozenset[int],
         chosen: list[int],
@@ -5489,14 +5566,7 @@ def _route_pool_recombination_from_solutions(
             candidate = CvrpSolution(
                 routes=tuple(route_entries[index][1] for index in chosen)
             )
-            valid, _reason = _solution_is_valid(adapter, instance, candidate)
-            if not valid:
-                return
-            objective = _objective_for_solution(adapter, instance, candidate)
-            if _lexicographic_improves(objective, best_objective):
-                best_solution = candidate
-                best_objective = objective
-                best_distance = float(objective.get("total_distance", best_distance))
+            maybe_update_best(candidate)
             return
         if len(chosen) >= route_limit:
             return
@@ -5529,6 +5599,41 @@ def _route_pool_recombination_from_solutions(
         return None, branch_calls, telemetry
     telemetry["route_pool_recombined_routes"] = len(best_solution.routes)
     return best_solution, branch_calls, telemetry
+
+
+def _route_pool_polish_route_order(
+    route: tuple[int, ...],
+    instance: CvrpInstance,
+    *,
+    max_attempts: int,
+) -> tuple[tuple[int, ...], int]:
+    if len(route) < 4 or max_attempts <= 0:
+        return route, 0
+    best = tuple(route)
+    best_distance = float(instance.route_distance(best))
+    attempts = 0
+    improved = True
+    while improved and attempts < max_attempts:
+        improved = False
+        for left in range(len(best) - 1):
+            for right in range(left + 1, len(best)):
+                attempts += 1
+                candidate = (
+                    best[:left]
+                    + tuple(reversed(best[left : right + 1]))
+                    + best[right + 1 :]
+                )
+                candidate_distance = float(instance.route_distance(candidate))
+                if candidate_distance < best_distance - _OBJECTIVE_TOLERANCE:
+                    best = candidate
+                    best_distance = candidate_distance
+                    improved = True
+                    break
+                if attempts >= max_attempts:
+                    break
+            if improved or attempts >= max_attempts:
+                break
+    return best, attempts
 
 
 def _remove_destroy_subset(
@@ -6201,6 +6306,9 @@ def _record_main_search_component_repair_counts(
         audit["main_search_route_pool_source_solutions"] = _as_nonnegative_int(
             audit.get("main_search_route_pool_source_solutions")
         ) + _as_nonnegative_int(telemetry.get("route_pool_source_solutions"))
+        audit["main_search_route_pool_sample_count"] = _as_nonnegative_int(
+            audit.get("main_search_route_pool_sample_count")
+        ) + _as_nonnegative_int(telemetry.get("route_pool_sample_count"))
         audit["main_search_route_pool_size"] = _as_nonnegative_int(
             audit.get("main_search_route_pool_size")
         ) + _as_nonnegative_int(telemetry.get("route_pool_size"))
@@ -8000,6 +8108,21 @@ def _time_exhausted(start_time: float, time_limit_sec: float) -> bool:
     if time_limit_sec <= 0:
         return False
     return time.perf_counter() - start_time >= time_limit_sec
+
+
+def _remaining_time_sec(
+    start_time: float | None,
+    time_limit_sec: float | None,
+) -> float:
+    if start_time is None or time_limit_sec is None or time_limit_sec <= 0:
+        return 0.0
+    return max(0.0, float(time_limit_sec) - (time.perf_counter() - start_time))
+
+
+def _main_search_time_exhausted(start_time: float, time_limit_sec: float) -> bool:
+    if time_limit_sec <= 0:
+        return False
+    return _remaining_time_sec(start_time, time_limit_sec) <= _MAIN_SEARCH_EXIT_RESERVE_SEC
 
 
 def _record_event(

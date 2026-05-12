@@ -368,7 +368,7 @@ def test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_t
             "                'pre_improvement_perturbation': 'probe',\n"
             "            },\n"
             "            'fallback_order': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'],\n"
-            "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_route_pool_size', 'main_search_route_pool_recombined_routes', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
+            "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_route_pool_sample_count', 'main_search_route_pool_size', 'main_search_route_pool_recombined_routes', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
             "        },\n"
             "        'construction': {'methods': ['nearest_neighbor', 'demand_descending'], 'keep_top_k': 2, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.78, 'params': {'destroy_ratio': (0.10, 0.30), 'segment_length': 150, 'max_destroy_customers': 8}},\n"

@@ -130,15 +130,13 @@ Important current interpretation:
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.
-- They do not yet validate solver efficacy. Screened candidates still fail
-  quality thresholds, median movement remains zero, and phase-best movement
-  remains zero.
-- Do not spend more rounds on the same shallow solver-design pattern or on
-  prompt-only exposure repairs. The latest short validation passed Contract
-  and Verification twice with declared problem adaptation and
-  `main_search_strategy_errors=0`, but both candidates still had
-  `win_rate=0.0`, `median_delta=0.0`, and zero main-search phase-best
-  movement.
+- They do not yet validate solver efficacy. The latest short diagnostic has
+  formal route-pool phase-best movement, but median movement remains zero and
+  the screening candidate still abandoned on win-rate threshold.
+- Do not spend more rounds on shallow solver-design knob reshuffles or
+  prompt-only exposure repairs. The latest useful signal came from a
+  code-level whole-solution route-pool quality repair inside `solver_design`,
+  not from another exposed singleton policy.
 - The main-search execution-semantics repair was necessary but insufficient:
   bounded destroy/repair now ranks repair insertions globally, preserves
   fallback budget, honors the fallback toggle, and lets recovery-only accepted
@@ -150,23 +148,30 @@ Important current interpretation:
   APS can study the problem object rather than another forced singleton
   policy. Runtime auto-adds it to old route-pair plus bounded-destroy/repair
   plans unless explicitly disabled, and screening feedback now preserves its
-  source-solution, route-pool size, branch-call, and recombined-route
-  telemetry.
-- The latest route-pool short diagnostic validates execution and feedback but
-  not quality: 16/16 formal pairs exposed route-pool telemetry, yet
-  `main_search_route_pool_recombined_routes=0` and
-  `main_search_component_phase_delta_sum.route_pool_recombination=0.0` on all
-  pairs. Do not spend more budget on the same route-pair/BDR lifecycle shape;
-  the next useful slice is deeper route-pool candidate-generation and
-  recombination quality.
+  source-solution, sample-count, route-pool size, branch-call, and
+  recombined-route telemetry.
+- The latest route-pool quality diagnostic produced the first formal positive
+  route-pool signal: 16/16 valid screening pairs, 0 timeouts, 2 wins, 14 ties,
+  `main_search_route_pool_recombined_routes=12`, and
+  `main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
+  The run still abandoned on win-rate/median movement and later agentic
+  proposals hit Contract-preview failures, so this is not long-validation
+  evidence.
+- Continue on the current direction, but do not shrink the research object to
+  route-pool itself. Route-pool is now useful evidence inside the
+  `solver_design` lifecycle; the next useful slice is exposing and improving
+  the whole CVRP algorithm body so Scion can reason about construction,
+  baseline sampling, complete-solution recombination, local repair,
+  acceptance, restart, and runtime tradeoff together.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.
 - Do not start another forced single-policy diagnostic, including
-  `route_pair_candidate_policy`, while route-pool quality under the
-  problem-object/top-level `solver_design` boundary is unresolved.
-- Do not run long CVRP solver-quality validation until a short diagnostic shows
-  nonzero phase-best improvement and screening-quality movement.
+  `route_pair_candidate_policy`, while whole-lifecycle quality under the
+  problem-object/top-level `solver_design` boundary is still sparse.
+- Do not run long CVRP solver-quality validation until short diagnostics show
+  repeated solver-design improvement, not only isolated wins on one screening
+  candidate.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 

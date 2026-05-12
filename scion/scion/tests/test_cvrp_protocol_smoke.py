@@ -202,7 +202,7 @@ def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
                 "            'phase_objective': 'phase_best_distance',",
                 "            'component_roles': {'route_pool_recombination': 'primary'},",
                 "            'fallback_order': ['route_pool_recombination'],",
-                "            'evidence_targets': ['main_search_route_pool_size', 'main_search_route_pool_branch_calls', 'main_search_route_pool_recombined_routes'],",
+                "            'evidence_targets': ['main_search_route_pool_sample_count', 'main_search_route_pool_size', 'main_search_route_pool_branch_calls', 'main_search_route_pool_recombined_routes'],",
                 "        },",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.2, 'params': {}},",
@@ -230,6 +230,10 @@ def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
 
     surface_summary = result.candidate_surface_runtime_summary
     assert surface_summary["selected_surface"] == "solver_design"
+    assert (
+        surface_summary["fields"]["main_search_route_pool_sample_count"]["present"]
+        == 4
+    )
     assert surface_summary["fields"]["main_search_route_pool_size"]["present"] == 4
     assert (
         surface_summary["fields"]["main_search_route_pool_branch_calls"]["present"]
@@ -245,6 +249,7 @@ def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
     pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
     assert pair_runtime["main_search_components"] == ["route_pool_recombination"]
+    assert "main_search_route_pool_sample_count" in pair_runtime
     assert "main_search_route_pool_size" in pair_runtime
     assert "main_search_route_pool_branch_calls" in pair_runtime
     assert "main_search_route_pool_recombined_routes" in pair_runtime
