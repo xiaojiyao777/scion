@@ -151,6 +151,10 @@ _ALLOWED_ROUTE_POOL_ACTIVATIONS = frozenset(
 )
 _DEFAULT_ROUTE_POOL_ACTIVATION = "adaptive"
 _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS = 80
+_ALLOWED_MAIN_SEARCH_BASELINE_BUDGET_POLICIES = frozenset(
+    {"declared", "formal_floor"}
+)
+_DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY = "declared"
 _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
     {
         "scale",
@@ -265,6 +269,7 @@ _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
 _MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS = frozenset(
     {
         "phase_sequence",
+        "baseline_budget_policy",
         "route_pool_activation",
         "route_pool_min_customers",
         "route_pool_max_rounds",
@@ -920,7 +925,7 @@ def _main() -> None:
         **destroy_repair_policy,
         **route_pair_policy,
         **acceptance_restart_policy,
-        **main_search_strategy,
+        **_finalize_main_search_audit(dict(main_search_strategy)),
         **main_search_audit,
         **baseline_audit,
         **operator_audit,
@@ -1686,6 +1691,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
             },
             "algorithm_body": {
                 "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+                "baseline_budget_policy": (
+                    _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY
+                ),
                 "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
                 "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
                 "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
@@ -1739,6 +1747,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         },
         "main_search_algorithm_body": {
             "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+            "baseline_budget_policy": _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY,
             "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
             "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
             "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
@@ -1759,6 +1768,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
         "main_search_baseline_time_fraction": _BASELINE_TIME_FRACTION,
         "main_search_baseline_time_fraction_effective": _BASELINE_TIME_FRACTION,
+        "main_search_baseline_budget_policy": (
+            _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY
+        ),
         "main_search_baseline_quality_guard_applied": False,
         "main_search_baseline_params": params,
         "main_search_baseline_params_clamped": False,
@@ -1806,6 +1818,11 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_reinserted_counts": {},
         "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
+        "main_search_component_top_k_effective": {},
+        "main_search_phase_component_order": {},
+        "main_search_phase_unassigned_components": [],
+        "main_search_construction_pool_size": 0,
+        "main_search_construction_pool_distances": [],
         "main_search_route_pool_source_solutions": 0,
         "main_search_route_pool_sample_count": 0,
         "main_search_route_pool_size": 0,
@@ -1816,6 +1833,8 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
         "main_search_route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
         "main_search_route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
+        "main_search_local_cleanup_after_recombination": False,
+        "main_search_adaptive_component_budget": True,
         "main_search_acceptance_min_distance_improvement": 0.0,
         "recovery_only_policy": "allow",
         "main_search_component_min_distance_improvement": {},
@@ -1943,6 +1962,16 @@ def _normalize_main_search_strategy_plan(
         field_name="algorithm_body.phase_sequence",
         audit=audit,
         allow_empty=False,
+    )
+    baseline_budget_policy = _main_search_string_choice(
+        algorithm_body.get(
+            "baseline_budget_policy",
+            _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY,
+        ),
+        allowed=_ALLOWED_MAIN_SEARCH_BASELINE_BUDGET_POLICIES,
+        default=_DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY,
+        field_name="algorithm_body.baseline_budget_policy",
+        audit=audit,
     )
     route_pool_activation = _main_search_string_choice(
         algorithm_body.get(
@@ -2242,6 +2271,7 @@ def _normalize_main_search_strategy_plan(
         },
         "algorithm_body": {
             "phase_sequence": algorithm_phase_sequence,
+            "baseline_budget_policy": baseline_budget_policy,
             "route_pool_activation": route_pool_activation,
             "route_pool_min_customers": route_pool_min_customers,
             "route_pool_max_rounds": route_pool_max_rounds,
@@ -2319,6 +2349,7 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_construction_bias"] = construction_bias
     audit["main_search_baseline_time_fraction"] = baseline_time_fraction
     audit["main_search_baseline_time_fraction_effective"] = baseline_time_fraction
+    audit["main_search_baseline_budget_policy"] = baseline_budget_policy
     audit["main_search_baseline_quality_guard_applied"] = False
     audit["main_search_baseline_params"] = baseline_params
     audit["main_search_baseline_params_clamped"] = bool(baseline_param_clamps)
@@ -2334,6 +2365,10 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_route_pool_activation"] = route_pool_activation
     audit["main_search_route_pool_min_customers"] = route_pool_min_customers
     audit["main_search_route_pool_max_rounds"] = route_pool_max_rounds
+    audit["main_search_local_cleanup_after_recombination"] = (
+        local_cleanup_after_recombination
+    )
+    audit["main_search_adaptive_component_budget"] = adaptive_component_budget
     _refresh_main_search_component_coverage_status(audit, components)
     audit["main_search_rounds"] = rounds
     audit["main_search_top_k"] = top_k
@@ -2938,6 +2973,78 @@ def _schedule_main_search_components(
     )
 
 
+_MAIN_SEARCH_COMPONENT_EXECUTION_PHASES = {
+    "route_pool_recombination": ("global_recombination",),
+    "route_pair_swap": ("route_structure_repair",),
+    "bounded_destroy_repair": ("route_structure_repair",),
+    "inter_route_relocate": ("route_structure_repair", "local_cleanup"),
+    "intra_route_2opt": ("local_cleanup",),
+}
+
+
+def _main_search_phase_component_order(
+    audit: Mapping[str, Any],
+    components: list[str],
+) -> dict[str, list[str]]:
+    algorithm_body = audit.get("main_search_algorithm_body")
+    if not isinstance(algorithm_body, Mapping):
+        algorithm_body = {}
+    raw_phases = algorithm_body.get(
+        "phase_sequence",
+        _DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES,
+    )
+    phases = [
+        str(phase)
+        for phase in raw_phases
+        if str(phase)
+        in {"global_recombination", "route_structure_repair", "local_cleanup"}
+    ]
+    order: dict[str, list[str]] = {phase: [] for phase in phases}
+    for component in components:
+        allowed = _MAIN_SEARCH_COMPONENT_EXECUTION_PHASES.get(component, ())
+        target_phase = next((phase for phase in phases if phase in allowed), None)
+        if target_phase is not None:
+            order.setdefault(target_phase, []).append(component)
+    return {
+        phase: phase_components
+        for phase, phase_components in order.items()
+        if phase_components
+    }
+
+
+def _main_search_effective_component_top_k(
+    audit: Mapping[str, Any],
+    component: str,
+    requested_top_k: int,
+    instance: CvrpInstance,
+) -> int:
+    top_k = max(1, _as_nonnegative_int(requested_top_k))
+    if not bool(audit.get("main_search_adaptive_component_budget")):
+        return top_k
+    customer_count = len(instance.customer_ids)
+    if component == "route_pool_recombination":
+        if customer_count < 60:
+            return min(top_k, 24)
+        if customer_count < 120:
+            return min(top_k, 48)
+        return min(top_k, 96)
+    if component in {"intra_route_2opt", "inter_route_relocate"}:
+        return min(top_k, 48)
+    return top_k
+
+
+def _record_main_search_effective_top_k(
+    audit: dict[str, Any],
+    component: str,
+    top_k: int,
+) -> None:
+    values = audit.setdefault("main_search_component_top_k_effective", {})
+    values[component] = max(
+        _as_nonnegative_int(values.get(component)),
+        _as_nonnegative_int(top_k),
+    )
+
+
 def _apply_main_search_strategy_search_policy(
     search_policy: dict[str, Any],
     *,
@@ -3021,6 +3128,9 @@ def _activate_main_search_strategy_for_mechanism_policies(
             "enabled": True,
             "algorithm_body": {
                 "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+                "baseline_budget_policy": (
+                    _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY
+                ),
                 "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
                 "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
                 "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
@@ -3940,6 +4050,13 @@ def _construct_with_main_search_strategy(
         best_solution = solve(instance, rng)
         best_objective = _objective_for_solution(adapter, instance, best_solution)
         best_method = _DEFAULT_CONSTRUCTION_MODE
+        main_search_strategy["_main_search_construction_pool_solutions"] = [
+            best_solution
+        ]
+        main_search_strategy["main_search_construction_pool_size"] = 1
+        main_search_strategy["main_search_construction_pool_distances"] = [
+            round(float(best_objective.get("total_distance", 0.0)), 6)
+        ]
     else:
         candidates.sort(
             key=lambda item: (
@@ -3949,6 +4066,14 @@ def _construct_with_main_search_strategy(
         )
         kept = candidates[:keep_top_k]
         best_objective, best_solution, best_method = kept[0]
+        main_search_strategy["_main_search_construction_pool_solutions"] = [
+            candidate_solution for _objective, candidate_solution, _method in kept
+        ]
+        main_search_strategy["main_search_construction_pool_size"] = len(kept)
+        main_search_strategy["main_search_construction_pool_distances"] = [
+            round(float(objective.get("total_distance", 0.0)), 6)
+            for objective, _solution, _method in kept
+        ]
 
     construction_audit["construction_elapsed_ms"] = int(
         (time.monotonic_ns() - start_ns) / 1_000_000
@@ -4001,7 +4126,7 @@ def improve_with_main_search_strategy(
             audit.get("main_search_strategy_errors")
         ) + _main_search_mechanism_policy_error_count(audit)
         audit["main_search_stop_reason"] = "invalid_mechanism_policy"
-        return solution, audit
+        return solution, _finalize_main_search_audit(audit)
     _append_main_search_phase(audit, "baseline")
     audit.setdefault("main_search_phase_runtime_ms", {}).setdefault("baseline", 0)
 
@@ -4026,7 +4151,7 @@ def improve_with_main_search_strategy(
         component_min_distance_improvement = {}
     if not components or rounds <= 0 or top_k <= 0:
         audit["main_search_stop_reason"] = "improvement_loop_disabled"
-        return solution, audit
+        return solution, _finalize_main_search_audit(audit)
 
     phase_start_ns = time.monotonic_ns()
     initial_objective = _objective_for_solution(adapter, instance, solution)
@@ -4043,6 +4168,239 @@ def improve_with_main_search_strategy(
         )
     )
     perturb_limit = _main_search_plan_int(audit, "perturbation", "max_perturbations")
+    phase_component_order = _main_search_phase_component_order(audit, components)
+    audit["main_search_phase_component_order"] = {
+        phase: list(phase_components)
+        for phase, phase_components in phase_component_order.items()
+    }
+    assigned_components = {
+        component
+        for phase_components in phase_component_order.values()
+        for component in phase_components
+    }
+    cleanup_coupled = bool(
+        audit.get("main_search_local_cleanup_after_recombination")
+    ) and "route_pool_recombination" in assigned_components
+    unassigned_components = [
+        component
+        for component in components
+        if component not in assigned_components
+        and not (
+            cleanup_coupled
+            and component in {"inter_route_relocate", "intra_route_2opt"}
+        )
+    ]
+    audit["main_search_phase_unassigned_components"] = unassigned_components
+    for component in unassigned_components:
+        _record_main_search_component_skip(
+            audit,
+            component,
+            "algorithm_body_phase_not_enabled",
+        )
+
+    def run_component(
+        component: str,
+        *,
+        phase_name: str,
+        route_pair_phase_improved: bool,
+    ) -> dict[str, bool]:
+        nonlocal current, current_objective, best_solution, best_objective, stop_reason
+        result = {
+            "stopped": False,
+            "phase_improved": False,
+            "current_accepted": False,
+            "route_pair_phase_improved": route_pair_phase_improved,
+            "route_pool_accepted": False,
+        }
+        if _main_search_time_exhausted(start_time, time_limit_sec):
+            stop_reason = "time_limit"
+            result["stopped"] = True
+            return result
+        algorithm_skip_reason = _main_search_algorithm_body_skip_reason(
+            audit,
+            component,
+            instance,
+            instance_path=instance_path,
+        )
+        if algorithm_skip_reason:
+            _record_main_search_component_attempted(audit, component)
+            _record_main_search_component_skip(
+                audit,
+                component,
+                algorithm_skip_reason,
+            )
+            return result
+        if (
+            component == "bounded_destroy_repair"
+            and "route_pair_swap" in components
+            and route_pair_phase_improved
+        ):
+            _record_main_search_component_skip(
+                audit,
+                component,
+                "route_pair_phase_improved",
+            )
+            return result
+        if (
+            component == "bounded_destroy_repair"
+            and _as_nonnegative_int(
+                audit.get("main_search_component_phase_improvement_counts", {}).get(
+                    "bounded_destroy_repair",
+                    0,
+                )
+            )
+            >= _as_nonnegative_int(
+                audit.get(
+                    "main_search_bounded_destroy_repair_accept_limit",
+                    _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+                )
+            )
+        ):
+            _record_main_search_component_skip(
+                audit,
+                component,
+                "bounded_destroy_repair_accept_limit_reached",
+            )
+            return result
+
+        component_start_ns = time.monotonic_ns()
+        _record_main_search_component_attempted(audit, component)
+        if component == "route_pool_recombination":
+            audit["main_search_route_pool_invocations"] = (
+                _as_nonnegative_int(audit.get("main_search_route_pool_invocations")) + 1
+            )
+        effective_top_k = _main_search_effective_component_top_k(
+            audit,
+            component,
+            top_k,
+            instance,
+        )
+        _record_main_search_effective_top_k(audit, component, effective_top_k)
+        choice_kwargs: dict[str, Any] = {
+            "current_solution": current,
+            "best_solution": best_solution,
+            "adapter": adapter,
+            "current_objective": current_objective,
+            "best_objective": best_objective,
+            "top_k": effective_top_k,
+            "min_distance_improvement": float(
+                component_min_distance_improvement.get(
+                    component,
+                    _main_search_component_min_distance_improvement(
+                        component,
+                        min_distance_improvement,
+                        strategy_family=strategy_family,
+                    ),
+                )
+            ),
+            "mechanism_policies": audit,
+        }
+        if component == "route_pool_recombination":
+            choice_kwargs.update(
+                {
+                    "rng": rng,
+                    "time_limit_sec": time_limit_sec,
+                    "start_time": start_time,
+                    "instance_path": instance_path,
+                    "seed": seed,
+                }
+            )
+        (
+            candidate,
+            attempts,
+            component_telemetry,
+            candidate_context,
+        ) = _main_search_component_candidate_choice(
+            component,
+            instance,
+            **choice_kwargs,
+        )
+        _record_main_search_component_attempts(audit, component, attempts)
+        _record_main_search_component_repair_counts(
+            audit,
+            component,
+            component_telemetry,
+        )
+        _record_main_search_component_runtime(audit, component, component_start_ns)
+        if candidate is None:
+            _record_main_search_component_skip(
+                audit,
+                component,
+                _main_search_skip_reason(component_telemetry, attempts),
+            )
+            return result
+
+        candidate_objective = candidate_context["objective"]
+        candidate_delta = float(candidate_context["accepted_delta"])
+        phase_best_delta = float(candidate_context["phase_delta"])
+        _record_main_search_component_candidate_delta(
+            audit,
+            component,
+            candidate_delta,
+        )
+        valid, reason = _solution_is_valid(adapter, instance, candidate)
+        if not valid:
+            audit["main_search_strategy_errors"] = (
+                _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
+            )
+            _record_main_search_event(
+                audit,
+                "error",
+                f"{component} produced invalid solution: {reason}",
+            )
+            _record_main_search_component_skip(
+                audit,
+                component,
+                "invalid_component_output",
+            )
+            stop_reason = "invalid_component_output"
+            result["stopped"] = True
+            return result
+
+        current = candidate
+        current_objective = candidate_objective
+        _record_main_search_component_accepted(audit, component)
+        result["current_accepted"] = True
+        result["route_pool_accepted"] = component == "route_pool_recombination"
+        _record_main_search_component_accepted_delta(
+            audit,
+            component,
+            candidate_delta,
+        )
+        if _lexicographic_improves(current_objective, best_objective):
+            best_solution = current
+            best_objective = dict(current_objective)
+            _record_main_search_component_phase_improvement(
+                audit,
+                component,
+                phase_best_delta,
+            )
+            result["phase_improved"] = True
+            if component == "route_pair_swap":
+                result["route_pair_phase_improved"] = True
+            _record_mechanism_acceptance(
+                audit,
+                component,
+                phase_delta=phase_best_delta,
+                recovery_delta=0.0,
+                phase_best=True,
+            )
+        else:
+            _record_main_search_component_recovery(
+                audit,
+                component,
+                candidate_delta,
+            )
+            _record_mechanism_acceptance(
+                audit,
+                component,
+                phase_delta=0.0,
+                recovery_delta=candidate_delta,
+                phase_best=False,
+            )
+        if phase_name:
+            _append_main_search_phase(audit, phase_name)
+        return result
 
     if perturbation_schedule == "before_first_round" and perturb_limit > 0:
         perturbed = _try_main_search_perturbation(
@@ -4092,186 +4450,71 @@ def improve_with_main_search_strategy(
             round_phase_improved = 0
             round_route_pair_phase_improved = False
             round_current_accepted = 0
-            for component in components:
-                if _main_search_time_exhausted(start_time, time_limit_sec):
-                    stop_reason = "time_limit"
+            for phase_name, phase_components in phase_component_order.items():
+                phase_runtime_start_ns = time.monotonic_ns()
+                phase_initial_objective = dict(best_objective)
+                _append_main_search_phase(audit, phase_name)
+                for component in phase_components:
+                    result = run_component(
+                        component,
+                        phase_name=phase_name,
+                        route_pair_phase_improved=round_route_pair_phase_improved,
+                    )
+                    round_route_pair_phase_improved = result[
+                        "route_pair_phase_improved"
+                    ]
+                    round_phase_improved += int(result["phase_improved"])
+                    round_current_accepted += int(result["current_accepted"])
+                    if result["route_pool_accepted"] and bool(
+                        audit.get("main_search_local_cleanup_after_recombination")
+                    ):
+                        for cleanup_component in (
+                            "inter_route_relocate",
+                            "intra_route_2opt",
+                        ):
+                            if cleanup_component not in components:
+                                continue
+                            if cleanup_component in phase_components:
+                                continue
+                            cleanup_result = run_component(
+                                cleanup_component,
+                                phase_name="local_cleanup",
+                                route_pair_phase_improved=round_route_pair_phase_improved,
+                            )
+                            round_phase_improved += int(
+                                cleanup_result["phase_improved"]
+                            )
+                            round_current_accepted += int(
+                                cleanup_result["current_accepted"]
+                            )
+                            if cleanup_result["stopped"]:
+                                break
+                    if result["stopped"]:
+                        break
+                phase_delta = _objective_distance_delta(
+                    phase_initial_objective,
+                    best_objective,
+                )
+                objective_delta = audit.setdefault(
+                    "main_search_objective_delta_by_phase",
+                    {},
+                )
+                objective_delta[phase_name] = round(
+                    float(objective_delta.get(phase_name, 0.0) or 0.0)
+                    + float(phase_delta),
+                    6,
+                )
+                _set_main_search_phase_runtime(
+                    audit,
+                    phase_name,
+                    phase_runtime_start_ns,
+                )
+                if stop_reason in {
+                    "time_limit",
+                    "invalid_component_output",
+                    "invalid_perturbation",
+                }:
                     break
-                algorithm_skip_reason = _main_search_algorithm_body_skip_reason(
-                    audit,
-                    component,
-                    instance,
-                    instance_path=instance_path,
-                )
-                if algorithm_skip_reason:
-                    _record_main_search_component_attempted(audit, component)
-                    _record_main_search_component_skip(
-                        audit,
-                        component,
-                        algorithm_skip_reason,
-                    )
-                    continue
-                if (
-                    component == "bounded_destroy_repair"
-                    and "route_pair_swap" in components
-                    and round_route_pair_phase_improved
-                ):
-                    _record_main_search_component_skip(
-                        audit,
-                        component,
-                        "route_pair_phase_improved",
-                    )
-                    continue
-                if (
-                    component == "bounded_destroy_repair"
-                    and _as_nonnegative_int(
-                        audit.get(
-                            "main_search_component_phase_improvement_counts",
-                            {},
-                        ).get(
-                            "bounded_destroy_repair",
-                            0,
-                        )
-                    )
-                    >= _as_nonnegative_int(
-                        audit.get(
-                            "main_search_bounded_destroy_repair_accept_limit",
-                            _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
-                        )
-                    )
-                ):
-                    _record_main_search_component_skip(
-                        audit,
-                        component,
-                        "bounded_destroy_repair_accept_limit_reached",
-                    )
-                    continue
-                component_start_ns = time.monotonic_ns()
-                _record_main_search_component_attempted(audit, component)
-                if component == "route_pool_recombination":
-                    audit["main_search_route_pool_invocations"] = (
-                        _as_nonnegative_int(
-                            audit.get("main_search_route_pool_invocations")
-                        )
-                        + 1
-                    )
-                choice_kwargs: dict[str, Any] = {
-                    "current_solution": current,
-                    "best_solution": best_solution,
-                    "adapter": adapter,
-                    "current_objective": current_objective,
-                    "best_objective": best_objective,
-                    "top_k": top_k,
-                    "min_distance_improvement": float(
-                        component_min_distance_improvement.get(
-                            component,
-                            _main_search_component_min_distance_improvement(
-                                component,
-                                min_distance_improvement,
-                                strategy_family=strategy_family,
-                            ),
-                        )
-                    ),
-                    "mechanism_policies": audit,
-                }
-                if component == "route_pool_recombination":
-                    choice_kwargs.update(
-                        {
-                            "rng": rng,
-                            "time_limit_sec": time_limit_sec,
-                            "start_time": start_time,
-                            "instance_path": instance_path,
-                            "seed": seed,
-                        }
-                    )
-                (
-                    candidate,
-                    attempts,
-                    component_telemetry,
-                    candidate_context,
-                ) = _main_search_component_candidate_choice(
-                    component,
-                    instance,
-                    **choice_kwargs,
-                )
-                _record_main_search_component_attempts(audit, component, attempts)
-                _record_main_search_component_repair_counts(
-                    audit,
-                    component,
-                    component_telemetry,
-                )
-                _record_main_search_component_runtime(audit, component, component_start_ns)
-                if candidate is None:
-                    _record_main_search_component_skip(
-                        audit,
-                        component,
-                        _main_search_skip_reason(component_telemetry, attempts),
-                    )
-                    continue
-                candidate_objective = candidate_context["objective"]
-                candidate_delta = float(candidate_context["accepted_delta"])
-                phase_best_delta = float(candidate_context["phase_delta"])
-                _record_main_search_component_candidate_delta(
-                    audit,
-                    component,
-                    candidate_delta,
-                )
-                valid, reason = _solution_is_valid(adapter, instance, candidate)
-                if not valid:
-                    audit["main_search_strategy_errors"] = (
-                        _as_nonnegative_int(audit.get("main_search_strategy_errors")) + 1
-                    )
-                    _record_main_search_event(
-                        audit,
-                        "error",
-                        f"{component} produced invalid solution: {reason}",
-                    )
-                    _record_main_search_component_skip(
-                        audit,
-                        component,
-                        "invalid_component_output",
-                    )
-                    stop_reason = "invalid_component_output"
-                    break
-                current = candidate
-                current_objective = candidate_objective
-                _record_main_search_component_accepted(audit, component)
-                round_current_accepted += 1
-                _record_main_search_component_accepted_delta(
-                    audit,
-                    component,
-                    candidate_delta,
-                )
-                if _lexicographic_improves(current_objective, best_objective):
-                    best_solution = current
-                    best_objective = dict(current_objective)
-                    _record_main_search_component_phase_improvement(
-                        audit,
-                        component,
-                        phase_best_delta,
-                    )
-                    round_phase_improved += 1
-                    if component == "route_pair_swap":
-                        round_route_pair_phase_improved = True
-                    _record_mechanism_acceptance(
-                        audit,
-                        component,
-                        phase_delta=phase_best_delta,
-                        recovery_delta=0.0,
-                        phase_best=True,
-                    )
-                else:
-                    _record_main_search_component_recovery(
-                        audit,
-                        component,
-                        candidate_delta,
-                    )
-                    _record_mechanism_acceptance(
-                        audit,
-                        component,
-                        phase_delta=0.0,
-                        recovery_delta=candidate_delta,
-                        phase_best=False,
-                    )
             if stop_reason in {
                 "time_limit",
                 "invalid_component_output",
@@ -4354,7 +4597,7 @@ def improve_with_main_search_strategy(
     audit["perturbation_count"] = audit.get("main_search_perturbation_count", 0)
     audit["acceptance_restart_phase_delta_sum"] = phase_delta
     audit["acceptance_restart_runtime_ms"] = audit.get("main_search_elapsed_ms", 0)
-    return best_solution, audit
+    return best_solution, _finalize_main_search_audit(audit)
 
 
 def _main_search_mechanism_policy_error_count(audit: Mapping[str, Any]) -> int:
@@ -4366,6 +4609,11 @@ def _main_search_mechanism_policy_error_count(audit: Mapping[str, Any]) -> int:
             "acceptance_restart_errors",
         )
     )
+
+
+def _finalize_main_search_audit(audit: dict[str, Any]) -> dict[str, Any]:
+    audit.pop("_main_search_construction_pool_solutions", None)
+    return audit
 
 
 def _apply_acceptance_restart_policy_to_main_search(audit: dict[str, Any]) -> None:
@@ -4541,7 +4789,15 @@ def _effective_baseline_time_fraction(
         and _main_search_strategy_active(main_search_strategy)
     ):
         return fraction
-    return max(fraction, _MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR)
+    budget_policy = str(
+        (main_search_strategy or {}).get(
+            "main_search_baseline_budget_policy",
+            _DEFAULT_MAIN_SEARCH_BASELINE_BUDGET_POLICY,
+        )
+    )
+    if budget_policy == "formal_floor":
+        return max(fraction, _MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR)
+    return fraction
 
 
 def _main_search_component_min_distance_improvement(
@@ -5500,6 +5756,26 @@ def _best_route_pool_recombination(
         return None, 0, telemetry
 
     pool_solutions = [solution]
+    if isinstance(mechanism_policies, Mapping):
+        construction_pool = mechanism_policies.get(
+            "_main_search_construction_pool_solutions"
+        )
+        if isinstance(construction_pool, list):
+            for construction_solution in construction_pool:
+                if not isinstance(construction_solution, CvrpSolution):
+                    continue
+                if any(
+                    construction_solution.routes == existing.routes
+                    for existing in pool_solutions
+                ):
+                    continue
+                valid, _reason = _solution_is_valid(
+                    adapter,
+                    instance,
+                    construction_solution,
+                )
+                if valid:
+                    pool_solutions.append(construction_solution)
     sample_attempts = 0
     sample_rng = rng if rng is not None else random.Random(seed)
     baseline_root = _find_vrp_baseline_root()

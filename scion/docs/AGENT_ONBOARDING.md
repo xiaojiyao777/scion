@@ -71,21 +71,22 @@ not just a shallow component policy. `main_search_plan` can declare
 `problem_adaptation` with strategy family, instance-profile intent, phase
 objective, component roles/order, and evidence targets. It must now also
 declare `algorithm_body` when enabled, making the lifecycle explicit:
-phase sequence, route-pool activation scope, route-pool customer threshold,
-route-pool invocation limit, cleanup coupling, and adaptive component-budget
-policy. The solver audits the computed runtime instance profile and algorithm
-body, uses the adaptation to order components, set bounded destroy/repair
-defaults, and apply per-component thresholds, and uses the algorithm body to
-avoid hidden route-pool behavior on small formal instances unless the plan
-explicitly asks for it. Proposal context, APS tools, target preview, and
-output validation still keep `change_locus` on `solver_design`, while component
-policies remain
+phase sequence, baseline budget policy, route-pool activation scope,
+route-pool customer threshold, route-pool invocation limit, cleanup coupling,
+and adaptive component-budget policy. The solver audits the computed runtime
+instance profile and algorithm body, uses the adaptation to order components,
+set bounded destroy/repair defaults, and apply per-component thresholds, and
+uses the algorithm body to control the actual main-search execution schedule
+and baseline budget instead of treating lifecycle fields as descriptive
+metadata. Proposal context, APS tools, target preview, and output validation
+still keep `change_locus` on `solver_design`, while component policies remain
 implementation hooks or attribution evidence. The latest repair fixed the live
 codegen contract for this path: lifecycle role targets and actual runtime
 evidence targets are accepted, and proposal-only `novelty_signature` metadata
 is no longer allowed in returned plan dictionaries. The current blocker is now
-CVRP main-search execution quality under this explicit algorithm-body boundary:
-screened candidates still need to prove phase-best objective movement.
+CVRP main-search execution quality under this explicit algorithm-body
+boundary: screened candidates still need to prove repeated phase-best
+objective movement.
 
 Important current interpretation:
 
@@ -95,8 +96,9 @@ Important current interpretation:
   declare `problem_adaptation` and `algorithm_body`, not merely force one
   component recipe.
 - `algorithm_body` is now required for enabled `solver_design` plans at the
-  adapter/problem-spec contract. It declares the phase sequence and route-pool
-  lifecycle controls: activation mode (`adaptive`, `always`,
+  adapter/problem-spec contract, and it has runtime effect. It declares the
+  phase sequence, baseline budget policy (`declared` or `formal_floor`), and
+  route-pool lifecycle controls: activation mode (`adaptive`, `always`,
   `medium_large_only`, or `disabled`), minimum customer threshold, max
   invocations, cleanup coupling, and adaptive component-budget policy.
 - `problem_adaptation` carries strategy family, instance-profile intent, phase
@@ -176,10 +178,20 @@ Important current interpretation:
   baseline sampling, complete-solution recombination, local repair,
   acceptance, restart, and runtime tradeoff together.
 - The current engineering slice implements that missing algorithm-body
-  exposure: enabled solver-design codegen must return `algorithm_body`, runtime
-  records `main_search_algorithm_body*` and route-pool lifecycle controls, and
-  adaptive auto-added route-pool is scoped out on small formal `.vrp` instances
-  unless the plan explicitly declares `route_pool_activation="always"`.
+  exposure and fixes the false-freedom gap in its execution semantics: enabled
+  solver-design codegen must return `algorithm_body`; runtime records
+  `main_search_algorithm_body*`, baseline budget policy, phase/component
+  order, effective component top-k, construction-pool size, cleanup coupling,
+  and adaptive-budget controls; and adaptive auto-added route-pool is scoped
+  out on small formal `.vrp` instances unless the plan explicitly declares
+  `route_pool_activation="always"`.
+- The previous algorithm-body lifecycle diagnostic was stopped before
+  completion because it showed that exposure alone was not enough: declared
+  baseline fractions were still clamped by the hidden formal 0.75 floor,
+  phase order did not control execution order, construction solutions were not
+  fed into route-pool recombination, and cleanup/adaptive-budget fields were
+  not sufficiently operational. Those issues are repaired and covered by the
+  latest full test suite.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

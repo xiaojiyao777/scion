@@ -993,6 +993,7 @@ research_surfaces:
         - main_search_construction_methods
         - main_search_baseline_time_fraction
         - main_search_baseline_time_fraction_effective
+        - main_search_baseline_budget_policy
         - main_search_baseline_quality_guard_applied
         - main_search_baseline_params
         - main_search_baseline_params_clamped
@@ -1001,6 +1002,7 @@ research_surfaces:
         - main_search_operator_round_limit
         - main_search_components
         - main_search_component_order
+        - main_search_phase_component_order
         - main_search_component_coverage_status
         - main_search_deep_components_selected
         - main_search_rounds
@@ -1025,6 +1027,9 @@ research_surfaces:
         - main_search_component_reinserted_counts
         - main_search_component_repair_fallback_counts
         - main_search_component_runtime_ms
+        - main_search_component_top_k_effective
+        - main_search_construction_pool_size
+        - main_search_construction_pool_distances
         - main_search_route_pool_source_solutions
         - main_search_route_pool_sample_count
         - main_search_route_pool_size
@@ -1035,6 +1040,8 @@ research_surfaces:
         - main_search_route_pool_activation
         - main_search_route_pool_min_customers
         - main_search_route_pool_max_rounds
+        - main_search_local_cleanup_after_recombination
+        - main_search_adaptive_component_budget
         - main_search_acceptance_min_distance_improvement
         - recovery_only_policy
         - main_search_component_min_distance_improvement
@@ -1112,8 +1119,12 @@ research_surfaces:
         adaptive, always, medium_large_only, or disabled; use
         medium_large_only or adaptive route_pool_min_customers to keep
         complete-solution sampling focused on cases where it has formal
-        evidence instead of spending budget on small ties. evidence_targets
-        should use
+        evidence instead of spending budget on small ties. baseline_budget_policy
+        can be declared or formal_floor; declared makes baseline.time_fraction
+        the actual formal-run budget, while formal_floor deliberately keeps the
+        legacy 0.75 guard. Use declared when the hypothesis depends on shifting
+        budget from baseline into recombination, repair, or cleanup.
+        evidence_targets should use
         actual runtime audit fields such as main_search_component_accepted,
         main_search_component_accepted_delta_sum,
         main_search_component_accepted_positive_counts,
@@ -1130,7 +1141,7 @@ research_surfaces:
         component ordering, bounded destroy/repair acceptance limit defaults,
         and per-component acceptance thresholds. The solver owns construction,
         repo-local baseline invocation, route edits, feasibility checks,
-        strict-improvement acceptance, a formal-run baseline quality guard,
+        strict-improvement acceptance, explicit baseline budget policy,
         component-coverage telemetry, restarts, perturbations, and optional
         registry operators. The perturbation schedule only changes when
         perturbation is applied; after_no_improvement is the legacy default,

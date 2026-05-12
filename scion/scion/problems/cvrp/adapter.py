@@ -99,6 +99,9 @@ _ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES = frozenset(
 _ALLOWED_ROUTE_POOL_ACTIVATIONS = frozenset(
     {"adaptive", "always", "medium_large_only", "disabled"}
 )
+_ALLOWED_MAIN_SEARCH_BASELINE_BUDGET_POLICIES = frozenset(
+    {"declared", "formal_floor"}
+)
 _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
     {
         "scale",
@@ -190,6 +193,7 @@ _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
 _MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS = frozenset(
     {
         "phase_sequence",
+        "baseline_budget_policy",
         "route_pool_activation",
         "route_pool_min_customers",
         "route_pool_max_rounds",
@@ -596,6 +600,10 @@ class CvrpAdapter:
                 "non-empty sequence drawn from 'construction', 'baseline', "
                 "'global_recombination', 'route_structure_repair', "
                 "'local_cleanup', 'perturbation', and 'restart'. "
+                "baseline_budget_policy is one of declared or formal_floor; "
+                "declared means the requested baseline.time_fraction is the "
+                "actual formal-run budget, while formal_floor applies the "
+                "legacy 0.75 floor. "
                 "route_pool_activation is one of adaptive, always, "
                 "medium_large_only, or disabled; route_pool_min_customers is "
                 "an int in [0, 500]; route_pool_max_rounds is an int in "
@@ -1434,6 +1442,18 @@ def _preview_main_search_strategy(
             allow_empty=False,
             issues=issues,
         )
+        baseline_budget_policy = str(
+            algorithm_body.get("baseline_budget_policy", "declared")
+        ).strip()
+        if (
+            baseline_budget_policy
+            and baseline_budget_policy
+            not in _ALLOWED_MAIN_SEARCH_BASELINE_BUDGET_POLICIES
+        ):
+            issues.append(
+                "algorithm_body.baseline_budget_policy returned unknown value "
+                f"{baseline_budget_policy!r}"
+            )
         route_pool_activation = str(
             algorithm_body.get("route_pool_activation", "adaptive")
         ).strip()

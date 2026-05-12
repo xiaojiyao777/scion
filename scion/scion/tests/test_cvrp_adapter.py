@@ -514,7 +514,7 @@ def test_cvrp_main_search_strategy_preview_rejects_bad_algorithm_body(
             "def main_search_plan(instance, time_limit_sec):\n"
             "    return {\n"
             "        'enabled': True,\n"
-            "        'algorithm_body': {'phase_sequence': [], 'route_pool_activation': 'tiny_only', 'route_pool_min_customers': -1, 'route_pool_max_rounds': 99, 'local_cleanup_after_recombination': 'yes'},\n"
+            "        'algorithm_body': {'phase_sequence': [], 'baseline_budget_policy': 'legacy_floor', 'route_pool_activation': 'tiny_only', 'route_pool_min_customers': -1, 'route_pool_max_rounds': 99, 'local_cleanup_after_recombination': 'yes'},\n"
             "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
             "        'improvement': {'enabled_components': ['route_pool_recombination'], 'rounds': 1, 'top_k': 24},\n"
@@ -534,6 +534,7 @@ def test_cvrp_main_search_strategy_preview_rejects_bad_algorithm_body(
 
     assert preview["passed"] is False
     assert "algorithm_body.phase_sequence" in json.dumps(preview["issues"])
+    assert "baseline_budget_policy" in json.dumps(preview["issues"])
     assert "tiny_only" in json.dumps(preview["issues"])
     assert "algorithm_body.route_pool_min_customers" in json.dumps(preview["issues"])
     assert "algorithm_body.route_pool_max_rounds" in json.dumps(preview["issues"])

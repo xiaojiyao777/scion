@@ -39,6 +39,7 @@ def _default_algorithm_body() -> dict[str, Any]:
             "route_structure_repair",
             "local_cleanup",
         ],
+        "baseline_budget_policy": "declared",
         "route_pool_activation": "adaptive",
         "route_pool_min_customers": 80,
         "route_pool_max_rounds": 8,
@@ -936,7 +937,7 @@ def test_alns_vns_policy_audit_records_positive_baseline_phase_delta() -> None:
     }
 
 
-def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(
+def test_active_main_search_declared_baseline_fraction_controls_formal_budget(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1031,9 +1032,27 @@ def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(
     captured = json.loads(capture_path.read_text(encoding="utf-8"))
     assert solution.routes == ((1, 2, 3),)
     assert main_search_strategy["main_search_baseline_time_fraction"] == 0.2
-    assert captured["time_limit"] == 1.5
-    assert audit["main_search_baseline_time_fraction_effective"] == 0.75
-    assert audit["main_search_baseline_quality_guard_applied"] is True
+    assert main_search_strategy["main_search_baseline_budget_policy"] == "declared"
+    assert captured["time_limit"] == 0.4
+    assert audit["main_search_baseline_time_fraction_effective"] == 0.2
+    assert audit["main_search_baseline_quality_guard_applied"] is False
+
+
+def test_active_main_search_formal_floor_budget_policy_clamps_budget() -> None:
+    main_search_strategy = {
+        "main_search_strategy_active": True,
+        "main_search_baseline_budget_policy": "formal_floor",
+    }
+
+    assert (
+        cvrp_solver._effective_baseline_time_fraction(
+            0.2,
+            is_vrp=True,
+            baseline_required=True,
+            main_search_strategy=main_search_strategy,
+        )
+        == 0.75
+    )
 
 
 def test_algorithm_blueprint_surface_declares_runtime_fields_and_default_is_inactive(
@@ -1257,6 +1276,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_instance_profile" in required_fields
     assert "main_search_component_roles" in required_fields
     assert "main_search_component_order" in required_fields
+    assert "main_search_phase_component_order" in required_fields
     assert "main_search_evidence_targets" in required_fields
     assert "main_search_selected_components" in required_fields
     assert "main_search_attempted_components" in required_fields
@@ -1266,6 +1286,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_skip_reasons" in required_fields
     assert "main_search_component_repair_fallback_counts" in required_fields
     assert "main_search_baseline_time_fraction_effective" in required_fields
+    assert "main_search_baseline_budget_policy" in required_fields
     assert "main_search_baseline_quality_guard_applied" in required_fields
     assert "main_search_baseline_params_clamped" in required_fields
     assert "main_search_baseline_param_clamps" in required_fields
@@ -1282,6 +1303,9 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_component_phase_delta_sum" in required_fields
     assert "main_search_component_phase_best_delta" in required_fields
     assert "main_search_component_phase_improvement_counts" in required_fields
+    assert "main_search_component_top_k_effective" in required_fields
+    assert "main_search_construction_pool_size" in required_fields
+    assert "main_search_construction_pool_distances" in required_fields
     assert "main_search_route_pool_source_solutions" in required_fields
     assert "main_search_route_pool_sample_count" in required_fields
     assert "main_search_route_pool_size" in required_fields
@@ -1292,6 +1316,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_route_pool_activation" in required_fields
     assert "main_search_route_pool_min_customers" in required_fields
     assert "main_search_route_pool_max_rounds" in required_fields
+    assert "main_search_local_cleanup_after_recombination" in required_fields
+    assert "main_search_adaptive_component_budget" in required_fields
     assert "main_search_perturbation_schedule" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
@@ -2835,6 +2861,275 @@ def test_main_search_strategy_algorithm_body_allows_explicit_small_route_pool(
     assert runtime["main_search_route_pool_invocations"] == 1
     assert runtime["main_search_component_attempts"]["route_pool_recombination"] == 1
     assert runtime["main_search_component_skip_reasons"]["route_pool_recombination"] == {
+        "no_improving_candidate": 1,
+    }
+
+
+def test_main_search_strategy_phase_sequence_controls_component_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="phase_order",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 2),))
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "algorithm_body": {
+                "phase_sequence": [
+                    "route_structure_repair",
+                    "global_recombination",
+                    "local_cleanup",
+                ],
+                "baseline_budget_policy": "declared",
+                "route_pool_activation": "always",
+                "route_pool_min_customers": 0,
+                "route_pool_max_rounds": 1,
+                "local_cleanup_after_recombination": False,
+                "adaptive_component_budget": True,
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.5, "params": {}},
+            "improvement": {
+                "enabled_components": [
+                    "route_pool_recombination",
+                    "route_pair_swap",
+                    "intra_route_2opt",
+                ],
+                "rounds": 1,
+                "top_k": 128,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+    calls: list[tuple[str, int]] = []
+
+    def no_candidate(
+        component: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[None, int, dict[str, Any]]:
+        del args
+        calls.append((component, int(kwargs["top_k"])))
+        return None, 1, {}
+
+    monkeypatch.setattr(cvrp_solver, "_main_search_component_candidate", no_candidate)
+
+    _, runtime = cvrp_solver.improve_with_main_search_strategy(
+        current,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+    )
+
+    assert [component for component, _top_k in calls] == [
+        "route_pair_swap",
+        "route_pool_recombination",
+        "intra_route_2opt",
+    ]
+    assert runtime["main_search_phase_component_order"] == {
+        "route_structure_repair": ["route_pair_swap"],
+        "global_recombination": ["route_pool_recombination"],
+        "local_cleanup": ["intra_route_2opt"],
+    }
+    assert runtime["main_search_component_top_k_effective"][
+        "route_pool_recombination"
+    ] == 24
+
+
+def test_route_pool_recombination_receives_construction_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="route_pool_uses_construction_pool",
+        capacity=3,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 100, 10, 1),
+            CvrpNode(4, 100, 11, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 3), (2, 4)))
+    construction_solution = CvrpSolution(routes=((1, 2), (3, 4)))
+    seen: dict[str, int] = {}
+
+    def capture_pool(
+        solution: CvrpSolution,
+        pool_solutions: list[CvrpSolution],
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[None, int, dict[str, Any]]:
+        del solution, args, kwargs
+        seen["pool_size"] = len(pool_solutions)
+        return None, 0, {
+            "route_pool_source_solutions": len(pool_solutions),
+            "route_pool_size": 0,
+            "route_pool_branch_calls": 0,
+            "route_pool_recombined_routes": 0,
+        }
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_route_pool_recombination_from_solutions",
+        capture_pool,
+    )
+
+    _candidate, _calls, telemetry = cvrp_solver._best_route_pool_recombination(
+        current,
+        instance,
+        adapter=adapter,
+        current_objective={"fleet_violation": 0.0, "total_distance": 500.0},
+        top_k=16,
+        mechanism_policies={
+            "_main_search_construction_pool_solutions": [construction_solution],
+        },
+    )
+
+    assert seen["pool_size"] == 2
+    assert telemetry["route_pool_source_solutions"] == 2
+
+
+def test_local_cleanup_after_recombination_runs_cleanup_component(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = CvrpInstance(
+        name="cleanup_after_recombination",
+        capacity=3,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 100, 10, 1),
+            CvrpNode(4, 100, 11, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 3), (2, 4)))
+    recombined = CvrpSolution(routes=((1, 2), (3, 4)))
+    audit = cvrp_solver._main_search_strategy_defaults()
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "algorithm_body": {
+                "phase_sequence": ["global_recombination"],
+                "baseline_budget_policy": "declared",
+                "route_pool_activation": "always",
+                "route_pool_min_customers": 0,
+                "route_pool_max_rounds": 1,
+                "local_cleanup_after_recombination": True,
+                "adaptive_component_budget": False,
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.5, "params": {}},
+            "improvement": {
+                "enabled_components": [
+                    "route_pool_recombination",
+                    "intra_route_2opt",
+                ],
+                "rounds": 1,
+                "top_k": 16,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+    calls: list[str] = []
+
+    def fake_choice(
+        component: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[CvrpSolution | None, int, dict[str, Any], dict[str, Any]]:
+        del args, kwargs
+        calls.append(component)
+        if component == "route_pool_recombination":
+            return recombined, 1, {}, {
+                "objective": {"fleet_violation": 0.0, "total_distance": 202.0},
+                "accepted_delta": 198.0,
+                "phase_delta": 198.0,
+            }
+        return None, 1, {}, {}
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_main_search_component_candidate_choice",
+        fake_choice,
+    )
+
+    returned, runtime = cvrp_solver.improve_with_main_search_strategy(
+        current,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+    )
+
+    assert returned.routes == recombined.routes
+    assert calls == ["route_pool_recombination", "intra_route_2opt"]
+    assert runtime["main_search_phase_component_order"] == {
+        "global_recombination": ["route_pool_recombination"],
+    }
+    assert runtime["main_search_component_skip_reasons"]["intra_route_2opt"] == {
         "no_improving_candidate": 1,
     }
 

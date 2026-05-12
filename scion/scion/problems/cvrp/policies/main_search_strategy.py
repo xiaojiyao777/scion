@@ -37,6 +37,7 @@ def main_search_plan(instance, time_limit_sec):
                 "route_structure_repair",
                 "local_cleanup",
             ],
+            "baseline_budget_policy": "declared",
             "route_pool_activation": "adaptive",
             "route_pool_min_customers": 80,
             "route_pool_max_rounds": 8,

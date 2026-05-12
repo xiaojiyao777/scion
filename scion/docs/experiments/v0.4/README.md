@@ -45,6 +45,9 @@ referenced, not copied into development prompts.
 - [Solver-design problem-adaptation Contract repair Sonnet 4R diagnostic, terminated early, 2026-05-12](v0.4-solver-design-problem-adaptation-contract-repair-sonnet-terminated-20260512.md)
 - [Main-search execution-semantics repair Sonnet 4R diagnostic, terminated early, 2026-05-12](v0.4-main-search-execution-semantics-repair-sonnet-terminated-20260512.md)
 - [Route-pool recombination telemetry repair Sonnet 8R diagnostic, terminated early, 2026-05-12](v0.4-route-pool-recombination-telemetry-sonnet-terminated-20260512.md)
+- [Route-pool quality and boundary repair Sonnet 8R diagnostic, terminated early, 2026-05-12](v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md)
+- [Algorithm-body lifecycle Sonnet 8R diagnostic, stopped for repair, 2026-05-12](v0.4-algorithm-body-lifecycle-sonnet-launched-20260512.md)
+- [Algorithm-body execution-semantics repair, 2026-05-12](v0.4-algorithm-body-execution-semantics-repair-20260512.md)
 
 ## Related
 
