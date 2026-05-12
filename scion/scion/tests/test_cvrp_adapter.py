@@ -310,6 +310,7 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
             "    return {\n"
             "        'enabled': True,\n"
             "        'problem_adaptation': {'strategy_family': 'route_structure_repair', 'instance_profile': {'scale': 'small'}, 'phase_objective': 'phase_best_distance', 'component_roles': {'intra_route_2opt': 'support', 'inter_route_relocate': 'support', 'route_pair_swap': 'primary', 'bounded_destroy_repair': 'support', 'route_pool_recombination': 'support'}, 'fallback_order': ['route_pair_swap', 'inter_route_relocate', 'bounded_destroy_repair', 'route_pool_recombination', 'intra_route_2opt'], 'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_objective_delta_by_phase']},\n"
+            "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 2, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},\n"
             "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.1},\n"
             "        'baseline': {'time_fraction': 0.6, 'params': {'destroy_ratio': (0.05, 0.25)}},\n"
             "        'improvement': {'enabled_components': ['intra_route_2opt', 'inter_route_relocate', 'route_pair_swap', 'bounded_destroy_repair', 'route_pool_recombination'], 'rounds': 2, 'top_k': 24},\n"
@@ -370,6 +371,7 @@ def test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_t
             "            'fallback_order': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'],\n"
             "            'evidence_targets': ['main_search_component_accepted', 'main_search_component_phase_improvement_counts', 'main_search_route_pool_sample_count', 'main_search_route_pool_size', 'main_search_route_pool_recombined_routes', 'main_search_perturbation_count', 'main_search_restart_count', 'main_search_objective_delta_by_phase'],\n"
             "        },\n"
+            "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'route_structure_repair', 'local_cleanup', 'perturbation', 'restart'], 'route_pool_activation': 'medium_large_only', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 1, 'local_cleanup_after_recombination': True, 'adaptive_component_budget': True},\n"
             "        'construction': {'methods': ['nearest_neighbor', 'demand_descending'], 'keep_top_k': 2, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.78, 'params': {'destroy_ratio': (0.10, 0.30), 'segment_length': 150, 'max_destroy_customers': 8}},\n"
             "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 5, 'top_k': 20},\n"
@@ -436,6 +438,7 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
             "def main_search_plan(instance, time_limit_sec):\n"
             "    return {\n"
             "        'enabled': True,\n"
+            "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'route_structure_repair'], 'route_pool_activation': 'disabled', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 0, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},\n"
             "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
             "        'improvement': {'enabled_components': ['intra_route_2opt', 'inter_route_relocate'], 'rounds': 5, 'top_k': 24},\n"
@@ -467,6 +470,74 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
         "route_pair_swap",
         "route_pool_recombination",
     ]
+
+
+def test_cvrp_main_search_strategy_preview_rejects_missing_algorithm_body(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+            "        'improvement': {'enabled_components': ['route_pool_recombination'], 'rounds': 1, 'top_k': 24},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "missing required keys ['algorithm_body']" in json.dumps(preview["issues"])
+    assert "missing required algorithm_body section" in json.dumps(preview["issues"])
+
+
+def test_cvrp_main_search_strategy_preview_rejects_bad_algorithm_body(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/main_search_strategy.py",
+        action="modify",
+        code_content=(
+            "def main_search_plan(instance, time_limit_sec):\n"
+            "    return {\n"
+            "        'enabled': True,\n"
+            "        'algorithm_body': {'phase_sequence': [], 'route_pool_activation': 'tiny_only', 'route_pool_min_customers': -1, 'route_pool_max_rounds': 99, 'local_cleanup_after_recombination': 'yes'},\n"
+            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
+            "        'improvement': {'enabled_components': ['route_pool_recombination'], 'rounds': 1, 'top_k': 24},\n"
+            "        'acceptance': {'min_distance_improvement': 0.0},\n"
+            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
+            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
+            "        'post_baseline_operators_enabled': False,\n"
+            "        'operator_round_limit': 0,\n"
+            "    }\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "algorithm_body.phase_sequence" in json.dumps(preview["issues"])
+    assert "tiny_only" in json.dumps(preview["issues"])
+    assert "algorithm_body.route_pool_min_customers" in json.dumps(preview["issues"])
+    assert "algorithm_body.route_pool_max_rounds" in json.dumps(preview["issues"])
+    assert "local_cleanup_after_recombination" in json.dumps(preview["issues"])
 
 
 def test_cvrp_main_search_strategy_preview_rejects_bad_plan(

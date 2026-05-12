@@ -128,6 +128,29 @@ _DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE = "phase_best_distance"
 _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES = frozenset(
     {"primary", "support", "probe", "disabled"}
 )
+_ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES = frozenset(
+    {
+        "construction",
+        "baseline",
+        "global_recombination",
+        "route_structure_repair",
+        "local_cleanup",
+        "perturbation",
+        "restart",
+    }
+)
+_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES = (
+    "construction",
+    "baseline",
+    "global_recombination",
+    "route_structure_repair",
+    "local_cleanup",
+)
+_ALLOWED_ROUTE_POOL_ACTIVATIONS = frozenset(
+    {"adaptive", "always", "medium_large_only", "disabled"}
+)
+_DEFAULT_ROUTE_POOL_ACTIVATION = "adaptive"
+_DEFAULT_ROUTE_POOL_MIN_CUSTOMERS = 80
 _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
     {
         "scale",
@@ -212,6 +235,7 @@ _ALGORITHM_BLUEPRINT_RESTART_REQUIRED_KEYS = frozenset(
 _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
     {
         "enabled",
+        "algorithm_body",
         "construction",
         "baseline",
         "improvement",
@@ -223,7 +247,7 @@ _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
     }
 )
 _MAIN_SEARCH_STRATEGY_ALLOWED_KEYS = frozenset(
-    {*_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS, "problem_adaptation"}
+    {*_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS, "problem_adaptation", "algorithm_body"}
 )
 _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS = frozenset(
     {
@@ -237,6 +261,16 @@ _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS = frozenset(
 )
 _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
     _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS
+)
+_MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS = frozenset(
+    {
+        "phase_sequence",
+        "route_pool_activation",
+        "route_pool_min_customers",
+        "route_pool_max_rounds",
+        "local_cleanup_after_recombination",
+        "adaptive_component_budget",
+    }
 )
 _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
     {"methods", "keep_top_k", "bias"}
@@ -1650,6 +1684,14 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
                 "fallback_order": [],
                 "evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
             },
+            "algorithm_body": {
+                "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+                "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
+                "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+                "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
+                "local_cleanup_after_recombination": False,
+                "adaptive_component_budget": True,
+            },
             "construction": {
                 "methods": [_DEFAULT_CONSTRUCTION_MODE],
                 "keep_top_k": 1,
@@ -1695,6 +1737,15 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
             "evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
             "source": "inactive_default",
         },
+        "main_search_algorithm_body": {
+            "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+            "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
+            "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+            "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
+            "local_cleanup_after_recombination": False,
+            "adaptive_component_budget": True,
+        },
+        "main_search_algorithm_body_source": "inactive_default",
         "main_search_strategy_family": _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
         "main_search_declared_instance_profile": {},
         "main_search_instance_profile": {},
@@ -1760,6 +1811,11 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_route_pool_size": 0,
         "main_search_route_pool_branch_calls": 0,
         "main_search_route_pool_recombined_routes": 0,
+        "main_search_route_pool_auto_added": False,
+        "main_search_route_pool_invocations": 0,
+        "main_search_route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
+        "main_search_route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+        "main_search_route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
         "main_search_acceptance_min_distance_improvement": 0.0,
         "recovery_only_policy": "allow",
         "main_search_component_min_distance_improvement": {},
@@ -1835,6 +1891,11 @@ def _normalize_main_search_strategy_plan(
         field_name="problem_adaptation",
         audit=audit,
     )
+    algorithm_body = _main_search_mapping_section(
+        plan.get("algorithm_body", {}),
+        field_name="algorithm_body",
+        audit=audit,
+    )
     strategy_family = _main_search_string_choice(
         problem_adaptation.get(
             "strategy_family",
@@ -1869,6 +1930,59 @@ def _normalize_main_search_strategy_plan(
         default=list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
         max_items=len(_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS),
         field_name="problem_adaptation.evidence_targets",
+        audit=audit,
+    )
+    algorithm_phase_sequence = _main_search_string_sequence(
+        algorithm_body.get(
+            "phase_sequence",
+            list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+        ),
+        allowed=_ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES,
+        default=list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+        max_items=len(_ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES),
+        field_name="algorithm_body.phase_sequence",
+        audit=audit,
+        allow_empty=False,
+    )
+    route_pool_activation = _main_search_string_choice(
+        algorithm_body.get(
+            "route_pool_activation",
+            _DEFAULT_ROUTE_POOL_ACTIVATION,
+        ),
+        allowed=_ALLOWED_ROUTE_POOL_ACTIVATIONS,
+        default=_DEFAULT_ROUTE_POOL_ACTIVATION,
+        field_name="algorithm_body.route_pool_activation",
+        audit=audit,
+    )
+    route_pool_min_customers = _main_search_int(
+        algorithm_body.get(
+            "route_pool_min_customers",
+            _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+        ),
+        minimum=0,
+        maximum=500,
+        default=_DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+        field_name="algorithm_body.route_pool_min_customers",
+        audit=audit,
+    )
+    route_pool_max_rounds = _main_search_int(
+        algorithm_body.get("route_pool_max_rounds", _MAX_MAIN_SEARCH_ROUNDS),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_ROUNDS,
+        default=_MAX_MAIN_SEARCH_ROUNDS,
+        field_name="algorithm_body.route_pool_max_rounds",
+        audit=audit,
+    )
+    local_cleanup_after_recombination = _main_search_bool(
+        algorithm_body.get("local_cleanup_after_recombination", False),
+        field_name="algorithm_body.local_cleanup_after_recombination",
+        default=False,
+        audit=audit,
+    )
+    adaptive_component_budget = _main_search_bool(
+        algorithm_body.get("adaptive_component_budget", True),
+        field_name="algorithm_body.adaptive_component_budget",
+        default=True,
         audit=audit,
     )
 
@@ -2126,6 +2240,14 @@ def _normalize_main_search_strategy_plan(
             "fallback_order": effective_fallback_order,
             "evidence_targets": evidence_targets,
         },
+        "algorithm_body": {
+            "phase_sequence": algorithm_phase_sequence,
+            "route_pool_activation": route_pool_activation,
+            "route_pool_min_customers": route_pool_min_customers,
+            "route_pool_max_rounds": route_pool_max_rounds,
+            "local_cleanup_after_recombination": local_cleanup_after_recombination,
+            "adaptive_component_budget": adaptive_component_budget,
+        },
         "construction": {
             "methods": construction_methods,
             "keep_top_k": construction_keep_top_k,
@@ -2177,6 +2299,13 @@ def _normalize_main_search_strategy_plan(
         "evidence_targets": evidence_targets,
         "source": adaptation_source,
     }
+    algorithm_body_source = (
+        "declared"
+        if isinstance(plan.get("algorithm_body"), Mapping)
+        else "defaulted_missing_section"
+    )
+    audit["main_search_algorithm_body"] = normalized_plan["algorithm_body"]
+    audit["main_search_algorithm_body_source"] = algorithm_body_source
     audit["main_search_strategy_family"] = strategy_family
     audit["main_search_declared_instance_profile"] = declared_instance_profile
     audit["main_search_instance_profile"] = runtime_instance_profile
@@ -2200,6 +2329,11 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_operator_round_limit"] = operator_round_limit
     audit["main_search_components"] = components
     audit["main_search_component_order"] = components
+    audit["main_search_route_pool_auto_added"] = route_pool_auto_added
+    audit["main_search_route_pool_invocations"] = 0
+    audit["main_search_route_pool_activation"] = route_pool_activation
+    audit["main_search_route_pool_min_customers"] = route_pool_min_customers
+    audit["main_search_route_pool_max_rounds"] = route_pool_max_rounds
     _refresh_main_search_component_coverage_status(audit, components)
     audit["main_search_rounds"] = rounds
     audit["main_search_top_k"] = top_k
@@ -2327,6 +2461,10 @@ def _validate_main_search_plan_keys(
         ),
         "problem_adaptation": (
             _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS,
+            frozenset(),
+        ),
+        "algorithm_body": (
+            _MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS,
             frozenset(),
         ),
     }
@@ -2881,6 +3019,14 @@ def _activate_main_search_strategy_for_mechanism_policies(
     _normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": {
+                "phase_sequence": list(_DEFAULT_MAIN_SEARCH_ALGORITHM_PHASES),
+                "route_pool_activation": _DEFAULT_ROUTE_POOL_ACTIVATION,
+                "route_pool_min_customers": _DEFAULT_ROUTE_POOL_MIN_CUSTOMERS,
+                "route_pool_max_rounds": _MAX_MAIN_SEARCH_ROUNDS,
+                "local_cleanup_after_recombination": False,
+                "adaptive_component_budget": True,
+            },
             "problem_adaptation": {
                 "strategy_family": "route_structure_repair",
                 "instance_profile": {},
@@ -3916,7 +4062,7 @@ def improve_with_main_search_strategy(
     _append_main_search_phase(audit, "improvement_loop")
     if stop_reason != "invalid_perturbation":
         for round_index in range(rounds):
-            if _time_exhausted(start_time, time_limit_sec):
+            if _main_search_time_exhausted(start_time, time_limit_sec):
                 stop_reason = "time_limit"
                 break
             audit["main_search_rounds"] = round_index + 1
@@ -3950,6 +4096,20 @@ def improve_with_main_search_strategy(
                 if _main_search_time_exhausted(start_time, time_limit_sec):
                     stop_reason = "time_limit"
                     break
+                algorithm_skip_reason = _main_search_algorithm_body_skip_reason(
+                    audit,
+                    component,
+                    instance,
+                    instance_path=instance_path,
+                )
+                if algorithm_skip_reason:
+                    _record_main_search_component_attempted(audit, component)
+                    _record_main_search_component_skip(
+                        audit,
+                        component,
+                        algorithm_skip_reason,
+                    )
+                    continue
                 if (
                     component == "bounded_destroy_repair"
                     and "route_pair_swap" in components
@@ -3987,6 +4147,13 @@ def improve_with_main_search_strategy(
                     continue
                 component_start_ns = time.monotonic_ns()
                 _record_main_search_component_attempted(audit, component)
+                if component == "route_pool_recombination":
+                    audit["main_search_route_pool_invocations"] = (
+                        _as_nonnegative_int(
+                            audit.get("main_search_route_pool_invocations")
+                        )
+                        + 1
+                    )
                 choice_kwargs: dict[str, Any] = {
                     "current_solution": current,
                     "best_solution": best_solution,
@@ -5908,6 +6075,49 @@ def _main_search_plan_int(
     if not isinstance(section, Mapping):
         return 0
     return _as_nonnegative_int(section.get(field_name))
+
+
+def _main_search_algorithm_body_skip_reason(
+    audit: Mapping[str, Any],
+    component: str,
+    instance: CvrpInstance,
+    *,
+    instance_path: str | Path | None = None,
+) -> str:
+    if component != "route_pool_recombination":
+        return ""
+    activation = str(
+        audit.get("main_search_route_pool_activation", _DEFAULT_ROUTE_POOL_ACTIVATION)
+    )
+    if activation == "disabled":
+        return "algorithm_body_route_pool_disabled"
+    if (
+        _as_nonnegative_int(audit.get("main_search_route_pool_invocations"))
+        >= _as_nonnegative_int(audit.get("main_search_route_pool_max_rounds"))
+    ):
+        return "algorithm_body_route_pool_round_limit"
+    min_customers = _as_nonnegative_int(
+        audit.get("main_search_route_pool_min_customers")
+    )
+    if min_customers <= 0:
+        return ""
+    customer_count = _as_nonnegative_int(getattr(instance, "customer_count", 0))
+    if activation == "medium_large_only" and customer_count < min_customers:
+        return "algorithm_body_route_pool_scope"
+    if activation == "adaptive":
+        if not bool(audit.get("main_search_route_pool_auto_added")):
+            return ""
+        if not _is_vrp_instance_path(instance_path):
+            return ""
+        if customer_count < min_customers:
+            return "algorithm_body_route_pool_scope"
+    return ""
+
+
+def _is_vrp_instance_path(instance_path: str | Path | None) -> bool:
+    if instance_path is None:
+        return False
+    return Path(instance_path).suffix.lower() == ".vrp"
 
 
 def _perturb_solution(

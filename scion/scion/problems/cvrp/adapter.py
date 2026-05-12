@@ -85,6 +85,20 @@ _ALLOWED_MAIN_SEARCH_PHASE_OBJECTIVES = frozenset(
 _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES = frozenset(
     {"primary", "support", "probe", "disabled"}
 )
+_ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES = frozenset(
+    {
+        "construction",
+        "baseline",
+        "global_recombination",
+        "route_structure_repair",
+        "local_cleanup",
+        "perturbation",
+        "restart",
+    }
+)
+_ALLOWED_ROUTE_POOL_ACTIVATIONS = frozenset(
+    {"adaptive", "always", "medium_large_only", "disabled"}
+)
 _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
     {
         "scale",
@@ -146,6 +160,7 @@ _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
 _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
     {
         "enabled",
+        "algorithm_body",
         "construction",
         "baseline",
         "improvement",
@@ -171,6 +186,16 @@ _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS = frozenset(
 )
 _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
     _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS
+)
+_MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS = frozenset(
+    {
+        "phase_sequence",
+        "route_pool_activation",
+        "route_pool_min_customers",
+        "route_pool_max_rounds",
+        "local_cleanup_after_recombination",
+        "adaptive_component_budget",
+    }
 )
 _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
     {"methods", "keep_top_k", "bias"}
@@ -536,8 +561,8 @@ class CvrpAdapter:
                 "Required function:\n"
                 "def main_search_plan(instance, time_limit_sec):\n"
                 "    return a dict with exactly these top-level keys: enabled, "
-                "problem_adaptation, construction, baseline, improvement, "
-                "acceptance, restart, perturbation, "
+                "problem_adaptation, algorithm_body, construction, baseline, "
+                "improvement, acceptance, restart, perturbation, "
                 "post_baseline_operators_enabled, and "
                 "operator_round_limit. Do not return any other top-level key; "
                 "`novelty_signature` belongs only to the approved hypothesis "
@@ -566,6 +591,17 @@ class CvrpAdapter:
                 "and must be drawn from "
                 + _format_literal_values(sorted(_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS))
                 + ".\n"
+                "- algorithm_body: dict declaring the full algorithm body "
+                "that the research process is studying. phase_sequence is a "
+                "non-empty sequence drawn from 'construction', 'baseline', "
+                "'global_recombination', 'route_structure_repair', "
+                "'local_cleanup', 'perturbation', and 'restart'. "
+                "route_pool_activation is one of adaptive, always, "
+                "medium_large_only, or disabled; route_pool_min_customers is "
+                "an int in [0, 500]; route_pool_max_rounds is an int in "
+                "[0, 8]; local_cleanup_after_recombination and "
+                "adaptive_component_budget are bools. Do not rely on hidden "
+                "defaults for the lifecycle in enabled solver_design plans.\n"
                 "- construction: dict with methods, keep_top_k, and bias. "
                 "methods is drawn from 'nearest_neighbor', "
                 "'nearest_neighbor_demand_bias', 'demand_descending', and "
@@ -1370,6 +1406,84 @@ def _preview_main_search_strategy(
                     "so the whole CVRP problem object, strategy family, "
                     "instance profile, component roles, fallback order, and "
                     "evidence targets are explicit."
+                ),
+            }
+        )
+    algorithm_body = (
+        _preview_mapping_section(
+            "algorithm_body",
+            plan.get("algorithm_body", {}),
+            issues,
+        )
+        if "algorithm_body" in plan
+        else None
+    )
+    if algorithm_body is not None:
+        _preview_section_keys(
+            "algorithm_body",
+            algorithm_body,
+            allowed=_MAIN_SEARCH_ALGORITHM_BODY_ALLOWED_KEYS,
+            required=frozenset(),
+            require_missing=False,
+            issues=issues,
+        )
+        _check_sequence_literals(
+            "algorithm_body.phase_sequence",
+            algorithm_body.get("phase_sequence", []),
+            allowed=_ALLOWED_MAIN_SEARCH_ALGORITHM_PHASES,
+            allow_empty=False,
+            issues=issues,
+        )
+        route_pool_activation = str(
+            algorithm_body.get("route_pool_activation", "adaptive")
+        ).strip()
+        if route_pool_activation and route_pool_activation not in _ALLOWED_ROUTE_POOL_ACTIVATIONS:
+            issues.append(
+                "algorithm_body.route_pool_activation returned unknown value "
+                f"{route_pool_activation!r}"
+            )
+        _check_number(
+            "algorithm_body.route_pool_min_customers",
+            algorithm_body.get("route_pool_min_customers", 80),
+            minimum=0,
+            maximum=500,
+            integral=True,
+            issues=issues,
+        )
+        _check_number(
+            "algorithm_body.route_pool_max_rounds",
+            algorithm_body.get("route_pool_max_rounds", 8),
+            minimum=0,
+            maximum=8,
+            integral=True,
+            issues=issues,
+        )
+        for bool_key in (
+            "local_cleanup_after_recombination",
+            "adaptive_component_budget",
+        ):
+            if bool_key in algorithm_body and not isinstance(
+                algorithm_body.get(bool_key),
+                bool,
+            ):
+                issues.append(
+                    f"algorithm_body.{bool_key} returned non-bool value "
+                    f"{algorithm_body.get(bool_key)!r}"
+                )
+    if enabled and "algorithm_body" not in plan:
+        issues.append(
+            "enabled main_search_plan missing required algorithm_body section"
+        )
+        checks.append(
+            {
+                "name": "main_search_algorithm_body_declared",
+                "passed": False,
+                "severity": "contract_error",
+                "guidance": (
+                    "solver_design proposals should declare algorithm_body so "
+                    "the full CVRP lifecycle is explicit: phase sequence, "
+                    "route-pool activation scope, route-pool invocation limit, "
+                    "cleanup coupling, and adaptive component budget policy."
                 ),
             }
         )

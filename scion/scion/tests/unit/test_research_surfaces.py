@@ -1039,10 +1039,11 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
         action="modify",
         code_content=(
             "def main_search_plan(instance, time_limit_sec):\n"
-            "    return {\n"
-            "        'enabled': False,\n"
-            "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
-            "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
+                "    return {\n"
+                "        'enabled': False,\n"
+                "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},\n"
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
             "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
             "        'acceptance': {'min_distance_improvement': 0.0},\n"
@@ -2202,6 +2203,7 @@ def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.2},",
                 "        'baseline': {'time_fraction': 0.6, 'params': {'destroy_ratio': (0.05, 0.25), 'use_vns': False}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 3, 'top_k': 40},",
@@ -2265,6 +2267,7 @@ def test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_threshold
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'problem_adaptation': {",
                 "            'strategy_family': 'destroy_repair_recovery',",
                 "            'instance_profile': {'scale': 'small', 'route_pressure': 'medium'},",
@@ -2338,6 +2341,7 @@ def test_cvrp_main_search_strategy_clamps_aggressive_baseline_params(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {'destroy_ratio': (0.05, 0.50), 'segment_length': 400, 'reaction_factor': 0.05, 'vns_max_no_improve': 10000, 'max_destroy_customers': 200}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 5, 'top_k': 64},",
@@ -2398,6 +2402,7 @@ def test_invalid_cvrp_main_search_strategy_counts_strategy_errors(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['bad_mode'], 'keep_top_k': 0, 'bias': 2.0},",
                 "        'baseline': {'time_fraction': 2.0, 'params': {'unknown': 1}},",
                 "        'improvement': {'enabled_components': ['unknown_move'], 'rounds': 0, 'top_k': 0},",
@@ -2719,6 +2724,10 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "def main_search_plan" in solver_design_prompt_text
     assert "Solver lifecycle:" in solver_design_prompt_text
     assert "Do not return any other top-level key" in solver_design_prompt_text
+    assert "algorithm_body" in solver_design_prompt_text
+    assert "Do not rely on hidden defaults for the lifecycle" in (
+        solver_design_prompt_text
+    )
     assert "Never include `novelty_signature` in main_search_plan" in (
         solver_design_prompt_text
     )

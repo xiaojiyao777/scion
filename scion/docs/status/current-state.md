@@ -17,7 +17,11 @@ repair produced the first formal positive signal from the top-level
 `main_search_route_pool_recombined_routes=12`, and
 `main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
 The candidate still abandoned on screening win rate and median movement, so
-this is short-validation evidence, not readiness for long validation.
+this is short-validation evidence, not readiness for long validation. The
+current engineering slice now makes the missing CVRP algorithm body explicit:
+enabled `solver_design` plans must declare `algorithm_body`, and runtime audits
+the declared lifecycle plus route-pool activation, scope, and invocation
+controls.
 
 Current branch: `v0.4-dev`
 
@@ -84,6 +88,19 @@ Current interpretation:
   baseline sampling, complete-solution recombination, local repair,
   acceptance, restart, and runtime tradeoff together instead of tuning another
   singleton hook.
+- That exposure is now implemented at the contract/runtime boundary. Active
+  `solver_design` proposals must return `algorithm_body`; adapter preview and
+  ContractGate fail closed when it is missing; runtime records
+  `main_search_algorithm_body`, `main_search_algorithm_body_source`,
+  `main_search_route_pool_auto_added`, `main_search_route_pool_invocations`,
+  `main_search_route_pool_activation`, `main_search_route_pool_min_customers`,
+  and `main_search_route_pool_max_rounds`.
+- The execution path now uses `algorithm_body` instead of hidden route-pool
+  behavior. Auto-added route-pool recombination remains available for old
+  route-pair plus bounded-destroy/repair plans, but `adaptive` activation skips
+  it on small formal `.vrp` instances below the declared customer threshold;
+  explicit `always`, `medium_large_only`, or `disabled` activation lets Scion
+  study route-pool scope as part of the full solver body.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -205,6 +222,9 @@ CVRP currently exposes these declared surfaces:
 the singleton execution file `policies/main_search_strategy.py` and can
 coordinate:
 
+- explicit `algorithm_body` lifecycle control: phase sequence, route-pool
+  activation scope, route-pool min-customer threshold, route-pool max
+  invocations, cleanup coupling, and adaptive component budgeting;
 - bounded construction ensemble;
 - repo-local baseline budget and sanitized baseline params;
 - package-owned improvement components: `intra_route_2opt`,
@@ -215,16 +235,17 @@ coordinate:
 - optional registry-operator round limit.
 
 Current limitation: the top-level boundary, active-boundary tool guidance,
-Contract-preview budget repair, non-empty semantic identity, and
-problem-adaptation codegen contract are live-validated. The bounded
-destroy/repair execution repair is complete but insufficient on its own.
-The route-pool quality repair now gives `solver_design` a package-owned
-whole-solution component that can produce formal phase-best movement:
-the latest short screening recorded 12 recombined routes and 5.0 route-pool
-phase-best delta. The signal is still sparse, runtime-expensive, and below the
-promotion threshold. Do not run long CVRP validation until `solver_design`
-produces repeated screening wins or median movement from the whole solver
-lifecycle, not only isolated route-pool successes.
+Contract-preview budget repair, non-empty semantic identity,
+problem-adaptation codegen contract, and algorithm-body contract are
+code-validated. The bounded destroy/repair execution repair is complete but
+insufficient on its own. The route-pool quality repair now gives
+`solver_design` a package-owned whole-solution component that can produce
+formal phase-best movement: the latest short screening recorded 12 recombined
+routes and 5.0 route-pool phase-best delta. The signal is still sparse,
+runtime-expensive, and below the promotion threshold. Do not run long CVRP
+validation until `solver_design` produces repeated screening wins or median
+movement from the whole solver lifecycle, not only isolated route-pool
+successes.
 
 ## Latest Experiment
 
@@ -278,6 +299,34 @@ restart as one solver design.
 
 Detailed analysis:
 [`v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md`](../experiments/v0.4/v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md)
+
+## Running Experiment
+
+A new short free-surface diagnostic is running from the explicit
+algorithm-body contract:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-algorithm-body-lifecycle-sonnet-8r-20260512T145345Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+time_limit_sec=60
+agentic_session_timeout_sec=1200
+force_surface=none
+analysis_stub=scion/docs/experiments/v0.4/v0.4-algorithm-body-lifecycle-sonnet-launched-20260512.md
+supersedes=/home/clawd/research/scion-experiments/v04-algorithm-body-lifecycle-sonnet-8r-20260512T143836Z
+```
+
+The first analysis question is whether generated `solver_design` code now
+declares and uses `algorithm_body`; solver quality remains a secondary short
+diagnostic signal until that contract is visibly exercised. Initial round-1
+sanity check is positive on the active run: the first completed code session
+passed schema and Contract preview, targeted
+`policies/main_search_strategy.py`, generated `algorithm_body`, and
+verification/runtime metrics recorded `main_search_strategy_errors=0`,
+`main_search_algorithm_body_source="declared"` with route-pool scope skips
+following the declared body.
 
 Previous analyzed run:
 

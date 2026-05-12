@@ -9,8 +9,8 @@ Candidate proposals should treat this as a solver-level lifecycle plan, not a
 place to force one component recipe. If enabled, the plan should explain how
 construction, baseline budget, package-owned improvement components,
 acceptance, restart/perturbation, and caps adapt to the instance profile, and
-which phase-best objective and whole-solver runtime evidence should move. The
-checked-in default remains inactive.
+which explicit algorithm_body lifecycle, phase-best objective, and whole-solver
+runtime evidence should move. The checked-in default remains inactive.
 """
 from __future__ import annotations
 
@@ -28,6 +28,20 @@ def main_search_plan(instance, time_limit_sec):
                 "main_search_component_phase_delta_sum",
                 "main_search_objective_delta_by_phase",
             ],
+        },
+        "algorithm_body": {
+            "phase_sequence": [
+                "construction",
+                "baseline",
+                "global_recombination",
+                "route_structure_repair",
+                "local_cleanup",
+            ],
+            "route_pool_activation": "adaptive",
+            "route_pool_min_customers": 80,
+            "route_pool_max_rounds": 8,
+            "local_cleanup_after_recombination": False,
+            "adaptive_component_budget": True,
         },
         "construction": {
             "methods": ["nearest_neighbor"],

@@ -230,6 +230,36 @@ algorithm body: construction, repo-local baseline sampling, complete-solution
 pooling, route-set recombination, local repair, acceptance, restart, and
 runtime tradeoff as a single problem-owned design.
 
+## Implemented Algorithm-Body Exposure Repair
+
+The next repair makes that algorithm body an explicit part of the
+`solver_design` contract instead of an implicit solver default:
+
+- enabled `main_search_plan()` proposals must return `algorithm_body` at the
+  adapter/problem-spec contract;
+- `algorithm_body.phase_sequence` declares which lifecycle phases the design is
+  studying: construction, baseline, global recombination, route-structure
+  repair, local cleanup, perturbation, and restart;
+- route-pool behavior is now lifecycle-controlled through
+  `route_pool_activation`, `route_pool_min_customers`, and
+  `route_pool_max_rounds`, plus explicit cleanup/adaptive-budget booleans;
+- runtime audits record `main_search_algorithm_body`,
+  `main_search_algorithm_body_source`, `main_search_route_pool_auto_added`,
+  `main_search_route_pool_invocations`, `main_search_route_pool_activation`,
+  `main_search_route_pool_min_customers`, and
+  `main_search_route_pool_max_rounds`;
+- the execution path uses the declared body: adaptive auto-added
+  `route_pool_recombination` is skipped on small formal `.vrp` cases below the
+  declared customer threshold, while explicit `always`, `medium_large_only`, or
+  `disabled` activation remains available for hypotheses that want to study
+  that scope directly.
+
+This repair addresses the latest direction correction: Scion should study the
+whole CVRP algorithm body, not merely discover which component hook is exposed.
+It is code-validated but still needs a short free-surface experiment to test
+whether the new contract changes generated solver-design behavior and runtime
+quality.
+
 ## Anti-Pattern
 
 Do not keep expanding the design space by repeatedly adding or forcing tiny
@@ -246,16 +276,15 @@ move a mature baseline.
 
 ## Remaining Slice
 
-The next engineering slice remains solver-lifecycle quality, not more
-boundary, identity, or prompt exposure control:
+The next slice is experimental validation and solver-lifecycle quality, not
+more boundary, identity, or prompt exposure control:
 
 1. Keep `solver_design` as the top-level research target. Do not force a
    singleton component policy unless validating a new adapter or contract
    boundary.
-2. Expose the CVRP algorithm body/lifecycle more completely to Scion so it can
-   reason across construction, baseline sampling, route-pool recombination,
-   local repair, acceptance, restart, and runtime tradeoff rather than tuning
-   another isolated mechanism hook.
+2. Verify that generated `solver_design` candidates now declare and use
+   `algorithm_body` rather than relying on hidden defaults or forcing one
+   component.
 3. Use route-pool evidence as one feedback channel inside the lifecycle:
    `sample_count`, recombined routes, accepted route-pool moves, and
    route-pool phase-best delta should explain when complete-solution
@@ -263,8 +292,8 @@ boundary, identity, or prompt exposure control:
 4. Make runtime feedback steer APS away from simply increasing repo-local
    baseline time fraction when that creates isolated wins with runtime
    regression and no median movement.
-5. Run another short free-surface diagnostic only after the next patch changes
-   the whole solver-design lifecycle, not just route-pool constants.
+5. Run another short free-surface diagnostic from this explicit algorithm-body
+   contract before considering longer CVRP validation.
 
 ## Current CVRP Implication
 
@@ -273,5 +302,5 @@ diagnostics for now. The former has been exhausted; the latter would continue
 the same incremental-hook pattern. The active-boundary control loop now keeps
 CVRP on the problem-object `solver_design` boundary after both pre-screening
 and screening failures. Route-pool quality now has formal positive signal, so
-the next useful work is to make the whole boundary produce
-real solver movement.
+the next useful work is to verify whether explicit algorithm-body control makes
+the whole boundary produce real solver movement.

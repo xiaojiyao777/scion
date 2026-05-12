@@ -845,9 +845,11 @@ research_surfaces:
         existing main_search_plan execution hook and takes over the package's
         main algorithm lifecycle when enabled: problem-object adaptation,
         instance-profile intent, solver strategy family, bounded construction
-        ensemble, repo-local baseline time budget and sanitized baseline params,
-        package-owned improvement loop components including route-pair swap and
-        bounded destroy/repair, component roles/order, bounded per-component
+        ensemble, explicit algorithm_body phase sequencing, repo-local
+        baseline time budget and sanitized baseline params, package-owned
+        improvement loop components including route-pair swap, bounded
+        destroy/repair, and route-pool recombination, component roles/order,
+        route-pool activation scope, bounded per-component
         acceptance/restart/perturbation knobs, and optional post-baseline
         registry-operator scheduling. The solver audits component coverage with
         selected, attempted, accepted, skipped/skip-reason, objective-delta, and
@@ -873,12 +875,17 @@ research_surfaces:
           - time_limit_sec
       return_contract: >-
         main_search_plan returns a bounded dict with enabled bool,
-        problem_adaptation dict, construction dict, baseline dict, improvement
-        dict, acceptance dict, restart dict, perturbation dict,
+        problem_adaptation dict, algorithm_body dict, construction dict,
+        baseline dict, improvement dict, acceptance dict, restart dict,
+        perturbation dict,
         post_baseline_operators_enabled bool, and operator_round_limit int. The
         problem_adaptation dict declares the strategy family, instance-profile
         intent, phase objective, component roles, fallback order, and expected
-        runtime evidence targets. The acceptance dict may include per-component
+        runtime evidence targets. The algorithm_body dict declares the full
+        solver lifecycle shape: phase_sequence, route_pool_activation,
+        route_pool_min_customers, route_pool_max_rounds,
+        local_cleanup_after_recombination, and adaptive_component_budget. The
+        acceptance dict may include per-component
         minimum distance-improvement thresholds, recovery_only_policy, and a
         bounded_destroy_repair_accept_limit. The perturbation dict may include
         schedule set to after_no_improvement, before_first_round, or
@@ -891,6 +898,7 @@ research_surfaces:
           allowed_keys:
             - enabled
             - problem_adaptation
+            - algorithm_body
             - construction
             - baseline
             - improvement
@@ -902,6 +910,7 @@ research_surfaces:
           required_keys:
             - enabled
             - problem_adaptation
+            - algorithm_body
             - construction
             - baseline
             - improvement
@@ -955,6 +964,8 @@ research_surfaces:
         perturbation_strength: [1, 8]
         max_perturbations: [0, 4]
         operator_round_limit: [0, 20]
+        route_pool_min_customers: [0, 500]
+        route_pool_max_rounds: [0, 8]
       complexity_scale_terms:
         - time_limit_sec
         - route_count
@@ -969,6 +980,8 @@ research_surfaces:
         - main_search_plan
         - main_search_phases
         - main_search_problem_adaptation
+        - main_search_algorithm_body
+        - main_search_algorithm_body_source
         - main_search_strategy_family
         - main_search_declared_instance_profile
         - main_search_instance_profile
@@ -1017,6 +1030,11 @@ research_surfaces:
         - main_search_route_pool_size
         - main_search_route_pool_branch_calls
         - main_search_route_pool_recombined_routes
+        - main_search_route_pool_auto_added
+        - main_search_route_pool_invocations
+        - main_search_route_pool_activation
+        - main_search_route_pool_min_customers
+        - main_search_route_pool_max_rounds
         - main_search_acceptance_min_distance_improvement
         - recovery_only_policy
         - main_search_component_min_distance_improvement
@@ -1053,10 +1071,12 @@ research_surfaces:
       hypothesis_guidance: >-
         State how the whole CVRP solver design should improve problem-level
         evidence: which strategy_family and instance-profile intent apply,
-        which construction ensemble, repo-local baseline params/budget,
+        which algorithm_body phase sequence and route-pool activation scope
+        apply, which construction ensemble, repo-local baseline params/budget,
         package-owned improvement components, component roles/order, acceptance
-        threshold or per-component threshold, restart or perturbation knobs, and
-        optional registry-operator setting should work together. Use this
+        threshold or per-component threshold, restart or perturbation knobs,
+        route-pool invocation limits, and optional registry-operator setting
+        should work together. Use this
         surface when the hypothesis needs coordinated lifecycle design rather
         than a standalone component knob. Treat component policies as
         implementation hooks, not research goals. Predict the
@@ -1072,8 +1092,9 @@ research_surfaces:
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
         the declared bounded plan dict: enabled, problem_adaptation,
-        construction, baseline, improvement, acceptance, restart, perturbation,
-        post_baseline_operators_enabled, and operator_round_limit.
+        algorithm_body, construction, baseline, improvement, acceptance,
+        restart, perturbation, post_baseline_operators_enabled, and
+        operator_round_limit.
         novelty_signature is proposal-only hypothesis identity; never include
         novelty_signature in the dict returned by main_search_plan. Include
         problem_adaptation with strategy_family, instance_profile intent,
@@ -1084,7 +1105,15 @@ research_surfaces:
         strict_improvement_acceptance, restart_stagnation,
         bounded_perturbation, pre_improvement_perturbation, and the
         package-owned improvement components; fallback_order orders only
-        package-owned improvement components. evidence_targets should use
+        package-owned improvement components. Include algorithm_body when the
+        hypothesis changes the full solver lifecycle. phase_sequence can use
+        construction, baseline, global_recombination, route_structure_repair,
+        local_cleanup, perturbation, and restart. route_pool_activation can be
+        adaptive, always, medium_large_only, or disabled; use
+        medium_large_only or adaptive route_pool_min_customers to keep
+        complete-solution sampling focused on cases where it has formal
+        evidence instead of spending budget on small ties. evidence_targets
+        should use
         actual runtime audit fields such as main_search_component_accepted,
         main_search_component_accepted_delta_sum,
         main_search_component_accepted_positive_counts,
@@ -1135,9 +1164,10 @@ research_surfaces:
     prompt_hint: >-
       Govern the whole CVRP solver lifecycle through a bounded plan;
       registry post-baseline operators are off by default. Choose
-      problem_adaptation, components, component roles/order, baseline budget,
-      restart/perturbation, and caps as one solver-level hypothesis; expose the
-      intended phase/objective movement in the novelty signature. When using a
+      problem_adaptation, algorithm_body, components, component roles/order,
+      baseline budget, route-pool scope, restart/perturbation, and caps as one
+      solver-level hypothesis; expose the intended phase/objective movement in
+      the novelty signature. When using a
       perturbation-first idea, implement it through perturbation.schedule rather
       than only describing it in prose.
     required_functions:

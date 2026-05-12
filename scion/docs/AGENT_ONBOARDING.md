@@ -69,24 +69,36 @@ declares `solver_design` as the top-level CVRP research boundary. The current
 implementation now makes that boundary a problem-object adaptation contract,
 not just a shallow component policy. `main_search_plan` can declare
 `problem_adaptation` with strategy family, instance-profile intent, phase
-objective, component roles/order, and evidence targets; the solver audits the
-computed runtime instance profile and uses the adaptation to order components,
-set bounded destroy/repair defaults, and apply per-component thresholds.
-Proposal context, APS tools, target preview, and output validation still keep
-`change_locus` on `solver_design`, while component policies remain
+objective, component roles/order, and evidence targets. It must now also
+declare `algorithm_body` when enabled, making the lifecycle explicit:
+phase sequence, route-pool activation scope, route-pool customer threshold,
+route-pool invocation limit, cleanup coupling, and adaptive component-budget
+policy. The solver audits the computed runtime instance profile and algorithm
+body, uses the adaptation to order components, set bounded destroy/repair
+defaults, and apply per-component thresholds, and uses the algorithm body to
+avoid hidden route-pool behavior on small formal instances unless the plan
+explicitly asks for it. Proposal context, APS tools, target preview, and
+output validation still keep `change_locus` on `solver_design`, while component
+policies remain
 implementation hooks or attribution evidence. The latest repair fixed the live
 codegen contract for this path: lifecycle role targets and actual runtime
 evidence targets are accepted, and proposal-only `novelty_signature` metadata
 is no longer allowed in returned plan dictionaries. The current blocker is now
-CVRP main-search execution quality, not missing exposure of the whole problem
-object: screened candidates still need to prove phase-best objective movement.
+CVRP main-search execution quality under this explicit algorithm-body boundary:
+screened candidates still need to prove phase-best objective movement.
 
 Important current interpretation:
 
 - `solver_design` is the top-level CVRP research object. It is backed by the
   existing `policies/main_search_strategy.py` execution hook, but the required
   research object is the whole CVRP solver lifecycle. A valid candidate should
-  declare `problem_adaptation`, not merely force one component recipe.
+  declare `problem_adaptation` and `algorithm_body`, not merely force one
+  component recipe.
+- `algorithm_body` is now required for enabled `solver_design` plans at the
+  adapter/problem-spec contract. It declares the phase sequence and route-pool
+  lifecycle controls: activation mode (`adaptive`, `always`,
+  `medium_large_only`, or `disabled`), minimum customer threshold, max
+  invocations, cleanup coupling, and adaptive component-budget policy.
 - `problem_adaptation` carries strategy family, instance-profile intent, phase
   objective, component roles/order, and evidence targets. Runtime now records
   `main_search_problem_adaptation`, `main_search_instance_profile`,
@@ -163,6 +175,11 @@ Important current interpretation:
   the whole CVRP algorithm body so Scion can reason about construction,
   baseline sampling, complete-solution recombination, local repair,
   acceptance, restart, and runtime tradeoff together.
+- The current engineering slice implements that missing algorithm-body
+  exposure: enabled solver-design codegen must return `algorithm_body`, runtime
+  records `main_search_algorithm_body*` and route-pool lifecycle controls, and
+  adaptive auto-added route-pool is scoped out on small formal `.vrp` instances
+  unless the plan explicitly declares `route_pool_activation="always"`.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

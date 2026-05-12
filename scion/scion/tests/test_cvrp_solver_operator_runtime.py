@@ -30,6 +30,23 @@ class _Spec:
     pass
 
 
+def _default_algorithm_body() -> dict[str, Any]:
+    return {
+        "phase_sequence": [
+            "construction",
+            "baseline",
+            "global_recombination",
+            "route_structure_repair",
+            "local_cleanup",
+        ],
+        "route_pool_activation": "adaptive",
+        "route_pool_min_customers": 80,
+        "route_pool_max_rounds": 8,
+        "local_cleanup_after_recombination": False,
+        "adaptive_component_budget": True,
+    }
+
+
 def _runner() -> LocalSubprocessRunner:
     return LocalSubprocessRunner(ResourceLimits(timeout_sec=10, memory_mb=1024))
 
@@ -959,6 +976,7 @@ def test_active_main_search_formal_baseline_fraction_guard_clamps_budget(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.2, 'params': {}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
@@ -1233,6 +1251,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_strategy_loaded" in required_fields
     assert "main_search_strategy_errors" in required_fields
     assert "main_search_problem_adaptation" in required_fields
+    assert "main_search_algorithm_body" in required_fields
+    assert "main_search_algorithm_body_source" in required_fields
     assert "main_search_strategy_family" in required_fields
     assert "main_search_instance_profile" in required_fields
     assert "main_search_component_roles" in required_fields
@@ -1267,6 +1287,11 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert "main_search_route_pool_size" in required_fields
     assert "main_search_route_pool_branch_calls" in required_fields
     assert "main_search_route_pool_recombined_routes" in required_fields
+    assert "main_search_route_pool_auto_added" in required_fields
+    assert "main_search_route_pool_invocations" in required_fields
+    assert "main_search_route_pool_activation" in required_fields
+    assert "main_search_route_pool_min_customers" in required_fields
+    assert "main_search_route_pool_max_rounds" in required_fields
     assert "main_search_perturbation_schedule" in required_fields
     assert set(required_fields).issubset(runtime)
     assert runtime["main_search_strategy_loaded"] is True
@@ -1274,6 +1299,12 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_plan"]["enabled"] is False
     assert runtime["main_search_strategy_family"] == "balanced_lifecycle"
     assert runtime["main_search_problem_adaptation_source"] == "declared"
+    assert runtime["main_search_algorithm_body_source"] == "declared"
+    assert runtime["main_search_algorithm_body"]["route_pool_activation"] == "adaptive"
+    assert runtime["main_search_route_pool_auto_added"] is False
+    assert runtime["main_search_route_pool_invocations"] == 0
+    assert runtime["main_search_route_pool_min_customers"] == 80
+    assert runtime["main_search_route_pool_max_rounds"] == 8
     assert runtime["main_search_phases"] == ["inactive"]
     assert runtime["main_search_component_coverage_status"]["status"] == "inactive"
     assert runtime["main_search_deep_components_selected"] == []
@@ -1305,6 +1336,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor', 'sequential'], 'keep_top_k': 2, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {'destroy_ratio': (0.05, 0.20), 'use_vns': False, 'max_destroy_customers': 16}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 3, 'top_k': 64},",
@@ -1475,6 +1507,7 @@ def test_main_search_strategy_records_clamp_details_in_selected_surface_runtime(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {'destroy_ratio': (0.05, 0.50), 'segment_length': 400, 'reaction_factor': 0.05, 'vns_max_no_improve': 10000, 'max_destroy_customers': 200}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair', 'intra_route_2opt'], 'rounds': 3, 'top_k': 64},",
@@ -1539,6 +1572,7 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
@@ -1617,6 +1651,7 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 1, 'top_k': 1},",
@@ -1693,6 +1728,7 @@ def test_main_search_strategy_returns_best_even_after_worse_perturbation(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 2, 'top_k': 8},",
@@ -1752,6 +1788,7 @@ def test_main_search_strategy_can_perturb_before_first_round(
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "problem_adaptation": {
                 "component_roles": {"route_pool_recombination": "disabled"},
             },
@@ -1873,6 +1910,7 @@ def test_main_search_strategy_does_not_gate_bdr_after_non_phase_route_pair_accep
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -2034,6 +2072,7 @@ def test_main_search_strategy_phase_best_probe_prefers_true_improvement_over_rec
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -2165,6 +2204,7 @@ def test_bounded_destroy_repair_recovery_does_not_consume_phase_accept_limit(
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -2531,6 +2571,7 @@ def test_main_search_strategy_auto_adds_route_pool_for_old_deep_pair() -> None:
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "problem_adaptation": {
                 "strategy_family": "baseline_intensification",
                 "instance_profile": {},
@@ -2580,10 +2621,222 @@ def test_main_search_strategy_auto_adds_route_pool_for_old_deep_pair() -> None:
         "route_pair_swap",
         "bounded_destroy_repair",
     ]
+    assert audit["main_search_route_pool_auto_added"] is True
+    assert audit["main_search_route_pool_activation"] == "adaptive"
+    assert audit["main_search_route_pool_min_customers"] == 80
+    assert audit["main_search_route_pool_max_rounds"] == 8
+    assert audit["main_search_algorithm_body_source"] == "declared"
     assert (
         audit["main_search_component_roles"]["route_pool_recombination"]
         == "support"
     )
+
+
+def test_main_search_strategy_algorithm_body_controls_route_pool_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    instance = CvrpInstance(
+        name="algorithm_body_scope",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 2),))
+    audit = cvrp_solver._main_search_strategy_defaults()
+
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "algorithm_body": {
+                "phase_sequence": [
+                    "construction",
+                    "baseline",
+                    "global_recombination",
+                    "route_structure_repair",
+                    "local_cleanup",
+                ],
+                "route_pool_activation": "adaptive",
+                "route_pool_min_customers": 80,
+                "route_pool_max_rounds": 8,
+                "local_cleanup_after_recombination": False,
+                "adaptive_component_budget": True,
+            },
+            "problem_adaptation": {
+                "strategy_family": "baseline_intensification",
+                "instance_profile": {},
+                "phase_objective": "phase_best_distance",
+                "component_roles": {
+                    "route_pair_swap": "primary",
+                    "bounded_destroy_repair": "support",
+                },
+                "fallback_order": ["route_pair_swap", "bounded_destroy_repair"],
+                "evidence_targets": [
+                    "main_search_component_phase_delta_sum",
+                    "main_search_objective_delta_by_phase",
+                ],
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pair_swap", "bounded_destroy_repair"],
+                "rounds": 1,
+                "top_k": 16,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+
+    def fail_route_pool(*args: Any, **kwargs: Any) -> tuple[None, int, dict[str, Any]]:
+        del args, kwargs
+        raise AssertionError("route_pool_recombination should be scoped out")
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_best_route_pool_recombination",
+        fail_route_pool,
+    )
+
+    _, runtime = cvrp_solver.improve_with_main_search_strategy(
+        current,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+        instance_path=tmp_path / "tiny.vrp",
+    )
+
+    assert runtime["main_search_route_pool_auto_added"] is True
+    assert runtime["main_search_route_pool_invocations"] == 0
+    assert runtime["main_search_attempted_components"][0] == "route_pool_recombination"
+    assert runtime["main_search_component_skip_reasons"]["route_pool_recombination"] == {
+        "algorithm_body_route_pool_scope": 1,
+    }
+
+
+def test_main_search_strategy_algorithm_body_allows_explicit_small_route_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    instance = CvrpInstance(
+        name="algorithm_body_always",
+        capacity=10,
+        depot=0,
+        allowed_routes=1,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 1, 0, 1),
+            CvrpNode(2, 2, 0, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 2),))
+    audit = cvrp_solver._main_search_strategy_defaults()
+
+    cvrp_solver._normalize_main_search_strategy_plan(
+        {
+            "enabled": True,
+            "algorithm_body": {
+                "phase_sequence": ["construction", "baseline", "global_recombination"],
+                "route_pool_activation": "always",
+                "route_pool_min_customers": 80,
+                "route_pool_max_rounds": 1,
+                "local_cleanup_after_recombination": False,
+                "adaptive_component_budget": True,
+            },
+            "construction": {
+                "methods": ["nearest_neighbor"],
+                "keep_top_k": 1,
+                "bias": 0.0,
+            },
+            "baseline": {"time_fraction": 0.75, "params": {}},
+            "improvement": {
+                "enabled_components": ["route_pool_recombination"],
+                "rounds": 2,
+                "top_k": 16,
+            },
+            "acceptance": {"min_distance_improvement": 0.0},
+            "restart": {
+                "enabled": False,
+                "stagnation_rounds": 0,
+                "max_restarts": 0,
+            },
+            "perturbation": {
+                "enabled": False,
+                "strength": 1,
+                "max_perturbations": 0,
+            },
+            "post_baseline_operators_enabled": False,
+            "operator_round_limit": 0,
+        },
+        instance=instance,
+        audit=audit,
+    )
+
+    def no_candidate_route_pool(
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[None, int, dict[str, Any]]:
+        del args, kwargs
+        return None, 1, {
+            "route_pool_source_solutions": 1,
+            "route_pool_sample_count": 1,
+            "route_pool_size": 1,
+            "route_pool_branch_calls": 0,
+            "route_pool_recombined_routes": 0,
+        }
+
+    monkeypatch.setattr(
+        cvrp_solver,
+        "_best_route_pool_recombination",
+        no_candidate_route_pool,
+    )
+
+    _, runtime = cvrp_solver.improve_with_main_search_strategy(
+        current,
+        instance,
+        adapter=adapter,
+        rng=random.Random(7),
+        time_limit_sec=10.0,
+        start_time=time.perf_counter(),
+        main_search_strategy=audit,
+        instance_path=tmp_path / "tiny.vrp",
+    )
+
+    assert runtime["main_search_route_pool_activation"] == "always"
+    assert runtime["main_search_route_pool_invocations"] == 1
+    assert runtime["main_search_component_attempts"]["route_pool_recombination"] == 1
+    assert runtime["main_search_component_skip_reasons"]["route_pool_recombination"] == {
+        "no_improving_candidate": 1,
+    }
 
 
 def test_main_search_strategy_respects_explicit_route_pool_disabled_role() -> None:
@@ -2604,6 +2857,7 @@ def test_main_search_strategy_respects_explicit_route_pool_disabled_role() -> No
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "problem_adaptation": {
                 "strategy_family": "baseline_intensification",
                 "instance_profile": {},
@@ -2680,6 +2934,7 @@ def test_main_search_strategy_route_pool_recombination_records_phase_improvement
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -2782,6 +3037,7 @@ def test_acceptance_restart_policy_can_reject_recovery_only_moves(
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["nearest_neighbor"],
                 "keep_top_k": 1,
@@ -2814,6 +3070,7 @@ def test_acceptance_restart_policy_can_reject_recovery_only_moves(
     cvrp_solver._normalize_acceptance_restart_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "min_distance_improvement": 0.0,
             "recovery_only_policy": "reject_recovery_only",
             "restart": {"enabled": False, "stagnation_rounds": 0, "max_restarts": 0},
@@ -2897,6 +3154,7 @@ def test_main_search_strategy_gates_destroy_repair_after_route_pair_improvement(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'problem_adaptation': {'component_roles': {'route_pool_recombination': 'disabled'}},",
                 "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.75, 'params': {}},",
@@ -2942,6 +3200,7 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
@@ -3025,6 +3284,7 @@ def test_route_pair_candidate_policy_changes_main_search_candidate_telemetry(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['sequential'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {}},",
                 "        'improvement': {'enabled_components': ['route_pair_swap'], 'rounds': 1, 'top_k': 1},",
@@ -3141,6 +3401,7 @@ def test_destroy_repair_policy_changes_main_search_repair_telemetry(
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.5, 'params': {}},",
                 "        'improvement': {'enabled_components': ['bounded_destroy_repair'], 'rounds': 1, 'top_k': 64},",
@@ -3388,6 +3649,7 @@ def test_main_search_strategy_bounded_destroy_repair_accepts_formal_like_budget(
     cvrp_solver._normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "algorithm_body": _default_algorithm_body(),
             "construction": {
                 "methods": ["sequential"],
                 "keep_top_k": 1,
@@ -3460,6 +3722,7 @@ def test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
                 "def main_search_plan(instance, time_limit_sec):",
                 "    return {",
                 "        'enabled': True,",
+                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},",
                 "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
                 "        'baseline': {'time_fraction': 0.8, 'params': {}},",
                 "        'improvement': {'enabled_components': ['unknown_move'], 'rounds': 1, 'top_k': 8},",
