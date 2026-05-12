@@ -305,7 +305,7 @@ Detailed analysis:
 
 ## Running Experiment
 
-A new short free-surface diagnostic is prepared from the repaired execution
+A new short free-surface diagnostic is running from the repaired execution
 contract:
 
 ```text
@@ -318,6 +318,9 @@ time_limit_sec=60
 agentic_session_timeout_sec=1200
 force_surface=none
 analysis_doc=scion/docs/experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md
+launcher=nohup+setsid
+pid=2600976
+started_utc=2026-05-12T17:38:32Z
 ```
 
 The first analysis question is whether generated `solver_design` candidates
