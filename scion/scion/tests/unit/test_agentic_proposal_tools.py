@@ -387,8 +387,11 @@ def _valid_hypothesis_payload(**overrides) -> dict:
         if "protected_objectives" not in overrides:
             payload["protected_objectives"] = ["fleet_violation"]
         signature = dict(payload.get("novelty_signature") or {})
-        signature.setdefault("selected_components", ["main_search_strategy"])
+        signature.setdefault("selected_components", ["route_pair_swap"])
         signature.setdefault("deep_components_selected", ["route_pair_swap"])
+        signature.setdefault("strategy_family_pattern", "route_structure_repair")
+        signature.setdefault("problem_adaptation_pattern", "route_pair_primary")
+        signature.setdefault("evidence_target_pattern", "phase_delta")
         signature.setdefault("destroy_repair_pattern", "bounded")
         signature.setdefault("baseline_fraction_pattern", "bounded_baseline")
         signature.setdefault("acceptance_restart_pattern", "strict_no_restart")

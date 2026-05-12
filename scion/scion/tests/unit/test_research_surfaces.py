@@ -648,6 +648,9 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "target_objectives",
         "selected_components",
         "deep_components_selected",
+        "strategy_family_pattern",
+        "problem_adaptation_pattern",
+        "evidence_target_pattern",
         "budget_pattern",
         "destroy_repair_pattern",
         "baseline_fraction_pattern",
@@ -736,6 +739,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             novelty_signature={
                 "selected_components": ["route_pair_swap"],
                 "deep_components_selected": ["route_pair_swap"],
+                "strategy_family_pattern": "route_structure_repair",
+                "problem_adaptation_pattern": "route_pair_primary",
+                "evidence_target_pattern": "phase_delta",
                 "budget_pattern": "baseline_20_post_80",
                 "destroy_repair_pattern": "none",
                 "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
@@ -756,6 +762,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             novelty_signature={
                 "selected_components": ["bounded_destroy_repair"],
                 "deep_components_selected": ["bounded_destroy_repair"],
+                "strategy_family_pattern": "destroy_repair_recovery",
+                "problem_adaptation_pattern": "destroy_repair_primary",
+                "evidence_target_pattern": "recovery_to_phase",
                 "budget_pattern": "baseline_50_post_50",
                 "destroy_repair_pattern": "bounded_destroy_repair_restart",
                 "baseline_fraction_pattern": {"baseline": 0.50, "post": 0.50},
@@ -774,6 +783,9 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
         novelty_signature={
             "selected_components": ["intra_route_2opt", "inter_route_relocate"],
             "deep_components_selected": ["intra_route_2opt", "inter_route_relocate"],
+            "strategy_family_pattern": "local_search_cleanup",
+            "problem_adaptation_pattern": "local_components_primary",
+            "evidence_target_pattern": "local_phase_delta",
             "budget_pattern": "baseline_35_post_65",
             "destroy_repair_pattern": "none",
             "baseline_fraction_pattern": {"baseline": 0.35, "post": 0.65},
@@ -825,6 +837,9 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
     signature = {
         "selected_components": ["route_pair_swap"],
         "deep_components_selected": ["route_pair_swap"],
+        "strategy_family_pattern": "route_structure_repair",
+        "problem_adaptation_pattern": "route_pair_primary",
+        "evidence_target_pattern": "phase_delta",
         "budget_pattern": "baseline_20_post_80",
         "destroy_repair_pattern": "none",
         "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
@@ -1026,6 +1041,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
             "def main_search_plan(instance, time_limit_sec):\n"
             "    return {\n"
             "        'enabled': False,\n"
+            "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
             "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
             "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
             "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
@@ -1048,6 +1064,7 @@ def _main_search_strategy_code(extra_body: str = "") -> str:
         f"{extra_body}"
         "    return {\n"
         "        'enabled': False,\n"
+        "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
         "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
         "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
         "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
@@ -2227,9 +2244,76 @@ def test_cvrp_solver_loads_workspace_main_search_strategy_and_applies_bounds(
     assert policy["main_search_component_coverage_status"]["status"] == (
         "selected_not_attempted"
     )
+    assert policy["main_search_problem_adaptation_source"] == "defaulted_missing_section"
+    assert policy["main_search_strategy_family"] == "balanced_lifecycle"
+    assert policy["main_search_instance_profile"]["customer_count"] > 0
     assert policy["main_search_rounds"] == 3
     assert policy["main_search_top_k"] == 40
     assert policy["main_search_post_baseline_operators_enabled"] is False
+
+
+def test_cvrp_main_search_strategy_problem_adaptation_drives_order_and_thresholds(
+    tmp_path: Path,
+) -> None:
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "main_search_strategy.py").write_text(
+        "\n".join(
+            [
+                "def main_search_plan(instance, time_limit_sec):",
+                "    return {",
+                "        'enabled': True,",
+                "        'problem_adaptation': {",
+                "            'strategy_family': 'destroy_repair_recovery',",
+                "            'instance_profile': {'scale': 'small', 'route_pressure': 'medium'},",
+                "            'phase_objective': 'recovery_to_phase_best',",
+                "            'component_roles': {'bounded_destroy_repair': 'primary', 'route_pair_swap': 'support'},",
+                "            'fallback_order': [],",
+                "            'evidence_targets': ['main_search_component_phase_delta_sum', 'main_search_objective_trace'],",
+                "        },",
+                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
+                "        'baseline': {'time_fraction': 0.75, 'params': {}},",
+                "        'improvement': {'enabled_components': ['route_pair_swap', 'bounded_destroy_repair'], 'rounds': 2, 'top_k': 32},",
+                "        'acceptance': {'min_distance_improvement': 0.0},",
+                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
+                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
+                "        'post_baseline_operators_enabled': False,",
+                "        'operator_round_limit': 0,",
+                "    }",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    policy = _load_main_search_strategy(
+        workspace_root=tmp_path,
+        instance=_tiny_instance(),
+        time_limit_sec=10.0,
+    )
+
+    assert policy["main_search_strategy_active"] is True
+    assert policy["main_search_problem_adaptation_source"] == "declared"
+    assert policy["main_search_strategy_family"] == "destroy_repair_recovery"
+    assert policy["main_search_phase_objective"] == "recovery_to_phase_best"
+    assert policy["main_search_declared_instance_profile"] == {
+        "scale": "small",
+        "route_pressure": "medium",
+    }
+    assert policy["main_search_instance_profile"]["customer_count"] > 0
+    assert policy["main_search_components"] == [
+        "bounded_destroy_repair",
+        "route_pair_swap",
+    ]
+    assert policy["main_search_component_order"] == [
+        "bounded_destroy_repair",
+        "route_pair_swap",
+    ]
+    assert policy["main_search_component_min_distance_improvement"][
+        "bounded_destroy_repair"
+    ] == 0.0
+    assert policy["main_search_bounded_destroy_repair_accept_limit"] == 2
+    assert policy["recovery_only_policy"] == "allow"
 
 
 def test_cvrp_main_search_strategy_clamps_aggressive_baseline_params(

@@ -63,27 +63,36 @@ Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is a problem-object adaptation
 pivot: Scion should receive a coherent CVRP problem object and solver-design
 boundary through the adapter, rather than being driven through one forced
-singleton policy at a time. The first exposure slice now renders the CVRP
-problem object into proposal contexts and `context.read_problem`; the second
-slice declares `solver_design` as the top-level CVRP research boundary. The
-latest repairs make that boundary active when no forced diagnostic surface is
-set, distinguish active-boundary tool guidance from forced-surface diagnostics,
-and require non-empty solver-design semantic identity. Proposal context, APS
-tools, target preview, and output validation keep `change_locus` on
-`solver_design`, while component policies remain implementation hooks or
-attribution evidence. APS self-check failures now fail closed before completed
-patches are accepted. The latest short free-surface diagnostic validated active
-boundary control, Contract-preview budget retention, active-boundary tool
-guidance, and non-empty semantic identity. The current blocker is still
-solver-design candidate quality: screened candidates show at most small
-win-rate movement, median movement remains zero, and main-search phase-best
-movement remains zero.
+singleton policy at a time. The first exposure slice renders the CVRP problem
+object into proposal contexts and `context.read_problem`; the second slice
+declares `solver_design` as the top-level CVRP research boundary. The current
+implementation now makes that boundary a problem-object adaptation contract,
+not just a shallow component policy. `main_search_plan` can declare
+`problem_adaptation` with strategy family, instance-profile intent, phase
+objective, component roles/order, and evidence targets; the solver audits the
+computed runtime instance profile and uses the adaptation to order components,
+set bounded destroy/repair defaults, and apply per-component thresholds.
+Proposal context, APS tools, target preview, and output validation still keep
+`change_locus` on `solver_design`, while component policies remain
+implementation hooks or attribution evidence. The current blocker is now
+empirical solver quality, not missing exposure of the whole problem object:
+screened candidates still need to prove phase-best objective movement.
 
 Important current interpretation:
 
 - `solver_design` is the top-level CVRP research object. It is backed by the
-  existing `policies/main_search_strategy.py` execution hook, but component
-  policies are implementation details, not standalone research goals.
+  existing `policies/main_search_strategy.py` execution hook, but the required
+  research object is the whole CVRP solver lifecycle. A valid candidate should
+  declare `problem_adaptation`, not merely force one component recipe.
+- `problem_adaptation` carries strategy family, instance-profile intent, phase
+  objective, component roles/order, and evidence targets. Runtime now records
+  `main_search_problem_adaptation`, `main_search_instance_profile`,
+  `main_search_component_order`, `main_search_component_roles`, and related
+  evidence fields.
+- `deep_components_selected` now means selected package-owned problem-object
+  components across all main-search components, not just route-pair swap and
+  bounded destroy/repair. This fixes the prior false runtime-contract failure
+  where local components produced an empty deep-component audit.
 - A failed `solver_design` implementation should be retried with a different
   solver lifecycle; it should not make APS fall back to isolated component
   policy goals.
@@ -108,10 +117,10 @@ Important current interpretation:
   quality thresholds, median movement remains zero, and phase-best movement
   remains zero.
 - Do not spend more rounds on the same shallow solver-design pattern. Next
-  optimization should improve solver lifecycle quality: accepted/recovery moves
-  need to refresh phase best, bounded destroy/repair needs to stop exhausting
-  repair budget, and extra baseline budget should not be the only source of
-  isolated wins.
+  optimization should use the whole problem-object adaptation surface:
+  strategy family, instance profile, component roles/order, per-component
+  thresholds, recovery policy, perturbation schedule, and evidence targets
+  should form one hypothesis.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

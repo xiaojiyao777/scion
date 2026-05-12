@@ -8,11 +8,9 @@ without editing solver.py.
 Candidate proposals should treat this as a solver-level lifecycle plan, not a
 place to force one component recipe. If enabled, the plan should explain how
 construction, baseline budget, package-owned improvement components,
-acceptance, restart/perturbation, and caps work together, and which
-phase-best objective and whole-solver runtime evidence should move. Deep
-components such as route_pair_swap and bounded_destroy_repair remain useful
-attribution hooks, but they are implementation details of a broader CVRP
-solver hypothesis. The checked-in default remains inactive.
+acceptance, restart/perturbation, and caps adapt to the instance profile, and
+which phase-best objective and whole-solver runtime evidence should move. The
+checked-in default remains inactive.
 """
 from __future__ import annotations
 
@@ -20,6 +18,17 @@ from __future__ import annotations
 def main_search_plan(instance, time_limit_sec):
     return {
         "enabled": False,
+        "problem_adaptation": {
+            "strategy_family": "balanced_lifecycle",
+            "instance_profile": {},
+            "phase_objective": "phase_best_distance",
+            "component_roles": {},
+            "fallback_order": [],
+            "evidence_targets": [
+                "main_search_component_phase_delta_sum",
+                "main_search_objective_delta_by_phase",
+            ],
+        },
         "construction": {
             "methods": ["nearest_neighbor"],
             "keep_top_k": 1,
@@ -36,6 +45,9 @@ def main_search_plan(instance, time_limit_sec):
         },
         "acceptance": {
             "min_distance_improvement": 0.0,
+            "component_min_distance_improvement": {},
+            "bounded_destroy_repair_accept_limit": 1,
+            "recovery_only_policy": "allow",
         },
         "restart": {
             "enabled": False,

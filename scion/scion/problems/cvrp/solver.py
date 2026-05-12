@@ -84,11 +84,57 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
-_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = frozenset(
+_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
+_ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES = frozenset(
     {
-        "route_pair_swap",
-        "bounded_destroy_repair",
+        "balanced_lifecycle",
+        "baseline_intensification",
+        "construction_diversification",
+        "improvement_intensification",
+        "destroy_repair_recovery",
+        "route_structure_repair",
+        "local_search_cleanup",
     }
+)
+_DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY = "balanced_lifecycle"
+_ALLOWED_MAIN_SEARCH_PHASE_OBJECTIVES = frozenset(
+    {
+        "construction_distance",
+        "baseline_distance",
+        "phase_best_distance",
+        "recovery_to_phase_best",
+        "runtime_neutrality",
+    }
+)
+_DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE = "phase_best_distance"
+_ALLOWED_MAIN_SEARCH_COMPONENT_ROLES = frozenset(
+    {"primary", "support", "probe", "disabled"}
+)
+_MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
+    {
+        "scale",
+        "route_pressure",
+        "demand_skew",
+        "distance_structure",
+        "route_count_hint",
+        "customer_count",
+    }
+)
+_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
+    {
+        "construction_distance",
+        "baseline_cost",
+        "main_search_component_accepted_delta_sum",
+        "main_search_component_recovery_delta_sum",
+        "main_search_component_phase_delta_sum",
+        "main_search_objective_delta_by_phase",
+        "main_search_objective_trace",
+        "main_search_stop_reason",
+    }
+)
+_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS = (
+    "main_search_component_phase_delta_sum",
+    "main_search_objective_delta_by_phase",
 )
 _MAX_BLUEPRINT_CONSTRUCTION_METHODS = 4
 _MAX_BLUEPRINT_LOCAL_SEARCH_ROUNDS = 4
@@ -105,6 +151,7 @@ _MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT = 10.0
 _MAIN_SEARCH_FORMAL_BASELINE_TIME_FLOOR = 0.75
 _BOUNDED_DESTROY_REPAIR_MIN_DISTANCE_IMPROVEMENT = 1.0
 _MAIN_SEARCH_BDR_ACCEPT_LIMIT = 1
+_MAX_MAIN_SEARCH_BDR_ACCEPT_LIMIT = 3
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR = 16
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING = 96
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION = 0.12
@@ -140,6 +187,22 @@ _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
         "operator_round_limit",
     }
 )
+_MAIN_SEARCH_STRATEGY_ALLOWED_KEYS = frozenset(
+    {*_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS, "problem_adaptation"}
+)
+_MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS = frozenset(
+    {
+        "strategy_family",
+        "instance_profile",
+        "phase_objective",
+        "component_roles",
+        "fallback_order",
+        "evidence_targets",
+    }
+)
+_MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
+    _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS
+)
 _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
     {"methods", "keep_top_k", "bias"}
 )
@@ -148,6 +211,14 @@ _MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS = frozenset(
     {"enabled_components", "rounds", "top_k"}
 )
 _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS = frozenset({"min_distance_improvement"})
+_MAIN_SEARCH_ACCEPTANCE_ALLOWED_KEYS = frozenset(
+    {
+        "min_distance_improvement",
+        "component_min_distance_improvement",
+        "bounded_destroy_repair_accept_limit",
+        "recovery_only_policy",
+    }
+)
 _MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
     {"enabled", "stagnation_rounds", "max_restarts"}
 )
@@ -1534,6 +1605,14 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_strategy_events": [],
         "main_search_plan": {
             "enabled": False,
+            "problem_adaptation": {
+                "strategy_family": _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+                "instance_profile": {},
+                "phase_objective": _DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE,
+                "component_roles": {},
+                "fallback_order": [],
+                "evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+            },
             "construction": {
                 "methods": [_DEFAULT_CONSTRUCTION_MODE],
                 "keep_top_k": 1,
@@ -1550,6 +1629,9 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
             },
             "acceptance": {
                 "min_distance_improvement": 0.0,
+                "component_min_distance_improvement": {},
+                "bounded_destroy_repair_accept_limit": _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+                "recovery_only_policy": "allow",
             },
             "restart": {
                 "enabled": False,
@@ -1566,6 +1648,24 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
             "operator_round_limit": 0,
         },
         "main_search_phases": ["inactive"],
+        "main_search_problem_adaptation": {
+            "strategy_family": _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+            "declared_instance_profile": {},
+            "runtime_instance_profile": {},
+            "phase_objective": _DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE,
+            "component_roles": {},
+            "fallback_order": [],
+            "evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+            "source": "inactive_default",
+        },
+        "main_search_strategy_family": _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+        "main_search_declared_instance_profile": {},
+        "main_search_instance_profile": {},
+        "main_search_phase_objective": _DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE,
+        "main_search_component_roles": {},
+        "main_search_component_fallback_order": [],
+        "main_search_evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+        "main_search_problem_adaptation_source": "inactive_default",
         "main_search_construction_methods": [_DEFAULT_CONSTRUCTION_MODE],
         "main_search_construction_keep_top_k": 1,
         "main_search_construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
@@ -1578,6 +1678,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_post_baseline_operators_enabled": False,
         "main_search_operator_round_limit": 0,
         "main_search_components": [],
+        "main_search_component_order": [],
         "main_search_component_coverage_status": {
             "status": "inactive",
             "required_deep_components": sorted(
@@ -1618,6 +1719,7 @@ def _main_search_strategy_defaults() -> dict[str, Any]:
         "main_search_component_repair_fallback_counts": {},
         "main_search_component_runtime_ms": {},
         "main_search_acceptance_min_distance_improvement": 0.0,
+        "recovery_only_policy": "allow",
         "main_search_component_min_distance_improvement": {},
         "main_search_bounded_destroy_repair_accept_limit": (
             _MAIN_SEARCH_BDR_ACCEPT_LIMIT
@@ -1686,6 +1788,47 @@ def _normalize_main_search_strategy_plan(
         field_name="perturbation",
         audit=audit,
     )
+    problem_adaptation = _main_search_mapping_section(
+        plan.get("problem_adaptation", {}),
+        field_name="problem_adaptation",
+        audit=audit,
+    )
+    strategy_family = _main_search_string_choice(
+        problem_adaptation.get(
+            "strategy_family",
+            _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+        ),
+        allowed=_ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES,
+        default=_DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+        field_name="problem_adaptation.strategy_family",
+        audit=audit,
+    )
+    phase_objective = _main_search_string_choice(
+        problem_adaptation.get(
+            "phase_objective",
+            _DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE,
+        ),
+        allowed=_ALLOWED_MAIN_SEARCH_PHASE_OBJECTIVES,
+        default=_DEFAULT_MAIN_SEARCH_PHASE_OBJECTIVE,
+        field_name="problem_adaptation.phase_objective",
+        audit=audit,
+    )
+    declared_instance_profile = _main_search_declared_instance_profile(
+        problem_adaptation.get("instance_profile", {}),
+        audit=audit,
+    )
+    runtime_instance_profile = _main_search_instance_profile(instance)
+    evidence_targets = _main_search_string_sequence(
+        problem_adaptation.get(
+            "evidence_targets",
+            list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+        ),
+        allowed=_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS,
+        default=list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+        max_items=len(_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS),
+        field_name="problem_adaptation.evidence_targets",
+        audit=audit,
+    )
 
     construction_methods = _main_search_string_sequence(
         construction.get("methods", [_DEFAULT_CONSTRUCTION_MODE]),
@@ -1703,6 +1846,11 @@ def _normalize_main_search_strategy_plan(
         field_name="construction.keep_top_k",
         audit=audit,
     )
+    if (
+        strategy_family == "construction_diversification"
+        and len(construction_methods) > 1
+    ):
+        construction_keep_top_k = max(2, construction_keep_top_k)
     construction_bias = _main_search_float(
         construction.get("bias", _DEFAULT_CONSTRUCTION_BIAS),
         minimum=_MIN_CONSTRUCTION_BIAS,
@@ -1745,7 +1893,27 @@ def _normalize_main_search_strategy_plan(
         audit=audit,
         allow_empty=not requested_active,
     )
-    components = _schedule_main_search_components(components)
+    component_roles = _main_search_component_roles(
+        problem_adaptation.get("component_roles", {}),
+        selected_components=components,
+        audit=audit,
+    )
+    fallback_order = _main_search_string_sequence(
+        problem_adaptation.get("fallback_order", []),
+        allowed=_ALLOWED_MAIN_SEARCH_COMPONENTS,
+        default=[],
+        max_items=len(_ALLOWED_MAIN_SEARCH_COMPONENTS),
+        field_name="problem_adaptation.fallback_order",
+        audit=audit,
+        allow_empty=True,
+    )
+    components = _schedule_main_search_components(
+        components,
+        strategy_family=strategy_family,
+        fallback_order=fallback_order,
+        component_roles=component_roles,
+    )
+    effective_fallback_order = fallback_order or list(components)
     rounds = _main_search_int(
         improvement.get("rounds", 0),
         minimum=0,
@@ -1783,6 +1951,31 @@ def _normalize_main_search_strategy_plan(
         maximum=_MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT,
         default=0.0,
         field_name="acceptance.min_distance_improvement",
+        audit=audit,
+    )
+    component_min_distance_improvement = _main_search_component_thresholds(
+        components,
+        acceptance.get("component_min_distance_improvement", {}),
+        min_distance_improvement=min_distance_improvement,
+        strategy_family=strategy_family,
+        audit=audit,
+    )
+    recovery_only_policy = _main_search_string_choice(
+        acceptance.get("recovery_only_policy", "allow"),
+        allowed=_ACCEPTANCE_RECOVERY_POLICIES,
+        default="allow",
+        field_name="acceptance.recovery_only_policy",
+        audit=audit,
+    )
+    bdr_accept_limit = _main_search_int(
+        acceptance.get(
+            "bounded_destroy_repair_accept_limit",
+            _default_main_search_bdr_accept_limit(strategy_family),
+        ),
+        minimum=0,
+        maximum=_MAX_MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+        default=_default_main_search_bdr_accept_limit(strategy_family),
+        field_name="acceptance.bounded_destroy_repair_accept_limit",
         audit=audit,
     )
     restart_enabled = _main_search_bool(
@@ -1859,6 +2052,14 @@ def _normalize_main_search_strategy_plan(
 
     normalized_plan = {
         "enabled": active,
+        "problem_adaptation": {
+            "strategy_family": strategy_family,
+            "instance_profile": declared_instance_profile,
+            "phase_objective": phase_objective,
+            "component_roles": component_roles,
+            "fallback_order": effective_fallback_order,
+            "evidence_targets": evidence_targets,
+        },
         "construction": {
             "methods": construction_methods,
             "keep_top_k": construction_keep_top_k,
@@ -1875,6 +2076,9 @@ def _normalize_main_search_strategy_plan(
         },
         "acceptance": {
             "min_distance_improvement": min_distance_improvement,
+            "component_min_distance_improvement": component_min_distance_improvement,
+            "bounded_destroy_repair_accept_limit": bdr_accept_limit,
+            "recovery_only_policy": recovery_only_policy,
         },
         "restart": {
             "enabled": restart_enabled,
@@ -1892,6 +2096,29 @@ def _normalize_main_search_strategy_plan(
     }
     audit["main_search_plan"] = normalized_plan
     audit["main_search_strategy_active"] = active
+    adaptation_source = (
+        "declared"
+        if isinstance(plan.get("problem_adaptation"), Mapping)
+        else "defaulted_missing_section"
+    )
+    audit["main_search_problem_adaptation"] = {
+        "strategy_family": strategy_family,
+        "declared_instance_profile": declared_instance_profile,
+        "runtime_instance_profile": runtime_instance_profile,
+        "phase_objective": phase_objective,
+        "component_roles": component_roles,
+        "fallback_order": effective_fallback_order,
+        "evidence_targets": evidence_targets,
+        "source": adaptation_source,
+    }
+    audit["main_search_strategy_family"] = strategy_family
+    audit["main_search_declared_instance_profile"] = declared_instance_profile
+    audit["main_search_instance_profile"] = runtime_instance_profile
+    audit["main_search_phase_objective"] = phase_objective
+    audit["main_search_component_roles"] = component_roles
+    audit["main_search_component_fallback_order"] = effective_fallback_order
+    audit["main_search_evidence_targets"] = evidence_targets
+    audit["main_search_problem_adaptation_source"] = adaptation_source
     audit["main_search_construction_methods"] = construction_methods
     audit["main_search_construction_keep_top_k"] = construction_keep_top_k
     audit["main_search_construction_bias"] = construction_bias
@@ -1906,6 +2133,7 @@ def _normalize_main_search_strategy_plan(
     audit["main_search_post_baseline_operators_enabled"] = post_baseline_enabled
     audit["main_search_operator_round_limit"] = operator_round_limit
     audit["main_search_components"] = components
+    audit["main_search_component_order"] = components
     _refresh_main_search_component_coverage_status(audit, components)
     audit["main_search_rounds"] = rounds
     audit["main_search_top_k"] = top_k
@@ -1968,16 +2196,11 @@ def _normalize_main_search_strategy_plan(
         component: 0 for component in components
     }
     audit["main_search_acceptance_min_distance_improvement"] = min_distance_improvement
-    audit["main_search_component_min_distance_improvement"] = {
-        component: _main_search_component_min_distance_improvement(
-            component,
-            min_distance_improvement,
-        )
-        for component in components
-    }
-    audit["main_search_bounded_destroy_repair_accept_limit"] = (
-        _MAIN_SEARCH_BDR_ACCEPT_LIMIT
+    audit["recovery_only_policy"] = recovery_only_policy
+    audit["main_search_component_min_distance_improvement"] = (
+        component_min_distance_improvement
     )
+    audit["main_search_bounded_destroy_repair_accept_limit"] = bdr_accept_limit
     audit["main_search_restart_enabled"] = restart_enabled
     audit["main_search_restart_stagnation_rounds"] = restart_stagnation
     audit["main_search_restart_count"] = 0
@@ -2017,7 +2240,7 @@ def _validate_main_search_plan_keys(
 ) -> None:
     _validate_main_search_section_keys(
         plan,
-        allowed=_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS,
+        allowed=_MAIN_SEARCH_STRATEGY_ALLOWED_KEYS,
         required=_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS,
         requested_active=requested_active,
         field_name="main_search_plan",
@@ -2027,11 +2250,18 @@ def _validate_main_search_plan_keys(
         "construction": _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS,
         "baseline": _MAIN_SEARCH_BASELINE_REQUIRED_KEYS,
         "improvement": _MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS,
-        "acceptance": _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+        "acceptance": (
+            _MAIN_SEARCH_ACCEPTANCE_ALLOWED_KEYS,
+            _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+        ),
         "restart": _MAIN_SEARCH_RESTART_REQUIRED_KEYS,
         "perturbation": (
             _MAIN_SEARCH_PERTURBATION_ALLOWED_KEYS,
             _MAIN_SEARCH_PERTURBATION_REQUIRED_KEYS,
+        ),
+        "problem_adaptation": (
+            _MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS,
+            frozenset(),
         ),
     }
     for section_name, spec in section_specs.items():
@@ -2223,16 +2453,276 @@ def _json_safe_runtime_value(value: Any) -> Any:
     return str(value)
 
 
-def _schedule_main_search_components(components: list[str]) -> list[str]:
-    if not (
-        "route_pair_swap" in components
-        and "bounded_destroy_repair" in components
-    ):
-        return components
-    priority = {"route_pair_swap": 0, "bounded_destroy_repair": 1}
+def _main_search_instance_profile(instance: CvrpInstance) -> dict[str, Any]:
+    demands = [instance.demand(customer) for customer in instance.customer_ids]
+    total_demand = sum(demands)
+    mean_demand = float(total_demand) / max(1, len(demands))
+    max_demand = max(demands, default=0)
+    route_count_hint = int(math.ceil(float(total_demand) / max(1, instance.capacity)))
+    customer_count = int(instance.customer_count)
+    if customer_count <= 50:
+        scale = "small"
+    elif customer_count <= 120:
+        scale = "medium"
+    else:
+        scale = "large"
+    max_demand_fraction = float(max_demand) / max(1.0, float(instance.capacity))
+    if max_demand_fraction >= 0.5:
+        demand_skew = "high"
+    elif max_demand_fraction >= 0.25:
+        demand_skew = "medium"
+    else:
+        demand_skew = "low"
+    route_pressure = "low"
+    if route_count_hint >= max(2, customer_count // 8):
+        route_pressure = "high"
+    elif route_count_hint >= max(2, customer_count // 16):
+        route_pressure = "medium"
+    return {
+        "customer_count": customer_count,
+        "capacity": int(instance.capacity),
+        "total_demand": int(total_demand),
+        "mean_demand": round(mean_demand, 6),
+        "max_demand": int(max_demand),
+        "max_demand_fraction": round(max_demand_fraction, 6),
+        "route_count_hint": route_count_hint,
+        "scale": scale,
+        "route_pressure": route_pressure,
+        "demand_skew": demand_skew,
+    }
+
+
+def _main_search_declared_instance_profile(
+    value: Any,
+    *,
+    audit: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"problem_adaptation.instance_profile returned non-mapping value {value!r}",
+        )
+        return {}
+    unknown = sorted(
+        str(key)
+        for key in value
+        if str(key) not in _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS
+    )
+    if unknown:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"problem_adaptation.instance_profile contains unknown keys {unknown}",
+        )
+    profile: dict[str, Any] = {}
+    for key, raw in value.items():
+        text_key = str(key)
+        if text_key not in _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS:
+            continue
+        safe = _json_safe_runtime_value(raw)
+        if isinstance(safe, (str, int, float, bool)) or safe is None:
+            profile[text_key] = safe
+        else:
+            profile[text_key] = str(safe)
+    if not profile:
+        profile["scale"] = "unspecified"
+    return profile
+
+
+def _main_search_component_roles(
+    value: Any,
+    *,
+    selected_components: list[str],
+    audit: dict[str, Any],
+) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"problem_adaptation.component_roles returned non-mapping value {value!r}",
+        )
+        value = {}
+    roles: dict[str, str] = {}
+    selected = set(selected_components)
+    for key, raw_role in value.items():
+        component = str(key).strip()
+        role = str(raw_role).strip()
+        if component not in _ALLOWED_MAIN_SEARCH_COMPONENTS:
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                f"problem_adaptation.component_roles contains unknown component {component!r}",
+            )
+            continue
+        if role not in _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES:
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                f"problem_adaptation.component_roles contains unknown role {role!r}",
+            )
+            continue
+        if component in selected and role == "disabled":
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                f"selected component {component!r} cannot have disabled role",
+            )
+            continue
+        roles[component] = role
+    for component in selected_components:
+        roles.setdefault(component, "support")
+    return roles
+
+
+def _default_main_search_bdr_accept_limit(strategy_family: str) -> int:
+    if strategy_family == "destroy_repair_recovery":
+        return 2
+    return _MAIN_SEARCH_BDR_ACCEPT_LIMIT
+
+
+def _main_search_component_thresholds(
+    components: list[str],
+    value: Any,
+    *,
+    min_distance_improvement: float,
+    strategy_family: str,
+    audit: dict[str, Any],
+) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        if value not in ({}, None):
+            audit["main_search_strategy_errors"] += 1
+            _record_main_search_event(
+                audit,
+                "error",
+                "acceptance.component_min_distance_improvement returned "
+                f"non-mapping value {value!r}",
+            )
+        value = {}
+    unknown = sorted(
+        str(key)
+        for key in value
+        if str(key) not in _ALLOWED_MAIN_SEARCH_COMPONENTS
+    )
+    if unknown:
+        audit["main_search_strategy_errors"] += 1
+        _record_main_search_event(
+            audit,
+            "error",
+            f"acceptance.component_min_distance_improvement contains unknown keys {unknown}",
+        )
+    thresholds: dict[str, float] = {}
+    for component in components:
+        default_threshold = _main_search_component_min_distance_improvement(
+            component,
+            min_distance_improvement,
+            strategy_family=strategy_family,
+        )
+        if component in value:
+            threshold = _main_search_float(
+                value.get(component),
+                minimum=0.0,
+                maximum=_MAX_MAIN_SEARCH_MIN_DISTANCE_IMPROVEMENT,
+                default=default_threshold,
+                field_name=f"acceptance.component_min_distance_improvement.{component}",
+                audit=audit,
+            )
+        else:
+            threshold = default_threshold
+        thresholds[component] = threshold
+    return thresholds
+
+
+def _schedule_main_search_components(
+    components: list[str],
+    *,
+    strategy_family: str = _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
+    fallback_order: list[str] | None = None,
+    component_roles: Mapping[str, str] | None = None,
+) -> list[str]:
+    components = [component for component in dict.fromkeys(components)]
+    fallback_order = fallback_order or []
+    component_roles = component_roles or {}
+    if not fallback_order and strategy_family == _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY:
+        if not (
+            "route_pair_swap" in components
+            and "bounded_destroy_repair" in components
+        ):
+            return components
+        legacy_priority = {"route_pair_swap": 0, "bounded_destroy_repair": 1}
+        return sorted(
+            components,
+            key=lambda component: (
+                legacy_priority.get(component, -1),
+                components.index(component),
+            ),
+        )
+    family_priorities = {
+        "balanced_lifecycle": {
+            "intra_route_2opt": 0,
+            "inter_route_relocate": 1,
+            "route_pair_swap": 2,
+            "bounded_destroy_repair": 3,
+        },
+        "baseline_intensification": {
+            "route_pair_swap": 0,
+            "bounded_destroy_repair": 1,
+            "inter_route_relocate": 2,
+            "intra_route_2opt": 3,
+        },
+        "construction_diversification": {
+            "intra_route_2opt": 0,
+            "inter_route_relocate": 1,
+            "route_pair_swap": 2,
+            "bounded_destroy_repair": 3,
+        },
+        "improvement_intensification": {
+            "intra_route_2opt": 0,
+            "inter_route_relocate": 1,
+            "route_pair_swap": 2,
+            "bounded_destroy_repair": 3,
+        },
+        "destroy_repair_recovery": {
+            "bounded_destroy_repair": 0,
+            "inter_route_relocate": 1,
+            "route_pair_swap": 2,
+            "intra_route_2opt": 3,
+        },
+        "route_structure_repair": {
+            "route_pair_swap": 0,
+            "inter_route_relocate": 1,
+            "bounded_destroy_repair": 2,
+            "intra_route_2opt": 3,
+        },
+        "local_search_cleanup": {
+            "intra_route_2opt": 0,
+            "inter_route_relocate": 1,
+            "route_pair_swap": 2,
+            "bounded_destroy_repair": 3,
+        },
+    }
+    priority = family_priorities.get(
+        strategy_family,
+        family_priorities[_DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY],
+    )
+    role_priority = {"primary": 0, "support": 1, "probe": 2, "disabled": 3}
+    fallback_position = {
+        component: index for index, component in enumerate(fallback_order)
+    }
     return sorted(
         components,
-        key=lambda component: (priority.get(component, -1), components.index(component)),
+        key=lambda component: (
+            fallback_position.get(component, len(fallback_position) + 1),
+            role_priority.get(str(component_roles.get(component, "support")), 1),
+            priority.get(component, 99),
+            components.index(component),
+        ),
     )
 
 
@@ -2317,6 +2807,16 @@ def _activate_main_search_strategy_for_mechanism_policies(
     _normalize_main_search_strategy_plan(
         {
             "enabled": True,
+            "problem_adaptation": {
+                "strategy_family": "route_structure_repair",
+                "instance_profile": {},
+                "phase_objective": "phase_best_distance",
+                "component_roles": {
+                    component: "primary" for component in components
+                },
+                "fallback_order": components,
+                "evidence_targets": list(_DEFAULT_MAIN_SEARCH_EVIDENCE_TARGETS),
+            },
             "construction": {
                 "methods": [_DEFAULT_CONSTRUCTION_MODE],
                 "keep_top_k": 1,
@@ -2333,6 +2833,9 @@ def _activate_main_search_strategy_for_mechanism_policies(
             },
             "acceptance": {
                 "min_distance_improvement": 0.0,
+                "component_min_distance_improvement": {},
+                "bounded_destroy_repair_accept_limit": _MAIN_SEARCH_BDR_ACCEPT_LIMIT,
+                "recovery_only_policy": "allow",
             },
             "restart": {
                 "enabled": False,
@@ -3290,6 +3793,9 @@ def improve_with_main_search_strategy(
     min_distance_improvement = float(
         audit.get("main_search_acceptance_min_distance_improvement", 0.0)
     )
+    strategy_family = str(
+        audit.get("main_search_strategy_family", _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY)
+    )
     component_min_distance_improvement = audit.get(
         "main_search_component_min_distance_improvement",
         {},
@@ -3421,6 +3927,7 @@ def improve_with_main_search_strategy(
                             _main_search_component_min_distance_improvement(
                                 component,
                                 min_distance_improvement,
+                                strategy_family=strategy_family,
                             ),
                         )
                     ),
@@ -3605,9 +4112,16 @@ def _apply_acceptance_restart_policy_to_main_search(audit: dict[str, Any]) -> No
         return
     threshold = float(plan.get("min_distance_improvement", 0.0))
     audit["main_search_acceptance_min_distance_improvement"] = threshold
+    strategy_family = str(
+        audit.get("main_search_strategy_family", _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY)
+    )
     components = list(audit.get("main_search_components") or [])
     audit["main_search_component_min_distance_improvement"] = {
-        component: _main_search_component_min_distance_improvement(component, threshold)
+        component: _main_search_component_min_distance_improvement(
+            component,
+            threshold,
+            strategy_family=strategy_family,
+        )
         for component in components
     }
     restart = plan.get("restart")
@@ -3769,9 +4283,13 @@ def _effective_baseline_time_fraction(
 def _main_search_component_min_distance_improvement(
     component: str,
     requested_min_distance_improvement: float,
+    *,
+    strategy_family: str = _DEFAULT_MAIN_SEARCH_STRATEGY_FAMILY,
 ) -> float:
     threshold = max(0.0, float(requested_min_distance_improvement))
     if component == "bounded_destroy_repair":
+        if strategy_family == "destroy_repair_recovery":
+            return threshold
         return max(threshold, _BOUNDED_DESTROY_REPAIR_MIN_DISTANCE_IMPROVEMENT)
     return threshold
 
@@ -4959,18 +5477,20 @@ def _refresh_main_search_component_coverage_status(
     ]
     unattempted = [
         component
-        for component in required
+        for component in selected_deep
         if component not in set(attempted_deep)
     ]
     active = bool(audit.get("main_search_strategy_active"))
     if not active:
         status = "inactive"
-    elif missing:
-        status = "missing_forced_diagnostic_deep_components"
+    elif not selected_deep:
+        status = "no_problem_components_selected"
     elif unattempted:
         status = "selected_not_attempted"
+    elif missing:
+        status = "partial_problem_components_attempted"
     else:
-        status = "deep_components_attempted"
+        status = "problem_components_attempted"
     audit["main_search_deep_components_selected"] = selected_deep
     audit["main_search_component_coverage_status"] = {
         "status": status,

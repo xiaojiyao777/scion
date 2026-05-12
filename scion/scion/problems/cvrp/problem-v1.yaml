@@ -843,14 +843,16 @@ research_surfaces:
       description: >-
         Declares the solver-level CVRP design boundary. It is backed by the
         existing main_search_plan execution hook and takes over the package's
-        main algorithm lifecycle when enabled:
-        bounded construction ensemble, repo-local baseline time budget and
-        sanitized baseline params, package-owned improvement loop components
-        including route-pair swap and bounded destroy/repair, bounded
+        main algorithm lifecycle when enabled: problem-object adaptation,
+        instance-profile intent, solver strategy family, bounded construction
+        ensemble, repo-local baseline time budget and sanitized baseline params,
+        package-owned improvement loop components including route-pair swap and
+        bounded destroy/repair, component roles/order, bounded per-component
         acceptance/restart/perturbation knobs, and optional post-baseline
         registry-operator scheduling. The solver audits component coverage with
         selected, attempted, accepted, skipped/skip-reason, objective-delta, and
-        destroy/repair count telemetry, and records conservative baseline-param
+        destroy/repair count telemetry, records the computed runtime instance
+        profile, and records conservative baseline-param
         clamp telemetry as a non-empty JSON-safe evidence object even when no
         clamp is applied. Defaults are inactive and disable
         post-baseline registry operators for this surface unless explicitly
@@ -871,9 +873,14 @@ research_surfaces:
           - time_limit_sec
       return_contract: >-
         main_search_plan returns a bounded dict with enabled bool,
-        construction dict, baseline dict, improvement dict, acceptance dict,
-        restart dict, perturbation dict, post_baseline_operators_enabled bool,
-        and operator_round_limit int. The perturbation dict may include
+        problem_adaptation dict, construction dict, baseline dict, improvement
+        dict, acceptance dict, restart dict, perturbation dict,
+        post_baseline_operators_enabled bool, and operator_round_limit int. The
+        problem_adaptation dict declares the strategy family, instance-profile
+        intent, phase objective, component roles, fallback order, and expected
+        runtime evidence targets. The acceptance dict may include per-component
+        minimum distance-improvement thresholds, recovery_only_policy, and a
+        bounded_destroy_repair_accept_limit. The perturbation dict may include
         schedule set to after_no_improvement, before_first_round, or
         before_each_round. When enabled is true, all required keys must be
         present and valid or the solver records
@@ -883,6 +890,7 @@ research_surfaces:
           value_type: mapping
           allowed_keys:
             - enabled
+            - problem_adaptation
             - construction
             - baseline
             - improvement
@@ -893,6 +901,7 @@ research_surfaces:
             - operator_round_limit
           required_keys:
             - enabled
+            - problem_adaptation
             - construction
             - baseline
             - improvement
@@ -917,6 +926,13 @@ research_surfaces:
         - bounded_perturbation
         - pre_improvement_perturbation
         - post_baseline_operator_toggle
+        - balanced_lifecycle
+        - baseline_intensification
+        - construction_diversification
+        - improvement_intensification
+        - destroy_repair_recovery
+        - route_structure_repair
+        - local_search_cleanup
       numeric_ranges:
         construction_keep_top_k: [1, 4]
         construction_bias: [0.0, 1.0]
@@ -929,6 +945,8 @@ research_surfaces:
         improvement_rounds: [1, 8]
         improvement_top_k: [1, 128]
         min_distance_improvement: [0.0, 10.0]
+        component_min_distance_improvement: [0.0, 10.0]
+        bounded_destroy_repair_accept_limit: [0, 3]
         restart_stagnation_rounds: [0, 25]
         max_restarts: [0, 3]
         perturbation_strength: [1, 8]
@@ -947,6 +965,15 @@ research_surfaces:
         - main_search_strategy_errors
         - main_search_plan
         - main_search_phases
+        - main_search_problem_adaptation
+        - main_search_strategy_family
+        - main_search_declared_instance_profile
+        - main_search_instance_profile
+        - main_search_phase_objective
+        - main_search_component_roles
+        - main_search_component_fallback_order
+        - main_search_evidence_targets
+        - main_search_problem_adaptation_source
         - main_search_construction_methods
         - main_search_baseline_time_fraction
         - main_search_baseline_time_fraction_effective
@@ -957,6 +984,7 @@ research_surfaces:
         - main_search_post_baseline_operators_enabled
         - main_search_operator_round_limit
         - main_search_components
+        - main_search_component_order
         - main_search_component_coverage_status
         - main_search_deep_components_selected
         - main_search_rounds
@@ -982,6 +1010,7 @@ research_surfaces:
         - main_search_component_repair_fallback_counts
         - main_search_component_runtime_ms
         - main_search_acceptance_min_distance_improvement
+        - recovery_only_policy
         - main_search_component_min_distance_improvement
         - main_search_bounded_destroy_repair_accept_limit
         - main_search_restart_enabled
@@ -1004,6 +1033,9 @@ research_surfaces:
         - target_objectives
         - selected_components
         - deep_components_selected
+        - strategy_family_pattern
+        - problem_adaptation_pattern
+        - evidence_target_pattern
         - budget_pattern
         - destroy_repair_pattern
         - baseline_fraction_pattern
@@ -1012,13 +1044,14 @@ research_surfaces:
     prompt:
       hypothesis_guidance: >-
         State how the whole CVRP solver design should improve problem-level
-        evidence:
+        evidence: which strategy_family and instance-profile intent apply,
         which construction ensemble, repo-local baseline params/budget,
-        package-owned improvement components, acceptance threshold, restart or
-        perturbation knobs, and optional registry-operator setting should work
-        together. Use this surface when the hypothesis needs coordinated
-        lifecycle design rather than a standalone component knob. Treat
-        component policies as implementation hooks, not research goals. Predict the
+        package-owned improvement components, component roles/order, acceptance
+        threshold or per-component threshold, restart or perturbation knobs, and
+        optional registry-operator setting should work together. Use this
+        surface when the hypothesis needs coordinated lifecycle design rather
+        than a standalone component knob. Treat component policies as
+        implementation hooks, not research goals. Predict the
         lifecycle phase, objective field, and whole-solver runtime evidence the
         change should move. If runtime feedback shows recovery-only moves,
         explicitly choose perturbation schedule after_no_improvement,
@@ -1030,27 +1063,34 @@ research_surfaces:
         recovery-only accepted deltas from phase-best objective gain.
       implementation_guidance: >-
         Keep main_search_plan deterministic, side-effect free, and return only
-        the declared bounded plan dict. The solver owns construction,
-        repo-local baseline invocation, route edits, feasibility checks,
-        strict-improvement acceptance, a formal-run baseline quality guard,
-        component-coverage telemetry, restarts, perturbations, and optional
-        registry operators. The perturbation schedule only changes when
-        perturbation is applied; after_no_improvement is the legacy default,
-        before_first_round perturbs once before the first improvement round,
-        and before_each_round perturbs before each round while perturbation
-        budget remains. For instance features,
+        the declared bounded plan dict. Include problem_adaptation with
+        strategy_family, instance_profile intent, phase_objective,
+        component_roles, fallback_order, and evidence_targets so the candidate
+        studies the whole problem object rather than forcing a single component
+        recipe. The solver computes and audits the runtime instance profile and
+        applies strategy_family/component roles to component ordering, bounded
+        destroy/repair acceptance limit defaults, and per-component acceptance
+        thresholds. The solver owns construction, repo-local baseline
+        invocation, route edits, feasibility checks, strict-improvement
+        acceptance, a formal-run baseline quality guard, component-coverage
+        telemetry, restarts, perturbations, and optional registry operators. The
+        perturbation schedule only changes when perturbation is applied;
+        after_no_improvement is the legacy default, before_first_round perturbs
+        once before the first improvement round, and before_each_round perturbs
+        before each round while perturbation budget remains. For instance features,
         use instance.customer_ids,
         instance.customer_count, instance.demands[customer_id],
         instance.capacity, and instance.distance(i, j). Leave
         post_baseline_operators_enabled false unless the hypothesis explicitly
         needs generated registry operators after the owned main loop. Include
         novelty_signature fields that distinguish selected_components,
-        deep_components_selected, budget_pattern, and destroy_repair_pattern
-        from prior whole-algorithm strategies when those dimensions are part of
-        the solver-level plan. For this surface, selected_components and
-        deep_components_selected are required structured identity fields: use
-        non-empty JSON arrays of component names, not false, null, or empty
-        arrays. Avoid
+        deep_components_selected, strategy_family_pattern,
+        problem_adaptation_pattern, evidence_target_pattern, budget_pattern, and
+        destroy_repair_pattern from prior whole-algorithm strategies when those
+        dimensions are part of the solver-level plan. For this surface,
+        selected_components and deep_components_selected are required
+        structured identity fields: use non-empty JSON arrays of component
+        names, not false, null, or empty arrays. Avoid
         aggressive baseline params such as global max_destroy_customers=200 on
         smaller formal cases; active main-search params are conservatively
         clamped and audited by the solver.
@@ -1065,11 +1105,12 @@ research_surfaces:
       - "policies/main_search_strategy.py"
     prompt_hint: >-
       Govern the whole CVRP solver lifecycle through a bounded plan;
-      registry post-baseline operators are off by default. Choose components,
-      baseline budget, restart/perturbation, and caps as one solver-level
-      hypothesis; expose the intended phase/objective movement in the novelty
-      signature. When using a perturbation-first idea, implement it through
-      perturbation.schedule rather than only describing it in prose.
+      registry post-baseline operators are off by default. Choose
+      problem_adaptation, components, component roles/order, baseline budget,
+      restart/perturbation, and caps as one solver-level hypothesis; expose the
+      intended phase/objective movement in the novelty signature. When using a
+      perturbation-first idea, implement it through perturbation.schedule rather
+      than only describing it in prose.
     required_functions:
       - "main_search_plan"
     create_new_allowed: false

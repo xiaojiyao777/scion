@@ -43,10 +43,50 @@ _ALLOWED_MAIN_SEARCH_COMPONENTS = frozenset(
         "bounded_destroy_repair",
     }
 )
-_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = frozenset(
+_MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS = _ALLOWED_MAIN_SEARCH_COMPONENTS
+_ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES = frozenset(
     {
-        "route_pair_swap",
-        "bounded_destroy_repair",
+        "balanced_lifecycle",
+        "baseline_intensification",
+        "construction_diversification",
+        "improvement_intensification",
+        "destroy_repair_recovery",
+        "route_structure_repair",
+        "local_search_cleanup",
+    }
+)
+_ALLOWED_MAIN_SEARCH_PHASE_OBJECTIVES = frozenset(
+    {
+        "construction_distance",
+        "baseline_distance",
+        "phase_best_distance",
+        "recovery_to_phase_best",
+        "runtime_neutrality",
+    }
+)
+_ALLOWED_MAIN_SEARCH_COMPONENT_ROLES = frozenset(
+    {"primary", "support", "probe", "disabled"}
+)
+_MAIN_SEARCH_ADAPTATION_PROFILE_KEYS = frozenset(
+    {
+        "scale",
+        "route_pressure",
+        "demand_skew",
+        "distance_structure",
+        "route_count_hint",
+        "customer_count",
+    }
+)
+_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
+    {
+        "construction_distance",
+        "baseline_cost",
+        "main_search_component_accepted_delta_sum",
+        "main_search_component_recovery_delta_sum",
+        "main_search_component_phase_delta_sum",
+        "main_search_objective_delta_by_phase",
+        "main_search_objective_trace",
+        "main_search_stop_reason",
     }
 )
 _PORTFOLIO_LIMIT_RANGES = {
@@ -85,6 +125,22 @@ _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS = frozenset(
         "operator_round_limit",
     }
 )
+_MAIN_SEARCH_STRATEGY_ALLOWED_KEYS = frozenset(
+    {*_MAIN_SEARCH_STRATEGY_REQUIRED_KEYS, "problem_adaptation"}
+)
+_MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS = frozenset(
+    {
+        "strategy_family",
+        "instance_profile",
+        "phase_objective",
+        "component_roles",
+        "fallback_order",
+        "evidence_targets",
+    }
+)
+_MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS = (
+    _MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS
+)
 _MAIN_SEARCH_CONSTRUCTION_REQUIRED_KEYS = frozenset(
     {"methods", "keep_top_k", "bias"}
 )
@@ -93,6 +149,14 @@ _MAIN_SEARCH_IMPROVEMENT_REQUIRED_KEYS = frozenset(
     {"enabled_components", "rounds", "top_k"}
 )
 _MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS = frozenset({"min_distance_improvement"})
+_MAIN_SEARCH_ACCEPTANCE_ALLOWED_KEYS = frozenset(
+    {
+        "min_distance_improvement",
+        "component_min_distance_improvement",
+        "bounded_destroy_repair_accept_limit",
+        "recovery_only_policy",
+    }
+)
 _MAIN_SEARCH_RESTART_REQUIRED_KEYS = frozenset(
     {"enabled", "stagnation_rounds", "max_restarts"}
 )
@@ -302,10 +366,11 @@ class CvrpAdapter:
             "- The `solver_design` research surface is the problem-owned "
             "solver-design boundary. It is backed by "
             "`policies/main_search_strategy.py` and inactive by default. When "
-            "enabled with a valid plan, it takes over construction ensemble "
-            "selection, repo-local baseline budget and sanitized baseline "
-            "params, package-owned main improvement components including "
-            "route-pair swap and bounded destroy/repair, bounded "
+            "enabled with a valid plan, it takes over the problem-object "
+            "adaptation layer: instance-profile intent, solver strategy family, "
+            "construction ensemble selection, repo-local baseline budget and "
+            "sanitized baseline params, package-owned main improvement "
+            "components, component roles/order, bounded per-component "
             "acceptance/restart/perturbation knobs, and the optional "
             "post-baseline registry-operator toggle. Registry operators are "
             "disabled by default for this surface unless explicitly enabled.\n"
@@ -440,13 +505,28 @@ class CvrpAdapter:
                 "Required function:\n"
                 "def main_search_plan(instance, time_limit_sec):\n"
                 "    return a dict with exactly these top-level keys: enabled, "
-                "construction, baseline, improvement, acceptance, restart, "
-                "perturbation, post_baseline_operators_enabled, and "
+                "problem_adaptation, construction, baseline, improvement, "
+                "acceptance, restart, perturbation, "
+                "post_baseline_operators_enabled, and "
                 "operator_round_limit.\n\n"
                 "Plan contract:\n"
                 "- enabled: bool. The default must be False. Only enabled=True "
                 "and a valid plan lets this surface take over the CVRP "
                 "algorithm lifecycle.\n"
+                "- problem_adaptation: dict declaring how the whole CVRP "
+                "problem object is being studied. strategy_family is one of "
+                "'balanced_lifecycle', 'baseline_intensification', "
+                "'construction_diversification', 'improvement_intensification', "
+                "'destroy_repair_recovery', 'route_structure_repair', or "
+                "'local_search_cleanup'. instance_profile is a bounded mapping "
+                "using keys scale, route_pressure, demand_skew, "
+                "distance_structure, route_count_hint, or customer_count. "
+                "phase_objective is one of construction_distance, "
+                "baseline_distance, phase_best_distance, recovery_to_phase_best, "
+                "or runtime_neutrality. component_roles maps allowed "
+                "components to primary/support/probe/disabled, fallback_order "
+                "orders allowed components, and evidence_targets lists runtime "
+                "fields expected to move.\n"
                 "- construction: dict with methods, keep_top_k, and bias. "
                 "methods is drawn from 'nearest_neighbor', "
                 "'nearest_neighbor_demand_bias', 'demand_descending', and "
@@ -472,8 +552,14 @@ class CvrpAdapter:
                 "non-empty JSON arrays of component names. Do not use false, "
                 "null, or empty arrays for these fields.\n"
                 "- acceptance: dict with min_distance_improvement finite number "
-                "in [0.0, 10.0]. bounded_destroy_repair also has a "
-                "problem-owned 1.0 minimum distance-improvement floor.\n"
+                "in [0.0, 10.0]. It may also include "
+                "component_min_distance_improvement, "
+                "bounded_destroy_repair_accept_limit in [0, 3], and "
+                "recovery_only_policy drawn from allow, reject_recovery_only, "
+                "or phase_best_preferred. bounded_destroy_repair keeps a "
+                "1.0 default minimum distance-improvement floor except for "
+                "destroy_repair_recovery plans or explicit per-component "
+                "thresholds.\n"
                 "- restart: dict with enabled bool, stagnation_rounds int in "
                 "[0, 25], and max_restarts int in [0, 3].\n"
                 "- perturbation: dict with enabled bool, strength int in "
@@ -1129,7 +1215,7 @@ def _preview_main_search_strategy(
         issues.append(f"main_search_plan returned non-mapping value {plan!r}")
         return
 
-    unknown = sorted(str(key) for key in plan if str(key) not in _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS)
+    unknown = sorted(str(key) for key in plan if str(key) not in _MAIN_SEARCH_STRATEGY_ALLOWED_KEYS)
     if unknown:
         issues.append(f"main_search_plan returned unknown keys {unknown}")
     enabled = plan.get("enabled", False)
@@ -1140,6 +1226,103 @@ def _preview_main_search_strategy(
         missing = sorted(key for key in _MAIN_SEARCH_STRATEGY_REQUIRED_KEYS if key not in plan)
         if missing:
             issues.append(f"enabled main_search_plan missing required keys {missing}")
+
+    problem_adaptation = _preview_mapping_section(
+        "problem_adaptation",
+        plan.get("problem_adaptation", {}),
+        issues,
+    )
+    if problem_adaptation is not None:
+        _preview_section_keys(
+            "problem_adaptation",
+            problem_adaptation,
+            allowed=_MAIN_SEARCH_PROBLEM_ADAPTATION_ALLOWED_KEYS,
+            required=_MAIN_SEARCH_PROBLEM_ADAPTATION_REQUIRED_KEYS,
+            require_missing=bool(enabled and "problem_adaptation" in plan),
+            issues=issues,
+        )
+        strategy_family = str(
+            problem_adaptation.get("strategy_family", "balanced_lifecycle")
+        ).strip()
+        if strategy_family not in _ALLOWED_MAIN_SEARCH_STRATEGY_FAMILIES:
+            issues.append(
+                "problem_adaptation.strategy_family returned unknown value "
+                f"{strategy_family!r}"
+            )
+        phase_objective = str(
+            problem_adaptation.get("phase_objective", "phase_best_distance")
+        ).strip()
+        if phase_objective not in _ALLOWED_MAIN_SEARCH_PHASE_OBJECTIVES:
+            issues.append(
+                "problem_adaptation.phase_objective returned unknown value "
+                f"{phase_objective!r}"
+            )
+        instance_profile = problem_adaptation.get("instance_profile", {})
+        if not isinstance(instance_profile, Mapping):
+            issues.append(
+                "problem_adaptation.instance_profile returned non-mapping value "
+                f"{instance_profile!r}"
+            )
+        else:
+            unknown_profile = sorted(
+                str(key)
+                for key in instance_profile
+                if str(key) not in _MAIN_SEARCH_ADAPTATION_PROFILE_KEYS
+            )
+            if unknown_profile:
+                issues.append(
+                    "problem_adaptation.instance_profile returned unknown keys "
+                    f"{unknown_profile}"
+                )
+        component_roles = problem_adaptation.get("component_roles", {})
+        if not isinstance(component_roles, Mapping):
+            issues.append(
+                "problem_adaptation.component_roles returned non-mapping value "
+                f"{component_roles!r}"
+            )
+        else:
+            for component, role in component_roles.items():
+                if str(component) not in _ALLOWED_MAIN_SEARCH_COMPONENTS:
+                    issues.append(
+                        "problem_adaptation.component_roles returned unknown "
+                        f"component {component!r}"
+                    )
+                if str(role) not in _ALLOWED_MAIN_SEARCH_COMPONENT_ROLES:
+                    issues.append(
+                        "problem_adaptation.component_roles returned unknown "
+                        f"role {role!r}"
+                    )
+        _check_sequence_literals(
+            "problem_adaptation.fallback_order",
+            problem_adaptation.get("fallback_order", []),
+            allowed=_ALLOWED_MAIN_SEARCH_COMPONENTS,
+            allow_empty=True,
+            issues=issues,
+        )
+        _check_sequence_literals(
+            "problem_adaptation.evidence_targets",
+            problem_adaptation.get(
+                "evidence_targets",
+                ["main_search_component_phase_delta_sum"],
+            ),
+            allowed=_ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS,
+            allow_empty=False,
+            issues=issues,
+        )
+    if enabled and "problem_adaptation" not in plan:
+        checks.append(
+            {
+                "name": "main_search_problem_adaptation_declared",
+                "passed": False,
+                "severity": "diagnostic_warning",
+                "guidance": (
+                    "solver_design proposals should declare problem_adaptation "
+                    "so the whole CVRP problem object, strategy family, "
+                    "instance profile, component roles, fallback order, and "
+                    "evidence targets are explicit."
+                ),
+            }
+        )
 
     construction = _preview_mapping_section("construction", plan.get("construction", {}), issues)
     if construction is not None:
@@ -1239,13 +1422,29 @@ def _preview_main_search_strategy(
             and not isinstance(components, (str, bytes))
         ):
             selected = {str(component) for component in components}
+            component_roles = (
+                problem_adaptation.get("component_roles", {})
+                if isinstance(problem_adaptation, Mapping)
+                else {}
+            )
+            if isinstance(component_roles, Mapping):
+                disabled_selected = sorted(
+                    str(component)
+                    for component in selected
+                    if str(component_roles.get(component, "")) == "disabled"
+                )
+                if disabled_selected:
+                    issues.append(
+                        "problem_adaptation.component_roles marks selected "
+                        f"components disabled: {disabled_selected}"
+                    )
             missing_deep = sorted(
                 _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS - selected
             )
             checks.append(
                 {
                     "name": "main_search_problem_object_evidence_alignment",
-                    "passed": not missing_deep,
+                    "passed": bool(selected & _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS),
                     "severity": "diagnostic_warning",
                     "required_components": sorted(
                         _MAIN_SEARCH_DEEP_ATTRIBUTION_COMPONENTS
@@ -1257,9 +1456,9 @@ def _preview_main_search_strategy(
                         "CVRP designs. Explain how selected components, baseline "
                         "budget, restart/perturbation, and caps work together; "
                         "predict phase-best objective movement and whole-solver "
-                        "runtime fields. The preview reports whether both "
-                        "package-owned deep components are selected because they "
-                        "are useful attribution hooks, but missing components "
+                        "runtime fields. The preview reports which package-owned "
+                        "problem-object components are selected because missing "
+                        "components "
                         "are diagnostic only and do not make an otherwise valid "
                         "problem-level plan fail."
                     ),
@@ -1271,7 +1470,7 @@ def _preview_main_search_strategy(
         _preview_section_keys(
             "acceptance",
             acceptance,
-            allowed=_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
+            allowed=_MAIN_SEARCH_ACCEPTANCE_ALLOWED_KEYS,
             required=_MAIN_SEARCH_ACCEPTANCE_REQUIRED_KEYS,
             require_missing=enabled,
             issues=issues,
@@ -1284,6 +1483,40 @@ def _preview_main_search_strategy(
             integral=False,
             issues=issues,
         )
+        component_thresholds = acceptance.get("component_min_distance_improvement", {})
+        if not isinstance(component_thresholds, Mapping):
+            issues.append(
+                "acceptance.component_min_distance_improvement returned "
+                f"non-mapping value {component_thresholds!r}"
+            )
+        else:
+            for component, threshold in component_thresholds.items():
+                if str(component) not in _ALLOWED_MAIN_SEARCH_COMPONENTS:
+                    issues.append(
+                        "acceptance.component_min_distance_improvement returned "
+                        f"unknown component {component!r}"
+                    )
+                _check_number(
+                    f"acceptance.component_min_distance_improvement.{component}",
+                    threshold,
+                    minimum=0.0,
+                    maximum=10.0,
+                    integral=False,
+                    issues=issues,
+                )
+        _check_number(
+            "acceptance.bounded_destroy_repair_accept_limit",
+            acceptance.get("bounded_destroy_repair_accept_limit", 1),
+            minimum=0,
+            maximum=3,
+            integral=True,
+            issues=issues,
+        )
+        recovery_policy = str(acceptance.get("recovery_only_policy", "allow")).strip()
+        if recovery_policy not in _ACCEPTANCE_RECOVERY_POLICIES:
+            issues.append(
+                f"acceptance.recovery_only_policy returned unknown value {recovery_policy!r}"
+            )
 
     restart = _preview_mapping_section("restart", plan.get("restart", {}), issues)
     if restart is not None:

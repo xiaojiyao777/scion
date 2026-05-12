@@ -1232,6 +1232,12 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
 
     assert "main_search_strategy_loaded" in required_fields
     assert "main_search_strategy_errors" in required_fields
+    assert "main_search_problem_adaptation" in required_fields
+    assert "main_search_strategy_family" in required_fields
+    assert "main_search_instance_profile" in required_fields
+    assert "main_search_component_roles" in required_fields
+    assert "main_search_component_order" in required_fields
+    assert "main_search_evidence_targets" in required_fields
     assert "main_search_selected_components" in required_fields
     assert "main_search_attempted_components" in required_fields
     assert "main_search_component_coverage_status" in required_fields
@@ -1261,6 +1267,8 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     assert runtime["main_search_strategy_loaded"] is True
     assert runtime["main_search_strategy_active"] is False
     assert runtime["main_search_plan"]["enabled"] is False
+    assert runtime["main_search_strategy_family"] == "balanced_lifecycle"
+    assert runtime["main_search_problem_adaptation_source"] == "declared"
     assert runtime["main_search_phases"] == ["inactive"]
     assert runtime["main_search_component_coverage_status"]["status"] == "inactive"
     assert runtime["main_search_deep_components_selected"] == []
@@ -1347,11 +1355,13 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     ]
     assert runtime["main_search_deep_components_selected"] == [
         "bounded_destroy_repair",
+        "intra_route_2opt",
     ]
     assert runtime["main_search_component_coverage_status"]["status"] == (
-        "missing_forced_diagnostic_deep_components"
+        "partial_problem_components_attempted"
     )
     assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "inter_route_relocate",
         "route_pair_swap",
     ]
     assert runtime["main_search_attempted_components"] == [
@@ -1558,9 +1568,12 @@ def test_main_search_strategy_runtime_marks_both_deep_components_attempted(
         "bounded_destroy_repair",
     ]
     assert runtime["main_search_component_coverage_status"]["status"] == (
-        "deep_components_attempted"
+        "partial_problem_components_attempted"
     )
-    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == []
+    assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "inter_route_relocate",
+        "intra_route_2opt",
+    ]
     assert runtime["main_search_component_coverage_status"]["unattempted_deep_components"] == []
     assert runtime["main_search_component_attempts"]["route_pair_swap"] == 0
     assert runtime["main_search_component_attempts"]["bounded_destroy_repair"] > 1
@@ -1617,10 +1630,12 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
     assert runtime["main_search_selected_components"] == ["route_pair_swap"]
     assert runtime["main_search_deep_components_selected"] == ["route_pair_swap"]
     assert runtime["main_search_component_coverage_status"]["status"] == (
-        "missing_forced_diagnostic_deep_components"
+        "partial_problem_components_attempted"
     )
     assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
         "bounded_destroy_repair",
+        "inter_route_relocate",
+        "intra_route_2opt",
     ]
     assert runtime["main_search_attempted_components"] == ["route_pair_swap"]
     assert runtime["main_search_accepted_components"] == ["route_pair_swap"]
@@ -2309,9 +2324,11 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
     assert runtime["main_search_selected_components"] == ["bounded_destroy_repair"]
     assert runtime["main_search_deep_components_selected"] == ["bounded_destroy_repair"]
     assert runtime["main_search_component_coverage_status"]["status"] == (
-        "missing_forced_diagnostic_deep_components"
+        "partial_problem_components_attempted"
     )
     assert runtime["main_search_component_coverage_status"]["missing_deep_components"] == [
+        "inter_route_relocate",
+        "intra_route_2opt",
         "route_pair_swap",
     ]
     assert runtime["main_search_attempted_components"] == ["bounded_destroy_repair"]

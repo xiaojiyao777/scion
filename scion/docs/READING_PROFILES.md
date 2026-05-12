@@ -131,7 +131,10 @@ Keep the boundary clear:
   field meanings, and controlled fixtures.
 - `solver_design` is the top-level problem-object boundary. It is backed by
   `policies/main_search_strategy.py`, and component policies should support
-  that solver-level hypothesis rather than define the research target.
+  that solver-level hypothesis rather than define the research target. Current
+  solver-design work should use `problem_adaptation` to declare strategy
+  family, instance-profile intent, phase objective, component roles/order, and
+  evidence targets for the whole CVRP problem object.
 
 ## Profile: New Problem Or Solver Onboarding
 
