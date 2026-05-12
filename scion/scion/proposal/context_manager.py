@@ -26,6 +26,13 @@ from scion.core.forced_surface import (
 )
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
+_NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
+    {
+        "selected_components",
+        "deep_components_selected",
+    }
+)
+
 
 class ContextManager:
     """Constructs context dicts for CreativeLayer calls.
@@ -622,6 +629,16 @@ def _build_forced_surface_novelty_guidance(
         "Do not use hypothesis prose as novelty identity; C10 ignores free text "
         "for this semantic signature.",
     ]
+    sequence_fields = [
+        field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
+    ]
+    if sequence_fields:
+        lines.append(
+            "These novelty_signature fields must be non-empty JSON arrays of "
+            "component names, not null, false, empty strings, or empty arrays: "
+            + ", ".join(sequence_fields)
+            + "."
+        )
     occupied = _summarise_surface_structured_signatures(
         blocking_hypotheses,
         surface_name=surface_name,
@@ -2873,13 +2890,6 @@ def _build_solver_design_boundary_guidance(
         for item in rejected_hypotheses
         if item.change_locus in solver_design_names
     ]
-    if (
-        not failed_solver_design_steps
-        and not blacklisted_solver_design
-        and not rejected_solver_design
-    ):
-        return ""
-
     names = ", ".join(solver_design_names)
     lines = [
         "## Solver-Design Boundary Control",
@@ -2907,15 +2917,32 @@ def _build_solver_design_boundary_guidance(
             "Rejected solver-design entries are candidate implementations only; "
             "they do not retire the solver-design boundary."
         )
-    lines.append(
-        "For the next hypothesis, retry the solver-design boundary with a "
-        "different lifecycle implementation before falling back to isolated "
-        "component policies."
-    )
+    if failed_solver_design_steps or blacklisted_solver_design or rejected_solver_design:
+        lines.append(
+            "For the next hypothesis, retry the solver-design boundary with a "
+            "different lifecycle implementation before falling back to isolated "
+            "component policies."
+        )
+    else:
+        lines.append(
+            "For the next hypothesis, use the solver-design boundary for the "
+            "problem-level lifecycle design before considering isolated "
+            "component policies."
+        )
     lines.append(
         "Component policies may be used as implementation hooks or attribution "
         "evidence, but they are not replacement research goals for this diagnostic."
     )
+    blocking_hypotheses = [*(blacklist or []), *(rejected_hypotheses or [])]
+    for surface_name in solver_design_names:
+        surface = _find_research_surface(research_surfaces, surface_name)
+        lines.extend(
+            _build_forced_surface_novelty_guidance(
+                surface=surface,
+                surface_name=surface_name,
+                blocking_hypotheses=blocking_hypotheses,
+            )
+        )
     return "\n".join(lines)
 
 

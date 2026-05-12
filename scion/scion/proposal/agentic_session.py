@@ -34,6 +34,7 @@ from scion.proposal.tools import (
     ProposalToolFailureCode,
     ProposalToolPermission,
     ProposalToolRegistry,
+    _active_boundary_novelty_requirements,
 )
 
 AGENTIC_SESSION_SCHEMA_VERSION = "agentic-proposal-session.v1"
@@ -1901,6 +1902,12 @@ class AgenticProposalSession:
                 return {}
             return {
                 "active_problem_boundary_surfaces": active_boundary,
+                "novelty_signature_requirements": (
+                    _active_boundary_novelty_requirements(
+                        context,
+                        list(active_boundary),
+                    )
+                ),
                 "rule": (
                     "Hypothesis generation must keep change_locus on the "
                     "active problem-object boundary. Component policies are "
@@ -1920,6 +1927,14 @@ class AgenticProposalSession:
                     "fails closed before code generation."
                 ),
                 "active_problem_boundary_surfaces": active_boundary or None,
+                "novelty_signature_requirements": (
+                    _active_boundary_novelty_requirements(
+                        context,
+                        [str(context.forced_surface).strip()],
+                    )
+                    if context.forced_surface
+                    else None
+                ),
             }.items()
             if value
         }

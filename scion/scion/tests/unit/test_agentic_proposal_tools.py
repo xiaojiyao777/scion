@@ -1288,6 +1288,83 @@ def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
     assert accepted.structured_payload["passed"] is True
 
 
+def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+
+    listed = registry.call("context.list_surfaces", {}, context)
+    constraint = listed.structured_payload["active_problem_boundary_constraint"]
+    requirements = constraint["novelty_signature_requirements"]["solver_design"]
+
+    assert requirements["strategy"] == "semantic_signature"
+    assert "deep_components_selected" in requirements["required_fields"]
+    assert requirements["nonempty_sequence_fields"] == [
+        "selected_components",
+        "deep_components_selected",
+    ]
+    assert "non-empty arrays" in requirements["rule"]
+
+
+def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/main_search_strategy.py",
+    )
+    hypothesis["novelty_signature"]["deep_components_selected"] = []
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guidance = preview.structured_payload["hypothesis"][
+        "novelty_signature_guidance"
+    ]
+    assert preview.structured_payload["passed"] is False
+    assert guidance["missing_fields"] == ["deep_components_selected"]
+    assert "deep_components_selected" in guidance["nonempty_sequence_fields"]
+
+
+def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    hypothesis = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/main_search_strategy.py",
+    )
+    hypothesis["novelty_signature"]["deep_components_selected"] = False
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+
+    guidance = preview.structured_payload["hypothesis"][
+        "novelty_signature_guidance"
+    ]
+    assert preview.structured_payload["passed"] is False
+    assert guidance["missing_fields"] == ["deep_components_selected"]
+
+
 def test_cvrp_solver_design_screening_failure_keeps_boundary_priority(
     tmp_path: Path,
 ) -> None:
@@ -2830,6 +2907,51 @@ def test_creative_layer_renders_agentic_observations_and_research_diagnosis() ->
     assert "## Agentic Proposal Tool Observations" in rendered
     assert "feedback.query_runtime" in rendered
     assert "screening_win_rate_failure" in rendered
+
+
+def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+
+    creative.generate_hypothesis(
+        {
+            "problem_summary": "CVRP.",
+            "research_surfaces": "surface: solver_design",
+            "objective_policy_guidance": "Minimize fleet_violation then distance.",
+            "solver_mechanics": "",
+            "champion_operators_code": "def main_search_plan(...): ...",
+            "champion_stats": "champion v1",
+            "operator_categories": "solver_design",
+            "active_problem_boundary_surfaces": "solver_design",
+            "available_actions": "modify",
+            "targetable_files": "policies/main_search_strategy.py",
+            "agentic_hypothesis_constraints": {
+                "active_problem_boundary_surfaces": ("solver_design",),
+                "novelty_signature_requirements": {
+                    "solver_design": {
+                        "strategy": "semantic_signature",
+                        "required_fields": [
+                            "predicted_direction",
+                            "target_objectives",
+                            "selected_components",
+                            "deep_components_selected",
+                        ],
+                        "nonempty_sequence_fields": [
+                            "selected_components",
+                            "deep_components_selected",
+                        ],
+                    }
+                },
+            },
+        }
+    )
+
+    rendered = json.dumps(client.system_blocks, sort_keys=True) + "\n".join(
+        client.prompts
+    )
+    assert "active problem-object research boundary" in rendered
+    assert "deep_components_selected" in rendered
+    assert "non-empty JSON arrays of component names" in rendered
 
 
 def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> None:

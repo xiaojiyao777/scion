@@ -1047,7 +1047,10 @@ research_surfaces:
         novelty_signature fields that distinguish selected_components,
         deep_components_selected, budget_pattern, and destroy_repair_pattern
         from prior whole-algorithm strategies when those dimensions are part of
-        the solver-level plan. Avoid
+        the solver-level plan. For this surface, selected_components and
+        deep_components_selected are required structured identity fields: use
+        non-empty JSON arrays of component names, not false, null, or empty
+        arrays. Avoid
         aggressive baseline params such as global max_destroy_customers=200 on
         smaller formal cases; active main-search params are conservatively
         clamped and audited by the solver.

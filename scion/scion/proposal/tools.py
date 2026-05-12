@@ -61,6 +61,12 @@ _PREVIEW_FAILURE_REASON_CHARS = 800
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
+_NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
+    {
+        "selected_components",
+        "deep_components_selected",
+    }
+)
 _COMPACT_SURFACE_SECTIONS = (
     "summary",
     "interface",
@@ -1628,7 +1634,10 @@ def _hypothesis_schema_preview(
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
     if forced_violation is not None:
         passed = False
-    if novelty_guidance.get("required") and novelty_guidance.get("missing_fields"):
+    if novelty_guidance.get("required") and (
+        novelty_guidance.get("missing_fields")
+        or novelty_guidance.get("invalid_fields")
+    ):
         passed = False
     return {
         "passed": passed,
@@ -1645,7 +1654,10 @@ def _hypothesis_schema_preview(
                 if forced_violation is not None
                 else (
                     novelty_guidance.get("detail")
-                    if novelty_guidance.get("missing_fields")
+                    if (
+                        novelty_guidance.get("missing_fields")
+                        or novelty_guidance.get("invalid_fields")
+                    )
                     else _limit_text(
                         _first_failure(c1_checks) or "", _PREVIEW_FAILURE_REASON_CHARS
                     )
@@ -1669,6 +1681,7 @@ def _semantic_signature_preview_guidance(
         return {}
 
     missing: list[str] = []
+    invalid: list[str] = []
     unsupported: list[str] = []
     for field in fields:
         name = str(field).strip()
@@ -1686,21 +1699,27 @@ def _semantic_signature_preview_guidance(
         if (
             not isinstance(values, dict)
             or name not in values
-            or values[name]
-            in (
-                None,
-                "",
-                [],
-                {},
-            )
+            or _semantic_signature_value_missing(values[name])
         ):
             missing.append(name)
+            continue
+        if (
+            name in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
+            and not _is_nonempty_text_sequence(values[name])
+        ):
+            invalid.append(name)
 
     detail = ""
     if missing:
         detail = (
             "missing structured novelty_signature identity for semantic_signature "
             f"surface '{hypothesis.change_locus}': {', '.join(missing)}"
+        )
+    elif invalid:
+        detail = (
+            "invalid structured novelty_signature identity for semantic_signature "
+            f"surface '{hypothesis.change_locus}': {', '.join(invalid)} must be "
+            "non-empty arrays of component names"
         )
     elif unsupported:
         detail = (
@@ -1718,10 +1737,30 @@ def _semantic_signature_preview_guidance(
             "strategy": strategy,
             "signature_fields": fields,
             "missing_fields": missing,
+            "invalid_fields": invalid,
+            "nonempty_sequence_fields": [
+                field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
+            ],
             "unsupported_fields": unsupported,
             "detail": detail,
         }
     )
+
+
+def _semantic_signature_value_missing(value: Any) -> bool:
+    if value is None or value is False:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, set, frozenset, dict)):
+        return len(value) == 0
+    return False
+
+
+def _is_nonempty_text_sequence(value: Any) -> bool:
+    if not isinstance(value, (list, tuple, set, frozenset)) or not value:
+        return False
+    return all(isinstance(item, str) and bool(item.strip()) for item in value)
 
 
 def _contract_gate(context: ProposalToolContext) -> ContractGate:
@@ -2044,6 +2083,7 @@ def _active_problem_boundary_constraint_payload(
     ]
     if not surfaces:
         return None
+    novelty_requirements = _active_boundary_novelty_requirements(context, surfaces)
     return {
         "surfaces": surfaces,
         "rule": (
@@ -2052,7 +2092,45 @@ def _active_problem_boundary_constraint_payload(
             "implementation hooks or attribution evidence, not replacement "
             "research goals."
         ),
+        "novelty_signature_requirements": novelty_requirements,
     }
+
+
+def _active_boundary_novelty_requirements(
+    context: ProposalToolContext,
+    surfaces: list[str],
+) -> dict[str, Any]:
+    requirements: dict[str, Any] = {}
+    for surface_name in surfaces:
+        surface = _find_surface(context, surface_name)
+        requirement = _surface_novelty_signature_requirement(surface)
+        if requirement:
+            requirements[surface_name] = requirement
+    return requirements
+
+
+def _surface_novelty_signature_requirement(surface: Any | None) -> dict[str, Any]:
+    if surface is None:
+        return {}
+    novelty = _attr(surface, "novelty")
+    strategy = str(_attr(novelty, "strategy", "") or "")
+    fields = _coerce_compact_list(_attr(novelty, "signature_fields", []))
+    if strategy != "semantic_signature" or not fields:
+        return {}
+    return _drop_empty_items(
+        {
+            "strategy": strategy,
+            "required_fields": fields,
+            "nonempty_sequence_fields": [
+                field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
+            ],
+            "rule": (
+                "Provide every required novelty_signature field. Fields listed "
+                "under nonempty_sequence_fields must be non-empty arrays of "
+                "component names, not null, false, empty strings, or empty arrays."
+            ),
+        }
+    )
 
 
 def _forced_hypothesis_violation(

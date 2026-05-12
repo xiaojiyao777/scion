@@ -787,6 +787,36 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
     assert result.passed
 
 
+def test_cvrp_main_search_strategy_rejects_false_deep_component_identity() -> None:
+    spec = load_problem_spec_v1_from_yaml(
+        Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem-v1.yaml"
+    )
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+    candidate = HypothesisProposal(
+        hypothesis_text="Use a shallow two-opt-only lifecycle.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/main_search_strategy.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        novelty_signature={
+            "selected_components": ["intra_route_2opt"],
+            "deep_components_selected": False,
+            "budget_pattern": "baseline_85_post_15",
+            "destroy_repair_pattern": "none",
+            "baseline_fraction_pattern": {"baseline": 0.85, "post": 0.15},
+            "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
+            "perturbation_pattern": "none",
+        },
+    )
+
+    result = gate.validate_hypothesis(candidate, [], [])
+
+    assert not result.passed
+    assert "C10_novelty" in (result.failure_reason or "")
+    assert "deep_components_selected" in (result.failure_reason or "")
+
+
 def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> None:
     spec = load_problem_spec_v1_from_yaml(
         Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem-v1.yaml"
@@ -2668,6 +2698,8 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "## Solver-Design Boundary Control" in prompt_text
     assert "retry the solver-design boundary" in prompt_text
     assert "Component policies" in prompt_text
+    assert "deep_components_selected" in prompt_text
+    assert "non-empty JSON arrays of component names" in prompt_text
     assert "## Globally Failed / Blacklisted Approaches\n(none)" in prompt_text
     assert ctx["active_problem_boundary_surfaces"] == "solver_design"
     assert ctx["operator_categories"] == "solver_design"

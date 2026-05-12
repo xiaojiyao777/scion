@@ -536,6 +536,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
     forced_action = str(context.get("forced_action") or "").strip()
     forced_target_file = str(context.get("forced_target_file") or "").strip()
     constraints = context.get("agentic_hypothesis_constraints")
+    novelty_requirements: Mapping[str, Any] = {}
     active_boundary = str(
         context.get("active_problem_boundary_surfaces") or ""
     ).strip()
@@ -556,6 +557,9 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             )
         elif not active_boundary:
             active_boundary = str(boundary_value or "").strip()
+        raw_novelty_requirements = constraints.get("novelty_signature_requirements")
+        if isinstance(raw_novelty_requirements, Mapping):
+            novelty_requirements = raw_novelty_requirements
     if forced_surface:
         lines = [
             "## Task",
@@ -585,6 +589,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 "If the forced action is \"modify\" or \"remove\", provide a "
                 "target_file declared by the forced surface."
             )
+        lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     if active_boundary:
         targetable_files = str(context.get("targetable_files") or "")
@@ -607,6 +612,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 "If action is \"modify\" or \"remove\", provide `target_file` "
                 f"from the active boundary files: {targetable_files}."
             )
+        lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")
     available_actions = str(
@@ -621,6 +627,39 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         "If action is \"modify\" or \"remove\", provide `target_file` from "
         f"the targetable files when available: {targetable_files}.\n"
     )
+
+
+def _novelty_signature_task_lines(
+    requirements: Mapping[str, Any],
+) -> list[str]:
+    if not isinstance(requirements, Mapping) or not requirements:
+        return []
+    lines: list[str] = []
+    for surface_name, requirement in sorted(requirements.items()):
+        if not isinstance(requirement, Mapping):
+            continue
+        fields = requirement.get("required_fields")
+        if not isinstance(fields, (list, tuple)) or not fields:
+            continue
+        field_text = ", ".join(str(field) for field in fields if str(field).strip())
+        if not field_text:
+            continue
+        lines.append(
+            f"For `{surface_name}`, populate `novelty_signature` with every "
+            f"declared semantic field: {field_text}."
+        )
+        sequence_fields = requirement.get("nonempty_sequence_fields")
+        if isinstance(sequence_fields, (list, tuple)) and sequence_fields:
+            seq_text = ", ".join(
+                str(field) for field in sequence_fields if str(field).strip()
+            )
+            if seq_text:
+                lines.append(
+                    f"For `{surface_name}`, `{seq_text}` must be non-empty "
+                    "JSON arrays of component names; do not use null, false, "
+                    "empty strings, or empty arrays."
+                )
+    return lines
 
 
 def _split_code_context(

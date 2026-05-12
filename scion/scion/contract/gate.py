@@ -81,6 +81,12 @@ _DIRECT_SIGNATURE_FIELDS = frozenset(
     }
 )
 _WEAK_SIGNATURE_FIELDS = frozenset({"predicted_direction"})
+_NONEMPTY_SEQUENCE_SIGNATURE_FIELDS = frozenset(
+    {
+        "selected_components",
+        "deep_components_selected",
+    }
+)
 _MAX_GENERIC_SIGNATURE_ITEMS = 16
 _MAX_GENERIC_SIGNATURE_STRING = 120
 _SIGNATURE_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -1150,6 +1156,8 @@ class ContractGate:
         values = getattr(h, "novelty_signature", None)
         if not isinstance(values, dict) or field not in values:
             return None
+        if field in _NONEMPTY_SEQUENCE_SIGNATURE_FIELDS:
+            return _normalize_nonempty_signature_sequence(values[field])
         return _normalize_generic_signature_value(values[field])
 
     def _normalize_structured_signature_value(
@@ -1649,10 +1657,28 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
     return deduped
 
 
+def _normalize_nonempty_signature_sequence(value: Any) -> str | None:
+    if not isinstance(value, (list, tuple, set, frozenset)) or not value:
+        return None
+    items: list[str] = []
+    for item in value:
+        token = _normalize_text_token(item, max_length=_MAX_GENERIC_SIGNATURE_STRING)
+        if token is None:
+            return None
+        items.append(token)
+    if not items:
+        return None
+    if isinstance(value, (set, frozenset)):
+        items = sorted(items)
+    return json.dumps(items, separators=(",", ":"), ensure_ascii=True)
+
+
 def _normalize_generic_signature_value(value: Any, *, depth: int = 0) -> str | None:
     if depth > 3:
         return None
     if value is None:
+        return None
+    if depth == 0 and value is False:
         return None
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -1665,6 +1691,8 @@ def _normalize_generic_signature_value(value: Any, *, depth: int = 0) -> str | N
     if isinstance(value, str):
         return _normalize_text_token(value, max_length=_MAX_GENERIC_SIGNATURE_STRING)
     if isinstance(value, (list, tuple, set, frozenset)):
+        if not value:
+            return None
         if len(value) > _MAX_GENERIC_SIGNATURE_ITEMS:
             return None
         items = [
@@ -1677,6 +1705,8 @@ def _normalize_generic_signature_value(value: Any, *, depth: int = 0) -> str | N
             items = sorted(items)  # type: ignore[arg-type]
         return json.dumps(items, separators=(",", ":"), ensure_ascii=True)
     if isinstance(value, dict):
+        if not value:
+            return None
         if len(value) > _MAX_GENERIC_SIGNATURE_ITEMS:
             return None
         normalized: dict[str, str] = {}
