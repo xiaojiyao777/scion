@@ -11,6 +11,8 @@ import json
 import hashlib
 import os
 import re
+import signal
+import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
@@ -78,6 +80,7 @@ _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
+_CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
 
 
 class AgenticProposalStatus(str, Enum):
@@ -87,6 +90,18 @@ class AgenticProposalStatus(str, Enum):
     PARTIAL_HYPOTHESIS_ONLY = "partial_hypothesis_only"
     PARTIAL_PATCH_UNCHECKED = "partial_patch_unchecked"
     FAILED = "failed"
+
+
+class _ProposalToolTimeout(BaseException):
+    pass
+
+
+def _can_use_signal_timeout() -> bool:
+    return (
+        threading.current_thread() is threading.main_thread()
+        and hasattr(signal, "SIGALRM")
+        and hasattr(signal, "setitimer")
+    )
 
 
 class AgenticTerminationReason(str, Enum):
@@ -2687,12 +2702,32 @@ class AgenticProposalSession:
                 repair_hint="Use existing compact observations or stop planning.",
             )
         else:
-            observation = self.tool_registry.call(
-                name,
-                args,
-                context,
-                tool_call_id=step_id,
-            )
+            try:
+                observation = self._registry_call_with_timeout(
+                    name,
+                    args,
+                    context,
+                    tool_call_id=step_id,
+                )
+            except _ProposalToolTimeout as exc:
+                observation = ProposalObservation(
+                    observation_id=str(uuid.uuid4()),
+                    session_id=context.session_id,
+                    tool_name=name,
+                    tool_call_id=step_id,
+                    observation_type="tool_error",
+                    summary=str(exc),
+                    structured_payload={
+                        "timeout_sec": _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC,
+                        "tool_name": name,
+                    },
+                    is_error=True,
+                    failure_code=ProposalToolFailureCode.RUNTIME_EXCEPTION,
+                    repair_hint=(
+                        "Simplify the candidate and use statically bounded loops "
+                        "before requesting Contract preview again."
+                    ),
+                )
         observation = self._enforce_observation_budget(context, state, observation)
         prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
         remaining = self._remaining_observation_chars(state)
@@ -2732,6 +2767,44 @@ class AgenticProposalSession:
             },
         )
         return observation
+
+    def _registry_call_with_timeout(
+        self,
+        name: str,
+        args: Mapping[str, Any],
+        context: ProposalToolContext,
+        *,
+        tool_call_id: str,
+    ) -> ProposalObservation:
+        assert self.tool_registry is not None
+        if name != "proposal.contract_preview" or not _can_use_signal_timeout():
+            return self.tool_registry.call(
+                name,
+                args,
+                context,
+                tool_call_id=tool_call_id,
+            )
+
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        previous_timer = signal.getitimer(signal.ITIMER_REAL)
+
+        def _raise_timeout(_signum: int, _frame: Any) -> None:
+            raise _ProposalToolTimeout(
+                "Contract preview timed out before workspace materialization."
+            )
+
+        signal.signal(signal.SIGALRM, _raise_timeout)
+        signal.setitimer(signal.ITIMER_REAL, _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC)
+        try:
+            return self.tool_registry.call(
+                name,
+                args,
+                context,
+                tool_call_id=tool_call_id,
+            )
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+            signal.signal(signal.SIGALRM, previous_handler)
 
     def _tool_loop_limit_reached(self, state: AgenticProposalSessionState) -> bool:
         return (

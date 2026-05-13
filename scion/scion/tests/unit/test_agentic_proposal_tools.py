@@ -5,6 +5,7 @@ from dataclasses import fields, replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from pydantic import BaseModel
 
 from scion.core.models import (
@@ -24,6 +25,7 @@ from scion.core.models import (
 from scion.problem.spec import ProblemSpecV1
 from scion.problem.bridge import load_problem_spec_v1_from_yaml
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.proposal import agentic_session as agentic_session_module
 from scion.proposal.agentic_session import (
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticProposalRequest,
@@ -179,6 +181,23 @@ class LargeObservationTool:
                 ProposalToolFailureCode.RUNTIME_EXCEPTION if self.is_error else None
             ),
         )
+
+
+class HangingContractPreviewTool:
+    name = "proposal.contract_preview"
+    permission = ProposalToolPermission.CONTRACT_PREVIEW
+    read_only = True
+    concurrency_safe = True
+    max_result_chars = 1000
+    input_schema = _EmptyToolInput
+
+    def call(
+        self,
+        args: BaseModel,
+        context: ProposalToolContext,
+    ) -> ProposalObservation:
+        while True:
+            pass
 
 
 def _problem_spec(root: Path) -> ProblemSpecV1:
@@ -4521,6 +4540,43 @@ def test_agentic_session_contract_preview_failure_fails_closed(
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
     assert output.self_check.contract_preview_codes[0] in output.failure_detail
+
+
+def test_agentic_session_contract_preview_timeout_returns_tool_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    if not agentic_session_module._can_use_signal_timeout():
+        pytest.skip("SIGALRM timeout is unavailable in this environment.")
+    monkeypatch.setattr(
+        agentic_session_module,
+        "_CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC",
+        0.01,
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    state = AgenticProposalSessionState(
+        session_id=context.session_id,
+        campaign_id=context.campaign_id,
+        branch_id=context.branch.branch_id,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry([HangingContractPreviewTool()]),
+    )
+
+    observation = session._call_tool(
+        context,
+        state,
+        AgenticProposalPhase.SELF_CHECK,
+        "proposal.contract_preview",
+        {},
+    )
+
+    assert observation.is_error is True
+    assert observation.failure_code == ProposalToolFailureCode.RUNTIME_EXCEPTION
+    assert "timed out" in observation.summary
+    assert observation.structured_payload["tool_name"] == "proposal.contract_preview"
+    assert state.transcript[-1].metadata["status"] == "error"
 
 
 def test_agentic_session_does_not_emit_raw_refs_in_artifacts(tmp_path: Path) -> None:

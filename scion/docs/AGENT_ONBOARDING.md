@@ -197,6 +197,13 @@ Important current interpretation:
   can be fed back into one bounded regeneration attempt. The proposal agent
   still cannot write workspaces, read validation/frozen raw metrics, or change
   objective/constraint semantics.
+- The latest 5-round exploratory `solver_design` run exposed a preview-time
+  hang after successful code generation. Treat this as a boundary-control
+  issue, not a reason to return to componentized policy exposure.
+- Current preview repair: unbounded boolean-flag `while` loops fail C9c unless
+  explicitly bounded, CVRP synthetic preview times out `solve(...)`, and APS
+  turns a hung `proposal.contract_preview` into a controlled tool error. Run a
+  1-2 round smoke before any longer CVRP solver-quality validation.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 

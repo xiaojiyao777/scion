@@ -20,6 +20,7 @@ from scion.problem.spec import ProblemSpecV1
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 from scion.problems.cvrp.solver import solve
 from scion.verification.gate import VerificationGate
+from scion.problems.cvrp import adapter as cvrp_adapter_module
 
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
@@ -403,6 +404,32 @@ def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(
 
     assert preview["passed"] is True
     assert preview["issues"] == []
+
+
+def test_cvrp_solver_algorithm_preview_times_out_unbounded_solve(
+    cvrp_adapter: ProblemAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert not issubclass(cvrp_adapter_module._PolicyPreviewTimeout, Exception)
+    monkeypatch.setattr(cvrp_adapter_module, "_POLICY_PREVIEW_EXEC_TIMEOUT_SEC", 0.05)
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    while True:\n"
+            "        pass\n"
+            "    return context.nearest_neighbor()\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "timed out during synthetic preview" in json.dumps(preview["issues"])
 
 
 def test_cvrp_solver_algorithm_preview_rejects_infeasible_solution(

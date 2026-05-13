@@ -155,10 +155,19 @@ win, `15` ties, `0` losses, median pair delta `0.0`, median runtime ratio
 about `1.00045`). This is not promotion-quality, but it is a real
 feedback-loop and whole-solver positive signal.
 
-Long CVRP validation is now permitted as exploratory validation, not as a
-promotion expectation. The next run should watch for repeated baseline-wrapper
-candidates, low `solver_algorithm_best_delta`, and final code prompt-size
-pressure.
+The follow-up 5-round exploratory run showed that this is still not ready for
+long unattended solver-quality validation. It reached three screened
+`solver_design` candidates with weak positive signal, then hung after a
+successful code-generation trace. The likely failure point was post-code
+Contract/CVRP synthetic preview executing a candidate with unbounded
+improvement-flag loops. This is now repaired as a boundary-control issue:
+static C9c rejects unbounded boolean-flag `while` loops, CVRP synthetic
+preview times out `solve(...)`, and APS converts a hung
+`proposal.contract_preview` into a controlled `tool_error`.
+
+Next validation should be a 1-2 round independent smoke, not a long run. The
+first gate is whether preview-time hangs fail closed and the campaign keeps
+moving; solver-quality promotion remains a later criterion.
 
 ## Current Engineering State
 
@@ -203,6 +212,9 @@ pressure.
   protocol/Decision calls.
 - Failed Contract preview feedback is now fed into one bounded patch
   regeneration attempt before the session fails closed.
+- Contract preview is also wall-time bounded before workspace materialization.
+  A hung `proposal.contract_preview` now returns a controlled APS tool error
+  instead of blocking the campaign.
 - The first micro smoke after this repair confirmed code-phase tool selection
   and full `solver_design` surface read, but the final `generate_patch` call
   still timed out on a roughly 49k prompt. Follow-up prompt slimming now omits
@@ -283,6 +295,10 @@ editable ALNS/VNS-style full-algorithm template with construction, capped
 route-edit neighborhoods, destroy/repair, perturbation, acceptance, runtime
 polling, and solver-algorithm telemetry. Adapter preview now rejects shallow
 `context.baseline(...)` wrappers that do not run their own bounded search body.
+It also fails closed on synthetic preview timeout, so generated
+`solver_design` code cannot hang Scion before workspace materialization.
+The timeout sentinel is outside normal `Exception` handling so generated
+candidate code cannot swallow it with a broad `except Exception`.
 
 `main_search_strategy` is a legacy config surface backed by
 `policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
@@ -295,7 +311,45 @@ control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest analyzed direct full-solver run after validation-feedback repair:
+Latest analyzed code-phase exploratory run after the 2-round smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-code-phase-slim-exploratory-sonnet-5r-20260513T190909Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=5
+rounds_observed_before_termination=4
+screened_experiments=3
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+git_commit=febca19
+exit_code=143
+status=manually_terminated_for_preview_hang
+analysis_doc=scion/docs/experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md
+```
+
+Summary:
+
+- The run confirmed the repaired whole-solver path could repeatedly reach
+  screening under `solver_design`, but solver quality remained weak: screened
+  candidates had median deltas `-152`, `0`, and `0`.
+- The second and third screened candidates showed small positive tails
+  (`2` wins each) while mostly tying the champion, so there is some signal but
+  still no promotion-quality movement.
+- The campaign then stopped producing artifacts after a successful code trace.
+  The process remained CPU-active for more than two hours, indicating a
+  post-code preview hang rather than an LLM-provider timeout.
+- Root cause: C9c allowed unbounded boolean-flag loops because reassignment of
+  the loop condition variable was mistakenly counted as collection shrinkage;
+  preview execution also had no hard wall-time guard.
+- Repair: C9c now rejects unbounded improvement-flag loops, CVRP synthetic
+  preview hard-times out `solve(...)`, and APS hard-times out
+  `proposal.contract_preview` before workspace materialization.
+- Next run: a 1-2 round independent smoke should validate fail-closed preview
+  behavior before any 5-8 round validation.
+
+Previous analyzed direct full-solver run after validation-feedback repair:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-full-solver-subject-validation-feedback-repair-sonnet-8r-20260513T160209Z
@@ -587,25 +641,27 @@ Validation after this follow-up repair:
 1612 passed, 1 skipped
 ```
 
-Current code-phase agentic repair validation:
+Current preview-timeout repair validation:
 
 ```text
 /home/clawd/miniconda3/envs/claw/bin/python -m py_compile \
+  scion/scion/contract/gate.py \
+  scion/scion/problems/cvrp/adapter.py \
   scion/scion/proposal/agentic_session.py \
-  scion/scion/proposal/engine.py \
-  scion/scion/proposal/tools.py
+  scion/scion/tests/unit/test_agentic_proposal_tools.py
 
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest \
-  scion/scion/tests/unit/test_agentic_proposal_tools.py \
-  scion/scion/tests/unit/core/test_proposal_pipeline.py \
+  scion/scion/tests/test_contract.py \
+  scion/scion/tests/test_cvrp_adapter.py \
   scion/scion/tests/unit/test_research_surfaces.py \
-  scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
+  scion/scion/tests/unit/test_agentic_proposal_tools.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline.py -q
 
-272 passed
+329 passed
 
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 
-1614 passed, 1 skipped
+1618 passed, 1 skipped
 ```
 
 Previous analyzed run:

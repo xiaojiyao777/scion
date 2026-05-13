@@ -1881,12 +1881,6 @@ def _body_shrinks_collection(body: list[ast.stmt], name: str) -> bool:
                 and child.func.attr in shrink_methods
             ):
                 return True
-        if isinstance(child, ast.Assign):
-            if any(
-                isinstance(target, ast.Name) and target.id == name
-                for target in child.targets
-            ):
-                return True
         if isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
             if child.target.id == name and isinstance(child.op, (ast.Sub, ast.BitAnd)):
                 return True

@@ -60,11 +60,13 @@ context; core does not interpret the problem semantics inside that text.
 Problem-owned preview hooks may validate surface-specific contracts before
 candidate code reaches runtime, while still staying behind the adapter
 boundary. For CVRP `solver_design`, the adapter preview imports only the
-candidate `main_search_plan()` under static ContractGate success, checks that
-the returned plan has exactly the declared top-level keys, rejects leaked
-proposal-only `novelty_signature`, accepts lifecycle role targets in
-`problem_adaptation.component_roles`, and validates `evidence_targets` against
-the package-owned runtime audit field allowlist.
+candidate `policies/solver_algorithm.py` after static ContractGate success,
+checks the `solve(instance, rng, time_limit_sec, context)` hook on a synthetic
+instance, rejects shallow baseline wrappers, validates the returned solution
+shape and feasibility, and fails closed if synthetic preview times out. The
+legacy `main_search_strategy` preview still checks the lifecycle
+`main_search_plan()` table, proposal-only metadata leakage, and package-owned
+runtime evidence allowlists for regression coverage.
 
 ## Metric Specs and Objective Policy
 

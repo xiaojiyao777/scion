@@ -242,6 +242,9 @@ the same authoritative surface as the formal patch gate; standalone interface
 previews may also carry an explicit selected surface. A selected surface whose
 targets do not contain the patch path fails closed instead of silently falling
 back to a path-resolved surface.
+APS also wraps `proposal.contract_preview` in a short wall-time guard before
+workspace materialization. A hung problem-owned preview becomes a controlled
+tool error in the transcript instead of blocking the campaign process.
 Problem-owned preview hooks run only after the full ContractGate patch result
 passes, not merely after interface-shape checks, so tainted policy/config code
 with forbidden APIs is not imported or executed during preview.

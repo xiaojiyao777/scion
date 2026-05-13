@@ -191,6 +191,9 @@ scheduling inside `solve(...)`. The adapter/solver remains authoritative for
 objective recomputation, feasibility, parser behavior, seeds, protocol splits,
 and Decision. The legacy `main_search_strategy` surface still exists for
 regression coverage; it is not the preferred research object.
+Adapter preview executes `solve(...)` only after static Contract success and
+under a short wall-time guard. Candidates with unbounded preview-time loops
+fail closed before workspace materialization instead of hanging the campaign.
 
 The model-facing interface and `problem-v1.yaml` require solver-design
 hypotheses to populate semantic identity through fields such as

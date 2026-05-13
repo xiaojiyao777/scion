@@ -2031,6 +2031,32 @@ def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_pattern
     assert c9c.passed
 
 
+def test_cvrp_solver_algorithm_complexity_rejects_unbounded_improvement_flag_loop() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(legacy)
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    routes = [list(instance.customer_ids)]\n"
+            "    improved = True\n"
+            "    while improved:\n"
+            "        improved = False\n"
+            "        for route in routes:\n"
+            "            if len(route) > 3:\n"
+            "                improved = True\n"
+            "    return context.make_solution(routes)\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch, selected_surface="solver_design")
+
+    assert not c9c.passed
+    assert "uncapped while loop" in c9c.detail
+
+
 def test_cvrp_solver_loads_workspace_search_policy_and_applies_bounds(
     tmp_path: Path,
 ) -> None:

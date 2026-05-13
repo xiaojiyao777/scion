@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import random
+import signal
+import threading
 import types
 from typing import Any, Mapping, Sequence
 
@@ -14,6 +16,7 @@ from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 
 
 _POLICY_PREVIEW_TIME_LIMIT_SEC = 1.0
+_POLICY_PREVIEW_EXEC_TIMEOUT_SEC = 2.0
 _ALLOWED_CONSTRUCTION_MODES = frozenset(
     {
         "nearest_neighbor",
@@ -1399,12 +1402,20 @@ def _preview_solver_algorithm(
     rng = random.Random(0)
     context = _PreviewSolverAlgorithmContext(instance, rng)
     try:
-        raw_solution = func(
-            instance,
-            rng,
-            _POLICY_PREVIEW_TIME_LIMIT_SEC,
-            context,
+        raw_solution = _call_solver_algorithm_preview(
+            func,
+            instance=instance,
+            rng=rng,
+            context=context,
         )
+    except _PolicyPreviewTimeout:
+        detail = (
+            "solve timed out during synthetic preview; solver_design candidates "
+            "must use explicit bounded loops and poll context.remaining_time()"
+        )
+        issues.append(detail)
+        checks.append({"name": "solve", "passed": False, "detail": detail})
+        return
     except Exception as exc:
         issues.append(f"solve raised during synthetic preview: {exc}")
         checks.append({"name": "solve", "passed": False, "detail": str(exc)})
@@ -1452,6 +1463,39 @@ def _preview_solver_algorithm(
     )
     if not valid:
         issues.append(f"solve returned invalid synthetic solution: {reason}")
+
+
+class _PolicyPreviewTimeout(BaseException):
+    pass
+
+
+def _call_solver_algorithm_preview(
+    func: Any,
+    *,
+    instance: CvrpInstance,
+    rng: random.Random,
+    context: "_PreviewSolverAlgorithmContext",
+) -> Any:
+    if (
+        threading.current_thread() is not threading.main_thread()
+        or not hasattr(signal, "SIGALRM")
+        or not hasattr(signal, "setitimer")
+    ):
+        return func(instance, rng, _POLICY_PREVIEW_TIME_LIMIT_SEC, context)
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+
+    def _raise_timeout(_signum: int, _frame: Any) -> None:
+        raise _PolicyPreviewTimeout()
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, _POLICY_PREVIEW_EXEC_TIMEOUT_SEC)
+    try:
+        return func(instance, rng, _POLICY_PREVIEW_TIME_LIMIT_SEC, context)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 class _PreviewSolverAlgorithmContext:
