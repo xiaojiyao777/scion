@@ -419,6 +419,28 @@ started_utc=2026-05-13T08:47:40Z
 status=blocked_infra_after_proposal_failures
 ```
 
+Follow-up validation is running from commit `8d8f01f`:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-direct-solver-algorithm-api-repair-sonnet-8r-20260513T092116Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+time_limit_sec=60
+agentic_session_timeout_sec=1200
+force_surface=none
+launcher=nohup+setsid
+pid=2621512
+started_utc=2026-05-13T09:21:16Z
+git_commit=8d8f01f4efaabe6d7c2ac7d425caf354e47a9ae2
+```
+
+Initial status check: the run reached `stage=screening` on round 1 with
+`target_file=policies/solver_algorithm.py`, so the previous C8/C9c/preview
+blocker is cleared at least for the first generated direct-algorithm
+candidate.
+
 Previous analyzed run:
 
 ```text
