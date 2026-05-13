@@ -242,6 +242,20 @@ def _write_json(path: str, payload: Dict[str, Any]) -> None:
 
 def _build_tool_selection_prompt(context: Dict[str, Any]) -> str:
     safe_context = _sanitize_tool_selection_context(context)
+    if bool(context.get("code_phase")):
+        return (
+            "You are selecting the next exposure-controlled code-phase inspection "
+            "tool for Scion after a hypothesis has already been approved.\n"
+            "Scion controls boundaries and executes tools; you only return one "
+            "plan_proposal_tool_call input naming an allowed tool and JSON args. "
+            "Use these tools to inspect memory, branch state, runtime/screening "
+            "feedback, and the declared problem research object before writing "
+            "the final patch. Do not include code_content, private rationale, "
+            "raw metric references, validation/frozen details, or workspace "
+            "writes in the tool plan. Stop when no more inspection is needed.\n\n"
+            "## Tool Selection Context\n"
+            f"{json.dumps(safe_context, indent=2, sort_keys=True, default=str)}"
+        )
     return (
         "You are selecting the next read-only proposal-context tool for Scion.\n"
         "Scion is a framework: use only the provided context and tool specs, "

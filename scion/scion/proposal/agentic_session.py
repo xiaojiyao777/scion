@@ -53,14 +53,29 @@ _COMPACT_FEEDBACK_TOOLS = (
     "feedback.query_screening",
     "feedback.query_runtime",
 )
+_CODE_PHASE_TOOL_ALLOWLIST = frozenset(
+    {
+        "context.list_surfaces",
+        "context.read_problem",
+        "context.read_surface",
+        "context.read_objective_policy",
+        "context.read_champion_summary",
+        "context.read_branch_state",
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }
+)
 _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
     "context.list_surfaces",
     "context.read_problem",
+    "context.read_branch_state",
     "memory.query",
 )
 _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
 _APS_SURFACE_READ_CODE_CHARS = 800
+_APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
 
@@ -107,11 +122,13 @@ class AgenticProposalPhase(str, Enum):
 class AgenticToolLoopConfig:
     """Deterministic limits for one proposal-session tool loop."""
 
-    max_steps: int = 14
-    max_tool_calls: int = 12
+    max_steps: int = 22
+    max_tool_calls: int = 18
     max_observation_chars: int = 64000
     max_wall_time_sec: float = 120.0
     max_repeated_tool_calls: int = 2
+    max_code_tool_calls: int = 4
+    max_code_repair_attempts: int = 1
 
 
 @dataclass(frozen=True)
@@ -938,6 +955,16 @@ class AgenticProposalSession:
                 code_context["agentic_resume_context"] = _sanitize_agentic_value(
                     request.resume_context
                 )
+            if tool_context is not None:
+                code_phase_observations = self._run_code_context_tool_loop(
+                    tool_context,
+                    state,
+                    hypothesis,
+                    observations,
+                    code_context,
+                )
+                observations.extend(code_phase_observations)
+                evidence.extend(_evidence_from_observations(code_phase_observations))
             if observations:
                 research_diagnosis = _research_diagnosis_from_observations(observations)
                 if research_diagnosis:
@@ -982,6 +1009,45 @@ class AgenticProposalSession:
             )
             observations.append(patch_preview)
             evidence.extend(_evidence_from_observations((patch_preview,)))
+            if (
+                not patch_preview.is_error
+                and not bool(patch_preview.structured_payload.get("passed"))
+                and self._tool_loop_config.max_code_repair_attempts > 0
+                and not self._session_timeout_reached(state)
+            ):
+                try:
+                    patch = self._repair_patch_after_preview(
+                        request=request,
+                        state=state,
+                        hypothesis=hypothesis,
+                        code_context=code_context,
+                        observations=observations,
+                        failed_preview=patch_preview,
+                    )
+                except self._SESSION_ERROR_TYPES as exc:
+                    output = self._partial_hypothesis_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        detail=str(exc),
+                        evidence_used=tuple(evidence),
+                        self_check=_self_check_from_previews(observations),
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Patch repair generation failed after Contract preview feedback.",
+                        metadata={"error": type(exc).__name__},
+                    )
+                    return self._persist(output, state)
+                repair_preview = self._run_contract_preview_tool(
+                    tool_context,
+                    hypothesis,
+                    patch,
+                    state,
+                )
+                observations.append(repair_preview)
+                evidence.extend(_evidence_from_observations((repair_preview,)))
 
         state.note(AgenticProposalPhase.SELF_CHECK, "Recorded APS-1 schema self-check.")
         self_check = (
@@ -1764,6 +1830,445 @@ class AgenticProposalSession:
             ),
         )
 
+    def _run_code_context_tool_loop(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        prior_observations: list[ProposalObservation],
+        code_context: Mapping[str, Any],
+    ) -> list[ProposalObservation]:
+        if self.tool_registry is None:
+            return []
+        if not self._supports_tool_selection():
+            return self._run_code_context_fixed_tools(
+                context,
+                state,
+                hypothesis,
+                prior_observations,
+                selection_source="code_phase_required",
+            )
+
+        selector = getattr(self._creative, "select_tool", None)
+        if not callable(selector):
+            selector = getattr(self._creative, "plan_tool_call", None)
+        if not callable(selector):
+            return self._run_code_context_fixed_tools(
+                context,
+                state,
+                hypothesis,
+                prior_observations,
+                selection_source="code_phase_required",
+            )
+
+        observations: list[ProposalObservation] = []
+        allowed_tools = self._code_phase_allowed_tools(context)
+        max_calls = max(0, int(self._tool_loop_config.max_code_tool_calls))
+        state.note(
+            AgenticProposalPhase.INSPECT_INTERFACE,
+            "Starting code-phase proposal tool loop for approved hypothesis.",
+            metadata={
+                "selected_surface": hypothesis.change_locus,
+                "target_file": hypothesis.target_file,
+                "max_code_tool_calls": max_calls,
+                "allowed_tools": allowed_tools,
+            },
+        )
+        while (
+            len(observations) < max_calls
+            and allowed_tools
+            and not self._tool_loop_limit_reached(state)
+        ):
+            if self._code_phase_budget_reserved(state):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Stopped code-phase proposal tool loop to reserve patch self-check budget.",
+                    metadata={
+                        "stop_reason": "code_self_check_budget_reserved",
+                        "tool_steps": state.tool_step_count,
+                        "tool_calls": state.tool_call_count,
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                        "remaining_steps": self._remaining_tool_steps(state),
+                        "remaining_observation_chars": self._remaining_observation_chars(
+                            state
+                        ),
+                    },
+                )
+                break
+
+            all_observations = [*prior_observations, *observations]
+            planner_context = {
+                "session_id": state.session_id,
+                "phase": AgenticProposalPhase.DRAFT_PATCH.value,
+                "code_phase": True,
+                "allowed_tools": allowed_tools,
+                "allowed_tool_specs": self._code_phase_allowed_tool_specs(context),
+                "tool_arg_guidance": self._code_tool_arg_guidance(
+                    context,
+                    hypothesis,
+                    all_observations,
+                ),
+                "approved_hypothesis": _proposal_payload(hypothesis),
+                "code_context_summary": _code_context_tool_summary(code_context),
+                "remaining_steps": self._remaining_tool_steps(state),
+                "remaining_tool_calls": self._remaining_tool_calls(state),
+                "remaining_code_tool_calls": max(0, max_calls - len(observations)),
+                "reserved_for_self_check": {
+                    "tool_calls": 1,
+                    "steps": 1,
+                    "purpose": "final Contract preview after patch generation",
+                },
+                "observations": [
+                    _observation_selection_payload(observation)
+                    for observation in all_observations
+                ],
+            }
+            try:
+                planned = selector(_sanitize_agentic_value(planner_context))
+            except Exception as exc:
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner tool selection failed; using deterministic code-context fallback.",
+                    metadata={
+                        "status": "error",
+                        "error": type(exc).__name__,
+                        "error_code": "code_planner_exception",
+                        "fallback": "code_phase_fixed_tool_plan",
+                    },
+                )
+                return observations + self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    selection_source="code_phase_fallback",
+                )
+
+            if not planned or getattr(planned, "stop", False):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner stopped.",
+                    metadata={"stop_reason": "code_planner_stop"},
+                )
+                break
+            if isinstance(planned, Mapping) and planned.get("stop"):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner stopped.",
+                    metadata={"stop_reason": "code_planner_stop"},
+                )
+                break
+            if not isinstance(planned, Mapping):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner returned malformed tool-selection payload; using deterministic fallback.",
+                    metadata={
+                        "status": "error",
+                        "error_code": "code_malformed_tool_selection",
+                        "fallback": "code_phase_fixed_tool_plan",
+                    },
+                )
+                return observations + self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    selection_source="code_phase_fallback",
+                )
+
+            name = str(
+                planned.get("tool_name")
+                or planned.get("name")
+                or planned.get("tool")
+                or ""
+            )
+            args = planned.get("args") or planned.get("input") or {}
+            if not isinstance(args, Mapping):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner returned malformed tool arguments; using deterministic fallback.",
+                    metadata={
+                        "status": "error",
+                        "tool_name": name,
+                        "error_code": "code_malformed_tool_args",
+                        "fallback": "code_phase_fixed_tool_plan",
+                    },
+                )
+                return observations + self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    selection_source="code_phase_fallback",
+                )
+            if name not in set(allowed_tools):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner selected a tool outside the allowed list; using deterministic fallback.",
+                    metadata={
+                        "status": "error",
+                        "tool_name": name,
+                        "error_code": "code_invalid_tool_selection",
+                        "fallback": "code_phase_fixed_tool_plan",
+                    },
+                )
+                return observations + self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    selection_source="code_phase_fallback",
+                )
+            fingerprint = _tool_call_fingerprint(name, args)
+            fuse_count = state.tool_call_fuse_counts.get(fingerprint, 0)
+            if fuse_count >= self._tool_loop_config.max_repeated_tool_calls:
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner repeated a proposal tool call; using deterministic fallback.",
+                    metadata={
+                        "status": "error",
+                        "tool_name": name,
+                        "error_code": "code_repeated_tool_call_fuse",
+                        "fallback": "code_phase_fixed_tool_plan",
+                    },
+                )
+                return observations + self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    [*prior_observations, *observations],
+                    selection_source="code_phase_fallback",
+                )
+            if _has_successful_code_phase_reusable_observation(
+                [*prior_observations, *observations],
+                name,
+                args,
+                hypothesis=hypothesis,
+            ):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase planner selected a proposal tool already completed successfully.",
+                    metadata={
+                        "status": "skipped",
+                        "tool_name": name,
+                        "error_code": "code_already_succeeded",
+                        "selection_source": "code_phase_planner",
+                        "skip_reason": "already_succeeded",
+                    },
+                )
+                break
+            observation = self._call_tool(
+                context,
+                state,
+                AgenticProposalPhase.INSPECT_INTERFACE,
+                name,
+                args,
+                selection_source="code_phase_planner",
+            )
+            observations.append(observation)
+            if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+                break
+
+        combined = [*prior_observations, *observations]
+        if not _has_code_phase_surface_read(combined, hypothesis):
+            observations.extend(
+                self._run_code_context_fixed_tools(
+                    context,
+                    state,
+                    hypothesis,
+                    combined,
+                    selection_source="code_phase_required",
+                )
+            )
+        state.note(
+            AgenticProposalPhase.INSPECT_INTERFACE,
+            "Collected code-phase proposal tool observations.",
+            metadata={
+                "tool_names": [observation.tool_name for observation in observations],
+                "error_count": sum(1 for observation in observations if observation.is_error),
+            },
+        )
+        return observations
+
+    def _run_code_context_fixed_tools(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        prior_observations: list[ProposalObservation],
+        *,
+        selection_source: str,
+    ) -> list[ProposalObservation]:
+        calls: list[tuple[str, Mapping[str, Any]]] = []
+        if not _has_successful_tool(prior_observations, "context.read_branch_state"):
+            calls.append(("context.read_branch_state", {}))
+        if not _has_code_phase_surface_read(prior_observations, hypothesis):
+            args: dict[str, Any] = {
+                "surface": hypothesis.change_locus,
+                "detail": "full",
+                "max_code_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
+            }
+            if hypothesis.target_file:
+                args["target_file"] = hypothesis.target_file
+            calls.append(("context.read_surface", args))
+
+        observations: list[ProposalObservation] = []
+        for name, args in calls:
+            if self._code_phase_budget_reserved(state):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped code-phase fallback tool to reserve patch self-check budget.",
+                    metadata={
+                        "tool_name": name,
+                        "status": "skipped",
+                        "selection_source": selection_source,
+                        "skip_reason": "code_self_check_budget_reserved",
+                    },
+                )
+                break
+            if self._tool_loop_limit_reached(state):
+                self._record_loop_stop(state, self._current_loop_stop_reason(state))
+                break
+            observations.append(
+                self._call_tool(
+                    context,
+                    state,
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    name,
+                    args,
+                    selection_source=selection_source,
+                )
+            )
+        return observations
+
+    def _code_phase_allowed_tools(
+        self,
+        context: ProposalToolContext,
+    ) -> tuple[str, ...]:
+        if self.tool_registry is None:
+            return ()
+        allowed = set(self.tool_registry.allowed_tools(context))
+        return tuple(sorted(allowed.intersection(_CODE_PHASE_TOOL_ALLOWLIST)))
+
+    def _code_phase_allowed_tool_specs(
+        self,
+        context: ProposalToolContext,
+    ) -> tuple[dict[str, Any], ...]:
+        if self.tool_registry is None:
+            return ()
+        allowed = set(self._code_phase_allowed_tools(context))
+        return tuple(
+            spec
+            for spec in self.tool_registry.allowed_tool_specs(context)
+            if spec.get("name") in allowed
+        )
+
+    def _code_phase_budget_reserved(
+        self,
+        state: AgenticProposalSessionState,
+    ) -> bool:
+        if self._remaining_tool_calls(state) <= 1:
+            return True
+        if self._remaining_tool_steps(state) <= 1:
+            return True
+        reserve = max(
+            self._minimum_budgeted_observation_chars(),
+            min(8000, max(0, int(self._tool_loop_config.max_observation_chars) // 8)),
+        )
+        return self._remaining_observation_chars(state) <= reserve
+
+    def _code_tool_arg_guidance(
+        self,
+        context: ProposalToolContext,
+        hypothesis: HypothesisProposal,
+        observations: list[ProposalObservation],
+    ) -> dict[str, Any]:
+        feedback_args = _feedback_query_args(context)
+        if hypothesis.change_locus and "surface" not in feedback_args:
+            feedback_args["surface"] = hypothesis.change_locus
+        read_surface_args: dict[str, Any] = {
+            "surface": hypothesis.change_locus,
+            "detail": "full",
+            "max_code_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
+        }
+        if hypothesis.target_file:
+            read_surface_args["target_file"] = hypothesis.target_file
+        guidance = {
+            "context.read_surface": {
+                "purpose": (
+                    "Inspect the full approved research object before writing "
+                    "the patch. This is the code phase, so a full target-surface "
+                    "read is allowed within budget."
+                ),
+                "recommended_args": read_surface_args,
+                "already_has_code_phase_surface_read": _has_code_phase_surface_read(
+                    observations,
+                    hypothesis,
+                ),
+            },
+            "context.read_branch_state": {
+                "recommended_args": {},
+                "purpose": "Check retry/failure state before deciding implementation risk.",
+            },
+            "memory.query": {
+                "recommended_args": {
+                    "surface": hypothesis.change_locus,
+                    "query": (
+                        "implementation lessons, failed mechanisms, and useful "
+                        f"history for {hypothesis.change_locus}"
+                    ),
+                },
+            },
+            "feedback.query_screening": {
+                "recommended_args": feedback_args,
+                "scope_rule": "Use screening feedback to avoid repeating failed mechanisms.",
+            },
+            "feedback.query_runtime": {
+                "recommended_args": feedback_args,
+                "scope_rule": "Use runtime feedback to tune algorithmic work and time budgets.",
+            },
+            "context.read_problem": {"recommended_args": {}},
+            "context.read_objective_policy": {"recommended_args": {}},
+            "context.read_champion_summary": {"recommended_args": {}},
+        }
+        return guidance
+
+    def _repair_patch_after_preview(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        code_context: Mapping[str, Any],
+        observations: list[ProposalObservation],
+        failed_preview: ProposalObservation,
+    ) -> PatchProposal:
+        repair_context = dict(code_context)
+        repair_context["prior_code_failure"] = (
+            "Contract preview failed before workspace materialization: "
+            f"{failed_preview.summary}"
+        )
+        repair_context["agentic_preview_feedback"] = _observation_prompt_payload(
+            failed_preview
+        )
+        research_diagnosis = _research_diagnosis_from_observations(observations)
+        if research_diagnosis:
+            repair_context["agentic_research_diagnosis"] = research_diagnosis
+        repair_context["agentic_tool_observations"] = [
+            _observation_prompt_payload(observation)
+            for observation in observations
+        ]
+        state.note(
+            AgenticProposalPhase.DRAFT_PATCH,
+            "Regenerating patch proposal with Contract-preview feedback.",
+            metadata={
+                "selected_surface": hypothesis.change_locus,
+                "target_file": hypothesis.target_file,
+                "repair_attempt": 1,
+            },
+        )
+        return self._creative.generate_code(repair_context)
+
     def _required_context_satisfied(
         self,
         observations: list[ProposalObservation],
@@ -2342,6 +2847,21 @@ class AgenticProposalSession:
         if name != "context.read_surface":
             return args
         budgeted = dict(args)
+        if selection_source.startswith("code_phase"):
+            if budgeted.get("detail") != "full":
+                budgeted["detail"] = "full"
+            max_code_chars = budgeted.get("max_code_chars")
+            if max_code_chars is None:
+                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+                return budgeted
+            try:
+                requested = int(max_code_chars)
+            except Exception:
+                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+                return budgeted
+            if requested > _APS_CODE_SURFACE_READ_CODE_CHARS or requested < 0:
+                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
+            return budgeted
         if budgeted.get("detail") != "compact":
             budgeted["detail"] = "compact"
         max_code_chars = budgeted.get("max_code_chars")
@@ -2793,6 +3313,8 @@ def _tool_loop_config_payload(config: AgenticToolLoopConfig) -> dict[str, Any]:
         "max_observation_chars": int(config.max_observation_chars),
         "max_wall_time_sec": float(config.max_wall_time_sec),
         "max_repeated_tool_calls": int(config.max_repeated_tool_calls),
+        "max_code_tool_calls": int(config.max_code_tool_calls),
+        "max_code_repair_attempts": int(config.max_code_repair_attempts),
     }
 
 
@@ -3480,6 +4002,119 @@ def _has_successful_reusable_observation(
     if not requested_surface:
         return False
     return _has_successful_surface_read(observations, requested_surface)
+
+
+def _has_successful_tool(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+) -> bool:
+    return any(
+        observation.tool_name == tool_name and not observation.is_error
+        for observation in observations
+    )
+
+
+def _has_successful_code_phase_reusable_observation(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    hypothesis: HypothesisProposal,
+) -> bool:
+    if tool_name in {
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }:
+        return False
+    if tool_name == "context.read_surface":
+        requested_surface = str(
+            args.get("surface") or hypothesis.change_locus or ""
+        ).strip()
+        requested_target = str(
+            args.get("target_file") or hypothesis.target_file or ""
+        ).strip()
+        return _has_code_phase_surface_read(
+            observations,
+            hypothesis,
+            surface=requested_surface,
+            target_file=requested_target or None,
+        )
+    return _has_successful_tool(observations, tool_name)
+
+
+def _has_code_phase_surface_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    hypothesis: HypothesisProposal,
+    *,
+    surface: str | None = None,
+    target_file: str | None = None,
+) -> bool:
+    expected_surface = str(surface or hypothesis.change_locus or "").strip()
+    expected_target = str(target_file or hypothesis.target_file or "").strip()
+    if not expected_surface:
+        return False
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_surface":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        observed_surface = payload.get("surface")
+        if not (
+            isinstance(observed_surface, Mapping)
+            and observed_surface.get("name") == expected_surface
+        ):
+            continue
+        if str(payload.get("detail") or "") != "full":
+            continue
+        observed_target = str(payload.get("target_file") or "").strip()
+        if expected_target and observed_target and observed_target != expected_target:
+            continue
+        artifact = payload.get("current_artifact")
+        if not isinstance(artifact, Mapping):
+            return True
+        if not bool(artifact.get("readable", True)):
+            continue
+        try:
+            max_chars = int(artifact.get("max_chars") or 0)
+        except (TypeError, ValueError):
+            max_chars = 0
+        if max_chars >= _APS_CODE_SURFACE_READ_CODE_CHARS or not artifact.get(
+            "truncated"
+        ):
+            return True
+    return False
+
+
+def _code_context_tool_summary(code_context: Mapping[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    compact_keys = (
+        "research_surface_name",
+        "research_surface_kind",
+        "change_locus",
+        "target_file",
+        "editable_patterns",
+        "frozen_patterns",
+        "import_whitelist",
+        "prior_code_failure",
+    )
+    for key in compact_keys:
+        if key in code_context:
+            summary[key] = _sanitize_agentic_value(code_context.get(key))
+    for key in (
+        "target_file_code",
+        "champion_operators_code",
+        "reference_operators",
+        "operator_interface_spec",
+        "problem_summary",
+        "problem_object",
+        "solver_mechanics",
+    ):
+        value = code_context.get(key)
+        if value is not None:
+            summary[f"{key}_chars"] = len(str(value))
+    return summary
 
 
 def _self_check_from_previews(

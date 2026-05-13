@@ -91,6 +91,11 @@ Current interpretation:
   current blocker is whether APS can use the direct `solve(...)` boundary to
   produce repeated solver-quality movement without modifying objective or
   constraint semantics.
+- Scion's role is boundary/protocol/audit control, not replacing the research
+  agent with prompt-only field exposure. The latest short run showed that
+  hypothesis-stage tools were not enough: the code stage also needs bounded
+  access to memory, branch state, screening/runtime feedback, and the full
+  approved problem object while implementing the algorithm.
 - The previous short lifecycle diagnostic showed why this had to be deeper
   than field exposure: candidates declared smaller baseline fractions but
   runtime silently used the legacy formal 0.75 floor, `phase_sequence` did not
@@ -178,6 +183,15 @@ phase-best improvement and screening-quality movement.
 - APS feedback defaults to same-campaign or forced-surface history for forced
   diagnostics.
 - Tool observations are rendered into final hypothesis/code prompts.
+- Code phase is now agentic within the same boundary. After ContractGate
+  approves a hypothesis, APS can run a bounded code-phase tool loop over
+  exposure-controlled tools before final `PatchProposal` generation. The loop
+  may read the selected surface at full code-preview budget, inspect branch
+  state, query memory, and query screening/runtime feedback. It still cannot
+  write candidate workspaces, read validation/frozen raw metrics, or make
+  protocol/Decision calls.
+- Failed Contract preview feedback is now fed into one bounded patch
+  regeneration attempt before the session fails closed.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
@@ -257,6 +271,44 @@ validation, and judge success by repeated solver-quality movement plus runtime
 control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
+
+Latest analyzed direct full-solver run after validation-feedback repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-full-solver-subject-validation-feedback-repair-sonnet-8r-20260513T160209Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+rounds_observed_before_repair=5
+screened_experiments=3
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+force_surface=none
+status=manually_terminated_for_code_phase_agentic_repair
+analysis_doc=scion/docs/experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md
+```
+
+Summary:
+
+- The run stayed on the direct `solver_design` subject and generated
+  `policies/solver_algorithm.py` patches for the screened candidates.
+- Three candidates passed Contract and Verification and reached screening with
+  16/16 valid pairs, but all failed `SCREENING_FAIL_WIN_RATE`.
+- Round 1 was fast but worse than champion (`win_rate=0.0`,
+  `median_delta=-98.5`). Rounds 2 and 3 mostly tied the repo-local ALNS+VNS
+  champion (`win_rate=0.0`, `median_delta=0.0`).
+- The next distinct population/recombination hypothesis failed at code
+  generation after static prompts reached roughly 58k characters.
+- Interpretation: boundary control is working, but code generation was still a
+  one-shot static `generate_patch` call. The repair now adds a bounded
+  code-phase tool loop and preview-feedback regeneration. The solver-quality
+  problem remains separate: future candidates must use runtime as an
+  optimization objective and produce a genuinely different algorithmic search,
+  not just baseline warm-start plus small polish.
+
+Detailed analysis:
+[`v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md`](../experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md)
 
 Latest completed experiment before the direct solver-algorithm boundary repair:
 
@@ -504,6 +556,27 @@ Validation after this follow-up repair:
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 
 1612 passed, 1 skipped
+```
+
+Current code-phase agentic repair validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m py_compile \
+  scion/scion/proposal/agentic_session.py \
+  scion/scion/proposal/engine.py \
+  scion/scion/proposal/tools.py
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_agentic_proposal_tools.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline.py \
+  scion/scion/tests/unit/test_research_surfaces.py \
+  scion/scion/tests/test_cvrp_solver_operator_runtime.py -q
+
+272 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+
+1614 passed, 1 skipped
 ```
 
 Previous analyzed run:

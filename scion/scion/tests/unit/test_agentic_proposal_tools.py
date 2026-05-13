@@ -607,6 +607,7 @@ def _cvrp_context_with_champion(tmp_path: Path) -> ProposalToolContext:
     for name in (
         "algorithm_blueprint.py",
         "main_search_strategy.py",
+        "solver_algorithm.py",
     ):
         (champion_root / "policies" / name).write_text(
             (_CVRP_ROOT / "policies" / name).read_text(encoding="utf-8"),
@@ -3854,6 +3855,69 @@ def test_planner_memory_only_still_falls_back_for_screening_and_runtime_feedback
     assert "feedback.query_runtime" in tool_names
 
 
+def test_code_phase_planner_can_query_memory_and_get_full_surface(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+            {
+                "tool_name": "memory.query",
+                "args": {
+                    "surface": "search_policy",
+                    "query": "implementation lessons for search_policy",
+                },
+            },
+            {"stop": True},
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    code_tool_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("selection_source", "").startswith("code_phase")
+    ]
+    code_observations = creative.code_contexts[0]["agentic_tool_observations"]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert any(context.get("code_phase") is True for context in creative.planner_contexts)
+    assert any(
+        event["tool_name"] == "memory.query"
+        and event["selection_source"] == "code_phase_planner"
+        for event in code_tool_events
+    )
+    assert any(
+        observation["tool_name"] == "context.read_surface"
+        and observation["structured_payload"]["detail"] == "full"
+        and observation["structured_payload"]["current_artifact"]["max_chars"] == 12000
+        for observation in code_observations
+    )
+
+
 def test_agentic_session_bounded_planner_rejects_forbidden_tool(
     tmp_path: Path,
 ) -> None:
@@ -4278,8 +4342,9 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     assert listed.structured_payload["surfaces"][0]["name"] == "solver_design"
     assert len(rendered_list) < 12000
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert len(read_surface_events) == 1
+    assert len(read_surface_events) == 2
     assert read_surface_events[0]["selection_source"] == "planner_selected"
+    assert read_surface_events[1]["selection_source"] == "code_phase_required"
     assert output.tool_budget_used["observation_chars"] <= (
         output.tool_loop_config["max_observation_chars"]
     )
@@ -4287,6 +4352,12 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         event.metadata.get("skip_reason") == "already_succeeded"
         and event.metadata.get("tool_name") == "context.read_surface"
         for event in output.transcript
+    )
+    assert any(
+        observation["tool_name"] == "context.read_surface"
+        and observation["structured_payload"]["detail"] == "full"
+        and observation["structured_payload"]["current_artifact"]["max_chars"] == 12000
+        for observation in creative.code_contexts[0]["agentic_tool_observations"]
     )
 
 
@@ -4346,10 +4417,18 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
         AgenticTerminationReason.TOOL_LOOP_LIMIT,
         AgenticTerminationReason.REPEATED_TOOL_CALL,
     }
-    assert len(read_surface_events) == 2
+    assert len(read_surface_events) == 4
     assert read_surface_events[0]["error_code"] == "not_found"
-    assert read_surface_events[1]["status"] == "ok"
-    assert read_surface_events[1]["selection_source"] == "selected_surface_required"
+    assert any(
+        event["status"] == "ok"
+        and event["selection_source"] == "selected_surface_required"
+        for event in read_surface_events
+    )
+    assert any(
+        event["status"] == "ok"
+        and event["selection_source"] == "code_phase_required"
+        for event in read_surface_events
+    )
     assert creative.planner_contexts[1]["tool_arg_guidance"]["context.read_surface"][
         "allowed_surface_ids"
     ] == ["route_local", "search_policy"]

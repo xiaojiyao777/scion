@@ -428,6 +428,7 @@ class ProposalToolRegistry:
                 ContextReadSurfaceTool(),
                 ContextReadObjectivePolicyTool(),
                 ContextReadChampionSummaryTool(),
+                ContextReadBranchStateTool(),
                 MemoryQueryTool(),
                 FeedbackQueryScreeningTool(),
                 FeedbackQueryHoldoutSummaryTool(),
@@ -615,6 +616,46 @@ class ContextReadChampionSummaryTool(_BaseReadOnlyTool):
             summary="Returned champion artifact inventory.",
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.CHAMPION_CODE,
+        )
+
+
+class ContextReadBranchStateTool(_BaseReadOnlyTool):
+    name = "context.read_branch_state"
+    permission = ProposalToolPermission.READ_PUBLIC_CONTEXT
+
+    def call(
+        self, args: BaseModel, context: ProposalToolContext
+    ) -> ProposalObservation:
+        branch = context.branch
+        if branch is None:
+            return self._error(
+                context,
+                failure_code=ProposalToolFailureCode.NOT_FOUND,
+                summary="No branch state is available.",
+            )
+        state = _attr(branch, "state")
+        payload = {
+            "branch_id": _attr(branch, "branch_id"),
+            "state": _model_payload(state),
+            "base_champion_id": _attr(branch, "base_champion_id"),
+            "base_champion_hash": _attr(branch, "base_champion_hash"),
+            "current_code_hash": _attr(branch, "current_code_hash"),
+            "last_clean_code_hash": _attr(branch, "last_clean_code_hash"),
+            "retry_count": _attr(branch, "retry_count"),
+            "failure_codes": list(_attr(branch, "failure_codes", []) or []),
+            "pending_retry": bool(_attr(branch, "pending_retry", False)),
+            "blocked_rounds": _attr(branch, "blocked_rounds"),
+            "consecutive_llm_retries": _attr(branch, "consecutive_llm_retries"),
+            "infra_block_count": _attr(branch, "infra_block_count"),
+            "direction": _attr(branch, "direction"),
+            "weight_revision": _attr(branch, "weight_revision"),
+        }
+        return self._observation(
+            context,
+            observation_type="branch_state",
+            summary="Returned current branch state and retry/failure counters.",
+            structured_payload=payload,
+            exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
         )
 
 
@@ -3988,6 +4029,7 @@ def _json_size(value: Any) -> int:
 __all__ = [
     "ContextExposurePolicy",
     "ContractPreviewTool",
+    "ContextReadBranchStateTool",
     "DraftHypothesisTool",
     "DraftPatchTool",
     "FeedbackQueryHoldoutSummaryTool",

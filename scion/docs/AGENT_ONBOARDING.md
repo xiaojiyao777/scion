@@ -25,6 +25,13 @@ algorithms. LLMs propose research changes, but deterministic layers decide
 whether evidence is strong enough to continue, validate, freeze, promote, or
 abandon.
 
+Scion's job is boundary control, protocol control, auditability, and
+traceability. The research core should still be a real agent doing algorithmic
+research: it must be able to inspect the declared problem object, allowed
+history, branch state, memory, and screening/runtime feedback inside Scion's
+exposure policy. Do not turn Scion into prompt-only field exposure or a set of
+forced component knobs.
+
 The core loop is:
 
 ```text
@@ -176,6 +183,20 @@ Important current interpretation:
 - Do not run long CVRP solver-quality validation until short diagnostics show
   repeated solver-design improvement, not only isolated wins on one screening
   candidate.
+- The latest direct full-solver short run validated the boundary but exposed a
+  deeper APS issue: hypothesis/planning used proposal tools, while code
+  generation was still a single static `generate_patch` call. Three screened
+  candidates were valid but failed to beat the repo-local ALNS+VNS champion,
+  and the next distinct population/recombination code attempt timed out on a
+  large static prompt. This is both a framework interaction problem and an
+  algorithm-quality problem.
+- APS now has a code-phase tool loop after ContractGate-approved hypotheses.
+  Code phase may use exposure-controlled reads for the full selected surface,
+  problem/objective context, branch state, memory, and screening/runtime
+  feedback before emitting the final `PatchProposal`. A failed Contract preview
+  can be fed back into one bounded regeneration attempt. The proposal agent
+  still cannot write workspaces, read validation/frozen raw metrics, or change
+  objective/constraint semantics.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 
