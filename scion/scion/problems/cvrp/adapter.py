@@ -134,6 +134,8 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
         "main_search_objective_trace",
+        "main_search_phase_runtime_ms",
+        "main_search_elapsed_ms",
         "main_search_stop_reason",
     }
 )
@@ -618,18 +620,21 @@ class CvrpAdapter:
                 "- baseline: dict with time_fraction in [0.2, 0.95] and params "
                 "mapping. params accepts the same sanitized bounded keys as "
                 "baseline_policy.baseline_params. For formal-like .vrp runs, "
-                "the solver applies a bounded quality guard so active "
-                "solver_design uses an effective baseline fraction of "
-                "at least 0.75.\n"
+                "algorithm_body.baseline_budget_policy controls the effective "
+                "baseline budget: declared uses this exact fraction, while "
+                "formal_floor intentionally applies the legacy 0.75 floor.\n"
                 "- improvement: dict with enabled_components, rounds, and top_k. "
                 "enabled_components is drawn from 'intra_route_2opt', "
                 "'inter_route_relocate', 'route_pair_swap', and "
                 "'bounded_destroy_repair', and 'route_pool_recombination'; "
                 "enabled plans must include at least one component, rounds in "
                 "[1, 8], and top_k in [1, 128]. "
-                "Choose top_k and component caps as part of the solver-level "
-                "hypothesis, and predict the phase/objective evidence they "
-                "should move. route_pool_recombination is a solver-owned "
+                "Computation time is part of the solver-design objective: "
+                "choose baseline fraction, route_pool_max_rounds, rounds, "
+                "top_k, activation scope, and adaptive_component_budget as "
+                "runtime/quality tradeoff controls, and predict both "
+                "phase/objective and runtime evidence they should move. "
+                "route_pool_recombination is a solver-owned "
                 "whole-solution route-set recombination step; it is intended "
                 "for phase-best movement from complete CVRP solutions, not for "
                 "single-policy diagnostics. Current formal evidence has already "

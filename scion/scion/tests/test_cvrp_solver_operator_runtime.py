@@ -2510,7 +2510,7 @@ def test_route_pool_sampling_keeps_exit_time_reserve(
         top_k=32,
         rng=random.Random(11),
         time_limit_sec=20.0,
-        start_time=time.perf_counter() - 17.0,
+        start_time=time.perf_counter() - 16.0,
         instance_path=tmp_path / "sample.vrp",
         seed=29,
     )
@@ -2527,12 +2527,52 @@ def test_route_pool_sampling_keeps_exit_time_reserve(
         top_k=32,
         rng=random.Random(11),
         time_limit_sec=20.0,
-        start_time=time.perf_counter() - 18.7,
+        start_time=time.perf_counter() - 17.4,
         instance_path=tmp_path / "sample.vrp",
         seed=29,
     )
 
     assert budgets == []
+
+
+def test_route_pool_recombination_stops_before_exit_reserve() -> None:
+    instance = CvrpInstance(
+        name="route_pool_recombination_time_guard",
+        capacity=3,
+        depot=0,
+        allowed_routes=2,
+        use_integer_cost=True,
+        nodes=(
+            CvrpNode(0, 0, 0, 0),
+            CvrpNode(1, 0, 10, 1),
+            CvrpNode(2, 0, 11, 1),
+            CvrpNode(3, 100, 10, 1),
+            CvrpNode(4, 100, 11, 1),
+        ),
+    )
+    adapter = CvrpAdapter(_Spec())  # type: ignore[arg-type]
+    current = CvrpSolution(routes=((1, 3), (2, 4)))
+    current_objective = cvrp_solver._objective_for_solution(
+        adapter,
+        instance,
+        current,
+    )
+
+    candidate, calls, telemetry = cvrp_solver._route_pool_recombination_from_solutions(
+        current,
+        [current],
+        instance,
+        adapter=adapter,
+        current_objective=current_objective,
+        top_k=32,
+        start_time=time.perf_counter() - 9.0,
+        time_limit_sec=10.0,
+        exit_reserve_sec=2.0,
+    )
+
+    assert candidate is None
+    assert calls == 0
+    assert telemetry["skip_reason"] == "route_pool_time_limit"
 
 
 def test_route_pool_can_complete_pool_route_with_incumbent_residual() -> None:

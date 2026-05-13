@@ -2818,6 +2818,7 @@ def _compact_contract_preview_observation(
             "verification_run": payload.get("verification_run"),
             "protocol_run": payload.get("protocol_run"),
             "decision_run": payload.get("decision_run"),
+            "issue_summary": _limit_string(payload.get("issue_summary"), 320),
             "hypothesis": _compact_contract_preview_section(
                 payload.get("hypothesis")
             ),
@@ -2839,8 +2840,11 @@ def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
+            "issue_summary": _limit_string(value.get("issue_summary"), 240),
             "contract": _compact_contract_mapping(value.get("contract")),
             "needs_hypothesis": value.get("needs_hypothesis"),
+            "errors": _bounded_string_list(value.get("errors"), limit=4),
+            "issues": _bounded_string_list(value.get("issues"), limit=4),
             "failed_checks": _failed_preview_checks(value.get("checks")),
             "problem_preview": _compact_problem_preview_mapping(
                 value.get("problem_preview")
@@ -3547,11 +3551,35 @@ def _self_check_required(context: ProposalToolContext | None) -> bool:
 def _preview_codes(payload: Mapping[str, Any]) -> tuple[str, ...]:
     codes: list[str] = []
 
+    def add(value: Any) -> None:
+        text = _limit_string(value, 160)
+        if text:
+            codes.append(text)
+
     def visit(value: Any) -> None:
         if isinstance(value, Mapping):
+            if value.get("issue_summary"):
+                add(value.get("issue_summary"))
+            if value.get("failure_reason"):
+                add(value.get("failure_reason"))
+            for key in ("errors", "issues"):
+                raw_values = value.get(key)
+                if isinstance(raw_values, list):
+                    for raw in raw_values:
+                        if isinstance(raw, Mapping):
+                            location = ".".join(
+                                str(part) for part in raw.get("loc", ()) or ()
+                            )
+                            message = raw.get("msg") or raw.get("message") or raw
+                            add(f"{location}: {message}" if location else message)
+                        else:
+                            add(raw)
+                elif raw_values:
+                    add(raw_values)
             name = value.get("name")
             if name and "passed" in value and not value.get("passed"):
-                codes.append(str(name))
+                detail = value.get("detail")
+                add(f"{name}: {detail}" if detail else name)
             for item in value.values():
                 visit(item)
         elif isinstance(value, list):

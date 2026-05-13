@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-12*
+*Last updated: 2026-05-13*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -192,6 +192,23 @@ Important current interpretation:
   fed into route-pool recombination, and cleanup/adaptive-budget fields were
   not sufficiently operational. Those issues are repaired and covered by the
   latest full test suite.
+- The follow-up execution-semantics diagnostic validated those lifecycle
+  semantics but exposed a different runtime-design failure: the screened
+  candidate used `baseline_budget_policy="declared"` with effective baseline
+  fraction 0.7 and ordered route-pool before local repair, but
+  `route_pool_recombination` consumed about 16s per observed pair, produced
+  only one phase-best improvement, and caused one candidate timeout. This is
+  not a missing Scion runtime module. Runtime is already a framework
+  optimization/governance signal; the missing piece was making the CVRP
+  algorithm body treat computation time as an internal scheduling objective.
+- Current repair response: `solver_design` guidance now names
+  `main_search_phase_runtime_ms` and `main_search_elapsed_ms` as valid
+  evidence targets; the prompt/problem spec explicitly frames baseline
+  fraction, route-pool max rounds, component rounds/top-k, activation scope,
+  and adaptive budgets as runtime/quality controls; route-pool sampling and
+  recombination now keep a bounded exit reserve before the process timeout;
+  and APS Contract-preview failures now preserve concrete issue summaries
+  instead of collapsing to generic "contract preview did not pass" loops.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

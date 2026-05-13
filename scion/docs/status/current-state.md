@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-12*
+*Last updated: 2026-05-13*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -10,19 +10,27 @@ handoff. Historical repair and experiment notes were moved to
 ## Status
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
-governance path is largely behaving, and the latest CVRP route-pool quality
-repair produced the first formal positive signal from the top-level
-`solver_design` boundary. One complete screening had 16/16 valid pairs,
-0 timeouts, 2 wins, 14 ties,
-`main_search_route_pool_recombined_routes=12`, and
-`main_search_component_phase_delta_sum.route_pool_recombination=5.0`.
-The candidate still abandoned on screening win rate and median movement, so
-this is short-validation evidence, not readiness for long validation. The
-latest engineering slice fixes a deeper false-freedom issue in the CVRP
-algorithm-body path: enabled `solver_design` plans must declare
-`algorithm_body`, and runtime now uses that declaration to control baseline
-budget policy, phase/component scheduling, construction-pool reuse,
-post-recombination cleanup, and adaptive component budgets.
+governance path is largely behaving, and the current CVRP path is correctly
+centered on the top-level `solver_design` problem object rather than forced
+single-policy diagnostics. The latest completed diagnostic validated that
+`algorithm_body` now has execution semantics: declared baseline budget policy,
+phase/component order, construction-pool reuse, route-pool activation, cleanup,
+and adaptive component budgets all reached runtime evidence. It still failed
+as a solver-quality/runtime design: the only screened candidate had
+15/16 valid pairs, one candidate timeout, `runtime_ratio_median=1.2115`,
+`runtime_regression_rate=1.0`, and only one nonzero
+`route_pool_recombination` phase-best gain. Rounds 2-8 then failed in APS
+Contract preview before patch application, and the circuit breaker ended the
+run.
+
+Runtime should not be treated as a new module to add. Scion already treats
+algorithm computation time as optimization/governance evidence. The current
+repair makes CVRP `solver_design` candidates internalize that existing signal:
+runtime phase/elapsed fields are valid evidence targets, prompt/spec guidance
+frames baseline fraction, route-pool scope/rounds, top-k, rounds, and adaptive
+budget as runtime/quality levers, route-pool recombination keeps a bounded exit
+reserve before process timeout, and APS Contract-preview failures now retain
+concrete issue summaries.
 
 Current branch: `v0.4-dev`
 
@@ -101,6 +109,14 @@ Current interpretation:
   control component order, construction candidates were not passed into the
   route-pool, and cleanup/adaptive-budget controls were mostly descriptive.
   Those execution gaps are now repaired and unit-tested.
+- The follow-up execution-semantics diagnostic confirms that these repaired
+  controls are live, but also shows the next bottleneck: route-pool
+  recombination is too expensive relative to its sparse quality gain unless
+  the algorithm body explicitly budgets it. In the screened candidate,
+  `main_search_route_pool_sample_count=8`, route-pool sources were 14-20
+  complete solutions, route pools had 48-157 routes, branch calls reached
+  360-1881, and `route_pool_recombination` consumed roughly 16s per observed
+  pair while improving only one pair.
 - The execution path now uses `algorithm_body` instead of hidden route-pool
   behavior. `baseline_budget_policy="declared"` makes
   `baseline.time_fraction` the actual formal budget; `formal_floor` preserves
@@ -110,6 +126,10 @@ Current interpretation:
   formal `.vrp` instances below the declared customer threshold; explicit
   `always`, `medium_large_only`, or `disabled` activation lets Scion study
   route-pool scope as part of the full solver body.
+- `main_search_phase_runtime_ms` and `main_search_elapsed_ms` are now valid
+  `solver_design` evidence targets. They are not a separate research module;
+  they expose Scion's existing runtime objective at the algorithm-body level
+  so candidates can justify or reject expensive phase schedules.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -258,7 +278,68 @@ successes.
 
 ## Latest Experiment
 
-Latest analyzed/stopped run:
+Latest completed run:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-algorithm-body-execution-semantics-sonnet-8r-20260512T173014Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+rounds_completed=8
+screened_experiments=1
+time_limit_sec=60
+agentic_proposal=true
+agentic_session_timeout_sec=1200
+force_surface=none
+exit_code=0
+stopped_reason=circuit_breaker
+finished_utc=2026-05-12T18:14:35Z
+analysis_doc=scion/docs/experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md
+```
+
+Summary:
+
+- The run stayed on `solver_design` for all eight rounds
+  (`action_locus_coverage.modify/solver_design=8`).
+- Round 1 passed Contract and Verification and reached screening. It had
+  16 attempted pairs, 15 valid pairs, one candidate timeout,
+  `runtime_ratio_median=1.2115`, `runtime_delta_median_ms=10231`,
+  and `runtime_regression_rate=1.0`; Decision abandoned it with
+  `CANDIDATE_RUNTIME_FAILURE`.
+- Runtime evidence confirmed the previous execution-semantics repair:
+  `baseline_budget_policy="declared"` produced an effective baseline fraction
+  of 0.7 with no hidden 0.75 guard; phase/component order followed the
+  declared body; construction pool size was 2; route-pool source solutions
+  were 14-20; and route-pool telemetry was present.
+- Solver efficacy was still sparse. Only one observed pair recorded
+  route-pool phase-best improvement
+  (`main_search_component_phase_delta_sum.route_pool_recombination=3.0`,
+  `main_search_route_pool_recombined_routes=8`), while
+  `route_pool_recombination` consumed roughly 16s per observed pair.
+- Rounds 2-8 failed before patch application because Contract preview failed
+  with only generic failure text in campaign logs. The circuit breaker then
+  ended the run after repeated proposal failures.
+
+Interpretation: the latest issue is not that Scion lacks a computation-time
+objective. Runtime is already part of framework governance. The CVRP
+algorithm-body adapter/runtime needed to expose computation time as an
+internal solver-design variable and preserve deterministic Contract-preview
+failure detail so APS can repair candidates instead of entering a generic
+failure loop.
+
+Current repair: `solver_design` now permits
+`main_search_phase_runtime_ms` and `main_search_elapsed_ms` as evidence
+targets; prompt/problem-spec text explicitly frames route-pool scope,
+route-pool rounds, top-k, component rounds, baseline fraction, and adaptive
+budget as runtime/quality controls; route-pool sampling/recombination keeps a
+bounded exit reserve before timeout; and APS Contract-preview compaction now
+keeps concrete issue summaries.
+
+Detailed analysis:
+[`v0.4-algorithm-body-execution-semantics-repair-20260512.md`](../experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md)
+
+Previous analyzed/stopped run:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-algorithm-body-lifecycle-sonnet-8r-20260512T145345Z
@@ -303,35 +384,28 @@ evidence.
 Detailed analysis:
 [`v0.4-algorithm-body-execution-semantics-repair-20260512.md`](../experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md)
 
-## Running Experiment
+## Current Repair Validation
 
-A new short free-surface diagnostic is running from the repaired execution
-contract:
+The May 13 repair has passed focused and boundary regression tests:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-algorithm-body-execution-semantics-sonnet-8r-20260512T173014Z
-model=claude-sonnet-4-6
-problem=cvrp
-protocol=formal
-rounds_requested=8
-time_limit_sec=60
-agentic_session_timeout_sec=1200
-force_surface=none
-analysis_doc=scion/docs/experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md
-launcher=nohup+setsid
-pid=2600976
-started_utc=2026-05-12T17:38:32Z
+scion/tests/test_cvrp_adapter.py scion/tests/test_cvrp_solver_operator_runtime.py:
+110 passed in 16.45s
+
+scion/tests/unit/test_agentic_proposal_tools.py:
+98 passed in 2.60s
+
+proposal/research-surface/protocol/CVRP regression subset:
+328 passed in 19.77s
+
+full suite:
+1603 passed, 1 skipped in 68.18s
 ```
 
-The first analysis question is whether generated `solver_design` candidates
-now exploit the full algorithm-body semantics instead of only reshuffling
-component lists. Required runtime evidence includes
-`main_search_baseline_budget_policy`,
-`main_search_phase_component_order`,
-`main_search_component_top_k_effective`,
-`main_search_construction_pool_size`,
-`main_search_local_cleanup_after_recombination`, and
-`main_search_adaptive_component_budget`.
+The next short diagnostic should again use free `solver_design`, not a forced
+component surface, and should check whether APS candidates now explicitly
+budget route-pool computation time using the algorithm body rather than
+letting route-pool consume most of the post-baseline window.
 
 Previous analyzed run:
 

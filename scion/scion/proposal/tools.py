@@ -1461,6 +1461,9 @@ class ContractPreviewTool(_BaseReadOnlyTool):
             payload["patch"] = patch_preview
             payload["passed"] = payload["passed"] and bool(patch_preview["passed"])
         payload = _drop_internal_preview_objects(payload)
+        issue_summary = _contract_preview_issue_summary(payload)
+        if issue_summary:
+            payload["issue_summary"] = issue_summary
         return self._observation(
             context,
             observation_type="contract_preview",
@@ -1470,7 +1473,12 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                 else (
                     "Static contract preview needs an approved hypothesis."
                     if payload.get("needs_hypothesis")
-                    else "Static contract preview found issues."
+                    else (
+                        "Static contract preview found issues: "
+                        f"{issue_summary}"
+                        if issue_summary
+                        else "Static contract preview found issues."
+                    )
                 )
             ),
             structured_payload=payload,
@@ -1839,6 +1847,64 @@ def _contract_summary_payload(result: ContractResult) -> dict[str, Any]:
             "failed_checks": failed_checks[:_PREVIEW_MAX_CHECKS],
         }
     )
+
+
+def _contract_preview_issue_summary(payload: Mapping[str, Any]) -> str:
+    issues = _contract_preview_issue_strings(payload)
+    if not issues:
+        return ""
+    return "; ".join(issues[:5])
+
+
+def _contract_preview_issue_strings(value: Any) -> list[str]:
+    issues: list[str] = []
+
+    def add(text: Any) -> None:
+        item = _limit_text(str(text or "").strip(), 240)
+        if item and item not in issues:
+            issues.append(item)
+
+    def visit(item: Any, *, context: str = "") -> None:
+        if isinstance(item, Mapping):
+            failure_reason = item.get("failure_reason")
+            if failure_reason:
+                add(f"{context}: {failure_reason}" if context else failure_reason)
+            for key in ("errors", "issues"):
+                raw_values = item.get(key)
+                if isinstance(raw_values, list):
+                    for raw in raw_values:
+                        if isinstance(raw, Mapping):
+                            location = ".".join(
+                                str(part) for part in raw.get("loc", ()) or ()
+                            )
+                            message = raw.get("msg") or raw.get("message") or raw
+                            add(f"{location}: {message}" if location else message)
+                        else:
+                            add(raw)
+                elif raw_values:
+                    add(raw_values)
+            name = item.get("name")
+            if name and item.get("passed") is False:
+                detail = item.get("detail")
+                add(f"{name}: {detail}" if detail else name)
+            contract = item.get("contract")
+            if isinstance(contract, Mapping):
+                failed_checks = contract.get("failed_checks")
+                if isinstance(failed_checks, list):
+                    for check_name in failed_checks:
+                        add(check_name)
+            for key, child in item.items():
+                key_text = str(key)
+                next_context = key_text if key_text in {"hypothesis", "patch"} else context
+                if key_text in {"hypothesis_object", "patch_object", "code_content"}:
+                    continue
+                visit(child, context=next_context)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child, context=context)
+
+    visit(value)
+    return issues
 
 
 def _checks_payload(

@@ -3339,6 +3339,41 @@ def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_b
     assert _self_check_from_previews([compact]).contract_preview_passed is True
 
 
+def test_contract_preview_failure_issues_become_self_check_codes() -> None:
+    observation = ProposalObservation(
+        observation_id="contract-preview-fail",
+        session_id="session-1",
+        tool_name="proposal.contract_preview",
+        tool_call_id="tool-9",
+        observation_type="contract_preview",
+        summary="Static contract preview found issues: bad lifecycle field.",
+        structured_payload={
+            "passed": False,
+            "static_only": False,
+            "patch": {
+                "passed": False,
+                "problem_preview": {
+                    "passed": False,
+                    "issues": [
+                        "algorithm_body.baseline_budget_policy returned unknown value 'legacy_floor'",
+                    ],
+                },
+            },
+        },
+    )
+
+    self_check = _self_check_from_previews([observation])
+    compact = _compact_contract_preview_observation(observation)
+
+    assert self_check.contract_preview_passed is False
+    assert any(
+        "baseline_budget_policy" in code
+        for code in self_check.contract_preview_codes
+    )
+    assert compact is not None
+    assert "baseline_budget_policy" in json.dumps(compact.structured_payload)
+
+
 def test_optional_read_surface_near_budget_returns_bounded_error(
     tmp_path: Path,
 ) -> None:
@@ -4378,6 +4413,7 @@ def test_agentic_session_contract_preview_failure_fails_closed(
     assert "contract preview did not pass" in output.failure_detail
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
+    assert output.self_check.contract_preview_codes[0] in output.failure_detail
 
 
 def test_agentic_session_does_not_emit_raw_refs_in_artifacts(tmp_path: Path) -> None:

@@ -187,6 +187,8 @@ _ALLOWED_MAIN_SEARCH_EVIDENCE_TARGETS = frozenset(
         "main_search_perturbation_count",
         "main_search_objective_delta_by_phase",
         "main_search_objective_trace",
+        "main_search_phase_runtime_ms",
+        "main_search_elapsed_ms",
         "main_search_stop_reason",
     }
 )
@@ -214,7 +216,8 @@ _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR = 16
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING = 96
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION = 0.12
 _MAIN_SEARCH_EXIT_RESERVE_SEC = 0.75
-_ROUTE_POOL_EXIT_RESERVE_SEC = 1.25
+_ROUTE_POOL_EXIT_RESERVE_SEC = 2.50
+_MAX_EXIT_RESERVE_FRACTION = 0.15
 _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC = 0.20
 _ROUTE_POOL_MAX_SAMPLE_BUDGET_SEC = 2.50
 _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(
@@ -5782,16 +5785,20 @@ def _best_route_pool_recombination(
     resolved_instance_path = (
         Path(instance_path).resolve(strict=False) if instance_path is not None else None
     )
+    exit_reserve_sec = _bounded_exit_reserve_sec(
+        time_limit_sec,
+        _ROUTE_POOL_EXIT_RESERVE_SEC,
+    )
     remaining_time = _remaining_time_sec(start_time, time_limit_sec)
     if (
         baseline_root is not None
         and resolved_instance_path is not None
         and resolved_instance_path.suffix.lower() == ".vrp"
         and remaining_time
-        > _ROUTE_POOL_EXIT_RESERVE_SEC + _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC
+        > exit_reserve_sec + _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC
     ):
         sample_cap = _route_pool_sample_cap(top_k)
-        usable_time = max(0.0, remaining_time - _ROUTE_POOL_EXIT_RESERVE_SEC)
+        usable_time = max(0.0, remaining_time - exit_reserve_sec)
         per_sample_budget = min(
             _ROUTE_POOL_MAX_SAMPLE_BUDGET_SEC,
             usable_time / max(1.0, sample_cap + 0.5),
@@ -5806,7 +5813,7 @@ def _best_route_pool_recombination(
                 remaining = _remaining_time_sec(start_time, time_limit_sec)
                 sample_budget = min(
                     per_sample_budget,
-                    max(0.0, remaining - _ROUTE_POOL_EXIT_RESERVE_SEC),
+                    max(0.0, remaining - exit_reserve_sec),
                 )
                 if sample_budget < _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC:
                     break
@@ -5842,6 +5849,9 @@ def _best_route_pool_recombination(
         adapter=adapter,
         current_objective=current_objective,
         top_k=top_k,
+        start_time=start_time,
+        time_limit_sec=time_limit_sec,
+        exit_reserve_sec=exit_reserve_sec,
     )
     telemetry.update(pool_telemetry)
     attempts = sample_attempts + branch_calls
@@ -5876,6 +5886,9 @@ def _route_pool_recombination_from_solutions(
     adapter: CvrpAdapter,
     current_objective: Mapping[str, int | float],
     top_k: int,
+    start_time: float | None = None,
+    time_limit_sec: float | None = None,
+    exit_reserve_sec: float = _ROUTE_POOL_EXIT_RESERVE_SEC,
 ) -> tuple[CvrpSolution | None, int, dict[str, Any]]:
     customers = frozenset(instance.customer_ids)
     route_by_customers: dict[frozenset[int], tuple[float, tuple[int, ...]]] = {}
@@ -5915,6 +5928,13 @@ def _route_pool_recombination_from_solutions(
     }
     if not route_entries:
         telemetry["skip_reason"] = "route_pool_empty"
+        return None, 0, telemetry
+    if _route_pool_time_exhausted(
+        start_time,
+        time_limit_sec,
+        exit_reserve_sec=exit_reserve_sec,
+    ):
+        telemetry["skip_reason"] = "route_pool_time_limit"
         return None, 0, telemetry
 
     allowed_routes = instance.allowed_routes
@@ -5956,6 +5976,13 @@ def _route_pool_recombination_from_solutions(
             best_objective = objective
             best_distance = float(objective.get("total_distance", best_distance))
 
+    def recombination_time_exhausted() -> bool:
+        return _route_pool_time_exhausted(
+            start_time,
+            time_limit_sec,
+            exit_reserve_sec=exit_reserve_sec,
+        )
+
     def try_incumbent_residual_completion(chosen: list[int]) -> None:
         if not chosen:
             return
@@ -5978,13 +6005,19 @@ def _route_pool_recombination_from_solutions(
     injection_index_limit = min(len(route_entries), max(8, min(64, max(1, top_k) * 2)))
     injection_pair_limit = min(len(route_entries), max(8, min(40, max(1, top_k))))
     for left in range(injection_index_limit):
+        if recombination_time_exhausted():
+            break
         branch_calls += 1
         try_incumbent_residual_completion([left])
         if branch_calls >= branch_call_limit:
             break
     if branch_calls < branch_call_limit:
         for left in range(injection_pair_limit):
+            if recombination_time_exhausted():
+                break
             for right in range(left + 1, injection_pair_limit):
+                if recombination_time_exhausted():
+                    break
                 branch_calls += 1
                 try_incumbent_residual_completion([left, right])
                 if branch_calls >= branch_call_limit:
@@ -5998,6 +6031,8 @@ def _route_pool_recombination_from_solutions(
         distance: float,
     ) -> None:
         nonlocal branch_calls, best_solution, best_objective, best_distance
+        if recombination_time_exhausted():
+            return
         if branch_calls >= branch_call_limit:
             return
         branch_calls += 1
@@ -6030,6 +6065,8 @@ def _route_pool_recombination_from_solutions(
         if not options:
             return
         for index in options:
+            if recombination_time_exhausted():
+                return
             cost, _route, route_customers = route_entries[index]
             dfs(uncovered - route_customers, [*chosen, index], distance + cost)
             if branch_calls >= branch_call_limit:
@@ -6038,7 +6075,11 @@ def _route_pool_recombination_from_solutions(
     dfs(customers, [], 0.0)
     telemetry["route_pool_branch_calls"] = branch_calls
     if best_solution is None:
-        telemetry["skip_reason"] = "route_pool_no_improvement"
+        telemetry["skip_reason"] = (
+            "route_pool_time_limit"
+            if recombination_time_exhausted()
+            else "route_pool_no_improvement"
+        )
         return None, branch_calls, telemetry
     telemetry["route_pool_recombined_routes"] = len(best_solution.routes)
     return best_solution, branch_calls, telemetry
@@ -8605,10 +8646,38 @@ def _remaining_time_sec(
     return max(0.0, float(time_limit_sec) - (time.perf_counter() - start_time))
 
 
+def _bounded_exit_reserve_sec(
+    time_limit_sec: float | None,
+    requested_reserve_sec: float,
+) -> float:
+    requested = max(0.0, float(requested_reserve_sec))
+    if time_limit_sec is None or time_limit_sec <= 0:
+        return requested
+    scaled_cap = max(0.05, float(time_limit_sec) * _MAX_EXIT_RESERVE_FRACTION)
+    return min(requested, scaled_cap)
+
+
 def _main_search_time_exhausted(start_time: float, time_limit_sec: float) -> bool:
     if time_limit_sec <= 0:
         return False
-    return _remaining_time_sec(start_time, time_limit_sec) <= _MAIN_SEARCH_EXIT_RESERVE_SEC
+    return _remaining_time_sec(
+        start_time,
+        time_limit_sec,
+    ) <= _bounded_exit_reserve_sec(time_limit_sec, _MAIN_SEARCH_EXIT_RESERVE_SEC)
+
+
+def _route_pool_time_exhausted(
+    start_time: float | None,
+    time_limit_sec: float | None,
+    *,
+    exit_reserve_sec: float = _ROUTE_POOL_EXIT_RESERVE_SEC,
+) -> bool:
+    if start_time is None or time_limit_sec is None or time_limit_sec <= 0:
+        return False
+    return _remaining_time_sec(start_time, time_limit_sec) <= max(
+        0.0,
+        _bounded_exit_reserve_sec(time_limit_sec, exit_reserve_sec),
+    )
 
 
 def _record_event(
