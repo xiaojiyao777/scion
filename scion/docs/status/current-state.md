@@ -402,10 +402,33 @@ full suite:
 1603 passed, 1 skipped in 68.18s
 ```
 
-The next short diagnostic should again use free `solver_design`, not a forced
-component surface, and should check whether APS candidates now explicitly
-budget route-pool computation time using the algorithm body rather than
-letting route-pool consume most of the post-baseline window.
+A new short diagnostic is running from this repair. It uses free
+`solver_design`, not a forced component surface:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-runtime-budget-contract-preview-sonnet-8r-20260513T002826Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+time_limit_sec=60
+agentic_session_timeout_sec=1200
+force_surface=none
+launcher=nohup+setsid
+pid=2608307
+git_commit=e2540a8
+started_utc=2026-05-13T00:28:26Z
+```
+
+Analysis questions:
+
+- Do APS candidates now explicitly budget route-pool computation time using
+  `algorithm_body` instead of letting route-pool consume most of the
+  post-baseline window?
+- Do candidates name `main_search_phase_runtime_ms` or
+  `main_search_elapsed_ms` when runtime tradeoff is part of the hypothesis?
+- If Contract preview fails, does the failure detail include concrete
+  issue-summary text instead of a generic proposal-failure loop?
 
 Previous analyzed run:
 
