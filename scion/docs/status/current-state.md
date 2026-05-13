@@ -146,8 +146,19 @@ Current interpretation:
   112 pairs with zero accepted current/recovery/phase-best moves and
   `destroy_repair_phase_delta_sum=0.0`.
 
-Do not run long CVRP validation until a short diagnostic shows nonzero
-phase-best improvement and screening-quality movement.
+The balance-restored 2-round smoke from the slimmed code path completed
+cleanly. Both candidates passed Contract/Verification and screened 16/16 valid
+pairs. Round 1 was a fast low-quality replacement solver (`0` wins, `16`
+losses, median pair delta `-119.5`, median runtime ratio about `0.029`).
+Round 2 consumed that feedback and switched to a baseline-plus-ILS solver (`1`
+win, `15` ties, `0` losses, median pair delta `0.0`, median runtime ratio
+about `1.00045`). This is not promotion-quality, but it is a real
+feedback-loop and whole-solver positive signal.
+
+Long CVRP validation is now permitted as exploratory validation, not as a
+promotion expectation. The next run should watch for repeated baseline-wrapper
+candidates, low `solver_algorithm_best_delta`, and final code prompt-size
+pressure.
 
 ## Current Engineering State
 
@@ -198,6 +209,12 @@ phase-best improvement and screening-quality movement.
   the duplicate full champion policy bundle for `solver_design` code prompts;
   the complete target file remains available in the `Target File` section and
   via audited code-phase surface reads.
+- The balance-restored 2-round smoke showed the complete feedback loop working:
+  `generate_patch` returned successfully, Contract-preview repair passed,
+  Contract and Verification passed, screening feedback was stored, and the next
+  hypothesis used that screening/runtime feedback to change algorithm strategy.
+  Prompt slimming remains incomplete; the second-round code prompt still grew
+  to roughly 55.6k characters.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
