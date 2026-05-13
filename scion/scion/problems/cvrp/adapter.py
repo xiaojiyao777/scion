@@ -1424,9 +1424,11 @@ class _PreviewSolverAlgorithmContext:
         self.rng = rng
         self.time_limit_sec = _POLICY_PREVIEW_TIME_LIMIT_SEC
         self._phase_runtime_ms: dict[str, int] = {}
+        self._remaining_time_calls = 0
 
     def remaining_time(self) -> float:
-        return self.time_limit_sec
+        self._remaining_time_calls += 1
+        return max(0.0, self.time_limit_sec - (0.05 * self._remaining_time_calls))
 
     def elapsed_ms(self) -> int:
         return 0

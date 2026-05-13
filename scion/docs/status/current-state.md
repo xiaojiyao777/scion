@@ -441,6 +441,58 @@ Initial status check: the run reached `stage=screening` on round 1 with
 blocker is cleared at least for the first generated direct-algorithm
 candidate.
 
+Completed status check:
+
+- `total_rounds=8`, `n_experiments=3`, `stopped_reason=max_rounds_exhausted`;
+- all 8 hypotheses stayed on `modify/solver_design` and targeted
+  `policies/solver_algorithm.py`;
+- 3 candidates reached screening with 16/16 valid pairs and non-empty
+  `solver_algorithm_*` evidence;
+- all 3 screened candidates failed `SCREENING_FAIL_WIN_RATE` with median
+  total-distance delta 0.0;
+- one screened candidate had runtime regression
+  (`runtime_ratio_median=1.236`, `runtime_regression_rate=0.75`), while two
+  were faster (`runtime_ratio_median=0.902` and `0.939`) but still lacked win
+  rate;
+- 2 verification failures were `V5_solution_consistency`;
+- 3 code-generation attempts still failed C9c on runtime-guarded full
+  algorithm `while` loops.
+
+Important framework issue found during this check: runtime evidence reported
+`solver_algorithm_active=true`, `solver_algorithm_solution_valid=true`, and
+`solver_algorithm_errors=0`, but still left
+`solver_algorithm_stop_reason="inactive"`. This was a default-audit overwrite
+bug, not inactive solve behavior, and it visibly polluted later hypotheses
+that tried to solve a nonexistent "still inactive" problem. Follow-up code now
+sets active successful direct algorithms to
+`solver_algorithm_stop_reason="completed"`, accepts `context.remaining_time()`
+guarded C9c loops, and makes synthetic preview decrement remaining time so
+preview cannot hang on the same runtime guards. Replaying the previously
+C9c-rejected runtime-guarded code traces now passes C9c and CVRP preview
+locally.
+
+Validation after this follow-up repair:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_research_surfaces.py \
+  scion/scion/tests/unit/test_agentic_proposal_tools.py \
+  scion/scion/tests/test_cvrp_adapter.py \
+  scion/scion/tests/test_cvrp_solver_operator_runtime.py \
+  scion/scion/tests/test_cvrp_protocol_smoke.py \
+  scion/scion/tests/test_protocol.py \
+  scion/scion/tests/test_problem_bridge.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline.py \
+  scion/scion/tests/unit/test_sprint_m.py \
+  scion/scion/tests/test_contract.py -q
+
+468 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+
+1612 passed, 1 skipped
+```
+
 Previous analyzed run:
 
 ```text

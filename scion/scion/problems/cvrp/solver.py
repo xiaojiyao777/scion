@@ -8489,8 +8489,9 @@ def _load_solver_algorithm(
     audit["solver_algorithm_fleet_violation"] = float(
         objective.get("fleet_violation", 0.0)
     )
+    stop_reason = str(audit.get("solver_algorithm_stop_reason") or "").strip()
     audit["solver_algorithm_stop_reason"] = (
-        audit.get("solver_algorithm_stop_reason") or "completed"
+        "completed" if stop_reason in {"", "inactive"} else stop_reason
     )
     _drop_inactive_solver_algorithm_records(audit)
     if not audit.get("solver_algorithm_phase_runtime_ms"):

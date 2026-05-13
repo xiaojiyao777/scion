@@ -1827,11 +1827,12 @@ def _is_problem_scale_expr(node: ast.AST, scale_names: frozenset[str]) -> bool:
 
 def _is_bounded_while(node: ast.While, scale_names: frozenset[str]) -> bool:
     if isinstance(node.test, ast.Constant) and node.test.value is True:
-        return False
+        return _while_body_has_bounded_break(node)
     if isinstance(node.test, ast.BoolOp):
         return any(
             _compare_has_small_constant(value)
             or _compare_has_incrementing_counter_guard(value, node, scale_names)
+            or _compare_has_runtime_guard(value)
             or _condition_collection_is_shrunk(value, node)
             for value in node.test.values
         ) or _while_body_has_bounded_break(node)
@@ -1839,6 +1840,7 @@ def _is_bounded_while(node: ast.While, scale_names: frozenset[str]) -> bool:
         return (
             _compare_has_small_constant(node.test)
             or _compare_has_incrementing_counter_guard(node.test, node, scale_names)
+            or _compare_has_runtime_guard(node.test)
         ) or _while_body_has_bounded_break(node)
     return (
         _condition_collection_is_shrunk(node.test, node)
@@ -1912,6 +1914,10 @@ def _compare_has_incrementing_counter_guard(
         if any(_is_bounded_limit_expr(other, scale_names) for other in other_exprs):
             return True
     return False
+
+
+def _compare_has_runtime_guard(node: ast.AST) -> bool:
+    return isinstance(node, ast.Compare) and _mentions_runtime_guard(node)
 
 
 def _body_increments_counter(body: list[ast.stmt], name: str) -> bool:

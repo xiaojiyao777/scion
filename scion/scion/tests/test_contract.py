@@ -686,6 +686,28 @@ class TestC9cComplexityBound:
         c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
         assert c9c.passed
 
+    def test_runtime_guarded_while_passes(self, gate: ContractGate):
+        code = (
+            "class Context:\n"
+            "    def remaining_time(self):\n"
+            "        return 1.0\n"
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    while context.remaining_time() > 0.5:\n"
+            "        break\n"
+            "    while True:\n"
+            "        if context.remaining_time() < 0.25:\n"
+            "            break\n"
+            "    return None\n"
+        )
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=code,
+        )
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
     def test_three_level_problem_scale_nested_loops_fail(self, gate: ContractGate):
         code = (
             "class Op:\n"

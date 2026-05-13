@@ -1425,6 +1425,7 @@ def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
     assert runtime["solver_algorithm_solution_valid"] is True
     assert runtime["solver_algorithm_solution_routes"] >= 1
     assert runtime["solver_algorithm_total_distance"] > 0
+    assert runtime["solver_algorithm_stop_reason"] == "completed"
     assert "construct" in runtime["solver_algorithm_phase_runtime_ms"]
     assert "inactive" not in runtime["solver_algorithm_phase_runtime_ms"]
     assert runtime["policy_loaded"] is False

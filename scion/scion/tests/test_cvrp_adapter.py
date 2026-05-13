@@ -357,6 +357,32 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
     assert preview["issues"] == []
 
 
+def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.nearest_neighbor()\n"
+            "    iterations = 0\n"
+            "    while context.remaining_time() > 0.5:\n"
+            "        iterations += 1\n"
+            "    context.record_phase('guarded_loop', iterations)\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["issues"] == []
+
+
 def test_cvrp_solver_algorithm_preview_rejects_infeasible_solution(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
