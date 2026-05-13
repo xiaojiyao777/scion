@@ -1438,6 +1438,39 @@ def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
     ) is None
 
 
+def test_solver_algorithm_context_accepts_baseline_alias_and_objective_comparison(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "solver_algorithm.py").write_text(
+        "\n".join(
+            [
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    seed = context.nearest_neighbor()",
+                "    baseline = context.baseline(seed, time_limit_sec=0.1)",
+                "    seed_obj = context.objective(seed)",
+                "    baseline_obj = context.objective(baseline)",
+                "    if baseline_obj <= seed_obj and baseline_obj[0] <= seed_obj[0]:",
+                "        context.record_phase('baseline_alias', 1)",
+                "        return baseline",
+                "    return seed",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(workspace, "data/operator_case.json")
+    runtime = raw["runtime"]
+
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_baseline_calls"] == 1
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert "baseline_alias" in runtime["solver_algorithm_phase_runtime_ms"]
+
+
 def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default(
     tmp_path: Path,
 ) -> None:

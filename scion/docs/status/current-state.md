@@ -365,21 +365,42 @@ boundary regression tests:
   scion/scion/tests/test_protocol.py \
   scion/scion/tests/test_problem_bridge.py \
   scion/scion/tests/unit/core/test_proposal_pipeline.py \
-  scion/scion/tests/unit/test_sprint_m.py -q
+  scion/scion/tests/unit/test_sprint_m.py \
+  scion/scion/tests/test_contract.py -q
 
-393 passed
+466 passed
 
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 
-1607 passed, 1 skipped
+1610 passed, 1 skipped
 ```
 
-No direct-solver-algorithm validation experiment has completed yet. The next
-short diagnostic should use free `solver_design`, verify patches target
-`policies/solver_algorithm.py`, and inspect `solver_algorithm_*` runtime
-evidence.
+The first direct-solver-algorithm validation launch did not reach screening.
+It selected free `solver_design` and generated direct
+`policies/solver_algorithm.py` patches, which is the important positive
+boundary signal, but then blocked before experiments after three proposal/code
+failures:
 
-A new short diagnostic is running from commit `caaf970`:
+- two candidates failed Contract on `time` imports plus bounded algorithm
+  `while` patterns that the old complexity heuristic treated as uncapped;
+- one candidate failed synthetic preview because preview/runtime
+  `context.baseline` signatures disagreed on seed solution and
+  `time_limit_sec` alias handling;
+- the campaign marked both active branches `blocked_infra`, with
+  `n_experiments=0`.
+
+Follow-up repair: the direct solver context now accepts
+`context.baseline(initial_solution=None, time_budget_sec=None,
+time_limit_sec=None, params=None)`, `context.objective` remains a mapping but
+supports lexicographic `(fleet_violation, total_distance)` comparison and
+indexing, `context.objective_key`/`context.is_better` are exposed, `time` is
+whitelisted for monotonic timing, `instance.depot` is documented, and C9c now
+recognizes finite algorithm-body while loops with shrinking collections,
+incrementing counters, or bounded-break/time guards. Replaying all five
+rejected code traces from the blocked run now passes C8, C9c, and CVRP
+synthetic preview locally.
+
+Blocked diagnostic:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-direct-solver-algorithm-boundary-sonnet-8r-20260513T084740Z
@@ -387,12 +408,15 @@ model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
 rounds_requested=8
+rounds_completed_before_block=0
+screened_experiments=0
 time_limit_sec=60
 agentic_session_timeout_sec=1200
 force_surface=none
 launcher=nohup+setsid
 pid=2618289
 started_utc=2026-05-13T08:47:40Z
+status=blocked_infra_after_proposal_failures
 ```
 
 Previous analyzed run:

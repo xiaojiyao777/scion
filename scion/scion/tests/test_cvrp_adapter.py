@@ -330,6 +330,33 @@ def test_cvrp_solver_algorithm_preview_accepts_valid_solution(
     assert "routes=" in check["detail"]
 
 
+def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_helpers(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    seed = context.nearest_neighbor()\n"
+            "    baseline = context.baseline(seed, time_limit_sec=0.1)\n"
+            "    seed_obj = context.objective(seed)\n"
+            "    baseline_obj = context.objective(baseline)\n"
+            "    if baseline_obj <= seed_obj and baseline_obj[0] <= seed_obj[0]:\n"
+            "        return baseline\n"
+            "    return seed\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["issues"] == []
+
+
 def test_cvrp_solver_algorithm_preview_rejects_infeasible_solution(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

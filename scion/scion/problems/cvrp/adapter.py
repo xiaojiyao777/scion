@@ -309,9 +309,10 @@ _ACCEPTANCE_RECOVERY_POLICIES = frozenset(
 )
 _POLICY_INSTANCE_API_TEXT = (
     "Safe CvrpInstance API for policy functions: use "
-    "`instance.customer_ids`, `instance.customer_count`, "
-    "`instance.demands[customer_id]`, `instance.capacity`, and "
-    "`instance.distance(i, j)`. `instance.demand(customer_id)` remains "
+    "`instance.depot`, `instance.customer_ids`, `instance.customer_count`, "
+    "`instance.demands[customer_id]`, `instance.capacity`, "
+    "`instance.distance(i, j)`, `instance.route_load(route)`, and "
+    "`instance.route_distance(route)`. `instance.demand(customer_id)` remains "
     "available for direct demand lookup. Never use `instance.customers`; that "
     "attribute is intentionally not defined and will fail synthetic preview or "
     "runtime audit when reached."
@@ -574,15 +575,28 @@ class CvrpAdapter:
                 "- You may implement construction, local improvement, "
                 "destroy/repair, recombination, perturbation, acceptance, and "
                 "time allocation directly in Python.\n"
-                "- You may use instance.customer_ids, instance.customer_count, "
-                "instance.demands[customer_id], instance.capacity, "
+                "- You may use instance.depot, instance.customer_ids, "
+                "instance.customer_count, instance.demands[customer_id], "
+                "instance.capacity, "
                 "instance.distance(i, j), instance.route_load(route), and "
                 "instance.route_distance(route).\n"
                 "- You may use context helpers: context.make_solution(routes), "
-                "context.nearest_neighbor(...), context.baseline(...), "
-                "context.objective(solution), context.is_valid(solution), "
-                "context.remaining_time(), context.elapsed_ms(), and "
-                "context.record_phase(name, elapsed_ms).\n"
+                "context.nearest_neighbor(...), "
+                "context.baseline(initial_solution=None, time_budget_sec=None, "
+                "time_limit_sec=None, params=None), "
+                "context.objective(solution), context.objective_key(solution), "
+                "context.is_better(candidate, incumbent), "
+                "context.is_valid(solution), context.remaining_time(), "
+                "context.elapsed_ms(), and context.record_phase(name, "
+                "elapsed_ms).\n"
+                "- context.objective returns a mapping with fleet_violation and "
+                "total_distance. It also compares lexicographically as "
+                "(fleet_violation, total_distance), but explicit field access "
+                "or context.objective_key is preferred.\n"
+                "- Runtime is part of the algorithm objective. Use finite "
+                "max_rounds/max_passes/top_k caps and poll "
+                "context.remaining_time(); importing time is allowed only for "
+                "monotonic timing, never for sleeps or external scheduling.\n"
                 "- The adapter/solver remains the authority for feasibility, "
                 "objective recomputation, runtime limit, seeds, and protocol "
                 "evaluation. The algorithm must not modify objectives, "
@@ -1427,19 +1441,28 @@ class _PreviewSolverAlgorithmContext:
         valid, _reason = _preview_solution_is_valid(self.instance, coerced)
         return valid
 
-    def objective(self, solution: Any) -> dict[str, float]:
+    def objective(self, solution: Any) -> "_PreviewObjectiveValue":
         coerced = _coerce_preview_solution(solution)
         if coerced is None:
             raise ValueError("solution cannot be coerced to CvrpSolution")
         valid, reason = _preview_solution_is_valid(self.instance, coerced)
         if not valid:
             raise ValueError(reason)
-        return {
-            "fleet_violation": 0.0,
-            "total_distance": sum(
-                self.instance.route_distance(route) for route in coerced.routes
-            ),
-        }
+        return _PreviewObjectiveValue(
+            {
+                "fleet_violation": 0.0,
+                "total_distance": sum(
+                    self.instance.route_distance(route) for route in coerced.routes
+                ),
+            }
+        )
+
+    def objective_key(self, solution: Any) -> tuple[float, float]:
+        objective = self.objective(solution)
+        return (float(objective[0]), float(objective[1]))
+
+    def is_better(self, candidate: Any, incumbent: Any) -> bool:
+        return self.objective_key(candidate) < self.objective_key(incumbent)
 
     def nearest_neighbor(
         self,
@@ -1477,11 +1500,21 @@ class _PreviewSolverAlgorithmContext:
 
     def baseline(
         self,
+        initial_solution: Any | None = None,
         *,
         time_budget_sec: float | None = None,
+        time_limit_sec: float | None = None,
         params: Mapping[str, Any] | None = None,
     ) -> CvrpSolution:
-        del time_budget_sec, params
+        del time_budget_sec, time_limit_sec, params
+        if (
+            isinstance(initial_solution, (int, float))
+            and not isinstance(initial_solution, bool)
+        ):
+            initial_solution = None
+        seed_solution = _coerce_preview_solution(initial_solution)
+        if seed_solution is not None and self.is_valid(seed_solution):
+            return seed_solution
         return self.nearest_neighbor()
 
     def record_phase(self, name: str, elapsed_ms: int | float) -> None:
@@ -1489,6 +1522,56 @@ class _PreviewSolverAlgorithmContext:
         self._phase_runtime_ms[phase] = self._phase_runtime_ms.get(phase, 0) + int(
             max(0, elapsed_ms)
         )
+
+
+class _PreviewObjectiveValue(dict):
+    def _key(self) -> tuple[float, float]:
+        return (
+            float(self.get("fleet_violation", 0.0)),
+            float(self.get("total_distance", 0.0)),
+        )
+
+    @staticmethod
+    def _coerce_key(other: Any) -> tuple[float, float] | None:
+        if isinstance(other, Mapping):
+            return (
+                float(other.get("fleet_violation", 0.0)),
+                float(other.get("total_distance", 0.0)),
+            )
+        if isinstance(other, (list, tuple)) and len(other) >= 2:
+            return (float(other[0]), float(other[1]))
+        return None
+
+    def __getitem__(self, key: Any) -> Any:
+        if key == 0:
+            return self.get("fleet_violation", 0.0)
+        if key == 1:
+            return self.get("total_distance", 0.0)
+        return super().__getitem__(key)
+
+    def __lt__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() < other_key
+
+    def __le__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() <= other_key
+
+    def __gt__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() > other_key
+
+    def __ge__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() >= other_key
 
 
 def _coerce_preview_solution(candidate: Any) -> CvrpSolution | None:

@@ -5,6 +5,10 @@ This file is intentionally inactive by default. Candidate proposals may replace
 the algorithm can construct and improve routes, but the adapter/solver remains
 the authority for feasibility, objective computation, runtime limits, and
 protocol evaluation.
+
+Available context helpers include nearest_neighbor, baseline, make_solution,
+objective/objective_key/is_better, is_valid, remaining_time, elapsed_ms, and
+record_phase.
 """
 from __future__ import annotations
 

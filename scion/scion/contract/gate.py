@@ -884,7 +884,10 @@ class ContractGate:
                     violations.append("product(... problem-scale iterables ...)")
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.While) and not _is_bounded_while(node):
+            if isinstance(node, ast.While) and not _is_bounded_while(
+                node,
+                scale_names,
+            ):
                 violations.append("uncapped while loop")
 
         loop_guard = _ProblemScaleLoopGuard(scale_names)
@@ -1822,14 +1825,177 @@ def _is_problem_scale_expr(node: ast.AST, scale_names: frozenset[str]) -> bool:
     return False
 
 
-def _is_bounded_while(node: ast.While) -> bool:
+def _is_bounded_while(node: ast.While, scale_names: frozenset[str]) -> bool:
     if isinstance(node.test, ast.Constant) and node.test.value is True:
         return False
     if isinstance(node.test, ast.BoolOp):
-        return any(_compare_has_small_constant(value) for value in node.test.values)
+        return any(
+            _compare_has_small_constant(value)
+            or _compare_has_incrementing_counter_guard(value, node, scale_names)
+            or _condition_collection_is_shrunk(value, node)
+            for value in node.test.values
+        ) or _while_body_has_bounded_break(node)
     if isinstance(node.test, ast.Compare):
-        return _compare_has_small_constant(node.test)
+        return (
+            _compare_has_small_constant(node.test)
+            or _compare_has_incrementing_counter_guard(node.test, node, scale_names)
+        ) or _while_body_has_bounded_break(node)
+    return (
+        _condition_collection_is_shrunk(node.test, node)
+        or _while_body_has_bounded_break(node)
+    )
+
+
+def _condition_collection_is_shrunk(test: ast.AST, node: ast.While) -> bool:
+    names = _condition_collection_names(test)
+    if not names:
+        return False
+    return any(_body_shrinks_collection(node.body, name) for name in names)
+
+
+def _condition_collection_names(test: ast.AST) -> set[str]:
+    if isinstance(test, ast.Name):
+        return {test.id}
+    if isinstance(test, ast.UnaryOp):
+        return _condition_collection_names(test.operand)
+    if isinstance(test, ast.BoolOp):
+        names: set[str] = set()
+        for value in test.values:
+            names.update(_condition_collection_names(value))
+        return names
+    if isinstance(test, ast.Call) and isinstance(test.func, ast.Name):
+        if test.func.id == "len" and test.args and isinstance(test.args[0], ast.Name):
+            return {test.args[0].id}
+    return set()
+
+
+def _body_shrinks_collection(body: list[ast.stmt], name: str) -> bool:
+    shrink_methods = {"remove", "discard", "pop", "clear"}
+    for child in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            if (
+                isinstance(child.func.value, ast.Name)
+                and child.func.value.id == name
+                and child.func.attr in shrink_methods
+            ):
+                return True
+        if isinstance(child, ast.Assign):
+            if any(
+                isinstance(target, ast.Name) and target.id == name
+                for target in child.targets
+            ):
+                return True
+        if isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
+            if child.target.id == name and isinstance(child.op, (ast.Sub, ast.BitAnd)):
+                return True
     return False
+
+
+def _compare_has_incrementing_counter_guard(
+    test: ast.AST,
+    node: ast.While,
+    scale_names: frozenset[str],
+) -> bool:
+    if not isinstance(test, ast.Compare):
+        return False
+    expressions = [test.left, *test.comparators]
+    for index, expr in enumerate(expressions):
+        if not isinstance(expr, ast.Name):
+            continue
+        if not _body_increments_counter(node.body, expr.id):
+            continue
+        other_exprs = [
+            other
+            for other_index, other in enumerate(expressions)
+            if other_index != index
+        ]
+        if any(_is_bounded_limit_expr(other, scale_names) for other in other_exprs):
+            return True
+    return False
+
+
+def _body_increments_counter(body: list[ast.stmt], name: str) -> bool:
+    for child in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
+            if child.target.id == name and isinstance(child.op, (ast.Add, ast.Sub)):
+                return True
+        if isinstance(child, ast.Assign):
+            if not any(
+                isinstance(target, ast.Name) and target.id == name
+                for target in child.targets
+            ):
+                continue
+            if _expr_references_name(child.value, name):
+                return True
+    return False
+
+
+def _is_bounded_limit_expr(expr: ast.AST, scale_names: frozenset[str]) -> bool:
+    if _is_small_constant(expr):
+        return True
+    if isinstance(expr, ast.Name):
+        lowered = expr.id.lower()
+        return (
+            expr.id.isupper()
+            or "max" in lowered
+            or "limit" in lowered
+            or "cap" in lowered
+            or "round" in lowered
+            or "iter" in lowered
+            or "strength" in lowered
+        )
+    if isinstance(expr, ast.Attribute):
+        return expr.attr in scale_names or expr.attr in {
+            "customer_count",
+            "route_count",
+        }
+    if isinstance(expr, ast.Call):
+        if isinstance(expr.func, ast.Name) and expr.func.id in {"len", "min", "max"}:
+            return True
+        return any(_is_bounded_limit_expr(arg, scale_names) for arg in expr.args)
+    if isinstance(expr, ast.BinOp):
+        return _is_bounded_limit_expr(expr.left, scale_names) or _is_bounded_limit_expr(
+            expr.right,
+            scale_names,
+        )
+    return False
+
+
+def _while_body_has_bounded_break(node: ast.While) -> bool:
+    for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+        if not isinstance(child, ast.If):
+            continue
+        if not _contains_break(child.body):
+            continue
+        if _compare_has_small_constant(child.test) or _mentions_runtime_guard(child.test):
+            return True
+    return False
+
+
+def _contains_break(body: list[ast.stmt]) -> bool:
+    return any(isinstance(child, ast.Break) for stmt in body for child in ast.walk(stmt))
+
+
+def _mentions_runtime_guard(node: ast.AST) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Attribute) and child.attr in {
+            "remaining_time",
+            "elapsed_ms",
+        }:
+            return True
+        if isinstance(child, ast.Name) and child.id in {
+            "remaining_time",
+            "elapsed_ms",
+        }:
+            return True
+    return False
+
+
+def _expr_references_name(node: ast.AST, name: str) -> bool:
+    return any(
+        isinstance(child, ast.Name) and child.id == name
+        for child in ast.walk(node)
+    )
 
 
 def _compare_has_small_constant(node: ast.AST) -> bool:

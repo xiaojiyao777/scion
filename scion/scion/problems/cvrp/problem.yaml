@@ -33,6 +33,7 @@ search_space:
     - math
     - models
     - random
+    - time
     - typing
 
 solver:

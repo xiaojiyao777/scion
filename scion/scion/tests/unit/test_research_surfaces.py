@@ -1978,6 +1978,53 @@ def test_c9c_uses_v2_surface_complexity_scale_terms_for_dummy_problem() -> None:
     assert unrelated.passed
 
 
+def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_patterns() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(legacy)
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    unvisited = set(instance.customer_ids)\n"
+            "    routes = []\n"
+            "    while unvisited:\n"
+            "        route = []\n"
+            "        load = 0\n"
+            "        while unvisited:\n"
+            "            best = None\n"
+            "            for customer in sorted(unvisited):\n"
+            "                if load + instance.demands[customer] <= instance.capacity:\n"
+            "                    best = customer\n"
+            "                    break\n"
+            "            if best is None:\n"
+            "                break\n"
+            "            unvisited.remove(best)\n"
+            "            route.append(best)\n"
+            "            load += instance.demands[best]\n"
+            "        if route:\n"
+            "            routes.append(route)\n"
+            "    max_rounds = min(20, instance.customer_count)\n"
+            "    round_idx = 0\n"
+            "    while round_idx < max_rounds:\n"
+            "        round_idx += 1\n"
+            "    improved = True\n"
+            "    pass_count = 0\n"
+            "    while improved:\n"
+            "        pass_count += 1\n"
+            "        improved = False\n"
+            "        if pass_count > 30:\n"
+            "            break\n"
+            "    return context.make_solution(routes)\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch, selected_surface="solver_design")
+
+    assert c9c.passed
+
+
 def test_cvrp_solver_loads_workspace_search_policy_and_applies_bounds(
     tmp_path: Path,
 ) -> None:
@@ -2690,6 +2737,9 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Solver lifecycle:" in solver_design_prompt_text
     assert "full algorithm hook" in solver_design_prompt_text
     assert "context.nearest_neighbor" in solver_design_prompt_text
+    assert "context.baseline(initial_solution=None" in solver_design_prompt_text
+    assert "context.objective_key" in solver_design_prompt_text
+    assert "instance.depot" in solver_design_prompt_text
     assert "adapter/solver remains the authority" in solver_design_prompt_text
 
 

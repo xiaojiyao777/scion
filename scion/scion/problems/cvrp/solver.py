@@ -8525,6 +8525,58 @@ def _solver_algorithm_active(audit: Mapping[str, Any] | None) -> bool:
     return bool(audit and audit.get("solver_algorithm_active"))
 
 
+class _ObjectiveValue(dict):
+    """Mapping objective value with lexicographic CVRP comparison helpers."""
+
+    def _key(self) -> tuple[float, float]:
+        return (
+            float(self.get("fleet_violation", 0.0)),
+            float(self.get("total_distance", 0.0)),
+        )
+
+    @staticmethod
+    def _coerce_key(other: Any) -> tuple[float, float] | None:
+        if isinstance(other, Mapping):
+            return (
+                float(other.get("fleet_violation", 0.0)),
+                float(other.get("total_distance", 0.0)),
+            )
+        if isinstance(other, (list, tuple)) and len(other) >= 2:
+            return (float(other[0]), float(other[1]))
+        return None
+
+    def __getitem__(self, key: Any) -> Any:
+        if key == 0:
+            return self.get("fleet_violation", 0.0)
+        if key == 1:
+            return self.get("total_distance", 0.0)
+        return super().__getitem__(key)
+
+    def __lt__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() < other_key
+
+    def __le__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() <= other_key
+
+    def __gt__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() > other_key
+
+    def __ge__(self, other: Any) -> bool:
+        other_key = self._coerce_key(other)
+        if other_key is None:
+            return NotImplemented
+        return self._key() >= other_key
+
+
 def _record_solver_algorithm_event(
     audit: dict[str, Any],
     status: str,
@@ -8605,14 +8657,23 @@ class _SolverAlgorithmContext:
         valid, _reason = _solution_is_valid(self._adapter, self.instance, coerced)
         return valid
 
-    def objective(self, solution: Any) -> dict[str, int | float]:
+    def objective(self, solution: Any) -> _ObjectiveValue:
         coerced = _coerce_solution(solution)
         if coerced is None:
             raise ValueError("solution cannot be coerced to CvrpSolution")
         valid, reason = _solution_is_valid(self._adapter, self.instance, coerced)
         if not valid:
             raise ValueError(f"invalid solution: {reason}")
-        return _objective_for_solution(self._adapter, self.instance, coerced)
+        return _ObjectiveValue(
+            _objective_for_solution(self._adapter, self.instance, coerced)
+        )
+
+    def objective_key(self, solution: Any) -> tuple[float, float]:
+        objective = self.objective(solution)
+        return (float(objective[0]), float(objective[1]))
+
+    def is_better(self, candidate: Any, incumbent: Any) -> bool:
+        return self.objective_key(candidate) < self.objective_key(incumbent)
 
     def nearest_neighbor(
         self,
@@ -8632,13 +8693,26 @@ class _SolverAlgorithmContext:
 
     def baseline(
         self,
+        initial_solution: Any | None = None,
         *,
         time_budget_sec: float | None = None,
+        time_limit_sec: float | None = None,
         params: Mapping[str, Any] | None = None,
     ) -> CvrpSolution:
         self._audit["solver_algorithm_baseline_calls"] = _as_nonnegative_int(
             self._audit.get("solver_algorithm_baseline_calls")
         ) + 1
+        if (
+            time_budget_sec is None
+            and time_limit_sec is None
+            and isinstance(initial_solution, (int, float))
+            and not isinstance(initial_solution, bool)
+        ):
+            time_budget_sec = float(initial_solution)
+            initial_solution = None
+        seed_solution = _coerce_solution(initial_solution)
+        if time_budget_sec is None and time_limit_sec is not None:
+            time_budget_sec = time_limit_sec
         budget = float(time_budget_sec) if time_budget_sec is not None else 0.0
         if budget <= 0:
             budget = max(0.05, self.remaining_time() * _BASELINE_TIME_FRACTION)
@@ -8676,6 +8750,8 @@ class _SolverAlgorithmContext:
                     "warning",
                     f"context.baseline fallback to nearest_neighbor: {exc}",
                 )
+        if seed_solution is not None and self.is_valid(seed_solution):
+            return seed_solution
         return self.nearest_neighbor()
 
     def record_phase(self, name: str, elapsed_ms: int | float) -> None:

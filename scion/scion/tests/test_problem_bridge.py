@@ -142,6 +142,7 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
     ]
     assert "policies/*.py" in legacy.search_space.editable
     assert "dataclasses" in legacy.search_space.import_whitelist
+    assert "time" in legacy.search_space.import_whitelist
     assert legacy.parameter_search.enabled is False
     assert legacy.canary_case_path == str((cvrp_dir / "data" / "tiny_canary.json").resolve())
     assert [metric.name for metric in bridge.metric_specs] == [

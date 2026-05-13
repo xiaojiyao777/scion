@@ -81,12 +81,18 @@ Important current interpretation:
   `solve(instance, rng, time_limit_sec, context)`. Returning `None` keeps the
   checked-in champion on the stable baseline path; an active candidate must
   return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
-- The allowed algorithm API is explicit: use `instance.customer_ids`,
-  `instance.customer_count`, `instance.demands`, `instance.capacity`,
-  `instance.distance`, `instance.route_load`, `instance.route_distance`, and
-  `context` helpers such as `nearest_neighbor`, `baseline`, `make_solution`,
-  `objective`, `is_valid`, `remaining_time`, `elapsed_ms`, and
-  `record_phase`.
+- The allowed algorithm API is explicit: use `instance.depot`,
+  `instance.customer_ids`, `instance.customer_count`, `instance.demands`,
+  `instance.capacity`, `instance.distance`, `instance.route_load`,
+  `instance.route_distance`, and `context` helpers such as
+  `nearest_neighbor`, `baseline`, `make_solution`, `objective`,
+  `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
+  and `record_phase`. `context.baseline` accepts an optional seed solution
+  and either `time_budget_sec` or the compatibility alias `time_limit_sec`.
+  `context.objective` is still a mapping, but now also compares
+  lexicographically as `(fleet_violation, total_distance)`.
+  The `time` module is whitelisted for monotonic timing; use context time
+  helpers for budget decisions and never add sleeps.
 - The boundary is fixed. Candidates may change the algorithm, but must not
   change objective semantics, capacity/fleet constraints, parser behavior,
   benchmark data, protocol splits, seeds, Decision thresholds, or solver/
@@ -105,6 +111,11 @@ Important current interpretation:
 - Active `solver_design` boundary control is now live-validated: free-surface
   APS sessions stayed on `solver_design` after heavy Verification and
   zero/low-movement screening failures.
+- The first direct `solver_algorithm` launch also stayed on `solver_design`,
+  but hit pre-evaluation framework friction: generated full-algorithm code
+  used natural bounded `while` loops, `time` for timing, baseline seed/time
+  aliases, and direct objective comparisons. Those are now supported without
+  weakening the fixed objective/constraint boundary.
 - Active-boundary tool guidance is now live-validated as an active problem
   boundary, not a fake forced-surface diagnostic.
 - The APS Contract-preview budget repair is now live-validated: completed code
