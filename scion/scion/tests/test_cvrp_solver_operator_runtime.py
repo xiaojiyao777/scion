@@ -1472,8 +1472,17 @@ def test_solver_algorithm_context_accepts_baseline_alias_and_objective_compariso
     assert runtime["solver_algorithm_baseline_calls"] == 1
     assert runtime["solver_algorithm_search_iterations"] == 1
     assert runtime["solver_algorithm_move_attempts"] == 1
+    assert runtime["solver_algorithm_accepted_moves"] == 0
+    assert runtime["solver_algorithm_phase_improvement_counts"]["baseline_probe"] == 0
     assert runtime["solver_algorithm_solution_valid"] is True
     assert "baseline_alias" in runtime["solver_algorithm_phase_runtime_ms"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    assert runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    ) is None
 
 
 def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default(

@@ -8832,7 +8832,9 @@ class _SolverAlgorithmContext:
         if not isinstance(counts, dict):
             counts = {}
             self._audit["solver_algorithm_phase_improvement_counts"] = counts
-        counts.pop("none", None)
+        if attempts > 0 or accepts > 0:
+            counts.pop("none", None)
+            counts.setdefault(phase_name, 0)
         if accepts > 0 and (delta_value > 0.0 or best_improved):
             counts[phase_name] = _as_nonnegative_int(counts.get(phase_name)) + accepts
         self._audit["solver_algorithm_best_delta"] = max(

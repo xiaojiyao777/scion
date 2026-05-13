@@ -124,6 +124,7 @@ class AgenticEvidenceRef:
 @dataclass(frozen=True)
 class AgenticSelfCheck:
     schema_valid: bool = False
+    schema_preview_codes: tuple[str, ...] = ()
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
 
@@ -1087,6 +1088,7 @@ class AgenticProposalSession:
             self_check=self_check
             or AgenticSelfCheck(
                 schema_valid=True,
+                schema_preview_codes=(),
                 contract_preview_passed=None,
                 contract_preview_codes=(),
             ),
@@ -3485,6 +3487,7 @@ def _self_check_from_previews(
 ) -> AgenticSelfCheck:
     schema_valid = True
     schema_preview_evaluated = False
+    schema_preview_codes: list[str] = []
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
     for observation in observations:
@@ -3495,6 +3498,14 @@ def _self_check_from_previews(
             }:
                 schema_valid = False
                 schema_preview_evaluated = True
+                schema_preview_codes.extend(
+                    code
+                    for code in (
+                        _enum_value(observation.failure_code),
+                        observation.observation_type,
+                    )
+                    if code
+                )
             if observation.tool_name == "proposal.contract_preview":
                 contract_preview_codes = tuple(
                     code
@@ -3515,12 +3526,16 @@ def _self_check_from_previews(
             "proposal.target_permission_preview",
         }:
             schema_preview_evaluated = True
-            schema_valid = schema_valid and bool(payload.get("passed"))
+            preview_passed = bool(payload.get("passed"))
+            schema_valid = schema_valid and preview_passed
+            if not preview_passed:
+                schema_preview_codes.extend(_preview_codes(payload))
         if observation.tool_name == "proposal.contract_preview":
             contract_preview_passed = bool(payload.get("passed"))
             contract_preview_codes = _preview_codes(payload)
     return AgenticSelfCheck(
         schema_valid=schema_valid if schema_preview_evaluated else False,
+        schema_preview_codes=tuple(dict.fromkeys(schema_preview_codes)),
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
     )
@@ -3533,7 +3548,9 @@ def _self_check_failure_detail(
     require_contract_preview: bool,
 ) -> str | None:
     if require_schema_preview and not self_check.schema_valid:
-        return "schema or target preview did not pass"
+        codes = ", ".join(self_check.schema_preview_codes)
+        suffix = f" ({codes})" if codes else ""
+        return f"schema or target preview did not pass{suffix}"
     if require_contract_preview and self_check.contract_preview_passed is not True:
         codes = ", ".join(self_check.contract_preview_codes)
         suffix = f" ({codes})" if codes else ""

@@ -1375,6 +1375,7 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
         "novelty_signature_guidance"
     ]
     assert preview.structured_payload["passed"] is False
+    assert "algorithm_family" in preview.summary
     assert guidance["missing_fields"] == ["algorithm_family"]
     assert "nonempty_sequence_fields" not in guidance
 

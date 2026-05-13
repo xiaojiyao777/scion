@@ -1157,18 +1157,41 @@ class SchemaPreviewTool(_BaseReadOnlyTool):
             payload["patch"] = _schema_preview_patch_payload(args.patch)
             payload["passed"] = payload["passed"] and bool(payload["patch"]["passed"])
         payload = _drop_internal_preview_objects(payload)
+        summary = _schema_preview_summary(payload)
 
         return self._observation(
             context,
             observation_type="schema_preview",
-            summary=(
-                "Schema preview passed."
-                if payload["passed"]
-                else "Schema preview found issues."
-            ),
+            summary=summary,
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
         )
+
+
+def _schema_preview_summary(payload: Mapping[str, Any]) -> str:
+    if bool(payload.get("passed")):
+        return "Schema preview passed."
+    details: list[str] = []
+    for section_name in ("hypothesis", "patch"):
+        section = payload.get(section_name)
+        if not isinstance(section, Mapping):
+            continue
+        reason = section.get("failure_reason")
+        if reason:
+            details.append(str(reason))
+        errors = section.get("errors")
+        if isinstance(errors, list):
+            for error in errors:
+                if isinstance(error, Mapping):
+                    loc = ".".join(str(part) for part in error.get("loc", ()) or ())
+                    message = error.get("msg") or error.get("message") or error
+                    details.append(f"{loc}: {message}" if loc else str(message))
+                elif error:
+                    details.append(str(error))
+    if not details:
+        return "Schema preview found issues."
+    compact = "; ".join(dict.fromkeys(details))
+    return "Schema preview found issues: " + _limit_text(compact, 420)
 
 
 class TargetPermissionPreviewTool(_BaseReadOnlyTool):
