@@ -130,11 +130,11 @@ Keep the boundary clear:
 - CVRP package owns solver hooks, allowed components, policy files, runtime
   field meanings, and controlled fixtures.
 - `solver_design` is the top-level problem-object boundary. It is backed by
-  `policies/main_search_strategy.py`, and component policies should support
-  that solver-level hypothesis rather than define the research target. Current
-  solver-design work should use `problem_adaptation` to declare strategy
-  family, instance-profile intent, phase objective, component roles/order, and
-  evidence targets for the whole CVRP problem object.
+  `policies/solver_algorithm.py` and the
+  `solve(instance, rng, time_limit_sec, context)` full-algorithm hook.
+  Component policies and the older `main_search_strategy` lifecycle table are
+  legacy implementation/regression surfaces; they should not define the top-
+  level research target for current CVRP optimization work.
 
 ## Profile: New Problem Or Solver Onboarding
 

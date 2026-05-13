@@ -273,19 +273,24 @@ class ExploreStepPipeline:
                 branch.consecutive_llm_retries = 0
 
         if patch is None:
+            detailed_failure = self.proposal_failure_detail_for(bid)
             if prior_failure is not None:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
-                failure_detail = "LLM code generation failed (retry - hypothesis rejected)"
+                failure_detail = (
+                    f"{detailed_failure} (retry - hypothesis rejected)"
+                    if detailed_failure
+                    else "LLM code generation failed (retry - hypothesis rejected)"
+                )
             else:
+                failure_detail = detailed_failure or "LLM code generation failed"
                 self.pending_hypotheses[bid] = (
                     hypothesis,
                     h_record,
-                    "LLM code generation failed",
+                    failure_detail,
                 )
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
-                failure_detail = "LLM code generation failed"
             self.record_step(
                 StepRecord(
                     round_num=rnum,

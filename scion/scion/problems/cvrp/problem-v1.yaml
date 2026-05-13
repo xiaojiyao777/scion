@@ -902,6 +902,13 @@ research_surfaces:
         - solver_algorithm_objective
         - solver_algorithm_total_distance
         - solver_algorithm_fleet_violation
+        - solver_algorithm_search_iterations
+        - solver_algorithm_move_attempts
+        - solver_algorithm_accepted_moves
+        - solver_algorithm_best_delta
+        - solver_algorithm_phase_delta_sum
+        - solver_algorithm_phase_best_delta
+        - solver_algorithm_phase_improvement_counts
         - solver_algorithm_stop_reason
     novelty:
       strategy: semantic_signature
@@ -918,6 +925,14 @@ research_surfaces:
         Treat the CVRP solver as the research object. State the complete
         algorithm idea: construction, improvement/recombination/repair,
         acceptance, perturbation/restart if any, and runtime budget strategy.
+        Keep novelty_signature identity fields as compact tokens or short
+        phrases; each scalar string must be at most 120 characters. Put long
+        rationale in hypothesis_text, not novelty_signature.
+        The idea must be a full solve(...) algorithm body, not a
+        main_search_plan lifecycle/config table and not a shallow wrapper
+        around context.baseline. A solver-design hypothesis that mainly changes
+        baseline budget/params or adds a tiny post-baseline polish has already
+        failed and should be considered a design failure.
         The hypothesis may change algorithm code but must preserve CVRP
         objective semantics, capacity/fleet constraints, instance parsing,
         seeds, evaluation splits, and Decision rules.
@@ -933,7 +948,10 @@ research_surfaces:
         context.objective(solution), context.objective_key(solution),
         context.is_better(candidate, incumbent), context.is_valid(solution),
         context.remaining_time(), context.elapsed_ms(), and
-        context.record_phase(name, elapsed_ms). context.objective returns a
+        context.record_phase(name, elapsed_ms),
+        context.record_iteration(phase, count), context.record_move(phase,
+        attempted=1, accepted=0, delta=0.0, best_improved=False), and
+        context.set_stop_reason(reason). context.objective returns a
         mapping with fleet_violation and total_distance and also compares
         lexicographically as (fleet_violation, total_distance); explicit field
         access or context.objective_key is preferred. Runtime is part of the
@@ -941,15 +959,23 @@ research_surfaces:
         poll context.remaining_time(); importing time is allowed only for
         monotonic timing, never for sleeps or external scheduling. Return only
         a solution or a routes mapping. Do not return a plan dictionary.
-        Telemetry can name phases but must not force the algorithm into
-        predeclared components.
+        The checked-in file contains an inactive ALNS/VNS-style algorithm-body
+        template adapted from the repo-local CVRP solver structure; candidates
+        may replace or materially rework that body. Telemetry must record real
+        search effort and accepted/best-improving movement when the algorithm
+        runs route edits, destroy/repair, recombination, perturbation, or
+        acceptance. Telemetry can name phases but must not force the algorithm
+        into predeclared components.
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, or benchmark data. Do not import or monkeypatch solver.py,
         adapter.py, models.py, cvrplib.py, protocol files, or runtime gates. Do
         not use case-name-specific behavior, hidden benchmark references,
         global mutable state, wall-clock sleeps, network/filesystem reads, or
-        instance.customers.
+        instance.customers. Do not implement a baseline-only wrapper: calling
+        context.baseline and returning it, changing only baseline budget or
+        params, or adding millisecond-scale polishing without a bounded
+        algorithmic search loop is not a valid solver-design candidate.
     target_files:
       - "policies/solver_algorithm.py"
     prompt_hint: >-
@@ -968,9 +994,10 @@ research_surfaces:
       role: legacy_componentized_solver_lifecycle_config
       invocation_point: construction_baseline_internal_main_loop_before_optional_registry_operators
       description: >-
-        Declares the solver-level CVRP design boundary. It is backed by the
-        existing main_search_plan execution hook and takes over the package's
-        main algorithm lifecycle when enabled: problem-object adaptation,
+        Legacy componentized lifecycle hook retained for regression coverage.
+        It is backed by the existing main_search_plan execution hook and takes
+        over the older package-owned main-search lifecycle when enabled:
+        problem-object adaptation,
         instance-profile intent, solver strategy family, bounded construction
         ensemble, explicit algorithm_body phase sequencing, repo-local
         baseline time budget and sanitized baseline params, package-owned

@@ -1452,6 +1452,8 @@ def test_solver_algorithm_context_accepts_baseline_alias_and_objective_compariso
                 "    baseline = context.baseline(seed, time_limit_sec=0.1)",
                 "    seed_obj = context.objective(seed)",
                 "    baseline_obj = context.objective(baseline)",
+                "    context.record_iteration('baseline_probe', 1)",
+                "    context.record_move('baseline_probe', attempted=1, accepted=0)",
                 "    if baseline_obj <= seed_obj and baseline_obj[0] <= seed_obj[0]:",
                 "        context.record_phase('baseline_alias', 1)",
                 "        return baseline",
@@ -1468,6 +1470,8 @@ def test_solver_algorithm_context_accepts_baseline_alias_and_objective_compariso
     assert runtime["solver_algorithm_active"] is True
     assert runtime["solver_algorithm_errors"] == 0
     assert runtime["solver_algorithm_baseline_calls"] == 1
+    assert runtime["solver_algorithm_search_iterations"] == 1
+    assert runtime["solver_algorithm_move_attempts"] == 1
     assert runtime["solver_algorithm_solution_valid"] is True
     assert "baseline_alias" in runtime["solver_algorithm_phase_runtime_ms"]
 

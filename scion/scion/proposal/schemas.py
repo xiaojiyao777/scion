@@ -162,7 +162,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "novelty_signature": {
             "type": "object",
             "additionalProperties": True,
-            "description": "Structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Required when the selected surface declares novelty.strategy=semantic_signature. Use compact scalars, lists, or small objects; do not put rationale prose here.",
+            "description": "Structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Required when the selected surface declares novelty.strategy=semantic_signature. Use compact scalars, lists, or small objects; scalar strings must be <=120 characters. Do not put rationale prose here.",
         },
     },
 }
@@ -220,7 +220,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
-        "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity.\n"
+        "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
         "- Prefer surface changes that provide a capability the current solver currently lacks.\n\n"
@@ -330,14 +330,14 @@ To avoid redundancy, these directions are already being explored:
 ## Task
 Propose ONE hypothesis for improving a declared research surface.
 - Set `change_locus` to one of: {operator_categories}
-- Set `action` to: "modify" (change existing), "create_new" (new operator), or "remove" (delete operator)
+- Set `action` to: "modify" (change existing surface file), "create_new" (new operator where allowed), or "remove" (delete operator where allowed)
 - If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/local_move.py" or "policies/search_policy.py")
 - Write a detailed `hypothesis_text` explaining the idea, the expected mechanism, and why it should improve results
 - Set `target_weakness` to describe what current behaviour you are targeting
 - Set `expected_effect` to describe the measurable improvement you expect
 - Set `target_runtime_effect` to the expected runtime impact (improve/neutral/risk/unknown or short text)
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
-- Set `runtime_budget_strategy` to how the operator will cap solve time (top-k, sampling, early exit, bounded neighborhood, etc.)
+- Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{

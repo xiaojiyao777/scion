@@ -204,6 +204,7 @@ class ContextManager:
                 available_actions=effective_available_actions,
                 forced_surface=forced_surface_name,
                 forced_action=forced_action_name,
+                active_problem_boundary_surfaces=active_problem_boundary_surfaces,
             )
             if families
             else ""
@@ -628,6 +629,8 @@ def _build_forced_surface_novelty_guidance(
         f"`novelty.signature_fields`: {', '.join(fields)}.",
         "Do not use hypothesis prose as novelty identity; C10 ignores free text "
         "for this semantic signature.",
+        "Use compact novelty_signature values; scalar strings longer than 120 "
+        "characters are invalid.",
     ]
     sequence_fields = [
         field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
@@ -1869,11 +1872,17 @@ def _build_strategy_guidance(
     available_actions: Optional[set[str]] = None,
     forced_surface: Optional[str] = None,
     forced_action: Optional[str] = None,
+    active_problem_boundary_surfaces: Optional[List[str]] = None,
 ) -> str:
     """Build strategy shift guidance when same mechanism fails repeatedly (T08)."""
     if not families:
         return ""
     allowed_actions = available_actions or {"create_new", "modify", "remove"}
+    active_boundaries = {
+        str(surface).strip()
+        for surface in (active_problem_boundary_surfaces or [])
+        if str(surface).strip()
+    }
     guidance_parts: List[str] = []
 
     # Rule 1: Same family failed 3+ consecutive times → force switch
@@ -1886,6 +1895,14 @@ def _build_strategy_guidance(
                     f"'{forced_surface}' has failed {consecutive_fails} "
                     "consecutive times. Keep the forced surface/action/target, "
                     "but use a distinct mechanism or runtime-evidence diagnosis."
+                )
+            elif fam.locus_pattern in active_boundaries:
+                guidance_parts.append(
+                    f"Family '{fam.mechanism_label}' on active problem boundary "
+                    f"'{fam.locus_pattern}' has failed {consecutive_fails} "
+                    "consecutive times. Keep the problem boundary, but abandon "
+                    "the failed mechanism pattern and propose a materially "
+                    "different full-algorithm body."
                 )
             else:
                 guidance_parts.append(
@@ -1922,7 +1939,15 @@ def _build_strategy_guidance(
         else set()
     )
     unexplored = all_loci - explored_loci
-    if unexplored and not forced_surface:
+    if unexplored and active_boundaries and not forced_surface:
+        guidance_parts.append(
+            "Active problem-boundary control is in force: do not switch the "
+            "top-level research target to unexplored component surfaces. Use "
+            f"{sorted(active_boundaries)} as the research surface and treat "
+            "component policies only as implementation hooks or attribution "
+            "evidence."
+        )
+    elif unexplored and not forced_surface:
         guidance_parts.append(
             f"Unexplored research surfaces: {sorted(unexplored)}. Consider targeting these."
         )
@@ -2920,14 +2945,14 @@ def _build_solver_design_boundary_guidance(
     if failed_solver_design_steps or blacklisted_solver_design or rejected_solver_design:
         lines.append(
             "For the next hypothesis, retry the solver-design boundary with a "
-            "different lifecycle implementation before falling back to isolated "
-            "component policies."
+            "materially different full-algorithm implementation. Do not treat "
+            "isolated component policies as replacement research goals."
         )
     else:
         lines.append(
             "For the next hypothesis, use the solver-design boundary for the "
-            "problem-level lifecycle design before considering isolated "
-            "component policies."
+            "problem-level algorithm body. Do not express the research target "
+            "as an isolated component policy."
         )
     lines.append(
         "Component policies may be used as implementation hooks or attribution "

@@ -54,15 +54,20 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/main_search_strategy.py`,
+3. Load `policies/solver_algorithm.py` first. If
+   `solve(instance, rng, time_limit_sec, context)` returns a valid solution,
+   the direct solver-design hook becomes the output path and the legacy
+   baseline/lifecycle/operator layers are skipped.
+4. If the direct solver hook is missing, inactive, or invalid, load
+   `policies/main_search_strategy.py`,
    `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
    `policies/baseline_policy.py`, `policies/construction_policy.py`,
    `policies/alns_vns_policy.py`, `policies/destroy_repair_policy.py`,
    `policies/route_pair_candidate_policy.py`, and
    `policies/acceptance_restart_policy.py` from the workspace when present,
    validating returns and recording runtime audit fields.
-4. If the `solver_design` surface's `main_search_strategy.py` execution file
-   returns an enabled valid `main_search_plan`, let it take over the whole CVRP
+5. If the legacy `main_search_strategy.py` execution file returns an enabled
+   valid `main_search_plan`, let it take over the older componentized CVRP
    main-search lifecycle: construction ensemble, repo-local baseline budget and
    sanitized baseline params, package-owned improvement loop, bounded
    acceptance/restart/perturbation knobs including explicit perturbation
@@ -73,17 +78,17 @@ Solver flow:
    `acceptance_restart_policy`), the solver activates a package-owned default
    main-search diagnostic plan so the selected mechanism surface can produce
    runtime evidence without also editing `main_search_strategy.py`.
-5. If no main-search strategy is active and `algorithm_blueprint` returns an
+6. If no main-search strategy is active and `algorithm_blueprint` returns an
    enabled valid plan, let it coordinate
    bounded construction ensemble, baseline time fraction, package-owned local
    search, restart knobs, and post-baseline registry-operator toggle/round
    limit. Invalid enabled plans record `algorithm_blueprint_errors` and do not
    take over.
-6. Build a construction solution through either the bounded construction
+7. Build a construction solution through either the bounded construction
    surface, the main-search construction ensemble, or the algorithm-blueprint
    construction ensemble, and use it as the JSON/synthetic fallback or
    required-baseline fallback.
-7. Build baseline solution:
+8. Build baseline solution:
    - real `.vrp` formal runs can use repo-local `vrp/src` ALNS+VNS baseline when data root env is configured;
    - `baseline_policy` passes sanitized bounded ALNS+VNS kwargs into the
      repo-local baseline;
@@ -174,27 +179,25 @@ direct generated code to use
 of the nonexistent `instance.customers` attribute.
 
 `solver_design` is the current problem-owned CVRP solver-design research
-surface. It is backed by `policies/main_search_strategy.py`. Required function:
+surface. It is backed by `policies/solver_algorithm.py`. Required function:
 
-- `main_search_plan(instance, time_limit_sec)`
+- `solve(instance, rng, time_limit_sec, context)`
 
-The default checked-in execution file is inactive (`enabled=False`) and
-disables post-baseline registry operators for this surface. A valid enabled plan can
-only select bounded package-owned knobs and components: construction methods,
-repo-local baseline time fraction and sanitized baseline params, improvement
-components `intra_route_2opt`, `inter_route_relocate`, `route_pair_swap`, and
-`bounded_destroy_repair`, strict-improvement acceptance threshold, restart
-stagnation/max-restart controls, bounded perturbation controls with explicit
-schedule, and optional post-baseline registry-operator toggle/round limit.
-The model-facing interface and `problem-v1.yaml` also require solver-design
-hypotheses to populate semantic identity through
-`novelty_signature.selected_components` and
-`novelty_signature.deep_components_selected` as non-empty arrays of component
-names. Those fields identify the solver lifecycle being changed; empty or false
-values fail schema/Contract preview before code generation. The
+The default checked-in execution file returns `None` for champion stability,
+but now includes an editable ALNS/VNS-style algorithm-body template. Active
+candidates may implement construction, route-edit candidate generation, local
+search, destroy/repair, recombination, perturbation, acceptance, and runtime
+scheduling inside `solve(...)`. The adapter/solver remains authoritative for
+objective recomputation, feasibility, parser behavior, seeds, protocol splits,
+and Decision. The legacy `main_search_strategy` surface still exists for
+regression coverage; it is not the preferred research object.
+
+The model-facing interface and `problem-v1.yaml` require solver-design
+hypotheses to populate semantic identity through fields such as
+`algorithm_family`, `construction_strategy`, `improvement_strategy`,
+`acceptance_strategy`, and `runtime_budget_strategy`. The
 `novelty_signature` object is proposal metadata only; it must not be returned
-from `main_search_plan()` because the plan contract has a fixed top-level key
-set.
+from `solve(...)`.
 `problem_adaptation.component_roles` can describe the whole lifecycle rather
 than only selected improvement components. Accepted role targets include
 construction modes, repo-local baseline/baseline params, strict-improvement

@@ -226,7 +226,9 @@ the singleton execution file `policies/solver_algorithm.py`:
 - required function: `solve(instance, rng, time_limit_sec, context)`;
 - allowed helpers: `context.make_solution`, `context.nearest_neighbor`,
   `context.baseline`, `context.objective`, `context.is_valid`,
-  `context.remaining_time`, `context.elapsed_ms`, and `context.record_phase`;
+  `context.remaining_time`, `context.elapsed_ms`, `context.record_phase`,
+  `context.record_iteration`, `context.record_move`, and
+  `context.set_stop_reason`;
 - editable algorithm scope: construction, local search, destroy/repair,
   recombination, acceptance, restart/perturbation, and runtime scheduling;
 - fixed boundary: objective, feasibility, parser, data, protocol splits,
@@ -234,8 +236,16 @@ the singleton execution file `policies/solver_algorithm.py`:
 - required evidence: `solver_algorithm_loaded`,
   `solver_algorithm_active`, `solver_algorithm_errors`,
   `solver_algorithm_elapsed_ms`, `solver_algorithm_phase_runtime_ms`,
-  solution validity/routes/objective/distance/fleet violation, and stop
-  reason.
+  solution validity/routes/objective/distance/fleet violation,
+  search-iteration/move-attempt/accepted-move counters, phase delta telemetry,
+  and stop reason.
+
+Current repair: `policies/solver_algorithm.py` is no longer only an empty
+stub. It keeps the checked-in champion inactive by default, but now contains an
+editable ALNS/VNS-style full-algorithm template with construction, capped
+route-edit neighborhoods, destroy/repair, perturbation, acceptance, runtime
+polling, and solver-algorithm telemetry. Adapter preview now rejects shallow
+`context.baseline(...)` wrappers that do not run their own bounded search body.
 
 `main_search_strategy` is a legacy config surface backed by
 `policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
@@ -303,6 +313,9 @@ APS edits this algorithm subject directly and does not fall back to
 component-policy or lifecycle-table optimization.
 
 Detailed analysis:
+[`v0.4-direct-solver-subject-adapter-repair-20260513.md`](../experiments/v0.4/v0.4-direct-solver-subject-adapter-repair-20260513.md)
+
+Previous repair:
 [`v0.4-algorithm-body-execution-semantics-repair-20260512.md`](../experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md)
 
 Previous analyzed/stopped run:

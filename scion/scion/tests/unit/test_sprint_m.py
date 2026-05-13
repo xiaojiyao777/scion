@@ -77,9 +77,9 @@ def _make_solver_design_problem_spec(root_dir: str) -> ProblemSpec:
             SimpleNamespace(
                 name="solver_design",
                 kind="solver_design",
-                algorithm=SimpleNamespace(role="problem_object_solver_design"),
+                algorithm=SimpleNamespace(role="problem_object_solver_algorithm"),
                 targets=SimpleNamespace(
-                    files=["policies/main_search_strategy.py"],
+                    files=["policies/solver_algorithm.py"],
                     create_new_allowed=False,
                     modify_allowed=True,
                     remove_allowed=False,
@@ -138,9 +138,9 @@ def _solver_design_campaign(
 ) -> CampaignManager:
     code_dir = tmp_path / "solver_design_champion"
     (code_dir / "policies").mkdir(parents=True)
-    (code_dir / "policies" / "main_search_strategy.py").write_text(
-        "def main_search_plan(instance, time_limit_sec):\n"
-        "    return {'enabled': False}\n",
+    (code_dir / "policies" / "solver_algorithm.py").write_text(
+        "def solve(instance, rng, time_limit_sec, context):\n"
+        "    return None\n",
         encoding="utf-8",
     )
     spec = _make_solver_design_problem_spec(str(code_dir))
@@ -149,7 +149,7 @@ def _solver_design_campaign(
         "hypothesis_text": "Try a different solver-design lifecycle.",
         "change_locus": "solver_design",
         "action": "modify",
-        "target_file": "policies/main_search_strategy.py",
+        "target_file": "policies/solver_algorithm.py",
         "predicted_direction": "improve",
         "target_weakness": "candidate lifecycle",
         "expected_effect": "better total_distance",
@@ -157,11 +157,11 @@ def _solver_design_campaign(
         "protected_objectives": ["fleet_violation"],
     }
     patch = {
-        "file_path": "policies/main_search_strategy.py",
+        "file_path": "policies/solver_algorithm.py",
         "action": "modify",
         "code_content": (
-            "def main_search_plan(instance, time_limit_sec):\n"
-            "    return {'enabled': False}\n"
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return None\n"
         ),
         "test_hint": None,
     }

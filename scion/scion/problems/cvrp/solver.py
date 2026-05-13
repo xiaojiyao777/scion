@@ -8517,6 +8517,13 @@ def _solver_algorithm_defaults() -> dict[str, Any]:
         "solver_algorithm_fleet_violation": 0.0,
         "solver_algorithm_baseline_calls": 0,
         "solver_algorithm_construction_calls": 0,
+        "solver_algorithm_search_iterations": 0,
+        "solver_algorithm_move_attempts": 0,
+        "solver_algorithm_accepted_moves": 0,
+        "solver_algorithm_best_delta": 0.0,
+        "solver_algorithm_phase_delta_sum": {"none": 0.0},
+        "solver_algorithm_phase_best_delta": {"none": 0.0},
+        "solver_algorithm_phase_improvement_counts": {"none": 0},
         "solver_algorithm_context_records": {"inactive": 0},
         "solver_algorithm_stop_reason": "inactive",
     }
@@ -8769,6 +8776,74 @@ class _SolverAlgorithmContext:
             records = {}
             self._audit["solver_algorithm_context_records"] = records
         records[phase] = _as_nonnegative_int(records.get(phase)) + 1
+
+    def record_iteration(self, phase: str = "search", count: int = 1) -> None:
+        phase_name = str(phase or "").strip() or "search"
+        increment = _as_nonnegative_int(count)
+        if increment <= 0:
+            increment = 1
+        self._audit["solver_algorithm_search_iterations"] = _as_nonnegative_int(
+            self._audit.get("solver_algorithm_search_iterations")
+        ) + increment
+        records = self._audit.setdefault("solver_algorithm_context_records", {})
+        if not isinstance(records, dict):
+            records = {}
+            self._audit["solver_algorithm_context_records"] = records
+        key = f"{phase_name}_iterations"
+        records[key] = _as_nonnegative_int(records.get(key)) + increment
+
+    def record_move(
+        self,
+        phase: str,
+        *,
+        attempted: int = 1,
+        accepted: int = 0,
+        delta: int | float = 0.0,
+        best_improved: bool = False,
+    ) -> None:
+        phase_name = str(phase or "").strip() or "search"
+        attempts = _as_nonnegative_int(attempted)
+        accepts = _as_nonnegative_int(accepted)
+        if attempts <= 0 and accepts <= 0:
+            attempts = 1
+        self._audit["solver_algorithm_move_attempts"] = _as_nonnegative_int(
+            self._audit.get("solver_algorithm_move_attempts")
+        ) + attempts
+        self._audit["solver_algorithm_accepted_moves"] = _as_nonnegative_int(
+            self._audit.get("solver_algorithm_accepted_moves")
+        ) + accepts
+        try:
+            delta_value = max(0.0, float(delta))
+        except (TypeError, ValueError):
+            delta_value = 0.0
+        phase_delta = self._audit.setdefault("solver_algorithm_phase_delta_sum", {})
+        if not isinstance(phase_delta, dict):
+            phase_delta = {}
+            self._audit["solver_algorithm_phase_delta_sum"] = phase_delta
+        phase_delta.pop("none", None)
+        phase_delta[phase_name] = float(phase_delta.get(phase_name, 0.0)) + delta_value
+        phase_best = self._audit.setdefault("solver_algorithm_phase_best_delta", {})
+        if not isinstance(phase_best, dict):
+            phase_best = {}
+            self._audit["solver_algorithm_phase_best_delta"] = phase_best
+        phase_best.pop("none", None)
+        phase_best[phase_name] = max(float(phase_best.get(phase_name, 0.0)), delta_value)
+        counts = self._audit.setdefault("solver_algorithm_phase_improvement_counts", {})
+        if not isinstance(counts, dict):
+            counts = {}
+            self._audit["solver_algorithm_phase_improvement_counts"] = counts
+        counts.pop("none", None)
+        if accepts > 0 and (delta_value > 0.0 or best_improved):
+            counts[phase_name] = _as_nonnegative_int(counts.get(phase_name)) + accepts
+        self._audit["solver_algorithm_best_delta"] = max(
+            float(self._audit.get("solver_algorithm_best_delta") or 0.0),
+            delta_value,
+        )
+
+    def set_stop_reason(self, reason: str) -> None:
+        value = str(reason or "").strip()
+        if value:
+            self._audit["solver_algorithm_stop_reason"] = value
 
 
 def _record_policy_event(audit: dict[str, Any], status: str, detail: str) -> None:

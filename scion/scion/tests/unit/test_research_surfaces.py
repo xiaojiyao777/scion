@@ -634,6 +634,12 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "solver_algorithm_total_distance" in (
         solver_design.evidence.required_runtime_fields
     )
+    assert "solver_algorithm_move_attempts" in (
+        solver_design.evidence.required_runtime_fields
+    )
+    assert "solver_algorithm_phase_delta_sum" in (
+        solver_design.evidence.required_runtime_fields
+    )
     main_search_strategy = next(
         surface
         for surface in spec.research_surfaces or []
@@ -2739,6 +2745,8 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "context.nearest_neighbor" in solver_design_prompt_text
     assert "context.baseline(initial_solution=None" in solver_design_prompt_text
     assert "context.objective_key" in solver_design_prompt_text
+    assert "context.record_move" in solver_design_prompt_text
+    assert "shallow wrapper" in solver_design_prompt_text
     assert "instance.depot" in solver_design_prompt_text
     assert "adapter/solver remains the authority" in solver_design_prompt_text
 

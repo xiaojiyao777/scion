@@ -342,6 +342,7 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
             "    baseline = context.baseline(seed, time_limit_sec=0.1)\n"
             "    seed_obj = context.objective(seed)\n"
             "    baseline_obj = context.objective(baseline)\n"
+            "    context.record_move('baseline_probe', attempted=1, accepted=0)\n"
             "    if baseline_obj <= seed_obj and baseline_obj[0] <= seed_obj[0]:\n"
             "        return baseline\n"
             "    return seed\n"
@@ -355,6 +356,27 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
 
     assert preview["passed"] is True
     assert preview["issues"] == []
+
+
+def test_cvrp_solver_algorithm_preview_rejects_shallow_baseline_wrapper(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return context.baseline(time_limit_sec=0.1)\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "shallow baseline wrapper" in json.dumps(preview["issues"])
 
 
 def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(

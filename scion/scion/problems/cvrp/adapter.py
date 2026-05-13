@@ -401,10 +401,30 @@ class CvrpAdapter:
 
     def render_solver_mechanics(self) -> str:
         return (
-            "The CVRP campaign solver first builds a baseline solution. For real "
-            "CVRPLIB .vrp cases, it uses the repo-local vrp/src ALNS+VNS baseline "
-            "when SCION_PROBLEM_DATA_ROOT or SCION_CVRP_DATA_ROOT points at the vrp directory; JSON and "
-            "synthetic smoke fixtures use a deterministic nearest-neighbor fallback.\n"
+            "The CVRP campaign solver first offers the active "
+            "`solver_design` surface a direct full-algorithm hook at "
+            "`policies/solver_algorithm.py::solve(instance, rng, "
+            "time_limit_sec, context)`. A valid returned solution becomes the "
+            "solver output and skips the legacy baseline, lifecycle config, "
+            "and post-baseline operator layers. Returning None keeps the "
+            "checked-in champion on the stable legacy path.\n"
+            "- For real CVRPLIB .vrp cases, the legacy path uses the "
+            "repo-local vrp/src ALNS+VNS baseline when SCION_PROBLEM_DATA_ROOT "
+            "or SCION_CVRP_DATA_ROOT points at the vrp directory; JSON and "
+            "synthetic smoke fixtures use a deterministic nearest-neighbor "
+            "fallback.\n"
+            "- The `solver_design` research surface is backed by "
+            "`policies/solver_algorithm.py`, not by a lifecycle/config table. "
+            "It may implement construction, route-edit candidate generation, "
+            "local search, destroy/repair, recombination, perturbation, "
+            "acceptance, and runtime scheduling directly while the adapter "
+            "keeps objective, feasibility, parser, seeds, protocol splits, "
+            "and Decision rules fixed.\n"
+            "- `context.baseline(...)` is an optional oracle/bootstrap helper "
+            "inside `solver_design`; it is not the algorithm body. A shallow "
+            "implementation that only changes baseline budget/params or adds "
+            "tiny post-baseline polishing is treated as a failed candidate "
+            "design.\n"
             "- The `construction_policy` research surface may select a bounded "
             "package-owned construction mode and numeric demand bias before the "
             "baseline/operator phase.\n"
@@ -427,17 +447,10 @@ class CvrpAdapter:
             "construction ensemble, baseline budget, package-owned local "
             "search, restart knobs, and post-baseline registry-operator "
             "toggle/round limit.\n"
-            "- The `solver_design` research surface is the problem-owned "
-            "solver-design boundary. It is backed by "
-            "`policies/main_search_strategy.py` and inactive by default. When "
-            "enabled with a valid plan, it takes over the problem-object "
-            "adaptation layer: instance-profile intent, solver strategy family, "
-            "construction ensemble selection, repo-local baseline budget and "
-            "sanitized baseline params, package-owned main improvement "
-            "components, component roles/order, bounded per-component "
-            "acceptance/restart/perturbation knobs, and the optional "
-            "post-baseline registry-operator toggle. Registry operators are "
-            "disabled by default for this surface unless explicitly enabled.\n"
+            "- The legacy `main_search_strategy` research surface remains as a "
+            "compatibility/regression config surface only. It is not the "
+            "preferred solver-design research object for new CVRP optimization "
+            "work.\n"
             "- The algorithm blueprint can only select package-owned bounded "
             "local-search components (`intra_route_2opt` and "
             "`inter_route_relocate`); it cannot inject route-editing code into "
@@ -587,8 +600,11 @@ class CvrpAdapter:
                 "context.objective(solution), context.objective_key(solution), "
                 "context.is_better(candidate, incumbent), "
                 "context.is_valid(solution), context.remaining_time(), "
-                "context.elapsed_ms(), and context.record_phase(name, "
-                "elapsed_ms).\n"
+                "context.elapsed_ms(), context.record_phase(name, "
+                "elapsed_ms), context.record_iteration(phase, count), "
+                "context.record_move(phase, attempted=1, accepted=0, "
+                "delta=0.0, best_improved=False), and "
+                "context.set_stop_reason(reason).\n"
                 "- context.objective returns a mapping with fleet_violation and "
                 "total_distance. It also compares lexicographically as "
                 "(fleet_violation, total_distance), but explicit field access "
@@ -597,6 +613,13 @@ class CvrpAdapter:
                 "max_rounds/max_passes/top_k caps and poll "
                 "context.remaining_time(); importing time is allowed only for "
                 "monotonic timing, never for sleeps or external scheduling.\n"
+                "- Implement a real algorithm body. If you call "
+                "context.baseline(...), also run your own bounded candidate "
+                "generation, route-edit/search loop, or acceptance decision "
+                "and record it with context.record_move or "
+                "context.record_iteration. A baseline-only wrapper or a "
+                "baseline budget/params tweak is not a valid solver-design "
+                "candidate.\n"
                 "- The adapter/solver remains the authority for feasibility, "
                 "objective recomputation, runtime limit, seeds, and protocol "
                 "evaluation. The algorithm must not modify objectives, "
@@ -1402,6 +1425,19 @@ def _preview_solver_algorithm(
         )
         return
     valid, reason = _preview_solution_is_valid(instance, solution)
+    body_has_search = (
+        context.move_attempts > 0
+        or context.accepted_moves > 0
+        or context.search_iterations > 0
+    )
+    if valid and context.baseline_calls > 0 and not body_has_search:
+        valid = False
+        reason = (
+            "shallow baseline wrapper: solver_design candidates that call "
+            "context.baseline must also run their own bounded candidate "
+            "generation, route-edit/search loop, or acceptance decision and "
+            "record it with context.record_move or context.record_iteration"
+        )
     checks.append(
         {
             "name": "solve",
@@ -1425,6 +1461,27 @@ class _PreviewSolverAlgorithmContext:
         self.time_limit_sec = _POLICY_PREVIEW_TIME_LIMIT_SEC
         self._phase_runtime_ms: dict[str, int] = {}
         self._remaining_time_calls = 0
+        self._baseline_calls = 0
+        self._search_iterations = 0
+        self._move_attempts = 0
+        self._accepted_moves = 0
+        self._stop_reason = ""
+
+    @property
+    def baseline_calls(self) -> int:
+        return self._baseline_calls
+
+    @property
+    def search_iterations(self) -> int:
+        return self._search_iterations
+
+    @property
+    def move_attempts(self) -> int:
+        return self._move_attempts
+
+    @property
+    def accepted_moves(self) -> int:
+        return self._accepted_moves
 
     def remaining_time(self) -> float:
         self._remaining_time_calls += 1
@@ -1508,6 +1565,7 @@ class _PreviewSolverAlgorithmContext:
         time_limit_sec: float | None = None,
         params: Mapping[str, Any] | None = None,
     ) -> CvrpSolution:
+        self._baseline_calls += 1
         del time_budget_sec, time_limit_sec, params
         if (
             isinstance(initial_solution, (int, float))
@@ -1524,6 +1582,38 @@ class _PreviewSolverAlgorithmContext:
         self._phase_runtime_ms[phase] = self._phase_runtime_ms.get(phase, 0) + int(
             max(0, elapsed_ms)
         )
+
+    def record_iteration(self, phase: str = "search", count: int = 1) -> None:
+        del phase
+        try:
+            increment = int(count)
+        except (TypeError, ValueError):
+            increment = 1
+        self._search_iterations += max(1, increment)
+
+    def record_move(
+        self,
+        phase: str,
+        *,
+        attempted: int = 1,
+        accepted: int = 0,
+        delta: int | float = 0.0,
+        best_improved: bool = False,
+    ) -> None:
+        del phase, delta, best_improved
+        try:
+            attempts = int(attempted)
+        except (TypeError, ValueError):
+            attempts = 1
+        try:
+            accepts = int(accepted)
+        except (TypeError, ValueError):
+            accepts = 0
+        self._move_attempts += max(1, attempts)
+        self._accepted_moves += max(0, accepts)
+
+    def set_stop_reason(self, reason: str) -> None:
+        self._stop_reason = str(reason or "").strip()
 
 
 class _PreviewObjectiveValue(dict):

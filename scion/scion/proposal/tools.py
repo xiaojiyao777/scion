@@ -61,6 +61,7 @@ _PREVIEW_FAILURE_REASON_CHARS = 800
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
+_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
         "selected_components",
@@ -1716,6 +1717,11 @@ def _semantic_signature_preview_guidance(
             and not _is_nonempty_text_sequence(values[name])
         ):
             invalid.append(name)
+        if (
+            isinstance(values.get(name), str)
+            and len(values[name].strip()) > _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS
+        ):
+            invalid.append(f"{name} > {_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS} chars")
 
     detail = ""
     if missing:
@@ -2193,7 +2199,9 @@ def _surface_novelty_signature_requirement(surface: Any | None) -> dict[str, Any
             "rule": (
                 "Provide every required novelty_signature field. Fields listed "
                 "under nonempty_sequence_fields must be non-empty arrays of "
-                "component names, not null, false, empty strings, or empty arrays."
+                "component names, not null, false, empty strings, or empty arrays. "
+                "Scalar string values must be at most "
+                f"{_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS} characters."
             ),
         }
     )

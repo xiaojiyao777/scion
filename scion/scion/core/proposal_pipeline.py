@@ -373,6 +373,7 @@ class ProposalPipeline:
                 bid,
                 exc,
             )
+            self.hypothesis_failure_details[bid] = str(exc)
             self.mark_balance_exhausted()
             self.circuit_breaker.record_failure(str(exc))
             return None
@@ -383,6 +384,7 @@ class ProposalPipeline:
             ProposalValidationError,
         ) as exc:
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
+            self.hypothesis_failure_details[bid] = str(exc)
             self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
             self.circuit_breaker.record_failure(str(exc))
             return None
@@ -698,6 +700,7 @@ class ProposalPipeline:
                     branch,
                     FailureEvent(category="proposal", detail=detail),
                 )
+                self.hypothesis_failure_details[bid] = detail
                 self.circuit_breaker.record_failure(detail)
                 return None
             if output.is_completed:
@@ -714,6 +717,7 @@ class ProposalPipeline:
                     branch,
                     FailureEvent(category="proposal", detail=detail),
                 )
+                self.hypothesis_failure_details[bid] = detail
                 self.circuit_breaker.record_failure(detail)
                 return None
 
@@ -735,6 +739,7 @@ class ProposalPipeline:
                     bid,
                     exc,
                 )
+                self.hypothesis_failure_details[bid] = str(exc)
                 self.mark_balance_exhausted()
                 self.circuit_breaker.record_failure(str(exc))
                 return None
@@ -746,6 +751,7 @@ class ProposalPipeline:
                 PermissionError,
             ) as exc:
                 logger.warning("Branch %s: agentic code session error: %s", bid, exc)
+                self.hypothesis_failure_details[bid] = str(exc)
                 self.handle_failure(
                     branch,
                     FailureEvent(category="proposal", detail=str(exc)),
@@ -773,6 +779,7 @@ class ProposalPipeline:
                 detail,
             )
             self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+            self.hypothesis_failure_details[bid] = detail
             self.circuit_breaker.record_failure(detail)
             return None
 
@@ -787,6 +794,7 @@ class ProposalPipeline:
             detail,
         )
         self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+        self.hypothesis_failure_details[bid] = detail
         self.circuit_breaker.record_failure(detail)
         return None
 

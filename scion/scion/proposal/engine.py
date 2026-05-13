@@ -646,7 +646,8 @@ def _novelty_signature_task_lines(
             continue
         lines.append(
             f"For `{surface_name}`, populate `novelty_signature` with every "
-            f"declared semantic field: {field_text}."
+            f"declared semantic field: {field_text}. Keep scalar string values "
+            "at or below 120 characters."
         )
         sequence_fields = requirement.get("nonempty_sequence_fields")
         if isinstance(sequence_fields, (list, tuple)) and sequence_fields:
@@ -689,18 +690,41 @@ def _split_code_context(
         if surface_name
         else f"[{surface_kind}]"
     )
+    is_solver_design_surface = (
+        surface_kind in {"solver_design", "solver_algorithm"}
+        or surface_name in {"solver_design", "solver_algorithm"}
+    )
+    solver_design_code_rules = (
+        "\n## Full Solver-Algorithm Rules\n"
+        "- For solver-design surfaces, helper functions are allowed and often "
+        "expected when they implement construction, route edits, search loops, "
+        "acceptance, perturbation, or telemetry.\n"
+        "- Implement a complete `solve(instance, rng, time_limit_sec, context)` "
+        "algorithm body. Do not return a lifecycle/config dictionary.\n"
+        "- Do not submit a shallow wrapper that only calls `context.baseline`, "
+        "changes baseline budget/params, or adds a tiny post-baseline polish. "
+        "If baseline is used, it must be paired with a bounded algorithmic "
+        "search loop and telemetry via `context.record_move` or "
+        "`context.record_iteration`.\n"
+        "- You may change algorithm strategy and runtime scheduling, but not "
+        "CVRP objective semantics, capacity/fleet constraints, parsing, seeds, "
+        "protocol splits, Decision rules, or adapter/runtime files.\n"
+        if is_solver_design_surface
+        else ""
+    )
 
     # Block 1: Static role + quality rules + problem + interface (never changes)
     static_text = (
         "You are a software engineer implementing a declared research surface for a combinatorial optimisation solver framework.\n"
         "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
-        "- Write ONLY what the hypothesis requires. No extra features, helper functions, or abstractions.\n"
+        "- Write ONLY what the hypothesis requires. For non-solver surfaces, do not add extra helper functions or abstractions.\n"
         "- Do not add error handling for impossible cases. Trust the data model.\n"
         "- Do not add comments explaining WHAT the code does \u2014 only WHY for non-obvious choices.\n"
         "- Prefer simple, direct code over clever abstractions.\n"
         "- Match the coding style of the existing champion research-surface files.\n"
-        "- Do NOT add logging, print statements, or debug output.\n\n"
+        "- Do NOT add logging, print statements, or debug output.\n"
+        f"{solver_design_code_rules}\n"
         "## Feasibility is Non-Negotiable\n"
         "An operator surface that produces infeasible solutions is worse than no change. "
         "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"

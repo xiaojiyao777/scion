@@ -90,11 +90,11 @@ Medium-risk areas:
   package: Scion core sees only declared surface metadata and generic required
   runtime fields, not CVRP construction modes or local-search component names.
 - CVRP now exposes `solver_design` as the preferred problem-owned
-  problem-object solver-design surface. It is backed by the existing
-  `policies/main_search_strategy.py` execution hook, but Scion core sees only
-  declared surface metadata and generic required runtime fields, not CVRP
-  construction modes, ALNS/VNS params, route-pair swaps, bounded
-  destroy/repair, restart, perturbation, or registry-toggle semantics.
+  problem-object solver-design surface. It is backed by the direct
+  `policies/solver_algorithm.py::solve(...)` execution hook, but Scion core
+  sees only declared surface metadata and generic required runtime fields, not
+  CVRP construction modes, route edits, destroy/repair, recombination,
+  acceptance, restart, perturbation, or runtime-scheduling semantics.
 - CVRP now exposes `baseline_policy` as a problem-owned baseline/main-search
   policy surface. Its solver integration stays inside the CVRP package: Scion
   core sees only declared surface metadata and selected-surface runtime fields,

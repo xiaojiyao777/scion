@@ -87,7 +87,8 @@ Important current interpretation:
   `instance.route_distance`, and `context` helpers such as
   `nearest_neighbor`, `baseline`, `make_solution`, `objective`,
   `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
-  and `record_phase`. `context.baseline` accepts an optional seed solution
+  `record_phase`, `record_iteration`, `record_move`, and `set_stop_reason`.
+  `context.baseline` accepts an optional seed solution
   and either `time_budget_sec` or the compatibility alias `time_limit_sec`.
   `context.objective` is still a mapping, but now also compares
   lexicographically as `(fleet_violation, total_distance)`.
@@ -99,7 +100,8 @@ Important current interpretation:
   adapter internals.
 - Runtime evidence for this boundary is `solver_algorithm_*`, including
   loaded/active/errors, elapsed time, phase runtime, solution validity,
-  route count, objective, total distance, fleet violation, and stop reason.
+  route count, objective, total distance, fleet violation, search iterations,
+  move attempts, accepted moves, phase delta telemetry, and stop reason.
 - `novelty_signature` for `solver_design` now describes algorithm identity:
   `algorithm_family`, `construction_strategy`, `improvement_strategy`,
   `acceptance_strategy`, and `runtime_budget_strategy`, alongside
@@ -133,6 +135,12 @@ Important current interpretation:
   prompt-only exposure repairs. The latest useful signal came from a
   code-level whole-solution route-pool quality repair inside `solver_design`,
   not from another exposed singleton policy.
+- The current adapter repair goes deeper than prompt exposure: the checked-in
+  `policies/solver_algorithm.py` remains inactive by default for champion
+  stability, but it now carries an editable ALNS/VNS-style full-algorithm
+  template. New candidates should materially rework or replace that algorithm
+  body. A candidate that only wraps `context.baseline(...)`, changes baseline
+  budget/params, or adds a tiny post-baseline polish is a design failure.
 - The main-search execution-semantics repair was necessary but insufficient:
   bounded destroy/repair now ranks repair insertions globally, preserves
   fallback budget, honors the fallback toggle, and lets recovery-only accepted
