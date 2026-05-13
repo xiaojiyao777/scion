@@ -192,6 +192,12 @@ phase-best improvement and screening-quality movement.
   protocol/Decision calls.
 - Failed Contract preview feedback is now fed into one bounded patch
   regeneration attempt before the session fails closed.
+- The first micro smoke after this repair confirmed code-phase tool selection
+  and full `solver_design` surface read, but the final `generate_patch` call
+  still timed out on a roughly 49k prompt. Follow-up prompt slimming now omits
+  the duplicate full champion policy bundle for `solver_design` code prompts;
+  the complete target file remains available in the `Target File` section and
+  via audited code-phase surface reads.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
@@ -306,6 +312,12 @@ Summary:
   problem remains separate: future candidates must use runtime as an
   optimization objective and produce a genuinely different algorithmic search,
   not just baseline warm-start plus small polish.
+- Follow-up micro smoke from commit `f77b263` confirmed `code_phase=true`
+  tool-selection traces and full selected-surface reads before patch
+  generation, but final patch generation timed out and the retry ended on API
+  balance exhaustion before Contract or screening. Do not start the planned
+  5-8 round validation until a 1-2 round smoke reaches at least
+  Contract/Verification with restored API balance.
 
 Detailed analysis:
 [`v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md`](../experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md)

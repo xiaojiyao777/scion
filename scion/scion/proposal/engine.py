@@ -754,12 +754,25 @@ def _split_code_context(
         f"{D['import_whitelist']}"
     )
 
-    # Block 2: Champion code (changes only on champion promotion)
-    champion_text = (
-        f"## Current Champion Research Code\n"
-        f"Study these files for coding style, data model usage, and patterns:\n\n"
-        f"{D['champion_operators_code']}"
-    )
+    # Block 2: Champion code (changes only on champion promotion).  Whole-solver
+    # candidates already receive the full selected target file below; repeating
+    # every component policy here makes final code-generation calls too large
+    # without improving the boundary.
+    if is_solver_design_surface:
+        champion_text = (
+            "## Current Champion Research Code\n"
+            "The approved solver-design target file is provided in full in the "
+            "`Target File` section below. Legacy component policies may be "
+            "implementation context, but they are not the research object for "
+            "this patch; follow the problem object, interface specification, "
+            "and target file instead of copying lifecycle/config tables."
+        )
+    else:
+        champion_text = (
+            f"## Current Champion Research Code\n"
+            f"Study these files for coding style, data model usage, and patterns:\n\n"
+            f"{D['champion_operators_code']}"
+        )
 
     system_blocks = [
         {

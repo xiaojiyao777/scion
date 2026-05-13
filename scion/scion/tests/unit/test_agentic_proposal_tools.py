@@ -2993,6 +2993,42 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
     assert "runtime_budget_strategy" in rendered
 
 
+def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+
+    creative.generate_code(
+        {
+            "problem_summary": "CVRP.",
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "change_locus": "solver_design",
+            "hypothesis_detail": "Implement a direct solver body.",
+            "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+            "import_whitelist": "math, random, time",
+            "champion_operators_code": (
+                "### policies/search_policy.py\n"
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.75\n"
+            ),
+            "target_file_code": (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return None\n"
+            ),
+            "reference_operators": "",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "solver.py, adapter.py",
+        }
+    )
+
+    rendered_system = json.dumps(client.system_blocks, sort_keys=True)
+    rendered_prompt = "\n".join(client.prompts)
+
+    assert "baseline_time_fraction" not in rendered_system
+    assert "Target File" in rendered_prompt
+    assert "def solve(instance, rng, time_limit_sec, context):" in rendered_prompt
+
+
 def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> None:
     observations = [
         ProposalObservation(
