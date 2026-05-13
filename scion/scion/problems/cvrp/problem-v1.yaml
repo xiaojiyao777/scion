@@ -21,8 +21,11 @@ search_space:
     - "policies/__init__.py"
   import_whitelist:
     - __future__
+    - bisect
+    - collections
     - copy
     - dataclasses
+    - heapq
     - itertools
     - math
     - models
@@ -836,9 +839,122 @@ research_surfaces:
     remove_allowed: false
   - name: solver_design
     kind: solver_design
-    description: "Problem-owned CVRP solver-design boundary backed by main_search_plan."
+    description: "Preferred CVRP research boundary: edit the full algorithm body under a fixed problem contract."
     algorithm:
-      role: problem_object_solver_design
+      role: problem_object_solver_algorithm
+      invocation_point: full_solver_before_legacy_baseline_and_component_policies
+      description: >-
+        Lets Scion study the algorithm itself instead of filling a component
+        lifecycle dictionary. The candidate may implement construction, local
+        improvement, destroy/repair, recombination, perturbation, acceptance,
+        and runtime allocation directly in policies/solver_algorithm.py. The
+        adapter and solver remain authoritative for CVRP parsing, feasibility,
+        objective recomputation, seeds, timeout handling, protocol splits, and
+        promotion decisions.
+    targets:
+      files:
+        - "policies/solver_algorithm.py"
+      create_new_allowed: false
+      modify_allowed: true
+      remove_allowed: false
+      singleton: true
+    interface:
+      required_functions:
+        - "solve"
+      function_signatures:
+        solve:
+          - instance
+          - rng
+          - time_limit_sec
+          - context
+      return_contract: >-
+        solve returns a CvrpSolution, a structurally equivalent object with a
+        routes attribute, or a mapping {'routes': [[customer_id, ...], ...]}.
+        Routes are implicit-depot customer sequences. The solver rejects
+        malformed, infeasible, duplicate/missing-customer, capacity-violating,
+        or objective-inconsistent outputs; objectives are always recomputed by
+        the adapter.
+    bounds:
+      allowed_components:
+        - direct_construction
+        - local_search
+        - destroy_repair
+        - route_recombination
+        - perturbation
+        - acceptance
+        - repo_local_baseline_helper
+      complexity_scale_terms:
+        - time_limit_sec
+        - customer_count
+        - route_count
+        - candidate_count
+        - local_search_passes
+    evidence:
+      required_runtime_fields:
+        - solver_algorithm_loaded
+        - solver_algorithm_active
+        - solver_algorithm_errors
+        - solver_algorithm_elapsed_ms
+        - solver_algorithm_phase_runtime_ms
+        - solver_algorithm_solution_valid
+        - solver_algorithm_solution_routes
+        - solver_algorithm_objective
+        - solver_algorithm_total_distance
+        - solver_algorithm_fleet_violation
+        - solver_algorithm_stop_reason
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+        - algorithm_family
+        - construction_strategy
+        - improvement_strategy
+        - acceptance_strategy
+        - runtime_budget_strategy
+    prompt:
+      hypothesis_guidance: >-
+        Treat the CVRP solver as the research object. State the complete
+        algorithm idea: construction, improvement/recombination/repair,
+        acceptance, perturbation/restart if any, and runtime budget strategy.
+        The hypothesis may change algorithm code but must preserve CVRP
+        objective semantics, capacity/fleet constraints, instance parsing,
+        seeds, evaluation splits, and Decision rules.
+      implementation_guidance: >-
+        Implement solve(instance, rng, time_limit_sec, context) in
+        policies/solver_algorithm.py. You may use instance.customer_ids,
+        instance.customer_count, instance.demands[customer_id],
+        instance.capacity, instance.distance(i, j), instance.route_load(route),
+        and instance.route_distance(route). Use context.make_solution(routes),
+        context.nearest_neighbor(...), context.baseline(...),
+        context.objective(solution), context.is_valid(solution),
+        context.remaining_time(), context.elapsed_ms(), and
+        context.record_phase(name, elapsed_ms). Return only a solution or a
+        routes mapping. Do not return a plan dictionary. Telemetry can name
+        phases but must not force the algorithm into predeclared components.
+      anti_patterns: >-
+        Do not edit objective, feasibility, parser, protocol, split, seed,
+        Decision, or benchmark data. Do not import or monkeypatch solver.py,
+        adapter.py, models.py, cvrplib.py, protocol files, or runtime gates. Do
+        not use case-name-specific behavior, hidden benchmark references,
+        global mutable state, wall-clock sleeps, network/filesystem reads, or
+        instance.customers.
+    target_files:
+      - "policies/solver_algorithm.py"
+    prompt_hint: >-
+      Preferred boundary: implement the full CVRP algorithm under the fixed
+      adapter objective/constraint contract; do not express the research idea
+      as a component-policy or lifecycle-config table.
+    required_functions:
+      - "solve"
+    create_new_allowed: false
+    modify_allowed: true
+    remove_allowed: false
+  - name: main_search_strategy
+    kind: config
+    description: "Legacy componentized CVRP lifecycle-config hook backed by main_search_plan."
+    algorithm:
+      role: legacy_componentized_solver_lifecycle_config
       invocation_point: construction_baseline_internal_main_loop_before_optional_registry_operators
       description: >-
         Declares the solver-level CVRP design boundary. It is backed by the

@@ -377,6 +377,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         "neighborhood_portfolio",
         "algorithm_blueprint",
         "solver_design",
+        "main_search_strategy",
         "alns_vns_policy",
         "destroy_repair_policy",
         "route_pair_candidate_policy",
@@ -606,56 +607,52 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     )
     assert solver_design.kind == "solver_design"
     assert solver_design.algorithm is not None
-    assert solver_design.algorithm.role == "problem_object_solver_design"
+    assert solver_design.algorithm.role == "problem_object_solver_algorithm"
     assert solver_design.targets is not None
-    assert solver_design.targets.files == ["policies/main_search_strategy.py"]
+    assert solver_design.targets.files == ["policies/solver_algorithm.py"]
     assert solver_design.targets.singleton is True
     assert solver_design.targets.create_new_allowed is False
     assert solver_design.targets.remove_allowed is False
     assert solver_design.interface is not None
-    assert solver_design.interface.required_functions == ["main_search_plan"]
+    assert solver_design.interface.required_functions == ["solve"]
     assert solver_design.interface.function_signatures == {
-        "main_search_plan": ["instance", "time_limit_sec"],
+        "solve": ["instance", "rng", "time_limit_sec", "context"],
     }
     assert solver_design.bounds is not None
-    assert "route_pair_swap" in solver_design.bounds.allowed_components
-    assert "bounded_destroy_repair" in solver_design.bounds.allowed_components
+    assert "local_search" in solver_design.bounds.allowed_components
+    assert "destroy_repair" in solver_design.bounds.allowed_components
     assert solver_design.evidence is not None
-    assert "main_search_strategy_errors" in (
+    assert "solver_algorithm_errors" in (
         solver_design.evidence.required_runtime_fields
     )
-    assert "main_search_component_attempts" in (
+    assert "solver_algorithm_active" in (
         solver_design.evidence.required_runtime_fields
     )
-    assert "main_search_component_coverage_status" in (
+    assert "solver_algorithm_phase_runtime_ms" in (
         solver_design.evidence.required_runtime_fields
     )
-    assert "main_search_deep_components_selected" in (
+    assert "solver_algorithm_total_distance" in (
         solver_design.evidence.required_runtime_fields
     )
-    assert "main_search_component_repair_fallback_counts" in (
-        solver_design.evidence.required_runtime_fields
+    main_search_strategy = next(
+        surface
+        for surface in spec.research_surfaces or []
+        if surface.name == "main_search_strategy"
     )
-    assert "main_search_component_recovery_delta_sum" in (
-        solver_design.evidence.required_runtime_fields
-    )
-    assert "main_search_component_recovery_counts" in (
-        solver_design.evidence.required_runtime_fields
-    )
+    assert main_search_strategy.kind == "config"
+    assert main_search_strategy.targets is not None
+    assert main_search_strategy.targets.files == ["policies/main_search_strategy.py"]
+    assert main_search_strategy.interface is not None
+    assert main_search_strategy.interface.required_functions == ["main_search_plan"]
     assert solver_design.novelty is not None
     assert solver_design.novelty.signature_fields == [
         "predicted_direction",
         "target_objectives",
-        "selected_components",
-        "deep_components_selected",
-        "strategy_family_pattern",
-        "problem_adaptation_pattern",
-        "evidence_target_pattern",
-        "budget_pattern",
-        "destroy_repair_pattern",
-        "baseline_fraction_pattern",
-        "acceptance_restart_pattern",
-        "perturbation_pattern",
+        "algorithm_family",
+        "construction_strategy",
+        "improvement_strategy",
+        "acceptance_strategy",
+        "runtime_budget_strategy",
     ]
 
 
@@ -732,21 +729,16 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             change_locus="solver_design",
             action="modify",
             status="active",
-            target_file="policies/main_search_strategy.py",
-            hypothesis_text="Use route-pair swap after a small baseline budget.",
+            target_file="policies/solver_algorithm.py",
+            hypothesis_text="Use route-pair swap inside a direct solver algorithm.",
             predicted_direction="improve",
             target_objectives=("total_distance",),
             novelty_signature={
-                "selected_components": ["route_pair_swap"],
-                "deep_components_selected": ["route_pair_swap"],
-                "strategy_family_pattern": "route_structure_repair",
-                "problem_adaptation_pattern": "route_pair_primary",
-                "evidence_target_pattern": "phase_delta",
-                "budget_pattern": "baseline_20_post_80",
-                "destroy_repair_pattern": "none",
-                "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
-                "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
-                "perturbation_pattern": "none",
+                "algorithm_family": "route_pair_local_search",
+                "construction_strategy": "nearest_neighbor_seed_pool",
+                "improvement_strategy": "bounded_route_pair_swap",
+                "acceptance_strategy": "strict_distance_improvement",
+                "runtime_budget_strategy": "reserve_exit_time",
             },
         ),
         HypothesisRecord(
@@ -755,42 +747,32 @@ def test_cvrp_main_search_strategy_same_target_allows_distinct_semantic_signatur
             change_locus="solver_design",
             action="modify",
             status="active",
-            target_file="policies/main_search_strategy.py",
-            hypothesis_text="Use bounded destroy repair with restart.",
+            target_file="policies/solver_algorithm.py",
+            hypothesis_text="Use bounded destroy repair inside a direct solver algorithm.",
             predicted_direction="improve",
             target_objectives=("fleet_violation",),
             novelty_signature={
-                "selected_components": ["bounded_destroy_repair"],
-                "deep_components_selected": ["bounded_destroy_repair"],
-                "strategy_family_pattern": "destroy_repair_recovery",
-                "problem_adaptation_pattern": "destroy_repair_primary",
-                "evidence_target_pattern": "recovery_to_phase",
-                "budget_pattern": "baseline_50_post_50",
-                "destroy_repair_pattern": "bounded_destroy_repair_restart",
-                "baseline_fraction_pattern": {"baseline": 0.50, "post": 0.50},
-                "acceptance_restart_pattern": {"min_improvement": 0.01, "restart": True},
-                "perturbation_pattern": "restart_only",
+                "algorithm_family": "destroy_repair_metaheuristic",
+                "construction_strategy": "baseline_helper_seed",
+                "improvement_strategy": "bounded_destroy_repair",
+                "acceptance_strategy": "phase_best_recovery",
+                "runtime_budget_strategy": "baseline_then_repair",
             },
         ),
     ]
     candidate = HypothesisProposal(
-        hypothesis_text="Use two-opt and relocate after a medium baseline fraction.",
+        hypothesis_text="Use two-opt and relocate inside a direct solver algorithm.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         predicted_direction="improve",
         target_objectives=("fleet_violation", "total_distance"),
         novelty_signature={
-            "selected_components": ["intra_route_2opt", "inter_route_relocate"],
-            "deep_components_selected": ["intra_route_2opt", "inter_route_relocate"],
-            "strategy_family_pattern": "local_search_cleanup",
-            "problem_adaptation_pattern": "local_components_primary",
-            "evidence_target_pattern": "local_phase_delta",
-            "budget_pattern": "baseline_35_post_65",
-            "destroy_repair_pattern": "none",
-            "baseline_fraction_pattern": {"baseline": 0.35, "post": 0.65},
-            "acceptance_restart_pattern": {"min_improvement": 0.005, "restart": False},
-            "perturbation_pattern": "none",
+            "algorithm_family": "local_search_metaheuristic",
+            "construction_strategy": "demand_seeded_nearest_neighbor",
+            "improvement_strategy": "two_opt_relocate",
+            "acceptance_strategy": "best_improvement",
+            "runtime_budget_strategy": "bounded_passes",
         },
     )
 
@@ -808,17 +790,15 @@ def test_cvrp_main_search_strategy_rejects_false_deep_component_identity() -> No
         hypothesis_text="Use a shallow two-opt-only lifecycle.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         predicted_direction="improve",
         target_objectives=("total_distance",),
         novelty_signature={
-            "selected_components": ["intra_route_2opt"],
-            "deep_components_selected": False,
-            "budget_pattern": "baseline_85_post_15",
-            "destroy_repair_pattern": "none",
-            "baseline_fraction_pattern": {"baseline": 0.85, "post": 0.15},
-            "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
-            "perturbation_pattern": "none",
+            "algorithm_family": False,
+            "construction_strategy": "nearest_neighbor",
+            "improvement_strategy": "two_opt",
+            "acceptance_strategy": "strict_improvement",
+            "runtime_budget_strategy": "bounded_passes",
         },
     )
 
@@ -826,7 +806,7 @@ def test_cvrp_main_search_strategy_rejects_false_deep_component_identity() -> No
 
     assert not result.passed
     assert "C10_novelty" in (result.failure_reason or "")
-    assert "deep_components_selected" in (result.failure_reason or "")
+    assert "algorithm_family" in (result.failure_reason or "")
 
 
 def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> None:
@@ -835,16 +815,11 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
     )
     gate = ContractGate(legacy_problem_spec_from_v1(spec))
     signature = {
-        "selected_components": ["route_pair_swap"],
-        "deep_components_selected": ["route_pair_swap"],
-        "strategy_family_pattern": "route_structure_repair",
-        "problem_adaptation_pattern": "route_pair_primary",
-        "evidence_target_pattern": "phase_delta",
-        "budget_pattern": "baseline_20_post_80",
-        "destroy_repair_pattern": "none",
-        "baseline_fraction_pattern": {"baseline": 0.20, "post": 0.80},
-        "acceptance_restart_pattern": {"min_improvement": 0.0, "restart": False},
-        "perturbation_pattern": "none",
+        "algorithm_family": "route_pair_local_search",
+        "construction_strategy": "nearest_neighbor_seed_pool",
+        "improvement_strategy": "bounded_route_pair_swap",
+        "acceptance_strategy": "strict_distance_improvement",
+        "runtime_budget_strategy": "reserve_exit_time",
     }
     existing = HypothesisRecord(
         hypothesis_id="h1",
@@ -852,8 +827,8 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
         change_locus="solver_design",
         action="modify",
         status="active",
-        target_file="policies/main_search_strategy.py",
-        hypothesis_text="Use route-pair swap after a small baseline budget.",
+        target_file="policies/solver_algorithm.py",
+        hypothesis_text="Use route-pair swap inside a direct solver algorithm.",
         predicted_direction="improve",
         target_objectives=("total_distance",),
         novelty_signature=signature,
@@ -862,7 +837,7 @@ def test_cvrp_main_search_strategy_identical_semantic_signature_fails_c10() -> N
         hypothesis_text="Same structured main search plan with different prose.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         predicted_direction="improve",
         target_objectives=("total_distance",),
         novelty_signature=dict(signature),
@@ -1001,10 +976,10 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
     gate = ContractGate(legacy_problem_spec_from_v1(spec))
 
     create_hypothesis = HypothesisProposal(
-        hypothesis_text="Create a second main-search strategy.",
+        hypothesis_text="Create a second solver algorithm.",
         change_locus="solver_design",
         action="create_new",
-        target_file="policies/other_main_search_strategy.py",
+        target_file="policies/other_solver_algorithm.py",
     )
     create_result = gate.validate_hypothesis(create_hypothesis, [], [])
     c3 = next(check for check in create_result.checks if check.name == "C3_action_target")
@@ -1012,7 +987,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
     assert "not allowed" in c3.detail
 
     wrong_target = HypothesisProposal(
-        hypothesis_text="Modify main search through an operator file.",
+        hypothesis_text="Modify solver algorithm through an operator file.",
         change_locus="solver_design",
         action="modify",
         target_file="operators/not_strategy.py",
@@ -1022,36 +997,24 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
         check for check in wrong_target_result.checks if check.name == "C3_action_target"
     )
     assert not c3.passed
-    assert "policies/main_search_strategy.py" in c3.detail
+    assert "policies/solver_algorithm.py" in c3.detail
 
     missing_patch = PatchProposal(
-        file_path="policies/main_search_strategy.py",
+        file_path="policies/solver_algorithm.py",
         action="modify",
-        code_content="def helper(instance, time_limit_sec):\n    return {}\n",
+        code_content="def helper(instance, rng, time_limit_sec, context):\n    return None\n",
     )
     missing_result = gate.validate_patch(missing_patch)
     c7 = next(check for check in missing_result.checks if check.name == "C7_interface")
     assert not c7.passed
-    assert "missing required functions ['main_search_plan']" in c7.detail
+    assert "missing required functions ['solve']" in c7.detail
 
     valid_patch = PatchProposal(
-        file_path="policies/main_search_strategy.py",
+        file_path="policies/solver_algorithm.py",
         action="modify",
         code_content=(
-            "def main_search_plan(instance, time_limit_sec):\n"
-                "    return {\n"
-                "        'enabled': False,\n"
-                "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
-                "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},\n"
-                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
-            "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
-            "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
-            "        'acceptance': {'min_distance_improvement': 0.0},\n"
-            "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},\n"
-            "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},\n"
-            "        'post_baseline_operators_enabled': False,\n"
-            "        'operator_round_limit': 0,\n"
-            "    }\n"
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return context.nearest_neighbor()\n"
         ),
     )
     valid_result = gate.validate_patch(valid_patch)
@@ -1066,6 +1029,7 @@ def _main_search_strategy_code(extra_body: str = "") -> str:
         "    return {\n"
         "        'enabled': False,\n"
         "        'problem_adaptation': {'strategy_family': 'balanced_lifecycle', 'instance_profile': {}, 'phase_objective': 'phase_best_distance', 'component_roles': {}, 'fallback_order': [], 'evidence_targets': ['main_search_component_phase_delta_sum']},\n"
+        "        'algorithm_body': {'phase_sequence': ['construction', 'baseline', 'global_recombination', 'route_structure_repair', 'local_cleanup'], 'route_pool_activation': 'adaptive', 'route_pool_min_customers': 80, 'route_pool_max_rounds': 8, 'local_cleanup_after_recombination': False, 'adaptive_component_budget': True},\n"
         "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},\n"
         "        'baseline': {'time_fraction': 0.8, 'params': {}},\n"
         "        'improvement': {'enabled_components': [], 'rounds': 0, 'top_k': 16},\n"
@@ -1242,6 +1206,7 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
         "policies/baseline_policy.py",
         "policies/construction_policy.py",
         "policies/neighborhood_portfolio.py",
+        "policies/solver_algorithm.py",
         "policies/main_search_strategy.py",
         "policies/alns_vns_policy.py",
         "policies/destroy_repair_policy.py",
@@ -2558,7 +2523,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "policies/construction_policy.py" in prompt_text
     assert "policies/neighborhood_portfolio.py" in prompt_text
     assert "policies/algorithm_blueprint.py" in prompt_text
-    assert "policies/main_search_strategy.py" in prompt_text
+    assert "policies/solver_algorithm.py" in prompt_text
     assert "algorithm.role: post_baseline_search_scheduling" in prompt_text
     assert (
         "algorithm.invocation_point: "
@@ -2597,7 +2562,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "portfolio_stop_reason" in prompt_text
     assert "algorithm_plan" in prompt_text
     assert "algorithm_blueprint_errors" in prompt_text
-    assert "main_search_strategy_errors" in prompt_text
+    assert "solver_algorithm_errors" in prompt_text
     assert "algorithm_local_search_components" in prompt_text
     assert "prompt.hypothesis_guidance:" in prompt_text
     assert "prompt.implementation_guidance:" in prompt_text
@@ -2703,7 +2668,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
         hypothesis_text="Coordinate the solver design from the problem object.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         target_weakness="component hooks are not moving phase-best objective",
         expected_effect="better whole-solver phase movement",
     )
@@ -2720,21 +2685,12 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
         "Active surface: solver_design [solver_design]"
         in solver_design_prompt_text
     )
-    assert "CVRP solver-design surface" in solver_design_prompt_text
-    assert "def main_search_plan" in solver_design_prompt_text
+    assert "problem-object research surface" in solver_design_prompt_text
+    assert "def solve" in solver_design_prompt_text
     assert "Solver lifecycle:" in solver_design_prompt_text
-    assert "Do not return any other top-level key" in solver_design_prompt_text
-    assert "algorithm_body" in solver_design_prompt_text
-    assert "Do not rely on hidden defaults for the lifecycle" in (
-        solver_design_prompt_text
-    )
-    assert "Never include `novelty_signature` in main_search_plan" in (
-        solver_design_prompt_text
-    )
-    assert "component_roles maps lifecycle role targets" in solver_design_prompt_text
-    assert "main_search_component_phase_improvement_counts" in (
-        solver_design_prompt_text
-    )
+    assert "full algorithm hook" in solver_design_prompt_text
+    assert "context.nearest_neighbor" in solver_design_prompt_text
+    assert "adapter/solver remains the authority" in solver_design_prompt_text
 
 
 def test_solver_design_verification_failure_guides_retry_not_surface_fallback() -> None:
@@ -2754,10 +2710,10 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
         base_champion_hash="h",
     )
     hypothesis = HypothesisProposal(
-        hypothesis_text="Try a coordinated solver-design lifecycle.",
+        hypothesis_text="Try a coordinated full solver algorithm.",
         change_locus="solver_design",
         action="modify",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         target_objectives=("total_distance",),
         protected_objectives=("fleet_violation",),
     )
@@ -2766,11 +2722,11 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
         branch_id=branch.branch_id,
         hypothesis=hypothesis,
         patch=PatchProposal(
-            file_path="policies/main_search_strategy.py",
+            file_path="policies/solver_algorithm.py",
             action="modify",
             code_content=(
-                "def main_search_plan(instance, time_limit_sec):\n"
-                "    return {}\n"
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return {'routes': [[1], [1]]}\n"
             ),
         ),
         contract_passed=True,
@@ -2789,7 +2745,7 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
         change_locus="solver_design",
         action="modify",
         status="rejected",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
         hypothesis_text=hypothesis.hypothesis_text,
         base_champion_version=1,
     )
@@ -2810,12 +2766,12 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "## Solver-Design Boundary Control" in prompt_text
     assert "retry the solver-design boundary" in prompt_text
     assert "Component policies" in prompt_text
-    assert "deep_components_selected" in prompt_text
-    assert "non-empty JSON arrays of component names" in prompt_text
+    assert "algorithm_family" in prompt_text
+    assert "runtime_budget_strategy" in prompt_text
     assert "## Globally Failed / Blacklisted Approaches\n(none)" in prompt_text
     assert ctx["active_problem_boundary_surfaces"] == "solver_design"
     assert ctx["operator_categories"] == "solver_design"
-    assert "policies/main_search_strategy.py" in ctx["targetable_files"]
+    assert "policies/solver_algorithm.py" in ctx["targetable_files"]
     assert "policies/baseline_policy.py" not in ctx["targetable_files"]
     assert "Set `change_locus` to one of: solver_design." in user_prompt
     assert "Do not choose a component policy" in user_prompt

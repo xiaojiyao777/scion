@@ -33,6 +33,7 @@ _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
 _ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
 _MAIN_SEARCH_STRATEGY_RELATIVE_PATH = "policies/main_search_strategy.py"
+_SOLVER_ALGORITHM_RELATIVE_PATH = "policies/solver_algorithm.py"
 _ALNS_VNS_POLICY_RELATIVE_PATH = "policies/alns_vns_policy.py"
 _DESTROY_REPAIR_POLICY_RELATIVE_PATH = "policies/destroy_repair_policy.py"
 _ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH = "policies/route_pair_candidate_policy.py"
@@ -785,135 +786,162 @@ def _main() -> None:
     instance_path = _resolve_instance_path(args.instance)
     instance = adapter.load_instance(instance_path)
     rng = random.Random(args.seed)
-    main_search_strategy = _load_main_search_strategy(
+    solver_algorithm_solution, solver_algorithm = _load_solver_algorithm(
         workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    algorithm_blueprint = _load_algorithm_blueprint(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    search_policy = _load_search_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    if _main_search_strategy_active(main_search_strategy):
-        _apply_main_search_strategy_search_policy(
-            search_policy,
-            main_search_strategy=main_search_strategy,
-        )
-    else:
-        _apply_algorithm_blueprint_search_policy(
-            search_policy,
-            algorithm_blueprint=algorithm_blueprint,
-        )
-    construction_policy = _load_construction_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    baseline_policy = _load_baseline_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    alns_vns_policy = _load_alns_vns_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    neighborhood_portfolio = _load_neighborhood_portfolio(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    destroy_repair_policy = _load_destroy_repair_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    route_pair_policy = _load_route_pair_candidate_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    acceptance_restart_policy = _load_acceptance_restart_policy(
-        workspace_root=Path.cwd(),
-        instance=instance,
-        time_limit_sec=args.time_limit,
-    )
-    _activate_main_search_strategy_for_mechanism_policies(
-        main_search_strategy,
-        instance=instance,
-        destroy_repair_policy=destroy_repair_policy,
-        route_pair_policy=route_pair_policy,
-        acceptance_restart_policy=acceptance_restart_policy,
-    )
-    if _main_search_strategy_active(main_search_strategy):
-        _apply_main_search_strategy_baseline_policy(
-            baseline_policy,
-            main_search_strategy=main_search_strategy,
-        )
-    sol, baseline_audit = solve_baseline(
         instance=instance,
         instance_path=instance_path,
         seed=args.seed,
         rng=rng,
         time_limit_sec=args.time_limit,
-        baseline_time_fraction=search_policy["baseline_time_fraction"],
-        construction_policy=construction_policy,
-        baseline_policy=baseline_policy,
-        alns_vns_policy=alns_vns_policy,
-        algorithm_blueprint=(
-            None if _main_search_strategy_active(main_search_strategy) else algorithm_blueprint
-        ),
-        main_search_strategy=main_search_strategy,
+        start_time=start,
+        adapter=adapter,
     )
-    main_search_audit: dict[str, Any] = {}
-    if _main_search_strategy_active(main_search_strategy):
-        sol, main_search_audit = improve_with_main_search_strategy(
-            sol,
-            instance,
-            adapter=adapter,
-            rng=rng,
+    if _solver_algorithm_active(solver_algorithm) and solver_algorithm_solution is not None:
+        sol = solver_algorithm_solution
+        search_policy = _search_policy_defaults()
+        algorithm_blueprint = _algorithm_blueprint_defaults()
+        construction_policy = _construction_policy_defaults()
+        baseline_policy = _baseline_policy_defaults()
+        alns_vns_policy = _alns_vns_policy_defaults()
+        neighborhood_portfolio = _portfolio_audit_defaults()
+        destroy_repair_policy = _destroy_repair_policy_defaults()
+        route_pair_policy = _route_pair_policy_defaults()
+        acceptance_restart_policy = _acceptance_restart_policy_defaults()
+        main_search_strategy = _main_search_strategy_defaults()
+        baseline_audit: dict[str, Any] = {}
+        algorithm_audit: dict[str, Any] = {}
+        main_search_audit: dict[str, Any] = {}
+        operator_audit: dict[str, Any] = {}
+    else:
+        main_search_strategy = _load_main_search_strategy(
+            workspace_root=Path.cwd(),
+            instance=instance,
             time_limit_sec=args.time_limit,
-            start_time=start,
-            instance_path=instance_path,
-            seed=args.seed,
-            main_search_strategy=main_search_strategy,
+        )
+        algorithm_blueprint = _load_algorithm_blueprint(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        search_policy = _load_search_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        if _main_search_strategy_active(main_search_strategy):
+            _apply_main_search_strategy_search_policy(
+                search_policy,
+                main_search_strategy=main_search_strategy,
+            )
+        else:
+            _apply_algorithm_blueprint_search_policy(
+                search_policy,
+                algorithm_blueprint=algorithm_blueprint,
+            )
+        construction_policy = _load_construction_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        baseline_policy = _load_baseline_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        alns_vns_policy = _load_alns_vns_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        neighborhood_portfolio = _load_neighborhood_portfolio(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        destroy_repair_policy = _load_destroy_repair_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        route_pair_policy = _load_route_pair_candidate_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        acceptance_restart_policy = _load_acceptance_restart_policy(
+            workspace_root=Path.cwd(),
+            instance=instance,
+            time_limit_sec=args.time_limit,
+        )
+        _activate_main_search_strategy_for_mechanism_policies(
+            main_search_strategy,
+            instance=instance,
             destroy_repair_policy=destroy_repair_policy,
             route_pair_policy=route_pair_policy,
             acceptance_restart_policy=acceptance_restart_policy,
         )
-        algorithm_audit = {}
-    else:
-        sol, algorithm_audit = improve_with_algorithm_blueprint(
+        if _main_search_strategy_active(main_search_strategy):
+            _apply_main_search_strategy_baseline_policy(
+                baseline_policy,
+                main_search_strategy=main_search_strategy,
+            )
+        sol, baseline_audit = solve_baseline(
+            instance=instance,
+            instance_path=instance_path,
+            seed=args.seed,
+            rng=rng,
+            time_limit_sec=args.time_limit,
+            baseline_time_fraction=search_policy["baseline_time_fraction"],
+            construction_policy=construction_policy,
+            baseline_policy=baseline_policy,
+            alns_vns_policy=alns_vns_policy,
+            algorithm_blueprint=(
+                None if _main_search_strategy_active(main_search_strategy) else algorithm_blueprint
+            ),
+            main_search_strategy=main_search_strategy,
+        )
+        main_search_audit = {}
+        if _main_search_strategy_active(main_search_strategy):
+            sol, main_search_audit = improve_with_main_search_strategy(
+                sol,
+                instance,
+                adapter=adapter,
+                rng=rng,
+                time_limit_sec=args.time_limit,
+                start_time=start,
+                instance_path=instance_path,
+                seed=args.seed,
+                main_search_strategy=main_search_strategy,
+                destroy_repair_policy=destroy_repair_policy,
+                route_pair_policy=route_pair_policy,
+                acceptance_restart_policy=acceptance_restart_policy,
+            )
+            algorithm_audit = {}
+        else:
+            sol, algorithm_audit = improve_with_algorithm_blueprint(
+                sol,
+                instance,
+                adapter=adapter,
+                rng=rng,
+                time_limit_sec=args.time_limit,
+                start_time=start,
+                algorithm_blueprint=algorithm_blueprint,
+            )
+        sol, operator_audit = improve_with_registry_operators(
             sol,
             instance,
             adapter=adapter,
             rng=rng,
+            registry_path=args.registry,
+            workspace_root=Path.cwd(),
             time_limit_sec=args.time_limit,
             start_time=start,
-            algorithm_blueprint=algorithm_blueprint,
+            max_operator_rounds=search_policy["operator_round_limit"],
+            post_baseline_operators_enabled=search_policy[
+                "post_baseline_operators_enabled"
+            ],
+            neighborhood_portfolio=neighborhood_portfolio,
         )
-    sol, operator_audit = improve_with_registry_operators(
-        sol,
-        instance,
-        adapter=adapter,
-        rng=rng,
-        registry_path=args.registry,
-        workspace_root=Path.cwd(),
-        time_limit_sec=args.time_limit,
-        start_time=start,
-        max_operator_rounds=search_policy["operator_round_limit"],
-        post_baseline_operators_enabled=search_policy[
-            "post_baseline_operators_enabled"
-        ],
-        neighborhood_portfolio=neighborhood_portfolio,
-    )
     raw = {"routes": [list(route) for route in sol.routes], "feasible": True}
     artifact = adapter.deserialize_solver_output(raw, instance)
     objective = dict(adapter.recompute_objective(artifact, instance))
@@ -921,7 +949,9 @@ def _main() -> None:
     raw["runtime"] = {
         "elapsed_s": time.perf_counter() - start,
         "time_limit_s": args.time_limit,
+        **solver_algorithm,
         **search_policy,
+        **construction_policy,
         **algorithm_blueprint,
         **algorithm_audit,
         **alns_vns_policy,
@@ -1076,14 +1106,7 @@ def _load_construction_policy(
     instance: CvrpInstance,
     time_limit_sec: float,
 ) -> dict[str, Any]:
-    audit: dict[str, Any] = {
-        "construction_policy_path": _CONSTRUCTION_POLICY_RELATIVE_PATH,
-        "construction_surface_loaded": False,
-        "construction_errors": 0,
-        "construction_events": [],
-        "construction_mode": _DEFAULT_CONSTRUCTION_MODE,
-        "construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
-    }
+    audit = _construction_policy_defaults()
     workspace = Path(workspace_root).resolve()
     policy_path = (workspace / _CONSTRUCTION_POLICY_RELATIVE_PATH).resolve()
     try:
@@ -1120,6 +1143,17 @@ def _load_construction_policy(
         audit=audit,
     )
     return audit
+
+
+def _construction_policy_defaults() -> dict[str, Any]:
+    return {
+        "construction_policy_path": _CONSTRUCTION_POLICY_RELATIVE_PATH,
+        "construction_surface_loaded": False,
+        "construction_errors": 0,
+        "construction_events": [],
+        "construction_mode": _DEFAULT_CONSTRUCTION_MODE,
+        "construction_bias": _DEFAULT_CONSTRUCTION_BIAS,
+    }
 
 
 def _construct_with_policy_audit(
@@ -8155,15 +8189,7 @@ def _load_search_policy(
     instance: CvrpInstance,
     time_limit_sec: float,
 ) -> dict[str, Any]:
-    audit: dict[str, Any] = {
-        "policy_path": _SEARCH_POLICY_RELATIVE_PATH,
-        "policy_loaded": False,
-        "policy_errors": 0,
-        "policy_events": [],
-        "baseline_time_fraction": _BASELINE_TIME_FRACTION,
-        "operator_round_limit": _MAX_OPERATOR_ROUNDS,
-        "post_baseline_operators_enabled": True,
-    }
+    audit = _search_policy_defaults()
     workspace = Path(workspace_root).resolve()
     policy_path = (workspace / _SEARCH_POLICY_RELATIVE_PATH).resolve()
     try:
@@ -8212,6 +8238,18 @@ def _load_search_policy(
         audit=audit,
     )
     return audit
+
+
+def _search_policy_defaults() -> dict[str, Any]:
+    return {
+        "policy_path": _SEARCH_POLICY_RELATIVE_PATH,
+        "policy_loaded": False,
+        "policy_errors": 0,
+        "policy_events": [],
+        "baseline_time_fraction": _BASELINE_TIME_FRACTION,
+        "operator_round_limit": _MAX_OPERATOR_ROUNDS,
+        "post_baseline_operators_enabled": True,
+    }
 
 
 def _load_policy_module(path: Path) -> Any:
@@ -8342,6 +8380,318 @@ def _call_policy_function(
     if not callable(func):
         raise ValueError(f"missing callable {function_name}")
     return func(instance, time_limit_sec)
+
+
+def _load_solver_algorithm(
+    *,
+    workspace_root: str | Path,
+    instance: CvrpInstance,
+    instance_path: str,
+    seed: int,
+    rng: random.Random,
+    time_limit_sec: float,
+    start_time: float,
+    adapter: CvrpAdapter,
+) -> tuple[CvrpSolution | None, dict[str, Any]]:
+    audit = _solver_algorithm_defaults()
+    workspace = Path(workspace_root).resolve()
+    policy_path = (workspace / _SOLVER_ALGORITHM_RELATIVE_PATH).resolve()
+    try:
+        policy_path.relative_to(workspace)
+    except ValueError:
+        _record_solver_algorithm_event(
+            audit,
+            "error",
+            "solver algorithm path escapes workspace",
+        )
+        audit["solver_algorithm_errors"] += 1
+        return None, audit
+    if not policy_path.is_file():
+        return None, audit
+
+    try:
+        module = _load_policy_module(policy_path)
+    except Exception as exc:
+        audit["solver_algorithm_errors"] += 1
+        _record_solver_algorithm_event(
+            audit,
+            "error",
+            f"solver algorithm load failed: {exc}",
+        )
+        return None, audit
+
+    solve_fn = getattr(module, "solve", None)
+    audit["solver_algorithm_loaded"] = True
+    if not callable(solve_fn):
+        audit["solver_algorithm_errors"] += 1
+        _record_solver_algorithm_event(audit, "error", "missing callable solve")
+        return None, audit
+
+    context = _SolverAlgorithmContext(
+        instance=instance,
+        instance_path=instance_path,
+        seed=seed,
+        rng=rng,
+        time_limit_sec=time_limit_sec,
+        start_time=start_time,
+        adapter=adapter,
+        audit=audit,
+    )
+    call_start_ns = time.monotonic_ns()
+    try:
+        raw_solution = solve_fn(instance, rng, time_limit_sec, context)
+    except Exception as exc:
+        audit["solver_algorithm_errors"] += 1
+        _record_solver_algorithm_event(audit, "error", f"solve failed: {exc}")
+        _finalize_solver_algorithm_timing(audit, call_start_ns)
+        return None, audit
+
+    _finalize_solver_algorithm_timing(audit, call_start_ns)
+    if raw_solution is None:
+        audit["solver_algorithm_stop_reason"] = "inactive"
+        _record_solver_algorithm_event(
+            audit,
+            "info",
+            "solve returned None; solver_algorithm inactive",
+        )
+        return None, audit
+
+    solution = _coerce_solution(raw_solution)
+    if solution is None:
+        audit["solver_algorithm_errors"] += 1
+        audit["solver_algorithm_stop_reason"] = "invalid_output"
+        _record_solver_algorithm_event(
+            audit,
+            "error",
+            "solve returned a value that cannot be coerced to CvrpSolution",
+        )
+        return None, audit
+
+    valid, reason = _solution_is_valid(adapter, instance, solution)
+    if not valid:
+        audit["solver_algorithm_errors"] += 1
+        audit["solver_algorithm_stop_reason"] = "invalid_solution"
+        _record_solver_algorithm_event(
+            audit,
+            "error",
+            f"solve returned invalid solution: {reason}",
+        )
+        return None, audit
+
+    objective = _objective_for_solution(adapter, instance, solution)
+    audit["solver_algorithm_active"] = True
+    audit["solver_algorithm_solution_valid"] = True
+    audit["solver_algorithm_solution_routes"] = len(solution.routes)
+    audit["solver_algorithm_objective"] = dict(objective)
+    audit["solver_algorithm_total_distance"] = float(
+        objective.get("total_distance", 0.0)
+    )
+    audit["solver_algorithm_fleet_violation"] = float(
+        objective.get("fleet_violation", 0.0)
+    )
+    audit["solver_algorithm_stop_reason"] = (
+        audit.get("solver_algorithm_stop_reason") or "completed"
+    )
+    _drop_inactive_solver_algorithm_records(audit)
+    if not audit.get("solver_algorithm_phase_runtime_ms"):
+        audit["solver_algorithm_phase_runtime_ms"] = {
+            "solve": audit["solver_algorithm_elapsed_ms"]
+        }
+    return solution, audit
+
+
+def _solver_algorithm_defaults() -> dict[str, Any]:
+    return {
+        "solver_algorithm_path": _SOLVER_ALGORITHM_RELATIVE_PATH,
+        "solver_algorithm_loaded": False,
+        "solver_algorithm_active": False,
+        "solver_algorithm_errors": 0,
+        "solver_algorithm_events": [],
+        "solver_algorithm_elapsed_ms": 0,
+        "solver_algorithm_phase_runtime_ms": {"inactive": 0},
+        "solver_algorithm_solution_valid": False,
+        "solver_algorithm_solution_routes": 0,
+        "solver_algorithm_objective": {"fleet_violation": 0.0, "total_distance": 0.0},
+        "solver_algorithm_total_distance": 0.0,
+        "solver_algorithm_fleet_violation": 0.0,
+        "solver_algorithm_baseline_calls": 0,
+        "solver_algorithm_construction_calls": 0,
+        "solver_algorithm_context_records": {"inactive": 0},
+        "solver_algorithm_stop_reason": "inactive",
+    }
+
+
+def _solver_algorithm_active(audit: Mapping[str, Any] | None) -> bool:
+    return bool(audit and audit.get("solver_algorithm_active"))
+
+
+def _record_solver_algorithm_event(
+    audit: dict[str, Any],
+    status: str,
+    detail: str,
+) -> None:
+    events = audit.setdefault("solver_algorithm_events", [])
+    if len(events) >= 20:
+        return
+    events.append(
+        {
+            "policy": _SOLVER_ALGORITHM_RELATIVE_PATH,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+
+def _finalize_solver_algorithm_timing(
+    audit: dict[str, Any],
+    call_start_ns: int,
+) -> None:
+    elapsed_ms = int((time.monotonic_ns() - call_start_ns) / 1_000_000)
+    audit["solver_algorithm_elapsed_ms"] = elapsed_ms
+    phase_runtime = audit.get("solver_algorithm_phase_runtime_ms")
+    if not isinstance(phase_runtime, dict) or not phase_runtime:
+        audit["solver_algorithm_phase_runtime_ms"] = {"solve": elapsed_ms}
+
+
+def _drop_inactive_solver_algorithm_records(audit: dict[str, Any]) -> None:
+    for key in (
+        "solver_algorithm_phase_runtime_ms",
+        "solver_algorithm_context_records",
+    ):
+        values = audit.get(key)
+        if isinstance(values, dict) and len(values) > 1:
+            values.pop("inactive", None)
+
+
+class _SolverAlgorithmContext:
+    """Bounded helper API for generated full-algorithm CVRP solvers."""
+
+    def __init__(
+        self,
+        *,
+        instance: CvrpInstance,
+        instance_path: str,
+        seed: int,
+        rng: random.Random,
+        time_limit_sec: float,
+        start_time: float,
+        adapter: CvrpAdapter,
+        audit: dict[str, Any],
+    ) -> None:
+        self.instance = instance
+        self.instance_path = instance_path
+        self.seed = seed
+        self.rng = rng
+        self.time_limit_sec = time_limit_sec
+        self._start_time = start_time
+        self._adapter = adapter
+        self._audit = audit
+
+    def remaining_time(self) -> float:
+        return _remaining_time_sec(self._start_time, self.time_limit_sec)
+
+    def elapsed_ms(self) -> int:
+        return int((time.perf_counter() - self._start_time) * 1000)
+
+    def make_solution(self, routes: Any) -> CvrpSolution:
+        return CvrpSolution(
+            routes=tuple(tuple(int(customer) for customer in route) for route in routes)
+        )
+
+    def is_valid(self, solution: Any) -> bool:
+        coerced = _coerce_solution(solution)
+        if coerced is None:
+            return False
+        valid, _reason = _solution_is_valid(self._adapter, self.instance, coerced)
+        return valid
+
+    def objective(self, solution: Any) -> dict[str, int | float]:
+        coerced = _coerce_solution(solution)
+        if coerced is None:
+            raise ValueError("solution cannot be coerced to CvrpSolution")
+        valid, reason = _solution_is_valid(self._adapter, self.instance, coerced)
+        if not valid:
+            raise ValueError(f"invalid solution: {reason}")
+        return _objective_for_solution(self._adapter, self.instance, coerced)
+
+    def nearest_neighbor(
+        self,
+        *,
+        construction_mode: str = _DEFAULT_CONSTRUCTION_MODE,
+        construction_bias: float = _DEFAULT_CONSTRUCTION_BIAS,
+    ) -> CvrpSolution:
+        self._audit["solver_algorithm_construction_calls"] = _as_nonnegative_int(
+            self._audit.get("solver_algorithm_construction_calls")
+        ) + 1
+        return solve(
+            self.instance,
+            self.rng,
+            construction_mode=construction_mode,
+            construction_bias=construction_bias,
+        )
+
+    def baseline(
+        self,
+        *,
+        time_budget_sec: float | None = None,
+        params: Mapping[str, Any] | None = None,
+    ) -> CvrpSolution:
+        self._audit["solver_algorithm_baseline_calls"] = _as_nonnegative_int(
+            self._audit.get("solver_algorithm_baseline_calls")
+        ) + 1
+        budget = float(time_budget_sec) if time_budget_sec is not None else 0.0
+        if budget <= 0:
+            budget = max(0.05, self.remaining_time() * _BASELINE_TIME_FRACTION)
+        budget = max(
+            0.05,
+            min(
+                budget,
+                max(0.05, self.remaining_time() - _bounded_exit_reserve_sec(
+                    self.time_limit_sec,
+                    _MAIN_SEARCH_EXIT_RESERVE_SEC,
+                )),
+            ),
+        )
+        path = Path(self.instance_path).resolve(strict=False)
+        baseline_root = _find_vrp_baseline_root()
+        if (
+            path.suffix.lower() == ".vrp"
+            and baseline_root is not None
+            and _baseline_required_for_instance(path)
+        ):
+            try:
+                solution, _audit = _solve_with_vrp_baseline(
+                    instance=self.instance,
+                    instance_path=path,
+                    seed=self.seed,
+                    time_limit_sec=budget,
+                    baseline_root=baseline_root,
+                    baseline_required=True,
+                    baseline_policy_params=params,
+                )
+                return solution
+            except Exception as exc:
+                _record_solver_algorithm_event(
+                    self._audit,
+                    "warning",
+                    f"context.baseline fallback to nearest_neighbor: {exc}",
+                )
+        return self.nearest_neighbor()
+
+    def record_phase(self, name: str, elapsed_ms: int | float) -> None:
+        phase = str(name or "").strip() or "unnamed"
+        runtime = self._audit.setdefault("solver_algorithm_phase_runtime_ms", {})
+        if not isinstance(runtime, dict):
+            runtime = {}
+            self._audit["solver_algorithm_phase_runtime_ms"] = runtime
+        runtime[phase] = _as_nonnegative_int(runtime.get(phase)) + _as_nonnegative_int(
+            elapsed_ms
+        )
+        records = self._audit.setdefault("solver_algorithm_context_records", {})
+        if not isinstance(records, dict):
+            records = {}
+            self._audit["solver_algorithm_context_records"] = records
+        records[phase] = _as_nonnegative_int(records.get(phase)) + 1
 
 
 def _record_policy_event(audit: dict[str, Any], status: str, detail: str) -> None:
@@ -8572,6 +8922,16 @@ def _coerce_solution(candidate: Any) -> CvrpSolution | None:
 
     if isinstance(candidate, CvrpSolution):
         return candidate
+    if isinstance(candidate, Mapping):
+        routes = candidate.get("routes")
+        if routes is None:
+            return None
+        try:
+            return CvrpSolution(
+                routes=tuple(tuple(int(customer) for customer in route) for route in routes)
+            )
+        except (TypeError, ValueError):
+            return None
     routes = getattr(candidate, "routes", None)
     if routes is None:
         return None

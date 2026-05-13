@@ -1263,7 +1263,7 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     surface = next(
         surface
         for surface in spec_v1.research_surfaces or []
-        if surface.name == "solver_design"
+        if surface.name == "main_search_strategy"
     )
     required_fields = tuple(surface.evidence.required_runtime_fields)
 
@@ -1343,11 +1343,99 @@ def test_main_search_strategy_surface_declares_runtime_fields_and_default_is_ina
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
-        selected_surface="solver_design",
+        selected_surface="main_search_strategy",
     )
     assert issue is not None
     assert issue["error_category"] == "surface_runtime_contract_error"
     assert "main_search_strategy_active" in issue["failed_runtime_fields"]
+
+
+def test_solver_algorithm_surface_declares_runtime_fields_and_default_is_inactive(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(workspace, "data/operator_case.json")
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+    surface = next(
+        surface
+        for surface in spec_v1.research_surfaces or []
+        if surface.name == "solver_design"
+    )
+    required_fields = tuple(surface.evidence.required_runtime_fields)
+
+    assert "solver_algorithm_loaded" in required_fields
+    assert "solver_algorithm_active" in required_fields
+    assert "solver_algorithm_phase_runtime_ms" in required_fields
+    assert set(required_fields).issubset(runtime)
+    assert runtime["solver_algorithm_loaded"] is True
+    assert runtime["solver_algorithm_active"] is False
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_stop_reason"] == "inactive"
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    )
+    assert issue is not None
+    assert issue["error_category"] == "surface_runtime_contract_error"
+    assert "solver_algorithm_active" in issue["failed_runtime_fields"]
+
+
+def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "solver_algorithm.py").write_text(
+        "\n".join(
+            [
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    start = context.elapsed_ms()",
+                "    solution = context.nearest_neighbor()",
+                "    context.record_phase('construct', context.elapsed_ms() - start)",
+                "    return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "search_policy.py").write_text(
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    raise RuntimeError('legacy search policy should not run')\n",
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "construction_policy.py").write_text(
+        "def construction_mode(instance, time_limit_sec):\n"
+        "    raise RuntimeError('legacy construction policy should not run')\n",
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(workspace, "data/operator_case.json")
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["solver_algorithm_loaded"] is True
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert runtime["solver_algorithm_solution_routes"] >= 1
+    assert runtime["solver_algorithm_total_distance"] > 0
+    assert "construct" in runtime["solver_algorithm_phase_runtime_ms"]
+    assert "inactive" not in runtime["solver_algorithm_phase_runtime_ms"]
+    assert runtime["policy_loaded"] is False
+    assert runtime["construction_surface_loaded"] is False
+    assert runtime["main_search_strategy_active"] is False
+    assert runtime["algorithm_blueprint_active"] is False
+    assert runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    ) is None
 
 
 def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry_by_default(
@@ -1496,7 +1584,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="solver_design",
+            selected_surface="main_search_strategy",
         )
         is None
     )
@@ -1505,7 +1593,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
         _runner(),
         str(workspace),
         adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
-        selected_surface="solver_design",
+        selected_surface="main_search_strategy",
     )
     assert v5.passed, v5.detail
     missing_field_raw = json.loads(json.dumps(raw))
@@ -1513,7 +1601,7 @@ def test_enabled_main_search_strategy_runs_owned_main_loop_and_disables_registry
     missing_issue = runtime_audit_failure_from_raw(
         missing_field_raw,
         problem_spec=legacy_spec,
-        selected_surface="solver_design",
+        selected_surface="main_search_strategy",
     )
     assert missing_issue is not None
     assert missing_issue["error_category"] == "surface_runtime_contract_error"
@@ -1581,7 +1669,7 @@ def test_main_search_strategy_records_clamp_details_in_selected_surface_runtime(
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="solver_design",
+            selected_surface="main_search_strategy",
         )
         is None
     )
@@ -1732,7 +1820,7 @@ def test_main_search_strategy_route_pair_swap_is_ranked_attempted_and_accepted(
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="solver_design",
+            selected_surface="main_search_strategy",
         )
         is None
     )
@@ -3602,7 +3690,7 @@ def test_main_search_strategy_bounded_destroy_repair_removes_subset_and_is_audit
         runtime_audit_failure_from_raw(
             raw,
             problem_spec=legacy_spec,
-            selected_surface="solver_design",
+            selected_surface="main_search_strategy",
         )
         is None
     )
@@ -4083,7 +4171,7 @@ def test_invalid_main_search_strategy_output_is_selected_surface_runtime_failure
     issue = runtime_audit_failure_from_raw(
         raw,
         problem_spec=legacy_spec,
-        selected_surface="solver_design",
+        selected_surface="main_search_strategy",
     )
 
     assert raw["runtime"]["main_search_strategy_errors"] >= 1

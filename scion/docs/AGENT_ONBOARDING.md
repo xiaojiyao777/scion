@@ -60,76 +60,48 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 Active version: v0.4 on `v0.4-dev`.
 
 Current work centers on CVRP as the second real problem class after the
-warehouse/surrogate path. The current direction is a problem-object adaptation
-pivot: Scion should receive a coherent CVRP problem object and solver-design
-boundary through the adapter, rather than being driven through one forced
-singleton policy at a time. The first exposure slice renders the CVRP problem
-object into proposal contexts and `context.read_problem`; the second slice
-declares `solver_design` as the top-level CVRP research boundary. The current
-implementation now makes that boundary a problem-object adaptation contract,
-not just a shallow component policy. `main_search_plan` can declare
-`problem_adaptation` with strategy family, instance-profile intent, phase
-objective, component roles/order, and evidence targets. It must now also
-declare `algorithm_body` when enabled, making the lifecycle explicit:
-phase sequence, baseline budget policy, route-pool activation scope,
-route-pool customer threshold, route-pool invocation limit, cleanup coupling,
-and adaptive component-budget policy. The solver audits the computed runtime
-instance profile and algorithm body, uses the adaptation to order components,
-set bounded destroy/repair defaults, and apply per-component thresholds, and
-uses the algorithm body to control the actual main-search execution schedule
-and baseline budget instead of treating lifecycle fields as descriptive
-metadata. Proposal context, APS tools, target preview, and output validation
-still keep `change_locus` on `solver_design`, while component policies remain
-implementation hooks or attribution evidence. The latest repair fixed the live
-codegen contract for this path: lifecycle role targets and actual runtime
-evidence targets are accepted, and proposal-only `novelty_signature` metadata
-is no longer allowed in returned plan dictionaries. The current blocker is now
-CVRP main-search execution quality under this explicit algorithm-body
-boundary: screened candidates still need to prove repeated phase-best
-objective movement.
+warehouse/surrogate path. The current direction is no longer incremental
+component exposure. `solver_design` is now the CVRP problem-object boundary
+for the algorithm itself, backed by `policies/solver_algorithm.py`.
+Candidates implement `solve(instance, rng, time_limit_sec, context)` and may
+change construction, improvement, destroy/repair, recombination, acceptance,
+restart/perturbation, and runtime scheduling inside that algorithm body.
+The adapter/solver remains authoritative for parsing, feasibility, objective
+recomputation, seeds, protocol splits, time limits, and Decision rules.
+
+The older `policies/main_search_strategy.py` lifecycle table remains as a
+legacy `main_search_strategy` config surface for regression coverage and
+compatibility. It is not the preferred research object. Do not route new CVRP
+optimization work through forced component-policy or lifecycle-table
+diagnostics unless explicitly debugging that legacy surface.
 
 Important current interpretation:
 
-- `solver_design` is the top-level CVRP research object. It is backed by the
-  existing `policies/main_search_strategy.py` execution hook, but the required
-  research object is the whole CVRP solver lifecycle. A valid candidate should
-  declare `problem_adaptation` and `algorithm_body`, not merely force one
-  component recipe.
-- `algorithm_body` is now required for enabled `solver_design` plans at the
-  adapter/problem-spec contract, and it has runtime effect. It declares the
-  phase sequence, baseline budget policy (`declared` or `formal_floor`), and
-  route-pool lifecycle controls: activation mode (`adaptive`, `always`,
-  `medium_large_only`, or `disabled`), minimum customer threshold, max
-  invocations, cleanup coupling, and adaptive component-budget policy.
-- `problem_adaptation` carries strategy family, instance-profile intent, phase
-  objective, component roles/order, and evidence targets. Runtime now records
-  `main_search_problem_adaptation`, `main_search_instance_profile`,
-  `main_search_component_order`, `main_search_component_roles`, and related
-  evidence fields.
-- `problem_adaptation.component_roles` may describe lifecycle role targets,
-  not only improvement components: construction modes, repo-local baseline,
-  strict-improvement acceptance, restart, perturbation, post-baseline operator
-  toggle, and package-owned main-search components. `fallback_order` remains
-  limited to package-owned improvement components.
-- `problem_adaptation.evidence_targets` must use actual runtime audit fields
-  such as `main_search_component_accepted`,
-  `main_search_component_phase_delta_sum`,
-  `main_search_component_phase_improvement_counts`,
-  `main_search_restart_count`, `main_search_perturbation_count`, and
-  `main_search_objective_delta_by_phase`.
-- `novelty_signature` is hypothesis identity metadata only. Do not copy it
-  into `main_search_plan()` or other generated policy/config return
-  dictionaries unless a surface interface explicitly declares that key.
-- `deep_components_selected` now means selected package-owned problem-object
-  components across all main-search components, not just route-pair swap and
-  bounded destroy/repair. This fixes the prior false runtime-contract failure
-  where local components produced an empty deep-component audit.
+- `solver_design` targets `policies/solver_algorithm.py` and requires
+  `solve(instance, rng, time_limit_sec, context)`. Returning `None` keeps the
+  checked-in champion on the stable baseline path; an active candidate must
+  return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
+- The allowed algorithm API is explicit: use `instance.customer_ids`,
+  `instance.customer_count`, `instance.demands`, `instance.capacity`,
+  `instance.distance`, `instance.route_load`, `instance.route_distance`, and
+  `context` helpers such as `nearest_neighbor`, `baseline`, `make_solution`,
+  `objective`, `is_valid`, `remaining_time`, `elapsed_ms`, and
+  `record_phase`.
+- The boundary is fixed. Candidates may change the algorithm, but must not
+  change objective semantics, capacity/fleet constraints, parser behavior,
+  benchmark data, protocol splits, seeds, Decision thresholds, or solver/
+  adapter internals.
+- Runtime evidence for this boundary is `solver_algorithm_*`, including
+  loaded/active/errors, elapsed time, phase runtime, solution validity,
+  route count, objective, total distance, fleet violation, and stop reason.
+- `novelty_signature` for `solver_design` now describes algorithm identity:
+  `algorithm_family`, `construction_strategy`, `improvement_strategy`,
+  `acceptance_strategy`, and `runtime_budget_strategy`, alongside
+  `predicted_direction` and `target_objectives`.
 - A failed `solver_design` implementation should be retried with a different
-  solver lifecycle; it should not make APS fall back to isolated component
-  policy goals.
-- A zero-movement `solver_design` screening failure is also a candidate design
-  failure, not permission to switch the top-level research goal to a component
-  policy.
+  full-algorithm idea. A zero-movement screening failure is a candidate design
+  failure, not permission to switch the top-level research goal to an isolated
+  component policy.
 - Active `solver_design` boundary control is now live-validated: free-surface
   APS sessions stayed on `solver_design` after heavy Verification and
   zero/low-movement screening failures.
@@ -138,9 +110,8 @@ Important current interpretation:
 - The APS Contract-preview budget repair is now live-validated: completed code
   sessions retained terminal Contract-preview pass/fail evidence under the
   64k observation budget instead of failing as `result_too_large`.
-- `solver_design` semantic identity is now fail-closed: required
-  `novelty_signature.selected_components` and
-  `novelty_signature.deep_components_selected` must be non-empty arrays.
+- `solver_design` semantic identity is now fail-closed on declared algorithm
+  identity fields. Free-text rationale is not novelty identity.
 - Latest short diagnostics validate forced-surface control, APS feedback,
   perturbation-schedule runtime evidence, selected-surface audit, and real
   `destroy_repair_policy` selector semantics.
@@ -171,44 +142,12 @@ Important current interpretation:
   The run still abandoned on win-rate/median movement and later agentic
   proposals hit Contract-preview failures, so this is not long-validation
   evidence.
-- Continue on the current direction, but do not shrink the research object to
-  route-pool itself. Route-pool is now useful evidence inside the
-  `solver_design` lifecycle; the next useful slice is exposing and improving
-  the whole CVRP algorithm body so Scion can reason about construction,
-  baseline sampling, complete-solution recombination, local repair,
-  acceptance, restart, and runtime tradeoff together.
-- The current engineering slice implements that missing algorithm-body
-  exposure and fixes the false-freedom gap in its execution semantics: enabled
-  solver-design codegen must return `algorithm_body`; runtime records
-  `main_search_algorithm_body*`, baseline budget policy, phase/component
-  order, effective component top-k, construction-pool size, cleanup coupling,
-  and adaptive-budget controls; and adaptive auto-added route-pool is scoped
-  out on small formal `.vrp` instances unless the plan explicitly declares
-  `route_pool_activation="always"`.
-- The previous algorithm-body lifecycle diagnostic was stopped before
-  completion because it showed that exposure alone was not enough: declared
-  baseline fractions were still clamped by the hidden formal 0.75 floor,
-  phase order did not control execution order, construction solutions were not
-  fed into route-pool recombination, and cleanup/adaptive-budget fields were
-  not sufficiently operational. Those issues are repaired and covered by the
-  latest full test suite.
-- The follow-up execution-semantics diagnostic validated those lifecycle
-  semantics but exposed a different runtime-design failure: the screened
-  candidate used `baseline_budget_policy="declared"` with effective baseline
-  fraction 0.7 and ordered route-pool before local repair, but
-  `route_pool_recombination` consumed about 16s per observed pair, produced
-  only one phase-best improvement, and caused one candidate timeout. This is
-  not a missing Scion runtime module. Runtime is already a framework
-  optimization/governance signal; the missing piece was making the CVRP
-  algorithm body treat computation time as an internal scheduling objective.
-- Current repair response: `solver_design` guidance now names
-  `main_search_phase_runtime_ms` and `main_search_elapsed_ms` as valid
-  evidence targets; the prompt/problem spec explicitly frames baseline
-  fraction, route-pool max rounds, component rounds/top-k, activation scope,
-  and adaptive budgets as runtime/quality controls; route-pool sampling and
-  recombination now keep a bounded exit reserve before the process timeout;
-  and APS Contract-preview failures now preserve concrete issue summaries
-  instead of collapsing to generic "contract preview did not pass" loops.
+- The previous algorithm-body/lifecycle diagnostics showed a small positive
+  route-pool signal but also proved the componentized lifecycle table was the
+  wrong research object: candidates were still optimizing exposed knobs rather
+  than studying the whole algorithm. The current engineering slice replaces
+  that with a direct full-algorithm hook while keeping Scion's governance and
+  objective/constraint boundaries intact.
 - The latest forced `destroy_repair_policy` enum-interface rerun validates
   selector clarity but exhausts that surface for the current solver-owned
   mechanism: valid candidates still produced zero accepted movement.

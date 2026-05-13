@@ -88,7 +88,11 @@ def _declared_solver_design_surface_names(problem_spec: Any) -> list[str]:
             continue
         kind = str(getattr(surface, "kind", "") or "").strip().lower()
         role = str(getattr(getattr(surface, "algorithm", None), "role", "") or "").lower()
-        if kind == "solver_design" or "solver_design" in role:
+        if (
+            kind in {"solver_design", "solver_algorithm"}
+            or "solver_design" in role
+            or "solver_algorithm" in role
+        ):
             names.append(name)
     return names
 

@@ -54,7 +54,11 @@ def _is_candidate_scoped_heavy_failure(
         return False
     kind = str(getattr(surface, "kind", "") or "").strip().lower()
     role = str(getattr(getattr(surface, "algorithm", None), "role", "") or "").lower()
-    return kind == "solver_design" or "solver_design" in role
+    return (
+        kind in {"solver_design", "solver_algorithm"}
+        or "solver_design" in role
+        or "solver_algorithm" in role
+    )
 
 
 def _surface_for_hypothesis(

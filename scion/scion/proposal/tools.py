@@ -3460,7 +3460,11 @@ def _declared_solver_design_surface_names(problem_spec: Any) -> list[str]:
         role = _attr(_attr(surface, "algorithm"), "role", "")
         kind = str(_attr(surface, "kind", "") or "")
         haystack = f"{kind} {role}".lower()
-        if kind == "solver_design" or "solver_design" in haystack:
+        if (
+            kind in {"solver_design", "solver_algorithm"}
+            or "solver_design" in haystack
+            or "solver_algorithm" in haystack
+        ):
             names.append(name)
     return names
 

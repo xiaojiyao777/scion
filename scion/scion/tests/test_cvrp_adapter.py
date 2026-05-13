@@ -299,6 +299,58 @@ def test_cvrp_algorithm_blueprint_preview_rejects_instance_customers_alias(
     assert "customers" in json.dumps(preview["issues"])
 
 
+def test_cvrp_solver_algorithm_preview_accepts_valid_solution(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.nearest_neighbor()\n"
+            "    context.record_phase('construct', 1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["surface"] == "solver_design"
+    assert preview["issues"] == []
+    check = next(
+        check
+        for check in preview["checks"]
+        if check["name"] == "solve"
+    )
+    assert check["passed"] is True
+    assert "routes=" in check["detail"]
+
+
+def test_cvrp_solver_algorithm_preview_rejects_infeasible_solution(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return {'routes': [[1], [1]]}\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    assert "invalid synthetic solution" in json.dumps(preview["issues"])
+
+
 def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
@@ -325,11 +377,11 @@ def test_cvrp_main_search_strategy_preview_accepts_valid_plan(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is True
-    assert preview["surface"] == "solver_design"
+    assert preview["surface"] == "main_search_strategy"
     assert preview["issues"] == []
     coverage_check = next(
         check
@@ -386,7 +438,7 @@ def test_cvrp_main_search_strategy_preview_accepts_lifecycle_roles_and_runtime_t
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is True
@@ -419,7 +471,7 @@ def test_cvrp_main_search_strategy_preview_rejects_novelty_signature_in_plan(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is False
@@ -453,7 +505,7 @@ def test_cvrp_main_search_strategy_preview_warns_when_forced_diagnostic_deep_com
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is True
@@ -496,7 +548,7 @@ def test_cvrp_main_search_strategy_preview_rejects_missing_algorithm_body(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is False
@@ -529,7 +581,7 @@ def test_cvrp_main_search_strategy_preview_rejects_bad_algorithm_body(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is False
@@ -565,7 +617,7 @@ def test_cvrp_main_search_strategy_preview_rejects_bad_plan(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is False
@@ -588,7 +640,7 @@ def test_cvrp_main_search_strategy_preview_rejects_instance_customers_alias(
 
     preview = cvrp_adapter.preview_research_surface_patch(
         patch=patch,
-        surface=SimpleNamespace(name="solver_design"),
+        surface=SimpleNamespace(name="main_search_strategy"),
     )
 
     assert preview["passed"] is False

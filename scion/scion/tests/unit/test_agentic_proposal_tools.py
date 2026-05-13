@@ -382,20 +382,18 @@ def _valid_hypothesis_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     if payload.get("change_locus") == "solver_design":
+        if "target_file" not in overrides:
+            payload["target_file"] = "policies/solver_algorithm.py"
         if "target_objectives" not in overrides:
             payload["target_objectives"] = ["total_distance"]
         if "protected_objectives" not in overrides:
             payload["protected_objectives"] = ["fleet_violation"]
         signature = dict(payload.get("novelty_signature") or {})
-        signature.setdefault("selected_components", ["route_pair_swap"])
-        signature.setdefault("deep_components_selected", ["route_pair_swap"])
-        signature.setdefault("strategy_family_pattern", "route_structure_repair")
-        signature.setdefault("problem_adaptation_pattern", "route_pair_primary")
-        signature.setdefault("evidence_target_pattern", "phase_delta")
-        signature.setdefault("destroy_repair_pattern", "bounded")
-        signature.setdefault("baseline_fraction_pattern", "bounded_baseline")
-        signature.setdefault("acceptance_restart_pattern", "strict_no_restart")
-        signature.setdefault("perturbation_pattern", "none")
+        signature.setdefault("algorithm_family", "route_pair_local_search")
+        signature.setdefault("construction_strategy", "nearest_neighbor_seed_pool")
+        signature.setdefault("improvement_strategy", "bounded_route_pair_swap")
+        signature.setdefault("acceptance_strategy", "strict_no_restart")
+        signature.setdefault("runtime_budget_strategy", "bounded_passes")
         payload["novelty_signature"] = signature
     return payload
 
@@ -676,7 +674,7 @@ def test_list_surfaces_returns_compact_payload_for_large_surface_specs(
     assert "solver_design" in surfaces
     assert surfaces["solver_design"]["kind"] == "solver_design"
     assert surfaces["solver_design"]["algorithm"]["role"] == (
-        "problem_object_solver_design"
+        "problem_object_solver_algorithm"
     )
     assert "prompt" not in rendered
     assert len(rendered) < AgenticToolLoopConfig().max_observation_chars // 2
@@ -800,7 +798,7 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     assert payload["detail"] == "compact"
     assert payload["section"] == "all"
     assert payload["surface"]["name"] == "solver_design"
-    assert payload["surface"]["interface"]["required_functions"] == ["main_search_plan"]
+    assert payload["surface"]["interface"]["required_functions"] == ["solve"]
     assert payload["surface_contract"]["schema_version"] == "surface-contract.v1"
     assert payload["surface_contract"]["available_sections"] == [
         "summary",
@@ -815,7 +813,6 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     )
     assert "content_preview" not in payload["surface_contract"]["target_preview"]
     assert "prompt" not in payload["surface"]
-    assert "State how the whole main-search strategy" not in rendered
     assert "raw_metrics_ref" not in rendered
     assert "SECRET_VALIDATION" not in rendered
     assert "SECRET_FROZEN" not in rendered
@@ -845,12 +842,12 @@ def test_read_surface_section_mode_returns_interface_slice(
         "interface": payload["surface"]["interface"],
     }
     assert payload["surface"]["interface"]["function_signatures"] == {
-        "main_search_plan": ["instance", "time_limit_sec"]
+        "solve": ["instance", "rng", "time_limit_sec", "context"]
     }
     assert "bounds" not in payload["surface"]
     assert "evidence" not in payload["surface"]
     assert "prompt" not in payload["surface"]
-    assert "State how the whole main-search strategy" not in rendered
+    assert "component-policy or lifecycle-config table" not in rendered
     assert len(rendered) < 8000
 
 
@@ -1192,7 +1189,7 @@ def test_cvrp_solver_design_preprotocol_failure_requests_boundary_retry(
             hypothesis_text="Try the top-level solver design.",
             change_locus="solver_design",
             action="modify",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
         ),
         patch=None,
         contract_passed=True,
@@ -1284,7 +1281,7 @@ def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
         {
             "change_locus": "solver_design",
             "action": "modify",
-            "target_file": "policies/main_search_strategy.py",
+            "target_file": "policies/solver_algorithm.py",
         },
         context,
     )
@@ -1305,12 +1302,9 @@ def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
     requirements = constraint["novelty_signature_requirements"]["solver_design"]
 
     assert requirements["strategy"] == "semantic_signature"
-    assert "deep_components_selected" in requirements["required_fields"]
-    assert requirements["nonempty_sequence_fields"] == [
-        "selected_components",
-        "deep_components_selected",
-    ]
-    assert "non-empty arrays" in requirements["rule"]
+    assert "algorithm_family" in requirements["required_fields"]
+    assert "runtime_budget_strategy" in requirements["required_fields"]
+    assert "nonempty_sequence_fields" not in requirements
 
 
 def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
@@ -1323,7 +1317,7 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
         )
     )
     creative = PlanningCreative(
@@ -1367,9 +1361,9 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
     )
     hypothesis = _valid_hypothesis_payload(
         change_locus="solver_design",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
     )
-    hypothesis["novelty_signature"]["deep_components_selected"] = []
+    hypothesis["novelty_signature"]["algorithm_family"] = []
 
     preview = registry.call(
         "proposal.schema_preview",
@@ -1381,8 +1375,8 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
         "novelty_signature_guidance"
     ]
     assert preview.structured_payload["passed"] is False
-    assert guidance["missing_fields"] == ["deep_components_selected"]
-    assert "deep_components_selected" in guidance["nonempty_sequence_fields"]
+    assert guidance["missing_fields"] == ["algorithm_family"]
+    assert "nonempty_sequence_fields" not in guidance
 
 
 def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
@@ -1395,9 +1389,9 @@ def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
     )
     hypothesis = _valid_hypothesis_payload(
         change_locus="solver_design",
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
     )
-    hypothesis["novelty_signature"]["deep_components_selected"] = False
+    hypothesis["novelty_signature"]["algorithm_family"] = False
 
     preview = registry.call(
         "proposal.schema_preview",
@@ -1409,7 +1403,7 @@ def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
         "novelty_signature_guidance"
     ]
     assert preview.structured_payload["passed"] is False
-    assert guidance["missing_fields"] == ["deep_components_selected"]
+    assert guidance["missing_fields"] == ["algorithm_family"]
 
 
 def test_cvrp_solver_design_screening_failure_keeps_boundary_priority(
@@ -1423,7 +1417,7 @@ def test_cvrp_solver_design_screening_failure_keeps_boundary_priority(
             hypothesis_text="Try the top-level solver design.",
             change_locus="solver_design",
             action="modify",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
         ),
         patch=None,
         contract_passed=True,
@@ -1474,7 +1468,7 @@ def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
             hypothesis_text="Accepted moves do not refresh phase best.",
             change_locus="solver_design",
             action="modify",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
         ),
         protocol_result=ProtocolResult(
             stage=ExperimentStage.SCREENING,
@@ -1672,7 +1666,7 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
     assert protocol is not None
     main_search_hypothesis = replace(
         _hyp("solver_design"),
-        target_file="policies/main_search_strategy.py",
+        target_file="policies/solver_algorithm.py",
     )
     attributed_step = replace(
         context.step_history[0],
@@ -1823,7 +1817,7 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
         context.step_history[0],
         hypothesis=replace(
             _hyp("solver_design"),
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
         ),
         protocol_result=replace(
             protocol,
@@ -2966,12 +2960,12 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
             "research_surfaces": "surface: solver_design",
             "objective_policy_guidance": "Minimize fleet_violation then distance.",
             "solver_mechanics": "",
-            "champion_operators_code": "def main_search_plan(...): ...",
+            "champion_operators_code": "def solve(...): ...",
             "champion_stats": "champion v1",
             "operator_categories": "solver_design",
             "active_problem_boundary_surfaces": "solver_design",
             "available_actions": "modify",
-            "targetable_files": "policies/main_search_strategy.py",
+            "targetable_files": "policies/solver_algorithm.py",
             "agentic_hypothesis_constraints": {
                 "active_problem_boundary_surfaces": ("solver_design",),
                 "novelty_signature_requirements": {
@@ -2980,12 +2974,8 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
                         "required_fields": [
                             "predicted_direction",
                             "target_objectives",
-                            "selected_components",
-                            "deep_components_selected",
-                        ],
-                        "nonempty_sequence_fields": [
-                            "selected_components",
-                            "deep_components_selected",
+                            "algorithm_family",
+                            "runtime_budget_strategy",
                         ],
                     }
                 },
@@ -2997,8 +2987,8 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
         client.prompts
     )
     assert "active problem-object research boundary" in rendered
-    assert "deep_components_selected" in rendered
-    assert "non-empty JSON arrays of component names" in rendered
+    assert "algorithm_family" in rendered
+    assert "runtime_budget_strategy" in rendered
 
 
 def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> None:
@@ -3112,7 +3102,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
             target_objectives=["total_distance"],
         )
     )
@@ -4220,7 +4210,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         _cvrp_context_with_champion(tmp_path),
         forced_surface="solver_design",
         forced_action="modify",
-        forced_target_file="policies/main_search_strategy.py",
+        forced_target_file="policies/solver_algorithm.py",
     )
     listed = ProposalToolRegistry.default_read_only().call(
         "context.list_surfaces",
@@ -4231,7 +4221,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/main_search_strategy.py",
+            target_file="policies/solver_algorithm.py",
             target_objectives=["total_distance"],
         )
     )
@@ -4245,10 +4235,11 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         ],
         hypothesis=hypothesis,
         patch=PatchProposal(
-            file_path="policies/main_search_strategy.py",
+            file_path="policies/solver_algorithm.py",
             action="modify",
-            code_content=(_CVRP_ROOT / "policies" / "main_search_strategy.py").read_text(
-                encoding="utf-8"
+            code_content=(
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return context.nearest_neighbor()\n"
             ),
         ),
     )

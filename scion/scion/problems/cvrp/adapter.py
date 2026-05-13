@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+import random
 import types
 from typing import Any, Mapping, Sequence
 
@@ -558,7 +559,49 @@ class CvrpAdapter:
                 "failures. The solver owns route moves and uses this policy only "
                 "to schedule already-declared bounded components."
             )
-        if surface_name in {"solver_design", "main_search_strategy"}:
+        if surface_name in {"solver_design", "solver_algorithm"}:
+            return (
+                "policies/solver_algorithm.py is the preferred CVRP "
+                "problem-object research surface. It is a module-level full "
+                "algorithm hook; no class is required.\n\n"
+                "Declared signature:\n"
+                "solve(instance, rng, time_limit_sec, context)\n\n"
+                "Required function:\n"
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return a CvrpSolution, a structurally equivalent object "
+                "with routes, or {'routes': [[customer_id, ...], ...]}.\n\n"
+                "Research contract:\n"
+                "- You may implement construction, local improvement, "
+                "destroy/repair, recombination, perturbation, acceptance, and "
+                "time allocation directly in Python.\n"
+                "- You may use instance.customer_ids, instance.customer_count, "
+                "instance.demands[customer_id], instance.capacity, "
+                "instance.distance(i, j), instance.route_load(route), and "
+                "instance.route_distance(route).\n"
+                "- You may use context helpers: context.make_solution(routes), "
+                "context.nearest_neighbor(...), context.baseline(...), "
+                "context.objective(solution), context.is_valid(solution), "
+                "context.remaining_time(), context.elapsed_ms(), and "
+                "context.record_phase(name, elapsed_ms).\n"
+                "- The adapter/solver remains the authority for feasibility, "
+                "objective recomputation, runtime limit, seeds, and protocol "
+                "evaluation. The algorithm must not modify objectives, "
+                "capacity constraints, parser behavior, benchmark data, "
+                "protocols, or decision thresholds.\n"
+                "- Prefer this surface over component policies or "
+                "main_search_plan when the question is algorithm design. "
+                "Telemetry may name phases, but phase names must not constrain "
+                "the algorithm structure.\n\n"
+                + _POLICY_INSTANCE_API_TEXT
+                + "\n\n"
+                + "Contract preview calls solve on a tiny synthetic instance "
+                "and fails closed if the returned solution is malformed or "
+                "infeasible. Runtime Verification recomputes the objective "
+                "from the fixed adapter and fails selected-surface audit on "
+                "exceptions, invalid output, timeout, or missing algorithm "
+                "runtime fields."
+            )
+        if surface_name == "main_search_strategy":
             return (
                 "policies/main_search_strategy.py is a module-level "
                 "CVRP solver-design surface; no class is required.\n\n"
@@ -829,6 +872,7 @@ class CvrpAdapter:
             "search_policy",
             "baseline_policy",
             "neighborhood_portfolio",
+            "solver_algorithm",
             "solver_design",
             "main_search_strategy",
             "algorithm_blueprint",
@@ -876,7 +920,9 @@ class CvrpAdapter:
             _preview_baseline_policy(module, instance, issues, checks)
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
-        elif surface_name in {"solver_design", "main_search_strategy"}:
+        elif surface_name in {"solver_design", "solver_algorithm"}:
+            _preview_solver_algorithm(module, instance, issues, checks)
+        elif surface_name == "main_search_strategy":
             _preview_main_search_strategy(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
             _preview_algorithm_blueprint(module, instance, issues, checks)
@@ -1055,7 +1101,8 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/search_policy.py": "search_policy",
         "policies/baseline_policy.py": "baseline_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
-        "policies/main_search_strategy.py": "solver_design",
+        "policies/solver_algorithm.py": "solver_design",
+        "policies/main_search_strategy.py": "main_search_strategy",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
         "policies/alns_vns_policy.py": "alns_vns_policy",
         "policies/destroy_repair_policy.py": "destroy_repair_policy",
@@ -1299,6 +1346,189 @@ def _preview_neighborhood_portfolio(
                     integral=True,
                     issues=issues,
                 )
+
+
+def _preview_solver_algorithm(
+    module: types.ModuleType,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    func = getattr(module, "solve", None)
+    if not callable(func):
+        issues.append("missing callable solve")
+        checks.append({"name": "solve", "passed": False, "detail": "missing callable"})
+        return
+    rng = random.Random(0)
+    context = _PreviewSolverAlgorithmContext(instance, rng)
+    try:
+        raw_solution = func(
+            instance,
+            rng,
+            _POLICY_PREVIEW_TIME_LIMIT_SEC,
+            context,
+        )
+    except Exception as exc:
+        issues.append(f"solve raised during synthetic preview: {exc}")
+        checks.append({"name": "solve", "passed": False, "detail": str(exc)})
+        return
+    if raw_solution is None:
+        issues.append("solve returned None; solver_algorithm would be inactive")
+        checks.append({"name": "solve", "passed": False, "detail": "returned None"})
+        return
+    solution = _coerce_preview_solution(raw_solution)
+    if solution is None:
+        issues.append("solve returned non-solution value")
+        checks.append(
+            {
+                "name": "solve",
+                "passed": False,
+                "detail": f"returned {type(raw_solution).__name__}",
+            }
+        )
+        return
+    valid, reason = _preview_solution_is_valid(instance, solution)
+    checks.append(
+        {
+            "name": "solve",
+            "passed": valid,
+            "detail": (
+                f"routes={len(solution.routes)} "
+                f"distance={sum(instance.route_distance(route) for route in solution.routes)}"
+                if valid
+                else reason
+            ),
+        }
+    )
+    if not valid:
+        issues.append(f"solve returned invalid synthetic solution: {reason}")
+
+
+class _PreviewSolverAlgorithmContext:
+    def __init__(self, instance: CvrpInstance, rng: random.Random) -> None:
+        self.instance = instance
+        self.rng = rng
+        self.time_limit_sec = _POLICY_PREVIEW_TIME_LIMIT_SEC
+        self._phase_runtime_ms: dict[str, int] = {}
+
+    def remaining_time(self) -> float:
+        return self.time_limit_sec
+
+    def elapsed_ms(self) -> int:
+        return 0
+
+    def make_solution(self, routes: Any) -> CvrpSolution:
+        return _coerce_preview_solution({"routes": routes}) or CvrpSolution(routes=())
+
+    def is_valid(self, solution: Any) -> bool:
+        coerced = _coerce_preview_solution(solution)
+        if coerced is None:
+            return False
+        valid, _reason = _preview_solution_is_valid(self.instance, coerced)
+        return valid
+
+    def objective(self, solution: Any) -> dict[str, float]:
+        coerced = _coerce_preview_solution(solution)
+        if coerced is None:
+            raise ValueError("solution cannot be coerced to CvrpSolution")
+        valid, reason = _preview_solution_is_valid(self.instance, coerced)
+        if not valid:
+            raise ValueError(reason)
+        return {
+            "fleet_violation": 0.0,
+            "total_distance": sum(
+                self.instance.route_distance(route) for route in coerced.routes
+            ),
+        }
+
+    def nearest_neighbor(
+        self,
+        *,
+        construction_mode: str = "nearest_neighbor",
+        construction_bias: float = 0.0,
+    ) -> CvrpSolution:
+        del construction_mode, construction_bias
+        unvisited = set(self.instance.customer_ids)
+        routes: list[tuple[int, ...]] = []
+        while unvisited:
+            route: list[int] = []
+            load = 0
+            current = self.instance.depot
+            while True:
+                feasible = [
+                    customer
+                    for customer in unvisited
+                    if load + self.instance.demand(customer) <= self.instance.capacity
+                ]
+                if not feasible:
+                    break
+                nxt = min(
+                    feasible,
+                    key=lambda customer: self.instance.distance(current, customer),
+                )
+                unvisited.remove(nxt)
+                route.append(nxt)
+                load += self.instance.demand(nxt)
+                current = nxt
+            if not route:
+                raise ValueError("remaining customer demand exceeds capacity")
+            routes.append(tuple(route))
+        return CvrpSolution(routes=tuple(routes))
+
+    def baseline(
+        self,
+        *,
+        time_budget_sec: float | None = None,
+        params: Mapping[str, Any] | None = None,
+    ) -> CvrpSolution:
+        del time_budget_sec, params
+        return self.nearest_neighbor()
+
+    def record_phase(self, name: str, elapsed_ms: int | float) -> None:
+        phase = str(name or "").strip() or "unnamed"
+        self._phase_runtime_ms[phase] = self._phase_runtime_ms.get(phase, 0) + int(
+            max(0, elapsed_ms)
+        )
+
+
+def _coerce_preview_solution(candidate: Any) -> CvrpSolution | None:
+    if isinstance(candidate, CvrpSolution):
+        return candidate
+    routes = candidate.get("routes") if isinstance(candidate, Mapping) else getattr(
+        candidate,
+        "routes",
+        None,
+    )
+    if routes is None:
+        return None
+    try:
+        return CvrpSolution(
+            routes=tuple(tuple(int(customer) for customer in route) for route in routes)
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _preview_solution_is_valid(
+    instance: CvrpInstance,
+    solution: CvrpSolution,
+) -> tuple[bool, str]:
+    seen: list[int] = []
+    allowed = set(instance.customer_ids)
+    for route in solution.routes:
+        if not route:
+            return False, "empty route"
+        if instance.route_load(route) > instance.capacity:
+            return False, "route exceeds capacity"
+        for customer in route:
+            if customer not in allowed:
+                return False, f"unknown customer {customer}"
+            seen.append(customer)
+    if sorted(seen) != sorted(allowed):
+        return False, "routes must cover each customer exactly once"
+    if instance.allowed_routes is not None and len(solution.routes) > instance.allowed_routes:
+        return False, "route count exceeds allowed_routes"
+    return True, ""
 
 
 def _preview_main_search_strategy(

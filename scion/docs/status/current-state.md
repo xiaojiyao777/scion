@@ -10,27 +10,24 @@ handoff. Historical repair and experiment notes were moved to
 ## Status
 
 v0.4 is not ready for long CVRP solver-quality validation. The framework
-governance path is largely behaving, and the current CVRP path is correctly
-centered on the top-level `solver_design` problem object rather than forced
-single-policy diagnostics. The latest completed diagnostic validated that
-`algorithm_body` now has execution semantics: declared baseline budget policy,
-phase/component order, construction-pool reuse, route-pool activation, cleanup,
-and adaptive component budgets all reached runtime evidence. It still failed
-as a solver-quality/runtime design: the only screened candidate had
-15/16 valid pairs, one candidate timeout, `runtime_ratio_median=1.2115`,
-`runtime_regression_rate=1.0`, and only one nonzero
-`route_pool_recombination` phase-best gain. Rounds 2-8 then failed in APS
-Contract preview before patch application, and the circuit breaker ended the
-run.
+governance path is largely behaving, but the previous CVRP optimization path
+was still too componentized: Scion could select `solver_design`, yet generated
+candidates mostly filled a `main_search_plan` lifecycle table and optimized
+exposed knobs rather than studying the algorithm itself.
 
-Runtime should not be treated as a new module to add. Scion already treats
-algorithm computation time as optimization/governance evidence. The current
-repair makes CVRP `solver_design` candidates internalize that existing signal:
-runtime phase/elapsed fields are valid evidence targets, prompt/spec guidance
-frames baseline fraction, route-pool scope/rounds, top-k, rounds, and adaptive
-budget as runtime/quality levers, route-pool recombination keeps a bounded exit
-reserve before process timeout, and APS Contract-preview failures now retain
-concrete issue summaries.
+The current repair changes the active CVRP research object. `solver_design`
+now targets `policies/solver_algorithm.py`, a direct full-algorithm hook with
+`solve(instance, rng, time_limit_sec, context)`. Candidates can implement
+construction, local search, destroy/repair, recombination, acceptance,
+restart/perturbation, and runtime scheduling in Python, while the adapter and
+solver keep ownership of objective semantics, feasibility, parsing, seeds,
+protocol splits, time limits, and Decision rules. Runtime evidence for this
+boundary is now `solver_algorithm_*`, including phase runtime and recomputed
+objective fields.
+
+The older `policies/main_search_strategy.py` path remains declared as the
+legacy `main_search_strategy` config surface for compatibility and regression
+tests. It is no longer the preferred solver-design research object.
 
 Current branch: `v0.4-dev`
 
@@ -43,9 +40,9 @@ Current interpretation:
   runtime-audit validation. They should not continue as the main optimization
   path.
 - CVRP now declares `solver_design` as the top-level research boundary backed
-  by `policies/main_search_strategy.py`. Deep mechanism policies remain useful
-  implementation hooks and attribution sources, but they are not standalone
-  research goals.
+  by `policies/solver_algorithm.py`. Deep mechanism policies and the legacy
+  `main_search_strategy` table remain useful implementation hooks or
+  regression surfaces, but they are not standalone optimization goals.
 - The latest contract repair is a framework/problem-boundary repair, not a
   solver-quality improvement. `novelty_signature` is hypothesis metadata only;
   generated policy/config dictionaries must not copy it unless a surface
@@ -77,59 +74,34 @@ Current interpretation:
   from `--force-surface`: traces render `active_problem_boundary_rule` with
   `allowed_surface_ids=["solver_design"]`, not a fake forced-surface rule with
   `[null]`.
-- For semantic-signature solver-design hypotheses, `selected_components` and
-  `deep_components_selected` must be non-empty arrays. Schema preview and
-  ContractGate fail closed on missing, false, empty, or empty-sequence identity.
+- For semantic-signature solver-design hypotheses, declared algorithm identity
+  fields such as `algorithm_family`, `construction_strategy`,
+  `improvement_strategy`, `acceptance_strategy`, and
+  `runtime_budget_strategy` are required. Free-text rationale is not novelty
+  identity.
 - APS self-check failures now fail closed for real sessions. Schema/target
   preview failures, skipped Contract previews, or failed Contract previews stop
   the completed output before the patch enters evaluation.
-- The higher-ceiling v3 path is now a problem-object adaptation path:
-  instance model, solution model, objective policy, move/design affordances,
-  solver lifecycle, and whole-solver evidence are rendered by the adapter as
-  one coherent object for Scion to reason over. The current blocker is no
-  longer failure to expose that object or total absence of phase-best movement;
-  it is that the package-owned CVRP main-search execution path still produces
-  sparse, runtime-expensive wins rather than repeated solver-quality movement.
-- The latest route-pool quality repair is a useful mechanism inside the
-  problem-object boundary, but not the final research object. The next
-  optimization should keep `solver_design` as the object and expose the CVRP
-  algorithm body/lifecycle more completely, so Scion studies construction,
-  baseline sampling, complete-solution recombination, local repair,
-  acceptance, restart, and runtime tradeoff together instead of tuning another
-  singleton hook.
-- Algorithm-body exposure is now an execution contract, not just an audit
-  field. Active `solver_design` proposals must return `algorithm_body`;
-  adapter preview and ContractGate fail closed when it is missing; runtime
-  records the declared body and applies it to baseline budget policy, phase
-  order, route-pool activation, cleanup coupling, and adaptive component
-  budget.
+- The higher-ceiling v3 path is now a problem-object algorithm path:
+  instance model, solution model, objective policy, safe helper API, and
+  whole-solver evidence are rendered by the adapter as one coherent object for
+  Scion to reason over.
+- The earlier route-pool and `algorithm_body` repairs are retained as legacy
+  mechanism evidence, but they are no longer the main research object. The
+  current blocker is whether APS can use the direct `solve(...)` boundary to
+  produce repeated solver-quality movement without modifying objective or
+  constraint semantics.
 - The previous short lifecycle diagnostic showed why this had to be deeper
   than field exposure: candidates declared smaller baseline fractions but
   runtime silently used the legacy formal 0.75 floor, `phase_sequence` did not
   control component order, construction candidates were not passed into the
   route-pool, and cleanup/adaptive-budget controls were mostly descriptive.
   Those execution gaps are now repaired and unit-tested.
-- The follow-up execution-semantics diagnostic confirms that these repaired
-  controls are live, but also shows the next bottleneck: route-pool
-  recombination is too expensive relative to its sparse quality gain unless
-  the algorithm body explicitly budgets it. In the screened candidate,
-  `main_search_route_pool_sample_count=8`, route-pool sources were 14-20
-  complete solutions, route pools had 48-157 routes, branch calls reached
-  360-1881, and `route_pool_recombination` consumed roughly 16s per observed
-  pair while improving only one pair.
-- The execution path now uses `algorithm_body` instead of hidden route-pool
-  behavior. `baseline_budget_policy="declared"` makes
-  `baseline.time_fraction` the actual formal budget; `formal_floor` preserves
-  the legacy 0.75 floor only when explicitly requested. Auto-added route-pool
-  recombination remains available for old route-pair plus
-  bounded-destroy/repair plans, but `adaptive` activation skips it on small
-  formal `.vrp` instances below the declared customer threshold; explicit
-  `always`, `medium_large_only`, or `disabled` activation lets Scion study
-  route-pool scope as part of the full solver body.
-- `main_search_phase_runtime_ms` and `main_search_elapsed_ms` are now valid
-  `solver_design` evidence targets. They are not a separate research module;
-  they expose Scion's existing runtime objective at the algorithm-body level
-  so candidates can justify or reject expensive phase schedules.
+- The follow-up execution-semantics diagnostic remains important historical
+  evidence: componentized route-pool recombination was too expensive relative
+  to its sparse gain. Under the new boundary, runtime should be handled inside
+  the candidate algorithm and audited through `solver_algorithm_elapsed_ms` and
+  `solver_algorithm_phase_runtime_ms`.
 - APS observation handling for CVRP deep-surface diagnostics now uses the 64k
   default, compact 800-character surface code previews, and an explicit
   terminal reserve for schema/target/interface/Contract previews after
@@ -242,43 +214,41 @@ CVRP currently exposes these declared surfaces:
 - `neighborhood_portfolio`
 - `algorithm_blueprint`
 - `solver_design`
+- `main_search_strategy`
 - `alns_vns_policy`
 - `destroy_repair_policy`
 - `route_pair_candidate_policy`
 - `acceptance_restart_policy`
 
-`solver_design` is the problem-owned solver-design surface. It is backed by
-the singleton execution file `policies/main_search_strategy.py` and can
-coordinate:
+`solver_design` is the problem-owned full-algorithm surface. It is backed by
+the singleton execution file `policies/solver_algorithm.py`:
 
-- explicit `algorithm_body` lifecycle control: phase sequence, route-pool
-  activation scope, route-pool min-customer threshold, route-pool max
-  invocations, cleanup coupling, and adaptive component budgeting;
-- bounded construction ensemble;
-- repo-local baseline budget and sanitized baseline params;
-- package-owned improvement components: `intra_route_2opt`,
-  `inter_route_relocate`, `route_pair_swap`, `bounded_destroy_repair`,
-  `route_pool_recombination`;
-- strict-improvement acceptance threshold;
-- restart and perturbation knobs, including explicit perturbation schedule;
-- optional registry-operator round limit.
+- required function: `solve(instance, rng, time_limit_sec, context)`;
+- allowed helpers: `context.make_solution`, `context.nearest_neighbor`,
+  `context.baseline`, `context.objective`, `context.is_valid`,
+  `context.remaining_time`, `context.elapsed_ms`, and `context.record_phase`;
+- editable algorithm scope: construction, local search, destroy/repair,
+  recombination, acceptance, restart/perturbation, and runtime scheduling;
+- fixed boundary: objective, feasibility, parser, data, protocol splits,
+  seeds, Decision, `solver.py`, `adapter.py`, `models.py`, and `cvrplib.py`;
+- required evidence: `solver_algorithm_loaded`,
+  `solver_algorithm_active`, `solver_algorithm_errors`,
+  `solver_algorithm_elapsed_ms`, `solver_algorithm_phase_runtime_ms`,
+  solution validity/routes/objective/distance/fleet violation, and stop
+  reason.
 
-Current limitation: the top-level boundary, active-boundary tool guidance,
-Contract-preview budget repair, non-empty semantic identity,
-problem-adaptation codegen contract, and algorithm-body contract are
-code-validated. The bounded destroy/repair execution repair is complete but
-insufficient on its own. The route-pool quality repair now gives
-`solver_design` a package-owned whole-solution component that can produce
-formal phase-best movement: the latest short screening recorded 12 recombined
-routes and 5.0 route-pool phase-best delta. The signal is still sparse,
-runtime-expensive, and below the promotion threshold. Do not run long CVRP
-validation until `solver_design` produces repeated screening wins or median
-movement from the whole solver lifecycle, not only isolated route-pool
-successes.
+`main_search_strategy` is a legacy config surface backed by
+`policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
+and `algorithm_body` tests, but it is not the default optimization direction.
+
+Current limitation: the direct full-algorithm boundary is code-validated but
+not yet experiment-validated. Run short diagnostics before any long CVRP
+validation, and judge success by repeated solver-quality movement plus runtime
+control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest completed run:
+Latest completed experiment before the direct solver-algorithm boundary repair:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-algorithm-body-execution-semantics-sonnet-8r-20260512T173014Z
@@ -321,20 +291,16 @@ Summary:
   with only generic failure text in campaign logs. The circuit breaker then
   ended the run after repeated proposal failures.
 
-Interpretation: the latest issue is not that Scion lacks a computation-time
-objective. Runtime is already part of framework governance. The CVRP
-algorithm-body adapter/runtime needed to expose computation time as an
-internal solver-design variable and preserve deterministic Contract-preview
-failure detail so APS can repair candidates instead of entering a generic
-failure loop.
+Interpretation: this run showed that the componentized `algorithm_body` path
+was not enough. Runtime is already part of framework governance, but asking
+Scion to optimize lifecycle-table knobs still kept the research object too
+indirect.
 
-Current repair: `solver_design` now permits
-`main_search_phase_runtime_ms` and `main_search_elapsed_ms` as evidence
-targets; prompt/problem-spec text explicitly frames route-pool scope,
-route-pool rounds, top-k, component rounds, baseline fraction, and adaptive
-budget as runtime/quality controls; route-pool sampling/recombination keeps a
-bounded exit reserve before timeout; and APS Contract-preview compaction now
-keeps concrete issue summaries.
+Current repair: `solver_design` now targets the direct
+`policies/solver_algorithm.py` full-algorithm hook and records
+`solver_algorithm_*` evidence. The next short experiment should validate that
+APS edits this algorithm subject directly and does not fall back to
+component-policy or lifecycle-table optimization.
 
 Detailed analysis:
 [`v0.4-algorithm-body-execution-semantics-repair-20260512.md`](../experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md)
@@ -386,49 +352,32 @@ Detailed analysis:
 
 ## Current Repair Validation
 
-The May 13 repair has passed focused and boundary regression tests:
+The May 13 direct solver-algorithm boundary repair has passed focused and
+boundary regression tests:
 
 ```text
-scion/tests/test_cvrp_adapter.py scion/tests/test_cvrp_solver_operator_runtime.py:
-110 passed in 16.45s
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_research_surfaces.py \
+  scion/scion/tests/unit/test_agentic_proposal_tools.py \
+  scion/scion/tests/test_cvrp_adapter.py \
+  scion/scion/tests/test_cvrp_solver_operator_runtime.py \
+  scion/scion/tests/test_cvrp_protocol_smoke.py \
+  scion/scion/tests/test_protocol.py \
+  scion/scion/tests/test_problem_bridge.py \
+  scion/scion/tests/unit/core/test_proposal_pipeline.py \
+  scion/scion/tests/unit/test_sprint_m.py -q
 
-scion/tests/unit/test_agentic_proposal_tools.py:
-98 passed in 2.60s
+393 passed
 
-proposal/research-surface/protocol/CVRP regression subset:
-328 passed in 19.77s
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 
-full suite:
-1603 passed, 1 skipped in 68.18s
+1607 passed, 1 skipped
 ```
 
-A new short diagnostic is running from this repair. It uses free
-`solver_design`, not a forced component surface:
-
-```text
-run_root=/home/clawd/research/scion-experiments/v04-runtime-budget-contract-preview-sonnet-8r-20260513T002826Z
-model=claude-sonnet-4-6
-problem=cvrp
-protocol=formal
-rounds_requested=8
-time_limit_sec=60
-agentic_session_timeout_sec=1200
-force_surface=none
-launcher=nohup+setsid
-pid=2608307
-git_commit=e2540a8
-started_utc=2026-05-13T00:28:26Z
-```
-
-Analysis questions:
-
-- Do APS candidates now explicitly budget route-pool computation time using
-  `algorithm_body` instead of letting route-pool consume most of the
-  post-baseline window?
-- Do candidates name `main_search_phase_runtime_ms` or
-  `main_search_elapsed_ms` when runtime tradeoff is part of the hypothesis?
-- If Contract preview fails, does the failure detail include concrete
-  issue-summary text instead of a generic proposal-failure loop?
+No direct-solver-algorithm validation experiment has completed yet. The next
+short diagnostic should use free `solver_design`, verify patches target
+`policies/solver_algorithm.py`, and inspect `solver_algorithm_*` runtime
+evidence.
 
 Previous analyzed run:
 
@@ -914,18 +863,15 @@ P2:
 ## Remaining Risks
 
 - CVRP `solver_design` is now validly routed, self-checked, and contract-valid
-  with declared problem adaptation and algorithm-body execution semantics.
-  Route-pool recombination has formal positive signal, but the signal is still
-  sparse: 2 wins, 14 ties, zero losses, median movement zero, and a 21% median
-  runtime regression in the latest positive short screening.
+  as a direct full-algorithm hook. It has not yet shown experiment-level solver
+  efficacy under the new boundary.
 - CVRP's current research-surface set still contains many component hooks. It
   risks optimizing whatever hook is exposed unless APS keeps prioritizing the
   problem-object solver-design boundary.
-- APS can still produce shallow solver-design hypotheses that satisfy the
-  contract but only reshuffle lifecycle knobs around package-owned primitives.
-  The next validation must check whether the repaired runtime semantics are
-  enough for Scion to study the algorithm body, or whether the problem package
-  needs to expose a more direct algorithm subject.
+- APS can still produce shallow solver-design hypotheses that wrap old helper
+  behavior. The next validation must check whether Scion actually edits and
+  reasons about the full algorithm subject while respecting the fixed
+  objective/constraint boundary.
 - Deep-surface runtime attribution is improved for `alns_vns_policy` and
   mechanically complete for `destroy_repair_policy`, but still thin for
   `acceptance_restart_policy` and `route_pair_candidate_policy`.

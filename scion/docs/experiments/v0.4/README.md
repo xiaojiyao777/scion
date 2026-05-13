@@ -48,6 +48,7 @@ referenced, not copied into development prompts.
 - [Route-pool quality and boundary repair Sonnet 8R diagnostic, terminated early, 2026-05-12](v0.4-route-pool-quality-boundary-sonnet-terminated-20260512.md)
 - [Algorithm-body lifecycle Sonnet 8R diagnostic, stopped for repair, 2026-05-12](v0.4-algorithm-body-lifecycle-sonnet-launched-20260512.md)
 - [Algorithm-body execution-semantics and runtime-budget repair, 2026-05-12/13](v0.4-algorithm-body-execution-semantics-repair-20260512.md)
+- [Direct solver-algorithm boundary repair, 2026-05-13](v0.4-direct-solver-algorithm-boundary-repair-20260513.md)
 
 ## Related
 

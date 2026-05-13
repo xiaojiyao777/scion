@@ -225,11 +225,11 @@ def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
         candidate_ws=str(candidate_ws),
         champion_ws=str(CVRP_DIR),
         hypothesis_action="modify",
-        selected_surface="solver_design",
+        selected_surface="main_search_strategy",
     )
 
     surface_summary = result.candidate_surface_runtime_summary
-    assert surface_summary["selected_surface"] == "solver_design"
+    assert surface_summary["selected_surface"] == "main_search_strategy"
     assert (
         surface_summary["fields"]["main_search_route_pool_sample_count"]["present"]
         == 4
