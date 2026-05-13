@@ -379,6 +379,22 @@ short diagnostic should use free `solver_design`, verify patches target
 `policies/solver_algorithm.py`, and inspect `solver_algorithm_*` runtime
 evidence.
 
+A new short diagnostic is running from commit `caaf970`:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-direct-solver-algorithm-boundary-sonnet-8r-20260513T084740Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=8
+time_limit_sec=60
+agentic_session_timeout_sec=1200
+force_surface=none
+launcher=nohup+setsid
+pid=2618289
+started_utc=2026-05-13T08:47:40Z
+```
+
 Previous analyzed run:
 
 ```text
