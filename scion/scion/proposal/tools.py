@@ -532,6 +532,7 @@ class ContextReadProblemTool(_BaseReadOnlyTool):
     ) -> ProposalObservation:
         summary = _problem_summary(context)
         problem_object = _problem_object(context)
+        solver_mechanics = _solver_mechanics(context)
         payload = {
             "problem_id": context.problem_id or _attr(context.problem_spec, "id"),
             "problem_spec_hash": context.problem_spec_hash,
@@ -539,6 +540,8 @@ class ContextReadProblemTool(_BaseReadOnlyTool):
             "summary_truncated": len(summary) > 12000,
             "problem_object": _limit_text(problem_object, 20000),
             "problem_object_truncated": len(problem_object) > 20000,
+            "solver_mechanics": _limit_text(solver_mechanics, 20000),
+            "solver_mechanics_truncated": len(solver_mechanics) > 20000,
         }
         return self._observation(
             context,
@@ -2517,6 +2520,14 @@ def _problem_object(context: ProposalToolContext) -> str:
         context.adapter, "render_problem_object"
     ):
         return str(context.adapter.render_problem_object())
+    return ""
+
+
+def _solver_mechanics(context: ProposalToolContext) -> str:
+    if context.adapter is not None and hasattr(
+        context.adapter, "render_solver_mechanics"
+    ):
+        return str(context.adapter.render_solver_mechanics())
     return ""
 
 

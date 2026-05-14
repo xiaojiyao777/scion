@@ -1193,6 +1193,22 @@ def _solver_algorithm_preview_instances(instance: CvrpInstance) -> tuple[CvrpIns
             bks_routes=2,
             use_integer_cost=True,
         ),
+        CvrpInstance(
+            name="synthetic_preview_improvement_trap",
+            capacity=99,
+            depot=0,
+            nodes=(
+                CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+                CvrpNode(id=1, x=-4.0, y=5.0, demand=1),
+                CvrpNode(id=2, x=7.0, y=7.0, demand=1),
+                CvrpNode(id=3, x=5.0, y=2.0, demand=1),
+                CvrpNode(id=4, x=10.0, y=-6.0, demand=1),
+            ),
+            allowed_routes=1,
+            bks=43.0,
+            bks_routes=1,
+            use_integer_cost=True,
+        ),
     )
 
 
@@ -1474,6 +1490,12 @@ def _preview_solver_algorithm_case(
         )
         return
     valid, reason = _preview_solution_is_valid(instance, solution)
+    solution_distance = sum(instance.route_distance(route) for route in solution.routes)
+    preview_baseline = context.nearest_neighbor()
+    preview_baseline_distance = sum(
+        instance.route_distance(route) for route in preview_baseline.routes
+    )
+    delta_vs_preview_baseline = preview_baseline_distance - solution_distance
     body_has_search = (
         context.move_attempts > 0
         or context.accepted_moves > 0
@@ -1487,13 +1509,35 @@ def _preview_solver_algorithm_case(
             "generation, route-edit/search loop, or acceptance decision and "
             "record it with context.record_move or context.record_iteration"
         )
+    elif (
+        valid
+        and context.baseline_calls > 0
+        and instance.name == "synthetic_preview_improvement_trap"
+        and solution_distance >= preview_baseline_distance
+    ):
+        valid = False
+        reason = (
+            "solver_design micro-eval no-op: the preview baseline is "
+            f"intentionally improvable on {instance.name} "
+            f"(baseline_distance={preview_baseline_distance}, "
+            f"returned_distance={solution_distance}), but solve returned no "
+            "strict improvement. Baseline-seeded candidates must use the "
+            "approved problem object to produce measurable phase-best movement, "
+            "not only wrap context.baseline or add fixed overhead."
+        )
     checks.append(
         {
             "name": check_name,
             "passed": valid,
             "detail": (
                 f"{instance.name}: routes={len(solution.routes)} "
-                f"distance={sum(instance.route_distance(route) for route in solution.routes)}"
+                f"distance={solution_distance} "
+                f"preview_baseline_distance={preview_baseline_distance} "
+                f"delta_vs_preview_baseline={delta_vs_preview_baseline} "
+                f"baseline_calls={context.baseline_calls} "
+                f"search_iterations={context.search_iterations} "
+                f"move_attempts={context.move_attempts} "
+                f"accepted_moves={context.accepted_moves}"
                 if valid
                 else f"{instance.name}: {reason}"
             ),

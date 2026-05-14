@@ -343,10 +343,22 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
             "    baseline = context.baseline(seed, time_limit_sec=0.1)\n"
             "    seed_obj = context.objective(seed)\n"
             "    baseline_obj = context.objective(baseline)\n"
-            "    context.record_move('baseline_probe', attempted=1, accepted=0)\n"
-            "    if baseline_obj <= seed_obj and baseline_obj[0] <= seed_obj[0]:\n"
-            "        return baseline\n"
-            "    return seed\n"
+            "    best = baseline if baseline_obj <= seed_obj else seed\n"
+            "    best_key = context.objective_key(best)\n"
+            "    for route_index, route in enumerate(best.routes):\n"
+            "        route = list(route)\n"
+            "        for left in range(max(0, len(route) - 1)):\n"
+            "            for right in range(left + 2, len(route) + 1):\n"
+            "                context.record_iteration('two_opt_probe', 1)\n"
+            "                new_route = route[:left] + list(reversed(route[left:right])) + route[right:]\n"
+            "                routes = [list(candidate_route) for candidate_route in best.routes]\n"
+            "                routes[route_index] = new_route\n"
+            "                candidate = context.make_solution(routes)\n"
+            "                if context.is_valid(candidate) and context.objective_key(candidate) < best_key:\n"
+            "                    context.record_move('two_opt_probe', attempted=1, accepted=1, delta=1.0, best_improved=True)\n"
+            "                    return candidate\n"
+            "                context.record_move('two_opt_probe', attempted=1, accepted=0)\n"
+            "    return best\n"
         ),
     )
 
@@ -357,6 +369,32 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
 
     assert preview["passed"] is True
     assert preview["issues"] == []
+
+
+def test_cvrp_solver_algorithm_preview_rejects_baseline_noop_on_micro_eval(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    baseline = context.baseline(time_limit_sec=0.1)\n"
+            "    context.record_iteration('cosmetic_loop', 1)\n"
+            "    context.record_move('cosmetic_loop', attempted=1, accepted=0)\n"
+            "    return baseline\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    rendered = json.dumps(preview["issues"])
+    assert "synthetic_preview_improvement_trap" in rendered
+    assert "micro-eval no-op" in rendered
 
 
 def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(

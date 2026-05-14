@@ -1869,6 +1869,101 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
     )
 
 
+def test_runtime_feedback_surfaces_solver_algorithm_noop_motion(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    protocol = context.step_history[0].protocol_result
+    assert protocol is not None
+    fields = {
+        "solver_algorithm_move_attempts": {
+            "present": 16,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "scalar": {
+                    "observed_count": 16,
+                    "weighted_sum": 7194.0,
+                    "positive_count": 16,
+                    "zero_count": 0,
+                }
+            },
+            "values": [{"value": "125", "count": 2}],
+        },
+        "solver_algorithm_accepted_moves": {
+            "present": 16,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "scalar": {
+                    "observed_count": 16,
+                    "weighted_sum": 1.0,
+                    "positive_count": 1,
+                    "zero_count": 15,
+                }
+            },
+            "values": [{"value": "0", "count": 15}],
+        },
+        "solver_algorithm_best_delta": {
+            "present": 16,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "scalar": {
+                    "observed_count": 16,
+                    "weighted_sum": 1.0,
+                    "positive_count": 1,
+                    "zero_count": 15,
+                }
+            },
+            "values": [{"value": "0.0", "count": 15}],
+        },
+        "solver_algorithm_search_iterations": {
+            "present": 16,
+            "missing": 0,
+            "empty": 0,
+            "failed": 0,
+            "numeric_summary": {
+                "scalar": {
+                    "observed_count": 16,
+                    "weighted_sum": 0.0,
+                    "positive_count": 0,
+                    "zero_count": 16,
+                }
+            },
+            "values": [{"value": "0", "count": 16}],
+        },
+    }
+    attributed_step = replace(
+        context.step_history[0],
+        hypothesis=replace(
+            _hyp("solver_design"),
+            target_file="policies/solver_algorithm.py",
+        ),
+        protocol_result=replace(
+            protocol,
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "fields": fields,
+            },
+        ),
+    )
+    context = replace(context, step_history=(attributed_step,))
+
+    runtime = registry.call("feedback.query_runtime", {}, context)
+    rendered = json.dumps(runtime.structured_payload, sort_keys=True, default=str)
+
+    assert "solver_algorithm_move_attempts" in rendered
+    assert "solver_algorithm_accepted_moves" in rendered
+    assert "solver_algorithm_best_delta" in rendered
+    assert "solver_algorithm_search_iterations" in rendered
+    assert "zero_count" in rendered
+
+
 def test_default_holdout_summary_exposes_no_validation_or_frozen_rows(
     tmp_path: Path,
 ) -> None:
@@ -2769,6 +2864,9 @@ def test_read_problem_returns_adapter_problem_object(tmp_path: Path) -> None:
         def render_problem_object(self) -> str:
             return "Problem object: solver lifecycle and move grammar."
 
+        def render_solver_mechanics(self) -> str:
+            return "Solver mechanics: direct solve hook and fixed objective."
+
     context = replace(_context(tmp_path), adapter=AdapterWithProblemObject())
     registry = ProposalToolRegistry.default_read_only()
 
@@ -2782,6 +2880,10 @@ def test_read_problem_returns_adapter_problem_object(tmp_path: Path) -> None:
         "Problem object: solver lifecycle and move grammar."
     )
     assert observation.structured_payload["problem_object_truncated"] is False
+    assert observation.structured_payload["solver_mechanics"] == (
+        "Solver mechanics: direct solve hook and fixed objective."
+    )
+    assert observation.structured_payload["solver_mechanics_truncated"] is False
 
 
 def test_holdout_aggregate_does_not_expose_malicious_raw_refs_or_case_ids(

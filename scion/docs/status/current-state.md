@@ -165,6 +165,26 @@ static C9c rejects unbounded boolean-flag `while` loops, CVRP synthetic
 preview times out `solve(...)`, and APS converts a hung
 `proposal.contract_preview` into a controlled `tool_error`.
 
+The 2026-05-14 code-self-check smoke from commit `06e9365` completed 2/2
+rounds cleanly and validated the framework path: code-phase tool selection,
+Contract-preview repair, `solver_algorithm` activation, runtime telemetry, and
+fail-closed Decision all worked. Both candidates were abandoned by
+`T4: win_rate < 0.3`. Round 1 had 3 wins, 1 loss, 12 ties, and median runtime
+ratio about `1.234x`; round 2 had 1 win, 2 losses, 13 ties, and median runtime
+ratio about `1.063x`. This is an algorithm-quality failure, not a boundary
+failure.
+
+The follow-up repair exposes adapter-rendered solver mechanics directly from
+`context.read_problem`, so code phase sees the fixed objective/constraint
+boundary and the direct `solve(...)` lifecycle without reconstructing it from
+surface snippets. CVRP Contract preview now also runs `solver_design` on a
+synthetic improvement-trap instance and fails baseline-seeded no-op wrappers
+that do not improve the preview baseline. Screening feedback now prioritizes
+`solver_algorithm_move_attempts`, `solver_algorithm_accepted_moves`,
+`solver_algorithm_best_delta`, `solver_algorithm_search_iterations`, elapsed
+time, and phase runtime fields, making "ran but did not move phase-best"
+visible to the next agent turn.
+
 Next validation should be a 1-2 round independent smoke, not a long run. The
 first gate is whether the slimmed code path reaches Contract preview and
 Verification without another final `generate_patch` timeout. Preview-time
@@ -1316,6 +1336,26 @@ Latest focused validation:
 1623 passed, 1 skipped in 74.48s
 ```
 
+Latest solver-design no-op feedback repair:
+
+- Independent smoke:
+  `/home/clawd/research/scion-experiments/v04-code-self-check-smoke-sonnet-2r-20260514T091556Z`
+  completed 2/2 rounds on commit `06e9365` with `n_experiments=2`,
+  `champion_version=1`, `stopped_reason=max_rounds_exhausted`, and exit code
+  `0`.
+- Both candidates were valid and active under `solver_algorithm`, but both
+  were abandoned by `T4: win_rate < 0.3`.
+- Round 1: 3 wins, 1 loss, 12 ties; median runtime ratio about `1.234x`;
+  several formal cases hit `time_limit`.
+- Round 2: 1 win, 2 losses, 13 ties; median runtime ratio about `1.063x`;
+  `solver_algorithm_move_attempts` was positive but
+  `solver_algorithm_accepted_moves` and `solver_algorithm_best_delta` were
+  zero on nearly all pairs.
+- The repair adds a CVRP synthetic improvement-trap micro-eval to Contract
+  preview for baseline-seeded `solver_design` patches and improves runtime
+  feedback ordering so solver move/no-op telemetry reaches the next code and
+  hypothesis prompts.
+
 ## Next Actions
 
 P1:
@@ -1333,6 +1373,10 @@ P1:
   that generated patches whose own `test_hint` admits unresolved syntax or
   implementation issues fail before Contract preview or are repaired once with
   explicit self-check feedback.
+- Re-run a 1-2 round smoke after the no-op feedback repair. The first gate is
+  that the next hypothesis/code phase explicitly reasons from
+  `solver_algorithm_accepted_moves`, `solver_algorithm_best_delta`, and runtime
+  regression instead of proposing another baseline-heavy wrapper.
 - Keep route-pool telemetry as evidence inside that lifecycle:
   `main_search_route_pool_sample_count`,
   `main_search_route_pool_recombined_routes`, and
