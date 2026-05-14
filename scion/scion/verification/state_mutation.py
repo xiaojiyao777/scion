@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.runner import Runner
+from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
 from scion.verification.feasibility import _registry_path, resolve_problem_path
 from scion.verification.requirements import requires_adapter_for_runtime
@@ -50,12 +50,14 @@ def check_state_mutation(
     reg = _registry_path(candidate_workspace)
 
     try:
-        result = runner.run_solver(
+        result = run_solver_with_surface(
+            runner,
             workdir=candidate_workspace,
             instance_path=canary,
             seed=_CANARY_SEED,
             time_limit_sec=30,
             registry_path=reg,
+            selected_surface=selected_surface,
         )
     except Exception as exc:
         return _cr(False, f"solver run failed: {exc}", t0, diagnosis="ENV")

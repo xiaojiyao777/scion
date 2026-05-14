@@ -155,6 +155,7 @@ def _run_solver(
     *,
     seed: int = 14,
     registry_path: str | None = None,
+    selected_surface: str | None = None,
 ) -> dict[str, Any]:
     result = _runner().run_solver(
         workdir=str(workspace),
@@ -162,6 +163,7 @@ def _run_solver(
         seed=seed,
         time_limit_sec=2,
         registry_path="" if registry_path is None else registry_path,
+        selected_surface=selected_surface,
     )
     assert result.success is True, result.stderr
     assert result.output is not None
@@ -1371,7 +1373,7 @@ def test_solver_algorithm_surface_declares_runtime_fields_and_default_is_inactiv
     assert "solver_algorithm_active" in required_fields
     assert "solver_algorithm_phase_runtime_ms" in required_fields
     assert set(required_fields).issubset(runtime)
-    assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert runtime["solver_algorithm_path"] == "policies/solver_algorithm.py"
     assert runtime["solver_algorithm_loaded"] is True
     assert runtime["solver_algorithm_active"] is False
     assert runtime["solver_algorithm_errors"] == 0
@@ -1384,6 +1386,28 @@ def test_solver_algorithm_surface_declares_runtime_fields_and_default_is_inactiv
     assert issue is not None
     assert issue["error_category"] == "surface_runtime_contract_error"
     assert "solver_algorithm_active" in issue["failed_runtime_fields"]
+
+
+def test_selected_solver_design_runs_checked_in_baseline_algorithm(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+
+    assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert runtime["solver_algorithm_loaded"] is True
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert runtime["solver_algorithm_solution_routes"] >= 1
+    assert raw["feasible"] is True
 
 
 def test_solver_algorithm_exception_surfaces_runtime_audit_error(
@@ -1507,7 +1531,11 @@ def test_enabled_baseline_algorithm_is_preferred_over_legacy_solver_hook(
         encoding="utf-8",
     )
 
-    raw = _run_solver(workspace, "data/operator_case.json")
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
     runtime = raw["runtime"]
 
     assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"

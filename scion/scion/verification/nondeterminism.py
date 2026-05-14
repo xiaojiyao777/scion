@@ -27,7 +27,7 @@ import uuid
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
-from scion.runtime.runner import Runner
+from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.verification.feasibility import _registry_path, resolve_problem_path
 from scion.verification.requirements import (
     declared_objective_metric_names,
@@ -67,12 +67,14 @@ def check_nondeterminism(
     def _run() -> tuple[dict | None, str]:
         """Returns (output_dict, stderr_snippet)."""
         try:
-            r = runner.run_solver(
+            r = run_solver_with_surface(
+                runner,
                 workdir=candidate_workspace,
                 instance_path=canary,
                 seed=_CANARY_SEED,
                 time_limit_sec=30,
                 registry_path=reg,
+                selected_surface=selected_surface,
             )
         except Exception as exc:
             return None, str(exc)

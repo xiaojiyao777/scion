@@ -39,6 +39,7 @@ _SOLVER_ALGORITHM_RELATIVE_PATHS = (
     _BASELINE_ALGORITHM_RELATIVE_PATH,
     _SOLVER_ALGORITHM_RELATIVE_PATH,
 )
+_SOLVER_DESIGN_SURFACE_NAME = "solver_design"
 _ALNS_VNS_POLICY_RELATIVE_PATH = "policies/alns_vns_policy.py"
 _DESTROY_REPAIR_POLICY_RELATIVE_PATH = "policies/destroy_repair_policy.py"
 _ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH = "policies/route_pair_candidate_policy.py"
@@ -8399,7 +8400,7 @@ def _load_solver_algorithm(
     adapter: CvrpAdapter,
 ) -> tuple[CvrpSolution | None, dict[str, Any]]:
     inactive_audit: dict[str, Any] | None = None
-    for relative_path in _SOLVER_ALGORITHM_RELATIVE_PATHS:
+    for relative_path in _solver_algorithm_relative_paths_for_runtime():
         solution, audit = _load_solver_algorithm_file(
             workspace_root=workspace_root,
             relative_path=relative_path,
@@ -8416,6 +8417,20 @@ def _load_solver_algorithm(
         if inactive_audit is None:
             inactive_audit = audit
     return None, inactive_audit or _solver_algorithm_defaults()
+
+
+def _solver_algorithm_relative_paths_for_runtime() -> tuple[str, ...]:
+    if _solver_design_runtime_enabled():
+        return _SOLVER_ALGORITHM_RELATIVE_PATHS
+    return (_SOLVER_ALGORITHM_RELATIVE_PATH,)
+
+
+def _solver_design_runtime_enabled() -> bool:
+    surface = str(os.environ.get("SCION_SELECTED_SURFACE") or "").strip()
+    if surface == _SOLVER_DESIGN_SURFACE_NAME:
+        return True
+    flag = str(os.environ.get("SCION_CVRP_ENABLE_BASELINE_ALGORITHM") or "").strip().lower()
+    return flag in {"1", "true", "yes", "on"}
 
 
 def _load_solver_algorithm_file(

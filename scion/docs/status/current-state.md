@@ -17,14 +17,17 @@ exposed knobs rather than studying the algorithm itself.
 
 The current repair changes the active CVRP research object. `solver_design`
 now targets `policies/baseline_algorithm.py` first: a Scion-controlled,
-inactive-by-default copy of the CVRP algorithm body with
-`solve(instance, rng, time_limit_sec, context)`. Candidates should study and
-modify that algorithm body inside the branch. `policies/solver_algorithm.py`
-remains as a compatibility hook only. The adapter and solver keep ownership of
-objective semantics, feasibility, parsing, seeds, protocol splits, time
-limits, and Decision rules. Runtime evidence for this boundary remains
-`solver_algorithm_*`, including selected path, phase runtime, movement
-telemetry, and recomputed objective fields.
+branch-owned port of the CVRP ALNS+VNS algorithm body with
+`solve(instance, rng, time_limit_sec, context)`. When `solver_design` is the
+selected surface, candidate and champion subprocesses run that copied branch
+algorithm file directly. When another component surface is selected, runtime
+skips this full-algorithm subject so legacy component tests remain isolated.
+Candidates should study and modify the branch copy of that algorithm body.
+`policies/solver_algorithm.py` remains as a compatibility hook only. The
+adapter and solver keep ownership of objective semantics, feasibility,
+parsing, seeds, protocol splits, time limits, and Decision rules. Runtime
+evidence for this boundary remains `solver_algorithm_*`, including selected
+path, phase runtime, movement telemetry, and recomputed objective fields.
 
 The older `policies/main_search_strategy.py` path remains declared as the
 legacy `main_search_strategy` config surface for compatibility and regression
@@ -45,6 +48,10 @@ Current interpretation:
   retained only for compatibility. Deep mechanism policies and the legacy
   `main_search_strategy` table remain useful implementation hooks or
   regression surfaces, but they are not standalone optimization goals.
+- Solver subprocesses now receive the selected surface through
+  `SCION_SELECTED_SURFACE`. This is the runtime switch that lets
+  `solver_design` evaluate the branch-owned full algorithm while preventing
+  that algorithm from swallowing unrelated component-surface experiments.
 - The latest contract repair is a framework/problem-boundary repair, not a
   solver-quality improvement. `novelty_signature` is hypothesis metadata only;
   generated policy/config dictionaries must not copy it unless a surface
@@ -403,17 +410,17 @@ first by the singleton execution file `policies/baseline_algorithm.py`, with
   search-iteration/move-attempt/accepted-move counters, phase delta telemetry,
   and stop reason.
 
-Current repair: `policies/baseline_algorithm.py` keeps the checked-in champion
-inactive by default, but contains a controlled ALNS/VNS-style algorithm body
-with construction, capped route-edit neighborhoods, destroy/repair,
-perturbation, acceptance, runtime polling, and solver-algorithm telemetry.
-Candidate branches should modify and activate that body. Adapter preview now
-rejects preferred-target `context.baseline(...)` wrappers, so the candidate
-cannot reduce the research task to "call champion, then polish." It also fails
-closed on synthetic preview timeout, so generated `solver_design` code cannot
-hang Scion before workspace materialization. The timeout sentinel is outside
-normal `Exception` handling so generated candidate code cannot swallow it with
-a broad `except Exception`.
+Current repair: `policies/baseline_algorithm.py` is now the active
+solver-design algorithm subject when `solver_design` is selected. It contains a
+controlled ALNS/VNS-style algorithm body with construction, capped route-edit
+neighborhoods, destroy/repair, perturbation, acceptance, runtime polling, and
+solver-algorithm telemetry. Candidate branches should modify that branch copy
+directly. Adapter preview rejects preferred-target `context.baseline(...)`
+wrappers, so the candidate cannot reduce the research task to "call champion,
+then polish." It also fails closed on synthetic preview timeout, so generated
+`solver_design` code cannot hang Scion before workspace materialization. The
+timeout sentinel is outside normal `Exception` handling so generated candidate
+code cannot swallow it with a broad `except Exception`.
 
 `main_search_strategy` is a legacy config surface backed by
 `policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
@@ -428,6 +435,31 @@ evidence.
 
 ## Latest Experiment
 
+Current branch-owned algorithm-subject smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-branch-algorithm-subject-smoke-opus-1r-20260514T164018Z
+model=claude-opus-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=1
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+status=running at 2026-05-14T16:40Z
+```
+
+Purpose: validate the deeper repair, not promotion quality. The expected
+signal is that free APS selects `solver_design`, targets the branch copy of
+`policies/baseline_algorithm.py`, uses code-phase tool access to inspect the
+problem object and algorithm body, passes Contract plus
+`proposal.algorithm_smoke`, and enters official Verification as a direct
+algorithm-body change.
+
+Note: an earlier run root ending `20260514T163525Z` was terminated at
+2026-05-14T16:40Z after its trace exposed stale prompt text about inactive
+legacy hooks. That prompt residue is fixed in the current code before the
+`20260514T164018Z` validation run.
+
 Latest baseline-algorithm subject smoke:
 
 ```text
@@ -438,23 +470,30 @@ protocol=formal
 rounds_requested=2
 time_limit_sec=60
 agentic_session_timeout_sec=1800
-status=running at 2026-05-14T15:49Z
+status=terminated_for_invalid_research_object_analysis at 2026-05-14T16:11:51Z
 target_file=policies/baseline_algorithm.py
 ```
 
-Preliminary check:
+Post-run analysis:
 
 - Round 1 selected `modify/solver_design` with target
   `policies/baseline_algorithm.py`.
 - Code phase generated an activated algorithm-body patch in that file, passed
   static Contract preview, then passed `proposal.algorithm_smoke` on tainted
   synthetic CVRP preview before entering official evaluation.
-- The first completed screening pairs confirm the new execution path but not
-  solver quality: the candidate is active under `baseline_algorithm.py`,
-  faster than the champion baseline on observed pairs, and records nonzero
-  algorithm telemetry, but the early `comparison` values are mostly losses.
-  This is early evidence for the research-object plumbing, not promotion
-  evidence.
+- Screening confirmed why the previous adapter was still wrong. The first
+  candidate was 0 wins, 4 ties, 12 losses, median pair delta `-6.0`, and
+  abandoned by `SCREENING_FAIL_WIN_RATE`.
+- The failure was not just weak code quality. The candidate rewrote a
+  simplified, inactive Scion template instead of modifying a branch copy of
+  the real algorithm body. The original CVRP algorithm was still effectively a
+  reference object, so Scion was training the agent to become a postprocessor
+  or replacement-template author.
+- That invalid experiment was terminated and the repair now makes
+  `baseline_algorithm.py` a branch-owned, active ALNS+VNS algorithm subject
+  under selected `solver_design` runtime. Promotion still requires the normal
+  Contract, Verification, Protocol, and Decision gates; only a promoted branch
+  becomes champion.
 
 Previous analyzed code-scope/feedback-budget smoke:
 

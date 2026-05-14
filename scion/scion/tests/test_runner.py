@@ -238,6 +238,57 @@ class TestEnvSanitization:
         assert result.success is True
         assert "LEAKED" not in result.stderr
 
+    def test_selected_surface_is_passed_to_child(self, workdir: Path):
+        _write_solver(
+            workdir,
+            """\
+            import os, sys, json, argparse
+            p = argparse.ArgumentParser()
+            p.add_argument("instance", nargs="?", default="")
+            for name in ["--seed","--time-limit","--registry","--output"]:
+                p.add_argument(name, default="")
+            args = p.parse_args()
+            if os.environ.get("SCION_SELECTED_SURFACE") != "solver_design":
+                print("MISSING_SELECTED_SURFACE", file=sys.stderr)
+                sys.exit(1)
+            with open(args.output, 'w') as f:
+                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+            sys.exit(0)
+            """,
+        )
+        runner = LocalSubprocessRunner()
+        result = runner.run_solver(
+            workdir=str(workdir),
+            instance_path=str(workdir / "instance.json"),
+            seed=42,
+            time_limit_sec=5,
+            registry_path=str(workdir / "registry.json"),
+            selected_surface="solver_design",
+        )
+        assert result.success is True
+
+    def test_unselected_surface_clears_parent_env(self, workdir: Path, monkeypatch):
+        monkeypatch.setenv("SCION_SELECTED_SURFACE", "stale_surface")
+        _write_solver(
+            workdir,
+            """\
+            import os, sys, json, argparse
+            p = argparse.ArgumentParser()
+            p.add_argument("instance", nargs="?", default="")
+            for name in ["--seed","--time-limit","--registry","--output"]:
+                p.add_argument(name, default="")
+            args = p.parse_args()
+            if "SCION_SELECTED_SURFACE" in os.environ:
+                print("LEAKED_SELECTED_SURFACE", file=sys.stderr)
+                sys.exit(1)
+            with open(args.output, 'w') as f:
+                json.dump({"vehicles":{},"assignment":{},"objective":{},"feasible":True}, f)
+            sys.exit(0)
+            """,
+        )
+        result = run(workdir)
+        assert result.success is True
+
 
 # ---------------------------------------------------------------------------
 # Tests: _build_clean_env (T01)

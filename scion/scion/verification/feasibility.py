@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_raw
-from scion.runtime.runner import Runner
+from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
@@ -38,12 +38,14 @@ def check_feasibility(
 
     # Run solver in candidate workspace with canary case.
     try:
-        result = runner.run_solver(
+        result = run_solver_with_surface(
+            runner,
             workdir=candidate_workspace,
             instance_path=canary,
             seed=42,
             time_limit_sec=30,
             registry_path=_registry_path(candidate_workspace),
+            selected_surface=selected_surface,
         )
     except Exception as exc:
         return _cr(False, "heavy", f"runner error: {exc}", t0)

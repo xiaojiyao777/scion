@@ -95,6 +95,7 @@ class LocalSubprocessRunner:
         seed: int,
         time_limit_sec: int,
         registry_path: str,
+        selected_surface: str | None = None,
     ) -> RunResult:
         """Execute solver.py in an isolated subprocess.
 
@@ -135,6 +136,11 @@ class LocalSubprocessRunner:
         ]
 
         env = _build_clean_env()
+        surface = str(selected_surface or "").strip()
+        if surface:
+            env["SCION_SELECTED_SURFACE"] = surface
+        else:
+            env.pop("SCION_SELECTED_SURFACE", None)
         # Ensure the workspace itself is on PYTHONPATH so operators can be imported
         existing_pp = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = (workdir + os.pathsep + existing_pp).rstrip(os.pathsep)

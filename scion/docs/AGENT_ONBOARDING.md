@@ -88,9 +88,12 @@ Important current interpretation:
 
 - `solver_design` targets `policies/baseline_algorithm.py` first and
   `policies/solver_algorithm.py` only for compatibility. It requires
-  `solve(instance, rng, time_limit_sec, context)`. Returning `None` keeps the
-  checked-in champion on the stable baseline path; an active candidate must
-  return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
+  `solve(instance, rng, time_limit_sec, context)`. When `solver_design` is
+  selected, the subprocess runs the branch copy of
+  `policies/baseline_algorithm.py` as the algorithm under research. Returning
+  `None` is only a compatibility behavior for inactive hooks; a real
+  solver-design candidate must return a feasible `CvrpSolution`, a routes
+  object, or `{"routes": ...}`.
 - The allowed algorithm API is explicit: use `instance.depot`,
   `instance.customer_ids`, `instance.customer_count`, `instance.demands`,
   `instance.capacity`, `instance.distance`, `instance.route_load`,
@@ -146,13 +149,13 @@ Important current interpretation:
   prompt-only exposure repairs. The latest useful signal came from a
   code-level whole-solution route-pool quality repair inside `solver_design`,
   not from another exposed singleton policy.
-- The current adapter repair goes deeper than prompt exposure: the checked-in
-  `policies/baseline_algorithm.py` remains inactive by default for champion
-  stability, but it now carries the Scion-controlled ALNS/VNS-style
-  full-algorithm subject. New candidates should materially rework or replace
-  that algorithm body. A candidate that calls `context.baseline(...)` from
-  this preferred target, changes baseline budget/params, or adds a tiny
-  post-baseline polish is a design failure.
+- The current adapter repair goes deeper than prompt exposure:
+  `policies/baseline_algorithm.py` is the branch-owned ALNS/VNS-style
+  full-algorithm subject when `solver_design` is selected. New candidates
+  should materially rework or replace that algorithm body in their branch. A
+  candidate that calls `context.baseline(...)` from this preferred target,
+  changes only baseline budget/params, or adds a tiny post-baseline polish is
+  a design failure.
 - The main-search execution-semantics repair was necessary but insufficient:
   bounded destroy/repair now ranks repair insertions globally, preserves
   fallback budget, honors the fallback toggle, and lets recovery-only accepted

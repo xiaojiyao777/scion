@@ -55,11 +55,14 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/baseline_algorithm.py` first, then
-   `policies/solver_algorithm.py` only as a compatibility hook. If
-   `solve(instance, rng, time_limit_sec, context)` returns a valid solution,
-   the direct solver-design hook becomes the output path and the legacy
-   baseline/lifecycle/operator layers are skipped.
+3. If `SCION_SELECTED_SURFACE=solver_design` or the explicit
+   `SCION_CVRP_ENABLE_BASELINE_ALGORITHM` flag is set, load
+   `policies/baseline_algorithm.py` first, then
+   `policies/solver_algorithm.py` only as a compatibility hook. Other
+   component-surface runs skip `baseline_algorithm.py` and try only the older
+   compatibility hook. If `solve(instance, rng, time_limit_sec, context)`
+   returns a valid solution, the direct solver-design hook becomes the output
+   path and the legacy baseline/lifecycle/operator layers are skipped.
 4. If the direct solver hook is missing, inactive, or invalid, load
    `policies/main_search_strategy.py`,
    `policies/algorithm_blueprint.py`, `policies/search_policy.py`,
@@ -187,9 +190,10 @@ function:
 
 - `solve(instance, rng, time_limit_sec, context)`
 
-The default checked-in `baseline_algorithm.py` file returns `None` for champion
-stability, but carries a Scion-controlled ALNS/VNS-style algorithm subject.
-Active candidates should materially rework or replace that body, not call
+The checked-in `baseline_algorithm.py` file is active when `solver_design` is
+the selected surface and is skipped for unrelated component-surface runs. It
+carries a Scion-controlled ALNS/VNS-style algorithm subject. Candidates should
+materially rework or replace that branch copy, not call
 `context.baseline(...)` and then polish the result. Candidates may implement
 construction, route-edit candidate generation, local search, destroy/repair,
 recombination, perturbation, acceptance, and runtime scheduling inside
@@ -487,44 +491,16 @@ When `algorithm_blueprint` is the selected surface, `ExperimentProtocol`
 preserves these required `algorithm_*` fields in candidate-side pair metrics
 and campaign summaries through the generic selected-surface runtime summary.
 
-The `solver_design` surface declares required runtime fields covering
-load/active/error status, normalized plan, phases executed, construction
-methods, requested/effective baseline fraction and params, whether the formal
-baseline quality guard and conservative baseline-param clamps were applied,
-post-baseline registry toggle/limit,
-improvement components, rounds/top-k, selected and attempted component lists,
-component attempts/accepted/runtime, per-component skip reasons, best component
-distance deltas, accepted local delta totals, recovery-only delta totals,
-phase-best delta totals, accepted/recovery/phase-improvement counts, bounded
-destroy/repair removed/reinserted counts and accept limit, global and
-per-component acceptance thresholds, restart/perturbation knobs and counts,
-phase objective deltas, phase runtime, elapsed runtime, whether the phase best
-was returned, and stop reason.
-The main-search improvement loop distinguishes component-local acceptance from
-phase-best improvement: a move that improves the current perturbed solution but
-does not refresh phase best is still audited as accepted, but it does not
-reset stagnation or suppress bounded destroy/repair via the route-pair phase
-gate. The phase-level audit fields
-`main_search_component_phase_delta_sum`,
-`main_search_component_phase_best_delta`, and
-`main_search_component_phase_improvement_counts` expose that distinction to
-proposal feedback without changing Decision inputs.
-The recovery audit fields `main_search_component_recovery_delta_sum`,
-`main_search_component_recovery_best_delta`, and
-`main_search_component_recovery_counts` make accepted current-state recovery
-explicit so APS does not treat all accepted deltas as phase-level
-improvement.
-`main_search_baseline_param_clamps` is always a non-empty JSON-safe evidence
-object. In the no-clamp case it records `applied=false`,
-`status=no_clamps`, `count=0`, and empty nested `fields`/`clamps`; when clamps
-fire it records `applied=true`, `status=clamped`, a bounded field list, and
-per-field requested/effective values such as `destroy_ratio` and
-`max_destroy_customers`.
-Selected-surface audit fails closed when
-`main_search_strategy_errors` is positive or these fields are missing/empty.
-When `solver_design` is the selected surface, `ExperimentProtocol`
-preserves these required `main_search_*` fields through the generic
-selected-surface runtime summary.
+The `solver_design` surface declares required runtime fields around the direct
+algorithm subject: selected path, load/active/error status, elapsed runtime,
+phase runtime, solution validity/routes/objective/distance/fleet violation,
+search iterations, move attempts, accepted moves, phase delta telemetry,
+baseline-call count, stop reason, and compact event details. Selected-surface
+audit fails closed when `solver_algorithm_errors` is positive or required
+fields are missing/empty. When `solver_design` is selected,
+`ExperimentProtocol` propagates the surface to candidate and champion solver
+subprocesses and preserves the required `solver_algorithm_*` fields through the
+generic selected-surface runtime summary.
 
 The deep mechanism surfaces declare required runtime fields for selected-surface
 auditing:

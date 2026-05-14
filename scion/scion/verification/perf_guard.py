@@ -7,7 +7,7 @@ import time
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
 from scion.runtime.audit import format_runtime_audit_failure, runtime_audit_failure_from_result
-from scion.runtime.runner import Runner
+from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.verification.feasibility import _registry_path, resolve_problem_path
 
 
@@ -45,12 +45,14 @@ def check_perf(
     def _run(workdir: str) -> dict[str, object]:
         """Return structured runtime facts for evidence."""
         try:
-            r = runner.run_solver(
+            r = run_solver_with_surface(
+                runner,
                 workdir=workdir,
                 instance_path=perf_case,
                 seed=_PERF_SEED,
                 time_limit_sec=timeout_sec,
                 registry_path=_registry_path(workdir),
+                selected_surface=selected_surface,
             )
         except Exception:
             return {

@@ -300,6 +300,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
                 )
                 if not cand_result.success:
                     return CanaryResult(
@@ -326,6 +327,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(champion_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
                 )
                 if not champ_result.success:
                     # Infra issue on champion side — skip veto
@@ -521,6 +523,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(champion_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
                 )
                 cand_r = self.runner.run_solver(
                     workdir=candidate_ws,
@@ -528,6 +531,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
                 )
                 _record_surface_runtime_sample(
                     cand_r,
