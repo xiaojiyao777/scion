@@ -1391,9 +1391,7 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
         context,
     )
 
-    guidance = preview.structured_payload["hypothesis"][
-        "novelty_signature_guidance"
-    ]
+    guidance = preview.structured_payload["hypothesis"]["novelty_signature_guidance"]
     assert preview.structured_payload["passed"] is False
     assert "algorithm_family" in preview.summary
     assert guidance["missing_fields"] == ["algorithm_family"]
@@ -1420,9 +1418,7 @@ def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
         context,
     )
 
-    guidance = preview.structured_payload["hypothesis"][
-        "novelty_signature_guidance"
-    ]
+    guidance = preview.structured_payload["hypothesis"]["novelty_signature_guidance"]
     assert preview.structured_payload["passed"] is False
     assert guidance["missing_fields"] == ["algorithm_family"]
 
@@ -1466,9 +1462,7 @@ def test_cvrp_solver_design_screening_failure_keeps_boundary_priority(
     runtime = registry.call("feedback.query_runtime", {}, context)
     diagnosis = runtime.structured_payload["research_diagnosis"]
 
-    assert priorities["screening_failed_solver_design_surfaces"] == [
-        "solver_design"
-    ]
+    assert priorities["screening_failed_solver_design_surfaces"] == ["solver_design"]
     assert "solver_design_screening_failure" in priorities["failure_mode_tags"]
     assert "component policies" in priorities["recommendation"]
     assert diagnosis["screening_failed_solver_design_surfaces"] == ["solver_design"]
@@ -3337,8 +3331,9 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
     assert all(event["error_code"] == "result_too_large" for event in huge_events)
 
 
-def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_budget(
-) -> None:
+def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_budget() -> (
+    None
+):
     observation = ProposalObservation(
         observation_id="contract-preview-1",
         session_id="session-1",
@@ -3414,8 +3409,7 @@ def test_contract_preview_failure_issues_become_self_check_codes() -> None:
 
     assert self_check.contract_preview_passed is False
     assert any(
-        "baseline_budget_policy" in code
-        for code in self_check.contract_preview_codes
+        "baseline_budget_policy" in code for code in self_check.contract_preview_codes
     )
     assert compact is not None
     assert "baseline_budget_policy" in json.dumps(compact.structured_payload)
@@ -3784,6 +3778,48 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
     assert "raw_metrics_ref" not in client.prompts[0]
 
 
+def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    first_planner_context = creative.planner_contexts[0]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert "" not in first_planner_context["allowed_tools"]
+    assert (
+        "feedback.query_holdout_summary" not in first_planner_context["allowed_tools"]
+    )
+    assert all(spec.get("name") for spec in first_planner_context["allowed_tool_specs"])
+
+
 def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_read(
     tmp_path: Path,
 ) -> None:
@@ -3959,7 +3995,9 @@ def test_code_phase_planner_can_query_memory_and_get_full_surface(
     code_observations = creative.code_contexts[0]["agentic_tool_observations"]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert any(context.get("code_phase") is True for context in creative.planner_contexts)
+    assert any(
+        context.get("code_phase") is True for context in creative.planner_contexts
+    )
     assert any(
         event["tool_name"] == "memory.query"
         and event["selection_source"] == "code_phase_planner"
@@ -3969,6 +4007,11 @@ def test_code_phase_planner_can_query_memory_and_get_full_surface(
         observation["tool_name"] == "context.read_surface"
         and observation["structured_payload"]["detail"] == "full"
         and observation["structured_payload"]["current_artifact"]["max_chars"] == 12000
+        and observation["structured_payload"]["current_artifact"][
+            "content_preview_omitted"
+        ]
+        and "content_preview"
+        not in observation["structured_payload"]["current_artifact"]
         for observation in code_observations
     )
 
@@ -4480,8 +4523,7 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
         for event in read_surface_events
     )
     assert any(
-        event["status"] == "ok"
-        and event["selection_source"] == "code_phase_required"
+        event["status"] == "ok" and event["selection_source"] == "code_phase_required"
         for event in read_surface_events
     )
     assert creative.planner_contexts[1]["tool_arg_guidance"]["context.read_surface"][

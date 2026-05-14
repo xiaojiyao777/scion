@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-13*
+*Last updated: 2026-05-14*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -204,6 +204,22 @@ Important current interpretation:
   explicitly bounded, CVRP synthetic preview times out `solve(...)`, and APS
   turns a hung `proposal.contract_preview` into a controlled tool error. Run a
   1-2 round smoke before any longer CVRP solver-quality validation.
+- The preview-repair smoke itself did not reach preview: both rounds failed at
+  final `generate_patch` after three provider timeouts. The important finding
+  was duplicated code-phase context, not solver quality: the target file was
+  present in `Target File` and again inside full surface-read observations,
+  code phase repeated selected-surface reads, and planner sanitization turned
+  `feedback.query_holdout_summary` into an empty model-facing tool name.
+- Current prompt/tool-loop repair: code generation receives compact
+  observation payloads that omit duplicated `content_preview` code, code-phase
+  agentic context has a tighter cap, the code-phase planner stops after a
+  successful full selected-surface read, holdout summary is filtered from
+  model-facing planner specs while remaining callable directly, and timeout
+  retries ask for one compact bounded algorithm body.
+- Next validation is still a 1-2 round independent smoke. The first gate is
+  reaching Contract preview/Verification without final code-generation
+  timeout; preview-time fail-closed behavior and solver-quality movement are
+  later gates in that same short run.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 

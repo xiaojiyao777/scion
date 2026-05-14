@@ -1,4 +1,5 @@
 """CreativeLayer — LLM-backed proposal generation (Round 1 and Round 2)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -51,7 +52,7 @@ class CreativeLayer:
     ) -> None:
         self._client = llm_client
         # Inherit model from LLMClient if not explicitly set
-        self._model = model or getattr(llm_client, 'model', None) or "claude-opus-4-6"
+        self._model = model or getattr(llm_client, "model", None) or "claude-opus-4-6"
         self._trace_dir = trace_dir
 
     # ------------------------------------------------------------------
@@ -148,7 +149,9 @@ class CreativeLayer:
         )
         try:
             raw = self._client.call_with_tool(
-                prompt, tool, self._model,
+                prompt,
+                tool,
+                self._model,
                 system_blocks=system_blocks,
             )
         except Exception as exc:
@@ -194,7 +197,8 @@ class _TraceWriter:
             "champion_version": context.get("champion_version"),
             "system_blocks": system_blocks,
             "user_prompt": prompt,
-            "tool_schema": tool.get("input_schema") or tool.get("function", {}).get("parameters"),
+            "tool_schema": tool.get("input_schema")
+            or tool.get("function", {}).get("parameters"),
             "ok": None,
         }
         _write_json(path, payload)
@@ -215,10 +219,12 @@ class _TraceWriter:
                 payload = json.load(fh)
         except (OSError, json.JSONDecodeError):
             payload = {}
-        payload.update({
-            "finished_at": datetime.now().isoformat(),
-            "ok": ok,
-        })
+        payload.update(
+            {
+                "finished_at": datetime.now().isoformat(),
+                "ok": ok,
+            }
+        )
         if response is not None:
             payload["response"] = response
         if error is not None:
@@ -312,6 +318,7 @@ def _sanitize_tool_selection_context(value: Any) -> Any:
 # Parsers
 # ---------------------------------------------------------------------------
 
+
 def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
     try:
@@ -376,6 +383,8 @@ class _DefaultDict(dict):
 _CACHE_5M = {"type": "ephemeral"}
 _AGENTIC_RESEARCH_DIAGNOSIS_CHARS = 12000
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 24000
+_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 8000
+_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 10000
 
 
 def _split_hypothesis_context(
@@ -455,17 +464,13 @@ def _split_hypothesis_context(
             f"{D['branch_code']}"
         )
     if D["branch_direction"]:
-        branch_context_parts.append(
-            f"## Branch Direction\n{D['branch_direction']}"
-        )
+        branch_context_parts.append(f"## Branch Direction\n{D['branch_direction']}")
     if D["exploration_coverage"]:
         branch_context_parts.append(
             f"## Exploration Coverage\n{D['exploration_coverage']}"
         )
     if D["strategy_guidance"]:
-        branch_context_parts.append(
-            f"## Strategy Guidance\n{D['strategy_guidance']}"
-        )
+        branch_context_parts.append(f"## Strategy Guidance\n{D['strategy_guidance']}")
     if D["solver_design_boundary_guidance"]:
         branch_context_parts.append(D["solver_design_boundary_guidance"])
     if D["search_control_guidance"]:
@@ -491,9 +496,7 @@ def _split_hypothesis_context(
     if D["weight_opt_feedback"]:
         branch_context_parts.append(D["weight_opt_feedback"])
     if D["runtime_feedback"]:
-        branch_context_parts.append(
-            f"## Runtime Feedback\n{D['runtime_feedback']}"
-        )
+        branch_context_parts.append(f"## Runtime Feedback\n{D['runtime_feedback']}")
     if D["runtime_failure_guidance"]:
         branch_context_parts.append(
             f"## Runtime Failure Guidance\n{D['runtime_failure_guidance']}"
@@ -515,10 +518,12 @@ def _split_hypothesis_context(
         },
     ]
     if branch_context_parts:
-        system_blocks.append({
-            "type": "text",
-            "text": "\n\n".join(branch_context_parts),
-        })
+        system_blocks.append(
+            {
+                "type": "text",
+                "text": "\n\n".join(branch_context_parts),
+            }
+        )
 
     user_prompt = (
         f"## Experiment History \u2014 This Branch\n{D['experiment_history']}\n\n"
@@ -551,19 +556,18 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
     forced_target_file = str(context.get("forced_target_file") or "").strip()
     constraints = context.get("agentic_hypothesis_constraints")
     novelty_requirements: Mapping[str, Any] = {}
-    active_boundary = str(
-        context.get("active_problem_boundary_surfaces") or ""
-    ).strip()
+    active_boundary = str(context.get("active_problem_boundary_surfaces") or "").strip()
     if isinstance(constraints, Mapping):
-        forced_surface = forced_surface or str(
-            constraints.get("forced_surface") or ""
-        ).strip()
-        forced_action = forced_action or str(
-            constraints.get("forced_action") or ""
-        ).strip()
-        forced_target_file = forced_target_file or str(
-            constraints.get("forced_target_file") or ""
-        ).strip()
+        forced_surface = (
+            forced_surface or str(constraints.get("forced_surface") or "").strip()
+        )
+        forced_action = (
+            forced_action or str(constraints.get("forced_action") or "").strip()
+        )
+        forced_target_file = (
+            forced_target_file
+            or str(constraints.get("forced_target_file") or "").strip()
+        )
         boundary_value = constraints.get("active_problem_boundary_surfaces")
         if not active_boundary and isinstance(boundary_value, (list, tuple)):
             active_boundary = ", ".join(
@@ -591,16 +595,12 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         if forced_action:
             lines.append(f"Set `action` exactly to `{forced_action}`.")
         else:
-            lines.append(
-                "Set `action` to one legal action for the forced surface."
-            )
+            lines.append("Set `action` to one legal action for the forced surface.")
         if forced_target_file:
-            lines.append(
-                f"Set `target_file` exactly to `{forced_target_file}`."
-            )
+            lines.append(f"Set `target_file` exactly to `{forced_target_file}`.")
         else:
             lines.append(
-                "If the forced action is \"modify\" or \"remove\", provide a "
+                'If the forced action is "modify" or "remove", provide a '
                 "target_file declared by the forced surface."
             )
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
@@ -623,7 +623,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         ]
         if targetable_files:
             lines.append(
-                "If action is \"modify\" or \"remove\", provide `target_file` "
+                'If action is "modify" or "remove", provide `target_file` '
                 f"from the active boundary files: {targetable_files}."
             )
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
@@ -638,7 +638,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
         "Propose ONE new hypothesis for improving the solver.\n"
         f"Choose a research surface from {operator_categories} as `change_locus`.\n"
         f"Set `action` to one of: {available_actions}.\n"
-        "If action is \"modify\" or \"remove\", provide `target_file` from "
+        'If action is "modify" or "remove", provide `target_file` from '
         f"the targetable files when available: {targetable_files}.\n"
     )
 
@@ -692,22 +692,18 @@ def _split_code_context(
         f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
     )
     solver_mechanics_section = (
-        f"## Solver Execution Model\n{solver_mechanics}\n\n"
-        if solver_mechanics
-        else ""
+        f"## Solver Execution Model\n{solver_mechanics}\n\n" if solver_mechanics else ""
     )
 
     surface_name = str(D["research_surface_name"] or D["change_locus"]).strip()
     surface_kind = str(D["research_surface_kind"] or "operator").strip()
     surface_label = (
-        f"{surface_name} [{surface_kind}]"
-        if surface_name
-        else f"[{surface_kind}]"
+        f"{surface_name} [{surface_kind}]" if surface_name else f"[{surface_kind}]"
     )
-    is_solver_design_surface = (
-        surface_kind in {"solver_design", "solver_algorithm"}
-        or surface_name in {"solver_design", "solver_algorithm"}
-    )
+    is_solver_design_surface = surface_kind in {
+        "solver_design",
+        "solver_algorithm",
+    } or surface_name in {"solver_design", "solver_algorithm"}
     solver_design_code_rules = (
         "\n## Full Solver-Algorithm Rules\n"
         "- For solver-design surfaces, helper functions are allowed and often "
@@ -789,12 +785,23 @@ def _split_code_context(
 
     prior_failure_section = ""
     if D["prior_code_failure"]:
-        prior_failure_section = (
-            f"## Previous Attempt Failed\n"
-            f"The previous code generation failed with:\n"
-            f"{D['prior_code_failure']}\n"
-            f"Avoid the same mistake.\n\n"
-        )
+        prior_failure = str(D["prior_code_failure"])
+        if _is_timeout_failure(prior_failure):
+            prior_failure_section = (
+                "## Previous Attempt Failed\n"
+                "The previous code generation attempt timed out before "
+                "returning a patch. Keep the implementation compact and "
+                "bounded: implement one coherent algorithm body, avoid "
+                "large helper forests, and do not duplicate code already "
+                "present in the target file unless it must change.\n\n"
+            )
+        else:
+            prior_failure_section = (
+                f"## Previous Attempt Failed\n"
+                f"The previous code generation failed with:\n"
+                f"{prior_failure}\n"
+                f"Avoid the same mistake.\n\n"
+            )
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     if agentic_context:
         prior_failure_section += f"{agentic_context}\n\n"
@@ -842,7 +849,7 @@ def _agentic_research_context_block(
             "not Decision input. Use them to explain which declared surface "
             "evidence should change and why the next mechanism differs from "
             "prior failed attempts.\n\n"
-            f"{_bounded_json(diagnosis, _AGENTIC_RESEARCH_DIAGNOSIS_CHARS)}"
+            f"{_bounded_json(diagnosis, _agentic_research_diagnosis_chars(code_phase))}"
         )
     observations = context.get("agentic_tool_observations")
     if observations:
@@ -852,9 +859,30 @@ def _agentic_research_context_block(
             "generation. Use screening/runtime feedback and selected-surface "
             "metadata when forming the hypothesis or implementing the approved "
             "change; do not treat raw refs or holdout detail as available.\n\n"
-            f"{_bounded_json(observations, _AGENTIC_TOOL_OBSERVATIONS_CHARS)}"
+            f"{_bounded_json(observations, _agentic_observation_chars(code_phase))}"
         )
     return "\n\n".join(parts)
+
+
+def _agentic_research_diagnosis_chars(code_phase: bool) -> int:
+    return (
+        _AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS
+        if code_phase
+        else _AGENTIC_RESEARCH_DIAGNOSIS_CHARS
+    )
+
+
+def _agentic_observation_chars(code_phase: bool) -> int:
+    return (
+        _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS
+        if code_phase
+        else _AGENTIC_TOOL_OBSERVATIONS_CHARS
+    )
+
+
+def _is_timeout_failure(text: str) -> bool:
+    lowered = text.lower()
+    return "timed out" in lowered or "timeout" in lowered
 
 
 def _bounded_json(value: Any, max_chars: int) -> str:
@@ -864,10 +892,7 @@ def _bounded_json(value: Any, max_chars: int) -> str:
         rendered = str(value)
     if len(rendered) <= max_chars:
         return rendered
-    return (
-        rendered[: max(0, max_chars - 80)]
-        + "\n... <truncated agentic context>"
-    )
+    return rendered[: max(0, max_chars - 80)] + "\n... <truncated agentic context>"
 
 
 def _split_fix_context(
@@ -885,9 +910,7 @@ def _split_fix_context(
         f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
     )
     solver_mechanics_section = (
-        f"## Solver Execution Model\n{solver_mechanics}\n\n"
-        if solver_mechanics
-        else ""
+        f"## Solver Execution Model\n{solver_mechanics}\n\n" if solver_mechanics else ""
     )
 
     system_text = (

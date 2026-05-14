@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-13*
+*Last updated: 2026-05-14*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -166,8 +166,10 @@ preview times out `solve(...)`, and APS converts a hung
 `proposal.contract_preview` into a controlled `tool_error`.
 
 Next validation should be a 1-2 round independent smoke, not a long run. The
-first gate is whether preview-time hangs fail closed and the campaign keeps
-moving; solver-quality promotion remains a later criterion.
+first gate is whether the slimmed code path reaches Contract preview and
+Verification without another final `generate_patch` timeout. Preview-time
+fail-closed behavior and solver-quality movement are later gates in the same
+short run.
 
 ## Current Engineering State
 
@@ -217,16 +219,23 @@ moving; solver-quality promotion remains a later criterion.
   instead of blocking the campaign.
 - The first micro smoke after this repair confirmed code-phase tool selection
   and full `solver_design` surface read, but the final `generate_patch` call
-  still timed out on a roughly 49k prompt. Follow-up prompt slimming now omits
-  the duplicate full champion policy bundle for `solver_design` code prompts;
-  the complete target file remains available in the `Target File` section and
-  via audited code-phase surface reads.
+  still timed out on a roughly 49k prompt. Prompt slimming now omits both the
+  duplicate full champion policy bundle and duplicate surface-read
+  `content_preview` code from final `solver_design` code prompts. The complete
+  target file remains available once in the `Target File` section, while the
+  audited full selected-surface read remains part of APS tool evidence.
 - The balance-restored 2-round smoke showed the complete feedback loop working:
   `generate_patch` returned successfully, Contract-preview repair passed,
   Contract and Verification passed, screening feedback was stored, and the next
   hypothesis used that screening/runtime feedback to change algorithm strategy.
   Prompt slimming remains incomplete; the second-round code prompt still grew
   to roughly 55.6k characters.
+- The latest preview-repair smoke still failed before preview because final
+  code-generation prompts stayed too large and one planner prompt contained an
+  empty tool name after holdout sanitization. Current repair compacts
+  code-phase tool observations, filters holdout summary from model-facing
+  planner specs, stops repeated code-phase surface reads, and normalizes
+  timeout retry guidance.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
@@ -311,7 +320,46 @@ control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest analyzed code-phase exploratory run after the 2-round smoke:
+Latest analyzed preview-repair smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-preview-timeout-repair-smoke-sonnet-2r-20260513T232347Z
+model=claude-sonnet-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=2
+rounds_completed=2 APS attempts, 0 screened experiments
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+git_commit=0361d1a
+exit_code=0
+status=max_rounds_exhausted
+terminal_reason=code_generation_failed
+analysis_doc=scion/docs/experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md
+```
+
+Summary:
+
+- The run did not validate the preview-timeout repair because neither round
+  reached Contract preview. Both final `generate_patch` calls timed out after
+  three provider attempts.
+- Code prompt sizes were still roughly 49k and 51k characters. The target file
+  appeared once in the normal `Target File` section and again through the full
+  code-phase `context.read_surface` observation payload.
+- Code phase repeated selected-surface reads instead of stopping after the
+  required full read was already available.
+- Strict planner sanitization erased `feedback.query_holdout_summary` inside
+  model-facing allowed-tool specs, leaving an empty tool name in the prompt.
+- The current repair compacts code-phase observations, caps code-phase
+  agentic context more tightly, stops after a successful full selected-surface
+  read, filters holdout-summary from model-facing planner specs, and gives
+  timeout retries a smaller bounded-code instruction.
+
+Next validation should again be a 1-2 round independent smoke. The first gate
+is reaching Contract preview/Verification without final code-generation
+timeout; solver-quality promotion remains a later criterion.
+
+Previous analyzed code-phase exploratory run after the 2-round smoke:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-code-phase-slim-exploratory-sonnet-5r-20260513T190909Z
@@ -662,6 +710,32 @@ Current preview-timeout repair validation:
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
 
 1618 passed, 1 skipped
+```
+
+Current prompt/tool-loop repair validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+
+102 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_research_surfaces.py \
+  scion/scion/tests/test_cvrp_adapter.py \
+  scion/scion/tests/test_contract.py -q
+
+198 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_g4_plumbing.py \
+  scion/scion/tests/unit/test_sprint_j3_prompt_plumbing.py -q
+
+29 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+
+1619 passed, 1 skipped
 ```
 
 Previous analyzed run:

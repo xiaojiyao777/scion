@@ -55,6 +55,7 @@ _COMPACT_FEEDBACK_TOOLS = (
     "feedback.query_screening",
     "feedback.query_runtime",
 )
+_HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
 _CODE_PHASE_TOOL_ALLOWLIST = frozenset(
     {
         "context.list_surfaces",
@@ -81,6 +82,9 @@ _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
+_CODE_PROMPT_STRING_CHARS = 1600
+_CODE_PROMPT_LIST_ITEMS = 12
+_CODE_PROMPT_MAP_ITEMS = 32
 
 
 class AgenticProposalStatus(str, Enum):
@@ -985,7 +989,7 @@ class AgenticProposalSession:
                 if research_diagnosis:
                     code_context["agentic_research_diagnosis"] = research_diagnosis
                 code_context["agentic_tool_observations"] = [
-                    _observation_prompt_payload(observation)
+                    _code_observation_prompt_payload(observation)
                     for observation in observations
                 ]
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
@@ -1555,16 +1559,8 @@ class AgenticProposalSession:
             planner_context = {
                 "session_id": state.session_id,
                 "phase": state.phase.value,
-                "allowed_tools": (
-                    self.tool_registry.allowed_tools(context)
-                    if self.tool_registry is not None
-                    else ()
-                ),
-                "allowed_tool_specs": (
-                    self.tool_registry.allowed_tool_specs(context)
-                    if self.tool_registry is not None
-                    else ()
-                ),
+                "allowed_tools": self._planner_allowed_tools(context),
+                "allowed_tool_specs": self._planner_allowed_tool_specs(context),
                 "tool_arg_guidance": self._tool_arg_guidance(context, observations),
                 "hypothesis_constraints": self._hypothesis_constraints(context),
                 "remaining_steps": self._remaining_tool_steps(state),
@@ -2083,6 +2079,23 @@ class AgenticProposalSession:
             observations.append(observation)
             if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
                 break
+            if (
+                observation.tool_name == "context.read_surface"
+                and _has_code_phase_surface_read(
+                    [*prior_observations, *observations],
+                    hypothesis,
+                )
+            ):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Code-phase selected-surface context is complete.",
+                    metadata={
+                        "stop_reason": "code_surface_context_satisfied",
+                        "tool_name": observation.tool_name,
+                        "selection_source": "code_phase_planner",
+                    },
+                )
+                break
 
         combined = [*prior_observations, *observations]
         if not _has_code_phase_surface_read(combined, hypothesis):
@@ -2100,10 +2113,36 @@ class AgenticProposalSession:
             "Collected code-phase proposal tool observations.",
             metadata={
                 "tool_names": [observation.tool_name for observation in observations],
-                "error_count": sum(1 for observation in observations if observation.is_error),
+                "error_count": sum(
+                    1 for observation in observations if observation.is_error
+                ),
             },
         )
         return observations
+
+    def _planner_allowed_tools(
+        self,
+        context: ProposalToolContext,
+    ) -> tuple[str, ...]:
+        if self.tool_registry is None:
+            return ()
+        return _filter_model_facing_tool_names(
+            self.tool_registry.allowed_tools(context),
+            context,
+        )
+
+    def _planner_allowed_tool_specs(
+        self,
+        context: ProposalToolContext,
+    ) -> tuple[dict[str, Any], ...]:
+        if self.tool_registry is None:
+            return ()
+        allowed = set(self._planner_allowed_tools(context))
+        return tuple(
+            spec
+            for spec in self.tool_registry.allowed_tool_specs(context)
+            if str(spec.get("name") or "") in allowed
+        )
 
     def _run_code_context_fixed_tools(
         self,
@@ -2162,7 +2201,12 @@ class AgenticProposalSession:
     ) -> tuple[str, ...]:
         if self.tool_registry is None:
             return ()
-        allowed = set(self.tool_registry.allowed_tools(context))
+        allowed = set(
+            _filter_model_facing_tool_names(
+                self.tool_registry.allowed_tools(context),
+                context,
+            )
+        )
         return tuple(sorted(allowed.intersection(_CODE_PHASE_TOOL_ALLOWLIST)))
 
     def _code_phase_allowed_tool_specs(
@@ -2270,7 +2314,7 @@ class AgenticProposalSession:
         if research_diagnosis:
             repair_context["agentic_research_diagnosis"] = research_diagnosis
         repair_context["agentic_tool_observations"] = [
-            _observation_prompt_payload(observation)
+            _code_observation_prompt_payload(observation)
             for observation in observations
         ]
         state.note(
@@ -2392,9 +2436,9 @@ class AgenticProposalSession:
                     "draft one of these boundary surfaces; component policies "
                     "are implementation hooks, not replacement research goals."
                 )
-                guidance["context.read_surface"]["allowed_surface_ids"] = (
-                    active_boundary
-                )
+                guidance["context.read_surface"][
+                    "allowed_surface_ids"
+                ] = active_boundary
             guidance["proposal.draft_hypothesis"] = forced_constraint
             guidance["proposal.schema_preview"] = forced_constraint
             guidance["proposal.target_permission_preview"] = forced_constraint
@@ -3416,9 +3460,7 @@ def _compact_contract_preview_observation(
             "protocol_run": payload.get("protocol_run"),
             "decision_run": payload.get("decision_run"),
             "issue_summary": _limit_string(payload.get("issue_summary"), 320),
-            "hypothesis": _compact_contract_preview_section(
-                payload.get("hypothesis")
-            ),
+            "hypothesis": _compact_contract_preview_section(payload.get("hypothesis")),
             "patch": _compact_contract_preview_section(payload.get("patch")),
             "compact_due_to_budget": True,
         }
@@ -3922,6 +3964,24 @@ def _drop_empty_dict(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item not in ({}, [], None)}
 
 
+def _filter_model_facing_tool_names(
+    tool_names: tuple[str, ...] | list[str],
+    context: ProposalToolContext,
+) -> tuple[str, ...]:
+    filtered: list[str] = []
+    for raw_name in tool_names:
+        name = str(raw_name or "").strip()
+        if not name:
+            continue
+        if name == _HOLDOUT_SUMMARY_TOOL:
+            # The direct tool remains available to deterministic callers, but
+            # model-facing planner prompts cannot safely render a tool name
+            # containing holdout terminology under strict sanitization.
+            continue
+        filtered.append(name)
+    return tuple(dict.fromkeys(filtered))
+
+
 def _safe_positive_int(value: Any) -> bool:
     try:
         return int(value) > 0
@@ -3940,6 +4000,110 @@ def _observation_prompt_payload(observation: ProposalObservation) -> dict[str, A
         "exposure_level": _enum_value(observation.exposure_level),
         "structured_payload": _sanitize_agentic_value(observation.structured_payload),
     }
+
+
+def _code_observation_prompt_payload(
+    observation: ProposalObservation,
+) -> dict[str, Any]:
+    payload = _observation_prompt_payload(observation)
+    payload["structured_payload"] = _code_prompt_observation_payload(
+        observation.tool_name,
+        observation.structured_payload,
+    )
+    return _drop_empty_dict(payload)
+
+
+def _code_prompt_observation_payload(
+    tool_name: str,
+    structured_payload: Mapping[str, Any],
+) -> Any:
+    safe_payload = _sanitize_agentic_value(structured_payload)
+    if tool_name == "context.read_surface" and isinstance(safe_payload, Mapping):
+        return _compact_code_surface_payload(safe_payload)
+    return _compact_code_prompt_value(safe_payload)
+
+
+def _compact_code_surface_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    artifact = payload.get("current_artifact")
+    current_artifact = (
+        _code_artifact_metadata(artifact) if isinstance(artifact, Mapping) else {}
+    )
+    return _drop_empty_mapping(
+        {
+            "surface": _compact_code_prompt_value(payload.get("surface")),
+            "surface_contract": _compact_code_prompt_value(
+                payload.get("surface_contract")
+            ),
+            "detail": payload.get("detail"),
+            "section": payload.get("section"),
+            "declared_targets": _compact_code_prompt_value(
+                payload.get("declared_targets")
+            ),
+            "target_file": payload.get("target_file"),
+            "current_artifact": current_artifact,
+        }
+    )
+
+
+def _code_artifact_metadata(artifact: Mapping[str, Any]) -> dict[str, Any]:
+    content_preview = artifact.get("content_preview")
+    metadata = {
+        "file_path": artifact.get("file_path"),
+        "readable": artifact.get("readable"),
+        "reason": artifact.get("reason"),
+        "truncated": artifact.get("truncated"),
+        "size_chars": artifact.get("size_chars"),
+        "max_chars": artifact.get("max_chars"),
+        "content_preview_chars": (
+            len(str(content_preview)) if content_preview is not None else None
+        ),
+        "content_preview_omitted": content_preview is not None or None,
+    }
+    return _drop_empty_mapping(metadata)
+
+
+def _compact_code_prompt_value(value: Any, *, depth: int = 0) -> Any:
+    if depth > 6:
+        return _limit_string(value, _CODE_PROMPT_STRING_CHARS)
+    if isinstance(value, Mapping):
+        compact: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= _CODE_PROMPT_MAP_ITEMS:
+                compact["_truncated_items"] = len(value) - _CODE_PROMPT_MAP_ITEMS
+                break
+            key_text = str(key)
+            if key_text in {
+                "content_preview",
+                "interface_summary",
+                "problem_object",
+                "target_file_code",
+                "champion_operators_code",
+                "reference_operators",
+            }:
+                if key_text == "content_preview":
+                    compact["content_preview_omitted"] = True
+                    compact["content_preview_chars"] = len(str(item))
+                elif item:
+                    compact[f"{key_text}_chars"] = len(str(item))
+                continue
+            if key_text == "current_artifact" and isinstance(item, Mapping):
+                compact[key_text] = _code_artifact_metadata(item)
+                continue
+            compact[key_text] = _compact_code_prompt_value(item, depth=depth + 1)
+        return _drop_empty_mapping(compact)
+    if isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, list):
+        items = [
+            _compact_code_prompt_value(item, depth=depth + 1)
+            for item in value[:_CODE_PROMPT_LIST_ITEMS]
+        ]
+        if len(value) > _CODE_PROMPT_LIST_ITEMS:
+            items.append({"_truncated_items": len(value) - _CODE_PROMPT_LIST_ITEMS})
+        return items
+    if isinstance(value, str):
+        return _limit_string(value, _CODE_PROMPT_STRING_CHARS) or ""
+    return value
 
 
 def _observation_selection_payload(observation: ProposalObservation) -> dict[str, Any]:
