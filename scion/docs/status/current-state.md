@@ -185,6 +185,26 @@ that do not improve the preview baseline. Screening feedback now prioritizes
 time, and phase runtime fields, making "ran but did not move phase-best"
 visible to the next agent turn.
 
+The latest 2-round no-op-feedback smoke did not validate that micro-eval
+repair because both rounds failed earlier in final `generate_patch` after
+three provider timeout attempts. The important finding is framework control:
+the code-phase tool loop reached the approved `solver_design` target and read
+the full selected surface, but the approved hypotheses still invited broad
+hybrid baseline/ILS/destroy-repair implementations that were too large for a
+single static code response. Treat this as an APS code-generation scope
+failure, not a reason to return to component-policy exposure.
+
+Current repair: solver-design code generation now defaults to a compact
+whole-algorithm implementation shape. The prompt asks for one construction or
+seeding path plus one bounded improvement/search loop, discourages preserving
+or expanding the inactive ALNS/VNS-style helper template, and explicitly
+allows the replacement file to be much shorter than the current template.
+When final patch generation times out, APS performs one semantic retry inside
+the same session with `code_generation_mode=compact_timeout_retry`, injects
+`prior_code_failure=code_generation_timeout`, tightens problem/interface/
+hypothesis caps, and records the retry in the transcript. This is separate
+from Contract-preview or code-self-check repair attempts.
+
 Next validation should be a 1-2 round independent smoke, not a long run. The
 first gate is whether the slimmed code path reaches Contract preview and
 Verification without another final `generate_patch` timeout. Preview-time
@@ -262,6 +282,12 @@ short run.
   final code observations to code-relevant feedback plus the latest full
   selected-surface read metadata, and caps solver-design static text fields
   before the target file is rendered.
+- The no-op-feedback smoke from commit `a653388` reached the same code-phase
+  tool path, but both final `generate_patch` calls timed out before Contract
+  preview. APS now handles this as a controlled code-scope issue:
+  solver-design prompts default to compact single-mechanism solver bodies, and
+  timeout failures trigger one in-session semantic retry with a smaller
+  compact-timeout mode instead of repeating the same broad request.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
@@ -346,18 +372,18 @@ control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest analyzed preview-repair smoke:
+Latest analyzed no-op-feedback smoke:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-preview-timeout-repair-smoke-sonnet-2r-20260513T232347Z
-model=claude-sonnet-4-6
+run_root=/home/clawd/research/scion-experiments/v04-solver-noop-feedback-smoke-sonnet-2r-20260514T112251Z
+model=claude-opus-4-6
 problem=cvrp
 protocol=formal
 rounds_requested=2
 rounds_completed=2 APS attempts, 0 screened experiments
 time_limit_sec=60
 agentic_session_timeout_sec=1800
-git_commit=0361d1a
+git_commit=a653388
 exit_code=0
 status=max_rounds_exhausted
 terminal_reason=code_generation_failed
@@ -366,34 +392,17 @@ analysis_doc=scion/docs/experiments/v0.4/v0.4-full-solver-subject-code-phase-age
 
 Summary:
 
-- The run did not validate the preview-timeout repair because neither round
-  reached Contract preview. Both final `generate_patch` calls timed out after
-  three provider attempts.
-- Code prompt sizes were still roughly 49k and 51k characters. The target file
-  appeared once in the normal `Target File` section and again through the full
-  code-phase `context.read_surface` observation payload.
-- Code phase repeated selected-surface reads instead of stopping after the
-  required full read was already available.
-- Strict planner sanitization erased `feedback.query_holdout_summary` inside
-  model-facing allowed-tool specs, leaving an empty tool name in the prompt.
-- The current repair compacts code-phase observations, caps code-phase
-  agentic context more tightly, stops after a successful full selected-surface
-  read, filters holdout-summary from model-facing planner specs, and gives
-  timeout retries a smaller bounded-code instruction.
-- The follow-up compact-prompt smoke validated part of that repair: one round
-  still timed out in final `generate_patch`, but the next round generated a
-  patch, passed Contract and Verification, and screened 16/16 valid pairs.
-  Code prompt user text fell to roughly 35.5k-35.8k characters and no trace
-  contained empty tool names or raw `content_preview` code payloads. The
-  screened candidate was active and had nonzero `solver_algorithm_best_delta`,
-  but was weaker than champion (`win_rate=0.0`, `median_delta=-71.0`,
-  `runtime_ratio_median=0.192`).
-- The current follow-up repair is more aggressive: code-generation prompts
-  keep only memory, screening/runtime feedback, branch state, errors, and the
-  latest full selected-surface read metadata; they omit initial compact surface
-  reads, list/problem reads, and schema/target preview observations. The
-  solver-design problem object, solver mechanics, interface spec, hypothesis
-  detail, and agentic observation/diagnosis blocks are separately capped.
+- The run did not validate no-op micro-eval or screening feedback priority
+  because neither round generated a patch.
+- Both rounds stayed on `modify/solver_design` and code phase read the full
+  selected surface, so boundary/tool plumbing was not the blocker.
+- Both final `generate_patch` calls timed out after three provider attempts,
+  with roughly 30k user characters plus a 9k system block.
+- The hypotheses were over-broad: hybrid construction, baseline-bootstrapped
+  iterative local search, and destroy/repair all in one patch.
+- Current repair therefore treats solver-design timeout as a scope-control
+  failure: the first code prompt is compact by default, and a timeout triggers
+  one in-session compact semantic retry.
 
 Next validation should again be a 1-2 round independent smoke. The first gate
 is reaching Contract preview/Verification without final code-generation

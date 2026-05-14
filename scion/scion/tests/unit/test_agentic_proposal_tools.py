@@ -47,6 +47,7 @@ from scion.proposal.agentic_session import (
     _self_check_from_previews,
 )
 from scion.proposal.engine import CreativeLayer
+from scion.proposal.llm_client import LLMRetryExhaustedError
 from scion.proposal.tools import (
     ContextExposurePolicy,
     HoldoutExposure,
@@ -99,6 +100,21 @@ class SequentialPatchCreative(FakeCreative):
         if not self.patches:
             return self.patch
         return self.patches.pop(0)
+
+
+class TimeoutThenPatchCreative(FakeCreative):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._timed_out = False
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        if not self._timed_out:
+            self._timed_out = True
+            raise LLMRetryExhaustedError(
+                "Tool call failed after 3 attempt(s). Last error: Request timed out"
+            )
+        return self.patch
 
 
 class PlanningCreative(FakeCreative):
@@ -3154,6 +3170,132 @@ def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> N
     assert "baseline_time_fraction" not in rendered_system
     assert "Target File" in rendered_prompt
     assert "def solve(instance, rng, time_limit_sec, context):" in rendered_prompt
+
+
+def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+
+    creative.generate_code(
+        {
+            "problem_summary": "CVRP.",
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "change_locus": "solver_design",
+            "code_generation_mode": "compact_timeout_retry",
+            "hypothesis_detail": (
+                "Implement a hybrid ALNS/VNS route-pool destroy-repair "
+                "population portfolio."
+            ),
+            "agentic_code_scope_control": {
+                "mode": "compact_timeout_retry",
+                "detected_broad_terms": [
+                    "hybrid",
+                    "alns",
+                    "destroy",
+                    "repair",
+                    "portfolio",
+                ],
+                "failure_detail": "code_generation_timeout",
+            },
+            "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+            "import_whitelist": "math, random, time",
+            "champion_operators_code": "",
+            "target_file_code": (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return None\n"
+            ),
+            "reference_operators": "",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "solver.py, adapter.py",
+        }
+    )
+
+    rendered_system = "\n".join(
+        block["text"] for blocks in client.system_blocks for block in blocks
+    )
+    rendered_prompt = "\n".join(client.prompts)
+
+    assert "Compact Solver-Design Implementation Scope" in rendered_system
+    assert "one primary mechanism" in rendered_system
+    assert "around 220 lines or less" in rendered_system
+    assert "do not implement a full portfolio" in rendered_system
+    assert "compact complete replacement file" in rendered_prompt
+
+
+def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
+    tmp_path: Path,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Implement a hybrid ALNS/VNS destroy-repair route-pool solver."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/solver_algorithm.py",
+        target_weakness="The current hook is inactive.",
+        expected_effect="Produce movement under solver_algorithm telemetry.",
+        novelty_signature={
+            "algorithm_family": "compact_timeout_retry",
+            "construction_strategy": "nearest_seed",
+            "improvement_strategy": "bounded_relocate",
+            "acceptance_strategy": "strict_improvement",
+            "runtime_budget_strategy": "time_checked_passes",
+        },
+    )
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return context.nearest_neighbor()\n"
+        ),
+    )
+    creative = TimeoutThenPatchCreative(hypothesis=hypothesis, patch=patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(
+            max_code_generation_timeout_retries=1,
+        ),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/solver_algorithm.py",
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            approved_hypothesis=hypothesis,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == patch
+    assert len(creative.code_contexts) == 2
+    assert creative.code_contexts[0]["code_generation_mode"] == "compact_solver_design"
+    retry_context = creative.code_contexts[1]
+    assert retry_context["code_generation_mode"] == "compact_timeout_retry"
+    assert "code_generation_timeout" in retry_context["prior_code_failure"]
+    assert (
+        retry_context["agentic_code_scope_control"]["required_shape"]
+        == "complete replacement file with one primary construction or seeding path and one bounded improvement/search loop"
+    )
+    assert any(
+        event.message == "Retrying patch generation with compact timeout scope."
+        for event in output.transcript
+    )
 
 
 def test_agentic_research_diagnosis_keeps_latest_nonempty_runtime_signal() -> None:

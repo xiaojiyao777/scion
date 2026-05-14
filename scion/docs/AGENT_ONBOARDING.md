@@ -222,6 +222,16 @@ Important current interpretation:
   keep only code-relevant feedback plus the latest full selected-surface read
   metadata, and separately cap solver-design problem object, mechanics,
   interface, hypothesis, observation, and diagnosis text.
+- A follow-up no-op-feedback smoke from commit `a653388` still did not reach
+  Contract preview: both rounds timed out at final `generate_patch`. This is
+  now treated as APS code-scope control, not missing problem exposure. Code
+  phase reached the full `solver_design` target; the remaining failure was
+  broad one-shot hybrid baseline/ILS/destroy-repair implementation scope.
+- Current framework repair: solver-design code prompts default to a compact
+  whole-algorithm body with one construction or seeding path plus one bounded
+  improvement/search loop, allow the replacement file to be much shorter than
+  the inactive template, and perform one in-session compact semantic retry
+  after final `generate_patch` timeout.
 - Next validation is still a 1-2 round independent smoke. The first gate is
   reaching Contract preview/Verification without final code-generation
   timeout; preview-time fail-closed behavior and solver-quality movement are

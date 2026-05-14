@@ -389,6 +389,28 @@ _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS = 1800
 _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS = 1800
 _SOLVER_DESIGN_CODE_INTERFACE_CHARS = 2400
 _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS = 3000
+_SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS = 1200
+_SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS = 1200
+_SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS = 1600
+_SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS = 1600
+_SOLVER_DESIGN_BROAD_SCOPE_TERMS = (
+    "hybrid",
+    "alns",
+    "vns",
+    "lns",
+    "destroy",
+    "repair",
+    "recombination",
+    "route-pool",
+    "route pool",
+    "population",
+    "portfolio",
+    "ensemble",
+    "multi-operator",
+    "multi operator",
+    "restart",
+    "perturb",
+)
 
 
 def _split_hypothesis_context(
@@ -698,20 +720,35 @@ def _split_code_context(
         "solver_design",
         "solver_algorithm",
     } or surface_name in {"solver_design", "solver_algorithm"}
+    compact_timeout_retry = (
+        str(D["code_generation_mode"]).strip() == "compact_timeout_retry"
+    )
     if is_solver_design_surface:
         problem_object = _limit_code_phase_text(
             problem_object,
-            _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS,
+            (
+                _SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS
+                if compact_timeout_retry
+                else _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS
+            ),
             label="problem object",
         )
         solver_mechanics = _limit_code_phase_text(
             solver_mechanics,
-            _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS,
+            (
+                _SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS
+                if compact_timeout_retry
+                else _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS
+            ),
             label="solver execution model",
         )
         interface_spec = _limit_code_phase_text(
             str(D["operator_interface_spec"]),
-            _SOLVER_DESIGN_CODE_INTERFACE_CHARS,
+            (
+                _SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS
+                if compact_timeout_retry
+                else _SOLVER_DESIGN_CODE_INTERFACE_CHARS
+            ),
             label="surface interface",
         )
     else:
@@ -728,19 +765,35 @@ def _split_code_context(
     )
     solver_design_code_rules = (
         "\n## Full Solver-Algorithm Rules\n"
-        "- For solver-design surfaces, helper functions are allowed and often "
-        "expected when they implement construction, route edits, search loops, "
-        "acceptance, perturbation, or telemetry.\n"
         "- Implement a complete `solve(instance, rng, time_limit_sec, context)` "
         "algorithm body. Do not return a lifecycle/config dictionary.\n"
+        "- Default to a compact replacement file: one coherent construction or "
+        "seeding path, one bounded improvement/search loop, and only the helper "
+        "functions needed for that path.\n"
+        "- Do not preserve the inactive template merely to edit a few constants, "
+        "and do not grow a helper forest for ALNS/VNS, route-pool, destroy/repair, "
+        "and perturbation all at once. Later rounds can add breadth after this "
+        "patch proves movement.\n"
         "- Do not submit a shallow wrapper that only calls `context.baseline`, "
         "changes baseline budget/params, or adds a tiny post-baseline polish. "
         "If baseline is used, it must be paired with a bounded algorithmic "
         "search loop and telemetry via `context.record_move` or "
         "`context.record_iteration`.\n"
         "- You may change algorithm strategy and runtime scheduling, but not "
-        "CVRP objective semantics, capacity/fleet constraints, parsing, seeds, "
+        "problem objective semantics, feasibility constraints, parsing, seeds, "
         "protocol splits, Decision rules, or adapter/runtime files.\n"
+        if is_solver_design_surface
+        else ""
+    )
+    solver_design_scope_control = _solver_design_scope_control_section(
+        D,
+        is_solver_design_surface=is_solver_design_surface,
+    )
+    solver_design_user_constraints = (
+        "- For solver-design surfaces, return a compact complete replacement "
+        "file. The file may be much shorter than the current inactive template "
+        "if it still implements the approved `solve(...)` interface and "
+        "records runtime/search telemetry.\n"
         if is_solver_design_surface
         else ""
     )
@@ -756,7 +809,8 @@ def _split_code_context(
         "- Prefer simple, direct code over clever abstractions.\n"
         "- Match the coding style of the existing champion research-surface files.\n"
         "- Do NOT add logging, print statements, or debug output.\n"
-        f"{solver_design_code_rules}\n"
+        f"{solver_design_code_rules}"
+        f"{solver_design_scope_control}\n"
         "## Feasibility is Non-Negotiable\n"
         "An operator surface that produces infeasible solutions is worse than no change. "
         "Follow the problem-specific feasibility and consistency rules in the interface specification exactly.\n\n"
@@ -841,6 +895,7 @@ def _split_code_context(
         f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
         f"- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or the original if no valid move is found\n"
         f"- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds\n\n"
+        f"{solver_design_user_constraints}\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"
         f"{{\n"
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
@@ -894,11 +949,77 @@ def _code_hypothesis_detail(
     detail = str(context.get("hypothesis_detail") or "")
     if not is_solver_design_surface:
         return detail
+    if str(context.get("code_generation_mode") or "").strip() == "compact_timeout_retry":
+        return _limit_code_phase_text(
+            detail,
+            _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS,
+            label="hypothesis detail",
+        )
     return _limit_code_phase_text(
         detail,
         _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS,
         label="hypothesis detail",
     )
+
+
+def _solver_design_scope_control_section(
+    context: Mapping[str, Any],
+    *,
+    is_solver_design_surface: bool,
+) -> str:
+    if not is_solver_design_surface:
+        return ""
+    scope = context.get("agentic_code_scope_control")
+    if not isinstance(scope, Mapping):
+        scope = {}
+    mode = str(
+        context.get("code_generation_mode") or scope.get("mode") or ""
+    ).strip()
+    broad_terms = _solver_design_broad_terms(context)
+    if not broad_terms and isinstance(scope.get("detected_broad_terms"), list):
+        broad_terms = [
+            str(term)
+            for term in scope.get("detected_broad_terms", ())
+            if str(term).strip()
+        ]
+
+    lines = [
+        "",
+        "## Compact Solver-Design Implementation Scope",
+        "- Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
+        "- Implement one primary mechanism now. Prefer a direct seed/construction plus a bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
+        "- Suggested size target: keep the replacement file around 220 lines or less and around eight helper functions or fewer when practical.",
+        "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` or `time_limit_sec` through the provided context.",
+        "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
+    ]
+    if mode:
+        lines.append(f"- Current code-generation mode: `{mode}`.")
+    if broad_terms:
+        lines.append(
+            "- The approved hypothesis mentions broad mechanisms "
+            f"({', '.join(dict.fromkeys(broad_terms))}). Reduce them to one "
+            "executable path for this patch; do not implement a full portfolio."
+        )
+    if scope.get("failure_detail"):
+        lines.append(
+            "- Previous code generation timed out. Treat that as an instruction "
+            "to shrink implementation breadth before adding algorithmic detail."
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _solver_design_broad_terms(context: Mapping[str, Any]) -> list[str]:
+    text = "\n".join(
+        str(context.get(key) or "")
+        for key in (
+            "hypothesis_detail",
+            "prior_code_failure",
+            "target_runtime_effect",
+            "complexity_claim",
+            "runtime_budget_strategy",
+        )
+    ).lower()
+    return [term for term in _SOLVER_DESIGN_BROAD_SCOPE_TERMS if term in text]
 
 
 def _limit_code_phase_text(text: str, max_chars: int, *, label: str) -> str:

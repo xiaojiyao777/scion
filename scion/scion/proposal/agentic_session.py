@@ -112,6 +112,25 @@ _CODE_PROMPT_FEEDBACK_TOOLS = frozenset(
         "context.read_branch_state",
     }
 )
+_SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
+_SOLVER_DESIGN_BROAD_TERMS = (
+    "hybrid",
+    "alns",
+    "vns",
+    "lns",
+    "destroy",
+    "repair",
+    "recombination",
+    "route-pool",
+    "route pool",
+    "population",
+    "portfolio",
+    "ensemble",
+    "multi-operator",
+    "multi operator",
+    "restart",
+    "perturb",
+)
 
 
 class AgenticProposalStatus(str, Enum):
@@ -175,6 +194,7 @@ class AgenticToolLoopConfig:
     max_repeated_tool_calls: int = 2
     max_code_tool_calls: int = 4
     max_code_repair_attempts: int = 1
+    max_code_generation_timeout_retries: int = 1
 
 
 @dataclass(frozen=True)
@@ -1019,8 +1039,18 @@ class AgenticProposalSession:
                     _code_observation_prompt_payload(observation)
                     for observation in _code_prompt_observations(observations)
                 ]
+            code_context = _with_code_scope_control(
+                code_context,
+                hypothesis,
+                timeout_retry=False,
+            )
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
-            patch = self._creative.generate_code(code_context)
+            patch = self._generate_code_with_timeout_retry(
+                state=state,
+                hypothesis=hypothesis,
+                code_context=code_context,
+                observations=observations,
+            )
             code_repair_attempts_used = 0
         except self._SESSION_ERROR_TYPES as exc:
             output = self._partial_hypothesis_output(
@@ -2411,7 +2441,17 @@ class AgenticProposalSession:
                 "repair_attempt": repair_attempt,
             },
         )
-        return self._creative.generate_code(repair_context)
+        repair_context = _with_code_scope_control(
+            repair_context,
+            hypothesis,
+            timeout_retry=False,
+        )
+        return self._generate_code_with_timeout_retry(
+            state=state,
+            hypothesis=hypothesis,
+            code_context=repair_context,
+            observations=observations,
+        )
 
     def _repair_patch_after_code_self_check(
         self,
@@ -2452,7 +2492,60 @@ class AgenticProposalSession:
                 "issue": issue_detail,
             },
         )
-        return self._creative.generate_code(repair_context)
+        repair_context = _with_code_scope_control(
+            repair_context,
+            hypothesis,
+            timeout_retry=False,
+        )
+        return self._generate_code_with_timeout_retry(
+            state=state,
+            hypothesis=hypothesis,
+            code_context=repair_context,
+            observations=observations,
+        )
+
+    def _generate_code_with_timeout_retry(
+        self,
+        *,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        code_context: Mapping[str, Any],
+        observations: list[ProposalObservation],
+    ) -> PatchProposal:
+        assert self._creative is not None
+        max_retries = max(
+            0,
+            int(self._tool_loop_config.max_code_generation_timeout_retries),
+        )
+        attempt_context: Mapping[str, Any] = code_context
+        for attempt in range(max_retries + 1):
+            try:
+                return self._creative.generate_code(attempt_context)
+            except self._SESSION_ERROR_TYPES as exc:
+                if (
+                    attempt >= max_retries
+                    or self._session_timeout_reached(state)
+                    or not _is_code_generation_timeout(exc)
+                ):
+                    raise
+                attempt_context = _code_timeout_retry_context(
+                    attempt_context,
+                    hypothesis,
+                    exc,
+                    observations,
+                )
+                state.note(
+                    AgenticProposalPhase.DRAFT_PATCH,
+                    "Retrying patch generation with compact timeout scope.",
+                    metadata={
+                        "selected_surface": hypothesis.change_locus,
+                        "target_file": hypothesis.target_file,
+                        "retry_attempt": attempt + 1,
+                        "max_timeout_retries": max_retries,
+                        "error": type(exc).__name__,
+                    },
+                )
+        raise RuntimeError("unreachable code-generation timeout retry state")
 
     def _required_context_satisfied(
         self,
@@ -3558,6 +3651,9 @@ def _tool_loop_config_payload(config: AgenticToolLoopConfig) -> dict[str, Any]:
         "max_repeated_tool_calls": int(config.max_repeated_tool_calls),
         "max_code_tool_calls": int(config.max_code_tool_calls),
         "max_code_repair_attempts": int(config.max_code_repair_attempts),
+        "max_code_generation_timeout_retries": int(
+            config.max_code_generation_timeout_retries
+        ),
     }
 
 
@@ -4137,6 +4233,145 @@ def _code_observation_prompt_payload(
         observation.structured_payload,
     )
     return _drop_empty_dict(payload)
+
+
+def _with_code_scope_control(
+    code_context: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+    *,
+    timeout_retry: bool,
+    failure_detail: str | None = None,
+) -> dict[str, Any]:
+    prepared = dict(code_context)
+    if not _is_solver_design_code_context(prepared, hypothesis):
+        return prepared
+    if timeout_retry:
+        prepared["code_generation_mode"] = "compact_timeout_retry"
+    else:
+        prepared.setdefault("code_generation_mode", "compact_solver_design")
+    prepared["agentic_code_scope_control"] = _solver_design_code_scope_control(
+        hypothesis,
+        timeout_retry=timeout_retry,
+        failure_detail=failure_detail,
+    )
+    return prepared
+
+
+def _code_timeout_retry_context(
+    code_context: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+    exc: BaseException,
+    observations: list[ProposalObservation],
+) -> dict[str, Any]:
+    detail = _code_timeout_failure_detail(exc)
+    retry_context = _with_code_scope_control(
+        dict(code_context),
+        hypothesis,
+        timeout_retry=True,
+        failure_detail=detail,
+    )
+    retry_context["prior_code_failure"] = detail
+    if observations:
+        research_diagnosis = _research_diagnosis_from_observations(observations)
+        if research_diagnosis:
+            retry_context["agentic_research_diagnosis"] = research_diagnosis
+        retry_context["agentic_tool_observations"] = [
+            _code_observation_prompt_payload(observation)
+            for observation in _code_prompt_observations(observations)
+        ]
+    return retry_context
+
+
+def _code_timeout_failure_detail(exc: BaseException) -> str:
+    text = str(exc).strip() or type(exc).__name__
+    return (
+        "code_generation_timeout: final patch generation timed out before "
+        "returning a patch. Retry with a compact bounded implementation. "
+        f"Original error: {text}"
+    )
+
+
+def _is_code_generation_timeout(exc: BaseException) -> bool:
+    if isinstance(exc, LLMTimeoutError):
+        return True
+    if isinstance(exc, LLMRetryExhaustedError):
+        lowered = str(exc).lower()
+        return "timed out" in lowered or "timeout" in lowered
+    return False
+
+
+def _is_solver_design_code_context(
+    code_context: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+) -> bool:
+    surface = str(
+        code_context.get("research_surface_name")
+        or code_context.get("change_locus")
+        or hypothesis.change_locus
+        or ""
+    ).strip()
+    kind = str(code_context.get("research_surface_kind") or "").strip()
+    target_file = str(
+        code_context.get("target_file") or hypothesis.target_file or ""
+    ).strip()
+    return (
+        surface in _SOLVER_DESIGN_SURFACE_NAMES
+        or kind in _SOLVER_DESIGN_SURFACE_NAMES
+        or target_file.endswith("policies/solver_algorithm.py")
+    )
+
+
+def _solver_design_code_scope_control(
+    hypothesis: HypothesisProposal,
+    *,
+    timeout_retry: bool,
+    failure_detail: str | None,
+) -> dict[str, Any]:
+    broad_terms = _solver_design_broad_terms(hypothesis)
+    return _drop_empty_mapping(
+        {
+            "mode": (
+                "compact_timeout_retry"
+                if timeout_retry
+                else "compact_solver_design"
+            ),
+            "surface": hypothesis.change_locus,
+            "target_file": hypothesis.target_file,
+            "failure_detail": failure_detail,
+            "detected_broad_terms": broad_terms,
+            "required_shape": (
+                "complete replacement file with one primary construction or "
+                "seeding path and one bounded improvement/search loop"
+            ),
+            "scope_rule": (
+                "Reduce broad hybrid hypotheses to a single executable "
+                "algorithm body for this patch. Do not preserve or expand the "
+                "inactive template helper forest."
+            ),
+            "runtime_rule": (
+                "Use explicit loop caps and context time checks; runtime is an "
+                "optimization objective and evidence field."
+            ),
+        }
+    )
+
+
+def _solver_design_broad_terms(
+    hypothesis: HypothesisProposal,
+) -> list[str]:
+    fields = (
+        hypothesis.hypothesis_text,
+        hypothesis.target_weakness,
+        hypothesis.expected_effect,
+        hypothesis.complexity_claim,
+        hypothesis.runtime_budget_strategy,
+    )
+    text = "\n".join(str(field or "") for field in fields).lower()
+    return [
+        term
+        for term in _SOLVER_DESIGN_BROAD_TERMS
+        if term in text
+    ]
 
 
 def _code_prompt_observations(
