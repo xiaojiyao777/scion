@@ -85,6 +85,14 @@ _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
 _CODE_PROMPT_STRING_CHARS = 1600
 _CODE_PROMPT_LIST_ITEMS = 12
 _CODE_PROMPT_MAP_ITEMS = 32
+_CODE_PROMPT_FEEDBACK_TOOLS = frozenset(
+    {
+        "memory.query",
+        "feedback.query_screening",
+        "feedback.query_runtime",
+        "context.read_branch_state",
+    }
+)
 
 
 class AgenticProposalStatus(str, Enum):
@@ -990,7 +998,7 @@ class AgenticProposalSession:
                     code_context["agentic_research_diagnosis"] = research_diagnosis
                 code_context["agentic_tool_observations"] = [
                     _code_observation_prompt_payload(observation)
-                    for observation in observations
+                    for observation in _code_prompt_observations(observations)
                 ]
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
             patch = self._creative.generate_code(code_context)
@@ -2315,7 +2323,7 @@ class AgenticProposalSession:
             repair_context["agentic_research_diagnosis"] = research_diagnosis
         repair_context["agentic_tool_observations"] = [
             _code_observation_prompt_payload(observation)
-            for observation in observations
+            for observation in _code_prompt_observations(observations)
         ]
         state.note(
             AgenticProposalPhase.DRAFT_PATCH,
@@ -4011,6 +4019,31 @@ def _code_observation_prompt_payload(
         observation.structured_payload,
     )
     return _drop_empty_dict(payload)
+
+
+def _code_prompt_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[ProposalObservation]:
+    selected: list[ProposalObservation] = []
+    latest_full_surface: ProposalObservation | None = None
+    for observation in observations:
+        if observation.tool_name == "context.read_surface":
+            payload = observation.structured_payload
+            if (
+                not observation.is_error
+                and isinstance(payload, Mapping)
+                and str(payload.get("detail") or "") == "full"
+            ):
+                latest_full_surface = observation
+            continue
+        if observation.tool_name in _CODE_PROMPT_FEEDBACK_TOOLS:
+            selected.append(observation)
+            continue
+        if observation.is_error:
+            selected.append(observation)
+    if latest_full_surface is not None:
+        selected.append(latest_full_surface)
+    return selected
 
 
 def _code_prompt_observation_payload(

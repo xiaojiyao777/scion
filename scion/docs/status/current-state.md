@@ -236,6 +236,12 @@ short run.
   code-phase tool observations, filters holdout summary from model-facing
   planner specs, stops repeated code-phase surface reads, and normalizes
   timeout retry guidance.
+- The compact-prompt smoke from commit `7f7ef04` reduced code prompt user text
+  to roughly 35.5k-35.8k and reached screening in round 2, but round 1 still
+  timed out at final `generate_patch`. Current prompt repair therefore filters
+  final code observations to code-relevant feedback plus the latest full
+  selected-surface read metadata, and caps solver-design static text fields
+  before the target file is rendered.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
@@ -354,6 +360,20 @@ Summary:
   agentic context more tightly, stops after a successful full selected-surface
   read, filters holdout-summary from model-facing planner specs, and gives
   timeout retries a smaller bounded-code instruction.
+- The follow-up compact-prompt smoke validated part of that repair: one round
+  still timed out in final `generate_patch`, but the next round generated a
+  patch, passed Contract and Verification, and screened 16/16 valid pairs.
+  Code prompt user text fell to roughly 35.5k-35.8k characters and no trace
+  contained empty tool names or raw `content_preview` code payloads. The
+  screened candidate was active and had nonzero `solver_algorithm_best_delta`,
+  but was weaker than champion (`win_rate=0.0`, `median_delta=-71.0`,
+  `runtime_ratio_median=0.192`).
+- The current follow-up repair is more aggressive: code-generation prompts
+  keep only memory, screening/runtime feedback, branch state, errors, and the
+  latest full selected-surface read metadata; they omit initial compact surface
+  reads, list/problem reads, and schema/target preview observations. The
+  solver-design problem object, solver mechanics, interface spec, hypothesis
+  detail, and agentic observation/diagnosis blocks are separately capped.
 
 Next validation should again be a 1-2 round independent smoke. The first gate
 is reaching Contract preview/Verification without final code-generation
@@ -713,6 +733,32 @@ Current preview-timeout repair validation:
 ```
 
 Current prompt/tool-loop repair validation:
+
+```text
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+
+102 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_research_surfaces.py \
+  scion/scion/tests/test_cvrp_adapter.py \
+  scion/scion/tests/test_contract.py -q
+
+198 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest \
+  scion/scion/tests/unit/test_g4_plumbing.py \
+  scion/scion/tests/unit/test_sprint_j3_prompt_plumbing.py -q
+
+29 passed
+
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+
+1619 passed, 1 skipped
+```
+
+Current aggressive compact-prompt repair validation:
 
 ```text
 /home/clawd/miniconda3/envs/claw/bin/python -m pytest \

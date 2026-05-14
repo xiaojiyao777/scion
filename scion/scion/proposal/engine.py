@@ -383,8 +383,12 @@ class _DefaultDict(dict):
 _CACHE_5M = {"type": "ephemeral"}
 _AGENTIC_RESEARCH_DIAGNOSIS_CHARS = 12000
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 24000
-_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 8000
-_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 10000
+_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 6000
+_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 6000
+_SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS = 1800
+_SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS = 1800
+_SOLVER_DESIGN_CODE_INTERFACE_CHARS = 2400
+_SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS = 3000
 
 
 def _split_hypothesis_context(
@@ -688,6 +692,30 @@ def _split_code_context(
     D = _DefaultDict(context)
     solver_mechanics = str(D["solver_mechanics"]).strip()
     problem_object = str(D["problem_object"]).strip()
+    surface_name = str(D["research_surface_name"] or D["change_locus"]).strip()
+    surface_kind = str(D["research_surface_kind"] or "operator").strip()
+    is_solver_design_surface = surface_kind in {
+        "solver_design",
+        "solver_algorithm",
+    } or surface_name in {"solver_design", "solver_algorithm"}
+    if is_solver_design_surface:
+        problem_object = _limit_code_phase_text(
+            problem_object,
+            _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS,
+            label="problem object",
+        )
+        solver_mechanics = _limit_code_phase_text(
+            solver_mechanics,
+            _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS,
+            label="solver execution model",
+        )
+        interface_spec = _limit_code_phase_text(
+            str(D["operator_interface_spec"]),
+            _SOLVER_DESIGN_CODE_INTERFACE_CHARS,
+            label="surface interface",
+        )
+    else:
+        interface_spec = str(D["operator_interface_spec"])
     problem_object_section = (
         f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
     )
@@ -695,15 +723,9 @@ def _split_code_context(
         f"## Solver Execution Model\n{solver_mechanics}\n\n" if solver_mechanics else ""
     )
 
-    surface_name = str(D["research_surface_name"] or D["change_locus"]).strip()
-    surface_kind = str(D["research_surface_kind"] or "operator").strip()
     surface_label = (
         f"{surface_name} [{surface_kind}]" if surface_name else f"[{surface_kind}]"
     )
-    is_solver_design_surface = surface_kind in {
-        "solver_design",
-        "solver_algorithm",
-    } or surface_name in {"solver_design", "solver_algorithm"}
     solver_design_code_rules = (
         "\n## Full Solver-Algorithm Rules\n"
         "- For solver-design surfaces, helper functions are allowed and often "
@@ -744,7 +766,7 @@ def _split_code_context(
         f"## Research Surface Interface Specification\n"
         f"Active surface: {surface_label}\n"
         f"Follow this interface exactly:\n\n"
-        f"{D['operator_interface_spec']}\n\n"
+        f"{interface_spec}\n\n"
         f"## Allowed Imports\n"
         f"Only use modules from this whitelist \u2014 any other import will be rejected:\n"
         f"{D['import_whitelist']}"
@@ -791,9 +813,10 @@ def _split_code_context(
                 "## Previous Attempt Failed\n"
                 "The previous code generation attempt timed out before "
                 "returning a patch. Keep the implementation compact and "
-                "bounded: implement one coherent algorithm body, avoid "
-                "large helper forests, and do not duplicate code already "
-                "present in the target file unless it must change.\n\n"
+                "bounded. Implement one coherent solver body with at most "
+                "a small set of helpers, prefer one construction path plus "
+                "one bounded improvement loop, and avoid large ALNS helper "
+                "forests unless absolutely necessary.\n\n"
             )
         else:
             prior_failure_section = (
@@ -808,7 +831,7 @@ def _split_code_context(
 
     user_prompt = (
         f"{prior_failure_section}"
-        f"## Hypothesis to Implement\n{D['hypothesis_detail']}\n\n"
+        f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"## Target File (current content)\n{D['target_file_code']}\n\n"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"
@@ -862,6 +885,27 @@ def _agentic_research_context_block(
             f"{_bounded_json(observations, _agentic_observation_chars(code_phase))}"
         )
     return "\n\n".join(parts)
+
+
+def _code_hypothesis_detail(
+    context: Mapping[str, Any],
+    is_solver_design_surface: bool,
+) -> str:
+    detail = str(context.get("hypothesis_detail") or "")
+    if not is_solver_design_surface:
+        return detail
+    return _limit_code_phase_text(
+        detail,
+        _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS,
+        label="hypothesis detail",
+    )
+
+
+def _limit_code_phase_text(text: str, max_chars: int, *, label: str) -> str:
+    if not text or len(text) <= max_chars:
+        return text
+    suffix = f"\n... <truncated {label} for compact code generation>"
+    return text[: max(0, max_chars - len(suffix))] + suffix
 
 
 def _agentic_research_diagnosis_chars(code_phase: bool) -> int:

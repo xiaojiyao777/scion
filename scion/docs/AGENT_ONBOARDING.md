@@ -216,6 +216,12 @@ Important current interpretation:
   successful full selected-surface read, holdout summary is filtered from
   model-facing planner specs while remaining callable directly, and timeout
   retries ask for one compact bounded algorithm body.
+- A compact-prompt smoke from commit `7f7ef04` reached Contract,
+  Verification, and screening in round 2, but round 1 still timed out at final
+  `generate_patch`. Current repair is therefore stricter: final code prompts
+  keep only code-relevant feedback plus the latest full selected-surface read
+  metadata, and separately cap solver-design problem object, mechanics,
+  interface, hypothesis, observation, and diagnosis text.
 - Next validation is still a 1-2 round independent smoke. The first gate is
   reaching Contract preview/Verification without final code-generation
   timeout; preview-time fail-closed behavior and solver-quality movement are

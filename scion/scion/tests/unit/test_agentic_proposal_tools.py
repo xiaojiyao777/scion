@@ -3883,8 +3883,13 @@ def test_planner_stop_after_problem_context_falls_back_to_feedback_and_surface_r
     assert any(
         observation["tool_name"] == "context.read_surface"
         and observation["structured_payload"]["surface"]["name"] == "search_policy"
-        and observation["structured_payload"]["detail"] == "compact"
-        and observation["structured_payload"]["current_artifact"]["max_chars"] == 800
+        and observation["structured_payload"]["detail"] == "full"
+        and observation["structured_payload"]["current_artifact"]["max_chars"] == 12000
+        and observation["structured_payload"]["current_artifact"][
+            "content_preview_omitted"
+        ]
+        and "content_preview"
+        not in observation["structured_payload"]["current_artifact"]
         for observation in code_observations
     )
     hypothesis_observation_names = {
