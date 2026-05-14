@@ -1278,6 +1278,44 @@ Latest validation:
 1621 passed, 1 skipped in 73.91s
 ```
 
+Latest code self-check repair:
+
+- Independent smoke:
+  `/home/clawd/research/scion-experiments/v04-solver-preview-repair-smoke-sonnet-2r-20260514T073717Z`
+  completed 2/2 rounds on commit `c011ac2` with `n_experiments=0`.
+- Round 1 failed after three code-generation provider timeouts.
+- Round 2 failed closed in Contract preview: first on
+  `C9c_complexity_bound` for an uncapped `while` loop, then on
+  `C6_ast_syntax` at line 341 after repair.
+- The repair response's own `test_hint` said the generated
+  `_destroy_repair_regret` code still had a syntax error needing a fix, yet APS
+  still passed it to Contract preview.
+- APS now treats such self-reported unresolved code issues as code self-check
+  failures before Contract preview. It may spend the one configured code-repair
+  attempt with explicit `agentic_code_self_check_feedback`; if the repaired
+  patch still self-reports unresolved syntax/compile/incomplete/TODO issues,
+  the session fails closed as `code_generation_failed`.
+- Code self-check repair and Contract-preview repair now share
+  `max_code_repair_attempts`.
+
+Latest focused validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+```
+
+```text
+104 passed in 2.88s
+```
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+```
+
+```text
+1623 passed, 1 skipped in 74.48s
+```
+
 ## Next Actions
 
 P1:
@@ -1291,6 +1329,10 @@ P1:
   The first gate is that bad full-solver candidates fail in Contract preview
   with concrete synthetic runtime diagnostics instead of reaching heavy
   Verification with opaque V5/no-output symptoms.
+- Re-run the short smoke after the code self-check repair. The first gate is
+  that generated patches whose own `test_hint` admits unresolved syntax or
+  implementation issues fail before Contract preview or are repaired once with
+  explicit self-check feedback.
 - Keep route-pool telemetry as evidence inside that lifecycle:
   `main_search_route_pool_sample_count`,
   `main_search_route_pool_recombined_routes`, and

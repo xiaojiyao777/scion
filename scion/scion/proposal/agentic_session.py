@@ -82,6 +82,25 @@ _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
+_SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\b(?:has|contains)\s+(?:a\s+)?syntax error\b"), "syntax_error"),
+    (re.compile(r"\binvalid syntax\b"), "syntax_error"),
+    (re.compile(r"\b(?:does not|will not|won't)\s+compile\b"), "does_not_compile"),
+    (re.compile(r"\bneeds\s+(?:fixing|to be fixed)\b"), "needs_fixing"),
+    (re.compile(r"\bmust\s+be\s+fixed\b"), "needs_fixing"),
+    (re.compile(r"\bstill\s+(?:broken|failing|fails)\b"), "still_failing"),
+    (re.compile(r"\b(?:not implemented|not yet implemented)\b"), "not_implemented"),
+    (re.compile(r"\b(?:incomplete|unfinished)\b"), "incomplete"),
+    (re.compile(r"\b(?:todo|fixme)\b"), "placeholder"),
+)
+_SELF_REPORTED_SYNTAX_NEGATIONS = (
+    "no syntax error",
+    "no syntax errors",
+    "without syntax error",
+    "without syntax errors",
+    "valid syntax",
+    "syntax-valid",
+)
 _CODE_PROMPT_STRING_CHARS = 1600
 _CODE_PROMPT_LIST_ITEMS = 12
 _CODE_PROMPT_MAP_ITEMS = 32
@@ -1002,6 +1021,7 @@ class AgenticProposalSession:
                 ]
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
             patch = self._creative.generate_code(code_context)
+            code_repair_attempts_used = 0
         except self._SESSION_ERROR_TYPES as exc:
             output = self._partial_hypothesis_output(
                 request=request,
@@ -1027,6 +1047,42 @@ class AgenticProposalSession:
             state.status = output.status
             return self._persist(output, state)
 
+        self_reported_issue = _patch_self_reported_unresolved_issue(patch)
+        if (
+            self_reported_issue is not None
+            and code_repair_attempts_used
+            < self._tool_loop_config.max_code_repair_attempts
+            and not self._session_timeout_reached(state)
+        ):
+            patch = self._repair_patch_after_code_self_check(
+                request=request,
+                state=state,
+                hypothesis=hypothesis,
+                code_context=code_context,
+                observations=observations,
+                patch=patch,
+                issue_detail=self_reported_issue,
+                repair_attempt=code_repair_attempts_used + 1,
+            )
+            code_repair_attempts_used += 1
+            self_reported_issue = _patch_self_reported_unresolved_issue(patch)
+        if self_reported_issue is not None:
+            output = self._partial_hypothesis_output(
+                request=request,
+                session_id=session_id,
+                hypothesis=hypothesis,
+                detail=self_reported_issue,
+                evidence_used=tuple(evidence),
+                self_check=_self_check_from_previews(observations),
+            )
+            state.status = output.status
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Patch generation failed because generated patch self-reported an unresolved code issue.",
+                metadata={"detail": self_reported_issue},
+            )
+            return self._persist(output, state)
+
         if tool_context is not None:
             patch_preview = self._run_contract_preview_tool(
                 tool_context,
@@ -1039,7 +1095,8 @@ class AgenticProposalSession:
             if (
                 not patch_preview.is_error
                 and not bool(patch_preview.structured_payload.get("passed"))
-                and self._tool_loop_config.max_code_repair_attempts > 0
+                and code_repair_attempts_used
+                < self._tool_loop_config.max_code_repair_attempts
                 and not self._session_timeout_reached(state)
             ):
                 try:
@@ -1050,7 +1107,9 @@ class AgenticProposalSession:
                         code_context=code_context,
                         observations=observations,
                         failed_preview=patch_preview,
+                        repair_attempt=code_repair_attempts_used + 1,
                     )
+                    code_repair_attempts_used += 1
                 except self._SESSION_ERROR_TYPES as exc:
                     output = self._partial_hypothesis_output(
                         request=request,
@@ -1065,6 +1124,23 @@ class AgenticProposalSession:
                         AgenticProposalPhase.FINALIZE,
                         "Patch repair generation failed after Contract preview feedback.",
                         metadata={"error": type(exc).__name__},
+                    )
+                    return self._persist(output, state)
+                self_reported_issue = _patch_self_reported_unresolved_issue(patch)
+                if self_reported_issue is not None:
+                    output = self._partial_hypothesis_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        detail=self_reported_issue,
+                        evidence_used=tuple(evidence),
+                        self_check=_self_check_from_previews(observations),
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Patch repair failed because generated patch self-reported an unresolved code issue.",
+                        metadata={"detail": self_reported_issue},
                     )
                     return self._persist(output, state)
                 repair_preview = self._run_contract_preview_tool(
@@ -2309,6 +2385,7 @@ class AgenticProposalSession:
         code_context: Mapping[str, Any],
         observations: list[ProposalObservation],
         failed_preview: ProposalObservation,
+        repair_attempt: int = 1,
     ) -> PatchProposal:
         repair_context = dict(code_context)
         repair_context["prior_code_failure"] = (
@@ -2331,7 +2408,48 @@ class AgenticProposalSession:
             metadata={
                 "selected_surface": hypothesis.change_locus,
                 "target_file": hypothesis.target_file,
-                "repair_attempt": 1,
+                "repair_attempt": repair_attempt,
+            },
+        )
+        return self._creative.generate_code(repair_context)
+
+    def _repair_patch_after_code_self_check(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        code_context: Mapping[str, Any],
+        observations: list[ProposalObservation],
+        patch: PatchProposal,
+        issue_detail: str,
+        repair_attempt: int,
+    ) -> PatchProposal:
+        del request
+        repair_context = dict(code_context)
+        repair_context["prior_code_failure"] = issue_detail
+        repair_context["agentic_code_self_check_feedback"] = {
+            "passed": False,
+            "issue": issue_detail,
+            "file_path": patch.file_path,
+            "action": patch.action,
+            "test_hint": patch.test_hint,
+        }
+        research_diagnosis = _research_diagnosis_from_observations(observations)
+        if research_diagnosis:
+            repair_context["agentic_research_diagnosis"] = research_diagnosis
+        repair_context["agentic_tool_observations"] = [
+            _code_observation_prompt_payload(observation)
+            for observation in _code_prompt_observations(observations)
+        ]
+        state.note(
+            AgenticProposalPhase.DRAFT_PATCH,
+            "Regenerating patch proposal after code self-check feedback.",
+            metadata={
+                "selected_surface": hypothesis.change_locus,
+                "target_file": hypothesis.target_file,
+                "repair_attempt": repair_attempt,
+                "issue": issue_detail,
             },
         )
         return self._creative.generate_code(repair_context)
@@ -4549,3 +4667,26 @@ def _sanitize_agentic_text(text: str) -> str:
             continue
         safe_lines.append(line)
     return "\n".join(safe_lines)
+
+
+def _patch_self_reported_unresolved_issue(patch: PatchProposal) -> str | None:
+    hint = str(patch.test_hint or "").strip()
+    if not hint:
+        return None
+    normalized = re.sub(r"\s+", " ", hint).strip()
+    lowered = normalized.lower()
+    for pattern, label in _SELF_REPORTED_CODE_FAILURE_PATTERNS:
+        if not pattern.search(lowered):
+            continue
+        if label == "syntax_error" and any(
+            phrase in lowered for phrase in _SELF_REPORTED_SYNTAX_NEGATIONS
+        ):
+            continue
+        excerpt = normalized
+        if len(excerpt) > 360:
+            excerpt = excerpt[:357].rstrip() + "..."
+        return (
+            "generated patch self-reported unresolved code issue "
+            f"({label}) in test_hint: {excerpt}"
+        )
+    return None

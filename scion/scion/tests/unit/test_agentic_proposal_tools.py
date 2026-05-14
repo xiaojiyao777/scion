@@ -89,6 +89,18 @@ class FakeCreative:
         return self.patch
 
 
+class SequentialPatchCreative(FakeCreative):
+    def __init__(self, patches: list[PatchProposal], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.patches = list(patches)
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        if not self.patches:
+            return self.patch
+        return self.patches.pop(0)
+
+
 class PlanningCreative(FakeCreative):
     def __init__(self, plans: list[dict], **kwargs) -> None:
         super().__init__(**kwargs)
@@ -4587,6 +4599,96 @@ def test_agentic_session_contract_preview_failure_fails_closed(
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
     assert output.self_check.contract_preview_codes[0] in output.failure_detail
+
+
+def test_agentic_session_repairs_self_reported_unresolved_patch_issue(
+    tmp_path: Path,
+) -> None:
+    bad_payload = _valid_policy_patch_payload(
+        test_hint="This generated file has a syntax error that needs fixing."
+    )
+    good_payload = _valid_policy_patch_payload(test_hint=None)
+    creative = SequentialPatchCreative(
+        [
+            PatchProposal(**bad_payload),
+            PatchProposal(**good_payload),
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == PatchProposal(**good_payload)
+    assert len(creative.code_contexts) == 2
+    repair_context = creative.code_contexts[1]
+    assert "agentic_code_self_check_feedback" in repair_context
+    assert "syntax_error" in repair_context["prior_code_failure"]
+
+
+def test_agentic_session_rejects_self_reported_unresolved_patch_after_repair(
+    tmp_path: Path,
+) -> None:
+    first_bad = PatchProposal(
+        **_valid_policy_patch_payload(
+            test_hint="This generated file has a syntax error that needs fixing."
+        )
+    )
+    second_bad = PatchProposal(
+        **_valid_policy_patch_payload(
+            test_hint="The replacement is still broken and needs fixing."
+        )
+    )
+    creative = SequentialPatchCreative([first_bad, second_bad])
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.patch is None
+    assert output.termination_reason == AgenticTerminationReason.CODE_GENERATION_FAILED
+    assert output.failure_detail is not None
+    assert "self-reported unresolved code issue" in output.failure_detail
+    assert "needs_fixing" in output.failure_detail
+    assert len(creative.code_contexts) == 2
 
 
 def test_agentic_session_contract_preview_timeout_returns_tool_error(
