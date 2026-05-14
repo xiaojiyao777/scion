@@ -359,6 +359,38 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
     assert preview["issues"] == []
 
 
+def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    if instance.customer_count > 3:\n"
+            "        raise IndexError('split-only solver bug')\n"
+            "    solution = context.nearest_neighbor()\n"
+            "    context.record_phase('construct', 1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    issues = json.dumps(preview["issues"])
+    assert "synthetic_preview_canary_5" in issues
+    assert "split-only solver bug" in issues
+    assert any(
+        check["name"] == "solve:synthetic_preview_canary_5"
+        and check["passed"] is False
+        for check in preview["checks"]
+    )
+
+
 def test_cvrp_solver_algorithm_preview_rejects_shallow_baseline_wrapper(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

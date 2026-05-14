@@ -90,6 +90,7 @@ def runtime_audit_failure_from_runtime(
     """
 
     baseline_issue = _baseline_audit_failure(runtime)
+    solver_algorithm_errors = _as_int(runtime.get("solver_algorithm_errors"))
     construction_errors = _as_int(runtime.get("construction_errors"))
     portfolio_errors = _as_int(runtime.get("portfolio_errors"))
     policy_errors = _as_int(runtime.get("policy_errors"))
@@ -97,6 +98,7 @@ def runtime_audit_failure_from_runtime(
     operator_invalid_outputs = _as_int(runtime.get("operator_invalid_outputs"))
     if (
         baseline_issue is None
+        and solver_algorithm_errors <= 0
         and construction_errors <= 0
         and portfolio_errors <= 0
         and policy_errors <= 0
@@ -141,6 +143,24 @@ def runtime_audit_failure_from_runtime(
             "operator_accepted": _as_int(runtime.get("operator_accepted")),
             "operator_events": events[:5],
             "detail": baseline_issue,
+        }
+
+    if solver_algorithm_errors > 0:
+        solver_algorithm_events = runtime.get("solver_algorithm_events")
+        if not isinstance(solver_algorithm_events, list):
+            solver_algorithm_events = []
+        return {
+            "error_category": "solver_algorithm_runtime_error",
+            "solver_algorithm_errors": solver_algorithm_errors,
+            "solver_algorithm_path": runtime.get("solver_algorithm_path"),
+            "solver_algorithm_loaded": bool(runtime.get("solver_algorithm_loaded")),
+            "solver_algorithm_active": bool(runtime.get("solver_algorithm_active")),
+            "solver_algorithm_stop_reason": runtime.get("solver_algorithm_stop_reason"),
+            "solver_algorithm_events": solver_algorithm_events[:5],
+            "detail": (
+                "solver runtime audit reported "
+                f"solver_algorithm_errors={solver_algorithm_errors}"
+            ),
         }
 
     if construction_errors > 0:

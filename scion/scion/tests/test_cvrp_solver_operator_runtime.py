@@ -1385,6 +1385,46 @@ def test_solver_algorithm_surface_declares_runtime_fields_and_default_is_inactiv
     assert "solver_algorithm_active" in issue["failed_runtime_fields"]
 
 
+def test_solver_algorithm_exception_surfaces_runtime_audit_error(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "solver_algorithm.py").write_text(
+        "\n".join(
+            [
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    raise RuntimeError('candidate solver failed')",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(workspace, "data/operator_case.json")
+    runtime = raw["runtime"]
+    spec_v1 = load_problem_spec_v1_from_yaml(workspace / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
+
+    assert runtime["solver_algorithm_loaded"] is True
+    assert runtime["solver_algorithm_active"] is False
+    assert runtime["solver_algorithm_errors"] == 1
+    assert "candidate solver failed" in json.dumps(
+        runtime["solver_algorithm_events"]
+    )
+    issue = runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
+    )
+    assert issue is not None
+    assert issue["error_category"] == "solver_algorithm_runtime_error"
+    assert issue["solver_algorithm_errors"] == 1
+    assert "candidate solver failed" in json.dumps(
+        issue["solver_algorithm_events"]
+    )
+
+
 def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
     tmp_path: Path,
 ) -> None:

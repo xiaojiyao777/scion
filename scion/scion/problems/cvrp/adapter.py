@@ -15,7 +15,7 @@ from scion.problems.cvrp.cvrplib import load_cvrplib_instance
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
 
 
-_POLICY_PREVIEW_TIME_LIMIT_SEC = 1.0
+_POLICY_PREVIEW_TIME_LIMIT_SEC = 5.0
 _POLICY_PREVIEW_EXEC_TIMEOUT_SEC = 2.0
 _ALLOWED_CONSTRUCTION_MODES = frozenset(
     {
@@ -1175,6 +1175,27 @@ def _synthetic_preview_instance() -> CvrpInstance:
     )
 
 
+def _solver_algorithm_preview_instances(instance: CvrpInstance) -> tuple[CvrpInstance, ...]:
+    return (
+        instance,
+        CvrpInstance(
+            name="synthetic_preview_canary_5",
+            capacity=8,
+            depot=0,
+            nodes=(
+                CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+                CvrpNode(id=1, x=2.0, y=0.0, demand=2),
+                CvrpNode(id=2, x=4.0, y=0.0, demand=2),
+                CvrpNode(id=3, x=0.0, y=3.0, demand=3),
+                CvrpNode(id=4, x=0.0, y=6.0, demand=3),
+            ),
+            bks=20.0,
+            bks_routes=2,
+            use_integer_cost=True,
+        ),
+    )
+
+
 def _policy_preview_result(
     surface: str,
     issues: list[str],
@@ -1399,8 +1420,21 @@ def _preview_solver_algorithm(
         issues.append("missing callable solve")
         checks.append({"name": "solve", "passed": False, "detail": "missing callable"})
         return
+    for preview_instance in _solver_algorithm_preview_instances(instance):
+        _preview_solver_algorithm_case(func, preview_instance, issues, checks)
+
+
+def _preview_solver_algorithm_case(
+    func: Any,
+    instance: CvrpInstance,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
     rng = random.Random(0)
     context = _PreviewSolverAlgorithmContext(instance, rng)
+    check_name = (
+        "solve" if instance.name == "synthetic_preview" else f"solve:{instance.name}"
+    )
     try:
         raw_solution = _call_solver_algorithm_preview(
             func,
@@ -1410,28 +1444,32 @@ def _preview_solver_algorithm(
         )
     except _PolicyPreviewTimeout:
         detail = (
-            "solve timed out during synthetic preview; solver_design candidates "
+            f"{instance.name}: solve timed out during synthetic preview; "
+            "solver_design candidates "
             "must use explicit bounded loops and poll context.remaining_time()"
         )
         issues.append(detail)
-        checks.append({"name": "solve", "passed": False, "detail": detail})
+        checks.append({"name": check_name, "passed": False, "detail": detail})
         return
     except Exception as exc:
-        issues.append(f"solve raised during synthetic preview: {exc}")
-        checks.append({"name": "solve", "passed": False, "detail": str(exc)})
+        detail = f"{instance.name}: solve raised during synthetic preview: {exc}"
+        issues.append(detail)
+        checks.append({"name": check_name, "passed": False, "detail": detail})
         return
     if raw_solution is None:
-        issues.append("solve returned None; solver_algorithm would be inactive")
-        checks.append({"name": "solve", "passed": False, "detail": "returned None"})
+        detail = f"{instance.name}: solve returned None; solver_algorithm would be inactive"
+        issues.append(detail)
+        checks.append({"name": check_name, "passed": False, "detail": detail})
         return
     solution = _coerce_preview_solution(raw_solution)
     if solution is None:
-        issues.append("solve returned non-solution value")
+        detail = f"{instance.name}: solve returned non-solution value"
+        issues.append(detail)
         checks.append(
             {
-                "name": "solve",
+                "name": check_name,
                 "passed": False,
-                "detail": f"returned {type(raw_solution).__name__}",
+                "detail": f"{detail}: returned {type(raw_solution).__name__}",
             }
         )
         return
@@ -1451,18 +1489,20 @@ def _preview_solver_algorithm(
         )
     checks.append(
         {
-            "name": "solve",
+            "name": check_name,
             "passed": valid,
             "detail": (
-                f"routes={len(solution.routes)} "
+                f"{instance.name}: routes={len(solution.routes)} "
                 f"distance={sum(instance.route_distance(route) for route in solution.routes)}"
                 if valid
-                else reason
+                else f"{instance.name}: {reason}"
             ),
         }
     )
     if not valid:
-        issues.append(f"solve returned invalid synthetic solution: {reason}")
+        issues.append(
+            f"{instance.name}: solve returned invalid synthetic solution: {reason}"
+        )
 
 
 class _PolicyPreviewTimeout(BaseException):

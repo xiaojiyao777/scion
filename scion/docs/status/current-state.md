@@ -1231,6 +1231,53 @@ Latest CVRP destroy/repair selector/proposal validation:
 285 passed in 18.53s
 ```
 
+Latest direct solver-design smoke and repair:
+
+- Independent smoke:
+  `/home/clawd/research/scion-experiments/v04-code-phase-aggressive-compact-smoke-sonnet-2r-20260514T061603Z`
+  completed 2/2 rounds on commit `14f7f29`.
+- Code-generation prompt compaction worked: both code calls completed with
+  roughly 30k-33k user-prompt characters and no raw `content_preview` payloads.
+- Round 1 passed Contract/Verification and reached screening, but had
+  `win_rate=0.0`, `median_delta=0.0`, and `runtime_ratio_median=0.343`.
+- Round 2 failed heavy Verification at `V5_solution_consistency`; replaying the
+  generated solver in the correct workspace exposed the underlying candidate
+  error `solve failed: list index out of range`.
+- Runtime audit now reports `solver_algorithm_errors` as a dedicated
+  `solver_algorithm_runtime_error` instead of burying full-solver hook failures
+  behind generic surface evidence failures.
+- CVRP solver-design preview now runs the hook on a controlled-canary-shaped
+  synthetic instance and uses a 5s synthetic time window under the existing 2s
+  wall-clock timeout. The exact failed round-2 solver is now rejected during
+  Contract preview with `synthetic_preview_canary_5: solve raised during
+  synthetic preview: list index out of range`.
+
+Latest validation:
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/test_cvrp_adapter.py scion/scion/tests/test_cvrp_solver_operator_runtime.py scion/scion/tests/test_verification.py -q
+```
+
+```text
+209 passed in 21.75s
+```
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests/unit/test_agentic_proposal_tools.py -q
+```
+
+```text
+102 passed in 2.99s
+```
+
+```bash
+/home/clawd/miniconda3/envs/claw/bin/python -m pytest scion/scion/tests -q
+```
+
+```text
+1621 passed, 1 skipped in 73.91s
+```
+
 ## Next Actions
 
 P1:
@@ -1240,6 +1287,10 @@ P1:
   candidates use the full CVRP lifecycle semantics now that baseline budget,
   phase order, construction-pool reuse, cleanup coupling, and adaptive
   component budgets have real runtime effect.
+- Run a short independent smoke after the solver-design preview/audit repair.
+  The first gate is that bad full-solver candidates fail in Contract preview
+  with concrete synthetic runtime diagnostics instead of reaching heavy
+  Verification with opaque V5/no-output symptoms.
 - Keep route-pool telemetry as evidence inside that lifecycle:
   `main_search_route_pool_sample_count`,
   `main_search_route_pool_recombined_routes`, and
@@ -1298,6 +1349,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-algorithm-body-execution-semantics-repair-20260512.md`](../experiments/v0.4/v0.4-algorithm-body-execution-semantics-repair-20260512.md)
+  [`v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md`](../experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)
