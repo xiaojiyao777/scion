@@ -963,15 +963,21 @@ research_surfaces:
         access or context.objective_key is preferred. Runtime is part of the
         algorithm objective: use finite max_rounds/max_passes/top_k caps and
         poll context.remaining_time(); importing time is allowed only for
-        monotonic timing, never for sleeps or external scheduling. Return only
-        a solution or a routes mapping. Do not return a plan dictionary.
-        The checked-in file contains an inactive ALNS/VNS-style algorithm-body
-        template adapted from the repo-local CVRP solver structure; candidates
-        may replace or materially rework that body. Telemetry must record real
-        search effort and accepted/best-improving movement when the algorithm
-        runs route edits, destroy/repair, recombination, perturbation, or
-        acceptance. Telemetry can name phases but must not force the algorithm
-        into predeclared components.
+        monotonic timing, never for sleeps or external scheduling. Prefer
+        for-loops over range(max_rounds/max_passes/customer_count) for bounded
+        search. If you use while, make the bound statically obvious: a counter
+        compared with a max_* cap and incremented inside the loop, or a finite
+        collection condition whose collection is visibly shrunk in the loop.
+        Avoid while True unless the loop has a visible counter-bound break or
+        directly shrinks a finite collection on each non-break iteration.
+        Return only a solution or a routes mapping. Do not return a plan
+        dictionary. The checked-in file contains an active branch-owned
+        ALNS/VNS-style algorithm body adapted from the repo-local CVRP solver
+        structure; candidates may replace or materially rework that body.
+        Telemetry must record real search effort and accepted/best-improving
+        movement when the algorithm runs route edits, destroy/repair,
+        recombination, perturbation, or acceptance. Telemetry can name phases
+        but must not force the algorithm into predeclared components.
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, or benchmark data. Do not import or monkeypatch solver.py,

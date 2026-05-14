@@ -888,7 +888,7 @@ class ContractGate:
                 node,
                 scale_names,
             ):
-                violations.append("uncapped while loop")
+                violations.append(_uncapped_while_violation(node))
 
         loop_guard = _ProblemScaleLoopGuard(scale_names)
         loop_guard.visit(tree)
@@ -1827,7 +1827,11 @@ def _is_problem_scale_expr(node: ast.AST, scale_names: frozenset[str]) -> bool:
 
 def _is_bounded_while(node: ast.While, scale_names: frozenset[str]) -> bool:
     if isinstance(node.test, ast.Constant) and node.test.value is True:
-        return _while_body_has_bounded_break(node)
+        return (
+            _while_body_has_bounded_break(node)
+            or _while_body_has_counter_bounded_break(node, scale_names)
+            or _while_body_has_collection_progress_break(node)
+        )
     if isinstance(node.test, ast.BoolOp):
         return any(
             _compare_has_small_constant(value)
@@ -1972,8 +1976,49 @@ def _while_body_has_bounded_break(node: ast.While) -> bool:
     return False
 
 
+def _while_body_has_counter_bounded_break(
+    node: ast.While,
+    scale_names: frozenset[str],
+) -> bool:
+    for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+        if not isinstance(child, ast.If):
+            continue
+        if not _contains_break(child.body):
+            continue
+        if _compare_has_incrementing_counter_guard(child.test, node, scale_names):
+            return True
+    return False
+
+
+def _while_body_has_collection_progress_break(node: ast.While) -> bool:
+    if not _contains_break(node.body):
+        return False
+    return any(_stmt_directly_shrinks_collection(stmt) for stmt in node.body)
+
+
+def _stmt_directly_shrinks_collection(stmt: ast.stmt) -> bool:
+    shrink_methods = {"remove", "discard", "pop", "clear"}
+    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+        func = stmt.value.func
+        return (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.attr in shrink_methods
+        )
+    if isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Name):
+        return isinstance(stmt.op, (ast.Sub, ast.BitAnd))
+    return False
+
+
 def _contains_break(body: list[ast.stmt]) -> bool:
     return any(isinstance(child, ast.Break) for stmt in body for child in ast.walk(stmt))
+
+
+def _uncapped_while_violation(node: ast.While) -> str:
+    line = getattr(node, "lineno", None)
+    if line is None:
+        return "uncapped while loop"
+    return f"uncapped while loop at line {line}"
 
 
 def _mentions_runtime_guard(node: ast.AST) -> bool:

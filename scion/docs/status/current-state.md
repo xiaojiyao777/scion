@@ -206,8 +206,9 @@ failure, not a reason to return to component-policy exposure.
 Current repair: solver-design code generation now defaults to a compact
 whole-algorithm implementation shape. The prompt asks for one construction or
 seeding path plus one bounded improvement/search loop, discourages preserving
-or expanding the inactive ALNS/VNS-style helper template, and explicitly
-allows the replacement file to be much shorter than the current template.
+or expanding the branch-owned ALNS/VNS-style algorithm body unless the change
+is material, and explicitly allows the replacement file to be much shorter
+than the current implementation.
 When final patch generation times out, APS performs one semantic retry inside
 the same session with `code_generation_mode=compact_timeout_retry`, injects
 `prior_code_failure=code_generation_timeout`, tightens problem/interface/
@@ -445,7 +446,8 @@ protocol=formal
 rounds_requested=1
 time_limit_sec=60
 agentic_session_timeout_sec=1800
-status=running at 2026-05-14T16:40Z
+status=max_rounds_exhausted at 2026-05-14T17:01:45Z
+failure_stage=code_generation
 ```
 
 Purpose: validate the deeper repair, not promotion quality. The expected
@@ -459,6 +461,24 @@ Note: an earlier run root ending `20260514T163525Z` was terminated at
 2026-05-14T16:40Z after its trace exposed stale prompt text about inactive
 legacy hooks. That prompt residue is fixed in the current code before the
 `20260514T164018Z` validation run.
+
+Result: the run completed one APS round and stopped at `max_rounds_exhausted`
+with `failure_stage=code_generation`; no official experiment pair ran. The
+important positive signal was that the hypothesis stayed on
+`modify/solver_design`, targeted `policies/baseline_algorithm.py`, and
+reasoned about the ALNS+VNS algorithm body itself: nearest-neighbor-list VNS
+pruning, multi-start construction, and simulated-annealing schedule changes.
+The failure was a Contract-preview rejection, not a research-object drift:
+generated code used `while True` inside route construction and failed
+`C9c_complexity_bound` for `uncapped while loop`.
+
+Follow-up repair: C9c now still rejects true unbounded `while True` and
+unbounded improvement-flag loops, but recognizes two statically bounded
+algorithm-body patterns: `while True` with a visible counter-bound break, and
+`while True` that directly shrinks a finite collection on each non-break
+iteration. Contract detail now includes the offending loop line. CVRP
+solver-design prompts also tell code agents to prefer `for range(max_*)` loops
+and to make any `while` bound statically obvious.
 
 Latest baseline-algorithm subject smoke:
 

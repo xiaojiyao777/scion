@@ -214,9 +214,12 @@ Important current interpretation:
   hang after successful code generation. Treat this as a boundary-control
   issue, not a reason to return to componentized policy exposure.
 - Current preview repair: unbounded boolean-flag `while` loops fail C9c unless
-  explicitly bounded, CVRP synthetic preview times out `solve(...)`, and APS
-  turns a hung `proposal.contract_preview` into a controlled tool error. Run a
-  1-2 round smoke before any longer CVRP solver-quality validation.
+  explicitly bounded, while route-construction `while True` loops are allowed
+  only when they have a visible counter-bound break or directly shrink a finite
+  collection on each non-break iteration. CVRP synthetic preview times out
+  `solve(...)`, and APS turns a hung `proposal.contract_preview` into a
+  controlled tool error. Run a 1-2 round smoke before any longer CVRP
+  solver-quality validation.
 - The preview-repair smoke itself did not reach preview: both rounds failed at
   final `generate_patch` after three provider timeouts. The important finding
   was duplicated code-phase context, not solver quality: the target file was

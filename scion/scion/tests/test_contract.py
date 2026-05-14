@@ -672,6 +672,42 @@ class TestC9cComplexityBound:
         assert not c9c.passed
         assert "uncapped while" in c9c.detail
 
+    def test_while_true_with_counter_bound_passes(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        i = 0\n"
+            "        max_iter = 10\n"
+            "        while True:\n"
+            "            i += 1\n"
+            "            if i >= max_iter:\n"
+            "                break\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
+    def test_while_true_with_collection_progress_passes(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        unvisited = set(solution.customer_ids)\n"
+            "        route = []\n"
+            "        while True:\n"
+            "            if not unvisited:\n"
+            "                break\n"
+            "            customer = min(unvisited)\n"
+            "            route.append(customer)\n"
+            "            unvisited.remove(customer)\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
     def test_bounded_counter_while_passes(self, gate: ContractGate):
         code = (
             "class Op:\n"
