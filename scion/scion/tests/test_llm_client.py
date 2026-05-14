@@ -249,3 +249,32 @@ def test_parse_retry_after_with_header():
     mock_exc = MagicMock()
     mock_exc.response.headers = {"Retry-After": "30"}
     assert _parse_retry_after(mock_exc) == 30.0
+
+
+def test_provider_sdk_retries_are_disabled_by_default():
+    client = LLMClient()
+    assert client.sdk_max_retries == 0
+
+
+def test_provider_sdk_retries_can_be_overridden_by_env(monkeypatch):
+    monkeypatch.setenv("SCION_SDK_MAX_RETRIES", "1")
+    client = LLMClient()
+    assert client.sdk_max_retries == 1
+
+
+def test_anthropic_client_receives_sdk_retry_limit():
+    client = LLMClient(sdk_max_retries=0)
+    fake_anthropic = MagicMock()
+    with patch.dict("sys.modules", {"anthropic": fake_anthropic}):
+        client._get_anthropic_client()
+    fake_anthropic.Anthropic.assert_called_once()
+    assert fake_anthropic.Anthropic.call_args.kwargs["max_retries"] == 0
+
+
+def test_openai_client_receives_sdk_retry_limit():
+    client = LLMClient(sdk_max_retries=0)
+    fake_openai = MagicMock()
+    with patch.dict("sys.modules", {"openai": fake_openai}):
+        client._get_openai_client()
+    fake_openai.OpenAI.assert_called_once()
+    assert fake_openai.OpenAI.call_args.kwargs["max_retries"] == 0

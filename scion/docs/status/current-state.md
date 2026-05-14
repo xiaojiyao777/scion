@@ -264,6 +264,13 @@ instead of producing baseline-wrapper post-processing solvers. The budget and
 Contract-preview control path is now healthy enough to support that deeper
 repair.
 
+Operational cost/control note: real-cost smoke and validation runs should use
+`SCION_MODEL=claude-sonnet-4-6` unless there is an explicit reason to spend an
+Opus round. Provider SDK retries are disabled by default in `LLMClient` so
+Scion's own traced retry loop is the single audited retry layer; tune with
+`SCION_LLM_MAX_RETRIES` and only opt into SDK retries with
+`SCION_SDK_MAX_RETRIES` deliberately.
+
 ## Current Engineering State
 
 ### Framework Boundary
@@ -427,27 +434,27 @@ code cannot swallow it with a broad `except Exception`.
 `policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
 and `algorithm_body` tests, but it is not the default optimization direction.
 
-Current limitation: the direct full-algorithm boundary is under live
-short-smoke validation. Judge the first gate by whether candidates target
-`baseline_algorithm.py`, pass Contract plus `proposal.algorithm_smoke`, and
-enter official Verification as controlled algorithm-body changes. Solver
-promotion quality is a later gate under the existing `solver_algorithm_*`
-evidence.
+Current limitation: the direct full-algorithm boundary is now smoke-validated
+for framework stability, but not solver quality. The first gate is satisfied:
+candidates can target `baseline_algorithm.py`, pass Contract plus
+`proposal.algorithm_smoke`, enter official Verification, and run 16/16 formal
+screening pairs as controlled algorithm-body changes. Solver promotion quality
+is still a later gate under the existing `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Current branch-owned algorithm-subject smoke:
+Latest stable branch-owned algorithm-subject smoke:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-branch-algorithm-subject-smoke-opus-1r-20260514T164018Z
-model=claude-opus-4-6
+run_root=/home/clawd/research/scion-experiments/v04-sdk-retry-control-sonnet-1r-20260514T174450Z
+model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
 rounds_requested=1
 time_limit_sec=60
 agentic_session_timeout_sec=1800
-status=max_rounds_exhausted at 2026-05-14T17:01:45Z
-failure_stage=code_generation
+status=max_rounds_exhausted at 2026-05-14T18:13Z
+n_experiments=1
 ```
 
 Purpose: validate the deeper repair, not promotion quality. The expected
@@ -457,20 +464,41 @@ problem object and algorithm body, passes Contract plus
 `proposal.algorithm_smoke`, and enters official Verification as a direct
 algorithm-body change.
 
-Note: an earlier run root ending `20260514T163525Z` was terminated at
-2026-05-14T16:40Z after its trace exposed stale prompt text about inactive
-legacy hooks. That prompt residue is fixed in the current code before the
-`20260514T164018Z` validation run.
+Result: the Sonnet run completed the full 1-round path. The first code
+request timed out after two Scion-visible attempts with provider SDK retries
+disabled, then APS used one compact semantic timeout retry and succeeded. The
+completed patch targeted `policies/baseline_algorithm.py`, passed Contract
+preview, materialized a branch workspace, passed Verification, and screened
+16/16 formal candidate/champion pairs with 16/16 `solver_algorithm_*` runtime
+observations. Decision abandoned the branch by
+`SCREENING_FAIL_WIN_RATE` (`win_rate=0.0`, median pair delta `-132.5`), which
+is a normal solver-quality failure rather than a framework failure.
 
-Result: the run completed one APS round and stopped at `max_rounds_exhausted`
-with `failure_stage=code_generation`; no official experiment pair ran. The
-important positive signal was that the hypothesis stayed on
-`modify/solver_design`, targeted `policies/baseline_algorithm.py`, and
-reasoned about the ALNS+VNS algorithm body itself: nearest-neighbor-list VNS
-pruning, multi-start construction, and simulated-annealing schedule changes.
-The failure was a Contract-preview rejection, not a research-object drift:
-generated code used `while True` inside route construction and failed
-`C9c_complexity_bound` for `uncapped while loop`.
+This is now stable enough to launch an independent 8-round Sonnet validation
+with `SCION_SDK_MAX_RETRIES=0`, `SCION_LLM_MAX_RETRIES=1`, and
+`SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp`.
+
+Detailed analysis:
+[`v0.4-branch-algorithm-subject-sdk-retry-sonnet-1r-20260514.md`](../experiments/v0.4/v0.4-branch-algorithm-subject-sdk-retry-sonnet-1r-20260514.md)
+
+Earlier same-day notes:
+
+- `/home/clawd/research/scion-experiments/v04-bounded-while-repair-smoke-opus-1r-dataroot-20260514T172756Z`
+  also completed the full chain with 16/16 valid pairs and 16/16
+  `solver_algorithm_*` runtime observations after a compact timeout retry,
+  but it used Opus and is retained only as a secondary framework sample.
+- `/home/clawd/research/scion-experiments/v04-branch-algorithm-subject-smoke-opus-1r-20260514T164018Z`
+  selected `modify/solver_design`, targeted
+  `policies/baseline_algorithm.py`, and reasoned about the ALNS+VNS algorithm
+  body, but failed before official experiment pairs on a static C9c
+  `while`-loop boundary that is now repaired. That failure was a
+  Contract-preview rejection, not research-object drift: generated code used
+  `while True` inside route construction and failed `C9c_complexity_bound` for
+  `uncapped while loop`.
+- `/home/clawd/research/scion-experiments/v04-bounded-while-repair-smoke-opus-1r-20260514T171241Z`
+  completed code generation and Contract preview, but was launched without
+  `SCION_PROBLEM_DATA_ROOT`; all formal pairs failed on missing CVRPLIB files,
+  so it is an invalid launch-environment sample rather than solver evidence.
 
 Follow-up repair: C9c now still rejects true unbounded `while True` and
 unbounded improvement-flag loops, but recognizes two statically bounded

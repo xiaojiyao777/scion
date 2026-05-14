@@ -88,6 +88,17 @@ export SCION_API_KEY=<your-key>
 `ANTHROPIC_API_KEY` 和 `ANTHROPIC_BASE_URL`。本项目当前文档里的 Sonnet
 实验默认走 `SCION_MODEL=claude-sonnet-4-6`。
 
+重试控制：
+
+```bash
+export SCION_SDK_MAX_RETRIES=0
+export SCION_LLM_MAX_RETRIES=2
+```
+
+默认关闭 provider SDK 内部重试，让 Scion 自己的 LLM retry trace 成为唯一
+审计口径。只有在明确需要时才提高 `SCION_SDK_MAX_RETRIES`。实验阶段默认先
+用 Sonnet；Opus 只用于明确需要的高质量研究尝试。
+
 ## 3. CVRP 配置怎么选
 
 ### Formal VRP path
@@ -140,6 +151,7 @@ mkdir -p "$RUN_ROOT"
 
 ```bash
 SCION_MODEL=claude-sonnet-4-6 \
+SCION_SDK_MAX_RETRIES=0 \
 SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
 /home/clawd/miniconda3/envs/claw/bin/python -m scion.cli.main run \
   --problem scion/problems/cvrp/problem.yaml \

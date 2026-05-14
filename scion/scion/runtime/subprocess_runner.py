@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 MAX_INLINE_OUTPUT_BYTES = 50_000
 _OFFLOAD_PREFIX = "__offloaded__:"
+_SOLVER_WALL_CLOCK_GRACE_SEC = 2
 
 
 # Environment variables passed through to the subprocess (whitelist).
@@ -110,11 +111,16 @@ class LocalSubprocessRunner:
         """
         solver_path = Path(workdir) / "solver.py"
         python_exe = sys.executable
-        effective_timeout = (
-            min(self._limits.timeout_sec, int(time_limit_sec))
-            if time_limit_sec and time_limit_sec > 0
-            else self._limits.timeout_sec
-        )
+        effective_timeout = self._limits.timeout_sec
+        if time_limit_sec and time_limit_sec > 0:
+            # ``time_limit_sec`` is the solver's algorithm budget. Keep the
+            # subprocess kill guard close to that budget, but leave a small
+            # margin for Python teardown and JSON output flushing.
+            solver_budget = max(1, int(time_limit_sec))
+            effective_timeout = min(
+                self._limits.timeout_sec,
+                solver_budget + _SOLVER_WALL_CLOCK_GRACE_SEC,
+            )
         effective_limits = ResourceLimits(
             timeout_sec=effective_timeout,
             memory_mb=self._limits.memory_mb,

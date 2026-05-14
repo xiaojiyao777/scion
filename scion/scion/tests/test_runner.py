@@ -186,6 +186,36 @@ class TestRunnerTimeout:
         assert result.error_category == "timeout"
         assert result.elapsed_ms < 10_000
 
+    def test_per_call_time_limit_allows_output_flush_grace(self, workdir: Path):
+        _write_solver(
+            workdir,
+            """\
+            import argparse, json, pathlib, time
+            p = argparse.ArgumentParser()
+            p.add_argument("instance", nargs="?", default="")
+            for name in ["--seed", "--time-limit", "--registry", "--output"]:
+                p.add_argument(name, default="")
+            args = p.parse_args()
+            time.sleep(1.2)
+            pathlib.Path(args.output).write_text(json.dumps({
+                "feasible": True,
+                "objective": {"cost": 1.0},
+                "vehicles": {},
+                "assignment": {},
+            }))
+            """,
+        )
+        runner = LocalSubprocessRunner(limits=ResourceLimits(timeout_sec=30))
+        result = runner.run_solver(
+            workdir=str(workdir),
+            instance_path=str(workdir / "instance.json"),
+            seed=42,
+            time_limit_sec=1,
+            registry_path=str(workdir / "registry.json"),
+        )
+        assert result.success is True
+        assert result.output_path is not None
+
 
 # ---------------------------------------------------------------------------
 # Tests: ResourceLimits dataclass

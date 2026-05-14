@@ -23,6 +23,10 @@ MAX_MAX_TOKENS = 16384
 # Default config — aihubmix Anthropic endpoint
 _DEFAULT_BASE_URL = "https://aihubmix.com"
 _DEFAULT_MODEL = "claude-opus-4-6"
+_DEFAULT_TIMEOUT_SEC = 60.0
+_DEFAULT_MAX_RETRIES = 2
+_DEFAULT_SDK_MAX_RETRIES = 0
+_DEFAULT_MAX_TOKENS = 16384
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 
@@ -78,6 +82,8 @@ class LLMClient:
     - Format error: append the error to the prompt, same retry budget.
     - 429 (rate limit): sleep for ``Retry-After`` seconds then try again
       (does *not* count against ``max_retries``).
+    - Provider SDK retries are disabled by default so retries remain visible in
+      Scion traces instead of being multiplied inside the SDK.
 
     Config resolution (in order):
     1. Constructor arguments
@@ -91,9 +97,10 @@ class LLMClient:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-        timeout_sec: float = 60.0,
-        max_retries: int = 2,
-        max_tokens: int = 16384,
+        timeout_sec: float | None = None,
+        max_retries: int | None = None,
+        max_tokens: int | None = None,
+        sdk_max_retries: int | None = None,
     ) -> None:
         self.model = (
             model
@@ -113,9 +120,22 @@ class LLMClient:
             or os.environ.get("ANTHROPIC_BASE_URL")
             or _DEFAULT_BASE_URL
         )
-        self.timeout_sec = timeout_sec
-        self.max_retries = max_retries
-        self.max_tokens = max_tokens
+        self.timeout_sec = _env_float(
+            "SCION_LLM_TIMEOUT_SEC",
+            _DEFAULT_TIMEOUT_SEC if timeout_sec is None else timeout_sec,
+        )
+        self.max_retries = _env_int(
+            "SCION_LLM_MAX_RETRIES",
+            _DEFAULT_MAX_RETRIES if max_retries is None else max_retries,
+        )
+        self.max_tokens = _env_int(
+            "SCION_LLM_MAX_TOKENS",
+            _DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens,
+        )
+        self.sdk_max_retries = _env_int(
+            "SCION_SDK_MAX_RETRIES",
+            _DEFAULT_SDK_MAX_RETRIES if sdk_max_retries is None else sdk_max_retries,
+        )
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._anthropic_client: Any = None
         self._openai_client: Any = None
@@ -555,8 +575,14 @@ class LLMClient:
             self._anthropic_client = anthropic.Anthropic(
                 api_key=self.api_key,
                 base_url=self.base_url,
+                max_retries=self.sdk_max_retries,
             )
-            logger.info("Anthropic client initialized: model=%s base_url=%s", self.model, self.base_url)
+            logger.info(
+                "Anthropic client initialized: model=%s base_url=%s sdk_max_retries=%d",
+                self.model,
+                self.base_url,
+                self.sdk_max_retries,
+            )
             return self._anthropic_client
         except ImportError as exc:
             raise LLMError(
@@ -575,8 +601,14 @@ class LLMClient:
             self._openai_client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url=base,
+                max_retries=self.sdk_max_retries,
             )
-            logger.info("OpenAI client initialized: model=%s base_url=%s", self.model, base)
+            logger.info(
+                "OpenAI client initialized: model=%s base_url=%s sdk_max_retries=%d",
+                self.model,
+                base,
+                self.sdk_max_retries,
+            )
             return self._openai_client
         except ImportError as exc:
             raise LLMError(
@@ -648,3 +680,25 @@ def _parse_retry_after(exc: Exception) -> float:
     except Exception:
         pass
     return 60.0
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return int(default)
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r; using %d", name, raw, default)
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return float(default)
+    try:
+        return max(0.001, float(raw))
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r; using %.3f", name, raw, default)
+        return float(default)

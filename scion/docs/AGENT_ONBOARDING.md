@@ -262,10 +262,18 @@ Important current interpretation:
   bounded improvement loop, no more than two move families, and a hard target
   around 180 lines/six helpers. This still means a complete `solve(...)`
   algorithm body, not a component knob or baseline-only wrapper.
-- Next validation is a very short independent smoke. The first gate is whether
-  candidates target and modify `baseline_algorithm.py` as the algorithm body,
-  pass Contract plus algorithm smoke, and enter official Verification without
-  reverting to baseline-wrapper behavior.
+- The latest Sonnet 1-round smoke validated the first gate: candidates target
+  and modify `baseline_algorithm.py` as the algorithm body, pass Contract plus
+  algorithm smoke, pass Verification, and run 16/16 formal screening pairs with
+  required `solver_algorithm_*` telemetry. Solver quality remains weak, so the
+  next step is an 8-round Sonnet validation, not promotion-quality claims.
+- Real-cost validation should use Sonnet by default
+  (`SCION_MODEL=claude-sonnet-4-6`). Reserve Opus for explicitly chosen deep
+  research attempts after the framework path is stable.
+- Provider SDK retries are disabled by default through `SCION_SDK_MAX_RETRIES=0`
+  semantics in `LLMClient`; Scion's own `SCION_LLM_MAX_RETRIES` controls the
+  audited retry count. Do not multiply hidden SDK retries by Scion retries in
+  experiment runs.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 
