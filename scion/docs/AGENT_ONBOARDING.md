@@ -232,10 +232,23 @@ Important current interpretation:
   improvement/search loop, allow the replacement file to be much shorter than
   the inactive template, and perform one in-session compact semantic retry
   after final `generate_patch` timeout.
+- The latest 2-round code-scope smoke passed the first gate: final
+  `generate_patch` returned in all three code traces, and round 1 reached
+  Contract, Verification, and screening. It also exposed the next control
+  issue: screening/runtime feedback consumed nearly all of the 64k APS
+  observation budget, so round 2 could not retain terminal Contract-preview
+  evidence and failed with `result_too_large`.
+- Current APS repair compacts screening/runtime feedback before charging it
+  to session observation budget, keeps self-check observation reserve through
+  code phase, skips late feedback pulls when that reserve is at risk, and
+  reuses successful same-session feedback instead of re-querying it.
+- Current solver-design scope is stricter: one construction/seeding path, one
+  bounded improvement loop, no more than two move families, and a hard target
+  around 180 lines/six helpers. This still means a complete `solve(...)`
+  algorithm body, not a component knob or baseline-only wrapper.
 - Next validation is still a 1-2 round independent smoke. The first gate is
-  reaching Contract preview/Verification without final code-generation
-  timeout; preview-time fail-closed behavior and solver-quality movement are
-  later gates in that same short run.
+  retaining Contract-preview pass/fail evidence without `result_too_large`;
+  solver-quality movement is a later gate in that same short run.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 

@@ -41,6 +41,7 @@ from scion.proposal.agentic_session import (
     resume_from_artifact,
     validate_agentic_session_artifact,
     _compact_contract_preview_observation,
+    _compact_feedback_observation_for_budget,
     _json_size,
     _observation_prompt_payload,
     _research_diagnosis_from_observations,
@@ -3218,7 +3219,10 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
 
     assert "Compact Solver-Design Implementation Scope" in rendered_system
     assert "one primary mechanism" in rendered_system
-    assert "around 220 lines or less" in rendered_system
+    assert "around 180 lines or less" in rendered_system
+    assert (
+        "Do not implement more than two move/neighborhood families" in rendered_system
+    )
     assert "do not implement a full portfolio" in rendered_system
     assert "compact complete replacement file" in rendered_prompt
 
@@ -3289,8 +3293,12 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
     assert retry_context["code_generation_mode"] == "compact_timeout_retry"
     assert "code_generation_timeout" in retry_context["prior_code_failure"]
     assert (
-        retry_context["agentic_code_scope_control"]["required_shape"]
-        == "complete replacement file with one primary construction or seeding path and one bounded improvement/search loop"
+        "one primary construction or seeding path"
+        in retry_context["agentic_code_scope_control"]["required_shape"]
+    )
+    assert (
+        "no more than two move families"
+        in retry_context["agentic_code_scope_control"]["required_shape"]
     )
     assert any(
         event.message == "Retrying patch generation with compact timeout scope."
@@ -3635,6 +3643,146 @@ def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_b
     assert compact.structured_payload["patch"]["problem_preview"]["passed"] is True
     assert compact.structured_payload["compact_due_to_budget"] is True
     assert _self_check_from_previews([compact]).contract_preview_passed is True
+
+
+def test_agentic_session_compacts_feedback_observations_for_internal_budget() -> None:
+    screening = ProposalObservation(
+        observation_id="screening-1",
+        session_id="session-1",
+        tool_name="feedback.query_screening",
+        tool_call_id="tool-4",
+        observation_type="screening_feedback",
+        summary="Returned 4 of 4 screening feedback row(s).",
+        structured_payload={
+            "query_scope": {"campaign_id": "camp-1", "recent_first": True},
+            "available_screening_step_count": 4,
+            "matched_screening_step_count": 4,
+            "screening_steps": [
+                {
+                    "round_num": 2,
+                    "branch_id": "branch-1",
+                    "surface": "solver_design",
+                    "action": "modify",
+                    "target_file": "policies/solver_algorithm.py",
+                    "gate_outcome": "abandoned",
+                    "reason_codes": ["SCREENING_FAIL_WIN_RATE"],
+                    "stats": {
+                        "wins": 1,
+                        "losses": 0,
+                        "ties": 15,
+                        "win_rate": 0.0625,
+                        "median_delta": 0.0,
+                        "runtime_ratio_median": 0.9,
+                    },
+                    "candidate_surface_runtime_summary": {
+                        "fields": {
+                            f"solver_algorithm_phase_delta_sum_{idx}": {
+                                "present": 16,
+                                "numeric_summary": {
+                                    "weighted_sum": idx,
+                                    "values": ["x" * 500] * 8,
+                                },
+                            }
+                            for idx in range(32)
+                        }
+                    },
+                    "candidate_surface_runtime_attribution": {
+                        "runtime_field_highlights": [
+                            {
+                                "field": f"solver_algorithm_move_attempts_{idx}",
+                                "present": 16,
+                                "numeric_summary": {"weighted_sum": idx},
+                                "values": ["x" * 300] * 4,
+                            }
+                            for idx in range(16)
+                        ]
+                    },
+                    "case_feedback": [
+                        {"pair": idx, "detail": "x" * 1000} for idx in range(16)
+                    ],
+                }
+                for _ in range(4)
+            ],
+        },
+        exposure_level=ProposalExposureLevel.SCREENING_DETAIL,
+    )
+    runtime = ProposalObservation(
+        observation_id="runtime-1",
+        session_id="session-1",
+        tool_name="feedback.query_runtime",
+        tool_call_id="tool-5",
+        observation_type="runtime_feedback",
+        summary="Returned screening-derived runtime feedback.",
+        structured_payload={
+            "query_scope": {"campaign_id": "camp-1", "recent_first": True},
+            "runtime_feedback": "runtime line\n" * 1000,
+            "runtime_failure_guidance": "guidance line\n" * 1000,
+            "screening_runtime_attribution": [
+                {
+                    "round_num": 2,
+                    "surface": "solver_design",
+                    "runtime_field_highlights": [
+                        {
+                            "field": f"solver_algorithm_phase_delta_sum_{idx}",
+                            "numeric_summary": {"weighted_sum": idx},
+                            "values": ["x" * 300] * 4,
+                        }
+                        for idx in range(16)
+                    ],
+                }
+                for _ in range(4)
+            ],
+            "research_diagnosis": {
+                "schema_version": "research-diagnosis.v1",
+                "screening_only": True,
+                "screening_step_count": 4,
+                "reason_code_counts": {"SCREENING_FAIL_WIN_RATE": 4},
+                "failure_mode_tags": ["screening_win_rate_failure"],
+                "runtime_signal_rows": [
+                    {"surface": "solver_design", "highlight_fields": ["x"] * 20}
+                    for _ in range(8)
+                ],
+                "recent_screening_steps": [
+                    {
+                        "round_num": 2,
+                        "surface": "solver_design",
+                        "stats": {"win_rate": 0.0625, "median_delta": 0.0},
+                    }
+                    for _ in range(8)
+                ],
+                "next_hypothesis_requirements": ["change the algorithm"] * 8,
+            },
+            "screening_only": True,
+            "metrics_file_refs_exposed": False,
+        },
+        exposure_level=ProposalExposureLevel.SCREENING_DETAIL,
+    )
+
+    compact_screening = _compact_feedback_observation_for_budget(screening)
+    compact_runtime = _compact_feedback_observation_for_budget(runtime)
+
+    assert _json_size(_observation_prompt_payload(compact_screening)) < _json_size(
+        _observation_prompt_payload(screening)
+    )
+    assert _json_size(_observation_prompt_payload(compact_runtime)) < _json_size(
+        _observation_prompt_payload(runtime)
+    )
+    assert _json_size(_observation_prompt_payload(compact_screening)) < 7000
+    assert _json_size(_observation_prompt_payload(compact_runtime)) < 7000
+    assert compact_screening.structured_payload["screening_steps"]
+    assert (
+        compact_runtime.structured_payload["research_diagnosis"]["screening_step_count"]
+        == 4
+    )
+    rendered = json.dumps(
+        [
+            compact_screening.structured_payload,
+            compact_runtime.structured_payload,
+        ],
+        sort_keys=True,
+    )
+    assert "solver_design" in rendered
+    assert "case_feedback" not in rendered
 
 
 def test_contract_preview_failure_issues_become_self_check_codes() -> None:

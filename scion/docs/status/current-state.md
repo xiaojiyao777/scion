@@ -205,11 +205,26 @@ the same session with `code_generation_mode=compact_timeout_retry`, injects
 hypothesis caps, and records the retry in the transcript. This is separate
 from Contract-preview or code-self-check repair attempts.
 
-Next validation should be a 1-2 round independent smoke, not a long run. The
-first gate is whether the slimmed code path reaches Contract preview and
-Verification without another final `generate_patch` timeout. Preview-time
-fail-closed behavior and solver-quality movement are later gates in the same
-short run.
+The 2026-05-14 2-round code-scope smoke from commit `2e6a888` passed the first
+gate: final `generate_patch` returned in all three code traces, and round 1
+reached Contract, Verification, and screening. It also exposed the next APS
+control issue. Screening/runtime feedback consumed almost the entire 64k
+session observation budget in round 2, leaving too little space for terminal
+Contract-preview evidence; the session failed closed with
+`contract preview did not pass (result_too_large, tool_error)`.
+
+Current repair: APS now compacts screening/runtime feedback before charging it
+to session observation budget, preserves the full self-check observation
+reserve for code phase, stops late feedback pulls when that reserve is at risk,
+and treats successful same-session feedback as reusable planner context. The
+solver-design prompt is also stricter: one construction/seeding path, one
+bounded improvement loop, no more than two move families, and a hard target of
+about 180 lines/six helpers.
+
+Next validation should again be a 1-2 round independent smoke. The first gate
+is retaining terminal Contract-preview evidence without `result_too_large`;
+the second is keeping generated solver bodies to one complete but narrow
+algorithm slice. Solver-quality movement is still a later criterion.
 
 ## Current Engineering State
 
@@ -291,6 +306,11 @@ short run.
 - Observation-budget pressure is mitigated by compact surface reads, compact
   preview payloads, and a self-check/static-preview reserve. Optional planner
   surface reads fail closed before consuming the reserve.
+- Screening/runtime feedback is now compacted again at the APS observation
+  boundary. The model still sees reason codes, recent screening stats,
+  runtime-attribution highlights, and research diagnosis, but bulky case
+  feedback and raw-sized value lists no longer crowd out terminal Contract
+  preview evidence.
 - Solver-design pre-screening and screening failures are rendered as
   boundary-control guidance: rejected or blacklisted solver-design entries are
   candidate failures, not retirement of the problem-level surface.
@@ -372,7 +392,50 @@ control under `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest analyzed no-op-feedback smoke:
+Latest analyzed code-scope/feedback-budget smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-code-scope-control-smoke-opus-2r-20260514T122210Z
+model=claude-opus-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=2
+rounds_completed=2 APS rounds, 1 screened experiment
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+git_commit=2e6a888
+exit_code=0
+status=max_rounds_exhausted
+terminal_reason=code_generation_failed
+analysis_doc=scion/docs/experiments/v0.4/v0.4-code-scope-control-feedback-budget-opus-2r-20260514.md
+```
+
+Summary:
+
+- The prior code-scope repair worked for final code generation: all three code
+  traces returned successfully instead of timing out.
+- Round 1 reached Contract, Verification, and screening under
+  `modify/solver_design`. It had 16/16 valid pairs, `win_rate=0.125`,
+  `median_delta=0.0`, and median runtime ratio about `0.771`.
+- The screened candidate produced real solver telemetry
+  (`solver_algorithm_accepted_moves` nonzero on 7/16 pairs and
+  `solver_algorithm_best_delta` weighted sum `53`), but it was still abandoned
+  by `SCREENING_FAIL_WIN_RATE`.
+- Round 2 used the feedback correctly at the hypothesis level, identifying
+  baseline bootstrap as consuming too much runtime and proposing a no-baseline
+  construction/local-search solver.
+- Round 2 then failed before useful preview evidence could be retained because
+  screening/runtime observations had already consumed almost the entire 64k
+  APS observation budget. Contract preview was recorded as
+  `result_too_large`, not as a deterministic pass/fail preview.
+
+Current repair compacts feedback observations at the APS boundary, reserves
+self-check observation budget through code phase, skips late feedback pulls
+when that reserve is at risk, and tightens solver-design code scope to one
+compact algorithm slice. This is a framework-control repair; it does not
+change CVRP objective, feasibility, parser, splits, seeds, or Decision rules.
+
+Previous analyzed no-op-feedback smoke:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-solver-noop-feedback-smoke-sonnet-2r-20260514T112251Z
@@ -404,9 +467,7 @@ Summary:
   failure: the first code prompt is compact by default, and a timeout triggers
   one in-session compact semantic retry.
 
-Next validation should again be a 1-2 round independent smoke. The first gate
-is reaching Contract preview/Verification without final code-generation
-timeout; solver-quality promotion remains a later criterion.
+This run is superseded by the code-scope/feedback-budget smoke above.
 
 Previous analyzed code-phase exploratory run after the 2-round smoke:
 

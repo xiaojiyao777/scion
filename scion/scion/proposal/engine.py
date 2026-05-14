@@ -768,12 +768,13 @@ def _split_code_context(
         "- Implement a complete `solve(instance, rng, time_limit_sec, context)` "
         "algorithm body. Do not return a lifecycle/config dictionary.\n"
         "- Default to a compact replacement file: one coherent construction or "
-        "seeding path, one bounded improvement/search loop, and only the helper "
-        "functions needed for that path.\n"
+        "seeding path, one bounded improvement/search loop, no more than two "
+        "move families, and only the helper functions needed for that path.\n"
         "- Do not preserve the inactive template merely to edit a few constants, "
         "and do not grow a helper forest for ALNS/VNS, route-pool, destroy/repair, "
-        "and perturbation all at once. Later rounds can add breadth after this "
-        "patch proves movement.\n"
+        "and perturbation all at once. Select one vertical algorithm slice that "
+        "can run and screen now; later rounds can add breadth after it proves "
+        "movement.\n"
         "- Do not submit a shallow wrapper that only calls `context.baseline`, "
         "changes baseline budget/params, or adds a tiny post-baseline polish. "
         "If baseline is used, it must be paired with a bounded algorithmic "
@@ -949,7 +950,10 @@ def _code_hypothesis_detail(
     detail = str(context.get("hypothesis_detail") or "")
     if not is_solver_design_surface:
         return detail
-    if str(context.get("code_generation_mode") or "").strip() == "compact_timeout_retry":
+    if (
+        str(context.get("code_generation_mode") or "").strip()
+        == "compact_timeout_retry"
+    ):
         return _limit_code_phase_text(
             detail,
             _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS,
@@ -972,9 +976,7 @@ def _solver_design_scope_control_section(
     scope = context.get("agentic_code_scope_control")
     if not isinstance(scope, Mapping):
         scope = {}
-    mode = str(
-        context.get("code_generation_mode") or scope.get("mode") or ""
-    ).strip()
+    mode = str(context.get("code_generation_mode") or scope.get("mode") or "").strip()
     broad_terms = _solver_design_broad_terms(context)
     if not broad_terms and isinstance(scope.get("detected_broad_terms"), list):
         broad_terms = [
@@ -987,8 +989,9 @@ def _solver_design_scope_control_section(
         "",
         "## Compact Solver-Design Implementation Scope",
         "- Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
-        "- Implement one primary mechanism now. Prefer a direct seed/construction plus a bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
-        "- Suggested size target: keep the replacement file around 220 lines or less and around eight helper functions or fewer when practical.",
+        "- Implement one primary mechanism now. Prefer a direct seed/construction plus one bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
+        "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
+        "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` or `time_limit_sec` through the provided context.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
     ]
