@@ -431,7 +431,7 @@ def _valid_hypothesis_payload(**overrides) -> dict:
     payload.update(overrides)
     if payload.get("change_locus") == "solver_design":
         if "target_file" not in overrides:
-            payload["target_file"] = "policies/solver_algorithm.py"
+            payload["target_file"] = "policies/baseline_algorithm.py"
         if "target_objectives" not in overrides:
             payload["target_objectives"] = ["total_distance"]
         if "protected_objectives" not in overrides:
@@ -654,6 +654,7 @@ def _cvrp_context_with_champion(tmp_path: Path) -> ProposalToolContext:
     (champion_root / "policies").mkdir(parents=True)
     for name in (
         "algorithm_blueprint.py",
+        "baseline_algorithm.py",
         "main_search_strategy.py",
         "solver_algorithm.py",
     ):
@@ -2362,6 +2363,80 @@ def test_contract_preview_is_static_and_does_not_materialize_workspace(
     assert after == before
 
 
+def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    solution = context.nearest_neighbor()\n"
+                    "    context.record_iteration('seed', 1)\n"
+                    "    context.record_move('seed', attempted=1, accepted=1)\n"
+                    "    return solution\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert payload["non_promotional"] is True
+    assert payload["tainted_debug"] is True
+    assert payload["workspace_materialized"] is False
+    assert payload["verification_run"] is False
+    assert payload["protocol_run"] is False
+    assert payload["decision_run"] is False
+    assert payload["problem_preview"]["passed"] is True
+    assert after == before
+
+
+def test_algorithm_smoke_rejects_preferred_solver_design_baseline_wrapper(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    return context.baseline()\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    rendered = json.dumps(observation.structured_payload, sort_keys=True)
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert "must not call context.baseline" in rendered
+
+
 def test_contract_preview_patch_payload_is_compact_without_code_content(
     tmp_path: Path,
 ) -> None:
@@ -3022,6 +3097,7 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     assert "proposal.schema_preview" in tool_names
     assert "proposal.target_permission_preview" in tool_names
     assert "proposal.contract_preview" in tool_names
+    assert "proposal.algorithm_smoke" in tool_names
     assert output.self_check.schema_valid is True
     assert output.self_check.contract_preview_passed is True
     assert creative.hypothesis_contexts[0]["agentic_tool_observations"]
@@ -4221,6 +4297,7 @@ def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
     assert (
         "feedback.query_holdout_summary" not in first_planner_context["allowed_tools"]
     )
+    assert "proposal.algorithm_smoke" not in first_planner_context["allowed_tools"]
     assert all(spec.get("name") for spec in first_planner_context["allowed_tool_specs"])
 
 

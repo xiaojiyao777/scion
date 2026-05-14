@@ -1127,6 +1127,7 @@ class AgenticProposalSession:
             )
             observations.append(patch_preview)
             evidence.extend(_evidence_from_observations((patch_preview,)))
+            latest_preview = patch_preview
             if (
                 not patch_preview.is_error
                 and not bool(patch_preview.structured_payload.get("passed"))
@@ -1186,6 +1187,88 @@ class AgenticProposalSession:
                 )
                 observations.append(repair_preview)
                 evidence.extend(_evidence_from_observations((repair_preview,)))
+                latest_preview = repair_preview
+
+            if _preview_observation_passed(latest_preview):
+                smoke_preview = self._run_algorithm_smoke_tool(
+                    tool_context,
+                    hypothesis,
+                    patch,
+                    state,
+                )
+                observations.append(smoke_preview)
+                evidence.extend(_evidence_from_observations((smoke_preview,)))
+                if (
+                    not _preview_observation_passed(smoke_preview)
+                    and code_repair_attempts_used
+                    < self._tool_loop_config.max_code_repair_attempts
+                    and not self._session_timeout_reached(state)
+                ):
+                    try:
+                        patch = self._repair_patch_after_preview(
+                            request=request,
+                            state=state,
+                            hypothesis=hypothesis,
+                            code_context=code_context,
+                            observations=observations,
+                            failed_preview=smoke_preview,
+                            repair_attempt=code_repair_attempts_used + 1,
+                        )
+                        code_repair_attempts_used += 1
+                    except self._SESSION_ERROR_TYPES as exc:
+                        output = self._partial_hypothesis_output(
+                            request=request,
+                            session_id=session_id,
+                            hypothesis=hypothesis,
+                            detail=str(exc),
+                            evidence_used=tuple(evidence),
+                            self_check=_self_check_from_previews(observations),
+                        )
+                        state.status = output.status
+                        state.note(
+                            AgenticProposalPhase.FINALIZE,
+                            "Patch repair generation failed after algorithm-smoke feedback.",
+                            metadata={"error": type(exc).__name__},
+                        )
+                        return self._persist(output, state)
+                    self_reported_issue = _patch_self_reported_unresolved_issue(patch)
+                    if self_reported_issue is not None:
+                        output = self._partial_hypothesis_output(
+                            request=request,
+                            session_id=session_id,
+                            hypothesis=hypothesis,
+                            detail=self_reported_issue,
+                            evidence_used=tuple(evidence),
+                            self_check=_self_check_from_previews(observations),
+                        )
+                        state.status = output.status
+                        state.note(
+                            AgenticProposalPhase.FINALIZE,
+                            "Patch repair failed because generated patch self-reported an unresolved code issue.",
+                            metadata={"detail": self_reported_issue},
+                        )
+                        return self._persist(output, state)
+                    repaired_contract_preview = self._run_contract_preview_tool(
+                        tool_context,
+                        hypothesis,
+                        patch,
+                        state,
+                    )
+                    observations.append(repaired_contract_preview)
+                    evidence.extend(
+                        _evidence_from_observations((repaired_contract_preview,))
+                    )
+                    if _preview_observation_passed(repaired_contract_preview):
+                        repaired_smoke_preview = self._run_algorithm_smoke_tool(
+                            tool_context,
+                            hypothesis,
+                            patch,
+                            state,
+                        )
+                        observations.append(repaired_smoke_preview)
+                        evidence.extend(
+                            _evidence_from_observations((repaired_smoke_preview,))
+                        )
 
         state.note(AgenticProposalPhase.SELF_CHECK, "Recorded APS-1 schema self-check.")
         self_check = (
@@ -1193,6 +1276,24 @@ class AgenticProposalSession:
             if tool_context is not None
             else AgenticSelfCheck(schema_valid=True)
         )
+        algorithm_smoke_detail = _algorithm_smoke_failure_detail(observations)
+        if algorithm_smoke_detail is not None:
+            output = self._self_check_failed_output(
+                request=request,
+                session_id=session_id,
+                hypothesis=hypothesis,
+                detail=algorithm_smoke_detail,
+                termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+                evidence_used=tuple(evidence),
+                self_check=self_check,
+            )
+            state.status = output.status
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Patch self-check failed closed after algorithm smoke.",
+                metadata={"detail": algorithm_smoke_detail},
+            )
+            return self._persist(output, state)
         self_check_detail = _self_check_failure_detail(
             self_check,
             require_schema_preview=_self_check_required(tool_context),
@@ -2090,9 +2191,12 @@ class AgenticProposalSession:
                 "remaining_tool_calls": self._remaining_tool_calls(state),
                 "remaining_code_tool_calls": max(0, max_calls - len(observations)),
                 "reserved_for_self_check": {
-                    "tool_calls": 1,
-                    "steps": 1,
-                    "purpose": "final Contract preview after patch generation",
+                    "tool_calls": 4,
+                    "steps": 4,
+                    "purpose": (
+                        "final Contract preview and algorithm smoke after patch "
+                        "generation"
+                    ),
                 },
                 "observations": [
                     _observation_selection_payload(observation)
@@ -2391,9 +2495,9 @@ class AgenticProposalSession:
         self,
         state: AgenticProposalSessionState,
     ) -> bool:
-        if self._remaining_tool_calls(state) <= 1:
+        if self._remaining_tool_calls(state) <= 4:
             return True
-        if self._remaining_tool_steps(state) <= 1:
+        if self._remaining_tool_steps(state) <= 4:
             return True
         reserve = max(
             self._minimum_budgeted_observation_chars(),
@@ -2922,6 +3026,43 @@ class AgenticProposalSession:
             selection_source="fallback_selected",
         )
 
+    def _run_algorithm_smoke_tool(
+        self,
+        context: ProposalToolContext,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal,
+        state: AgenticProposalSessionState,
+    ) -> ProposalObservation:
+        if self._tool_loop_limit_reached(state):
+            stop_reason = self._current_loop_stop_reason(state)
+            self._record_loop_stop(state, stop_reason)
+            return ProposalObservation(
+                observation_id=str(uuid.uuid4()),
+                session_id=context.session_id,
+                tool_name="proposal.algorithm_smoke",
+                tool_call_id="",
+                observation_type="tool_skipped",
+                summary=(
+                    "Algorithm smoke skipped because the session wall-time limit was reached."
+                    if stop_reason == "session_timeout"
+                    else "Algorithm smoke skipped because the tool loop limit was reached."
+                ),
+                structured_payload={},
+                is_error=True,
+                failure_code=ProposalToolFailureCode.UNSUPPORTED,
+            )
+        return self._call_tool(
+            context,
+            state,
+            AgenticProposalPhase.SELF_CHECK,
+            "proposal.algorithm_smoke",
+            {
+                "hypothesis": _proposal_payload(hypothesis),
+                "patch": _proposal_payload(patch),
+            },
+            selection_source="fallback_selected",
+        )
+
     def _call_tool(
         self,
         context: ProposalToolContext,
@@ -3040,7 +3181,7 @@ class AgenticProposalSession:
                     failure_code=ProposalToolFailureCode.RUNTIME_EXCEPTION,
                     repair_hint=(
                         "Simplify the candidate and use statically bounded loops "
-                        "before requesting Contract preview again."
+                        "before requesting Contract preview or algorithm smoke again."
                     ),
                 )
         observation = self._enforce_observation_budget(context, state, observation)
@@ -3092,7 +3233,10 @@ class AgenticProposalSession:
         tool_call_id: str,
     ) -> ProposalObservation:
         assert self.tool_registry is not None
-        if name != "proposal.contract_preview" or not _can_use_signal_timeout():
+        if (
+            name not in {"proposal.contract_preview", "proposal.algorithm_smoke"}
+            or not _can_use_signal_timeout()
+        ):
             return self.tool_registry.call(
                 name,
                 args,
@@ -3105,7 +3249,7 @@ class AgenticProposalSession:
 
         def _raise_timeout(_signum: int, _frame: Any) -> None:
             raise _ProposalToolTimeout(
-                "Contract preview timed out before workspace materialization."
+                "Preview timed out before workspace materialization."
             )
 
         signal.signal(signal.SIGALRM, _raise_timeout)
@@ -4270,6 +4414,11 @@ def _filter_model_facing_tool_names(
             # model-facing planner prompts cannot safely render a tool name
             # containing holdout terminology under strict sanitization.
             continue
+        if name == "proposal.algorithm_smoke":
+            # This tool needs a completed patch; the session invokes it
+            # deterministically after code generation instead of exposing it to
+            # pre-code planning.
+            continue
         filtered.append(name)
     return tuple(dict.fromkeys(filtered))
 
@@ -4387,6 +4536,7 @@ def _is_solver_design_code_context(
     return (
         surface in _SOLVER_DESIGN_SURFACE_NAMES
         or kind in _SOLVER_DESIGN_SURFACE_NAMES
+        or target_file.endswith("policies/baseline_algorithm.py")
         or target_file.endswith("policies/solver_algorithm.py")
     )
 
@@ -4414,8 +4564,9 @@ def _solver_design_code_scope_control(
             ),
             "scope_rule": (
                 "Reduce broad hybrid hypotheses to one executable vertical "
-                "algorithm slice for this patch. Do not preserve or expand "
-                "the inactive template helper forest."
+                "algorithm slice for this patch. Modify the controlled "
+                "algorithm body directly; do not turn it into a "
+                "context.baseline post-processing wrapper."
             ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "
@@ -5258,6 +5409,42 @@ def _self_check_failure_detail(
         suffix = f" ({codes})" if codes else ""
         return f"contract preview did not pass{suffix}"
     return None
+
+
+def _preview_observation_passed(observation: ProposalObservation) -> bool:
+    return (
+        not observation.is_error
+        and bool(observation.structured_payload.get("passed"))
+    )
+
+
+def _algorithm_smoke_failure_detail(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> str | None:
+    smoke_observations = [
+        observation
+        for observation in observations
+        if observation.tool_name == "proposal.algorithm_smoke"
+    ]
+    if not smoke_observations:
+        return None
+    latest = smoke_observations[-1]
+    if latest.is_error:
+        codes = ", ".join(
+            code
+            for code in (
+                _enum_value(latest.failure_code),
+                latest.observation_type,
+            )
+            if code
+        )
+        suffix = f" ({codes})" if codes else ""
+        return f"algorithm smoke did not run{suffix}"
+    if bool(latest.structured_payload.get("passed")):
+        return None
+    codes = ", ".join(_preview_codes(latest.structured_payload))
+    suffix = f" ({codes})" if codes else ""
+    return f"algorithm smoke did not pass{suffix}"
 
 
 def _self_check_required(context: ProposalToolContext | None) -> bool:

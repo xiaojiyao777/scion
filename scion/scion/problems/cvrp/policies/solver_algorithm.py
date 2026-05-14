@@ -1,10 +1,8 @@
-"""Default CVRP solver-algorithm research hook.
+"""Compatibility CVRP solver-algorithm research hook.
 
-The checked-in champion keeps this hook inactive so existing campaigns still
-fall back to the stable repo-local baseline. The rest of the file is an
-editable full-algorithm template: candidate proposals should replace or
-materially rework this body instead of wrapping ``context.baseline`` with a
-thin post-processing pass.
+The preferred solver_design target is now ``policies/baseline_algorithm.py``,
+which exposes a Scion-controlled algorithm body. This older hook remains
+inactive for backward compatibility with existing snapshots and tests.
 """
 from __future__ import annotations
 

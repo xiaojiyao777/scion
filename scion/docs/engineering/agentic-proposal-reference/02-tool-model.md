@@ -262,6 +262,7 @@ Suggested MVP tool set:
 | `proposal.draft_hypothesis` | draft_patch | Pydantic validated. |
 | `proposal.draft_patch` | draft_patch | Complete file content artifact. |
 | `proposal.contract_preview` | contract_preview | Static only, no workspace materialization. |
+| `proposal.algorithm_smoke` | contract_preview | Deterministic post-code synthetic smoke; tainted, non-promotional, no workspace materialization, and not model-facing before a patch exists. |
 | `proposal.finalize` | draft_patch | Emits final session output. |
 
 Everything else remains outside the proposal agent.
@@ -285,6 +286,14 @@ while individual tool observations remain bounded and raw metrics refs remain
 stripped. Terminal Contract preview keeps a compact deterministic pass/fail
 summary when the full preview payload would exceed the remaining session
 observation budget.
+
+After a patch passes static Contract preview, APS may invoke
+`proposal.algorithm_smoke` as a code-stage debug gate. The tool reuses the
+problem-owned preview path, calls the candidate algorithm on synthetic cases,
+and returns compact pass/fail plus problem-preview issues. It can guide one
+bounded code repair attempt before official evaluation, but it remains tainted
+proposal evidence. Verification, Protocol, and Decision remain the only
+promotion path.
 
 Active problem-object boundary guidance is separate from forced-surface
 diagnostics. During `--force-surface` campaigns, tool guidance renders the

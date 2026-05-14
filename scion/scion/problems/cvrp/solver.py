@@ -33,7 +33,12 @@ _CONSTRUCTION_POLICY_RELATIVE_PATH = "policies/construction_policy.py"
 _NEIGHBORHOOD_PORTFOLIO_RELATIVE_PATH = "policies/neighborhood_portfolio.py"
 _ALGORITHM_BLUEPRINT_RELATIVE_PATH = "policies/algorithm_blueprint.py"
 _MAIN_SEARCH_STRATEGY_RELATIVE_PATH = "policies/main_search_strategy.py"
+_BASELINE_ALGORITHM_RELATIVE_PATH = "policies/baseline_algorithm.py"
 _SOLVER_ALGORITHM_RELATIVE_PATH = "policies/solver_algorithm.py"
+_SOLVER_ALGORITHM_RELATIVE_PATHS = (
+    _BASELINE_ALGORITHM_RELATIVE_PATH,
+    _SOLVER_ALGORITHM_RELATIVE_PATH,
+)
 _ALNS_VNS_POLICY_RELATIVE_PATH = "policies/alns_vns_policy.py"
 _DESTROY_REPAIR_POLICY_RELATIVE_PATH = "policies/destroy_repair_policy.py"
 _ROUTE_PAIR_CANDIDATE_POLICY_RELATIVE_PATH = "policies/route_pair_candidate_policy.py"
@@ -8393,16 +8398,48 @@ def _load_solver_algorithm(
     start_time: float,
     adapter: CvrpAdapter,
 ) -> tuple[CvrpSolution | None, dict[str, Any]]:
-    audit = _solver_algorithm_defaults()
+    inactive_audit: dict[str, Any] | None = None
+    for relative_path in _SOLVER_ALGORITHM_RELATIVE_PATHS:
+        solution, audit = _load_solver_algorithm_file(
+            workspace_root=workspace_root,
+            relative_path=relative_path,
+            instance=instance,
+            instance_path=instance_path,
+            seed=seed,
+            rng=rng,
+            time_limit_sec=time_limit_sec,
+            start_time=start_time,
+            adapter=adapter,
+        )
+        if _solver_algorithm_active(audit) or audit.get("solver_algorithm_errors"):
+            return solution, audit
+        if inactive_audit is None:
+            inactive_audit = audit
+    return None, inactive_audit or _solver_algorithm_defaults()
+
+
+def _load_solver_algorithm_file(
+    *,
+    workspace_root: str | Path,
+    relative_path: str,
+    instance: CvrpInstance,
+    instance_path: str,
+    seed: int,
+    rng: random.Random,
+    time_limit_sec: float,
+    start_time: float,
+    adapter: CvrpAdapter,
+) -> tuple[CvrpSolution | None, dict[str, Any]]:
+    audit = _solver_algorithm_defaults(relative_path)
     workspace = Path(workspace_root).resolve()
-    policy_path = (workspace / _SOLVER_ALGORITHM_RELATIVE_PATH).resolve()
+    policy_path = (workspace / relative_path).resolve()
     try:
         policy_path.relative_to(workspace)
     except ValueError:
         _record_solver_algorithm_event(
             audit,
             "error",
-            "solver algorithm path escapes workspace",
+            f"solver algorithm path escapes workspace: {relative_path}",
         )
         audit["solver_algorithm_errors"] += 1
         return None, audit
@@ -8501,9 +8538,11 @@ def _load_solver_algorithm(
     return solution, audit
 
 
-def _solver_algorithm_defaults() -> dict[str, Any]:
+def _solver_algorithm_defaults(
+    relative_path: str = _BASELINE_ALGORITHM_RELATIVE_PATH,
+) -> dict[str, Any]:
     return {
-        "solver_algorithm_path": _SOLVER_ALGORITHM_RELATIVE_PATH,
+        "solver_algorithm_path": relative_path,
         "solver_algorithm_loaded": False,
         "solver_algorithm_active": False,
         "solver_algorithm_errors": 0,

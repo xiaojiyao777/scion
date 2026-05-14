@@ -69,12 +69,14 @@ Active version: v0.4 on `v0.4-dev`.
 Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is no longer incremental
 component exposure. `solver_design` is now the CVRP problem-object boundary
-for the algorithm itself, backed by `policies/solver_algorithm.py`.
+for the algorithm itself, backed primarily by
+`policies/baseline_algorithm.py`.
 Candidates implement `solve(instance, rng, time_limit_sec, context)` and may
 change construction, improvement, destroy/repair, recombination, acceptance,
 restart/perturbation, and runtime scheduling inside that algorithm body.
 The adapter/solver remains authoritative for parsing, feasibility, objective
 recomputation, seeds, protocol splits, time limits, and Decision rules.
+`policies/solver_algorithm.py` remains only as an older compatibility hook.
 
 The older `policies/main_search_strategy.py` lifecycle table remains as a
 legacy `main_search_strategy` config surface for regression coverage and
@@ -84,7 +86,8 @@ diagnostics unless explicitly debugging that legacy surface.
 
 Important current interpretation:
 
-- `solver_design` targets `policies/solver_algorithm.py` and requires
+- `solver_design` targets `policies/baseline_algorithm.py` first and
+  `policies/solver_algorithm.py` only for compatibility. It requires
   `solve(instance, rng, time_limit_sec, context)`. Returning `None` keeps the
   checked-in champion on the stable baseline path; an active candidate must
   return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
@@ -92,11 +95,12 @@ Important current interpretation:
   `instance.customer_ids`, `instance.customer_count`, `instance.demands`,
   `instance.capacity`, `instance.distance`, `instance.route_load`,
   `instance.route_distance`, and `context` helpers such as
-  `nearest_neighbor`, `baseline`, `make_solution`, `objective`,
+  `nearest_neighbor`, `make_solution`, `objective`,
   `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
   `record_phase`, `record_iteration`, `record_move`, and `set_stop_reason`.
-  `context.baseline` accepts an optional seed solution
-  and either `time_budget_sec` or the compatibility alias `time_limit_sec`.
+  `context.baseline` remains available only for the older compatibility hook;
+  preferred `baseline_algorithm.py` candidates must study and modify the
+  controlled algorithm body instead of calling `context.baseline`.
   `context.objective` is still a mapping, but now also compares
   lexicographically as `(fleet_violation, total_distance)`.
   The `time` module is whitelisted for monotonic timing; use context time
@@ -143,11 +147,12 @@ Important current interpretation:
   code-level whole-solution route-pool quality repair inside `solver_design`,
   not from another exposed singleton policy.
 - The current adapter repair goes deeper than prompt exposure: the checked-in
-  `policies/solver_algorithm.py` remains inactive by default for champion
-  stability, but it now carries an editable ALNS/VNS-style full-algorithm
-  template. New candidates should materially rework or replace that algorithm
-  body. A candidate that only wraps `context.baseline(...)`, changes baseline
-  budget/params, or adds a tiny post-baseline polish is a design failure.
+  `policies/baseline_algorithm.py` remains inactive by default for champion
+  stability, but it now carries the Scion-controlled ALNS/VNS-style
+  full-algorithm subject. New candidates should materially rework or replace
+  that algorithm body. A candidate that calls `context.baseline(...)` from
+  this preferred target, changes baseline budget/params, or adds a tiny
+  post-baseline polish is a design failure.
 - The main-search execution-semantics repair was necessary but insufficient:
   bounded destroy/repair now ranks repair insertions globally, preserves
   fallback budget, honors the fallback toggle, and lets recovery-only accepted
@@ -197,6 +202,11 @@ Important current interpretation:
   can be fed back into one bounded regeneration attempt. The proposal agent
   still cannot write workspaces, read validation/frozen raw metrics, or change
   objective/constraint semantics.
+- Code phase also runs `proposal.algorithm_smoke` after a static Contract
+  preview passes. This is a tainted, non-promotional synthetic CVRP smoke that
+  calls the candidate `solve(...)` before the patch enters official
+  evaluation. Its only purpose is debugging/repair; promotion evidence still
+  comes exclusively from Contract, Verification, Protocol, and Decision.
 - The latest 5-round exploratory `solver_design` run exposed a preview-time
   hang after successful code generation. Treat this as a boundary-control
   issue, not a reason to return to componentized policy exposure.
@@ -246,9 +256,10 @@ Important current interpretation:
   bounded improvement loop, no more than two move families, and a hard target
   around 180 lines/six helpers. This still means a complete `solve(...)`
   algorithm body, not a component knob or baseline-only wrapper.
-- Next validation is still a 1-2 round independent smoke. The first gate is
-  retaining Contract-preview pass/fail evidence without `result_too_large`;
-  solver-quality movement is a later gate in that same short run.
+- Next validation is a very short independent smoke. The first gate is whether
+  candidates target and modify `baseline_algorithm.py` as the algorithm body,
+  pass Contract plus algorithm smoke, and enter official Verification without
+  reverting to baseline-wrapper behavior.
 
 Read [current-state.md](status/current-state.md) for the exact latest status.
 

@@ -291,6 +291,11 @@ class ContractPreviewInput(_StrictInput):
     patch: dict[str, Any] | None = None
 
 
+class AlgorithmSmokeInput(_StrictInput):
+    hypothesis: dict[str, Any] | None = None
+    patch: dict[str, Any] | None = None
+
+
 class ProposalToolRegistry:
     """Registry and call boundary for proposal tools."""
 
@@ -439,6 +444,7 @@ class ProposalToolRegistry:
                 TargetPermissionPreviewTool(),
                 InterfacePreviewTool(),
                 ContractPreviewTool(),
+                AlgorithmSmokeTool(),
             ]
         )
 
@@ -1547,6 +1553,133 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                         if issue_summary
                         else "Static contract preview found issues."
                     )
+                )
+            ),
+            structured_payload=payload,
+            exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
+        )
+
+
+class AlgorithmSmokeTool(_BaseReadOnlyTool):
+    name = "proposal.algorithm_smoke"
+    input_schema = AlgorithmSmokeInput
+    permission = ProposalToolPermission.CONTRACT_PREVIEW
+    max_result_chars = 60000
+
+    def call(
+        self,
+        args: AlgorithmSmokeInput,
+        context: ProposalToolContext,
+    ) -> ProposalObservation:
+        payload: dict[str, Any] = {
+            "passed": True,
+            "hypothesis": None,
+            "patch": None,
+            "static_contract": None,
+            "problem_preview": None,
+            "non_promotional": True,
+            "tainted_debug": True,
+            "workspace_materialized": False,
+            "verification_run": False,
+            "protocol_run": False,
+            "decision_run": False,
+        }
+        gate = _contract_gate(context)
+        if args.hypothesis is None or args.patch is None:
+            payload["passed"] = False
+            payload["errors"] = [
+                "Provide both approved hypothesis and patch payload for algorithm smoke."
+            ]
+        hypothesis_object = None
+        if args.hypothesis is not None:
+            hypothesis_preview = _schema_preview_hypothesis_payload(
+                context,
+                args.hypothesis,
+            )
+            if hypothesis_preview["passed"]:
+                result = gate.validate_hypothesis(
+                    hypothesis_preview["hypothesis_object"],
+                    [],
+                    [],
+                    current_champion_version=_champion_version(context.champion),
+                )
+                hypothesis_preview["contract"] = _contract_summary_payload(result)
+                hypothesis_preview["checks"] = _checks_payload(
+                    result.checks,
+                    detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
+                    max_checks=_PREVIEW_MAX_CHECKS,
+                )
+                hypothesis_preview["passed"] = result.passed
+                if result.passed:
+                    hypothesis_object = hypothesis_preview["hypothesis_object"]
+            payload["hypothesis"] = hypothesis_preview
+            payload["passed"] = payload["passed"] and bool(hypothesis_preview["passed"])
+
+        if args.patch is not None:
+            patch_preview = _schema_preview_patch_payload(args.patch)
+            if patch_preview["passed"]:
+                result = gate.validate_patch(
+                    patch_preview["patch_object"],
+                    approved_hypothesis=hypothesis_object,
+                )
+                contract_payload = _contract_result_payload(
+                    result,
+                    detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
+                    max_checks=_PREVIEW_MAX_CHECKS,
+                )
+                patch_preview["contract"] = _contract_summary_payload(result)
+                patch_preview["checks"] = contract_payload["checks"]
+                patch_preview["passed"] = result.passed
+                payload["static_contract"] = _contract_summary_payload(result)
+                if result.passed and hypothesis_object is not None:
+                    selected_surface = _hypothesis_selected_surface(hypothesis_object)
+                    surface = _surface_for_selected_or_patch_path(
+                        context,
+                        patch_preview["patch_object"].file_path,
+                        selected_surface,
+                    )
+                    problem_preview = _problem_surface_preview(
+                        context,
+                        patch_preview["patch_object"],
+                        surface,
+                    )
+                    if problem_preview is None:
+                        problem_preview = {
+                            "passed": True,
+                            "checks": [],
+                            "issues": [],
+                            "skipped": True,
+                            "workspace_materialized": False,
+                            "verification_run": False,
+                        }
+                    compact_preview = _compact_problem_preview(problem_preview)
+                    patch_preview["problem_preview"] = compact_preview
+                    payload["problem_preview"] = compact_preview
+                    patch_preview["passed"] = bool(patch_preview["passed"]) and bool(
+                        problem_preview.get("passed")
+                    )
+                elif result.passed:
+                    patch_preview["passed"] = False
+                    patch_preview["needs_hypothesis"] = True
+                    payload["needs_hypothesis"] = True
+            payload["patch"] = patch_preview
+            payload["passed"] = payload["passed"] and bool(patch_preview["passed"])
+
+        payload = _drop_internal_preview_objects(payload)
+        issue_summary = _contract_preview_issue_summary(payload)
+        if issue_summary:
+            payload["issue_summary"] = issue_summary
+        return self._observation(
+            context,
+            observation_type="algorithm_smoke",
+            summary=(
+                "Algorithm smoke passed on tainted synthetic preview."
+                if payload["passed"]
+                else (
+                    "Algorithm smoke found issues: "
+                    f"{issue_summary}"
+                    if issue_summary
+                    else "Algorithm smoke found issues."
                 )
             ),
             structured_payload=payload,

@@ -848,12 +848,14 @@ research_surfaces:
         Lets Scion study the algorithm itself instead of filling a component
         lifecycle dictionary. The candidate may implement construction, local
         improvement, destroy/repair, recombination, perturbation, acceptance,
-        and runtime allocation directly in policies/solver_algorithm.py. The
-        adapter and solver remain authoritative for CVRP parsing, feasibility,
-        objective recomputation, seeds, timeout handling, protocol splits, and
-        promotion decisions.
+        and runtime allocation directly in policies/baseline_algorithm.py, the
+        Scion-controlled editable algorithm body. policies/solver_algorithm.py
+        remains only as a compatibility hook. The adapter and solver remain
+        authoritative for CVRP parsing, feasibility, objective recomputation,
+        seeds, timeout handling, protocol splits, and promotion decisions.
     targets:
       files:
+        - "policies/baseline_algorithm.py"
         - "policies/solver_algorithm.py"
       create_new_allowed: false
       modify_allowed: true
@@ -883,7 +885,7 @@ research_surfaces:
         - route_recombination
         - perturbation
         - acceptance
-        - repo_local_baseline_helper
+        - controlled_baseline_algorithm_body
       complexity_scale_terms:
         - time_limit_sec
         - customer_count
@@ -928,7 +930,8 @@ research_surfaces:
         Keep novelty_signature identity fields as compact tokens or short
         phrases; each scalar string must be at most 120 characters. Put long
         rationale in hypothesis_text, not novelty_signature.
-        The idea must be a full solve(...) algorithm body, not a
+        The idea must be a full solve(...) algorithm body in the editable
+        policies/baseline_algorithm.py subject, not a
         main_search_plan lifecycle/config table and not a shallow wrapper
         around context.baseline. A solver-design hypothesis that mainly changes
         baseline budget/params or adds a tiny post-baseline polish has already
@@ -938,14 +941,17 @@ research_surfaces:
         seeds, evaluation splits, and Decision rules.
       implementation_guidance: >-
         Implement solve(instance, rng, time_limit_sec, context) in
-        policies/solver_algorithm.py. You may use instance.depot,
+        policies/baseline_algorithm.py. This file is the preferred editable
+        algorithm subject and must not call context.baseline; change the
+        controlled construction/search/destroy-repair/VNS logic itself.
+        policies/solver_algorithm.py is retained only for older compatibility
+        candidates. You may use instance.depot,
         instance.customer_ids, instance.customer_count,
         instance.demands[customer_id], instance.capacity,
         instance.distance(i, j), instance.route_load(route), and
         instance.route_distance(route). Use context.make_solution(routes),
-        context.nearest_neighbor(...), context.baseline(initial_solution=None,
-        time_budget_sec=None, time_limit_sec=None, params=None),
-        context.objective(solution), context.objective_key(solution),
+        context.nearest_neighbor(...), context.objective(solution),
+        context.objective_key(solution),
         context.is_better(candidate, incumbent), context.is_valid(solution),
         context.remaining_time(), context.elapsed_ms(), and
         context.record_phase(name, elapsed_ms),
@@ -972,11 +978,13 @@ research_surfaces:
         adapter.py, models.py, cvrplib.py, protocol files, or runtime gates. Do
         not use case-name-specific behavior, hidden benchmark references,
         global mutable state, wall-clock sleeps, network/filesystem reads, or
-        instance.customers. Do not implement a baseline-only wrapper: calling
-        context.baseline and returning it, changing only baseline budget or
-        params, or adding millisecond-scale polishing without a bounded
-        algorithmic search loop is not a valid solver-design candidate.
+        instance.customers. Do not implement a baseline-only wrapper: the
+        preferred target policies/baseline_algorithm.py must not call
+        context.baseline, and changing only baseline budget or params, or
+        adding millisecond-scale polishing without a bounded algorithmic search
+        loop is not a valid solver-design candidate.
     target_files:
+      - "policies/baseline_algorithm.py"
       - "policies/solver_algorithm.py"
     prompt_hint: >-
       Preferred boundary: implement the full CVRP algorithm under the fixed

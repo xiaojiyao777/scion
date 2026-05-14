@@ -609,7 +609,10 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert solver_design.algorithm is not None
     assert solver_design.algorithm.role == "problem_object_solver_algorithm"
     assert solver_design.targets is not None
-    assert solver_design.targets.files == ["policies/solver_algorithm.py"]
+    assert solver_design.targets.files == [
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+    ]
     assert solver_design.targets.singleton is True
     assert solver_design.targets.create_new_allowed is False
     assert solver_design.targets.remove_allowed is False
@@ -1003,6 +1006,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
         check for check in wrong_target_result.checks if check.name == "C3_action_target"
     )
     assert not c3.passed
+    assert "policies/baseline_algorithm.py" in c3.detail
     assert "policies/solver_algorithm.py" in c3.detail
 
     missing_patch = PatchProposal(
@@ -1212,6 +1216,7 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
         "policies/baseline_policy.py",
         "policies/construction_policy.py",
         "policies/neighborhood_portfolio.py",
+        "policies/baseline_algorithm.py",
         "policies/solver_algorithm.py",
         "policies/main_search_strategy.py",
         "policies/alns_vns_policy.py",
@@ -2769,7 +2774,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Solver lifecycle:" in solver_design_prompt_text
     assert "full algorithm hook" in solver_design_prompt_text
     assert "context.nearest_neighbor" in solver_design_prompt_text
-    assert "context.baseline(initial_solution=None" in solver_design_prompt_text
+    assert "do not call context.baseline" in solver_design_prompt_text
     assert "context.objective_key" in solver_design_prompt_text
     assert "context.record_move" in solver_design_prompt_text
     assert "shallow wrapper" in solver_design_prompt_text
@@ -2855,6 +2860,7 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "## Globally Failed / Blacklisted Approaches\n(none)" in prompt_text
     assert ctx["active_problem_boundary_surfaces"] == "solver_design"
     assert ctx["operator_categories"] == "solver_design"
+    assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
     assert "policies/solver_algorithm.py" in ctx["targetable_files"]
     assert "policies/baseline_policy.py" not in ctx["targetable_files"]
     assert "Set `change_locus` to one of: solver_design." in user_prompt

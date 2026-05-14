@@ -1371,6 +1371,7 @@ def test_solver_algorithm_surface_declares_runtime_fields_and_default_is_inactiv
     assert "solver_algorithm_active" in required_fields
     assert "solver_algorithm_phase_runtime_ms" in required_fields
     assert set(required_fields).issubset(runtime)
+    assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
     assert runtime["solver_algorithm_loaded"] is True
     assert runtime["solver_algorithm_active"] is False
     assert runtime["solver_algorithm_errors"] == 0
@@ -1477,6 +1478,47 @@ def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
         problem_spec=legacy_spec,
         selected_surface="solver_design",
     ) is None
+
+
+def test_enabled_baseline_algorithm_is_preferred_over_legacy_solver_hook(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "baseline_algorithm.py").write_text(
+        "\n".join(
+            [
+                "ENABLE_BASELINE_ALGORITHM = True",
+                "",
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    solution = context.nearest_neighbor()",
+                "    context.record_iteration('preferred_body', 1)",
+                "    context.record_move('preferred_body', attempted=1, accepted=1)",
+                "    context.set_stop_reason('preferred_completed')",
+                "    return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "policies" / "solver_algorithm.py").write_text(
+        "def solve(instance, rng, time_limit_sec, context):\n"
+        "    raise RuntimeError('legacy solver hook should not run')\n",
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(workspace, "data/operator_case.json")
+    runtime = raw["runtime"]
+
+    assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert runtime["solver_algorithm_active"] is True
+    assert runtime["solver_algorithm_errors"] == 0
+    assert runtime["solver_algorithm_solution_valid"] is True
+    assert runtime["solver_algorithm_stop_reason"] == "preferred_completed"
+    assert runtime["solver_algorithm_search_iterations"] == 1
+    assert "legacy solver hook should not run" not in json.dumps(
+        runtime["solver_algorithm_events"]
+    )
 
 
 def test_solver_algorithm_context_accepts_baseline_alias_and_objective_comparison(

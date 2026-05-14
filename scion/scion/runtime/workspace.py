@@ -178,7 +178,7 @@ class WorkspaceMaterializer:
             shutil.rmtree(ws)
 
     def archive_workspace(self, workspace: str, branch_id: str) -> str | None:
-        """Copy the operators/ directory from workspace into archive/<branch_id_short>/.
+        """Copy editable research-surface dirs into archive/<branch_id_short>/.
 
         Called before cleanup on ABANDON so generated .py files are preserved
         for post-campaign analysis.
@@ -188,11 +188,16 @@ class WorkspaceMaterializer:
             branch_id: Branch ID used to name the archive sub-directory.
 
         Returns:
-            Absolute path to the archive directory, or None if operators/ absent.
+            Absolute path to the archive directory, or None if no editable
+            research-surface directories are present.
         """
         ws = Path(workspace)
-        ops_src = ws / "operators"
-        if not ops_src.exists():
+        surface_sources = [
+            source
+            for source in (ws / "operators", ws / "policies")
+            if source.exists()
+        ]
+        if not surface_sources:
             return None
 
         # Use first 8 chars of branch_id for readability
@@ -205,10 +210,16 @@ class WorkspaceMaterializer:
                 suffix += 1
             archive_dest = self._archive_dir / f"{short_id}_{suffix}"
 
-        shutil.copytree(ops_src, archive_dest, symlinks=False)
+        archive_dest.mkdir(parents=True)
+        for source in surface_sources:
+            shutil.copytree(
+                source,
+                archive_dest / source.name,
+                symlinks=False,
+            )
         import logging as _logging
         _logging.getLogger(__name__).info(
-            "Archived operators from branch %s → %s", branch_id, archive_dest
+            "Archived research surfaces from branch %s → %s", branch_id, archive_dest
         )
         return str(archive_dest)
 

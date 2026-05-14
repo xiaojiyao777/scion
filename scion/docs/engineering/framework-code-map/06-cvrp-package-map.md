@@ -19,7 +19,8 @@ Responsibilities:
 - render CVRP problem summary for prompts;
 - render a solver-level CVRP problem object for proposal contexts and APS
   `context.read_problem`;
-- render solver mechanics, including baseline plus post-baseline operator loop;
+- render solver mechanics, including the direct solver-design algorithm body,
+  legacy baseline path, and post-baseline operator loop;
 - render operator interface and policy surface interface;
 - load `.json` instances via `CvrpInstance.from_json()`;
 - load `.vrp` instances via `cvrplib.py`;
@@ -54,7 +55,8 @@ Solver flow:
 
 1. Resolve instance path, including data-root-relative formal paths.
 2. Load instance through `CvrpAdapter`.
-3. Load `policies/solver_algorithm.py` first. If
+3. Load `policies/baseline_algorithm.py` first, then
+   `policies/solver_algorithm.py` only as a compatibility hook. If
    `solve(instance, rng, time_limit_sec, context)` returns a valid solution,
    the direct solver-design hook becomes the output path and the legacy
    baseline/lifecycle/operator layers are skipped.
@@ -179,21 +181,27 @@ direct generated code to use
 of the nonexistent `instance.customers` attribute.
 
 `solver_design` is the current problem-owned CVRP solver-design research
-surface. It is backed by `policies/solver_algorithm.py`. Required function:
+surface. It is backed primarily by `policies/baseline_algorithm.py`, with
+`policies/solver_algorithm.py` retained only for compatibility. Required
+function:
 
 - `solve(instance, rng, time_limit_sec, context)`
 
-The default checked-in execution file returns `None` for champion stability,
-but now includes an editable ALNS/VNS-style algorithm-body template. Active
-candidates may implement construction, route-edit candidate generation, local
-search, destroy/repair, recombination, perturbation, acceptance, and runtime
-scheduling inside `solve(...)`. The adapter/solver remains authoritative for
-objective recomputation, feasibility, parser behavior, seeds, protocol splits,
-and Decision. The legacy `main_search_strategy` surface still exists for
+The default checked-in `baseline_algorithm.py` file returns `None` for champion
+stability, but carries a Scion-controlled ALNS/VNS-style algorithm subject.
+Active candidates should materially rework or replace that body, not call
+`context.baseline(...)` and then polish the result. Candidates may implement
+construction, route-edit candidate generation, local search, destroy/repair,
+recombination, perturbation, acceptance, and runtime scheduling inside
+`solve(...)`. The adapter/solver remains authoritative for objective
+recomputation, feasibility, parser behavior, seeds, protocol splits, and
+Decision. The legacy `main_search_strategy` surface still exists for
 regression coverage; it is not the preferred research object.
 Adapter preview executes `solve(...)` only after static Contract success and
 under a short wall-time guard. Candidates with unbounded preview-time loops
 fail closed before workspace materialization instead of hanging the campaign.
+Preferred-target preview also fails candidates that call `context.baseline(...)`
+from `policies/baseline_algorithm.py`.
 
 The model-facing interface and `problem-v1.yaml` require solver-design
 hypotheses to populate semantic identity through fields such as

@@ -16,14 +16,15 @@ candidates mostly filled a `main_search_plan` lifecycle table and optimized
 exposed knobs rather than studying the algorithm itself.
 
 The current repair changes the active CVRP research object. `solver_design`
-now targets `policies/solver_algorithm.py`, a direct full-algorithm hook with
-`solve(instance, rng, time_limit_sec, context)`. Candidates can implement
-construction, local search, destroy/repair, recombination, acceptance,
-restart/perturbation, and runtime scheduling in Python, while the adapter and
-solver keep ownership of objective semantics, feasibility, parsing, seeds,
-protocol splits, time limits, and Decision rules. Runtime evidence for this
-boundary is now `solver_algorithm_*`, including phase runtime and recomputed
-objective fields.
+now targets `policies/baseline_algorithm.py` first: a Scion-controlled,
+inactive-by-default copy of the CVRP algorithm body with
+`solve(instance, rng, time_limit_sec, context)`. Candidates should study and
+modify that algorithm body inside the branch. `policies/solver_algorithm.py`
+remains as a compatibility hook only. The adapter and solver keep ownership of
+objective semantics, feasibility, parsing, seeds, protocol splits, time
+limits, and Decision rules. Runtime evidence for this boundary remains
+`solver_algorithm_*`, including selected path, phase runtime, movement
+telemetry, and recomputed objective fields.
 
 The older `policies/main_search_strategy.py` path remains declared as the
 legacy `main_search_strategy` config surface for compatibility and regression
@@ -40,7 +41,8 @@ Current interpretation:
   runtime-audit validation. They should not continue as the main optimization
   path.
 - CVRP now declares `solver_design` as the top-level research boundary backed
-  by `policies/solver_algorithm.py`. Deep mechanism policies and the legacy
+  by `policies/baseline_algorithm.py`, with `policies/solver_algorithm.py`
+  retained only for compatibility. Deep mechanism policies and the legacy
   `main_search_strategy` table remain useful implementation hooks or
   regression surfaces, but they are not standalone optimization goals.
 - The latest contract repair is a framework/problem-boundary repair, not a
@@ -213,18 +215,46 @@ session observation budget in round 2, leaving too little space for terminal
 Contract-preview evidence; the session failed closed with
 `contract preview did not pass (result_too_large, tool_error)`.
 
-Current repair: APS now compacts screening/runtime feedback before charging it
-to session observation budget, preserves the full self-check observation
-reserve for code phase, stops late feedback pulls when that reserve is at risk,
-and treats successful same-session feedback as reusable planner context. The
-solver-design prompt is also stricter: one construction/seeding path, one
-bounded improvement loop, no more than two move families, and a hard target of
-about 180 lines/six helpers.
+The follow-up 2-round feedback-budget smoke from commit `ff7ae66` validated
+that APS repair: both code sessions completed, both retained terminal
+Contract-preview evidence, and no session failed with `result_too_large`.
+Round 2 also proved Contract-preview repair in-session by rejecting an initial
+uncapped-loop patch and accepting the regenerated patch.
 
-Next validation should again be a 1-2 round independent smoke. The first gate
-is retaining terminal Contract-preview evidence without `result_too_large`;
-the second is keeping generated solver bodies to one complete but narrow
-algorithm slice. Solver-quality movement is still a later criterion.
+The deeper research-object repair now makes `policies/baseline_algorithm.py`
+the preferred solver-design target and forbids `context.baseline(...)` calls
+from that file in CVRP problem-owned preview. This changes the research loop
+from "call baseline, then polish" to "modify the controlled algorithm body and
+let the candidate become the next champion if it passes the gates." The
+original `vrp/` implementation remains frozen; all candidate changes happen
+inside Scion branch snapshots.
+
+Code phase now has an explicit debug/effectiveness gate:
+`proposal.algorithm_smoke`. After static Contract preview passes, APS runs a
+tainted, non-promotional synthetic CVRP smoke by calling the candidate
+`solve(...)`. A failed smoke can feed one bounded repair attempt before the
+patch enters official evaluation. This smoke does not write workspaces and
+does not count as promotion evidence; final validation remains Contract,
+Verification, Protocol, and Decision.
+
+The same smoke exposed the next direction-level blocker. `solver_design` is a
+full-algorithm hook, but the agent is still being induced to treat the
+repo-local baseline as an oracle/seed and then write small post-baseline local
+search code. The first-round hypothesis was too shallow because it did not
+study the ALNS+VNS baseline algorithm body before choosing the mechanism, and
+the code phase effectively wrote a generic cleanup solver around
+`context.baseline(...)`. This is not Scion's intended loop. Scion should let
+the research agent study the algorithm under boundary/protocol/audit control,
+modify a controlled candidate copy of that algorithm, and let successful
+candidate branches become the next champion/baseline. The original `vrp/`
+files remain frozen; candidate algorithm changes must happen inside
+Scion-controlled branches.
+
+Current repair target: improve the CVRP research-object adapter so hypothesis
+and code phases can study and modify the algorithm body that actually matters,
+instead of producing baseline-wrapper post-processing solvers. The budget and
+Contract-preview control path is now healthy enough to support that deeper
+repair.
 
 ## Current Engineering State
 
@@ -350,15 +380,18 @@ CVRP currently exposes these declared surfaces:
 - `route_pair_candidate_policy`
 - `acceptance_restart_policy`
 
-`solver_design` is the problem-owned full-algorithm surface. It is backed by
-the singleton execution file `policies/solver_algorithm.py`:
+`solver_design` is the problem-owned full-algorithm surface. It is backed
+first by the singleton execution file `policies/baseline_algorithm.py`, with
+`policies/solver_algorithm.py` retained as an older compatibility hook:
 
 - required function: `solve(instance, rng, time_limit_sec, context)`;
 - allowed helpers: `context.make_solution`, `context.nearest_neighbor`,
-  `context.baseline`, `context.objective`, `context.is_valid`,
-  `context.remaining_time`, `context.elapsed_ms`, `context.record_phase`,
-  `context.record_iteration`, `context.record_move`, and
-  `context.set_stop_reason`;
+  `context.objective`, `context.is_valid`, `context.remaining_time`,
+  `context.elapsed_ms`, `context.record_phase`, `context.record_iteration`,
+  `context.record_move`, and `context.set_stop_reason`;
+- compatibility helper: `context.baseline(...)` may exist for older
+  `solver_algorithm.py` experiments, but preferred
+  `baseline_algorithm.py` candidates must not call it;
 - editable algorithm scope: construction, local search, destroy/repair,
   recombination, acceptance, restart/perturbation, and runtime scheduling;
 - fixed boundary: objective, feasibility, parser, data, protocol splits,
@@ -370,29 +403,60 @@ the singleton execution file `policies/solver_algorithm.py`:
   search-iteration/move-attempt/accepted-move counters, phase delta telemetry,
   and stop reason.
 
-Current repair: `policies/solver_algorithm.py` is no longer only an empty
-stub. It keeps the checked-in champion inactive by default, but now contains an
-editable ALNS/VNS-style full-algorithm template with construction, capped
-route-edit neighborhoods, destroy/repair, perturbation, acceptance, runtime
-polling, and solver-algorithm telemetry. Adapter preview now rejects shallow
-`context.baseline(...)` wrappers that do not run their own bounded search body.
-It also fails closed on synthetic preview timeout, so generated
-`solver_design` code cannot hang Scion before workspace materialization.
-The timeout sentinel is outside normal `Exception` handling so generated
-candidate code cannot swallow it with a broad `except Exception`.
+Current repair: `policies/baseline_algorithm.py` keeps the checked-in champion
+inactive by default, but contains a controlled ALNS/VNS-style algorithm body
+with construction, capped route-edit neighborhoods, destroy/repair,
+perturbation, acceptance, runtime polling, and solver-algorithm telemetry.
+Candidate branches should modify and activate that body. Adapter preview now
+rejects preferred-target `context.baseline(...)` wrappers, so the candidate
+cannot reduce the research task to "call champion, then polish." It also fails
+closed on synthetic preview timeout, so generated `solver_design` code cannot
+hang Scion before workspace materialization. The timeout sentinel is outside
+normal `Exception` handling so generated candidate code cannot swallow it with
+a broad `except Exception`.
 
 `main_search_strategy` is a legacy config surface backed by
 `policies/main_search_strategy.py`. It preserves the earlier `main_search_plan`
 and `algorithm_body` tests, but it is not the default optimization direction.
 
-Current limitation: the direct full-algorithm boundary is code-validated but
-not yet experiment-validated. Run short diagnostics before any long CVRP
-validation, and judge success by repeated solver-quality movement plus runtime
-control under `solver_algorithm_*` evidence.
+Current limitation: the direct full-algorithm boundary is under live
+short-smoke validation. Judge the first gate by whether candidates target
+`baseline_algorithm.py`, pass Contract plus `proposal.algorithm_smoke`, and
+enter official Verification as controlled algorithm-body changes. Solver
+promotion quality is a later gate under the existing `solver_algorithm_*`
+evidence.
 
 ## Latest Experiment
 
-Latest analyzed code-scope/feedback-budget smoke:
+Latest baseline-algorithm subject smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-baseline-algorithm-subject-smoke-opus-2r-20260514T154153Z
+model=claude-opus-4-6
+problem=cvrp
+protocol=formal
+rounds_requested=2
+time_limit_sec=60
+agentic_session_timeout_sec=1800
+status=running at 2026-05-14T15:49Z
+target_file=policies/baseline_algorithm.py
+```
+
+Preliminary check:
+
+- Round 1 selected `modify/solver_design` with target
+  `policies/baseline_algorithm.py`.
+- Code phase generated an activated algorithm-body patch in that file, passed
+  static Contract preview, then passed `proposal.algorithm_smoke` on tainted
+  synthetic CVRP preview before entering official evaluation.
+- The first completed screening pairs confirm the new execution path but not
+  solver quality: the candidate is active under `baseline_algorithm.py`,
+  faster than the champion baseline on observed pairs, and records nonzero
+  algorithm telemetry, but the early `comparison` values are mostly losses.
+  This is early evidence for the research-object plumbing, not promotion
+  evidence.
+
+Previous analyzed code-scope/feedback-budget smoke:
 
 ```text
 run_root=/home/clawd/research/scion-experiments/v04-code-scope-control-smoke-opus-2r-20260514T122210Z

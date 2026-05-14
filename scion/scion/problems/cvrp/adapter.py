@@ -1,6 +1,7 @@
 """CVRP ProblemAdapter implementation for Scion v0.4."""
 from __future__ import annotations
 
+import ast
 import math
 from pathlib import Path
 import random
@@ -405,29 +406,33 @@ class CvrpAdapter:
     def render_solver_mechanics(self) -> str:
         return (
             "The CVRP campaign solver first offers the active "
-            "`solver_design` surface a direct full-algorithm hook at "
-            "`policies/solver_algorithm.py::solve(instance, rng, "
-            "time_limit_sec, context)`. A valid returned solution becomes the "
-            "solver output and skips the legacy baseline, lifecycle config, "
-            "and post-baseline operator layers. Returning None keeps the "
-            "checked-in champion on the stable legacy path.\n"
+            "`solver_design` surface a direct full-algorithm hook. The "
+            "preferred research target is "
+            "`policies/baseline_algorithm.py::solve(instance, rng, "
+            "time_limit_sec, context)`, a Scion-controlled copy of the "
+            "baseline algorithm body. The older "
+            "`policies/solver_algorithm.py` hook remains a compatibility "
+            "target. A valid returned solution becomes the solver output and "
+            "skips the legacy baseline, lifecycle config, and post-baseline "
+            "operator layers. Returning None keeps the checked-in champion on "
+            "the stable legacy path.\n"
             "- For real CVRPLIB .vrp cases, the legacy path uses the "
             "repo-local vrp/src ALNS+VNS baseline when SCION_PROBLEM_DATA_ROOT "
             "or SCION_CVRP_DATA_ROOT points at the vrp directory; JSON and "
             "synthetic smoke fixtures use a deterministic nearest-neighbor "
             "fallback.\n"
-            "- The `solver_design` research surface is backed by "
-            "`policies/solver_algorithm.py`, not by a lifecycle/config table. "
-            "It may implement construction, route-edit candidate generation, "
-            "local search, destroy/repair, recombination, perturbation, "
-            "acceptance, and runtime scheduling directly while the adapter "
-            "keeps objective, feasibility, parser, seeds, protocol splits, "
-            "and Decision rules fixed.\n"
-            "- `context.baseline(...)` is an optional oracle/bootstrap helper "
-            "inside `solver_design`; it is not the algorithm body. A shallow "
-            "implementation that only changes baseline budget/params or adds "
-            "tiny post-baseline polishing is treated as a failed candidate "
-            "design.\n"
+            "- The `solver_design` research surface is backed primarily by "
+            "`policies/baseline_algorithm.py`, not by a lifecycle/config "
+            "table. It may implement construction, route-edit candidate "
+            "generation, local search, destroy/repair, recombination, "
+            "perturbation, acceptance, and runtime scheduling directly while "
+            "the adapter keeps objective, feasibility, parser, seeds, "
+            "protocol splits, and Decision rules fixed.\n"
+            "- `context.baseline(...)` is a compatibility helper inside the "
+            "older solver hook. It is not the research object. New "
+            "`baseline_algorithm.py` candidates should modify the controlled "
+            "algorithm body itself instead of calling `context.baseline(...)` "
+            "and adding post-processing.\n"
             "- The `construction_policy` research surface may select a bounded "
             "package-owned construction mode and numeric demand bias before the "
             "baseline/operator phase.\n"
@@ -578,9 +583,12 @@ class CvrpAdapter:
             )
         if surface_name in {"solver_design", "solver_algorithm"}:
             return (
-                "policies/solver_algorithm.py is the preferred CVRP "
-                "problem-object research surface. It is a module-level full "
-                "algorithm hook; no class is required.\n\n"
+                "policies/baseline_algorithm.py is the preferred CVRP "
+                "problem-object research surface. It is a Scion-controlled "
+                "module-level copy of the baseline algorithm body and a direct "
+                "full algorithm hook; no class is required. "
+                "policies/solver_algorithm.py remains available only as a "
+                "compatibility hook.\n\n"
                 "Declared signature:\n"
                 "solve(instance, rng, time_limit_sec, context)\n\n"
                 "Required function:\n"
@@ -598,8 +606,6 @@ class CvrpAdapter:
                 "instance.route_distance(route).\n"
                 "- You may use context helpers: context.make_solution(routes), "
                 "context.nearest_neighbor(...), "
-                "context.baseline(initial_solution=None, time_budget_sec=None, "
-                "time_limit_sec=None, params=None), "
                 "context.objective(solution), context.objective_key(solution), "
                 "context.is_better(candidate, incumbent), "
                 "context.is_valid(solution), context.remaining_time(), "
@@ -616,13 +622,11 @@ class CvrpAdapter:
                 "max_rounds/max_passes/top_k caps and poll "
                 "context.remaining_time(); importing time is allowed only for "
                 "monotonic timing, never for sleeps or external scheduling.\n"
-                "- Implement a real algorithm body. If you call "
-                "context.baseline(...), also run your own bounded candidate "
-                "generation, route-edit/search loop, or acceptance decision "
-                "and record it with context.record_move or "
-                "context.record_iteration. A baseline-only wrapper or a "
-                "baseline budget/params tweak is not a valid solver-design "
-                "candidate.\n"
+                "- Implement a real algorithm body. For the preferred "
+                "baseline_algorithm.py target, do not call context.baseline; "
+                "study and change the controlled ALNS/VNS-style body in the "
+                "file. A baseline-only wrapper or a baseline budget/params "
+                "tweak is not a valid solver-design candidate.\n"
                 "- The adapter/solver remains the authority for feasibility, "
                 "objective recomputation, runtime limit, seeds, and protocol "
                 "evaluation. The algorithm must not modify objectives, "
@@ -961,6 +965,12 @@ class CvrpAdapter:
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
         elif surface_name in {"solver_design", "solver_algorithm"}:
+            if _is_baseline_algorithm_path(str(getattr(patch, "file_path", ""))):
+                _preview_baseline_algorithm_boundary(
+                    str(getattr(patch, "code_content", "")),
+                    issues,
+                    checks,
+                )
             _preview_solver_algorithm(module, instance, issues, checks)
         elif surface_name == "main_search_strategy":
             _preview_main_search_strategy(module, instance, issues, checks)
@@ -1141,6 +1151,7 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/search_policy.py": "search_policy",
         "policies/baseline_policy.py": "baseline_policy",
         "policies/neighborhood_portfolio.py": "neighborhood_portfolio",
+        "policies/baseline_algorithm.py": "solver_design",
         "policies/solver_algorithm.py": "solver_design",
         "policies/main_search_strategy.py": "main_search_strategy",
         "policies/algorithm_blueprint.py": "algorithm_blueprint",
@@ -1149,6 +1160,57 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/route_pair_candidate_policy.py": "route_pair_candidate_policy",
         "policies/acceptance_restart_policy.py": "acceptance_restart_policy",
     }.get(normalized, "")
+
+
+def _is_baseline_algorithm_path(path: str) -> bool:
+    return path.replace("\\", "/").lstrip("/") == "policies/baseline_algorithm.py"
+
+
+def _preview_baseline_algorithm_boundary(
+    code: str,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    baseline_calls = _context_baseline_call_count(code)
+    passed = baseline_calls == 0
+    detail = (
+        "preferred solver_design target does not call context.baseline"
+        if passed
+        else (
+            "policies/baseline_algorithm.py is the Scion-controlled algorithm "
+            "body and must not call context.baseline; modify the editable "
+            "construction/search/destroy-repair/VNS logic directly"
+        )
+    )
+    checks.append(
+        {
+            "name": "baseline_algorithm_no_context_baseline",
+            "passed": passed,
+            "detail": detail,
+        }
+    )
+    if not passed:
+        issues.append(detail)
+
+
+def _context_baseline_call_count(code: str) -> int:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return 0
+    count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "baseline"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "context"
+        ):
+            count += 1
+    return count
 
 
 def _module_from_policy_code(file_path: str, code: str) -> types.ModuleType:
