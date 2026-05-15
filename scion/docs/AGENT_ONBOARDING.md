@@ -76,6 +76,11 @@ Candidates keep the stable `solve(instance, rng, time_limit_sec, context)`
 entrypoint and may add, delete, or modify branch-owned modules for
 construction, improvement, destroy/repair, recombination, acceptance,
 restart/perturbation, telemetry, and runtime scheduling.
+For multi-file solver-design edits, the primary patch path must match the
+approved `target_file`; integration edits to the entrypoint, scheduler, or
+sibling modules belong in `additional_changes`. New helper functions must be
+called from the branch algorithm path in the same candidate patch. Scion should
+reject inert helper drops before official screening.
 The adapter/solver remains authoritative for parsing, feasibility, objective
 recomputation, seeds, protocol splits, time limits, and Decision rules.
 `policies/solver_algorithm.py` remains only as an older compatibility hook.

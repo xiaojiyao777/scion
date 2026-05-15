@@ -108,6 +108,11 @@ def compose_campaign_services(
     owner._contract_gate = ContractGate(
         problem_spec,
         operator_execute_signature=operator_execute_signature,
+        champion_snapshot_provider=lambda: getattr(
+            owner._champion,
+            "code_snapshot_path",
+            None,
+        ),
     )
     owner._decision_coordinator = DecisionCoordinator(config=protocol_config)
     from scion.core.features import SafeFeatureExtractor

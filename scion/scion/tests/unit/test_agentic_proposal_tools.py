@@ -2571,6 +2571,19 @@ def test_algorithm_smoke_runs_multi_file_solver_design_patch(
     baseline_code = (_CVRP_ROOT / "policies" / "baseline_algorithm.py").read_text(
         encoding="utf-8"
     )
+    baseline_code = baseline_code.replace(
+        "from .baseline_modules.scheduler import _ALNSVNSSolver\n",
+        "from .baseline_modules.scheduler import _ALNSVNSSolver\n"
+        "from .baseline_modules.intensification import intensify\n",
+        1,
+    ).replace(
+        "    context.set_stop_reason(solution.stop_reason)\n"
+        "    return context.make_solution(solution.routes_as_tuples())\n",
+        "    solution = intensify(solution, instance, context)\n"
+        "    context.set_stop_reason(solution.stop_reason)\n"
+        "    return context.make_solution(solution.routes_as_tuples())\n",
+        1,
+    )
     helper_code = (
         "def intensify(solution, instance, context):\n"
         "    context.record_phase('intensification', 0.0)\n"

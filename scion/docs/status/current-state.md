@@ -58,6 +58,23 @@ now carries the algorithm-smoke observation itself, with compact
 `solver_algorithm_events`/stderr/run detail preferred over the generic
 `solver_algorithm_errors=1` summary.
 
+The follow-up 6-round module-object smoke showed the next control gap. APS
+preview was champion-snapshot aware, but the main campaign `ContractGate` was
+not, so completed scheduler candidates could still fail main `patch_contract`
+on inherited `instance.name` text. That is now repaired with a dynamic champion
+snapshot provider on the campaign gate. Solver-design code prompts now require
+the primary JSON `file_path` to match the approved `target_file`, with
+entrypoint/scheduler/module wiring in `additional_changes`; package-relative
+imports inside `policies` are required. Contract also rejects inert
+solver-design helper additions through `C9e_solver_design_integration`: new
+module-level helper functions must be statically called from an existing
+solver path in the same candidate patch.
+The immediate 2-round validation after this repair produced two real screening
+experiments, both normal algorithm-quality abandons rather than framework gate
+failures: scheduler ensemble construction tied the champion with a small
+runtime tie-speedup below the promotion threshold, while local-search
+round-robin VNS worsened quality and slowed runtime.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median

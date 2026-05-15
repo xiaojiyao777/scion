@@ -4917,7 +4917,16 @@ def _solver_design_code_scope_control(
                 "algorithm slice for this patch. Prefer the focused "
                 "solver-design modules under policies/baseline_modules; do not "
                 "turn the entrypoint into a context.baseline post-processing "
-                "wrapper."
+                "wrapper. The final JSON top-level file_path must remain the "
+                "approved target_file; put entrypoint/scheduler/module wiring "
+                "in additional_changes, and ensure any new helper is called "
+                "from an existing solver path."
+            ),
+            "import_rule": (
+                "Use package-relative imports inside policies, for example "
+                "from .baseline_modules.local_search import _vns or "
+                "from .state import _Solution. Do not import "
+                "policies.baseline_modules.*."
             ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "

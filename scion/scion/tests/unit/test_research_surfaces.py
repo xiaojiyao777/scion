@@ -1280,6 +1280,38 @@ def test_contract_gate_allows_inherited_solver_module_identity_message(
     assert c9d.passed
 
 
+def test_contract_gate_uses_dynamic_champion_snapshot_provider(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "scheduler.py"
+    target.parent.mkdir(parents=True)
+    code = (_CVRP_ROOT / "policies" / "baseline_modules" / "scheduler.py").read_text(
+        encoding="utf-8"
+    )
+    target.write_text(code, encoding="utf-8")
+    current_champion = {"path": str(champion)}
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_provider=lambda: current_champion["path"],
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/scheduler.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert c9d.passed
+
+
 def test_contract_gate_rejects_new_solver_module_identity_branch(
     tmp_path: Path,
 ) -> None:
@@ -1317,6 +1349,86 @@ def test_contract_gate_rejects_new_solver_module_identity_branch(
     )
     assert not c9d.passed
     assert "if instance.name == 'case-a'" in c9d.detail
+
+
+def test_contract_gate_rejects_inert_solver_design_helper(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "local_search.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "local_search.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = (
+        base_code
+        + "\n\n"
+        + "def _adaptive_vns(solution, operators, max_no_improve, context, reserve):\n"
+        + "    return False\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/local_search.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "_adaptive_vns" in c9e.detail
+
+
+def test_contract_gate_allows_integrated_solver_design_helper(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "local_search.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "local_search.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = base_code.replace(
+        "def _vns(solution, operators, max_no_improve, context, reserve):\n",
+        "def _vns(solution, operators, max_no_improve, context, reserve):\n"
+        "    _adaptive_vns(solution, operators, max_no_improve, context, reserve)\n",
+        1,
+    )
+    code += (
+        "\n\n"
+        "def _adaptive_vns(solution, operators, max_no_improve, context, reserve):\n"
+        "    return False\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/local_search.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert c9e.passed
 
 
 def test_contract_gate_allows_safe_policy_instance_api() -> None:

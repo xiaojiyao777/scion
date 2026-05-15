@@ -8,7 +8,7 @@ import re
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.operator_interface import parse_execute_signature
@@ -109,10 +109,12 @@ class ContractGate:
         *,
         operator_execute_signature: str | None = None,
         champion_snapshot_path: str | None = None,
+        champion_snapshot_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._spec = problem_spec
         self._operator_signature = parse_execute_signature(operator_execute_signature)
         self._champion_snapshot_path = champion_snapshot_path
+        self._champion_snapshot_provider = champion_snapshot_provider
 
     @classmethod
     def supports_semantic_signature_field(cls, field: str) -> bool:
@@ -185,6 +187,14 @@ class ContractGate:
                 checks.extend(
                     _prefix_checks(change_checks, f"additional_changes[{index - 1}]")
                 )
+
+        if checks and all(check.passed for check in checks):
+            checks.append(
+                self._c9e_solver_design_integration(
+                    patch,
+                    selected_surface=selected_surface_name,
+                )
+            )
 
         return _build_result(checks)
 
@@ -805,12 +815,11 @@ class ContractGate:
         )
 
     def _champion_file_content(self, file_rel: str) -> str | None:
-        if not self._champion_snapshot_path:
+        champion_snapshot_path = self._current_champion_snapshot_path()
+        if not champion_snapshot_path:
             return None
         try:
-            root = Path(self._champion_snapshot_path).expanduser().resolve(
-                strict=False
-            )
+            root = Path(champion_snapshot_path).expanduser().resolve(strict=False)
             path = (root / file_rel).resolve(strict=False)
             path.relative_to(root)
         except Exception:
@@ -821,6 +830,127 @@ class ContractGate:
             return path.read_text(encoding="utf-8")
         except OSError:
             return None
+
+    def _current_champion_snapshot_path(self) -> str | None:
+        if self._champion_snapshot_provider is not None:
+            try:
+                value = self._champion_snapshot_provider()
+            except Exception:
+                value = None
+            if value:
+                return str(value)
+        return self._champion_snapshot_path
+
+    # ------------------------------------------------------------------
+    # C9e: Solver-design patches must integrate newly added helpers.
+    # ------------------------------------------------------------------
+
+    def _c9e_solver_design_integration(
+        self,
+        patch: PatchProposal,
+        *,
+        selected_surface: str | None = None,
+    ) -> CheckResult:
+        t0 = time.monotonic_ns()
+        if not self._selected_surface_is_solver_design(selected_surface, patch):
+            return _cr(
+                "C9e_solver_design_integration",
+                True,
+                "light",
+                "not a solver_design patch",
+                t0,
+            )
+
+        new_functions: set[str] = set()
+        call_graph: dict[str, set[str]] = {}
+        root_calls: set[str] = set()
+        changed_files = 0
+
+        for change in patch_file_changes(patch):
+            if change.action == "delete":
+                continue
+            try:
+                file_rel = normalize_relative_patch_path(change.file_path)
+            except ValueError as exc:
+                return _cr(
+                    "C9e_solver_design_integration",
+                    False,
+                    "light",
+                    str(exc),
+                    t0,
+                )
+            if not self._is_solver_design_patch_path(file_rel):
+                continue
+            changed_files += 1
+            try:
+                tree = ast.parse(change.code_content)
+            except SyntaxError:
+                return _cr(
+                    "C9e_solver_design_integration",
+                    False,
+                    "light",
+                    "unparseable code",
+                    t0,
+                )
+
+            current_defs = _module_level_function_defs(tree)
+            champion_defs = _module_level_function_defs_from_source(
+                self._champion_file_content(file_rel)
+            )
+            local_new = current_defs - champion_defs
+            if local_new:
+                new_functions.update(local_new)
+            local_existing = current_defs - local_new
+
+            module_calls, function_calls = _module_call_references(tree)
+            root_calls.update(module_calls)
+            if file_rel in {
+                "policies/baseline_algorithm.py",
+                "policies/solver_algorithm.py",
+            } and "solve" in current_defs:
+                root_calls.add("solve")
+            for root in local_existing:
+                root_calls.update(function_calls.get(root, set()))
+            for name, calls in function_calls.items():
+                call_graph.setdefault(name, set()).update(calls)
+
+        if changed_files == 0 or not new_functions:
+            return _cr(
+                "C9e_solver_design_integration",
+                True,
+                "light",
+                "no new solver_design helper functions",
+                t0,
+            )
+
+        reachable = set(root_calls)
+        queue = list(root_calls & new_functions)
+        while queue:
+            name = queue.pop()
+            for called in call_graph.get(name, set()):
+                if called in reachable:
+                    continue
+                reachable.add(called)
+                if called in new_functions:
+                    queue.append(called)
+
+        inert = sorted(new_functions - reachable)
+        if inert:
+            return _cr(
+                "C9e_solver_design_integration",
+                False,
+                "light",
+                "new solver_design helper functions are not called from any "
+                f"existing entrypoint/module function in this patch: {inert}",
+                t0,
+            )
+        return _cr(
+            "C9e_solver_design_integration",
+            True,
+            "light",
+            "new solver_design helper functions are integrated",
+            t0,
+        )
 
     # ------------------------------------------------------------------
     # C9b: Non-rng random source detection
@@ -1562,6 +1692,57 @@ class ContractGate:
         name = str(getattr(hypothesis, "change_locus", "") or "").strip()
         return name or None
 
+    def _selected_surface_is_solver_design(
+        self,
+        selected_surface: str | None,
+        patch: PatchProposal,
+    ) -> bool:
+        selected = str(selected_surface or "").strip()
+        if selected in {"solver_design", "solver_algorithm"}:
+            return True
+        if selected:
+            surface = self._surface_by_name(selected)
+            if surface is not None:
+                kind = str(getattr(surface, "kind", "") or "").strip()
+                role = str(
+                    getattr(getattr(surface, "algorithm", None), "role", "") or ""
+                )
+                if kind in {"solver_design", "solver_algorithm"}:
+                    return True
+                if role in {"solver_design", "solver_algorithm"}:
+                    return True
+        for change in patch_file_changes(patch):
+            try:
+                file_rel = normalize_relative_patch_path(change.file_path)
+            except ValueError:
+                continue
+            if self._is_solver_design_patch_path(file_rel):
+                return True
+        return False
+
+    def _is_solver_design_patch_path(self, file_rel: str) -> bool:
+        normalized = str(file_rel or "").replace("\\", "/").lstrip("/")
+        if normalized in {
+            "policies/baseline_algorithm.py",
+            "policies/solver_algorithm.py",
+        }:
+            return True
+        if normalized.startswith("policies/baseline_modules/") and normalized.endswith(
+            ".py"
+        ):
+            return True
+        surface = self._surface_for_patch_path(normalized)
+        if surface is None:
+            return False
+        kind = str(getattr(surface, "kind", "") or "").strip()
+        role = str(
+            getattr(getattr(surface, "algorithm", None), "role", "") or ""
+        )
+        return kind in {"solver_design", "solver_algorithm"} or role in {
+            "solver_design",
+            "solver_algorithm",
+        }
+
     def _surface_disallows_instance_name(self, surface: Any | None) -> bool:
         if surface is None:
             return False
@@ -1674,6 +1855,55 @@ def _subtract_inherited_identity_violations(
             continue
         remaining.append(violation)
     return remaining
+
+
+def _module_level_function_defs(tree: ast.AST) -> set[str]:
+    if not isinstance(tree, ast.Module):
+        return set()
+    return {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def _module_level_function_defs_from_source(code: str | None) -> set[str]:
+    if not code:
+        return set()
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+    return _module_level_function_defs(tree)
+
+
+def _module_call_references(tree: ast.AST) -> tuple[set[str], dict[str, set[str]]]:
+    if not isinstance(tree, ast.Module):
+        return set(), {}
+
+    module_calls: set[str] = set()
+    function_calls: dict[str, set[str]] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function_calls[node.name] = _call_reference_names(node)
+        elif isinstance(node, ast.ClassDef):
+            continue
+        else:
+            module_calls.update(_call_reference_names(node))
+    return module_calls, function_calls
+
+
+def _call_reference_names(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Name):
+            names.add(func.id)
+        elif isinstance(func, ast.Attribute):
+            names.add(func.attr)
+    return names
 
 
 def _enclosing_statement_source(
