@@ -192,6 +192,24 @@ def test_screening_gate_fail():
     assert result.outcome == "fail"
 
 
+def test_screening_gate_passes_runtime_tie_improvement():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-1000.0,
+        runtime_pairs=10,
+    )
+    result = screening_gate(stats, _cfg)
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+
+
 def test_screening_gate_expand():
     stats = _make_stats(win_rate=0.55, median_delta=0.01)
     result = screening_gate(stats, _cfg)
@@ -223,6 +241,25 @@ def test_validation_gate_uses_hierarchical_status():
     assert result.reason_codes == ("VALIDATION_PASS_HIERARCHICAL",)
 
 
+def test_validation_gate_passes_runtime_tie_improvement():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-1000.0,
+        runtime_pairs=10,
+    )
+    result = validation_gate(stats, _cfg)
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT",)
+
+
 def test_validation_gate_fail_ci_negative():
     stats = _make_stats(win_rate=0.7, ci_low=-0.02, ci_high=-0.001)
     result = validation_gate(stats, _cfg)
@@ -239,6 +276,25 @@ def test_frozen_gate_pass():
     stats = _make_stats(ci_low=0.005, ci_high=0.02)
     result = frozen_gate(stats, _cfg)
     assert result.outcome == "pass"
+
+
+def test_frozen_gate_passes_runtime_tie_improvement():
+    stats = _make_stats(
+        wins=0,
+        losses=0,
+        ties=10,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-1000.0,
+        runtime_pairs=10,
+    )
+    result = frozen_gate(stats, _cfg)
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT",)
 
 
 def test_frozen_gate_rejects_hierarchical_uncertain_even_if_legacy_ci_nonnegative():
@@ -422,6 +478,25 @@ def test_run_experiment_records_runtime_telemetry_for_successful_pairs(tmp_path)
     assert all(p["candidate_elapsed_ms"] == 150 for p in raw["pairs"])
     assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
     assert all(p["runtime_ratio"] == pytest.approx(1.5) for p in raw["pairs"])
+
+
+def test_run_experiment_screening_gate_sees_runtime_tie_improvement(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(1, 900, elapsed_ms=1000),
+        _make_run_result(1, 900, elapsed_ms=100),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.gate_outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.stats.median_delta == pytest.approx(0.0)
+    assert result.stats.runtime_ratio_median == pytest.approx(0.1)
 
 
 def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):

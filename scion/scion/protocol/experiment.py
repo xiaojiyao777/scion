@@ -876,20 +876,6 @@ class ExperimentProtocol:
                 metric_deltas=[r.metric_deltas or {} for r in case_level_results],
                 metric_order=metric_order,
             )
-            if stage == ExperimentStage.SCREENING:
-                gate = screening_gate(stats, self.config)
-            elif stage == ExperimentStage.VALIDATION:
-                gate = validation_gate(stats, self.config)
-            else:
-                gate = frozen_gate(stats, self.config)
-
-            if failed_pairs > 0 and stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN):
-                reason_codes = ["INCOMPLETE_EVIDENCE"]
-                if candidate_failed_pairs:
-                    reason_codes.append("CANDIDATE_RUNTIME_FAILURE")
-                if champion_failed_pairs:
-                    reason_codes.append("CHAMPION_RUNTIME_FAILURE")
-                gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
 
         runtime_stats = _build_runtime_stats(runtime_ratios, runtime_deltas_ms)
         stats = replace(
@@ -905,6 +891,21 @@ class ExperimentProtocol:
             candidate_failed_pairs=candidate_failed_pairs,
             champion_failed_pairs=champion_failed_pairs,
         )
+        if case_comparisons:
+            if stage == ExperimentStage.SCREENING:
+                gate = screening_gate(stats, self.config)
+            elif stage == ExperimentStage.VALIDATION:
+                gate = validation_gate(stats, self.config)
+            else:
+                gate = frozen_gate(stats, self.config)
+
+            if failed_pairs > 0 and stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN):
+                reason_codes = ["INCOMPLETE_EVIDENCE"]
+                if candidate_failed_pairs:
+                    reason_codes.append("CANDIDATE_RUNTIME_FAILURE")
+                if champion_failed_pairs:
+                    reason_codes.append("CHAMPION_RUNTIME_FAILURE")
+                gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
 
         # Persist final raw metrics snapshot.
         _write_metrics_snapshot(complete=True)

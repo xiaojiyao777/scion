@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-14*
+*Last updated: 2026-05-15*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -28,6 +28,20 @@ adapter and solver keep ownership of objective semantics, feasibility,
 parsing, seeds, protocol splits, time limits, and Decision rules. Runtime
 evidence for this boundary remains `solver_algorithm_*`, including selected
 path, phase runtime, movement telemetry, and recomputed objective fields.
+
+The May 15 runtime-governance repair makes algorithm compute time a real
+positive optimization signal under strict boundaries. A candidate that ties the
+lexicographic objective, has no runtime failures, and beats champion median
+runtime by `runtime.tie_speedup_ratio` may pass screening, validation, and
+frozen via `*_PASS_RUNTIME_TIE_IMPROVEMENT`; it still cannot bypass the
+three-layer protocol. `ExperimentProtocol` computes these gates after runtime
+stats are attached to `EvalStats`, so protocol gate outcomes and Decision
+reason codes now agree on runtime tie-speedup evidence. CVRP `solver_design`
+context now exposes
+`context.remaining_time()` explicitly as seconds and
+`context.remaining_time_ms()` for millisecond comparisons. Contract preview
+rejects preferred `policies/baseline_algorithm.py` patches that compare
+second-valued `remaining_time()` to millisecond-derived variables.
 
 The older `policies/main_search_strategy.py` path remains declared as the
 legacy `main_search_strategy` config surface for compatibility and regression
@@ -1719,6 +1733,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md`](../experiments/v0.4/v0.4-full-solver-subject-code-phase-agentic-repair-20260513.md)
+  [`v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md`](../experiments/v0.4/v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

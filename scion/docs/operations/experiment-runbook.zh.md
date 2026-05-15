@@ -917,7 +917,7 @@ CVRP 当前要特别区分：
 | `surface_contract_error` | selected surface 宣告的 required runtime field 缺失/为空/失败。 |
 | `no_accepted_moves` | 运行了但没有有效接受移动，常见于 post-baseline operator no-op。 |
 | `SCREENING_FAIL_WIN_RATE` + `median_delta=0` | 候选可运行，但 tie/no-op 主导。 |
-| `runtime_ratio_median < 1` | 候选更快；仍需目标质量达标，不能只凭速度 promote。 |
+| `runtime_ratio_median < 1` | 候选更快。若 objective 非退化且达到 `runtime.tie_speedup_ratio`，可作为 tie-preserving speedup 经过 validation/frozen 晋升；不能绕过三层验证。 |
 
 ### 11.5 专门检查 `algorithm_blueprint`
 
@@ -1065,8 +1065,9 @@ jq -r '
    `neighborhood_portfolio` 遇到 `no_registry_operators` 不是 portfolio 本身一定
    无效，而是没有 generated registry operators 可调度。
 8. objective 失败是质量、速度，还是 gate 阈值？
-   `runtime_ratio_median < 1` 只说明更快；promotion 仍然先看 lexicographic
-   objective 和 win-rate/CI。
+   `runtime_ratio_median < 1` 是算法效率信号。若 lexicographic objective
+   非退化、没有 runtime failure，且达到 `runtime.tie_speedup_ratio`，Decision
+   可以走 `*_PASS_RUNTIME_TIE_IMPROVEMENT`，但仍必须通过 validation/frozen。
 
 把结论写成“哪一层阻塞 + 下一步要验证的假设”，不要直接写“模型不行”。
 

@@ -50,6 +50,8 @@ def _protocol(
     runtime_delta_median_ms=None,
     runtime_regression_rate=None,
     runtime_pairs: int = 0,
+    statistical_status=None,
+    statistical_metric=None,
     total_pairs: int = 0,
     attempted_pairs: int = 0,
     valid_pairs: int = 0,
@@ -66,6 +68,8 @@ def _protocol(
         runtime_delta_median_ms=runtime_delta_median_ms,
         runtime_regression_rate=runtime_regression_rate,
         runtime_pairs=runtime_pairs,
+        statistical_status=statistical_status,
+        statistical_metric=statistical_metric,
         total_pairs=total_pairs,
         attempted_pairs=attempted_pairs,
         valid_pairs=valid_pairs,
@@ -357,6 +361,8 @@ def _features(
     runtime_guard_passed=None,
     runtime_guard_timeout=False,
     runtime_ratio_median=None,
+    runtime_delta_median_ms=None,
+    runtime_pairs: int = 0,
     failed_pairs: int = 0,
     candidate_failed_pairs: int = 0,
     protocol_gate_outcome=None,
@@ -383,6 +389,8 @@ def _features(
         runtime_guard_passed=runtime_guard_passed,
         runtime_guard_timeout=runtime_guard_timeout,
         runtime_ratio_median=runtime_ratio_median,
+        runtime_delta_median_ms=runtime_delta_median_ms,
+        runtime_pairs=runtime_pairs,
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         protocol_gate_outcome=protocol_gate_outcome,
@@ -476,6 +484,22 @@ def test_decision_screening_fail():
     f = _features(stage="screening", win_rate=0.3, median_delta=0.01)
     out = _engine.decide(f)
     assert out.decision == Decision.CONTINUE_EXPLORE
+
+
+def test_decision_screening_runtime_tie_improvement_queues_validation():
+    f = _features(
+        stage="screening",
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        runtime_ratio_median=0.25,
+        runtime_delta_median_ms=-1000.0,
+        runtime_pairs=4,
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
 
 
 def test_decision_screening_expand():
@@ -592,6 +616,24 @@ def test_decision_validation_hierarchical_positive_to_queue_frozen():
     assert "VALIDATION_PASS_HIERARCHICAL" in out.reason_codes
 
 
+def test_decision_validation_runtime_tie_improvement_queues_frozen_even_if_protocol_gate_failed():
+    f = _features(
+        stage="validation",
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_ratio_median=0.4,
+        runtime_delta_median_ms=-500.0,
+        runtime_pairs=8,
+        protocol_gate_outcome="fail",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.QUEUE_FROZEN
+    assert "VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
+
+
 def test_decision_validation_fail_ci_negative():
     f = _features(stage="validation", win_rate=0.4, ci_low=-0.02, ci_high=-0.001)
     out = _engine.decide(f)
@@ -686,6 +728,43 @@ def test_decision_frozen_hierarchical_positive_promotes():
     out = _engine.decide(f)
     assert out.decision == Decision.PROMOTE
     assert "FROZEN_PASS_HIERARCHICAL" in out.reason_codes
+
+
+def test_decision_frozen_runtime_tie_improvement_promotes_even_if_protocol_gate_failed():
+    f = _features(
+        stage="frozen",
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-250.0,
+        runtime_pairs=8,
+        protocol_gate_outcome="fail",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.PROMOTE
+    assert "FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
+
+
+def test_decision_runtime_tie_improvement_rejects_runtime_failures():
+    f = _features(
+        stage="frozen",
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+        statistical_status="tie",
+        runtime_ratio_median=0.5,
+        runtime_delta_median_ms=-250.0,
+        runtime_pairs=8,
+        failed_pairs=1,
+        protocol_gate_outcome="fail",
+    )
+    out = _engine.decide(f)
+    assert out.decision == Decision.ABANDON
+    assert "INCOMPLETE_RUNTIME_EVIDENCE" in out.reason_codes
 
 
 def test_decision_frozen_hierarchical_uncertain_fails_even_with_positive_legacy_ci():

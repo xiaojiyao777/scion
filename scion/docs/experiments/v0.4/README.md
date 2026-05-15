@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-14*
+*Last updated: 2026-05-15*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -50,6 +50,7 @@ referenced, not copied into development prompts.
 - [Algorithm-body execution-semantics and runtime-budget repair, 2026-05-12/13](v0.4-algorithm-body-execution-semantics-repair-20260512.md)
 - [Direct solver-algorithm boundary repair, 2026-05-13](v0.4-direct-solver-algorithm-boundary-repair-20260513.md)
 - [Code-scope control and feedback-budget Opus 2R smoke, 2026-05-14](v0.4-code-scope-control-feedback-budget-opus-2r-20260514.md)
+- [Runtime tie-speedup repair Sonnet 2R smoke, 2026-05-15](v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md)
 
 ## Related
 

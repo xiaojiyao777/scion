@@ -20,6 +20,8 @@ canary:
   - 101
 runtime:
   max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 1
 gates:
   screening:
     win_rate_min: 0.6

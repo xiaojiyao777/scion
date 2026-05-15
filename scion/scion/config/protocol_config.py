@@ -82,6 +82,12 @@ class RuntimeGovernanceConfig(BaseModel):
     max_runtime_ratio: float = Field(gt=0.0, default=2.0)
     """Maximum accepted candidate/champion median runtime ratio."""
 
+    tie_speedup_ratio: float = Field(gt=0.0, le=1.0, default=0.75)
+    """Median candidate/champion runtime ratio that counts as a tie-preserving speedup."""
+
+    tie_min_runtime_pairs: int = Field(gt=0, default=1)
+    """Minimum paired runtime samples required for tie-preserving speedup decisions."""
+
 
 class RetryConfig(BaseModel):
     """重试配置。"""

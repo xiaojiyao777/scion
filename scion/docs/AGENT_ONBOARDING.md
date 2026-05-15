@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-14*
+*Last updated: 2026-05-15*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -116,6 +116,15 @@ Important current interpretation:
   loaded/active/errors, elapsed time, phase runtime, solution validity,
   route count, objective, total distance, fleet violation, search iterations,
   move attempts, accepted moves, phase delta telemetry, and stop reason.
+- Runtime is an optimization signal under protocol control. A candidate that
+  ties the lexicographic objective, has complete runtime evidence, has no
+  runtime failures, and meets `runtime.tie_speedup_ratio` can progress through
+  screening/validation/frozen with `*_PASS_RUNTIME_TIE_IMPROVEMENT`; it still
+  cannot bypass the three-layer protocol.
+- `context.remaining_time()` returns seconds. Use
+  `context.remaining_time_ms()` for millisecond comparisons; Contract preview
+  rejects preferred `baseline_algorithm.py` patches that compare seconds to
+  millisecond-derived variables.
 - `novelty_signature` for `solver_design` now describes algorithm identity:
   `algorithm_family`, `construction_strategy`, `improvement_strategy`,
   `acceptance_strategy`, and `runtime_budget_strategy`, alongside

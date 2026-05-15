@@ -75,6 +75,8 @@ class DecisionEngine:
             # A3 (stagnation_window=25), v3 §11.5 (frozen uses per campaign: 3),
             # and the new T2 validation-layer md guard below.
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_NEGATIVE_DELTA"])
+        elif self._runtime_tie_improvement(features):
+            return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT"])
         elif wr >= 0.5 and wr < threshold:
             # v3 §11.5: screening expansion is one pre-registered statistical
             # expand per candidate, not a repeatable retry loop.
@@ -101,6 +103,9 @@ class DecisionEngine:
         ci_high = features.ci_high
         stat = features.statistical_status
         threshold = self.config.validation_win_rate_threshold
+
+        if self._runtime_tie_improvement(features):
+            return self._out(features, Decision.QUEUE_FROZEN, ["VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT"])
 
         if features.protocol_gate_outcome == "fail":
             return self._out(features, Decision.ABANDON, ["VALIDATION_PROTOCOL_GATE_FAIL"])
@@ -147,6 +152,9 @@ class DecisionEngine:
     def _decide_frozen(self, features: DecisionFeatures) -> DecisionOutcome:
         ci_low = features.ci_low
         stat = features.statistical_status
+
+        if self._runtime_tie_improvement(features):
+            return self._out(features, Decision.PROMOTE, ["FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT"])
 
         if (
             features.protocol_gate_outcome is not None
@@ -204,6 +212,31 @@ class DecisionEngine:
             return self._out(features, Decision.ABANDON, ["INCOMPLETE_RUNTIME_EVIDENCE"])
 
         return None
+
+    def _runtime_tie_improvement(self, features: DecisionFeatures) -> bool:
+        """Treat runtime as positive evidence only when quality is non-regressive."""
+        if features.candidate_failed_pairs > 0 or features.failed_pairs > 0:
+            return False
+        if features.runtime_ratio_median is None:
+            return False
+        if features.runtime_pairs < self.config.runtime.tie_min_runtime_pairs:
+            return False
+        if features.runtime_ratio_median > self.config.runtime.tie_speedup_ratio:
+            return False
+        if (
+            features.runtime_delta_median_ms is not None
+            and features.runtime_delta_median_ms >= 0
+        ):
+            return False
+        if features.statistical_status is not None:
+            if features.statistical_status != "tie":
+                return False
+            return features.ci_low is None or features.ci_low >= 0
+        if features.median_delta is None or features.median_delta < 0:
+            return False
+        if features.stage in ("validation", "frozen") and features.ci_low is not None:
+            return features.ci_low >= 0
+        return features.median_delta == 0
 
     def _out(
         self,

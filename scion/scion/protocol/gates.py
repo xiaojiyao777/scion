@@ -25,6 +25,11 @@ def screening_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
 
     if wr >= threshold and stats.median_delta >= config.min_practical_delta:
         return GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
+    elif _runtime_tie_improvement(stats, config):
+        return GateResult(
+            outcome="pass",
+            reason_codes=("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",),
+        )
     elif wr < 0.5:
         return GateResult(outcome="fail", reason_codes=("SCREENING_FAIL_WIN_RATE",))
     elif wr < threshold:
@@ -44,6 +49,12 @@ def validation_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     """
     wr = stats.win_rate
     threshold = config.validation_win_rate_threshold
+
+    if _runtime_tie_improvement(stats, config):
+        return GateResult(
+            outcome="pass",
+            reason_codes=("VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT",),
+        )
 
     if stats.statistical_status is not None:
         if wr >= threshold and stats.statistical_status == "positive":
@@ -70,6 +81,12 @@ def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     - pass: ci_low >= 0
     - fail: anything else (including CI straddling 0)
     """
+    if _runtime_tie_improvement(stats, config):
+        return GateResult(
+            outcome="pass",
+            reason_codes=("FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT",),
+        )
+
     if stats.statistical_status is not None:
         if stats.statistical_status == "positive":
             return GateResult(outcome="pass", reason_codes=("FROZEN_PASS_HIERARCHICAL",))
@@ -85,3 +102,21 @@ def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
         return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_CI_NEGATIVE",))
     else:
         return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_UNCLEAR",))
+
+
+def _runtime_tie_improvement(stats: EvalStats, config: ProtocolConfig) -> bool:
+    if stats.candidate_failed_pairs > 0 or stats.failed_pairs > 0:
+        return False
+    if stats.runtime_ratio_median is None:
+        return False
+    if stats.runtime_pairs < config.runtime.tie_min_runtime_pairs:
+        return False
+    if stats.runtime_ratio_median > config.runtime.tie_speedup_ratio:
+        return False
+    if stats.runtime_delta_median_ms is not None and stats.runtime_delta_median_ms >= 0:
+        return False
+    if stats.statistical_status is not None:
+        return stats.statistical_status == "tie" and stats.ci_low >= 0
+    if stats.median_delta < 0:
+        return False
+    return stats.ci_low >= 0

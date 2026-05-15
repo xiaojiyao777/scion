@@ -1020,7 +1020,7 @@ def _solver_design_scope_control_section(
         "- Implement one primary mechanism now. Prefer a direct seed/construction plus one bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
         "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
-        "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` or `time_limit_sec` through the provided context.",
+        "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
     ]
     if mode:

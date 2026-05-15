@@ -8704,6 +8704,9 @@ class _SolverAlgorithmContext:
     def remaining_time(self) -> float:
         return _remaining_time_sec(self._start_time, self.time_limit_sec)
 
+    def remaining_time_ms(self) -> int:
+        return int(self.remaining_time() * 1000)
+
     def elapsed_ms(self) -> int:
         return int((time.perf_counter() - self._start_time) * 1000)
 

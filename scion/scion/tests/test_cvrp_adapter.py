@@ -476,6 +476,63 @@ def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(
     assert preview["issues"] == []
 
 
+def test_cvrp_baseline_algorithm_preview_rejects_remaining_time_ms_mixup(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.nearest_neighbor()\n"
+            "    budget_ms = float(time_limit_sec) * 1000.0\n"
+            "    reserve = max(50.0, budget_ms * 0.03)\n"
+            "    while context.remaining_time() > reserve:\n"
+            "        break\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    rendered = json.dumps(preview["issues"])
+    assert "context.remaining_time() returns seconds" in rendered
+    assert "remaining_time_ms" in rendered
+    assert any(
+        check["name"] == "baseline_algorithm_remaining_time_units"
+        and check["passed"] is False
+        for check in preview["checks"]
+    )
+
+
+def test_cvrp_solver_algorithm_preview_exposes_remaining_time_ms_helper(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/solver_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.nearest_neighbor()\n"
+            "    if context.remaining_time_ms() <= 0:\n"
+            "        context.set_stop_reason('time_limit')\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is True
+    assert preview["issues"] == []
+
+
 def test_cvrp_solver_algorithm_preview_times_out_unbounded_solve(
     cvrp_adapter: ProblemAdapter,
     monkeypatch: pytest.MonkeyPatch,

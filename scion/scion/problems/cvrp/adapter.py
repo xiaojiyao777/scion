@@ -614,8 +614,9 @@ class CvrpAdapter:
                 "context.nearest_neighbor(...), "
                 "context.objective(solution), context.objective_key(solution), "
                 "context.is_better(candidate, incumbent), "
-                "context.is_valid(solution), context.remaining_time(), "
-                "context.elapsed_ms(), context.record_phase(name, "
+                "context.is_valid(solution), context.remaining_time() "
+                "(seconds), context.remaining_time_ms(), context.elapsed_ms(), "
+                "context.record_phase(name, "
                 "elapsed_ms), context.record_iteration(phase, count), "
                 "context.record_move(phase, attempted=1, accepted=0, "
                 "delta=0.0, best_improved=False), and "
@@ -626,7 +627,9 @@ class CvrpAdapter:
                 "or context.objective_key is preferred.\n"
                 "- Runtime is part of the algorithm objective. Use finite "
                 "max_rounds/max_passes/top_k caps and poll "
-                "context.remaining_time(); importing time is allowed only for "
+                "context.remaining_time() in seconds or "
+                "context.remaining_time_ms() in milliseconds; importing time "
+                "is allowed only for "
                 "monotonic timing, never for sleeps or external scheduling.\n"
                 "- Prefer for-loops over range(max_rounds/max_passes/"
                 "customer_count) for bounded search. If you use while, make "
@@ -1206,6 +1209,27 @@ def _preview_baseline_algorithm_boundary(
     if not passed:
         issues.append(detail)
 
+    mixed = _remaining_time_ms_mixed_comparisons(code)
+    time_units_passed = not mixed
+    time_units_detail = (
+        "remaining_time unit usage is consistent"
+        if time_units_passed
+        else (
+            "context.remaining_time() returns seconds; use "
+            "context.remaining_time_ms() when comparing to millisecond-derived "
+            f"variables: {mixed[:5]}"
+        )
+    )
+    checks.append(
+        {
+            "name": "baseline_algorithm_remaining_time_units",
+            "passed": time_units_passed,
+            "detail": time_units_detail,
+        }
+    )
+    if not time_units_passed:
+        issues.append(time_units_detail)
+
 
 def _context_baseline_call_count(code: str) -> int:
     try:
@@ -1225,6 +1249,92 @@ def _context_baseline_call_count(code: str) -> int:
         ):
             count += 1
     return count
+
+
+def _remaining_time_ms_mixed_comparisons(code: str) -> list[str]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+
+    assignments: dict[str, ast.AST] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                assignments[target.id] = node.value
+
+    ms_names = {name for name in assignments if name.endswith("_ms")}
+    changed = True
+    while changed:
+        changed = False
+        for name, expr in assignments.items():
+            if name in ms_names:
+                continue
+            if _expr_is_millisecond_derived(expr, ms_names):
+                ms_names.add(name)
+                changed = True
+
+    mixed: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        parts = [node.left, *node.comparators]
+        for left, right in zip(parts, parts[1:]):
+            if _is_context_remaining_time_call(left) and _expr_references_ms_name(
+                right, ms_names
+            ):
+                mixed.append(_format_compare_issue(right, ms_names))
+            elif _is_context_remaining_time_call(right) and _expr_references_ms_name(
+                left, ms_names
+            ):
+                mixed.append(_format_compare_issue(left, ms_names))
+    return mixed
+
+
+def _expr_is_millisecond_derived(expr: ast.AST, ms_names: set[str]) -> bool:
+    if _expr_references_ms_name(expr, ms_names):
+        return True
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Mult):
+        return _is_1000_literal(expr.left) or _is_1000_literal(expr.right)
+    return False
+
+
+def _expr_references_ms_name(expr: ast.AST, ms_names: set[str]) -> bool:
+    return any(
+        isinstance(node, ast.Name) and node.id in ms_names
+        for node in ast.walk(expr)
+    )
+
+
+def _is_1000_literal(expr: ast.AST) -> bool:
+    return (
+        isinstance(expr, ast.Constant)
+        and isinstance(expr.value, (int, float))
+        and expr.value == 1000
+    )
+
+
+def _is_context_remaining_time_call(expr: ast.AST) -> bool:
+    return (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Attribute)
+        and expr.func.attr == "remaining_time"
+        and isinstance(expr.func.value, ast.Name)
+        and expr.func.value.id == "context"
+    )
+
+
+def _format_compare_issue(expr: ast.AST, ms_names: set[str]) -> str:
+    names = sorted(
+        {
+            node.id
+            for node in ast.walk(expr)
+            if isinstance(node, ast.Name) and node.id in ms_names
+        }
+    )
+    return ", ".join(names) if names else "millisecond expression"
 
 
 def _module_from_policy_code(file_path: str, code: str) -> types.ModuleType:
@@ -1690,6 +1800,9 @@ class _PreviewSolverAlgorithmContext:
     def remaining_time(self) -> float:
         self._remaining_time_calls += 1
         return max(0.0, self.time_limit_sec - (0.05 * self._remaining_time_calls))
+
+    def remaining_time_ms(self) -> int:
+        return int(self.remaining_time() * 1000)
 
     def elapsed_ms(self) -> int:
         return 0

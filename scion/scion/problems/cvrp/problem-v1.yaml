@@ -953,7 +953,8 @@ research_surfaces:
         context.nearest_neighbor(...), context.objective(solution),
         context.objective_key(solution),
         context.is_better(candidate, incumbent), context.is_valid(solution),
-        context.remaining_time(), context.elapsed_ms(), and
+        context.remaining_time() in seconds, context.remaining_time_ms(),
+        context.elapsed_ms(), and
         context.record_phase(name, elapsed_ms),
         context.record_iteration(phase, count), context.record_move(phase,
         attempted=1, accepted=0, delta=0.0, best_improved=False), and
@@ -962,8 +963,9 @@ research_surfaces:
         lexicographically as (fleet_violation, total_distance); explicit field
         access or context.objective_key is preferred. Runtime is part of the
         algorithm objective: use finite max_rounds/max_passes/top_k caps and
-        poll context.remaining_time(); importing time is allowed only for
-        monotonic timing, never for sleeps or external scheduling. Prefer
+        poll context.remaining_time() in seconds or context.remaining_time_ms()
+        in milliseconds; importing time is allowed only for monotonic timing,
+        never for sleeps or external scheduling. Prefer
         for-loops over range(max_rounds/max_passes/customer_count) for bounded
         search. If you use while, make the bound statically obvious: a counter
         compared with a max_* cap and incremented inside the loop, or a finite
