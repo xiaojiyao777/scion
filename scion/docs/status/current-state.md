@@ -574,6 +574,16 @@ compaction retains failed-check names. Validation after this repair: targeted
 budget regressions `3 passed`, focused subset `313 passed`, full suite
 `1675 passed, 1 skipped`.
 
+2-round smoke after the self-check budget repair:
+`/home/clawd/research/scion-experiments/v04-selfcheck-budget-sonnet-2r-20260515T161843Z`
+completed with exit code 0. No `result_too_large` recurred. Contract preview
+retained concrete `C4b_patch_action_target` and
+`C9d_surface_instance_identity` feedback, and another candidate passed Contract
+but was stopped by expanded `proposal.algorithm_smoke` for
+`solver_algorithm_errors=1` before official screening. This is acceptable for
+the repair: bad candidate code is rejected inside tainted self-checks, with
+auditable failure evidence.
+
 Latest code-generation timeout-policy diagnosis and repair:
 
 ```text
