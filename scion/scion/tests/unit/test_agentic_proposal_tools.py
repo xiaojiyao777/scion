@@ -24,7 +24,10 @@ from scion.core.models import (
     StepRecord,
 )
 from scion.problem.spec import ProblemSpecV1
-from scion.problem.bridge import load_problem_spec_v1_from_yaml
+from scion.problem.bridge import (
+    legacy_problem_spec_from_v1,
+    load_problem_spec_v1_from_yaml,
+)
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.proposal import agentic_session as agentic_session_module
 from scion.proposal.agentic_session import (
@@ -2475,6 +2478,41 @@ def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(
         "policies/baseline_algorithm.py"
     )
     assert after == before
+
+
+def test_algorithm_smoke_accepts_legacy_problem_v1_runtime_audit_spec(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    context = replace(
+        context,
+        problem_spec=legacy_problem_spec_from_v1(context.problem_spec),
+    )
+    module_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "config.py"
+    ).read_text(encoding="utf-8")
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_modules/config.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_modules/config.py",
+                "action": "modify",
+                "code_content": module_code,
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert payload["runtime_smoke"]["passed"] is True
 
 
 def test_algorithm_smoke_runs_multi_file_solver_design_patch(

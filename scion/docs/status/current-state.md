@@ -538,6 +538,15 @@ tests, and proposal validation. Full suite validation:
 `1672 passed, 1 skipped`. The next step is a 2-round Sonnet smoke; if it passes
 the framework gate, start a 6-round independent validation run.
 
+First 2-round smoke after the multi-file repair reached Contract repair and
+then failed in `proposal.algorithm_smoke` with a framework compatibility bug:
+live campaign context carried a legacy `ProblemSpec` with
+`spec_version=problem-v1`, and smoke attempted to bridge it as if it were a
+`ProblemSpecV1` with `id`. Runtime-audit spec handling now bridges only real
+v1 specs with an `id` and uses already-legacy specs directly. Focused
+regression after this fix: `311 passed`. Full suite after the compatibility
+fix: `1673 passed, 1 skipped`.
+
 Latest code-generation timeout-policy diagnosis and repair:
 
 ```text

@@ -2001,7 +2001,10 @@ def _runtime_smoke_audit_failure(
 
 
 def _problem_spec_for_runtime_audit(problem_spec: Any) -> Any:
-    if str(_attr(problem_spec, "spec_version", "") or "") == "problem-v1":
+    if (
+        str(_attr(problem_spec, "spec_version", "") or "") == "problem-v1"
+        and _attr(problem_spec, "id") is not None
+    ):
         return legacy_problem_spec_from_v1(problem_spec)
     return problem_spec
 
