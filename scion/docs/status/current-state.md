@@ -494,6 +494,39 @@ generated code successfully but failed closed at Contract preview on
 `C9c_complexity_bound`, which is a generated-algorithm boundary/quality issue
 rather than an LLM timeout issue.
 
+Follow-up 5-round Sonnet validation confirmed the LLM timeout repair:
+10/10 `code/generate_patch` traces succeeded, with code durations from
+`45.60s` to `124.55s` and no old 60s/125s timeout-failure pattern. The new
+blocking issue was APS observation-budget handling: several branches generated
+code and passed or repaired Contract preview, but `proposal.algorithm_smoke`
+was replaced by `result_too_large` because the remaining transcript budget was
+too small. The smoke tool had effectively run; the error message implied
+otherwise.
+
+Current repair: APS now compacts `proposal.algorithm_smoke` observations the
+same way it compacts Contract preview observations, preserving pass/fail,
+issue summary, static contract summary, and tainted/non-promotional flags while
+dropping large preview bodies. The self-check observation reserve now scales
+for Contract + smoke previews, and residual budget failures are reported as
+smoke observation-budget failures rather than code-generation failures.
+
+Validation smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-algorithm-smoke-budget-repair-sonnet-3r-20260515T042430Z
+rounds=3
+stopped_reason=max_rounds_exhausted
+code_traces=5/5 ok
+algorithm_smoke=3/3 ok with compact smoke preview retained
+screening=3/3 reached
+decision=3/3 abandon by SCREENING_FAIL_WIN_RATE
+```
+
+This confirms the framework path is now past the LLM timeout and
+algorithm-smoke observation-budget blockers at short-run scale. The remaining
+negative signal is solver quality: generated solver-design candidates reach
+screening but lose to the champion.
+
 Claude Code comparison: the next deeper design step is a Scion-native
 continuous tool-use loop. Scion should keep permission, taint, exposure,
 transcript, and promotion gates, but expose controlled proposal tools as native

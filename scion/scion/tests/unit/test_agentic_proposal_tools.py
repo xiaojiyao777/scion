@@ -40,6 +40,7 @@ from scion.proposal.agentic_session import (
     compute_agentic_idempotency_key,
     resume_from_artifact,
     validate_agentic_session_artifact,
+    _compact_algorithm_smoke_observation,
     _compact_contract_preview_observation,
     _compact_feedback_observation_for_budget,
     _json_size,
@@ -3719,6 +3720,112 @@ def test_contract_preview_compacts_pass_fail_summary_when_full_payload_exceeds_b
     assert compact.structured_payload["patch"]["problem_preview"]["passed"] is True
     assert compact.structured_payload["compact_due_to_budget"] is True
     assert _self_check_from_previews([compact]).contract_preview_passed is True
+
+
+def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
+    observation = ProposalObservation(
+        observation_id="smoke-1",
+        session_id="session-1",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-10",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke passed on tainted synthetic preview.",
+        structured_payload={
+            "passed": True,
+            "non_promotional": True,
+            "tainted_debug": True,
+            "workspace_materialized": False,
+            "verification_run": False,
+            "protocol_run": False,
+            "decision_run": False,
+            "hypothesis": {
+                "passed": True,
+                "hypothesis_text": "x" * 8000,
+                "contract": {"passed": True, "check_count": 6},
+                "checks": [{"name": "C2_locus", "passed": True}],
+            },
+            "patch": {
+                "passed": True,
+                "code_content": "x" * 48000,
+                "contract": {"passed": True, "check_count": 10},
+                "checks": [{"name": "C7_interface", "passed": True}],
+                "problem_preview": {
+                    "passed": True,
+                    "surface": "solver_design",
+                    "checks": [{"name": "preview", "passed": True}],
+                    "workspace_materialized": False,
+                },
+            },
+            "problem_preview": {
+                "passed": True,
+                "surface": "solver_design",
+                "checks": [{"name": "preview", "passed": True}],
+                "workspace_materialized": False,
+            },
+        },
+    )
+
+    compact = _compact_algorithm_smoke_observation(observation)
+
+    assert compact is not None
+    assert compact.is_error is False
+    assert _json_size(_observation_prompt_payload(compact)) < 1500
+    assert compact.structured_payload["passed"] is True
+    assert compact.structured_payload["patch"]["contract"]["check_count"] == 10
+    assert compact.structured_payload["problem_preview"]["passed"] is True
+    assert compact.structured_payload["compact_due_to_budget"] is True
+
+
+def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_observation_chars=64000)
+    state = AgenticProposalSessionState(
+        session_id="session-smoke-budget",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        observation_chars_used=62400,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    observation = ProposalObservation(
+        observation_id="smoke-2",
+        session_id=state.session_id,
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-11",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke passed on tainted synthetic preview.",
+        structured_payload={
+            "passed": True,
+            "non_promotional": True,
+            "tainted_debug": True,
+            "workspace_materialized": False,
+            "verification_run": False,
+            "protocol_run": False,
+            "decision_run": False,
+            "patch": {
+                "passed": True,
+                "code_content": "x" * 48000,
+                "contract": {"passed": True, "check_count": 10},
+                "problem_preview": {"passed": True, "surface": "solver_design"},
+            },
+            "problem_preview": {"passed": True, "surface": "solver_design"},
+        },
+    )
+
+    compact = session._enforce_observation_budget(context, state, observation)
+
+    assert compact.is_error is False
+    assert compact.failure_code is None
+    assert compact.structured_payload["passed"] is True
+    assert compact.structured_payload["compact_due_to_budget"] is True
+    assert _json_size(_observation_prompt_payload(compact)) <= (
+        config.max_observation_chars - state.observation_chars_used
+    )
 
 
 def test_agentic_session_compacts_feedback_observations_for_internal_budget() -> None:

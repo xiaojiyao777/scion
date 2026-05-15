@@ -85,7 +85,7 @@ _APS_FEEDBACK_LIST_ITEMS = 4
 _APS_FEEDBACK_MAP_ITEMS = 16
 _APS_FEEDBACK_CALL_RESERVE_CHARS = 6000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
-_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
+_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 24000
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
 _SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:has|contains)\s+(?:a\s+)?syntax error\b"), "syntax_error"),
@@ -3310,7 +3310,7 @@ class AgenticProposalSession:
         max_chars = max(0, int(self._tool_loop_config.max_observation_chars))
         if max_chars < _SELF_CHECK_OBSERVATION_RESERVE_CHARS * 2:
             return 0
-        return min(_SELF_CHECK_OBSERVATION_RESERVE_CHARS, max_chars // 4)
+        return min(_SELF_CHECK_OBSERVATION_RESERVE_CHARS, max_chars // 3)
 
     def _diagnosis_budget_reserved(self, state: AgenticProposalSessionState) -> bool:
         call_reserve = self._self_check_tool_call_reserve()
@@ -3462,21 +3462,21 @@ class AgenticProposalSession:
         observation: ProposalObservation,
     ) -> ProposalObservation:
         observation = _compact_feedback_observation_for_budget(observation)
-        compact_contract = _compact_contract_preview_observation(observation)
-        if compact_contract is not None and (
-            _json_size(_observation_prompt_payload(compact_contract))
+        compact_preview = _compact_self_check_preview_observation(observation)
+        if compact_preview is not None and (
+            _json_size(_observation_prompt_payload(compact_preview))
             < _json_size(_observation_prompt_payload(observation))
         ):
-            observation = compact_contract
+            observation = compact_preview
         projected = _json_size(_observation_prompt_payload(observation))
         remaining = self._remaining_observation_chars(state)
         if projected <= remaining:
             return observation
-        compact_contract = _compact_contract_preview_observation(observation)
-        if compact_contract is not None and (
-            _json_size(_observation_prompt_payload(compact_contract)) <= remaining
+        compact_preview = _compact_self_check_preview_observation(observation)
+        if compact_preview is not None and (
+            _json_size(_observation_prompt_payload(compact_preview)) <= remaining
         ):
-            return compact_contract
+            return compact_preview
         return self._budget_error_observation(
             context,
             state,
@@ -3907,6 +3907,53 @@ def _compact_contract_preview_observation(
         structured_payload=compact_payload,
         repair_hint=None,
     )
+
+
+def _compact_algorithm_smoke_observation(
+    observation: ProposalObservation,
+) -> ProposalObservation | None:
+    if observation.tool_name != "proposal.algorithm_smoke" or observation.is_error:
+        return None
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return None
+    compact_payload = _drop_empty_mapping(
+        {
+            "passed": bool(payload.get("passed")),
+            "non_promotional": payload.get("non_promotional"),
+            "tainted_debug": payload.get("tainted_debug"),
+            "workspace_materialized": payload.get("workspace_materialized"),
+            "verification_run": payload.get("verification_run"),
+            "protocol_run": payload.get("protocol_run"),
+            "decision_run": payload.get("decision_run"),
+            "issue_summary": _limit_string(payload.get("issue_summary"), 240),
+            "static_contract": _compact_contract_mapping(
+                payload.get("static_contract")
+            ),
+            "hypothesis": _compact_contract_preview_section(payload.get("hypothesis")),
+            "patch": _compact_contract_preview_section(payload.get("patch")),
+            "problem_preview": _compact_problem_preview_mapping(
+                payload.get("problem_preview")
+            ),
+            "compact_due_to_budget": True,
+        }
+    )
+    return replace(
+        observation,
+        summary=f"{observation.summary} Compact smoke preview retained.",
+        structured_payload=compact_payload,
+        repair_hint=None,
+    )
+
+
+def _compact_self_check_preview_observation(
+    observation: ProposalObservation,
+) -> ProposalObservation | None:
+    if observation.tool_name == "proposal.contract_preview":
+        return _compact_contract_preview_observation(observation)
+    if observation.tool_name == "proposal.algorithm_smoke":
+        return _compact_algorithm_smoke_observation(observation)
+    return None
 
 
 def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
@@ -5430,6 +5477,8 @@ def _algorithm_smoke_failure_detail(
         return None
     latest = smoke_observations[-1]
     if latest.is_error:
+        if latest.failure_code == ProposalToolFailureCode.RESULT_TOO_LARGE:
+            return "algorithm smoke result exceeded observation budget"
         codes = ", ".join(
             code
             for code in (
