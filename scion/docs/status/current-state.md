@@ -26,7 +26,10 @@ remain isolated. Candidates should study and modify the branch copy of the
 algorithm modules; `policies/solver_algorithm.py` remains as a compatibility
 hook only. APS `context.read_surface` now includes bounded support-module
 previews for `solver_design`, so hypothesis and code phases can inspect the
-actual algorithm internals rather than only the stable entrypoint. The adapter
+actual algorithm internals rather than only the stable entrypoint. Code-phase
+reads of a specific `policies/baseline_modules/*.py` target are now narrowed
+to a target-only preview with a 6000-character code cap, preventing repeated
+module reads from consuming the terminal Contract/smoke reserve. The adapter
 and solver keep ownership of objective semantics,
 feasibility, parsing, seeds, protocol splits, time limits, and Decision rules.
 Runtime evidence for this boundary remains `solver_algorithm_*`, including
@@ -472,6 +475,32 @@ screening pairs as controlled algorithm-body changes. Solver promotion quality
 is still a later gate under the existing `solver_algorithm_*` evidence.
 
 ## Latest Experiment
+
+Latest solver-design module-subject smoke and repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-module-subject-sonnet-2r-20260515T142828Z
+model=claude-sonnet-4-6
+rounds_requested=2
+screened_experiments=0
+stopped_reason=max_rounds_exhausted
+last_result=code generation failed
+```
+
+This smoke validated the new research-object direction but exposed a budget
+control issue. APS selected `solver_design` and targeted
+`policies/baseline_modules/local_search.py`, proving the agent can now choose
+focused branch-owned algorithm modules instead of regenerating the stable
+entrypoint. It then failed before official evaluation because post-repair
+Contract preview was replaced by `result_too_large` after the session spent
+too much of its observation budget.
+
+Current repair: code-phase reads for solver-design support modules use
+`section=target_preview`, cap code preview at 6000 chars, and count that
+module-target read as sufficient so the deterministic fallback does not read
+the same module again. The full Scion suite passes after this repair
+(`1670 passed, 1 skipped`); rerun the 2-round Sonnet smoke before any longer
+validation.
 
 Latest code-generation timeout-policy diagnosis and repair:
 

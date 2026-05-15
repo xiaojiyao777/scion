@@ -5225,6 +5225,102 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     )
 
 
+def test_code_phase_solver_module_read_uses_target_preview_budget(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/config.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    target_path = Path(context.champion.code_snapshot_path) / target_file
+    module_code = target_path.read_text(encoding="utf-8") + "\n" + "\n".join(
+        f"# budget filler {idx}" for idx in range(700)
+    )
+    target_path.write_text(module_code, encoding="utf-8")
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {
+                "tool_name": "context.read_surface",
+                "args": {
+                    "surface": "solver_design",
+                    "target_file": target_file,
+                    "detail": "full",
+                    "max_code_chars": 12000,
+                },
+            },
+        ],
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path=target_file,
+            action="modify",
+            code_content=module_code,
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    tool_events = [
+        event.metadata for event in output.transcript if event.metadata.get("step_id")
+    ]
+    read_surface_events = [
+        event for event in tool_events if event["tool_name"] == "context.read_surface"
+    ]
+    code_observations = creative.code_contexts[0]["agentic_tool_observations"]
+    module_read = next(
+        observation
+        for observation in code_observations
+        if observation["tool_name"] == "context.read_surface"
+    )
+    payload = module_read["structured_payload"]
+    artifact = payload["current_artifact"]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert any(
+        event["selection_source"] == "code_phase_planner"
+        for event in read_surface_events
+    )
+    assert not any(
+        event["selection_source"] == "code_phase_required"
+        for event in read_surface_events
+    )
+    assert payload["detail"] == "full"
+    assert payload["section"] == "target_preview"
+    assert payload["target_file"] == target_file
+    assert artifact["max_chars"] == 6000
+    assert artifact["truncated"] is True
+    assert artifact["content_preview_chars"] == 6000
+
+
 def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     tmp_path: Path,
 ) -> None:

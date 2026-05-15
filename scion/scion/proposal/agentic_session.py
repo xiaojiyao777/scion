@@ -79,6 +79,7 @@ _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
 _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
+_APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
 _APS_FEEDBACK_OBSERVATION_TARGET_CHARS = 6000
 _APS_FEEDBACK_TEXT_CHARS = 1200
 _APS_FEEDBACK_LIST_ITEMS = 4
@@ -2522,6 +2523,11 @@ class AgenticProposalSession:
         }
         if hypothesis.target_file:
             read_surface_args["target_file"] = hypothesis.target_file
+        if _is_solver_design_support_module_target(hypothesis.target_file):
+            read_surface_args["section"] = "target_preview"
+            read_surface_args["max_code_chars"] = (
+                _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
+            )
         guidance = {
             "context.read_surface": {
                 "purpose": (
@@ -3391,6 +3397,19 @@ class AgenticProposalSession:
             return args
         budgeted = dict(args)
         if selection_source.startswith("code_phase"):
+            target_file = str(budgeted.get("target_file") or "").strip()
+            if _is_solver_design_support_module_target(target_file):
+                budgeted["section"] = "target_preview"
+                budgeted["max_code_chars"] = min(
+                    _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                    _coerce_positive_int(
+                        budgeted.get("max_code_chars"),
+                        _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                    ),
+                )
+                if budgeted.get("detail") != "full":
+                    budgeted["detail"] = "full"
+                return budgeted
             if budgeted.get("detail") != "full":
                 budgeted["detail"] = "full"
             max_code_chars = budgeted.get("max_code_chars")
@@ -5173,6 +5192,21 @@ def _step_stage_name(step: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _is_solver_design_support_module_target(target_file: Any) -> bool:
+    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
+    return normalized.startswith("policies/baseline_modules/") and normalized.endswith(
+        ".py"
+    )
+
+
+def _coerce_positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return default
+    return parsed if parsed > 0 else default
+
+
 def _observation_satisfies_compact_requirement(
     context: ProposalToolContext | None,
     observation: ProposalObservation,
@@ -5346,7 +5380,12 @@ def _has_code_phase_surface_read(
             max_chars = int(artifact.get("max_chars") or 0)
         except (TypeError, ValueError):
             max_chars = 0
-        if max_chars >= _APS_CODE_SURFACE_READ_CODE_CHARS or not artifact.get(
+        required_chars = (
+            _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
+            if _is_solver_design_support_module_target(expected_target)
+            else _APS_CODE_SURFACE_READ_CODE_CHARS
+        )
+        if max_chars >= required_chars or not artifact.get(
             "truncated"
         ):
             return True
