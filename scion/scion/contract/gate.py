@@ -858,6 +858,7 @@ class ContractGate:
             return _cr("C9c_complexity_bound", False, "heavy", surface_error, t0)
         itertools_aliases = _collect_itertools_aliases(tree)
         runtime_guard_names = _collect_runtime_guard_function_names(tree)
+        _annotate_ast_parents(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -1851,6 +1852,12 @@ def _is_bounded_while(
                 scale_names,
                 runtime_guard_names,
             )
+            or _compare_has_bounded_collection_size_progress(
+                value,
+                node,
+                scale_names,
+                runtime_guard_names,
+            )
             or _compare_has_runtime_guard(value, runtime_guard_names)
             or _condition_collection_is_shrunk(value, node)
             for value in node.test.values
@@ -1859,6 +1866,12 @@ def _is_bounded_while(
         return (
             _compare_has_small_constant(node.test)
             or _compare_has_incrementing_counter_guard(
+                node.test,
+                node,
+                scale_names,
+                runtime_guard_names,
+            )
+            or _compare_has_bounded_collection_size_progress(
                 node.test,
                 node,
                 scale_names,
@@ -1896,6 +1909,84 @@ def _condition_collection_names(test: ast.AST) -> set[str]:
     return set()
 
 
+def _compare_has_bounded_collection_size_progress(
+    test: ast.AST,
+    node: ast.While,
+    scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+        return False
+    left = test.left
+    right = test.comparators[0]
+    op = test.ops[0]
+    left_name = _len_call_name(left)
+    right_name = _len_call_name(right)
+    if left_name is not None:
+        if not _is_effectively_bounded_limit_expr(
+            right,
+            node,
+            left_name,
+            scale_names,
+            runtime_guard_names,
+        ):
+            return False
+        if isinstance(op, (ast.Lt, ast.LtE)):
+            return _body_grows_collection(node.body, left_name)
+        if isinstance(op, (ast.Gt, ast.GtE)):
+            return _body_shrinks_collection(node.body, left_name)
+    if right_name is not None:
+        if not _is_effectively_bounded_limit_expr(
+            left,
+            node,
+            right_name,
+            scale_names,
+            runtime_guard_names,
+        ):
+            return False
+        if isinstance(op, (ast.Lt, ast.LtE)):
+            return _body_shrinks_collection(node.body, right_name)
+        if isinstance(op, (ast.Gt, ast.GtE)):
+            return _body_grows_collection(node.body, right_name)
+    return False
+
+
+def _len_call_name(expr: ast.AST) -> str | None:
+    if (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id == "len"
+        and len(expr.args) == 1
+        and isinstance(expr.args[0], ast.Name)
+    ):
+        return expr.args[0].id
+    return None
+
+
+def _is_effectively_bounded_limit_expr(
+    expr: ast.AST,
+    while_node: ast.While,
+    collection_name: str,
+    scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
+    if _expr_references_name(expr, collection_name):
+        return False
+    if _is_bounded_limit_expr(expr, scale_names) or _mentions_runtime_guard(
+        expr,
+        runtime_guard_names,
+    ):
+        return True
+    if isinstance(expr, ast.Name):
+        return _has_prior_bounded_assignment(
+            while_node,
+            expr.id,
+            scale_names,
+            runtime_guard_names,
+        )
+    return False
+
+
 def _body_shrinks_collection(body: list[ast.stmt], name: str) -> bool:
     shrink_methods = {"remove", "discard", "pop", "clear"}
     for child in ast.walk(ast.Module(body=body, type_ignores=[])):
@@ -1908,6 +1999,34 @@ def _body_shrinks_collection(body: list[ast.stmt], name: str) -> bool:
                 return True
         if isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
             if child.target.id == name and isinstance(child.op, (ast.Sub, ast.BitAnd)):
+                return True
+    return False
+
+
+def _body_grows_collection(body: list[ast.stmt], name: str) -> bool:
+    grow_methods = {"append", "add", "extend", "insert", "update"}
+    for child in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            if (
+                isinstance(child.func.value, ast.Name)
+                and child.func.value.id == name
+                and child.func.attr in grow_methods
+            ):
+                return True
+        if isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
+            if child.target.id == name and isinstance(child.op, (ast.Add, ast.BitOr)):
+                return True
+        if isinstance(child, ast.Assign):
+            if not any(
+                isinstance(target, ast.Name) and target.id == name
+                for target in child.targets
+            ):
+                continue
+            if (
+                isinstance(child.value, ast.BinOp)
+                and isinstance(child.value.op, ast.Add)
+                and _expr_references_name(child.value, name)
+            ):
                 return True
     return False
 
@@ -2079,6 +2198,73 @@ def _collect_runtime_guard_function_names(tree: ast.AST) -> frozenset[str]:
                 names.add(node.name)
                 break
     return frozenset(names)
+
+
+def _annotate_ast_parents(tree: ast.AST) -> None:
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            setattr(child, "_scion_parent", parent)
+
+
+def _has_prior_bounded_assignment(
+    node: ast.AST,
+    name: str,
+    scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
+    current = node
+    parent = getattr(current, "_scion_parent", None)
+    while parent is not None:
+        found_container = False
+        for field_name in ("body", "orelse", "finalbody"):
+            body = getattr(parent, field_name, None)
+            if not isinstance(body, list) or current not in body:
+                continue
+            found_container = True
+            index = body.index(current)
+            for stmt in reversed(body[:index]):
+                if _stmt_assigns_bounded_name(
+                    stmt,
+                    name,
+                    scale_names,
+                    runtime_guard_names,
+                ):
+                    return True
+            break
+        current = parent
+        parent = getattr(current, "_scion_parent", None)
+        if not found_container:
+            continue
+    return False
+
+
+def _stmt_assigns_bounded_name(
+    stmt: ast.stmt,
+    name: str,
+    scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
+    if isinstance(stmt, ast.Assign):
+        if not any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in stmt.targets
+        ):
+            return False
+        return _is_bounded_limit_expr(stmt.value, scale_names) or _mentions_runtime_guard(
+            stmt.value,
+            runtime_guard_names,
+        )
+    if (
+        isinstance(stmt, ast.AnnAssign)
+        and isinstance(stmt.target, ast.Name)
+        and stmt.target.id == name
+        and stmt.value is not None
+    ):
+        return _is_bounded_limit_expr(stmt.value, scale_names) or _mentions_runtime_guard(
+            stmt.value,
+            runtime_guard_names,
+        )
+    return False
 
 
 def _mentions_runtime_guard(

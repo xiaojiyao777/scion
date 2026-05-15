@@ -722,6 +722,57 @@ class TestC9cComplexityBound:
         c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
         assert c9c.passed
 
+    def test_bounded_collection_size_growth_while_passes(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        customers = list(solution.customer_ids)\n"
+            "        cap = min(8, len(customers))\n"
+            "        neighbors = []\n"
+            "        while len(neighbors) < cap:\n"
+            "            neighbors.append(customers[len(neighbors)])\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert c9c.passed
+
+    def test_collection_size_growth_without_bound_fails(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        target = solution.customer_count\n"
+            "        items = []\n"
+            "        while len(items) < threshold:\n"
+            "            items.append(target)\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "uncapped while" in c9c.detail
+
+    def test_collection_size_self_assignment_does_not_count_as_progress(
+        self,
+        gate: ContractGate,
+    ):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        cap = min(8, len(solution.customer_ids))\n"
+            "        items = []\n"
+            "        while len(items) < cap:\n"
+            "            items = items\n"
+            "        return solution\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9c = next(c for c in result.checks if c.name == "C9c_complexity_bound")
+        assert not c9c.passed
+        assert "uncapped while" in c9c.detail
+
     def test_runtime_guarded_while_passes(self, gate: ContractGate):
         code = (
             "class Context:\n"

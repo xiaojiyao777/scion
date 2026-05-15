@@ -2036,6 +2036,32 @@ def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_pattern
     assert c9c.passed
 
 
+def test_cvrp_solver_algorithm_complexity_allows_prior_capped_collection_growth() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(legacy)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    routes = [list(instance.customer_ids)]\n"
+            "    customers = list(instance.customer_ids)\n"
+            "    q = max(0, min(q, len(customers)))\n"
+            "    removed = []\n"
+            "    while len(removed) < q:\n"
+            "        if not customers:\n"
+            "            break\n"
+            "        removed.append(customers.pop())\n"
+            "    return context.make_solution(routes)\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch, selected_surface="solver_design")
+
+    assert c9c.passed
+
+
 def test_cvrp_solver_algorithm_complexity_allows_local_runtime_guard_helper() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     legacy = legacy_problem_spec_from_v1(spec_v1)

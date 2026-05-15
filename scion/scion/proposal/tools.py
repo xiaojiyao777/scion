@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field, is_dataclass
@@ -1859,13 +1860,29 @@ def _apply_patch_to_runtime_smoke_workspace(
     target.relative_to(workspace.resolve(strict=False))
     action = str(patch.action or "modify")
     if action in {"modify", "add", "create", "create_new"}:
+        _ensure_runtime_smoke_path_writable(target.parent)
         target.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_runtime_smoke_path_writable(target)
         target.write_text(str(patch.code_content or ""), encoding="utf-8")
     elif action in {"remove", "delete"}:
         if target.exists():
+            _ensure_runtime_smoke_path_writable(target.parent)
+            _ensure_runtime_smoke_path_writable(target)
             target.unlink()
     else:
         raise ValueError(f"unsupported patch action for smoke: {action}")
+
+
+def _ensure_runtime_smoke_path_writable(path: Path) -> None:
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError:
+        return
+    writable_mode = mode | stat.S_IWUSR
+    if path.is_dir():
+        writable_mode |= stat.S_IXUSR
+    if writable_mode != mode:
+        path.chmod(writable_mode)
 
 
 def _resolve_smoke_instance_path(

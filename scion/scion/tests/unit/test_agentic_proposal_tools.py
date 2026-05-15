@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import fields, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -2410,6 +2411,70 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
         "policies/baseline_algorithm.py"
     )
     assert after == before
+
+
+def test_algorithm_smoke_materializes_readonly_champion_snapshot(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    champion_root = tmp_path / "readonly_cvrp_champion"
+    shutil.copytree(
+        _CVRP_ROOT,
+        champion_root,
+        ignore=shutil.ignore_patterns(
+            "__pycache__",
+            "*.pyc",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+        ),
+    )
+    for path in sorted(champion_root.rglob("*"), reverse=True):
+        path.chmod(0o555 if path.is_dir() else 0o444)
+    champion_root.chmod(0o555)
+    context = replace(
+        context,
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(champion_root),
+            code_snapshot_hash="code-hash",
+        ),
+    )
+
+    try:
+        observation = registry.call(
+            "proposal.algorithm_smoke",
+            {
+                "hypothesis": _valid_hypothesis_payload(
+                    change_locus="solver_design",
+                    target_file="policies/baseline_algorithm.py",
+                ),
+                "patch": {
+                    "file_path": "policies/baseline_algorithm.py",
+                    "action": "modify",
+                    "code_content": (
+                        "def solve(instance, rng, time_limit_sec, context):\n"
+                        "    solution = context.make_solution(context.nearest_neighbor())\n"
+                        "    context.record_iteration('seed', 1)\n"
+                        "    return solution\n"
+                    ),
+                },
+            },
+            context,
+        )
+    finally:
+        for path in sorted(champion_root.rglob("*"), reverse=True):
+            path.chmod(0o755 if path.is_dir() else 0o644)
+        champion_root.chmod(0o755)
+
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert payload["runtime_smoke"]["passed"] is True
+    assert payload["runtime_smoke"]["runtime_smoke_run"] is True
 
 
 def test_algorithm_smoke_rejects_solver_design_runtime_error(

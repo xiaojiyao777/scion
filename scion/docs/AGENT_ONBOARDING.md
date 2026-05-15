@@ -243,6 +243,21 @@ Important current interpretation:
   `solve(...)`, and APS turns a hung `proposal.contract_preview` into a
   controlled tool error. Run a 1-2 round smoke before any longer CVRP
   solver-quality validation.
+- Latest C9c/smoke boundary repair: C9c now also accepts explicit bounded
+  collection-size loops such as `while len(removed) < q` when the collection is
+  visibly grown toward the bound and the bound is either directly bounded or
+  assigned from `min(...)`/`max(...)` earlier in the same block. It still rejects
+  true unbounded improvement-flag loops such as `while improved:`. Algorithm
+  smoke also makes copied temporary smoke-workspace files writable before
+  applying a patch, because champion snapshots are intentionally read-only.
+- Research-object design debt: current `PatchProposal` still carries complete
+  file contents. For `solver_design`, code phase therefore regenerates the full
+  `policies/baseline_algorithm.py` even for a one-operator change. The next
+  object-model repair should split the branch-owned algorithm subject into
+  controlled modules. The agent may add, delete, or modify modules inside the
+  declared solver-design package; Scion's hard boundary is the fixed objective,
+  constraints, adapter-owned parsing/feasibility/objective recomputation,
+  seeds, protocol splits, and promotion.
 - The preview-repair smoke itself did not reach preview: both rounds failed at
   final `generate_patch` after three provider timeouts. The important finding
   was duplicated code-phase context, not solver quality: the target file was

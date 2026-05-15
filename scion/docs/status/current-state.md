@@ -1688,6 +1688,21 @@ Latest solver-design no-op feedback repair:
 
 P1:
 
+- Run a 1-2 round smoke after the latest C9c/smoke permission repair. The
+  first gate is that the 6-round failure modes no longer recur: bounded
+  `while len(collection) < cap/q` loops should pass Contract preview, true
+  unbounded `while improved` loops should still fail, and
+  `proposal.algorithm_smoke` should apply patches inside copied read-only
+  champion snapshots without `PermissionError`.
+- Start the research-object modularization design. Current `PatchProposal`
+  still requires complete file contents, so `solver_design` changes force the
+  LLM to regenerate all of `policies/baseline_algorithm.py` even for one repair
+  operator. The next object repair should keep a stable solve entrypoint and
+  expose branch-owned modules for construction, destroy, repair, local search,
+  acceptance, scheduler/runtime allocation, and telemetry. Inside that declared
+  package, the agent should be allowed to add, delete, or modify modules; the
+  hard boundary is fixed objective/constraints, adapter-owned parsing and
+  feasibility/objective recomputation, seeds, protocol splits, and promotion.
 - Run and analyze the repaired algorithm-body execution diagnostic. The first
   gate is not promotion; it is whether APS-generated `solver_design`
   candidates use the full CVRP lifecycle semantics now that baseline budget,
@@ -1763,6 +1778,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md`](../experiments/v0.4/v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md)
+  [`v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md`](../experiments/v0.4/v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

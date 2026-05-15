@@ -113,6 +113,36 @@ the boundary active rather than advisory:
 This is still a control-loop repair, not solver-efficacy evidence. It needs a
 new short free-surface diagnostic before any longer solver-quality run.
 
+## Solver-Design Module Granularity
+
+The next design correction is research-object granularity. The current
+`solver_design` path correctly lets Scion target the algorithm body, but the
+patch protocol still asks the agent to return complete file contents. In
+practice, a one-operator change to `policies/baseline_algorithm.py` causes the
+code agent to regenerate the entire algorithm file.
+
+The original `vrp/` implementation is a better structural guide. It separates
+the CVRP algorithm into data/state, construction, ALNS destroy/repair,
+adaptive weights, local-search/VNS, acceptance, and solver scheduling modules.
+Scion should preserve the same conceptual split inside the branch-owned
+controlled subject:
+
+- stable entrypoint: `policies/baseline_algorithm.py::solve(...)`;
+- branch-owned algorithm modules: construction, destroy, repair, local search,
+  acceptance, scheduler/runtime allocation, and telemetry;
+- fixed adapter boundary: parsing, feasibility, objective recomputation, seed
+  handling, protocol splits, and promotion decisions stay outside the research
+  modules.
+
+This does not require exposing raw `vrp/` files or modifying the original
+implementation. The controlled CVRP package should own its copy of the
+algorithm subject, while Scion audits a full candidate workspace after module
+changes. Within that solver-design package, the agent may add, delete, or
+modify algorithm modules. `PatchProposal` can still use complete file contents,
+but the file should be a focused algorithm module rather than the whole solver
+body, and the candidate workspace must be validated through the stable
+`solve(...)` entrypoint.
+
 ## Implemented Semantic-Identity Guidance Repair
 
 The next repair tightened the solver-design identity contract:
