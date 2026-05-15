@@ -29,6 +29,7 @@ _DEFAULT_SDK_MAX_RETRIES = 0
 _DEFAULT_MAX_TOKENS = 16384
 _DEFAULT_CODE_TIMEOUT_SEC = 180.0
 _DEFAULT_CODE_MAX_RETRIES = 0
+_DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES = 1
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _CODE_REQUEST_KINDS = {"code", "fix"}
@@ -72,6 +73,23 @@ def _request_kind_env_key(request_kind: str | None) -> str | None:
     return cleaned or None
 
 
+def _is_transient_provider_error(err_str: str) -> bool:
+    """Return true for gateway failures that happen before model generation."""
+    transient_markers = (
+        "aihubmix_api_error",
+        "new request failed",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+        "error code: 500",
+        "error code: 502",
+        "error code: 503",
+        "error code: 504",
+        "internal server error",
+    )
+    return any(marker in err_str for marker in transient_markers)
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -82,6 +100,10 @@ class LLMError(Exception):
 
 class LLMTimeoutError(LLMError):
     """API call timed out."""
+
+
+class LLMTransientProviderError(LLMError):
+    """Provider/gateway failed before a usable model response was produced."""
 
 
 class LLMFormatError(LLMError):
@@ -144,24 +166,24 @@ class LLMClient:
         max_tokens: int | None = None,
         sdk_max_retries: int | None = None,
     ) -> None:
-        self.model = (
+        self.model = str(
             model
             or os.environ.get("SCION_MODEL")
             or os.environ.get("ANTHROPIC_MODEL")
             or _DEFAULT_MODEL
-        )
-        self.api_key = (
+        ).strip()
+        self.api_key = str(
             api_key
             or os.environ.get("SCION_API_KEY")
             or os.environ.get("ANTHROPIC_AUTH_TOKEN")
             or os.environ.get("ANTHROPIC_API_KEY", "")
-        )
-        self.base_url = (
+        ).strip()
+        self.base_url = str(
             base_url
             or os.environ.get("SCION_BASE_URL")
             or os.environ.get("ANTHROPIC_BASE_URL")
             or _DEFAULT_BASE_URL
-        )
+        ).strip()
         self.timeout_sec = _env_float(
             "SCION_LLM_TIMEOUT_SEC",
             _DEFAULT_TIMEOUT_SEC if timeout_sec is None else timeout_sec,
@@ -288,7 +310,9 @@ class LLMClient:
         policy = self.resolve_request_policy(request_kind=request_kind, tool=tool)
         max_retries = policy["max_retries"]
         timeout_sec = policy["timeout_sec"]
+        transient_max_retries = policy["transient_max_retries"]
         attempt = 0
+        transient_attempt = 0
         last_error: Exception | None = None
         current_max_tokens = self.max_tokens
         truncation_retries = 0
@@ -350,6 +374,24 @@ class LLMClient:
                     time.sleep(delay)
                 attempt += 1
 
+            except LLMTransientProviderError as exc:
+                last_error = exc
+                if transient_attempt < transient_max_retries:
+                    delay = _BACKOFF_DELAYS[
+                        min(transient_attempt, len(_BACKOFF_DELAYS) - 1)
+                    ]
+                    logger.warning(
+                        "Transient provider error (attempt %d/%d); retrying in %.1fs: %s",
+                        transient_attempt + 1,
+                        transient_max_retries,
+                        delay,
+                        exc,
+                    )
+                    transient_attempt += 1
+                    time.sleep(delay)
+                    continue
+                attempt += 1
+
             except (LLMBalanceError, LLMRetryExhaustedError):
                 raise
 
@@ -362,6 +404,22 @@ class LLMClient:
                         raise
                     time.sleep(rle.retry_after)
                     continue
+                except LLMTransientProviderError as tpe:
+                    last_error = tpe
+                    if transient_attempt < transient_max_retries:
+                        delay = _BACKOFF_DELAYS[
+                            min(transient_attempt, len(_BACKOFF_DELAYS) - 1)
+                        ]
+                        logger.warning(
+                            "Transient provider error (attempt %d/%d); retrying in %.1fs: %s",
+                            transient_attempt + 1,
+                            transient_max_retries,
+                            delay,
+                            tpe,
+                        )
+                        transient_attempt += 1
+                        time.sleep(delay)
+                        continue
                 except LLMBalanceError:
                     raise
                 except LLMError as le:
@@ -407,11 +465,16 @@ class LLMClient:
                 f"SCION_LLM_{env_key}_MAX_RETRIES",
                 max_retries,
             )
+        transient_max_retries = _env_int(
+            "SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES",
+            _DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES,
+        )
 
         return {
             "request_kind": normalized or "default",
             "timeout_sec": timeout_sec,
             "max_retries": max_retries,
+            "transient_max_retries": transient_max_retries,
             "sdk_max_retries": self.sdk_max_retries,
             "max_tokens": self.max_tokens,
         }
@@ -642,6 +705,8 @@ class LLMClient:
         err_str = str(exc).lower()
         if "timeout" in err_str or "timed out" in err_str or "read timed out" in err_str:
             raise LLMTimeoutError(f"Request timed out: {exc}") from exc
+        if _is_transient_provider_error(err_str):
+            raise LLMTransientProviderError(f"Transient provider error: {exc}") from exc
         if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
             retry_after = _parse_retry_after(exc)
             raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc

@@ -281,6 +281,18 @@ def test_openai_client_receives_sdk_retry_limit():
     assert fake_openai.OpenAI.call_args.kwargs["max_retries"] == 0
 
 
+def test_llm_client_strips_config_values(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", " claude-sonnet-4-6 ")
+    monkeypatch.setenv("SCION_API_KEY", " sk-test ")
+    monkeypatch.setenv("SCION_BASE_URL", " https://aihubmix.com ")
+
+    client = LLMClient()
+
+    assert client.model == "claude-sonnet-4-6"
+    assert client.api_key == "sk-test"
+    assert client.base_url == "https://aihubmix.com"
+
+
 def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):
     monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
     monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
@@ -330,6 +342,47 @@ def test_code_tool_timeout_does_not_duplicate_same_prompt_by_default(monkeypatch
     assert fake_anthropic_client.messages.create.call_count == 1
     assert fake_anthropic_client.messages.create.call_args.kwargs["timeout"] == 180.0
     mock_sleep.assert_not_called()
+
+
+def test_code_tool_retries_transient_provider_error_once(monkeypatch):
+    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES", raising=False)
+
+    client = LLMClient(timeout_sec=60, max_retries=2)
+    tool = {
+        "name": "generate_patch",
+        "input_schema": {"required": ["file_path", "action", "code_content"]},
+    }
+    provider_error = Exception(
+        "Error code: 500 - {'error': {'type': 'Aihubmix_api_error', "
+        "'message': 'new request failed: parse \" https://aws-example\": first "
+        "path segment in URL cannot contain colon'}}"
+    )
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.name = "generate_patch"
+    tool_block.input = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
+    }
+    response = MagicMock()
+    response.stop_reason = "tool_use"
+    response.content = [tool_block]
+    response.usage = None
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.side_effect = [provider_error, response]
+
+    with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
+        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
+            result = client.call_with_tool("prompt", tool)
+
+    assert result["file_path"] == "policies/baseline_algorithm.py"
+    assert fake_anthropic_client.messages.create.call_count == 2
+    mock_sleep.assert_called_once_with(5.0)
 
 
 def test_creative_trace_records_llm_request_policy(tmp_path):
