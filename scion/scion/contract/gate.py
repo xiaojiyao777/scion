@@ -6,6 +6,8 @@ import hashlib
 import json
 import re
 import time
+from collections import Counter
+from pathlib import Path
 from typing import Any, List, Optional
 
 from scion.config.problem import ProblemSpec
@@ -106,9 +108,11 @@ class ContractGate:
         problem_spec: ProblemSpec,
         *,
         operator_execute_signature: str | None = None,
+        champion_snapshot_path: str | None = None,
     ) -> None:
         self._spec = problem_spec
         self._operator_signature = parse_execute_signature(operator_execute_signature)
+        self._champion_snapshot_path = champion_snapshot_path
 
     @classmethod
     def supports_semantic_signature_field(cls, field: str) -> bool:
@@ -776,26 +780,11 @@ class ContractGate:
                 t0,
             )
 
-        violations: list[str] = []
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Attribute)
-                and node.attr == "name"
-                and isinstance(node.value, ast.Name)
-                and node.value.id == "instance"
-            ):
-                violations.append("instance.name")
-            elif (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in {"getattr", "hasattr"}
-                and len(node.args) >= 2
-                and isinstance(node.args[0], ast.Name)
-                and node.args[0].id == "instance"
-                and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value == "name"
-            ):
-                violations.append(f"{node.func.id}(instance, 'name')")
+        violations = _instance_identity_violations(patch.code_content, tree)
+        violations = _subtract_inherited_identity_violations(
+            violations,
+            self._champion_file_content(file_rel),
+        )
 
         if not violations:
             return _cr(
@@ -814,6 +803,24 @@ class ContractGate:
             f"surface '{surface_name}': {violations}",
             t0,
         )
+
+    def _champion_file_content(self, file_rel: str) -> str | None:
+        if not self._champion_snapshot_path:
+            return None
+        try:
+            root = Path(self._champion_snapshot_path).expanduser().resolve(
+                strict=False
+            )
+            path = (root / file_rel).resolve(strict=False)
+            path.relative_to(root)
+        except Exception:
+            return None
+        if not path.is_file():
+            return None
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return None
 
     # ------------------------------------------------------------------
     # C9b: Non-rng random source detection
@@ -1610,6 +1617,79 @@ def _prefix_checks(checks: List[CheckResult], prefix: str) -> List[CheckResult]:
         )
         for check in checks
     ]
+
+
+def _instance_identity_violations(
+    code: str,
+    tree: ast.AST,
+) -> list[str]:
+    parent: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        label: str | None = None
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "name"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "instance"
+        ):
+            label = "instance.name"
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in {"getattr", "hasattr"}
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "instance"
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "name"
+        ):
+            label = f"{node.func.id}(instance, 'name')"
+        if label is None:
+            continue
+        statement = _enclosing_statement_source(code, node, parent)
+        violations.append(statement or label)
+    return violations
+
+
+def _subtract_inherited_identity_violations(
+    violations: list[str],
+    champion_code: str | None,
+) -> list[str]:
+    if not violations or not champion_code:
+        return violations
+    try:
+        champion_tree = ast.parse(champion_code)
+    except SyntaxError:
+        return violations
+    inherited = Counter(_instance_identity_violations(champion_code, champion_tree))
+    remaining: list[str] = []
+    for violation in violations:
+        if inherited.get(violation, 0) > 0:
+            inherited[violation] -= 1
+            continue
+        remaining.append(violation)
+    return remaining
+
+
+def _enclosing_statement_source(
+    code: str,
+    node: ast.AST,
+    parent: dict[ast.AST, ast.AST],
+) -> str | None:
+    current: ast.AST | None = node
+    while current is not None and not isinstance(current, ast.stmt):
+        current = parent.get(current)
+    if current is None:
+        return None
+    source = ast.get_source_segment(code, current)
+    if not source:
+        return None
+    return " ".join(source.strip().split())
 
 
 def _static_literal_value(node: ast.AST | None) -> Any:

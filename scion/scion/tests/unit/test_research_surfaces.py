@@ -1249,6 +1249,76 @@ def test_contract_gate_rejects_getattr_instance_name_on_search_policy() -> None:
     assert not result.passed
 
 
+def test_contract_gate_allows_inherited_solver_module_identity_message(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "scheduler.py"
+    target.parent.mkdir(parents=True)
+    code = (_CVRP_ROOT / "policies" / "baseline_modules" / "scheduler.py").read_text(
+        encoding="utf-8"
+    )
+    target.write_text(code, encoding="utf-8")
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/scheduler.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert c9d.passed
+
+
+def test_contract_gate_rejects_new_solver_module_identity_branch(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "scheduler.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "scheduler.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = base_code.replace(
+        "    def solve(self, instance, rng):\n",
+        "    def solve(self, instance, rng):\n"
+        "        if instance.name == 'case-a':\n"
+        "            return self._initial_solution(instance, 0.05)\n",
+        1,
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/scheduler.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9d = next(
+        check for check in result.checks if check.name == "C9d_surface_instance_identity"
+    )
+    assert not c9d.passed
+    assert "if instance.name == 'case-a'" in c9d.detail
+
+
 def test_contract_gate_allows_safe_policy_instance_api() -> None:
     spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     gate = ContractGate(legacy_problem_spec_from_v1(spec))

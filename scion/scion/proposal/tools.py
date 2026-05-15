@@ -2544,6 +2544,8 @@ def _contract_gate(context: ProposalToolContext) -> ContractGate:
     return ContractGate(
         spec,
         operator_execute_signature=_operator_execute_signature(context),
+        champion_snapshot_path=str(_attr(context.champion, "code_snapshot_path") or "")
+        or None,
     )
 
 

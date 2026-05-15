@@ -45,6 +45,15 @@ Runtime evidence for this boundary remains `solver_algorithm_*`, including
 selected path, phase runtime, movement telemetry, and recomputed objective
 fields.
 
+The latest 2-round object-context smoke validated the new code-stage context:
+LLM traces contained `support_artifacts` and `python_api_summary` for
+`baseline_modules/state.py` when the target was `scheduler.py`. It also exposed
+a Contract nuance: complete scheduler replacements inherited an existing
+baseline exception message that referenced `instance.name`, and C9d treated it
+as a new case-specific branch. Contract preview is now champion-snapshot aware
+for C9d: exact inherited statement-level identity uses are not blockers, while
+new `instance.name` branches remain forbidden.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
