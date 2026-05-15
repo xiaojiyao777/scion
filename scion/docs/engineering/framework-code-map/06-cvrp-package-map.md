@@ -184,28 +184,38 @@ direct generated code to use
 of the nonexistent `instance.customers` attribute.
 
 `solver_design` is the current problem-owned CVRP solver-design research
-surface. It is backed primarily by `policies/baseline_algorithm.py`, with
+surface. It is backed primarily by the stable
+`policies/baseline_algorithm.py::solve(...)` entrypoint plus focused
+branch-owned algorithm modules under `policies/baseline_modules/`, with
 `policies/solver_algorithm.py` retained only for compatibility. Required
-function:
+entrypoint function:
 
 - `solve(instance, rng, time_limit_sec, context)`
 
 The checked-in `baseline_algorithm.py` file is active when `solver_design` is
 the selected surface and is skipped for unrelated component-surface runs. It
-carries a Scion-controlled ALNS/VNS-style algorithm subject. Candidates should
-materially rework or replace that branch copy, not call
-`context.baseline(...)` and then polish the result. Candidates may implement
-construction, route-edit candidate generation, local search, destroy/repair,
-recombination, perturbation, acceptance, and runtime scheduling inside
-`solve(...)`. The adapter/solver remains authoritative for objective
+imports the branch-owned module package, currently split into config, state,
+construction, destroy/repair, local-search/VNS, acceptance, and scheduler
+modules. Candidates should materially rework these branch copies, or the
+entrypoint when necessary, not call `context.baseline(...)` and then polish
+the result. Candidates may add, delete, or modify modules under
+`policies/baseline_modules/*.py`; `policies/baseline_modules/__init__.py`
+stays frozen. APS `context.read_surface` includes bounded support-artifact
+previews for those modules when reading `solver_design`, so the model can
+inspect the actual algorithm internals under the normal exposure policy. The
+adapter/solver remains authoritative for objective
 recomputation, feasibility, parser behavior, seeds, protocol splits, and
 Decision. The legacy `main_search_strategy` surface still exists for
 regression coverage; it is not the preferred research object.
-Adapter preview executes `solve(...)` only after static Contract success and
-under a short wall-time guard. Candidates with unbounded preview-time loops
-fail closed before workspace materialization instead of hanging the campaign.
+Adapter preview imports solver-design support modules as package modules and
+defers their interface validation to workspace smoke. For entrypoint patches,
+preview executes `solve(...)` only after static Contract success and under a
+short wall-time guard. Candidates with unbounded preview-time loops fail
+closed before workspace materialization instead of hanging the campaign.
 Preferred-target preview also fails candidates that call `context.baseline(...)`
-from `policies/baseline_algorithm.py`.
+from `policies/baseline_algorithm.py`. `proposal.algorithm_smoke` applies
+entrypoint or support-module patches in a temporary workspace and runs the
+stable entrypoint on the configured canary before official evaluation.
 
 The model-facing interface and `problem-v1.yaml` require solver-design
 hypotheses to populate semantic identity through fields such as

@@ -612,10 +612,11 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert solver_design.targets.files == [
         "policies/baseline_algorithm.py",
         "policies/solver_algorithm.py",
+        "policies/baseline_modules/*.py",
     ]
-    assert solver_design.targets.singleton is True
-    assert solver_design.targets.create_new_allowed is False
-    assert solver_design.targets.remove_allowed is False
+    assert solver_design.targets.singleton is False
+    assert solver_design.targets.create_new_allowed is True
+    assert solver_design.targets.remove_allowed is True
     assert solver_design.interface is not None
     assert solver_design.interface.required_functions == ["solve"]
     assert solver_design.interface.function_signatures == {
@@ -993,7 +994,34 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
     create_result = gate.validate_hypothesis(create_hypothesis, [], [])
     c3 = next(check for check in create_result.checks if check.name == "C3_action_target")
     assert not c3.passed
-    assert "not allowed" in c3.detail
+    assert "is not in target files" in c3.detail
+    assert "policies/baseline_modules/*.py" in c3.detail
+
+    create_module_hypothesis = HypothesisProposal(
+        hypothesis_text="Add a focused solver-design construction helper.",
+        change_locus="solver_design",
+        action="create_new",
+        target_file="policies/baseline_modules/construction_variant.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        novelty_signature={
+            "algorithm_family": "alns_vns_module_variant",
+            "construction_strategy": "capacity_seeded_sweep",
+            "improvement_strategy": "reuse_existing_vns",
+            "acceptance_strategy": "reuse_existing_acceptance",
+            "runtime_budget_strategy": "bounded_existing_scheduler",
+        },
+    )
+    create_module_result = gate.validate_hypothesis(
+        create_module_hypothesis,
+        [],
+        [],
+    )
+    c3 = next(
+        check for check in create_module_result.checks if check.name == "C3_action_target"
+    )
+    assert c3.passed
+    assert create_module_result.passed
 
     wrong_target = HypothesisProposal(
         hypothesis_text="Modify solver algorithm through an operator file.",
@@ -1008,6 +1036,7 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
     assert not c3.passed
     assert "policies/baseline_algorithm.py" in c3.detail
     assert "policies/solver_algorithm.py" in c3.detail
+    assert "policies/baseline_modules/*.py" in c3.detail
 
     missing_patch = PatchProposal(
         file_path="policies/solver_algorithm.py",
@@ -1030,6 +1059,52 @@ def test_cvrp_main_search_strategy_contract_targets_and_required_functions() -> 
     valid_result = gate.validate_patch(valid_patch)
     c7 = next(check for check in valid_result.checks if check.name == "C7_interface")
     assert c7.passed
+
+    module_patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content=(
+            "from __future__ import annotations\n\n"
+            "def helper():\n"
+            "    return 'bounded local search helper'\n"
+        ),
+    )
+    module_result = gate.validate_patch(module_patch)
+    c7 = next(check for check in module_result.checks if check.name == "C7_interface")
+    assert c7.passed
+    assert "deferred to workspace smoke" in c7.detail
+
+    delete_module_hypothesis = HypothesisProposal(
+        hypothesis_text="Remove an unused solver-design helper module.",
+        change_locus="solver_design",
+        action="remove",
+        target_file="policies/baseline_modules/obsolete_helper.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        novelty_signature={
+            "algorithm_family": "alns_vns_module_cleanup",
+            "construction_strategy": "unchanged",
+            "improvement_strategy": "remove_unused_helper",
+            "acceptance_strategy": "unchanged",
+            "runtime_budget_strategy": "reduce_import_surface",
+        },
+    )
+    delete_module_patch = PatchProposal(
+        file_path="policies/baseline_modules/obsolete_helper.py",
+        action="delete",
+        code_content="",
+    )
+    delete_module_result = gate.validate_patch(
+        delete_module_patch,
+        approved_hypothesis=delete_module_hypothesis,
+    )
+    c4b = next(
+        check
+        for check in delete_module_result.checks
+        if check.name == "C4b_patch_action_target"
+    )
+    assert c4b.passed
+    assert delete_module_result.passed
 
 
 def _main_search_strategy_code(extra_body: str = "") -> str:
@@ -1218,6 +1293,13 @@ def test_cvrp_default_policy_files_match_declared_signatures() -> None:
         "policies/neighborhood_portfolio.py",
         "policies/baseline_algorithm.py",
         "policies/solver_algorithm.py",
+        "policies/baseline_modules/acceptance.py",
+        "policies/baseline_modules/config.py",
+        "policies/baseline_modules/construction.py",
+        "policies/baseline_modules/destroy_repair.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/state.py",
         "policies/main_search_strategy.py",
         "policies/alns_vns_policy.py",
         "policies/destroy_repair_policy.py",
@@ -2688,6 +2770,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "policies/neighborhood_portfolio.py" in prompt_text
     assert "policies/algorithm_blueprint.py" in prompt_text
     assert "policies/solver_algorithm.py" in prompt_text
+    assert "policies/baseline_modules/*.py" in prompt_text
     assert "algorithm.role: post_baseline_search_scheduling" in prompt_text
     assert (
         "algorithm.invocation_point: "
@@ -2853,6 +2936,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "def solve" in solver_design_prompt_text
     assert "Solver lifecycle:" in solver_design_prompt_text
     assert "full algorithm hook" in solver_design_prompt_text
+    assert "baseline_modules" in solver_design_prompt_text
     assert "context.nearest_neighbor" in solver_design_prompt_text
     assert "do not call context.baseline" in solver_design_prompt_text
     assert "context.objective_key" in solver_design_prompt_text
@@ -2942,6 +3026,7 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert ctx["operator_categories"] == "solver_design"
     assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
     assert "policies/solver_algorithm.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
     assert "policies/baseline_policy.py" not in ctx["targetable_files"]
     assert "Set `change_locus` to one of: solver_design." in user_prompt
     assert "Do not choose a component policy" in user_prompt

@@ -962,7 +962,24 @@ class CvrpAdapter:
                 "workspace_materialized": False,
             }
 
+        patch_path = str(getattr(patch, "file_path", ""))
         if str(getattr(patch, "action", "modify")) == "delete":
+            if surface_name == "solver_design" and _is_solver_design_module_path(
+                patch_path
+            ):
+                return _policy_preview_result(
+                    surface_name,
+                    [],
+                    [
+                        {
+                            "name": "solver_design_module_delete",
+                            "passed": True,
+                            "detail": (
+                                "module delete deferred to workspace algorithm smoke"
+                            ),
+                        }
+                    ],
+                )
             return _policy_preview_result(
                 surface_name,
                 [f"{surface_name} cannot be sanity-previewed for delete action"],
@@ -993,13 +1010,26 @@ class CvrpAdapter:
         elif surface_name == "neighborhood_portfolio":
             _preview_neighborhood_portfolio(module, instance, issues, checks)
         elif surface_name in {"solver_design", "solver_algorithm"}:
-            if _is_baseline_algorithm_path(str(getattr(patch, "file_path", ""))):
+            if _is_solver_design_module_path(str(getattr(patch, "file_path", ""))):
+                checks.append(
+                    {
+                        "name": "solver_design_module_import",
+                        "passed": True,
+                        "detail": (
+                            "solver_design support module imported; solve "
+                            "entrypoint validation deferred to workspace smoke"
+                        ),
+                    }
+                )
+            elif _is_baseline_algorithm_path(str(getattr(patch, "file_path", ""))):
                 _preview_baseline_algorithm_boundary(
                     str(getattr(patch, "code_content", "")),
                     issues,
                     checks,
                 )
-            _preview_solver_algorithm(module, instance, issues, checks)
+                _preview_solver_algorithm(module, instance, issues, checks)
+            else:
+                _preview_solver_algorithm(module, instance, issues, checks)
         elif surface_name == "main_search_strategy":
             _preview_main_search_strategy(module, instance, issues, checks)
         elif surface_name == "algorithm_blueprint":
@@ -1187,11 +1217,20 @@ def _surface_name_from_policy_path(path: str) -> str:
         "policies/destroy_repair_policy.py": "destroy_repair_policy",
         "policies/route_pair_candidate_policy.py": "route_pair_candidate_policy",
         "policies/acceptance_restart_policy.py": "acceptance_restart_policy",
-    }.get(normalized, "")
+    }.get(normalized, "solver_design" if _is_solver_design_module_path(normalized) else "")
 
 
 def _is_baseline_algorithm_path(path: str) -> bool:
     return path.replace("\\", "/").lstrip("/") == "policies/baseline_algorithm.py"
+
+
+def _is_solver_design_module_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("/")
+    return (
+        normalized.startswith("policies/baseline_modules/")
+        and normalized.endswith(".py")
+        and "/__pycache__/" not in normalized
+    )
 
 
 def _preview_baseline_algorithm_boundary(
@@ -1352,8 +1391,20 @@ def _module_from_policy_code(file_path: str, code: str) -> types.ModuleType:
     module = types.ModuleType(f"_scion_cvrp_policy_preview_{abs(hash(file_path))}")
     module.__dict__["__file__"] = f"<preview:{file_path}>"
     module.__dict__["__name__"] = module.__name__
+    package = _preview_package_for_policy_path(file_path)
+    if package:
+        module.__dict__["__package__"] = package
     exec(compile(code, file_path, "exec"), module.__dict__)
     return module
+
+
+def _preview_package_for_policy_path(file_path: str) -> str:
+    normalized = file_path.replace("\\", "/").lstrip("/")
+    if normalized == "policies/baseline_algorithm.py":
+        return "scion.problems.cvrp.policies"
+    if normalized.startswith("policies/baseline_modules/"):
+        return "scion.problems.cvrp.policies.baseline_modules"
+    return ""
 
 
 def _synthetic_preview_instance() -> CvrpInstance:

@@ -16,18 +16,22 @@ candidates mostly filled a `main_search_plan` lifecycle table and optimized
 exposed knobs rather than studying the algorithm itself.
 
 The current repair changes the active CVRP research object. `solver_design`
-now targets `policies/baseline_algorithm.py` first: a Scion-controlled,
-branch-owned port of the CVRP ALNS+VNS algorithm body with
-`solve(instance, rng, time_limit_sec, context)`. When `solver_design` is the
-selected surface, candidate and champion subprocesses run that copied branch
-algorithm file directly. When another component surface is selected, runtime
-skips this full-algorithm subject so legacy component tests remain isolated.
-Candidates should study and modify the branch copy of that algorithm body.
-`policies/solver_algorithm.py` remains as a compatibility hook only. The
-adapter and solver keep ownership of objective semantics, feasibility,
-parsing, seeds, protocol splits, time limits, and Decision rules. Runtime
-evidence for this boundary remains `solver_algorithm_*`, including selected
-path, phase runtime, movement telemetry, and recomputed objective fields.
+now targets a branch-owned solver-design package: stable entrypoint
+`policies/baseline_algorithm.py::solve(...)` plus focused algorithm modules
+under `policies/baseline_modules/*.py`. When `solver_design` is the selected
+surface, candidate and champion subprocesses run that copied branch entrypoint,
+which imports the branch-owned modules. When another component surface is
+selected, runtime skips this full-algorithm subject so legacy component tests
+remain isolated. Candidates should study and modify the branch copy of the
+algorithm modules; `policies/solver_algorithm.py` remains as a compatibility
+hook only. APS `context.read_surface` now includes bounded support-module
+previews for `solver_design`, so hypothesis and code phases can inspect the
+actual algorithm internals rather than only the stable entrypoint. The adapter
+and solver keep ownership of objective semantics,
+feasibility, parsing, seeds, protocol splits, time limits, and Decision rules.
+Runtime evidence for this boundary remains `solver_algorithm_*`, including
+selected path, phase runtime, movement telemetry, and recomputed objective
+fields.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
@@ -58,7 +62,8 @@ Current interpretation:
   runtime-audit validation. They should not continue as the main optimization
   path.
 - CVRP now declares `solver_design` as the top-level research boundary backed
-  by `policies/baseline_algorithm.py`, with `policies/solver_algorithm.py`
+  by `policies/baseline_algorithm.py` and the
+  `policies/baseline_modules/` package, with `policies/solver_algorithm.py`
   retained only for compatibility. Deep mechanism policies and the legacy
   `main_search_strategy` table remain useful implementation hooks or
   regression surfaces, but they are not standalone optimization goals.
@@ -1664,6 +1669,21 @@ Latest focused validation:
 1623 passed, 1 skipped in 74.48s
 ```
 
+Latest solver-design module-subject repair validation:
+
+- `policies/baseline_algorithm.py` is now a stable entrypoint backed by the
+  branch-owned `policies/baseline_modules/` package.
+- `context.read_surface("solver_design")` includes bounded support-module
+  previews for the default entrypoint read; target-specific module reads stay
+  under tool result budgets.
+- Focused CVRP/APS/Contract subset:
+  `404 passed in 49.03s`.
+- Full Scion suite:
+  `1669 passed, 1 skipped in 89.96s`.
+- Direct CVRP canary with `SCION_SELECTED_SURFACE=solver_design` loaded
+  `policies/baseline_algorithm.py`, returned active solver-design telemetry,
+  and had `solver_algorithm_errors=0`.
+
 Latest solver-design no-op feedback repair:
 
 - Independent smoke:
@@ -1694,15 +1714,12 @@ P1:
   unbounded `while improved` loops should still fail, and
   `proposal.algorithm_smoke` should apply patches inside copied read-only
   champion snapshots without `PermissionError`.
-- Start the research-object modularization design. Current `PatchProposal`
-  still requires complete file contents, so `solver_design` changes force the
-  LLM to regenerate all of `policies/baseline_algorithm.py` even for one repair
-  operator. The next object repair should keep a stable solve entrypoint and
-  expose branch-owned modules for construction, destroy, repair, local search,
-  acceptance, scheduler/runtime allocation, and telemetry. Inside that declared
-  package, the agent should be allowed to add, delete, or modify modules; the
-  hard boundary is fixed objective/constraints, adapter-owned parsing and
-  feasibility/objective recomputation, seeds, protocol splits, and promotion.
+- Run a 1-2 round smoke after the solver-design module-subject repair. The
+  first gate is that APS can legally choose a focused
+  `policies/baseline_modules/*.py` target, static preview defers module
+  interface checks to workspace smoke, and `proposal.algorithm_smoke` runs the
+  stable `baseline_algorithm.py::solve(...)` entrypoint after applying a module
+  patch.
 - Run and analyze the repaired algorithm-body execution diagnostic. The first
   gate is not promotion; it is whether APS-generated `solver_design`
   candidates use the full CVRP lifecycle semantics now that baseline budget,

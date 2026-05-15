@@ -139,8 +139,11 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
         "operators/base.py",
         "operators/__init__.py",
         "policies/__init__.py",
+        "policies/baseline_modules/__init__.py",
     ]
     assert "policies/*.py" in legacy.search_space.editable
+    assert "policies/baseline_modules/*.py" in legacy.search_space.editable
+    assert "baseline_modules" in legacy.search_space.import_whitelist
     assert "dataclasses" in legacy.search_space.import_whitelist
     assert "time" in legacy.search_space.import_whitelist
     assert legacy.parameter_search.enabled is False

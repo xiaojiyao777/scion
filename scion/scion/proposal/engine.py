@@ -819,10 +819,12 @@ def _split_code_context(
         is_solver_design_surface=is_solver_design_surface,
     )
     solver_design_user_constraints = (
-        "- For solver-design surfaces, return a compact complete replacement "
-        "file. The file may be much shorter than the current inactive template "
-        "if it still implements the approved `solve(...)` interface and "
-        "records runtime/search telemetry.\n"
+        "- For solver-design surfaces, return the complete contents of the "
+        "target algorithm module. Prefer focused modules under "
+        "`policies/baseline_modules/` for construction, destroy/repair, local "
+        "search, acceptance, scheduler/runtime allocation, and telemetry. Keep "
+        "`policies/baseline_algorithm.py::solve(...)` as the stable entrypoint "
+        "unless the entrypoint itself must change.\n"
         if is_solver_design_surface
         else ""
     )

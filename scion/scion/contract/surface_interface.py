@@ -79,6 +79,17 @@ def check_surface_interface(
         return _cr(check_name, False, severity, kind_error, t0)
 
     kind = str(_field(surface, "kind", "operator") or "operator")
+    if kind == "solver_design" and _is_solver_design_support_module(file_rel):
+        return _cr(
+            check_name,
+            True,
+            severity,
+            _detail(
+                "solver_design support module interface deferred to workspace smoke",
+                detail_suffix,
+            ),
+            t0,
+        )
     if kind == "policy":
         return _check_policy_interface(
             tree,
@@ -240,6 +251,13 @@ def surface_return_values(surface: Any | None) -> dict[str, Any]:
     interface = _field(surface, "interface")
     values = _field(interface, "return_values") if interface is not None else None
     return dict(values) if isinstance(values, Mapping) else {}
+
+
+def _is_solver_design_support_module(file_rel: str) -> bool:
+    return (
+        file_rel.startswith("policies/baseline_modules/")
+        and file_rel.endswith(".py")
+    )
 
 
 def _check_operator_interface(

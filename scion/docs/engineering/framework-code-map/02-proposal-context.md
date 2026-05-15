@@ -52,7 +52,8 @@ but they are not valid replacement research goals. The same active-boundary
 constraint is carried through hypothesis context, APS tool context,
 `context.list_surfaces`, `proposal.target_permission_preview`, and final
 CreativeLayer hypothesis prompts. For CVRP this means the default free
-diagnostic task targets `solver_design` and `policies/solver_algorithm.py`
+diagnostic task targets `solver_design` and the branch-owned solver-design
+package (`policies/baseline_algorithm.py` plus `policies/baseline_modules/*.py`)
 instead of offering every component policy as a top-level choice.
 APS tool guidance distinguishes this active problem-object boundary from a
 diagnostic `--force-surface` run: forced campaigns render a forced-surface rule

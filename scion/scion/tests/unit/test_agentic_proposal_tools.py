@@ -664,6 +664,10 @@ def _cvrp_context_with_champion(tmp_path: Path) -> ProposalToolContext:
             (_CVRP_ROOT / "policies" / name).read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+    shutil.copytree(
+        _CVRP_ROOT / "policies" / "baseline_modules",
+        champion_root / "policies" / "baseline_modules",
+    )
     return replace(
         context,
         champion=ChampionState(
@@ -862,6 +866,15 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     ]
     assert (
         payload["surface_contract"]["target_preview"]["content_preview_chars"] <= 1200
+    )
+    support_paths = {
+        artifact["file_path"] for artifact in payload["support_artifacts"]
+    }
+    assert "policies/baseline_modules/construction.py" in support_paths
+    assert "policies/baseline_modules/scheduler.py" in support_paths
+    assert any(
+        "class _ALNSVNSSolver" in artifact.get("content_preview", "")
+        for artifact in payload["support_artifacts"]
     )
     assert "content_preview" not in payload["surface_contract"]["target_preview"]
     assert "prompt" not in payload["surface"]
@@ -1338,6 +1351,17 @@ def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
         context,
     )
     assert accepted.structured_payload["passed"] is True
+
+    accepted_module = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "solver_design",
+            "action": "create_new",
+            "target_file": "policies/baseline_modules/construction_variant.py",
+        },
+        context,
+    )
+    assert accepted_module.structured_payload["passed"] is True
 
 
 def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
@@ -2413,6 +2437,46 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     assert after == before
 
 
+def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    module_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "config.py"
+    ).read_text(encoding="utf-8")
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_modules/config.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_modules/config.py",
+                "action": "modify",
+                "code_content": module_code,
+            },
+        },
+        context,
+    )
+
+    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert payload["workspace_materialized"] is True
+    assert payload["problem_preview"]["passed"] is True
+    assert payload["runtime_smoke"]["passed"] is True
+    assert payload["runtime_smoke"]["runtime_smoke_run"] is True
+    assert payload["runtime_smoke"]["runtime"]["solver_algorithm_path"] == (
+        "policies/baseline_algorithm.py"
+    )
+    assert after == before
+
+
 def test_algorithm_smoke_materializes_readonly_champion_snapshot(
     tmp_path: Path,
 ) -> None:
@@ -3410,7 +3474,7 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
         "Do not implement more than two move/neighborhood families" in rendered_system
     )
     assert "do not implement a full portfolio" in rendered_system
-    assert "compact complete replacement file" in rendered_prompt
+    assert "complete contents of the target algorithm module" in rendered_prompt
 
 
 def test_agentic_session_retries_code_generation_timeout_with_compact_scope(

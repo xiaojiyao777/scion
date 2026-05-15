@@ -70,10 +70,12 @@ Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is no longer incremental
 component exposure. `solver_design` is now the CVRP problem-object boundary
 for the algorithm itself, backed primarily by
-`policies/baseline_algorithm.py`.
-Candidates implement `solve(instance, rng, time_limit_sec, context)` and may
-change construction, improvement, destroy/repair, recombination, acceptance,
-restart/perturbation, and runtime scheduling inside that algorithm body.
+`policies/baseline_algorithm.py` plus focused modules under
+`policies/baseline_modules/`.
+Candidates keep the stable `solve(instance, rng, time_limit_sec, context)`
+entrypoint and may add, delete, or modify branch-owned modules for
+construction, improvement, destroy/repair, recombination, acceptance,
+restart/perturbation, telemetry, and runtime scheduling.
 The adapter/solver remains authoritative for parsing, feasibility, objective
 recomputation, seeds, protocol splits, time limits, and Decision rules.
 `policies/solver_algorithm.py` remains only as an older compatibility hook.
@@ -86,14 +88,16 @@ diagnostics unless explicitly debugging that legacy surface.
 
 Important current interpretation:
 
-- `solver_design` targets `policies/baseline_algorithm.py` first and
-  `policies/solver_algorithm.py` only for compatibility. It requires
+- `solver_design` targets `policies/baseline_algorithm.py` first, focused
+  support modules under `policies/baseline_modules/*.py`, and
+  `policies/solver_algorithm.py` only for compatibility. It requires the
+  stable entrypoint
   `solve(instance, rng, time_limit_sec, context)`. When `solver_design` is
   selected, the subprocess runs the branch copy of
-  `policies/baseline_algorithm.py` as the algorithm under research. Returning
-  `None` is only a compatibility behavior for inactive hooks; a real
-  solver-design candidate must return a feasible `CvrpSolution`, a routes
-  object, or `{"routes": ...}`.
+  `policies/baseline_algorithm.py`, which imports the branch-owned module
+  package as the algorithm under research. Returning `None` is only a
+  compatibility behavior for inactive hooks; a real solver-design candidate
+  must return a feasible `CvrpSolution`, a routes object, or `{"routes": ...}`.
 - The allowed algorithm API is explicit: use `instance.depot`,
   `instance.customer_ids`, `instance.customer_count`, `instance.demands`,
   `instance.capacity`, `instance.distance`, `instance.route_load`,
@@ -164,9 +168,10 @@ Important current interpretation:
   code-level whole-solution route-pool quality repair inside `solver_design`,
   not from another exposed singleton policy.
 - The current adapter repair goes deeper than prompt exposure:
-  `policies/baseline_algorithm.py` is the branch-owned ALNS/VNS-style
-  full-algorithm subject when `solver_design` is selected. New candidates
-  should materially rework or replace that algorithm body in their branch. A
+  `policies/baseline_algorithm.py` is the stable entrypoint for a
+  branch-owned ALNS/VNS-style solver-design package. New candidates should
+  materially rework the branch-owned modules under
+  `policies/baseline_modules/` or, when needed, the entrypoint itself. A
   candidate that calls `context.baseline(...)` from this preferred target,
   changes only baseline budget/params, or adds a tiny post-baseline polish is
   a design failure.
@@ -221,9 +226,10 @@ Important current interpretation:
   objective/constraint semantics.
 - Code phase also runs `proposal.algorithm_smoke` after a static Contract
   preview passes. This is tainted, non-promotional debug evidence. For
-  approved `solver_design` patches to `policies/baseline_algorithm.py` or
-  `policies/solver_algorithm.py`, the smoke also applies the patch in a
-  temporary workspace and runs the configured canary case before official
+  approved `solver_design` patches to `policies/baseline_algorithm.py`,
+  `policies/solver_algorithm.py`, or `policies/baseline_modules/*.py`, the
+  smoke applies the patch in a temporary workspace and runs the configured
+  canary case through the stable solver-design entrypoint before official
   evaluation. Its only purpose is debugging/repair; promotion evidence still
   comes exclusively from Contract, Verification, Protocol, and Decision.
 - C9c complexity preview now recognizes a local helper such as
@@ -250,14 +256,17 @@ Important current interpretation:
   true unbounded improvement-flag loops such as `while improved:`. Algorithm
   smoke also makes copied temporary smoke-workspace files writable before
   applying a patch, because champion snapshots are intentionally read-only.
-- Research-object design debt: current `PatchProposal` still carries complete
-  file contents. For `solver_design`, code phase therefore regenerates the full
-  `policies/baseline_algorithm.py` even for a one-operator change. The next
-  object-model repair should split the branch-owned algorithm subject into
-  controlled modules. The agent may add, delete, or modify modules inside the
-  declared solver-design package; Scion's hard boundary is the fixed objective,
-  constraints, adapter-owned parsing/feasibility/objective recomputation,
-  seeds, protocol splits, and promotion.
+- Research-object granularity repair: `PatchProposal` still carries complete
+  file contents, but `solver_design` no longer forces every change through one
+  monolithic `baseline_algorithm.py`. The branch-owned algorithm subject is
+  split into controlled modules under `policies/baseline_modules/`, while
+  `baseline_algorithm.py::solve(...)` stays the stable entrypoint. The agent
+  may add, delete, or modify modules inside that declared solver-design package;
+  `context.read_surface` returns bounded support-module previews so hypothesis
+  and code phases can inspect the actual algorithm internals, not only the
+  tiny entrypoint. Scion's hard boundary remains the fixed objective, constraints,
+  adapter-owned parsing/feasibility/objective recomputation, seeds, protocol
+  splits, and promotion.
 - The preview-repair smoke itself did not reach preview: both rounds failed at
   final `generate_patch` after three provider timeouts. The important finding
   was duplicated code-phase context, not solver quality: the target file was
@@ -298,8 +307,9 @@ Important current interpretation:
   reuses successful same-session feedback instead of re-querying it.
 - Current solver-design scope is stricter: one construction/seeding path, one
   bounded improvement loop, no more than two move families, and a hard target
-  around 180 lines/six helpers. This still means a complete `solve(...)`
-  algorithm body, not a component knob or baseline-only wrapper.
+  around 180 lines/six helpers for a generated target module. This still means
+  algorithm code that participates in the branch-owned solver-design package,
+  not a component knob or baseline-only wrapper.
 - The latest Sonnet 1-round smoke validated the first gate: candidates target
   and modify `baseline_algorithm.py` as the algorithm body, pass Contract plus
   algorithm smoke, pass Verification, and run 16/16 formal screening pairs with

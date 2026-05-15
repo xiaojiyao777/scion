@@ -11,6 +11,7 @@ search_space:
   editable:
     - "operators/*.py"
     - "policies/*.py"
+    - "policies/baseline_modules/*.py"
   frozen:
     - "adapter.py"
     - "cvrplib.py"
@@ -19,6 +20,7 @@ search_space:
     - "operators/base.py"
     - "operators/__init__.py"
     - "policies/__init__.py"
+    - "policies/baseline_modules/__init__.py"
   import_whitelist:
     - __future__
     - bisect
@@ -29,6 +31,14 @@ search_space:
     - itertools
     - math
     - models
+    - acceptance
+    - baseline_modules
+    - config
+    - construction
+    - destroy_repair
+    - local_search
+    - scheduler
+    - state
     - random
     - time
     - typing
@@ -840,27 +850,30 @@ research_surfaces:
     remove_allowed: false
   - name: solver_design
     kind: solver_design
-    description: "Preferred CVRP research boundary: edit the full algorithm body under a fixed problem contract."
+    description: "Preferred CVRP research boundary: edit branch-owned algorithm modules under a fixed problem contract."
     algorithm:
       role: problem_object_solver_algorithm
       invocation_point: full_solver_before_legacy_baseline_and_component_policies
       description: >-
         Lets Scion study the algorithm itself instead of filling a component
-        lifecycle dictionary. The candidate may implement construction, local
-        improvement, destroy/repair, recombination, perturbation, acceptance,
-        and runtime allocation directly in policies/baseline_algorithm.py, the
-        Scion-controlled editable algorithm body. policies/solver_algorithm.py
-        remains only as a compatibility hook. The adapter and solver remain
+        lifecycle dictionary. The stable entrypoint is
+        policies/baseline_algorithm.py::solve(...). Candidate branches may add,
+        delete, or modify branch-owned algorithm modules under
+        policies/baseline_modules/ for construction, local improvement,
+        destroy/repair, recombination, perturbation, acceptance, scheduler
+        runtime allocation, and telemetry. policies/solver_algorithm.py remains
+        only as a compatibility hook. The adapter and solver remain
         authoritative for CVRP parsing, feasibility, objective recomputation,
         seeds, timeout handling, protocol splits, and promotion decisions.
     targets:
       files:
         - "policies/baseline_algorithm.py"
         - "policies/solver_algorithm.py"
-      create_new_allowed: false
+        - "policies/baseline_modules/*.py"
+      create_new_allowed: true
       modify_allowed: true
-      remove_allowed: false
-      singleton: true
+      remove_allowed: true
+      singleton: false
     interface:
       required_functions:
         - "solve"
@@ -886,6 +899,7 @@ research_surfaces:
         - perturbation
         - acceptance
         - controlled_baseline_algorithm_body
+        - branch_owned_algorithm_modules
       complexity_scale_terms:
         - time_limit_sec
         - customer_count
@@ -933,22 +947,25 @@ research_surfaces:
         Keep novelty_signature identity fields as compact tokens or short
         phrases; each scalar string must be at most 120 characters. Put long
         rationale in hypothesis_text, not novelty_signature.
-        The idea must be a full solve(...) algorithm body in the editable
-        policies/baseline_algorithm.py subject, not a
-        main_search_plan lifecycle/config table and not a shallow wrapper
-        around context.baseline. A solver-design hypothesis that mainly changes
-        baseline budget/params or adds a tiny post-baseline polish has already
-        failed and should be considered a design failure.
+        The idea must modify the branch-owned solver-design algorithm subject,
+        not a main_search_plan lifecycle/config table and not a shallow wrapper
+        around context.baseline. Prefer focused module changes under
+        policies/baseline_modules/ when the hypothesis concerns construction,
+        destroy/repair, local search, acceptance, scheduler/runtime allocation,
+        or telemetry. A solver-design hypothesis that mainly changes baseline
+        budget/params or adds a tiny post-baseline polish has already failed
+        and should be considered a design failure.
         The hypothesis may change algorithm code but must preserve CVRP
         objective semantics, capacity/fleet constraints, instance parsing,
         seeds, evaluation splits, and Decision rules.
       implementation_guidance: >-
-        Implement solve(instance, rng, time_limit_sec, context) in
-        policies/baseline_algorithm.py. This file is the preferred editable
-        algorithm subject and must not call context.baseline; change the
-        controlled construction/search/destroy-repair/VNS logic itself.
-        policies/solver_algorithm.py is retained only for older compatibility
-        candidates. You may use instance.depot,
+        Implement solver-design changes in the branch-owned modules under
+        policies/baseline_modules/ whenever possible. Keep
+        policies/baseline_algorithm.py as the stable solve(...) entrypoint
+        unless the entrypoint itself must change. The entrypoint must not call
+        context.baseline; change controlled construction/search/destroy-repair/
+        VNS logic itself. policies/solver_algorithm.py is retained only for
+        older compatibility candidates. You may use instance.depot,
         instance.customer_ids, instance.customer_count,
         instance.demands[customer_id], instance.capacity,
         instance.distance(i, j), instance.route_load(route), and
@@ -983,9 +1000,10 @@ research_surfaces:
         when its return expression directly references context.remaining_time()
         or context.elapsed_ms().
         Return only a solution or a routes mapping. Do not return a plan
-        dictionary. The checked-in file contains an active branch-owned
-        ALNS/VNS-style algorithm body adapted from the repo-local CVRP solver
-        structure; candidates may replace or materially rework that body.
+        dictionary. The checked-in solver-design package contains an active
+        branch-owned ALNS/VNS-style algorithm adapted from the repo-local CVRP
+        solver structure; candidates may add, delete, replace, or materially
+        rework algorithm modules in that package.
         Telemetry must record real search effort and accepted/best-improving
         movement when the algorithm runs route edits, destroy/repair,
         recombination, perturbation, or acceptance. Telemetry can name phases
@@ -1000,22 +1018,24 @@ research_surfaces:
         not use case-name-specific behavior, hidden benchmark references,
         global mutable state, wall-clock sleeps, network/filesystem reads, or
         instance.customers. Do not implement a baseline-only wrapper: the
-        preferred target policies/baseline_algorithm.py must not call
+        stable entrypoint policies/baseline_algorithm.py must not call
         context.baseline, and changing only baseline budget or params, or
         adding millisecond-scale polishing without a bounded algorithmic search
         loop is not a valid solver-design candidate.
     target_files:
       - "policies/baseline_algorithm.py"
       - "policies/solver_algorithm.py"
+      - "policies/baseline_modules/*.py"
     prompt_hint: >-
-      Preferred boundary: implement the full CVRP algorithm under the fixed
-      adapter objective/constraint contract; do not express the research idea
-      as a component-policy or lifecycle-config table.
+      Preferred boundary: implement or revise the CVRP algorithm under the
+      fixed adapter objective/constraint contract. Use focused solver-design
+      modules when possible; do not express the research idea as a
+      component-policy or lifecycle-config table.
     required_functions:
       - "solve"
-    create_new_allowed: false
+    create_new_allowed: true
     modify_allowed: true
-    remove_allowed: false
+    remove_allowed: true
   - name: main_search_strategy
     kind: config
     description: "Legacy componentized CVRP lifecycle-config hook backed by main_search_plan."

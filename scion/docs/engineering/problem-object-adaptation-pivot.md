@@ -63,10 +63,11 @@ The next slice declares `solver_design` as the CVRP top-level research surface:
 
 - `ProblemSpecV1` supports the generic `solver_design` surface kind.
 - CVRP `problem-v1.yaml` names `solver_design` as the problem-owned
-  solver-design boundary while keeping `policies/main_search_strategy.py` and
-  `main_search_plan()` as the execution hook.
-- Adapter interface/preview logic treats `solver_design` as the
-  main-search-plan surface.
+  solver-design boundary with `policies/baseline_algorithm.py::solve(...)` as
+  the stable branch-owned entrypoint.
+- Adapter interface/preview logic treats `solver_design` as a whole-solver
+  algorithm surface, with `policies/solver_algorithm.py` retained only as a
+  compatibility hook.
 - APS diagnosis and `context.list_surfaces` prioritize the solver-design
   problem-object boundary before component policies when it is declared.
 
@@ -113,9 +114,9 @@ the boundary active rather than advisory:
 This is still a control-loop repair, not solver-efficacy evidence. It needs a
 new short free-surface diagnostic before any longer solver-quality run.
 
-## Solver-Design Module Granularity
+## Implemented Solver-Design Module Granularity
 
-The next design correction is research-object granularity. The current
+The next design correction was research-object granularity. The current
 `solver_design` path correctly lets Scion target the algorithm body, but the
 patch protocol still asks the agent to return complete file contents. In
 practice, a one-operator change to `policies/baseline_algorithm.py` causes the
@@ -142,6 +143,24 @@ modify algorithm modules. `PatchProposal` can still use complete file contents,
 but the file should be a focused algorithm module rather than the whole solver
 body, and the candidate workspace must be validated through the stable
 `solve(...)` entrypoint.
+
+Implemented on 2026-05-15:
+
+- the checked-in solver-design subject is split into
+  `policies/baseline_modules/config.py`, `state.py`, `construction.py`,
+  `destroy_repair.py`, `local_search.py`, `acceptance.py`, and
+  `scheduler.py`;
+- `policies/baseline_algorithm.py` is now a small stable entrypoint that
+  imports the branch-owned module package and returns a Scion-normalized
+  solution through `context.make_solution(...)`;
+- `problem-v1.yaml` declares `policies/baseline_modules/*.py` as editable
+  `solver_design` targets with create/delete/modify allowed, while
+  `policies/baseline_modules/__init__.py` remains frozen;
+- Contract C7 treats support-module interface checks as deferred to workspace
+  smoke, because only the package entrypoint must define `solve(...)`;
+- CVRP preview and `proposal.algorithm_smoke` can apply a module patch in a
+  temporary workspace and validate it by running the stable
+  `baseline_algorithm.py::solve(...)` entrypoint on the configured canary.
 
 ## Implemented Semantic-Identity Guidance Repair
 

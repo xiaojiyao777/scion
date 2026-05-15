@@ -52,6 +52,7 @@ referenced, not copied into development prompts.
 - [Code-scope control and feedback-budget Opus 2R smoke, 2026-05-14](v0.4-code-scope-control-feedback-budget-opus-2r-20260514.md)
 - [Runtime tie-speedup repair Sonnet 2R smoke, 2026-05-15](v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md)
 - [Solver-design C9c and smoke permission repair, 2026-05-15](v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md)
+- [Solver-design module subject repair, 2026-05-15](v0.4-solver-design-module-subject-repair-20260515.md)
 
 ## Related
 

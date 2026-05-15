@@ -4605,15 +4605,16 @@ def _solver_design_code_scope_control(
             "failure_detail": failure_detail,
             "detected_broad_terms": broad_terms,
             "required_shape": (
-                "complete replacement file with one primary construction or "
-                "seeding path and one bounded improvement/search loop using "
+                "complete target module content with one primary construction "
+                "or seeding path and one bounded improvement/search loop using "
                 "no more than two move families"
             ),
             "scope_rule": (
                 "Reduce broad hybrid hypotheses to one executable vertical "
-                "algorithm slice for this patch. Modify the controlled "
-                "algorithm body directly; do not turn it into a "
-                "context.baseline post-processing wrapper."
+                "algorithm slice for this patch. Prefer the focused "
+                "solver-design modules under policies/baseline_modules; do not "
+                "turn the entrypoint into a context.baseline post-processing "
+                "wrapper."
             ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "

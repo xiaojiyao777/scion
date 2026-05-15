@@ -130,8 +130,9 @@ Keep the boundary clear:
 - CVRP package owns solver hooks, allowed components, policy files, runtime
   field meanings, and controlled fixtures.
 - `solver_design` is the top-level problem-object boundary. It is backed by
-  `policies/solver_algorithm.py` and the
-  `solve(instance, rng, time_limit_sec, context)` full-algorithm hook.
+  `policies/baseline_algorithm.py::solve(...)` plus focused branch-owned
+  modules under `policies/baseline_modules/`; `policies/solver_algorithm.py`
+  remains only as a compatibility hook.
   Component policies and the older `main_search_strategy` lifecycle table are
   legacy implementation/regression surfaces; they should not define the top-
   level research target for current CVRP optimization work.

@@ -727,6 +727,7 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
             requested_max=args.max_code_chars,
         )
         code_payload: dict[str, Any] | None = None
+        support_artifacts: list[dict[str, Any]] = []
         if args.include_code and target_file:
             if context.champion is None:
                 return self._error(
@@ -739,6 +740,17 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
                 target_file,
                 max_chars=code_char_limit,
             )
+            if _surface_name(surface) == "solver_design" and args.section in {
+                "all",
+                "target_preview",
+            }:
+                support_artifacts = _read_solver_design_support_artifacts(
+                    context.champion,
+                    target_files,
+                    primary_target=target_file,
+                    detail=detail,
+                    primary_code_char_limit=code_char_limit,
+                )
 
         payload = {
             "surface": _surface_read_payload(
@@ -762,6 +774,7 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
             "declared_targets": target_files,
             "target_file": target_file,
             "current_artifact": code_payload,
+            "support_artifacts": support_artifacts,
         }
         return self._observation(
             context,
@@ -1721,10 +1734,7 @@ def _runtime_algorithm_smoke_preview(
     if surface_name != "solver_design":
         return None
     patch_path = _normalize_rel_path(patch.file_path)
-    if patch_path not in {
-        "policies/baseline_algorithm.py",
-        "policies/solver_algorithm.py",
-    }:
+    if not _is_solver_design_runtime_patch_path(patch_path):
         return None
 
     base_workspace = _runtime_smoke_base_workspace(context)
@@ -1849,6 +1859,17 @@ def _runtime_smoke_base_workspace(context: ProposalToolContext) -> Path | None:
         if path.is_dir() and (path / "solver.py").is_file():
             return path
     return None
+
+
+def _is_solver_design_runtime_patch_path(path: str | None) -> bool:
+    normalized = str(path or "").replace("\\", "/").lstrip("/")
+    return normalized in {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+    } or (
+        normalized.startswith("policies/baseline_modules/")
+        and normalized.endswith(".py")
+    )
 
 
 def _apply_patch_to_runtime_smoke_workspace(
@@ -2934,6 +2955,10 @@ def _find_surface(context: ProposalToolContext, name: str) -> Any | None:
     return None
 
 
+def _surface_name(surface: Any) -> str:
+    return str(_attr(surface, "name") or "").strip()
+
+
 def _problem_summary(context: ProposalToolContext) -> str:
     if context.adapter is not None and hasattr(
         context.adapter, "render_problem_summary"
@@ -3477,6 +3502,59 @@ def _target_declared(target_file: str, declared_targets: list[str]) -> bool:
         if segment_glob_match(normalized, pattern):
             return True
     return False
+
+
+def _read_solver_design_support_artifacts(
+    champion: ChampionState,
+    target_files: list[str],
+    *,
+    primary_target: str,
+    detail: str,
+    primary_code_char_limit: int,
+) -> list[dict[str, Any]]:
+    root = Path(champion.code_snapshot_path).expanduser().resolve()
+    primary = _normalize_rel_path(primary_target) or ""
+    if primary == "policies/solver_algorithm.py" or primary.startswith(
+        "policies/baseline_modules/"
+    ):
+        return []
+    per_file_limit = min(primary_code_char_limit, _COMPACT_SURFACE_CODE_CHARS)
+    total_limit = 6000 if detail == "full" else 9000
+    artifacts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    remaining = total_limit
+    for raw_pattern in target_files:
+        try:
+            pattern = normalize_relative_glob_pattern(raw_pattern)
+        except ValueError:
+            continue
+        if not pattern.startswith("policies/baseline_modules/"):
+            continue
+        if not any(ch in pattern for ch in "*?["):
+            candidates = [root / pattern]
+        else:
+            candidates = sorted(root.glob(pattern))
+        for path in candidates:
+            if len(artifacts) >= 12 or remaining <= 0:
+                return artifacts
+            try:
+                rel = path.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if (
+                rel == primary
+                or rel.endswith("/__init__.py")
+                or rel in seen
+                or not path.is_file()
+            ):
+                continue
+            seen.add(rel)
+            read_limit = max(0, min(per_file_limit, remaining))
+            artifact = _read_champion_file(champion, rel, max_chars=read_limit)
+            artifacts.append(artifact)
+            if artifact.get("readable"):
+                remaining -= len(str(artifact.get("content_preview", "")))
+    return artifacts
 
 
 def _read_champion_file(
