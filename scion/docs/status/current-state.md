@@ -561,6 +561,19 @@ validation/frozen cases. Validation after this repair: targeted smoke
 regression `5 passed`, focused subset `312 passed`, full suite
 `1674 passed, 1 skipped`.
 
+The follow-up 2-round smoke completed with exit code 0 and showed the previous
+`tiny_6` runtime leak was fixed: screening had 4/4 valid pairs and zero
+candidate runtime failures, then abandoned normally for
+`SCREENING_FAIL_WIN_RATE`. It also exposed a budget-control issue in round 2:
+after screening/runtime feedback and code context, required
+`proposal.contract_preview` had too little remaining observation budget and
+collapsed to `result_too_large`. Repair: default agentic observation budget is
+now 96k, required self-check tools have a minimal preview fallback that
+preserves pass/fail and compact failed-check/runtime summaries, and repeated
+compaction retains failed-check names. Validation after this repair: targeted
+budget regressions `3 passed`, focused subset `313 passed`, full suite
+`1675 passed, 1 skipped`.
+
 Latest code-generation timeout-policy diagnosis and repair:
 
 ```text

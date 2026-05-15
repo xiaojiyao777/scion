@@ -4139,6 +4139,68 @@ def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(
     )
 
 
+def test_agentic_session_keeps_minimal_contract_preview_at_budget_edge(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_observation_chars=64000)
+    state = AgenticProposalSessionState(
+        session_id="session-contract-budget",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        observation_chars_used=62200,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    observation = ProposalObservation(
+        observation_id="contract-preview-edge",
+        session_id=state.session_id,
+        tool_name="proposal.contract_preview",
+        tool_call_id="tool-10",
+        observation_type="contract_preview",
+        summary="Static contract preview found issues.",
+        structured_payload={
+            "passed": False,
+            "hypothesis": {
+                "passed": True,
+                "hypothesis_text": "x" * 12000,
+                "checks": [{"name": "C2_locus", "passed": True}],
+            },
+            "patch": {
+                "passed": False,
+                "code_content": "x" * 50000,
+                "checks": [
+                    {
+                        "name": f"C{i}_large_failure",
+                        "passed": False,
+                        "detail": "x" * 1000,
+                    }
+                    for i in range(8)
+                ],
+            },
+        },
+    )
+
+    compact = session._enforce_observation_budget(context, state, observation)
+
+    assert compact.is_error is False
+    assert compact.failure_code is None
+    assert compact.structured_payload["passed"] is False
+    assert (
+        compact.structured_payload.get("minimal_due_to_budget") is True
+        or compact.structured_payload.get("compact_due_to_budget") is True
+    )
+    assert _json_size(_observation_prompt_payload(compact)) <= (
+        config.max_observation_chars - state.observation_chars_used
+    )
+    self_check = _self_check_from_previews([compact])
+    assert self_check.contract_preview_passed is False
+    assert any("C0_large_failure" in code for code in self_check.contract_preview_codes)
+
+
 def test_agentic_session_compacts_feedback_observations_for_internal_budget() -> None:
     screening = ProposalObservation(
         observation_id="screening-1",

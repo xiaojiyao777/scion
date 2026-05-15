@@ -195,7 +195,7 @@ class AgenticToolLoopConfig:
 
     max_steps: int = 22
     max_tool_calls: int = 18
-    max_observation_chars: int = 64000
+    max_observation_chars: int = 96000
     max_wall_time_sec: float = 120.0
     max_repeated_tool_calls: int = 2
     max_code_tool_calls: int = 4
@@ -3496,6 +3496,14 @@ class AgenticProposalSession:
             _json_size(_observation_prompt_payload(compact_preview)) <= remaining
         ):
             return compact_preview
+        minimal_preview = _minimal_self_check_preview_observation(observation)
+        if minimal_preview is not None:
+            if _json_size(_observation_prompt_payload(minimal_preview)) <= remaining:
+                return minimal_preview
+            return self._fit_observation_to_remaining(
+                minimal_preview,
+                remaining_chars=remaining,
+            )
         return self._budget_error_observation(
             context,
             state,
@@ -3975,9 +3983,72 @@ def _compact_self_check_preview_observation(
     return None
 
 
+def _minimal_self_check_preview_observation(
+    observation: ProposalObservation,
+) -> ProposalObservation | None:
+    if observation.is_error:
+        return None
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return None
+    if observation.tool_name == "proposal.contract_preview":
+        compact_payload = _drop_empty_mapping(
+            {
+                "passed": bool(payload.get("passed")),
+                "issue_summary": _limit_string(payload.get("issue_summary"), 160),
+                "hypothesis": _minimal_contract_preview_section(
+                    payload.get("hypothesis")
+                ),
+                "patch": _minimal_contract_preview_section(payload.get("patch")),
+                "minimal_due_to_budget": True,
+            }
+        )
+        summary = (
+            "Static contract preview passed."
+            if compact_payload.get("passed")
+            else "Static contract preview found issues."
+        )
+        return replace(
+            observation,
+            summary=f"{summary} Minimal budget preview retained.",
+            structured_payload=compact_payload,
+            repair_hint=None,
+        )
+    if observation.tool_name == "proposal.algorithm_smoke":
+        compact_payload = _drop_empty_mapping(
+            {
+                "passed": bool(payload.get("passed")),
+                "issue_summary": _limit_string(payload.get("issue_summary"), 160),
+                "patch": _minimal_contract_preview_section(payload.get("patch")),
+                "runtime_smoke": _minimal_algorithm_smoke_section(
+                    payload.get("runtime_smoke")
+                ),
+                "minimal_due_to_budget": True,
+            }
+        )
+        summary = (
+            "Algorithm smoke passed."
+            if compact_payload.get("passed")
+            else "Algorithm smoke found issues."
+        )
+        return replace(
+            observation,
+            summary=f"{summary} Minimal budget preview retained.",
+            structured_payload=compact_payload,
+            repair_hint=None,
+        )
+    return None
+
+
 def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
+    failed_checks = _failed_preview_checks(value.get("checks"))
+    if not failed_checks:
+        failed_checks = _existing_failed_preview_checks(
+            value.get("failed_checks"),
+            limit=8,
+        )
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
@@ -3986,10 +4057,53 @@ def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
             "needs_hypothesis": value.get("needs_hypothesis"),
             "errors": _bounded_string_list(value.get("errors"), limit=4),
             "issues": _bounded_string_list(value.get("issues"), limit=4),
-            "failed_checks": _failed_preview_checks(value.get("checks")),
+            "failed_checks": failed_checks,
             "problem_preview": _compact_problem_preview_mapping(
                 value.get("problem_preview")
             ),
+        }
+    )
+    return compact or None
+
+
+def _minimal_contract_preview_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    failed_checks = _failed_preview_checks(value.get("checks"))
+    if not failed_checks:
+        failed_checks = _existing_failed_preview_checks(
+            value.get("failed_checks"),
+            limit=3,
+        )
+    compact = _drop_empty_mapping(
+        {
+            "passed": value.get("passed"),
+            "issue_summary": _limit_string(value.get("issue_summary"), 120),
+            "errors": _bounded_string_list(value.get("errors"), limit=2),
+            "issues": _bounded_string_list(value.get("issues"), limit=2),
+            "failed_checks": failed_checks[:3],
+        }
+    )
+    return compact or None
+
+
+def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    audit_failure = value.get("runtime_audit_failure")
+    if isinstance(audit_failure, Mapping):
+        audit_detail = audit_failure.get("detail") or audit_failure.get(
+            "error_category"
+        )
+    else:
+        audit_detail = audit_failure
+    compact = _drop_empty_mapping(
+        {
+            "passed": value.get("passed"),
+            "case": value.get("case"),
+            "case_count": value.get("case_count"),
+            "issues": _bounded_string_list(value.get("issues"), limit=2),
+            "runtime_audit_failure": _limit_string(audit_detail, 180),
         }
     )
     return compact or None
@@ -4044,6 +4158,28 @@ def _failed_preview_checks(value: Any) -> list[dict[str, Any]]:
             )
         )
         if len(failed) >= 8:
+            break
+    return failed
+
+
+def _existing_failed_preview_checks(value: Any, *, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    failed: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        failed.append(
+            _drop_empty_mapping(
+                {
+                    "name": item.get("name"),
+                    "passed": False if item.get("passed") is False else None,
+                    "severity": item.get("severity"),
+                    "detail": _limit_string(item.get("detail"), 160),
+                }
+            )
+        )
+        if len(failed) >= limit:
             break
     return failed
 
