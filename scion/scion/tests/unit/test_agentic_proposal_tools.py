@@ -873,8 +873,16 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     support_paths = {
         artifact["file_path"] for artifact in payload["support_artifacts"]
     }
+    assert "policies/baseline_modules/state.py" in support_paths
     assert "policies/baseline_modules/construction.py" in support_paths
     assert "policies/baseline_modules/scheduler.py" in support_paths
+    state_artifact = next(
+        artifact
+        for artifact in payload["support_artifacts"]
+        if artifact["file_path"] == "policies/baseline_modules/state.py"
+    )
+    assert "class _Route" in state_artifact["python_api_summary"]
+    assert "class _Solution" in state_artifact["python_api_summary"]
     assert any(
         "class _ALNSVNSSolver" in artifact.get("content_preview", "")
         for artifact in payload["support_artifacts"]
@@ -885,6 +893,42 @@ def test_read_main_search_strategy_default_returns_compact_contract_below_budget
     assert "SECRET_VALIDATION" not in rendered
     assert "SECRET_FROZEN" not in rendered
     assert len(rendered) < 24000
+
+
+def test_read_solver_design_module_target_includes_state_support_context(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call(
+        "context.read_surface",
+        {
+            "surface": "solver_design",
+            "target_file": "policies/baseline_modules/scheduler.py",
+            "section": "target_preview",
+            "detail": "full",
+            "max_code_chars": 6000,
+        },
+        context,
+    )
+    payload = observation.structured_payload
+    support = {
+        artifact["file_path"]: artifact
+        for artifact in payload["support_artifacts"]
+    }
+
+    assert observation.is_error is False
+    assert payload["target_file"] == "policies/baseline_modules/scheduler.py"
+    assert "policies/baseline_modules/state.py" in support
+    assert "policies/baseline_algorithm.py" in support
+    assert "policies/baseline_modules/scheduler.py" not in support
+    assert "class _Route" in support["policies/baseline_modules/state.py"][
+        "python_api_summary"
+    ]
+    assert "def solve(instance, rng, time_limit_sec, context)" in support[
+        "policies/baseline_algorithm.py"
+    ]["python_api_summary"]
 
 
 def test_read_surface_section_mode_returns_interface_slice(
@@ -3612,6 +3656,8 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
         "Do not implement more than two move/neighborhood families" in rendered_system
     )
     assert "do not implement a full portfolio" in rendered_system
+    assert "_Solution.routes" in rendered_system
+    assert "not `list[list[int]]`" in rendered_system
     assert "complete contents of the target algorithm module" in rendered_prompt
 
 
@@ -4073,6 +4119,32 @@ def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
                 "checks": [{"name": "preview", "passed": True}],
                 "workspace_materialized": False,
             },
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "workspace_materialized": True,
+                "case": "controlled/data/canary.vrp",
+                "seed": 77,
+                "case_count": 1,
+                "issues": ["runtime audit failed"],
+                "runtime_audit_failure": {
+                    "error_category": "solver_algorithm_errors",
+                    "detail": "'_Route' object is not subscriptable",
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_events": [
+                        {"type": "error", "message": "'_Route' object is not subscriptable"}
+                    ],
+                },
+                "runtime": {
+                    "solver_algorithm_loaded": True,
+                    "solver_algorithm_active": True,
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_events": [
+                        {"type": "error", "message": "'_Route' object is not subscriptable"}
+                    ],
+                },
+                "run": {"success": True, "detail": "solver smoke completed"},
+            },
         },
     )
 
@@ -4080,10 +4152,16 @@ def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
 
     assert compact is not None
     assert compact.is_error is False
-    assert _json_size(_observation_prompt_payload(compact)) < 1500
+    assert _json_size(_observation_prompt_payload(compact)) < 2200
     assert compact.structured_payload["passed"] is True
     assert compact.structured_payload["patch"]["contract"]["check_count"] == 10
     assert compact.structured_payload["problem_preview"]["passed"] is True
+    assert compact.structured_payload["runtime_smoke"]["runtime"][
+        "solver_algorithm_errors"
+    ] == 1
+    assert "_Route" in compact.structured_payload["runtime_smoke"][
+        "runtime_audit_failure"
+    ]["detail"]
     assert compact.structured_payload["compact_due_to_budget"] is True
 
 
@@ -5519,6 +5597,10 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
     assert artifact["max_chars"] == 6000
     assert artifact["truncated"] is True
     assert artifact["content_preview_chars"] == 6000
+    support_paths = {
+        support["file_path"] for support in payload["support_artifacts"]
+    }
+    assert "policies/baseline_modules/state.py" in support_paths
 
 
 def test_planner_nonexistent_surface_falls_back_and_generates_patch(

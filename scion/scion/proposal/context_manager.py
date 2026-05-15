@@ -389,6 +389,7 @@ class ContextManager:
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "hypothesis_detail": hypothesis_detail,
+            "target_file": hypothesis.target_file,
             "target_file_code": target_file_code,
             "champion_operators_code": champion_operators_code,
             "reference_operators": reference_operators,

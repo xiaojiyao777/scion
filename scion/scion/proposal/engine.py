@@ -723,6 +723,16 @@ def _novelty_signature_task_lines(
             f"declared semantic field: {field_text}. Keep scalar string values "
             "at or below 120 characters."
         )
+        if str(surface_name) == "solver_design":
+            lines.append(
+                "For `solver_design`, make `novelty_signature` compact identity "
+                "tokens, not prose. Example: "
+                '{"algorithm_family":"alns_vns","construction_strategy":"cw_seed",'
+                '"improvement_strategy":"bounded_oropt",'
+                '"acceptance_strategy":"sa_threshold",'
+                '"runtime_budget_strategy":"time_checked_caps"}. Put rationale '
+                "and expected mechanism detail in `hypothesis_text`."
+            )
         sequence_fields = requirement.get("nonempty_sequence_fields")
         if isinstance(sequence_fields, (list, tuple)) and sequence_fields:
             seq_text = ", ".join(
@@ -799,8 +809,14 @@ def _split_code_context(
     )
     solver_design_code_rules = (
         "\n## Full Solver-Algorithm Rules\n"
-        "- Implement a complete `solve(instance, rng, time_limit_sec, context)` "
-        "algorithm body. Do not return a lifecycle/config dictionary.\n"
+        "- For entrypoint targets (`policies/baseline_algorithm.py` or the "
+        "legacy `policies/solver_algorithm.py`), implement a complete "
+        "`solve(instance, rng, time_limit_sec, context)` algorithm body. Do "
+        "not return a lifecycle/config dictionary.\n"
+        "- For targets under `policies/baseline_modules/`, implement the "
+        "complete contents of that branch-owned algorithm module and integrate "
+        "with the existing entrypoint; do not add a top-level `solve` unless "
+        "the target module already owns one.\n"
         "- Default to a compact replacement file: one coherent construction or "
         "seeding path, one bounded improvement/search loop, no more than two "
         "move families, and only the helper functions needed for that path.\n"
@@ -817,6 +833,15 @@ def _split_code_context(
         "`context.record_move` or `context.record_iteration`.\n"
         "- Do not submit a shallow wrapper that changes baseline budget/params "
         "or adds a tiny post-baseline polish.\n"
+        "- The active package state model uses `_Solution.routes` as `_Route` "
+        "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
+        "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
+        "`.cost_of_remove(...)`, `.insert(...)`, `.remove(...)`, and "
+        "`.recalculate()`. A `_Solution` exposes `.copy()`, "
+        "`.rebuild_index()`, `.remove_empty_routes()`, `.is_feasible()`, and "
+        "`.routes_as_tuples()`. Do not slice, concatenate, or overwrite "
+        "`solution.routes` as customer lists; edit `route.customers` or use "
+        "route methods, then rebuild indexes when route membership changes.\n"
         "- You may change algorithm strategy and runtime scheduling, but not "
         "problem objective semantics, feasibility constraints, parsing, seeds, "
         "protocol splits, Decision rules, or adapter/runtime files.\n"
@@ -834,6 +859,11 @@ def _split_code_context(
         "search, acceptance, scheduler/runtime allocation, and telemetry. Keep "
         "`policies/baseline_algorithm.py::solve(...)` as the stable entrypoint "
         "unless the entrypoint itself must change.\n"
+        "- When the code-phase tool observations include support artifacts, "
+        "use their `python_api_summary` and `content_preview` as the object "
+        "model for sibling modules. In particular, read "
+        "`policies/baseline_modules/state.py` before changing scheduler or "
+        "local-search route edits.\n"
         "- If the approved solver-design change requires more than one file "
         "to be executable, keep the approved target as the primary patch and "
         "put scheduler/entrypoint/module integration edits in "

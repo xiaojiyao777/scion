@@ -7,6 +7,7 @@ workspaces and they do not expose validation/frozen raw metrics.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -85,6 +86,17 @@ _COMPACT_SURFACE_SECTIONS = (
     "evidence",
     "novelty",
     "target_preview",
+)
+_SOLVER_DESIGN_SUPPORT_PRIORITY = (
+    "policies/baseline_modules/state.py",
+    "policies/baseline_algorithm.py",
+    "policies/baseline_modules/scheduler.py",
+    "policies/baseline_modules/local_search.py",
+    "policies/baseline_modules/construction.py",
+    "policies/baseline_modules/destroy_repair.py",
+    "policies/baseline_modules/acceptance.py",
+    "policies/baseline_modules/config.py",
+    "policies/solver_algorithm.py",
 )
 
 
@@ -2430,7 +2442,8 @@ def _semantic_signature_preview_guidance(
         return {}
 
     missing: list[str] = []
-    invalid: list[str] = []
+    invalid_sequence: list[str] = []
+    invalid_scalar: list[str] = []
     unsupported: list[str] = []
     for field in fields:
         name = str(field).strip()
@@ -2456,12 +2469,14 @@ def _semantic_signature_preview_guidance(
             name in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
             and not _is_nonempty_text_sequence(values[name])
         ):
-            invalid.append(name)
+            invalid_sequence.append(name)
         if (
             isinstance(values.get(name), str)
             and len(values[name].strip()) > _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS
         ):
-            invalid.append(f"{name} > {_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS} chars")
+            invalid_scalar.append(
+                f"{name} > {_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS} chars"
+            )
 
     detail = ""
     if missing:
@@ -2469,11 +2484,18 @@ def _semantic_signature_preview_guidance(
             "missing structured novelty_signature identity for semantic_signature "
             f"surface '{hypothesis.change_locus}': {', '.join(missing)}"
         )
-    elif invalid:
+    elif invalid_sequence:
         detail = (
             "invalid structured novelty_signature identity for semantic_signature "
-            f"surface '{hypothesis.change_locus}': {', '.join(invalid)} must be "
-            "non-empty arrays of component names"
+            f"surface '{hypothesis.change_locus}': {', '.join(invalid_sequence)} "
+            "must be non-empty arrays of component names"
+        )
+    elif invalid_scalar:
+        detail = (
+            "invalid structured novelty_signature identity for semantic_signature "
+            f"surface '{hypothesis.change_locus}': {', '.join(invalid_scalar)}. "
+            "Use compact tokens or short phrases and put rationale in "
+            "hypothesis_text."
         )
     elif unsupported:
         detail = (
@@ -2491,7 +2513,7 @@ def _semantic_signature_preview_guidance(
             "strategy": strategy,
             "signature_fields": fields,
             "missing_fields": missing,
-            "invalid_fields": invalid,
+            "invalid_fields": [*invalid_sequence, *invalid_scalar],
             "nonempty_sequence_fields": [
                 field for field in fields if field in _NONEMPTY_SEQUENCE_NOVELTY_FIELDS
             ],
@@ -2965,6 +2987,17 @@ def _surface_novelty_signature_requirement(surface: Any | None) -> dict[str, Any
                 "Scalar string values must be at most "
                 f"{_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS} characters."
             ),
+            "compact_example": (
+                {
+                    "algorithm_family": "alns_vns",
+                    "construction_strategy": "cw_seed",
+                    "improvement_strategy": "bounded_oropt",
+                    "acceptance_strategy": "sa_threshold",
+                    "runtime_budget_strategy": "time_checked_caps",
+                }
+                if str(_attr(surface, "name") or "") == "solver_design"
+                else None
+            ),
         }
     )
 
@@ -3293,7 +3326,7 @@ def _surface_read_payload(
     detail: str,
     section: str = "all",
 ) -> dict[str, Any]:
-    if detail == "full":
+    if detail == "full" and section == "all":
         return _surface_payload(surface)
     return _surface_compact_payload(surface, section=section)
 
@@ -3734,47 +3767,118 @@ def _read_solver_design_support_artifacts(
 ) -> list[dict[str, Any]]:
     root = Path(champion.code_snapshot_path).expanduser().resolve()
     primary = _normalize_rel_path(primary_target) or ""
-    if primary == "policies/solver_algorithm.py" or primary.startswith(
-        "policies/baseline_modules/"
-    ):
-        return []
     per_file_limit = min(primary_code_char_limit, _COMPACT_SURFACE_CODE_CHARS)
-    total_limit = 6000 if detail == "full" else 9000
+    if primary in {"policies/baseline_algorithm.py", "policies/solver_algorithm.py"}:
+        total_limit = 6500 if detail == "full" else 7000
+    else:
+        total_limit = 11000 if detail == "full" else 9000
     artifacts: list[dict[str, Any]] = []
-    seen: set[str] = set()
     remaining = total_limit
+    for rel, path in _solver_design_support_candidate_paths(
+        root,
+        target_files,
+        primary=primary,
+    ):
+        if len(artifacts) >= 12 or remaining <= 0:
+            return artifacts
+        read_limit = max(0, min(per_file_limit, remaining))
+        artifact = _read_champion_file(champion, rel, max_chars=read_limit)
+        api_summary = _python_api_summary_for_file(path)
+        if api_summary:
+            artifact["python_api_summary"] = api_summary
+        artifacts.append(artifact)
+        if artifact.get("readable"):
+            remaining -= len(str(artifact.get("content_preview", "")))
+            remaining -= len(str(artifact.get("python_api_summary", "")))
+    return artifacts
+
+
+def _solver_design_support_candidate_paths(
+    root: Path,
+    target_files: list[str],
+    *,
+    primary: str,
+) -> list[tuple[str, Path]]:
+    declared: dict[str, Path] = {}
     for raw_pattern in target_files:
         try:
             pattern = normalize_relative_glob_pattern(raw_pattern)
         except ValueError:
             continue
-        if not pattern.startswith("policies/baseline_modules/"):
+        if not (
+            pattern in {"policies/baseline_algorithm.py", "policies/solver_algorithm.py"}
+            or pattern.startswith("policies/baseline_modules/")
+        ):
             continue
         if not any(ch in pattern for ch in "*?["):
             candidates = [root / pattern]
         else:
             candidates = sorted(root.glob(pattern))
         for path in candidates:
-            if len(artifacts) >= 12 or remaining <= 0:
-                return artifacts
+            if not path.is_file():
+                continue
             try:
                 rel = path.relative_to(root).as_posix()
             except ValueError:
                 continue
-            if (
-                rel == primary
-                or rel.endswith("/__init__.py")
-                or rel in seen
-                or not path.is_file()
-            ):
+            if rel == primary or rel.endswith("/__init__.py"):
                 continue
-            seen.add(rel)
-            read_limit = max(0, min(per_file_limit, remaining))
-            artifact = _read_champion_file(champion, rel, max_chars=read_limit)
-            artifacts.append(artifact)
-            if artifact.get("readable"):
-                remaining -= len(str(artifact.get("content_preview", "")))
-    return artifacts
+            declared.setdefault(rel, path)
+
+    priority = {rel: idx for idx, rel in enumerate(_SOLVER_DESIGN_SUPPORT_PRIORITY)}
+    return sorted(
+        declared.items(),
+        key=lambda item: (
+            priority.get(item[0], len(priority)),
+            item[0],
+        ),
+    )
+
+
+def _python_api_summary_for_file(path: Path, *, max_chars: int = 1800) -> str:
+    if path.suffix != ".py":
+        return ""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return ""
+    lines: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            methods = [
+                _python_function_signature(child)
+                for child in node.body
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+            if methods:
+                lines.append(f"class {node.name}: " + "; ".join(methods[:14]))
+            else:
+                lines.append(f"class {node.name}")
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lines.append("def " + _python_function_signature(node))
+        if len(lines) >= 28:
+            break
+    if not lines:
+        return ""
+    return _limit_text("\n".join(lines), max_chars)
+
+
+def _python_function_signature(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> str:
+    args = node.args
+    parts: list[str] = []
+    for arg in [*args.posonlyargs, *args.args]:
+        parts.append(arg.arg)
+    if args.vararg is not None:
+        parts.append("*" + args.vararg.arg)
+    elif args.kwonlyargs:
+        parts.append("*")
+    for arg in args.kwonlyargs:
+        parts.append(arg.arg)
+    if args.kwarg is not None:
+        parts.append("**" + args.kwarg.arg)
+    return f"{node.name}({', '.join(parts)})"
 
 
 def _read_champion_file(

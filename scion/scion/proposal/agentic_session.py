@@ -2523,8 +2523,9 @@ class AgenticProposalSession:
         }
         if hypothesis.target_file:
             read_surface_args["target_file"] = hypothesis.target_file
-        if _is_solver_design_support_module_target(hypothesis.target_file):
+        if _is_solver_design_algorithm_target(hypothesis.target_file):
             read_surface_args["section"] = "target_preview"
+        if _is_solver_design_support_module_target(hypothesis.target_file):
             read_surface_args["max_code_chars"] = (
                 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
             )
@@ -3398,8 +3399,9 @@ class AgenticProposalSession:
         budgeted = dict(args)
         if selection_source.startswith("code_phase"):
             target_file = str(budgeted.get("target_file") or "").strip()
-            if _is_solver_design_support_module_target(target_file):
+            if _is_solver_design_algorithm_target(target_file):
                 budgeted["section"] = "target_preview"
+            if _is_solver_design_support_module_target(target_file):
                 budgeted["max_code_chars"] = min(
                     _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
                     _coerce_positive_int(
@@ -3962,6 +3964,9 @@ def _compact_algorithm_smoke_observation(
             "problem_preview": _compact_problem_preview_mapping(
                 payload.get("problem_preview")
             ),
+            "runtime_smoke": _compact_algorithm_smoke_section(
+                payload.get("runtime_smoke")
+            ),
             "compact_due_to_budget": True,
         }
     )
@@ -4107,6 +4112,124 @@ def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
         }
     )
     return compact or None
+
+
+def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    compact = _drop_empty_mapping(
+        {
+            "passed": value.get("passed"),
+            "runtime_smoke_run": value.get("runtime_smoke_run"),
+            "workspace_materialized": value.get("workspace_materialized"),
+            "case": value.get("case"),
+            "seed": value.get("seed"),
+            "case_count": value.get("case_count"),
+            "issues": _bounded_string_list(value.get("issues"), limit=4),
+            "runtime_audit_failure": _compact_runtime_audit_failure_section(
+                value.get("runtime_audit_failure")
+            ),
+            "runtime": _compact_runtime_section(value.get("runtime")),
+            "run": _compact_smoke_run_section(value.get("run")),
+            "runs": _compact_smoke_runs(value.get("runs")),
+        }
+    )
+    return compact or None
+
+
+def _compact_runtime_audit_failure_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        text = _limit_string(value, 240)
+        return {"detail": text} if text else None
+    compact = {
+        "error_category": _limit_string(value.get("error_category"), 80),
+        "detail": _limit_string(value.get("detail"), 360),
+        "failed_runtime_fields": _bounded_string_list(
+            value.get("failed_runtime_fields"),
+            limit=6,
+        ),
+        "solver_algorithm_errors": value.get("solver_algorithm_errors"),
+    }
+    events = value.get("solver_algorithm_events")
+    if events not in (None, "", [], {}):
+        compact["solver_algorithm_events"] = _limit_string(
+            json.dumps(
+                _json_ready(events),
+                sort_keys=True,
+                default=str,
+            ),
+            500,
+        )
+    return _drop_empty_mapping(compact)
+
+
+def _compact_runtime_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    keys = (
+        "solver_algorithm_loaded",
+        "solver_algorithm_active",
+        "solver_algorithm_errors",
+        "solver_algorithm_elapsed_ms",
+        "solver_algorithm_solution_valid",
+        "solver_algorithm_total_distance",
+        "solver_algorithm_fleet_violation",
+        "solver_algorithm_search_iterations",
+        "solver_algorithm_accepted_moves",
+        "solver_algorithm_best_delta",
+        "solver_algorithm_stop_reason",
+    )
+    compact = {key: value.get(key) for key in keys if key in value}
+    events = value.get("solver_algorithm_events")
+    if events not in (None, "", [], {}):
+        compact["solver_algorithm_events"] = _limit_string(
+            json.dumps(_json_ready(events), sort_keys=True, default=str),
+            500,
+        )
+    return _drop_empty_mapping(compact)
+
+
+def _compact_smoke_run_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    return _drop_empty_mapping(
+        {
+            "case": value.get("case"),
+            "seed": value.get("seed"),
+            "label": value.get("label"),
+            "success": value.get("success"),
+            "exit_code": value.get("exit_code"),
+            "elapsed_ms": value.get("elapsed_ms"),
+            "error_category": _limit_string(value.get("error_category"), 120),
+            "detail": _limit_string(value.get("detail"), 320),
+            "stderr": _limit_string(value.get("stderr"), 500),
+            "stdout": _limit_string(value.get("stdout"), 240),
+        }
+    )
+
+
+def _compact_smoke_runs(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    compact: list[dict[str, Any]] = []
+    for item in value[:3]:
+        if not isinstance(item, Mapping):
+            continue
+        run = _drop_empty_mapping(
+            {
+                "case": item.get("case"),
+                "seed": item.get("seed"),
+                "label": item.get("label"),
+                "passed": item.get("passed"),
+                "runtime_audit_failure": _compact_runtime_audit_failure_section(
+                    item.get("runtime_audit_failure")
+                ),
+                "runtime": _compact_runtime_section(item.get("runtime")),
+            }
+        )
+        if run:
+            compact.append(run)
+    return compact
 
 
 def _compact_problem_preview_mapping(value: Any) -> dict[str, Any] | None:
@@ -4753,6 +4876,7 @@ def _is_solver_design_code_context(
         or kind in _SOLVER_DESIGN_SURFACE_NAMES
         or target_file.endswith("policies/baseline_algorithm.py")
         or target_file.endswith("policies/solver_algorithm.py")
+        or target_file.startswith("policies/baseline_modules/")
     )
 
 
@@ -4859,8 +4983,40 @@ def _compact_code_surface_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
             ),
             "target_file": payload.get("target_file"),
             "current_artifact": current_artifact,
+            "support_artifacts": _compact_code_support_artifacts(
+                payload.get("support_artifacts")
+            ),
         }
     )
+
+
+def _compact_code_support_artifacts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    artifacts: list[dict[str, Any]] = []
+    for item in value[:8]:
+        if not isinstance(item, Mapping):
+            continue
+        preview = item.get("content_preview")
+        artifacts.append(
+            _drop_empty_mapping(
+                {
+                    "file_path": item.get("file_path"),
+                    "readable": item.get("readable"),
+                    "reason": item.get("reason"),
+                    "truncated": item.get("truncated"),
+                    "size_chars": item.get("size_chars"),
+                    "content_preview": _limit_string(preview, 1000),
+                    "python_api_summary": _limit_string(
+                        item.get("python_api_summary"),
+                        1200,
+                    ),
+                }
+            )
+        )
+    if len(value) > 8:
+        artifacts.append({"_truncated_items": len(value) - 8})
+    return [artifact for artifact in artifacts if artifact]
 
 
 def _code_artifact_metadata(artifact: Mapping[str, Any]) -> dict[str, Any]:
@@ -5348,6 +5504,14 @@ def _is_solver_design_support_module_target(target_file: Any) -> bool:
     )
 
 
+def _is_solver_design_algorithm_target(target_file: Any) -> bool:
+    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
+    return normalized in {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+    } or _is_solver_design_support_module_target(normalized)
+
+
 def _coerce_positive_int(value: Any, default: int) -> int:
     try:
         parsed = int(value)
@@ -5682,7 +5846,49 @@ def _algorithm_smoke_failure_detail(
         return None
     codes = ", ".join(_preview_codes(latest.structured_payload))
     suffix = f" ({codes})" if codes else ""
-    return f"algorithm smoke did not pass{suffix}"
+    runtime_detail = _algorithm_smoke_runtime_failure_text(
+        latest.structured_payload.get("runtime_smoke")
+    )
+    detail_suffix = f": {runtime_detail}" if runtime_detail else ""
+    return f"algorithm smoke did not pass{suffix}{detail_suffix}"
+
+
+def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    candidates: list[Any] = []
+    issues = value.get("issues")
+    if isinstance(issues, (list, tuple)):
+        candidates.extend(issues)
+    audit = value.get("runtime_audit_failure")
+    if isinstance(audit, Mapping):
+        candidates.extend(
+            [
+                audit.get("detail"),
+                audit.get("error_category"),
+                audit.get("solver_algorithm_events"),
+            ]
+        )
+    runtime = value.get("runtime")
+    if isinstance(runtime, Mapping):
+        candidates.extend(
+            [
+                runtime.get("solver_algorithm_events"),
+                (
+                    f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
+                    if runtime.get("solver_algorithm_errors") not in (None, "")
+                    else None
+                ),
+            ]
+        )
+    run = value.get("run")
+    if isinstance(run, Mapping):
+        candidates.extend([run.get("detail"), run.get("stderr")])
+    for candidate in candidates:
+        text = _limit_string(candidate, 360)
+        if text:
+            return text
+    return None
 
 
 def _self_check_required(context: ProposalToolContext | None) -> bool:

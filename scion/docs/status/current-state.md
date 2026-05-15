@@ -26,11 +26,20 @@ remain isolated. Candidates should study and modify the branch copy of the
 algorithm modules; `policies/solver_algorithm.py` remains as a compatibility
 hook only. APS `context.read_surface` now includes bounded support-module
 previews for `solver_design`, so hypothesis and code phases can inspect the
-actual algorithm internals rather than only the stable entrypoint. Code-phase
-reads of a specific `policies/baseline_modules/*.py` target are now narrowed
-to a target-only preview with a 6000-character code cap, preventing repeated
-module reads from consuming the terminal Contract/smoke reserve. The adapter
-and solver keep ownership of objective semantics,
+actual algorithm internals rather than only the stable entrypoint. For module
+targets, code-phase reads now keep the selected target narrow but also include
+prioritized support artifacts for `state.py`, the stable entrypoint, and
+sibling algorithm modules, with compact `python_api_summary` entries. This is
+required because the branch-owned solver uses `_Solution.routes` as `_Route`
+objects, not `list[list[int]]`; the code agent must see that object model
+before editing scheduler or local-search logic. Algorithm-smoke retry feedback
+now preserves concrete runtime/audit details such as failing case,
+`solver_algorithm_errors`, and compact `solver_algorithm_events` instead of
+only a generic failure code. Code-phase reads of a specific
+`policies/baseline_modules/*.py` target are narrowed to a target-only preview
+with a 6000-character code cap, preventing repeated module reads from
+consuming the terminal Contract/smoke reserve. The adapter and solver keep
+ownership of objective semantics,
 feasibility, parsing, seeds, protocol splits, time limits, and Decision rules.
 Runtime evidence for this boundary remains `solver_algorithm_*`, including
 selected path, phase runtime, movement telemetry, and recomputed objective
