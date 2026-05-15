@@ -47,6 +47,9 @@ from scion.proposal.agentic_session import (
     _compact_algorithm_smoke_observation,
     _compact_contract_preview_observation,
     _compact_feedback_observation_for_budget,
+    _algorithm_smoke_failure_detail,
+    _code_observation_prompt_payload,
+    _code_prompt_observations,
     _json_size,
     _observation_prompt_payload,
     _research_diagnosis_from_observations,
@@ -4163,6 +4166,60 @@ def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
         "runtime_audit_failure"
     ]["detail"]
     assert compact.structured_payload["compact_due_to_budget"] is True
+
+
+def test_code_prompt_observation_payload_preserves_algorithm_smoke_runtime_detail() -> None:
+    observation = ProposalObservation(
+        observation_id="smoke-runtime",
+        session_id="session-1",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-12",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload={
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "case": "controlled/data/canary.vrp",
+                "issues": ["solver runtime audit reported solver_algorithm_errors=1"],
+                "runtime_audit_failure": {
+                    "detail": "solver runtime audit reported solver_algorithm_errors=1",
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_events": [
+                        {
+                            "type": "error",
+                            "message": "NameError: DESTROY_RATIO_LOW is not defined",
+                        }
+                    ],
+                },
+                "runtime": {
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_events": [
+                        {
+                            "type": "error",
+                            "message": "NameError: DESTROY_RATIO_LOW is not defined",
+                        }
+                    ],
+                },
+                "run": {
+                    "success": True,
+                    "detail": "solver smoke completed",
+                    "stderr": "",
+                },
+            },
+        },
+    )
+
+    selected = _code_prompt_observations([observation])
+    compact = _code_observation_prompt_payload(selected[0])
+    detail = _algorithm_smoke_failure_detail([observation])
+    rendered = json.dumps(compact, sort_keys=True, default=str)
+
+    assert selected == [observation]
+    assert "DESTROY_RATIO_LOW" in rendered
+    assert detail is not None
+    assert "DESTROY_RATIO_LOW" in detail
 
 
 def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(

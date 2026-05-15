@@ -2581,19 +2581,30 @@ class AgenticProposalSession:
         repair_attempt: int = 1,
     ) -> PatchProposal:
         repair_context = dict(code_context)
-        repair_context["prior_code_failure"] = (
-            "Contract preview failed before workspace materialization: "
-            f"{failed_preview.summary}"
-        )
+        if failed_preview.tool_name == "proposal.algorithm_smoke":
+            detail = _algorithm_smoke_failure_detail([failed_preview])
+            repair_context["prior_code_failure"] = (
+                detail
+                or "Algorithm smoke failed before official screening: "
+                f"{failed_preview.summary}"
+            )
+        else:
+            repair_context["prior_code_failure"] = (
+                "Contract preview failed before workspace materialization: "
+                f"{failed_preview.summary}"
+            )
         repair_context["agentic_preview_feedback"] = _observation_prompt_payload(
             failed_preview
         )
         research_diagnosis = _research_diagnosis_from_observations(observations)
         if research_diagnosis:
             repair_context["agentic_research_diagnosis"] = research_diagnosis
+        prompt_observations = _code_prompt_observations(observations)
+        if failed_preview not in prompt_observations:
+            prompt_observations.append(failed_preview)
         repair_context["agentic_tool_observations"] = [
             _code_observation_prompt_payload(observation)
-            for observation in _code_prompt_observations(observations)
+            for observation in prompt_observations
         ]
         state.note(
             AgenticProposalPhase.DRAFT_PATCH,
@@ -4948,6 +4959,9 @@ def _code_prompt_observations(
         if observation.tool_name in _CODE_PROMPT_FEEDBACK_TOOLS:
             selected.append(observation)
             continue
+        if observation.tool_name == "proposal.algorithm_smoke":
+            selected.append(observation)
+            continue
         if observation.is_error:
             selected.append(observation)
     if latest_full_surface is not None:
@@ -5859,31 +5873,38 @@ def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
     candidates: list[Any] = []
     issues = value.get("issues")
     if isinstance(issues, (list, tuple)):
-        candidates.extend(issues)
-    audit = value.get("runtime_audit_failure")
-    if isinstance(audit, Mapping):
         candidates.extend(
-            [
-                audit.get("detail"),
-                audit.get("error_category"),
-                audit.get("solver_algorithm_events"),
-            ]
+            issue
+            for issue in issues
+            if "solver_algorithm_errors=" not in str(issue)
         )
     runtime = value.get("runtime")
     if isinstance(runtime, Mapping):
         candidates.extend(
             [
                 runtime.get("solver_algorithm_events"),
-                (
-                    f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
-                    if runtime.get("solver_algorithm_errors") not in (None, "")
-                    else None
-                ),
+            ]
+        )
+    audit = value.get("runtime_audit_failure")
+    if isinstance(audit, Mapping):
+        candidates.extend(
+            [
+                audit.get("solver_algorithm_events"),
+                audit.get("detail"),
+                audit.get("error_category"),
             ]
         )
     run = value.get("run")
     if isinstance(run, Mapping):
         candidates.extend([run.get("detail"), run.get("stderr")])
+    if isinstance(issues, (list, tuple)):
+        candidates.extend(issues)
+    if isinstance(runtime, Mapping):
+        candidates.append(
+            f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
+            if runtime.get("solver_algorithm_errors") not in (None, "")
+            else None
+        )
     for candidate in candidates:
         text = _limit_string(candidate, 360)
         if text:

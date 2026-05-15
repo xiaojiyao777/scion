@@ -52,7 +52,11 @@ a Contract nuance: complete scheduler replacements inherited an existing
 baseline exception message that referenced `instance.name`, and C9d treated it
 as a new case-specific branch. Contract preview is now champion-snapshot aware
 for C9d: exact inherited statement-level identity uses are not blockers, while
-new `instance.name` branches remain forbidden.
+new `instance.name` branches remain forbidden. The follow-up smoke advanced
+past that Contract blocker and failed in algorithm smoke; code-repair context
+now carries the algorithm-smoke observation itself, with compact
+`solver_algorithm_events`/stderr/run detail preferred over the generic
+`solver_algorithm_errors=1` summary.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
