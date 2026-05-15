@@ -516,11 +516,27 @@ retained concrete C4b/C9c failures, so the budget repair is validated. The new
 blocker is patch protocol expressiveness: the agent proposed
 `create_new/policies/baseline_modules/intensification.py`, but the intended
 algorithm change also required modifying scheduler/entrypoint code to call the
-new module. Current `PatchProposal` is single-file, so generated code either
+new module. Current `PatchProposal` was single-file, so generated code either
 created an inert module or switched to `baseline_algorithm.py` and violated
-the approved action/target. The next framework repair should support
-auditable multi-file `solver_design` patches, or reject create-new module
-hypotheses that require a separate integration edit before code generation.
+the approved action/target.
+
+Current repair: `PatchProposal` remains backward-compatible but now supports
+optional `additional_changes`. Contract validates the primary change against
+the approved hypothesis and validates every additional file independently
+inside the same selected research-surface boundary. Workspace materialization
+and `proposal.algorithm_smoke` apply all file changes together, so a
+`solver_design` candidate can create a module and wire it into
+`baseline_algorithm.py` or `baseline_modules/scheduler.py` without bypassing
+editable/frozen path checks, interface checks, import whitelist, C9/C9b/C9c,
+tainted smoke, Verification, Protocol, or Decision. Agentic output artifacts
+omit all additional code bodies while preserving path/action/body-size audit
+metadata.
+
+Focused validation after this repair: `310 passed` across APS proposal tools,
+research-surface Contract tests, workspace materialization, base Contract
+tests, and proposal validation. Full suite validation:
+`1672 passed, 1 skipped`. The next step is a 2-round Sonnet smoke; if it passes
+the framework gate, start a 6-round independent validation run.
 
 Latest code-generation timeout-policy diagnosis and repair:
 

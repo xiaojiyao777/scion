@@ -4201,6 +4201,19 @@ def _patch_artifact_payload(patch: PatchProposal) -> dict[str, Any]:
     if code_content is not None:
         payload["patch_body_omitted"] = True
         payload["patch_body_chars"] = len(str(code_content))
+    additional = []
+    for change in payload.get("additional_changes") or []:
+        if not isinstance(change, Mapping):
+            continue
+        compact = dict(change)
+        change_code = compact.pop("code_content", None)
+        if change_code is not None:
+            compact["patch_body_omitted"] = True
+            compact["patch_body_chars"] = len(str(change_code))
+        additional.append(compact)
+    if additional:
+        payload["additional_changes"] = additional
+        payload["additional_change_count"] = len(additional)
     return payload
 
 

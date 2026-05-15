@@ -66,11 +66,51 @@ class HypothesisProposal:
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
+class PatchFileChange:
+    file_path: str
+    action: Literal["modify", "create", "delete"]
+    code_content: str
+    test_hint: Optional[str] = None
+
+
+@dataclass
 class PatchProposal:
     file_path: str
     action: Literal["modify", "create", "delete"]
     code_content: str
     test_hint: Optional[str] = None
+    additional_changes: Tuple[PatchFileChange, ...] = ()
+
+    def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
+        return patch_file_changes(self)
+
+
+def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
+    """Return primary plus additional file changes for a patch proposal."""
+    changes = [
+        PatchFileChange(
+            file_path=patch.file_path,
+            action=patch.action,
+            code_content=patch.code_content,
+            test_hint=patch.test_hint,
+        )
+    ]
+    for change in patch.additional_changes or ():
+        if isinstance(change, PatchFileChange):
+            changes.append(change)
+        elif isinstance(change, dict):
+            changes.append(PatchFileChange(**change))
+        else:
+            changes.append(
+                PatchFileChange(
+                    file_path=getattr(change, "file_path"),
+                    action=getattr(change, "action"),
+                    code_content=getattr(change, "code_content"),
+                    test_hint=getattr(change, "test_hint", None),
+                )
+            )
+    return tuple(changes)
+
 
 # --- Results & Stats ---
 

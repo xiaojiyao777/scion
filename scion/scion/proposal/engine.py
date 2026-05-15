@@ -11,7 +11,7 @@ from typing import Any, Dict, Mapping
 
 from pydantic import ValidationError
 
-from scion.core.models import HypothesisProposal, PatchProposal
+from scion.core.models import HypothesisProposal, PatchFileChange, PatchProposal
 from scion.proposal.schemas import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
     PATCH_PROPOSAL_SCHEMA,
@@ -382,6 +382,15 @@ def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
         action=validated.action,  # type: ignore[arg-type]
         code_content=validated.code_content,
         test_hint=validated.test_hint or None,
+        additional_changes=tuple(
+            PatchFileChange(
+                file_path=change.file_path,
+                action=change.action,  # type: ignore[arg-type]
+                code_content=change.code_content,
+                test_hint=change.test_hint or None,
+            )
+            for change in validated.additional_changes
+        ),
     )
 
 
@@ -825,6 +834,10 @@ def _split_code_context(
         "search, acceptance, scheduler/runtime allocation, and telemetry. Keep "
         "`policies/baseline_algorithm.py::solve(...)` as the stable entrypoint "
         "unless the entrypoint itself must change.\n"
+        "- If the approved solver-design change requires more than one file "
+        "to be executable, keep the approved target as the primary patch and "
+        "put scheduler/entrypoint/module integration edits in "
+        "`additional_changes`. Do not leave a newly created module inert.\n"
         if is_solver_design_surface
         else ""
     )
@@ -932,6 +945,9 @@ def _split_code_context(
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
         f'  "action": "modify" | "create" | "delete",\n'
         f'  "code_content": "<complete file contents>",\n'
+        f'  "additional_changes": [{{"file_path": "<relative path>", '
+        f'"action": "modify" | "create" | "delete", '
+        f'"code_content": "<complete file contents>"}}],\n'
         f'  "test_hint": "<optional note, or null>"\n'
         f"}}\n"
     )

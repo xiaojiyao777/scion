@@ -18,6 +18,7 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
+    patch_file_changes,
 )
 from scion.contract.surface_interface import check_surface_interface
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
@@ -160,22 +161,59 @@ class ContractGate:
         selected_surface_name = (
             self._selected_surface_name(contract_hypothesis) or selected_surface
         )
+        for index, change in enumerate(patch_file_changes(patch)):
+            is_primary = index == 0
+            change_patch = PatchProposal(
+                file_path=change.file_path,
+                action=change.action,
+                code_content=change.code_content,
+                test_hint=change.test_hint,
+            )
+            change_checks = self._validate_patch_file_change(
+                change_patch,
+                contract_hypothesis if is_primary else None,
+                selected_surface=selected_surface_name,
+                enforce_hypothesis_target=is_primary,
+            )
+            if is_primary:
+                checks.extend(change_checks)
+            else:
+                checks.extend(
+                    _prefix_checks(change_checks, f"additional_changes[{index - 1}]")
+                )
 
+        return _build_result(checks)
+
+    def _validate_patch_file_change(
+        self,
+        patch: PatchProposal,
+        hypothesis: HypothesisProposal | HypothesisRecord | None,
+        *,
+        selected_surface: str | None,
+        enforce_hypothesis_target: bool,
+    ) -> List[CheckResult]:
+        checks: List[CheckResult] = []
         checks.append(self._c4_file_whitelist(patch))
         checks.append(self._c5_frozen_files(patch))
-        checks.append(self._c4b_patch_action_target(patch, contract_hypothesis))
-        # Short-circuit: no point running AST checks on a file we already rejected
+        checks.append(
+            self._c4b_patch_action_target(
+                patch,
+                hypothesis,
+                selected_surface=selected_surface,
+                enforce_hypothesis_target=enforce_hypothesis_target,
+            )
+        )
         if not all(check.passed for check in checks[-3:]):
-            return _build_result(checks)
+            return checks
 
         checks.append(self._c6_ast_syntax(patch))
         if not checks[-1].passed:
-            return _build_result(checks)
+            return checks
 
         checks.append(
             self._c7_interface_signature(
                 patch,
-                selected_surface=selected_surface_name,
+                selected_surface=selected_surface,
             )
         )
         checks.append(self._c8_import_whitelist(patch))
@@ -183,18 +221,17 @@ class ContractGate:
         checks.append(
             self._c9d_surface_instance_identity(
                 patch,
-                selected_surface=selected_surface_name,
+                selected_surface=selected_surface,
             )
         )
         checks.append(self._c9b_non_rng_random(patch))
         checks.append(
             self._c9c_complexity_bound(
                 patch,
-                selected_surface=selected_surface_name,
+                selected_surface=selected_surface,
             )
         )
-
-        return _build_result(checks)
+        return checks
 
     # ------------------------------------------------------------------
     # C1: JSON Schema (pydantic already validates, check required fields)
@@ -347,6 +384,9 @@ class ContractGate:
         self,
         patch: PatchProposal,
         hypothesis: HypothesisProposal | HypothesisRecord | None,
+        *,
+        selected_surface: str | None = None,
+        enforce_hypothesis_target: bool = True,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
         try:
@@ -356,7 +396,7 @@ class ContractGate:
 
         expected_patch_action = None
         surface = None
-        if hypothesis is not None:
+        if hypothesis is not None and enforce_hypothesis_target:
             expected_patch_action = _patch_action_for_hypothesis_action(
                 hypothesis.action
             )
@@ -393,7 +433,7 @@ class ContractGate:
                         f"hypothesis target_file '{target_rel}'",
                         t0,
                     )
-            selected_name = self._selected_surface_name(hypothesis)
+            selected_name = self._selected_surface_name(hypothesis) or selected_surface
             surface = self._surface_by_name(selected_name or "")
             if selected_name and self._research_surfaces() and surface is None:
                 return _cr(
@@ -406,6 +446,17 @@ class ContractGate:
                 )
             if surface is None:
                 surface = self._surface_for_hypothesis(hypothesis)
+        elif selected_surface:
+            surface = self._surface_by_name(selected_surface)
+            if self._research_surfaces() and surface is None:
+                return _cr(
+                    "C4b_patch_action_target",
+                    False,
+                    "heavy",
+                    f"selected research surface '{selected_surface}' is not declared "
+                    "in problem_spec.research_surfaces",
+                    t0,
+                )
 
         if surface is None:
             surface = self._surface_for_patch_path(file_rel)
@@ -1545,6 +1596,20 @@ def _cr(
         detail=detail,
         elapsed_ms=elapsed_ms,
     )
+
+
+def _prefix_checks(checks: List[CheckResult], prefix: str) -> List[CheckResult]:
+    return [
+        CheckResult(
+            name=f"{prefix}.{check.name}",
+            passed=check.passed,
+            severity=check.severity,
+            detail=check.detail,
+            elapsed_ms=check.elapsed_ms,
+            metadata=check.metadata,
+        )
+        for check in checks
+    ]
 
 
 def _static_literal_value(node: ast.AST | None) -> Any:

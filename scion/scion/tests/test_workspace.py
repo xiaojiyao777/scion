@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from scion.runtime.workspace import FrozenFileError, WorkspaceMaterializer
-from scion.core.models import ChampionState, PatchProposal
+from scion.core.models import ChampionState, PatchFileChange, PatchProposal
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +94,34 @@ class TestApplyPatch:
         )
         mat.apply_patch(ws, patch)
         assert (Path(ws) / "operators" / "sub" / "deep_op.py").exists()
+
+    def test_multi_file_patch_applies_all_changes(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+    ):
+        ws = mat.create_branch_workspace("b2multi", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/new_op.py",
+            action="create",
+            code_content="class NewOp:\n    pass\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="policies/helper.py",
+                    action="create",
+                    code_content="VALUE = 1\n",
+                ),
+            ),
+        )
+
+        mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "new_op.py").read_text(
+            encoding="utf-8"
+        ) == "class NewOp:\n    pass\n"
+        assert (Path(ws) / "policies" / "helper.py").read_text(
+            encoding="utf-8"
+        ) == "VALUE = 1\n"
 
     def test_delete_removes_file(self, mat: WorkspaceMaterializer, code_base: Path):
         ws = mat.create_branch_workspace("b3", str(code_base))

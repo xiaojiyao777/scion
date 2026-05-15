@@ -8,7 +8,12 @@ import stat
 from pathlib import Path
 from typing import Optional
 
-from scion.core.models import ChampionState, PatchProposal
+from scion.core.models import (
+    ChampionState,
+    PatchFileChange,
+    PatchProposal,
+    patch_file_changes,
+)
 from scion.core.paths import normalize_relative_patch_path
 
 
@@ -107,34 +112,38 @@ class WorkspaceMaterializer:
         """
         ws = Path(workspace).resolve()
 
+        for change in patch_file_changes(patch):
+            self._apply_file_change(ws, change)
+
+        return self.compute_code_hash(workspace)
+
+    def _apply_file_change(self, ws: Path, change: PatchFileChange) -> None:
         # Second-level frozen-file check (Contract Gate is the first)
-        file_rel = normalize_relative_patch_path(patch.file_path)
+        file_rel = normalize_relative_patch_path(change.file_path)
         if self._is_frozen(file_rel):
             raise FrozenFileError(
-                f"apply_patch refused: '{patch.file_path}' matches frozen patterns"
+                f"apply_patch refused: '{change.file_path}' matches frozen patterns"
             )
 
         target = (ws / file_rel).resolve()
         if not _is_relative_to(target, ws):
-            raise ValueError(f"patch file_path escapes workspace: {patch.file_path}")
+            raise ValueError(f"patch file_path escapes workspace: {change.file_path}")
 
-        if patch.action == "delete":
+        if change.action == "delete":
             if target.exists():
                 target.unlink()
         else:
             # "modify" or "create"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(patch.code_content, encoding="utf-8")
+            target.write_text(change.code_content, encoding="utf-8")
 
         # For new operator files, register them in registry.yaml so the solver picks them up
         if (
-            patch.action == "create"
+            change.action == "create"
             and file_rel.startswith("operators/")
             and file_rel.endswith(".py")
         ):
-            _update_registry(ws, file_rel, patch.code_content)
-
-        return self.compute_code_hash(workspace)
+            _update_registry(ws, file_rel, change.code_content)
 
     def create_champion_snapshot(
         self,

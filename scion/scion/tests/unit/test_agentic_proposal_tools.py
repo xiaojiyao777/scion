@@ -2477,6 +2477,67 @@ def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(
     assert after == before
 
 
+def test_algorithm_smoke_runs_multi_file_solver_design_patch(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    baseline_code = (_CVRP_ROOT / "policies" / "baseline_algorithm.py").read_text(
+        encoding="utf-8"
+    )
+    helper_code = (
+        "def intensify(solution, instance, context):\n"
+        "    context.record_phase('intensification', 0.0)\n"
+        "    return solution\n"
+    )
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                action="create_new",
+                target_file="policies/baseline_modules/intensification.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_modules/intensification.py",
+                "action": "create",
+                "code_content": helper_code,
+                "additional_changes": [
+                    {
+                        "file_path": "policies/baseline_algorithm.py",
+                        "action": "modify",
+                        "code_content": baseline_code,
+                    }
+                ],
+            },
+        },
+        context,
+    )
+
+    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    payload = observation.structured_payload
+    patch_payload = payload["patch"]
+    contract_checks = {
+        check["name"]: check["passed"] for check in patch_payload["checks"]
+    }
+
+    assert observation.is_error is False
+    assert payload["passed"] is True
+    assert patch_payload["patch"]["additional_change_count"] == 1
+    assert contract_checks["C4b_patch_action_target"] is True
+    assert (
+        contract_checks[
+            "additional_changes[0].C4b_patch_action_target"
+        ]
+        is True
+    )
+    assert payload["runtime_smoke"]["passed"] is True
+    assert payload["runtime_smoke"]["runtime_smoke_run"] is True
+    assert after == before
+
+
 def test_algorithm_smoke_materializes_readonly_champion_snapshot(
     tmp_path: Path,
 ) -> None:

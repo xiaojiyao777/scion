@@ -44,7 +44,7 @@ class HypothesisProposalInput(BaseModel):
         return v
 
 
-class PatchProposalInput(BaseModel):
+class PatchFileChangeInput(BaseModel):
     file_path: str
     action: str
     code_content: str
@@ -63,6 +63,27 @@ class PatchProposalInput(BaseModel):
         if v not in ("modify", "create", "delete"):
             raise ValueError(f"action must be modify/create/delete, got '{v}'")
         return v
+
+
+class PatchProposalInput(PatchFileChangeInput):
+    additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def additional_changes_have_unique_paths(self) -> "PatchProposalInput":
+        paths = [
+            self.file_path,
+            *[change.file_path for change in self.additional_changes],
+        ]
+        normalized = [str(path).strip() for path in paths]
+        duplicates = sorted(
+            {path for path in normalized if normalized.count(path) > 1}
+        )
+        if duplicates:
+            raise ValueError(
+                "additional_changes must not repeat file_path values: "
+                + ", ".join(duplicates)
+            )
+        return self
 
 
 class ToolSelectionInput(BaseModel):
@@ -178,6 +199,30 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
         },
         "code_content": {"type": "string"},
         "test_hint": {"type": ["string", "null"]},
+        "additional_changes": {
+            "type": "array",
+            "description": (
+                "Optional extra complete-file changes that are required for the "
+                "approved algorithm change to be executable. Use this for "
+                "solver_design module additions that also need scheduler or "
+                "entrypoint integration. Each change is independently checked "
+                "by Contract and applied in the same tainted candidate workspace."
+            ),
+            "items": {
+                "type": "object",
+                "required": ["file_path", "action", "code_content"],
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["modify", "create", "delete"],
+                    },
+                    "code_content": {"type": "string"},
+                    "test_hint": {"type": ["string", "null"]},
+                },
+                "additionalProperties": False,
+            },
+        },
     },
 }
 
@@ -398,12 +443,22 @@ Produce the complete file content that implements the hypothesis.
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - If action is "delete", set code_content to an empty string ""
+- If the approved algorithm change requires extra files to be executable, put
+  them in `additional_changes`; each item must contain complete file contents
+  and will be independently checked.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
   "file_path": "<relative path within workspace, e.g. operators/my_operator.py>",
   "action": "modify" | "create" | "delete",
   "code_content": "<complete file contents as a single string>",
+  "additional_changes": [
+    {{
+      "file_path": "<relative path for required integration edit>",
+      "action": "modify" | "create" | "delete",
+      "code_content": "<complete file contents>"
+    }}
+  ],
   "test_hint": "<optional brief testing note, or null>"
 }}
 """
@@ -443,6 +498,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
   "file_path": "<same relative path as original>",
   "action": "modify" | "create" | "delete",
   "code_content": "<complete corrected file contents>",
+  "additional_changes": [],
   "test_hint": "<optional note, or null>"
 }}
 """

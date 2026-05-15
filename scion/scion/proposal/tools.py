@@ -29,8 +29,10 @@ from scion.core.models import (
     ContractResult,
     ExperimentStage,
     HypothesisProposal,
+    PatchFileChange,
     PatchProposal,
     StepRecord,
+    patch_file_changes,
 )
 from scion.core.path_match import normalize_relative_glob_pattern, segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
@@ -1518,7 +1520,9 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                 contract_payload = _contract_result_payload(
                     result,
                     detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
-                    max_checks=_PREVIEW_MAX_CHECKS,
+                    max_checks=_preview_max_checks_for_patch(
+                        patch_preview["patch_object"]
+                    ),
                 )
                 patch_preview["contract"] = _contract_summary_payload(result)
                 patch_preview["checks"] = contract_payload["checks"]
@@ -1644,7 +1648,9 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                 contract_payload = _contract_result_payload(
                     result,
                     detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
-                    max_checks=_PREVIEW_MAX_CHECKS,
+                    max_checks=_preview_max_checks_for_patch(
+                        patch_preview["patch_object"]
+                    ),
                 )
                 patch_preview["contract"] = _contract_summary_payload(result)
                 patch_preview["checks"] = contract_payload["checks"]
@@ -1733,8 +1739,10 @@ def _runtime_algorithm_smoke_preview(
     surface_name = str(selected_surface or "").strip()
     if surface_name != "solver_design":
         return None
-    patch_path = _normalize_rel_path(patch.file_path)
-    if not _is_solver_design_runtime_patch_path(patch_path):
+    patch_paths = [
+        _normalize_rel_path(change.file_path) for change in patch_file_changes(patch)
+    ]
+    if not any(_is_solver_design_runtime_patch_path(path) for path in patch_paths):
         return None
 
     base_workspace = _runtime_smoke_base_workspace(context)
@@ -1876,15 +1884,23 @@ def _apply_patch_to_runtime_smoke_workspace(
     workspace: Path,
     patch: PatchProposal,
 ) -> None:
-    rel = normalize_relative_patch_path(patch.file_path)
+    for change in patch_file_changes(patch):
+        _apply_file_change_to_runtime_smoke_workspace(workspace, change)
+
+
+def _apply_file_change_to_runtime_smoke_workspace(
+    workspace: Path,
+    change: PatchFileChange,
+) -> None:
+    rel = normalize_relative_patch_path(change.file_path)
     target = (workspace / rel).resolve(strict=False)
     target.relative_to(workspace.resolve(strict=False))
-    action = str(patch.action or "modify")
+    action = str(change.action or "modify")
     if action in {"modify", "add", "create", "create_new"}:
         _ensure_runtime_smoke_path_writable(target.parent)
         target.parent.mkdir(parents=True, exist_ok=True)
         _ensure_runtime_smoke_path_writable(target)
-        target.write_text(str(patch.code_content or ""), encoding="utf-8")
+        target.write_text(str(change.code_content or ""), encoding="utf-8")
     elif action in {"remove", "delete"}:
         if target.exists():
             _ensure_runtime_smoke_path_writable(target.parent)
@@ -2057,6 +2073,15 @@ def _patch_from_input(value: PatchProposalInput) -> PatchProposal:
         action=value.action,  # type: ignore[arg-type]
         code_content=value.code_content,
         test_hint=value.test_hint or None,
+        additional_changes=tuple(
+            PatchFileChange(
+                file_path=change.file_path,
+                action=change.action,  # type: ignore[arg-type]
+                code_content=change.code_content,
+                test_hint=change.test_hint or None,
+            )
+            for change in value.additional_changes
+        ),
     )
 
 
@@ -2153,12 +2178,21 @@ def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
             "errors": exc.errors(include_url=False),
         }
     patch = _patch_from_input(validated)
-    path_error = _patch_path_error(patch.file_path)
+    path_errors = []
+    for index, change in enumerate(patch_file_changes(patch)):
+        path_error = _patch_path_error(change.file_path)
+        if path_error is not None:
+            loc = ("file_path",) if index == 0 else (
+                "additional_changes",
+                index - 1,
+                "file_path",
+            )
+            path_errors.append({"loc": loc, "msg": path_error})
     patch_summary = _patch_preview_summary(patch)
-    if path_error is not None:
+    if path_errors:
         return {
             "passed": False,
-            "errors": [{"loc": ("file_path",), "msg": path_error}],
+            "errors": path_errors,
             "patch": patch_summary,
         }
     return {
@@ -2374,6 +2408,10 @@ def _contract_result_payload(
     }
 
 
+def _preview_max_checks_for_patch(patch: PatchProposal) -> int:
+    return _PREVIEW_MAX_CHECKS * max(1, len(patch_file_changes(patch)))
+
+
 def _contract_summary_payload(result: ContractResult) -> dict[str, Any]:
     failed_checks = [
         str(_attr(check, "name"))
@@ -2536,6 +2574,10 @@ def _surface_permission_summary(
 
 def _patch_preview_summary(patch: PatchProposal) -> dict[str, Any]:
     code_content = str(patch.code_content or "")
+    additional = [
+        _patch_file_change_preview_summary(change)
+        for change in patch_file_changes(patch)[1:]
+    ]
     return {
         "file_path": patch.file_path,
         "action": patch.action,
@@ -2543,7 +2585,21 @@ def _patch_preview_summary(patch: PatchProposal) -> dict[str, Any]:
         "code_digest": hashlib.sha256(code_content.encode("utf-8")).hexdigest(),
         "functions": _module_level_functions(code_content),
         "classes": _module_classes(code_content),
+        "additional_change_count": len(additional),
+        "additional_changes": additional,
         "checks": [],
+    }
+
+
+def _patch_file_change_preview_summary(change: PatchFileChange) -> dict[str, Any]:
+    code_content = str(change.code_content or "")
+    return {
+        "file_path": change.file_path,
+        "action": change.action,
+        "code_char_count": len(code_content),
+        "code_digest": hashlib.sha256(code_content.encode("utf-8")).hexdigest(),
+        "functions": _module_level_functions(code_content),
+        "classes": _module_classes(code_content),
     }
 
 
