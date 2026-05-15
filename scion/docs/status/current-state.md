@@ -499,8 +499,28 @@ Current repair: code-phase reads for solver-design support modules use
 `section=target_preview`, cap code preview at 6000 chars, and count that
 module-target read as sufficient so the deterministic fallback does not read
 the same module again. The full Scion suite passes after this repair
-(`1670 passed, 1 skipped`); rerun the 2-round Sonnet smoke before any longer
-validation.
+(`1670 passed, 1 skipped`).
+
+Follow-up smoke after this repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-solver-design-module-budget-repair-sonnet-2r-20260515T144636Z
+rounds_requested=2
+screened_experiments=0
+stopped_reason=max_rounds_exhausted
+last_result=code generation failed
+```
+
+The previous `result_too_large` failure did not recur. Contract preview
+retained concrete C4b/C9c failures, so the budget repair is validated. The new
+blocker is patch protocol expressiveness: the agent proposed
+`create_new/policies/baseline_modules/intensification.py`, but the intended
+algorithm change also required modifying scheduler/entrypoint code to call the
+new module. Current `PatchProposal` is single-file, so generated code either
+created an inert module or switched to `baseline_algorithm.py` and violated
+the approved action/target. The next framework repair should support
+auditable multi-file `solver_design` patches, or reject create-new module
+hypotheses that require a separate integration edit before code generation.
 
 Latest code-generation timeout-policy diagnosis and repair:
 
