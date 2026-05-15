@@ -2383,7 +2383,7 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
                 "action": "modify",
                 "code_content": (
                     "def solve(instance, rng, time_limit_sec, context):\n"
-                    "    solution = context.nearest_neighbor()\n"
+                    "    solution = context.make_solution(context.nearest_neighbor())\n"
                     "    context.record_iteration('seed', 1)\n"
                     "    context.record_move('seed', attempted=1, accepted=1)\n"
                     "    return solution\n"
@@ -2399,12 +2399,56 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     assert payload["passed"] is True
     assert payload["non_promotional"] is True
     assert payload["tainted_debug"] is True
-    assert payload["workspace_materialized"] is False
+    assert payload["workspace_materialized"] is True
     assert payload["verification_run"] is False
     assert payload["protocol_run"] is False
     assert payload["decision_run"] is False
     assert payload["problem_preview"]["passed"] is True
+    assert payload["runtime_smoke"]["passed"] is True
+    assert payload["runtime_smoke"]["runtime_smoke_run"] is True
+    assert payload["runtime_smoke"]["runtime"]["solver_algorithm_path"] == (
+        "policies/baseline_algorithm.py"
+    )
     assert after == before
+
+
+def test_algorithm_smoke_rejects_solver_design_runtime_error(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    solution = context.nearest_neighbor()\n"
+                    "    if time_limit_sec < 4:\n"
+                    "        raise RuntimeError('runtime smoke only')\n"
+                    "    return solution\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["passed"] is False
+    assert payload["workspace_materialized"] is True
+    assert payload["runtime_smoke"]["passed"] is False
+    assert "solver_algorithm_errors" in rendered
+    assert "runtime smoke only" in rendered
+    assert "policies/baseline_algorithm.py" in rendered
 
 
 def test_algorithm_smoke_rejects_preferred_solver_design_baseline_wrapper(

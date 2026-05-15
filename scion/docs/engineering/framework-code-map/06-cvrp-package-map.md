@@ -494,8 +494,9 @@ and campaign summaries through the generic selected-surface runtime summary.
 The `solver_design` surface declares required runtime fields around the direct
 algorithm subject: selected path, load/active/error status, elapsed runtime,
 phase runtime, solution validity/routes/objective/distance/fleet violation,
-search iterations, move attempts, accepted moves, phase delta telemetry,
-baseline-call count, stop reason, and compact event details. Selected-surface
+search iterations, move attempts, accepted moves, improving moves, neutral
+accepted moves, phase delta telemetry, baseline-call count, stop reason, and
+compact event details. Selected-surface
 audit fails closed when `solver_algorithm_errors` is positive or required
 fields are missing/empty. When `solver_design` is selected,
 `ExperimentProtocol` propagates the surface to candidate and champion solver

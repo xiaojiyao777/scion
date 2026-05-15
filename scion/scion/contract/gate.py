@@ -857,6 +857,7 @@ class ContractGate:
         if surface_error is not None:
             return _cr("C9c_complexity_bound", False, "heavy", surface_error, t0)
         itertools_aliases = _collect_itertools_aliases(tree)
+        runtime_guard_names = _collect_runtime_guard_function_names(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -887,6 +888,7 @@ class ContractGate:
             if isinstance(node, ast.While) and not _is_bounded_while(
                 node,
                 scale_names,
+                runtime_guard_names,
             ):
                 violations.append(_uncapped_while_violation(node))
 
@@ -1825,30 +1827,49 @@ def _is_problem_scale_expr(node: ast.AST, scale_names: frozenset[str]) -> bool:
     return False
 
 
-def _is_bounded_while(node: ast.While, scale_names: frozenset[str]) -> bool:
+def _is_bounded_while(
+    node: ast.While,
+    scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
     if isinstance(node.test, ast.Constant) and node.test.value is True:
         return (
-            _while_body_has_bounded_break(node)
-            or _while_body_has_counter_bounded_break(node, scale_names)
+            _while_body_has_bounded_break(node, runtime_guard_names)
+            or _while_body_has_counter_bounded_break(
+                node,
+                scale_names,
+                runtime_guard_names,
+            )
             or _while_body_has_collection_progress_break(node)
         )
     if isinstance(node.test, ast.BoolOp):
         return any(
             _compare_has_small_constant(value)
-            or _compare_has_incrementing_counter_guard(value, node, scale_names)
-            or _compare_has_runtime_guard(value)
+            or _compare_has_incrementing_counter_guard(
+                value,
+                node,
+                scale_names,
+                runtime_guard_names,
+            )
+            or _compare_has_runtime_guard(value, runtime_guard_names)
             or _condition_collection_is_shrunk(value, node)
             for value in node.test.values
-        ) or _while_body_has_bounded_break(node)
+        ) or _while_body_has_bounded_break(node, runtime_guard_names)
     if isinstance(node.test, ast.Compare):
         return (
             _compare_has_small_constant(node.test)
-            or _compare_has_incrementing_counter_guard(node.test, node, scale_names)
-            or _compare_has_runtime_guard(node.test)
-        ) or _while_body_has_bounded_break(node)
+            or _compare_has_incrementing_counter_guard(
+                node.test,
+                node,
+                scale_names,
+                runtime_guard_names,
+            )
+            or _compare_has_runtime_guard(node.test, runtime_guard_names)
+        ) or _while_body_has_bounded_break(node, runtime_guard_names)
     return (
-        _condition_collection_is_shrunk(node.test, node)
-        or _while_body_has_bounded_break(node)
+        _mentions_runtime_guard(node.test, runtime_guard_names)
+        or _condition_collection_is_shrunk(node.test, node)
+        or _while_body_has_bounded_break(node, runtime_guard_names)
     )
 
 
@@ -1895,6 +1916,7 @@ def _compare_has_incrementing_counter_guard(
     test: ast.AST,
     node: ast.While,
     scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
 ) -> bool:
     if not isinstance(test, ast.Compare):
         return False
@@ -1909,13 +1931,23 @@ def _compare_has_incrementing_counter_guard(
             for other_index, other in enumerate(expressions)
             if other_index != index
         ]
-        if any(_is_bounded_limit_expr(other, scale_names) for other in other_exprs):
+        if any(
+            _is_bounded_limit_expr(other, scale_names)
+            or _mentions_runtime_guard(other, runtime_guard_names)
+            for other in other_exprs
+        ):
             return True
     return False
 
 
-def _compare_has_runtime_guard(node: ast.AST) -> bool:
-    return isinstance(node, ast.Compare) and _mentions_runtime_guard(node)
+def _compare_has_runtime_guard(
+    node: ast.AST,
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
+    return isinstance(node, ast.Compare) and _mentions_runtime_guard(
+        node,
+        runtime_guard_names,
+    )
 
 
 def _body_increments_counter(body: list[ast.stmt], name: str) -> bool:
@@ -1965,13 +1997,19 @@ def _is_bounded_limit_expr(expr: ast.AST, scale_names: frozenset[str]) -> bool:
     return False
 
 
-def _while_body_has_bounded_break(node: ast.While) -> bool:
+def _while_body_has_bounded_break(
+    node: ast.While,
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
     for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
         if not isinstance(child, ast.If):
             continue
         if not _contains_break(child.body):
             continue
-        if _compare_has_small_constant(child.test) or _mentions_runtime_guard(child.test):
+        if _compare_has_small_constant(child.test) or _mentions_runtime_guard(
+            child.test,
+            runtime_guard_names,
+        ):
             return True
     return False
 
@@ -1979,13 +2017,19 @@ def _while_body_has_bounded_break(node: ast.While) -> bool:
 def _while_body_has_counter_bounded_break(
     node: ast.While,
     scale_names: frozenset[str],
+    runtime_guard_names: frozenset[str] = frozenset(),
 ) -> bool:
     for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
         if not isinstance(child, ast.If):
             continue
         if not _contains_break(child.body):
             continue
-        if _compare_has_incrementing_counter_guard(child.test, node, scale_names):
+        if _compare_has_incrementing_counter_guard(
+            child.test,
+            node,
+            scale_names,
+            runtime_guard_names,
+        ):
             return True
     return False
 
@@ -2021,13 +2065,38 @@ def _uncapped_while_violation(node: ast.While) -> str:
     return f"uncapped while loop at line {line}"
 
 
-def _mentions_runtime_guard(node: ast.AST) -> bool:
+def _collect_runtime_guard_function_names(tree: ast.AST) -> frozenset[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+            if (
+                isinstance(child, ast.Return)
+                and child.value is not None
+                and _mentions_runtime_guard(child.value)
+            ):
+                names.add(node.name)
+                break
+    return frozenset(names)
+
+
+def _mentions_runtime_guard(
+    node: ast.AST,
+    runtime_guard_names: frozenset[str] = frozenset(),
+) -> bool:
     for child in ast.walk(node):
         if isinstance(child, ast.Attribute) and child.attr in {
             "remaining_time",
             "elapsed_ms",
         }:
             return True
+        if isinstance(child, ast.Call):
+            func = child.func
+            if isinstance(func, ast.Name) and func.id in runtime_guard_names:
+                return True
+            if isinstance(func, ast.Attribute) and func.attr in runtime_guard_names:
+                return True
         if isinstance(child, ast.Name) and child.id in {
             "remaining_time",
             "elapsed_ms",

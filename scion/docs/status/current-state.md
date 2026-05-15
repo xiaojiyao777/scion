@@ -254,10 +254,13 @@ inside Scion branch snapshots.
 Code phase now has an explicit debug/effectiveness gate:
 `proposal.algorithm_smoke`. After static Contract preview passes, APS runs a
 tainted, non-promotional synthetic CVRP smoke by calling the candidate
-`solve(...)`. A failed smoke can feed one bounded repair attempt before the
-patch enters official evaluation. This smoke does not write workspaces and
-does not count as promotion evidence; final validation remains Contract,
-Verification, Protocol, and Decision.
+`solve(...)`. For `solver_design` patches to `policies/baseline_algorithm.py`
+or `policies/solver_algorithm.py`, APS now materializes a temporary tainted
+workspace, applies the patch, and runs the configured canary case under the
+selected `solver_design` runtime. A failed smoke can feed one bounded repair
+attempt before the patch enters official evaluation. This smoke does not write
+candidate/champion workspaces and does not count as promotion evidence; final
+validation remains Contract, Verification, Protocol, and Decision.
 
 The same smoke exposed the next direction-level blocker. `solver_design` is a
 full-algorithm hook, but the agent is still being induced to treat the
@@ -423,6 +426,9 @@ first by the singleton execution file `policies/baseline_algorithm.py`, with
   `context.objective`, `context.is_valid`, `context.remaining_time`,
   `context.elapsed_ms`, `context.record_phase`, `context.record_iteration`,
   `context.record_move`, and `context.set_stop_reason`;
+- `context.nearest_neighbor(...)` returns a `CvrpSolution`; use it directly as
+  a candidate solution. `context.make_solution(...)` accepts route iterables
+  and is idempotent for existing solution objects;
 - compatibility helper: `context.baseline(...)` may exist for older
   `solver_algorithm.py` experiments, but preferred
   `baseline_algorithm.py` candidates must not call it;
@@ -434,8 +440,8 @@ first by the singleton execution file `policies/baseline_algorithm.py`, with
   `solver_algorithm_active`, `solver_algorithm_errors`,
   `solver_algorithm_elapsed_ms`, `solver_algorithm_phase_runtime_ms`,
   solution validity/routes/objective/distance/fleet violation,
-  search-iteration/move-attempt/accepted-move counters, phase delta telemetry,
-  and stop reason.
+  search-iteration/move-attempt/accepted-move counters, improving-vs-neutral
+  accepted-move counters, phase delta telemetry, and stop reason.
 
 Current repair: `policies/baseline_algorithm.py` is now the active
 solver-design algorithm subject when `solver_design` is selected. It contains a
@@ -540,6 +546,30 @@ This confirms the framework path is now past the LLM timeout and
 algorithm-smoke observation-budget blockers at short-run scale. The remaining
 negative signal is solver quality: generated solver-design candidates reach
 screening but lose to the champion.
+
+Latest runtime-smoke/C9c repair validation:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-runtime-smoke-audit-repair-sonnet-2r-20260515T113941Z
+rounds=2
+stopped_reason=max_rounds_exhausted
+screened_experiments=0
+round_1=full baseline_algorithm.py rewrite; failed old C9c before smoke
+round_2=provider 500 during code generation
+post_repair_replay=round_1 repaired patch passed Contract C9c and proposal.algorithm_smoke runtime canary
+```
+
+The replay matters more than the noisy 2-round run: after C9c learned to
+recognize local runtime-guard helpers such as `while within_budget():`, the
+Round 1 repaired patch passed static Contract preview and the new tainted
+runtime smoke. The canary run loaded
+`policies/baseline_algorithm.py`, produced a valid solution, recorded
+`solver_algorithm_errors=0`, and split activity into
+`solver_algorithm_improving_moves=1` and
+`solver_algorithm_neutral_accepted_moves=14679`.
+
+Detailed analysis:
+[`v0.4-runtime-smoke-audit-c9c-repair-20260515.md`](../experiments/v0.4/v0.4-runtime-smoke-audit-c9c-repair-20260515.md)
 
 Claude Code comparison: the next deeper design step is a Scion-native
 continuous tool-use loop. Scion should keep permission, taint, exposure,

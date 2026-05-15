@@ -907,6 +907,9 @@ research_surfaces:
         - solver_algorithm_search_iterations
         - solver_algorithm_move_attempts
         - solver_algorithm_accepted_moves
+        - solver_algorithm_improving_moves
+        - solver_algorithm_neutral_accepted_moves
+        - solver_algorithm_best_improving_moves
         - solver_algorithm_best_delta
         - solver_algorithm_phase_delta_sum
         - solver_algorithm_phase_best_delta
@@ -961,7 +964,11 @@ research_surfaces:
         context.set_stop_reason(reason). context.objective returns a
         mapping with fleet_violation and total_distance and also compares
         lexicographically as (fleet_violation, total_distance); explicit field
-        access or context.objective_key is preferred. Runtime is part of the
+        access or context.objective_key is preferred. context.nearest_neighbor
+        returns a CvrpSolution, not a route iterable; use it directly as a
+        candidate solution. context.make_solution accepts route iterables and
+        is idempotent for an existing CvrpSolution or equivalent object.
+        Runtime is part of the
         algorithm objective: use finite max_rounds/max_passes/top_k caps and
         poll context.remaining_time() in seconds or context.remaining_time_ms()
         in milliseconds; importing time is allowed only for monotonic timing,
@@ -972,6 +979,9 @@ research_surfaces:
         collection condition whose collection is visibly shrunk in the loop.
         Avoid while True unless the loop has a visible counter-bound break or
         directly shrinks a finite collection on each non-break iteration.
+        A local helper such as within_budget() may guard a while loop only
+        when its return expression directly references context.remaining_time()
+        or context.elapsed_ms().
         Return only a solution or a routes mapping. Do not return a plan
         dictionary. The checked-in file contains an active branch-owned
         ALNS/VNS-style algorithm body adapted from the repo-local CVRP solver
@@ -979,7 +989,10 @@ research_surfaces:
         Telemetry must record real search effort and accepted/best-improving
         movement when the algorithm runs route edits, destroy/repair,
         recombination, perturbation, or acceptance. Telemetry can name phases
-        but must not force the algorithm into predeclared components.
+        but must not force the algorithm into predeclared components. Accepted
+        moves are not automatically improvements; pass positive delta or
+        best_improved=True only for objective-improving moves so the audit can
+        distinguish improving and neutral accepted moves.
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, or benchmark data. Do not import or monkeypatch solver.py,

@@ -625,6 +625,14 @@ class CvrpAdapter:
                 "total_distance. It also compares lexicographically as "
                 "(fleet_violation, total_distance), but explicit field access "
                 "or context.objective_key is preferred.\n"
+                "- context.nearest_neighbor(...) returns a CvrpSolution, not "
+                "route tuples. Use it directly as a candidate solution. "
+                "context.make_solution accepts route iterables and is "
+                "idempotent for an existing CvrpSolution or equivalent object.\n"
+                "- Accepted moves are not automatically improvements. Pass "
+                "positive delta or best_improved=True to context.record_move "
+                "only for objective-improving moves, so telemetry separates "
+                "improving from neutral accepted moves.\n"
                 "- Runtime is part of the algorithm objective. Use finite "
                 "max_rounds/max_passes/top_k caps and poll "
                 "context.remaining_time() in seconds or "
@@ -638,7 +646,10 @@ class CvrpAdapter:
                 "collection condition whose collection is visibly shrunk in "
                 "the loop. Avoid while True unless it has a visible "
                 "counter-bound break or directly shrinks a finite collection "
-                "on each non-break iteration.\n"
+                "on each non-break iteration. A local helper such as "
+                "within_budget() may guard a while loop only when its return "
+                "expression directly references context.remaining_time() or "
+                "context.elapsed_ms().\n"
                 "- Implement a real algorithm body. For the preferred "
                 "baseline_algorithm.py target, do not call context.baseline; "
                 "study and change the controlled ALNS/VNS-style body in the "
@@ -1808,6 +1819,9 @@ class _PreviewSolverAlgorithmContext:
         return 0
 
     def make_solution(self, routes: Any) -> CvrpSolution:
+        existing = _coerce_preview_solution(routes)
+        if existing is not None:
+            return existing
         return _coerce_preview_solution({"routes": routes}) or CvrpSolution(routes=())
 
     def is_valid(self, solution: Any) -> bool:

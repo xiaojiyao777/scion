@@ -1450,6 +1450,38 @@ def test_solver_algorithm_exception_surfaces_runtime_audit_error(
     )
 
 
+def test_solver_design_baseline_algorithm_exception_reports_actual_policy_path(
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace(tmp_path)
+    _write_operator_case(workspace)
+    (workspace / "policies" / "baseline_algorithm.py").write_text(
+        "\n".join(
+            [
+                "ENABLE_BASELINE_ALGORITHM = True",
+                "",
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    raise RuntimeError('baseline body failed')",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    raw = _run_solver(
+        workspace,
+        "data/operator_case.json",
+        selected_surface="solver_design",
+    )
+    runtime = raw["runtime"]
+
+    assert runtime["solver_algorithm_errors"] == 1
+    assert runtime["solver_algorithm_events"][0]["policy"] == (
+        "policies/baseline_algorithm.py"
+    )
+    assert "baseline body failed" in runtime["solver_algorithm_events"][0]["detail"]
+
+
 def test_enabled_solver_algorithm_returns_valid_solution_and_skips_legacy_loop(
     tmp_path: Path,
 ) -> None:
@@ -1544,6 +1576,9 @@ def test_enabled_baseline_algorithm_is_preferred_over_legacy_solver_hook(
     assert runtime["solver_algorithm_solution_valid"] is True
     assert runtime["solver_algorithm_stop_reason"] == "preferred_completed"
     assert runtime["solver_algorithm_search_iterations"] == 1
+    assert runtime["solver_algorithm_accepted_moves"] == 1
+    assert runtime["solver_algorithm_neutral_accepted_moves"] == 1
+    assert runtime["solver_algorithm_improving_moves"] == 0
     assert "legacy solver hook should not run" not in json.dumps(
         runtime["solver_algorithm_events"]
     )
@@ -1583,6 +1618,8 @@ def test_solver_algorithm_context_accepts_baseline_alias_and_objective_compariso
     assert runtime["solver_algorithm_search_iterations"] == 1
     assert runtime["solver_algorithm_move_attempts"] == 1
     assert runtime["solver_algorithm_accepted_moves"] == 0
+    assert runtime["solver_algorithm_neutral_accepted_moves"] == 0
+    assert runtime["solver_algorithm_improving_moves"] == 0
     assert runtime["solver_algorithm_phase_improvement_counts"]["baseline_probe"] == 0
     assert runtime["solver_algorithm_solution_valid"] is True
     assert "baseline_alias" in runtime["solver_algorithm_phase_runtime_ms"]

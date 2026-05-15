@@ -8574,6 +8574,9 @@ def _solver_algorithm_defaults(
         "solver_algorithm_search_iterations": 0,
         "solver_algorithm_move_attempts": 0,
         "solver_algorithm_accepted_moves": 0,
+        "solver_algorithm_improving_moves": 0,
+        "solver_algorithm_neutral_accepted_moves": 0,
+        "solver_algorithm_best_improving_moves": 0,
         "solver_algorithm_best_delta": 0.0,
         "solver_algorithm_phase_delta_sum": {"none": 0.0},
         "solver_algorithm_phase_best_delta": {"none": 0.0},
@@ -8647,9 +8650,12 @@ def _record_solver_algorithm_event(
     events = audit.setdefault("solver_algorithm_events", [])
     if len(events) >= 20:
         return
+    policy_path = str(
+        audit.get("solver_algorithm_path") or _SOLVER_ALGORITHM_RELATIVE_PATH
+    )
     events.append(
         {
-            "policy": _SOLVER_ALGORITHM_RELATIVE_PATH,
+            "policy": policy_path,
             "status": status,
             "detail": detail,
         }
@@ -8711,6 +8717,9 @@ class _SolverAlgorithmContext:
         return int((time.perf_counter() - self._start_time) * 1000)
 
     def make_solution(self, routes: Any) -> CvrpSolution:
+        existing = _coerce_solution(routes)
+        if existing is not None:
+            return existing
         return CvrpSolution(
             routes=tuple(tuple(int(customer) for customer in route) for route in routes)
         )
@@ -8894,6 +8903,23 @@ class _SolverAlgorithmContext:
             counts.setdefault(phase_name, 0)
         if accepts > 0 and (delta_value > 0.0 or best_improved):
             counts[phase_name] = _as_nonnegative_int(counts.get(phase_name)) + accepts
+            self._audit["solver_algorithm_improving_moves"] = _as_nonnegative_int(
+                self._audit.get("solver_algorithm_improving_moves")
+            ) + accepts
+            if best_improved:
+                self._audit["solver_algorithm_best_improving_moves"] = (
+                    _as_nonnegative_int(
+                        self._audit.get("solver_algorithm_best_improving_moves")
+                    )
+                    + accepts
+                )
+        elif accepts > 0:
+            self._audit["solver_algorithm_neutral_accepted_moves"] = (
+                _as_nonnegative_int(
+                    self._audit.get("solver_algorithm_neutral_accepted_moves")
+                )
+                + accepts
+            )
         self._audit["solver_algorithm_best_delta"] = max(
             float(self._audit.get("solver_algorithm_best_delta") or 0.0),
             delta_value,

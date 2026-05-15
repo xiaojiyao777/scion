@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
@@ -61,6 +63,8 @@ _PREVIEW_FAILURE_REASON_CHARS = 800
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
+_ALGORITHM_SMOKE_TIME_LIMIT_SEC = 3
+_ALGORITHM_SMOKE_TIMEOUT_SEC = 10
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -1577,6 +1581,7 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             "patch": None,
             "static_contract": None,
             "problem_preview": None,
+            "runtime_smoke": None,
             "non_promotional": True,
             "tainted_debug": True,
             "workspace_materialized": False,
@@ -1658,6 +1663,21 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                     patch_preview["passed"] = bool(patch_preview["passed"]) and bool(
                         problem_preview.get("passed")
                     )
+                    if patch_preview["passed"]:
+                        smoke_preview = _runtime_algorithm_smoke_preview(
+                            context,
+                            patch_preview["patch_object"],
+                            selected_surface,
+                        )
+                        if smoke_preview is not None:
+                            payload["runtime_smoke"] = smoke_preview
+                            patch_preview["runtime_smoke"] = smoke_preview
+                            payload["workspace_materialized"] = bool(
+                                smoke_preview.get("workspace_materialized")
+                            )
+                            patch_preview["passed"] = bool(
+                                patch_preview["passed"]
+                            ) and bool(smoke_preview.get("passed"))
                 elif result.passed:
                     patch_preview["passed"] = False
                     patch_preview["needs_hypothesis"] = True
@@ -1673,7 +1693,11 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             context,
             observation_type="algorithm_smoke",
             summary=(
-                "Algorithm smoke passed on tainted synthetic preview."
+                (
+                    "Algorithm smoke passed on tainted runtime preview."
+                    if payload.get("runtime_smoke")
+                    else "Algorithm smoke passed on tainted synthetic preview."
+                )
                 if payload["passed"]
                 else (
                     "Algorithm smoke found issues: "
@@ -1685,6 +1709,286 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
         )
+
+
+def _runtime_algorithm_smoke_preview(
+    context: ProposalToolContext,
+    patch: PatchProposal,
+    selected_surface: str | None,
+) -> dict[str, Any] | None:
+    surface_name = str(selected_surface or "").strip()
+    if surface_name != "solver_design":
+        return None
+    patch_path = _normalize_rel_path(patch.file_path)
+    if patch_path not in {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+    }:
+        return None
+
+    base_workspace = _runtime_smoke_base_workspace(context)
+    canary_rel = str(_attr(context.problem_spec, "canary_case_path", "") or "").strip()
+    if base_workspace is None:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "issues": ["No runnable base workspace found for solver_design smoke."],
+        }
+    if not canary_rel:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "issues": ["No canary_case_path configured for solver_design smoke."],
+        }
+
+    with tempfile.TemporaryDirectory(prefix="scion_algorithm_smoke_") as tmp:
+        workspace = Path(tmp) / "workspace"
+        try:
+            shutil.copytree(
+                base_workspace,
+                workspace,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                ),
+            )
+            _apply_patch_to_runtime_smoke_workspace(workspace, patch)
+            instance_path = _resolve_smoke_instance_path(
+                workspace=workspace,
+                base_workspace=base_workspace,
+                canary_rel=canary_rel,
+            )
+            if instance_path is None:
+                return {
+                    "passed": False,
+                    "skipped": False,
+                    "workspace_materialized": True,
+                    "runtime_smoke_run": False,
+                    "issues": [f"Canary case not found: {canary_rel}"],
+                }
+            registry_path = workspace / "registry.yaml"
+            if not registry_path.exists():
+                registry_path = workspace / "registry.json"
+            raw, run_payload = _run_solver_design_smoke(
+                workspace=workspace,
+                instance_path=instance_path,
+                registry_path=registry_path,
+                selected_surface=surface_name,
+            )
+        except Exception as exc:
+            return {
+                "passed": False,
+                "skipped": False,
+                "workspace_materialized": True,
+                "runtime_smoke_run": False,
+                "issues": [f"runtime smoke setup failed: {type(exc).__name__}: {exc}"],
+            }
+
+    if raw is None:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": True,
+            "runtime_smoke_run": True,
+            "issues": [run_payload["detail"]],
+            "run": run_payload,
+        }
+
+    audit_failure = _runtime_smoke_audit_failure(
+        raw,
+        context=context,
+        selected_surface=surface_name,
+    )
+    runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
+    runtime_payload = _compact_runtime_smoke_payload(runtime)
+    passed = audit_failure is None
+    issues = (
+        []
+        if passed
+        else [str(audit_failure.get("detail") or "runtime audit failed")]
+    )
+    payload = {
+        "passed": passed,
+        "skipped": False,
+        "workspace_materialized": True,
+        "runtime_smoke_run": True,
+        "selected_surface": surface_name,
+        "case": canary_rel,
+        "seed": 77,
+        "time_limit_sec": _ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+        "objective": raw.get("objective") if isinstance(raw, Mapping) else None,
+        "feasible": raw.get("feasible") if isinstance(raw, Mapping) else None,
+        "runtime": runtime_payload,
+        "issues": issues,
+        "run": run_payload,
+    }
+    if audit_failure is not None:
+        payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
+            audit_failure
+        )
+    return payload
+
+
+def _runtime_smoke_base_workspace(context: ProposalToolContext) -> Path | None:
+    champion_path = _attr(context.champion, "code_snapshot_path")
+    if champion_path:
+        path = Path(str(champion_path)).expanduser().resolve(strict=False)
+        if path.is_dir() and (path / "solver.py").is_file():
+            return path
+    root_dir = _attr(context.problem_spec, "root_dir")
+    if root_dir:
+        path = Path(str(root_dir)).expanduser().resolve(strict=False)
+        if path.is_dir() and (path / "solver.py").is_file():
+            return path
+    return None
+
+
+def _apply_patch_to_runtime_smoke_workspace(
+    workspace: Path,
+    patch: PatchProposal,
+) -> None:
+    rel = normalize_relative_patch_path(patch.file_path)
+    target = (workspace / rel).resolve(strict=False)
+    target.relative_to(workspace.resolve(strict=False))
+    action = str(patch.action or "modify")
+    if action in {"modify", "add", "create", "create_new"}:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(str(patch.code_content or ""), encoding="utf-8")
+    elif action in {"remove", "delete"}:
+        if target.exists():
+            target.unlink()
+    else:
+        raise ValueError(f"unsupported patch action for smoke: {action}")
+
+
+def _resolve_smoke_instance_path(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    canary_rel: str,
+) -> Path | None:
+    rel = Path(canary_rel)
+    candidates = []
+    if rel.is_absolute():
+        candidates.append(rel)
+    else:
+        candidates.append(workspace / rel)
+        candidates.append(base_workspace / rel)
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def _run_solver_design_smoke(
+    *,
+    workspace: Path,
+    instance_path: Path,
+    registry_path: Path,
+    selected_surface: str,
+) -> tuple[Mapping[str, Any] | None, dict[str, Any]]:
+    from scion.runtime.runner import ResourceLimits
+    from scion.runtime.subprocess_runner import LocalSubprocessRunner
+
+    runner = LocalSubprocessRunner(
+        ResourceLimits(timeout_sec=_ALGORITHM_SMOKE_TIMEOUT_SEC, memory_mb=2048)
+    )
+    result = runner.run_solver(
+        workdir=str(workspace),
+        instance_path=str(instance_path),
+        seed=77,
+        time_limit_sec=_ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+        registry_path=str(registry_path),
+        selected_surface=selected_surface,
+    )
+    run_payload = {
+        "success": result.success,
+        "exit_code": result.exit_code,
+        "elapsed_ms": result.elapsed_ms,
+        "error_category": result.error_category,
+        "stdout": _limit_text(result.stdout or "", 800),
+        "stderr": _limit_text(result.stderr or "", 800),
+    }
+    if not result.success or result.output_path is None:
+        detail = result.stderr.strip() if result.stderr else "solver run failed"
+        run_payload["detail"] = detail
+        return None, run_payload
+    try:
+        with open(result.output_path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as exc:
+        run_payload["detail"] = f"could not read solver output: {exc}"
+        return None, run_payload
+    run_payload["detail"] = "solver smoke completed"
+    return raw, run_payload
+
+
+def _runtime_smoke_audit_failure(
+    raw: Mapping[str, Any],
+    *,
+    context: ProposalToolContext,
+    selected_surface: str,
+) -> Mapping[str, Any] | None:
+    from scion.runtime.audit import runtime_audit_failure_from_raw
+
+    problem_spec = _problem_spec_for_runtime_audit(context.problem_spec)
+    return runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
+
+
+def _problem_spec_for_runtime_audit(problem_spec: Any) -> Any:
+    if str(_attr(problem_spec, "spec_version", "") or "") == "problem-v1":
+        return legacy_problem_spec_from_v1(problem_spec)
+    return problem_spec
+
+
+def _compact_runtime_smoke_payload(runtime: Any) -> dict[str, Any]:
+    if not isinstance(runtime, Mapping):
+        return {}
+    keys = (
+        "solver_algorithm_path",
+        "solver_algorithm_loaded",
+        "solver_algorithm_active",
+        "solver_algorithm_errors",
+        "solver_algorithm_events",
+        "solver_algorithm_elapsed_ms",
+        "solver_algorithm_solution_valid",
+        "solver_algorithm_total_distance",
+        "solver_algorithm_fleet_violation",
+        "solver_algorithm_search_iterations",
+        "solver_algorithm_move_attempts",
+        "solver_algorithm_accepted_moves",
+        "solver_algorithm_improving_moves",
+        "solver_algorithm_neutral_accepted_moves",
+        "solver_algorithm_best_improving_moves",
+        "solver_algorithm_best_delta",
+        "solver_algorithm_phase_delta_sum",
+        "solver_algorithm_phase_best_delta",
+        "solver_algorithm_phase_improvement_counts",
+        "solver_algorithm_stop_reason",
+    )
+    return {key: runtime.get(key) for key in keys if key in runtime}
+
+
+def _compact_runtime_audit_failure(value: Mapping[str, Any]) -> dict[str, Any]:
+    keys = (
+        "error_category",
+        "detail",
+        "failed_runtime_fields",
+        "solver_algorithm_errors",
+        "solver_algorithm_events",
+    )
+    return {key: value.get(key) for key in keys if key in value}
 
 
 def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal:

@@ -2036,6 +2036,34 @@ def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_pattern
     assert c9c.passed
 
 
+def test_cvrp_solver_algorithm_complexity_allows_local_runtime_guard_helper() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(legacy)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    routes = [list(instance.customer_ids)]\n"
+            "    iteration = 0\n"
+            "    while _within_budget(context):\n"
+            "        iteration += 1\n"
+            "        context.record_iteration('search', 1)\n"
+            "        if iteration >= 10:\n"
+            "            return context.make_solution(routes)\n"
+            "    return context.make_solution(routes)\n"
+            "\n"
+            "def _within_budget(context):\n"
+            "    return context.remaining_time() > 0.05\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch, selected_surface="solver_design")
+
+    assert c9c.passed
+
+
 def test_cvrp_solver_algorithm_complexity_rejects_unbounded_improvement_flag_loop() -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     legacy = legacy_problem_spec_from_v1(spec_v1)
@@ -2053,6 +2081,32 @@ def test_cvrp_solver_algorithm_complexity_rejects_unbounded_improvement_flag_loo
             "            if len(route) > 3:\n"
             "                improved = True\n"
             "    return context.make_solution(routes)\n"
+        ),
+    )
+
+    c9c = gate._c9c_complexity_bound(patch, selected_surface="solver_design")
+
+    assert not c9c.passed
+    assert "uncapped while loop" in c9c.detail
+
+
+def test_cvrp_solver_algorithm_complexity_rejects_fake_runtime_guard_helper() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    gate = ContractGate(legacy)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    routes = [list(instance.customer_ids)]\n"
+            "    while always(context):\n"
+            "        pass\n"
+            "    return context.make_solution(routes)\n"
+            "\n"
+            "def always(context):\n"
+            "    context.remaining_time()\n"
+            "    return True\n"
         ),
     )
 

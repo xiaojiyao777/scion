@@ -101,6 +101,9 @@ Important current interpretation:
   `nearest_neighbor`, `make_solution`, `objective`,
   `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
   `record_phase`, `record_iteration`, `record_move`, and `set_stop_reason`.
+  `nearest_neighbor(...)` returns a `CvrpSolution`; use it directly as a
+  candidate solution. `make_solution(...)` accepts route iterables and is
+  idempotent for an existing solution object.
   `context.baseline` remains available only for the older compatibility hook;
   preferred `baseline_algorithm.py` candidates must study and modify the
   controlled algorithm body instead of calling `context.baseline`.
@@ -115,7 +118,9 @@ Important current interpretation:
 - Runtime evidence for this boundary is `solver_algorithm_*`, including
   loaded/active/errors, elapsed time, phase runtime, solution validity,
   route count, objective, total distance, fleet violation, search iterations,
-  move attempts, accepted moves, phase delta telemetry, and stop reason.
+  move attempts, accepted moves, improving moves, neutral accepted moves,
+  phase delta telemetry, and stop reason. `accepted_moves` is search activity,
+  not proof of objective improvement.
 - Runtime is an optimization signal under protocol control. A candidate that
   ties the lexicographic objective, has complete runtime evidence, has no
   runtime failures, and meets `runtime.tie_speedup_ratio` can progress through
@@ -215,10 +220,19 @@ Important current interpretation:
   still cannot write workspaces, read validation/frozen raw metrics, or change
   objective/constraint semantics.
 - Code phase also runs `proposal.algorithm_smoke` after a static Contract
-  preview passes. This is a tainted, non-promotional synthetic CVRP smoke that
-  calls the candidate `solve(...)` before the patch enters official
+  preview passes. This is tainted, non-promotional debug evidence. For
+  approved `solver_design` patches to `policies/baseline_algorithm.py` or
+  `policies/solver_algorithm.py`, the smoke also applies the patch in a
+  temporary workspace and runs the configured canary case before official
   evaluation. Its only purpose is debugging/repair; promotion evidence still
   comes exclusively from Contract, Verification, Protocol, and Decision.
+- C9c complexity preview now recognizes a local helper such as
+  `while within_budget():` only when that helper's return expression directly
+  references runtime guards like `context.remaining_time()` or
+  `context.elapsed_ms()`. True unbounded `while` loops and unbounded
+  improvement-flag loops still fail closed. This is needed for complete
+  algorithm-body work, where budget checks are often factored into helper
+  functions.
 - The latest 5-round exploratory `solver_design` run exposed a preview-time
   hang after successful code generation. Treat this as a boundary-control
   issue, not a reason to return to componentized policy exposure.
