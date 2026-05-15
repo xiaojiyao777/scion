@@ -13,6 +13,7 @@ from scion.proposal.llm_client import (
     LLMTimeoutError,
     _parse_retry_after,
 )
+from scion.proposal.engine import CreativeLayer
 from scion.proposal.mock_client import MockLLMClient
 from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA, PATCH_PROPOSAL_SCHEMA
 
@@ -278,3 +279,87 @@ def test_openai_client_receives_sdk_retry_limit():
         client._get_openai_client()
     fake_openai.OpenAI.assert_called_once()
     assert fake_openai.OpenAI.call_args.kwargs["max_retries"] == 0
+
+
+def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):
+    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
+
+    client = LLMClient(timeout_sec=60, max_retries=2)
+    policy = client.resolve_request_policy(
+        tool={"name": "generate_patch", "input_schema": {"required": []}},
+    )
+
+    assert policy["request_kind"] == "code"
+    assert policy["timeout_sec"] == 180.0
+    assert policy["max_retries"] == 0
+
+
+def test_code_tool_policy_respects_kind_specific_env(monkeypatch):
+    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
+    monkeypatch.setenv("SCION_LLM_CODE_TIMEOUT_SEC", "240")
+    monkeypatch.setenv("SCION_LLM_CODE_MAX_RETRIES", "1")
+
+    client = LLMClient(timeout_sec=60, max_retries=2)
+    policy = client.resolve_request_policy(request_kind="code")
+
+    assert policy["timeout_sec"] == 240.0
+    assert policy["max_retries"] == 1
+
+
+def test_code_tool_timeout_does_not_duplicate_same_prompt_by_default(monkeypatch):
+    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
+
+    client = LLMClient(timeout_sec=60, max_retries=2)
+    tool = {"name": "generate_patch", "input_schema": {"required": []}}
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.side_effect = LLMTimeoutError("slow")
+
+    with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
+        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
+            with pytest.raises(LLMRetryExhaustedError) as exc_info:
+                client.call_with_tool("prompt", tool)
+
+    assert "1 attempt(s)" in str(exc_info.value)
+    assert fake_anthropic_client.messages.create.call_count == 1
+    assert fake_anthropic_client.messages.create.call_args.kwargs["timeout"] == 180.0
+    mock_sleep.assert_not_called()
+
+
+def test_creative_trace_records_llm_request_policy(tmp_path):
+    class PolicyClient:
+        def resolve_request_policy(self, *, request_kind=None, tool=None):
+            return {
+                "request_kind": request_kind,
+                "timeout_sec": 180.0,
+                "max_retries": 0,
+                "sdk_max_retries": 0,
+            }
+
+        def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+            return {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
+            }
+
+    creative = CreativeLayer(
+        PolicyClient(),
+        model="claude-test",
+        trace_dir=str(tmp_path),
+    )
+
+    creative.generate_code({"change_locus": "solver_design"})
+
+    traces = list(tmp_path.glob("*.json"))
+    assert len(traces) == 1
+    payload = json.loads(traces[0].read_text())
+    assert payload["request_kind"] == "code"
+    assert payload["request_policy"]["timeout_sec"] == 180.0
+    assert payload["request_policy"]["max_retries"] == 0

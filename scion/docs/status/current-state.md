@@ -269,7 +269,12 @@ Operational cost/control note: real-cost smoke and validation runs should use
 Opus round. Provider SDK retries are disabled by default in `LLMClient` so
 Scion's own traced retry loop is the single audited retry layer; tune with
 `SCION_LLM_MAX_RETRIES` and only opt into SDK retries with
-`SCION_SDK_MAX_RETRIES` deliberately.
+`SCION_SDK_MAX_RETRIES` deliberately. Code/fix tool calls are now treated as
+long non-streaming generation requests: by default they use
+`timeout_sec=max(SCION_LLM_TIMEOUT_SEC, 180)` and `max_retries=0`, with
+per-kind overrides through `SCION_LLM_CODE_TIMEOUT_SEC`,
+`SCION_LLM_CODE_MAX_RETRIES`, `SCION_LLM_FIX_TIMEOUT_SEC`, and
+`SCION_LLM_FIX_MAX_RETRIES`.
 
 ## Current Engineering State
 
@@ -443,46 +448,71 @@ is still a later gate under the existing `solver_algorithm_*` evidence.
 
 ## Latest Experiment
 
-Latest stable branch-owned algorithm-subject smoke:
+Latest code-generation timeout-policy diagnosis and repair:
 
 ```text
-run_root=/home/clawd/research/scion-experiments/v04-sdk-retry-control-sonnet-1r-20260514T174450Z
+analyzed_run_root=/home/clawd/research/scion-experiments/v04-sdk-retry-control-sonnet-8r-20260514T181734Z
 model=claude-sonnet-4-6
 problem=cvrp
 protocol=formal
-rounds_requested=1
+rounds_requested=8
 time_limit_sec=60
 agentic_session_timeout_sec=1800
-status=max_rounds_exhausted at 2026-05-14T18:13Z
-n_experiments=1
+status=max_rounds_exhausted
 ```
 
-Purpose: validate the deeper repair, not promotion quality. The expected
-signal is that free APS selects `solver_design`, targets the branch copy of
-`policies/baseline_algorithm.py`, uses code-phase tool access to inspect the
-problem object and algorithm body, passes Contract plus
-`proposal.algorithm_smoke`, and enters official Verification as a direct
-algorithm-body change.
+Trace analysis corrected the prior interpretation. The 8-round run had
+57/57 successful tool-selection calls and 5/5 successful hypothesis calls, but
+only 2/15 code-generation calls succeeded. The 13 failed code traces all
+clustered around `125.1s`, matching `60s client timeout + 5s backoff + 60s
+client timeout` under `SCION_LLM_MAX_RETRIES=1`. Successful code calls were
+not materially smaller; one succeeded in about `50s` and one in about `114s`.
+The primary issue was therefore a non-streaming client timeout policy mismatch,
+not prompt size alone.
 
-Result: the Sonnet run completed the full 1-round path. The first code
-request timed out after two Scion-visible attempts with provider SDK retries
-disabled, then APS used one compact semantic timeout retry and succeeded. The
-completed patch targeted `policies/baseline_algorithm.py`, passed Contract
-preview, materialized a branch workspace, passed Verification, and screened
-16/16 formal candidate/champion pairs with 16/16 `solver_algorithm_*` runtime
-observations. Decision abandoned the branch by
-`SCREENING_FAIL_WIN_RATE` (`win_rate=0.0`, median pair delta `-132.5`), which
-is a normal solver-quality failure rather than a framework failure.
+Repair: `LLMClient` now resolves request policy by request kind. `code` and
+`fix` tool calls default to a longer `180s` timeout and zero same-prompt
+LLMClient retries, while APS keeps its single semantic compact timeout retry.
+`CreativeLayer` writes the effective request policy into each LLM trace for
+auditability. Streaming remains a useful follow-up but is not required for the
+first repair validation.
 
-This is now stable enough to launch an independent 8-round Sonnet validation
-with `SCION_SDK_MAX_RETRIES=0`, `SCION_LLM_MAX_RETRIES=1`, and
-`SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp`.
+Validation smoke:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-codegen-timeout-policy-sonnet-2r-20260515T011055Z
+rounds=2
+stopped_reason=max_rounds_exhausted
+code_trace_durations=121.68s, 125.41s, 143.88s, 144.25s
+code_trace_policy=timeout_sec=180.0, max_retries=0
+```
+
+All four code-generation traces returned successfully and would have been
+prematurely killed by the old 60s non-streaming timeout. Round 1 reached
+screening and was normally abandoned by `SCREENING_FAIL_WIN_RATE`; round 2
+generated code successfully but failed closed at Contract preview on
+`C9c_complexity_bound`, which is a generated-algorithm boundary/quality issue
+rather than an LLM timeout issue.
+
+Claude Code comparison: the next deeper design step is a Scion-native
+continuous tool-use loop. Scion should keep permission, taint, exposure,
+transcript, and promotion gates, but expose controlled proposal tools as native
+LLM tools throughout hypothesis/code work. `generate_patch` should become the
+code-phase finalizer after the agent has had a bounded chance to inspect
+surface/branch/memory/feedback, draft, run Contract preview and algorithm
+smoke, and repair from returned observations.
 
 Detailed analysis:
-[`v0.4-branch-algorithm-subject-sdk-retry-sonnet-1r-20260514.md`](../experiments/v0.4/v0.4-branch-algorithm-subject-sdk-retry-sonnet-1r-20260514.md)
+[`v0.4-codegen-timeout-policy-repair-20260515.md`](../experiments/v0.4/v0.4-codegen-timeout-policy-repair-20260515.md)
 
 Earlier same-day notes:
 
+- `/home/clawd/research/scion-experiments/v04-sdk-retry-control-sonnet-1r-20260514T174450Z`
+  completed the full 1-round branch-owned algorithm-subject path. It targeted
+  `policies/baseline_algorithm.py`, passed Contract, Verification, and 16/16
+  formal screening pairs, then was normally abandoned by
+  `SCREENING_FAIL_WIN_RATE`. This validated framework stability but not solver
+  quality.
 - `/home/clawd/research/scion-experiments/v04-bounded-while-repair-smoke-opus-1r-dataroot-20260514T172756Z`
   also completed the full chain with 16/16 valid pairs and 16/16
   `solver_algorithm_*` runtime observations after a compact timeout retry,

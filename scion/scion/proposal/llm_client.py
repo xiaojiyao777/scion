@@ -27,13 +27,49 @@ _DEFAULT_TIMEOUT_SEC = 60.0
 _DEFAULT_MAX_RETRIES = 2
 _DEFAULT_SDK_MAX_RETRIES = 0
 _DEFAULT_MAX_TOKENS = 16384
+_DEFAULT_CODE_TIMEOUT_SEC = 180.0
+_DEFAULT_CODE_MAX_RETRIES = 0
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
+_CODE_REQUEST_KINDS = {"code", "fix"}
+_TOOL_REQUEST_KIND_BY_NAME = {
+    "generate_patch": "code",
+    "fix_patch": "fix",
+    "generate_hypothesis": "hypothesis",
+    "plan_proposal_tool_call": "tool_selection",
+}
 
 
 def _is_openai_model(model: str) -> bool:
     """Non-Anthropic models use the OpenAI-compatible API via aihubmix."""
     return not any(model.startswith(p) for p in _ANTHROPIC_MODEL_PREFIXES)
+
+
+def _normalize_request_kind(
+    *,
+    request_kind: str | None = None,
+    tool: Dict[str, Any] | None = None,
+) -> str | None:
+    if request_kind:
+        return str(request_kind).strip().lower() or None
+    if not tool:
+        return None
+    name = tool.get("name")
+    if not name and isinstance(tool.get("function"), dict):
+        name = tool["function"].get("name")
+    if name is None:
+        return None
+    return _TOOL_REQUEST_KIND_BY_NAME.get(str(name), None)
+
+
+def _request_kind_env_key(request_kind: str | None) -> str | None:
+    if not request_kind:
+        return None
+    cleaned = "".join(
+        char.upper() if char.isalnum() else "_"
+        for char in str(request_kind)
+    ).strip("_")
+    return cleaned or None
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +120,18 @@ class LLMClient:
       (does *not* count against ``max_retries``).
     - Provider SDK retries are disabled by default so retries remain visible in
       Scion traces instead of being multiplied inside the SDK.
+    - Code/fix tool calls default to a longer timeout and zero same-prompt
+      LLMClient retries; APS owns semantic retry for code generation.
 
     Config resolution (in order):
     1. Constructor arguments
     2. Environment variables: SCION_API_KEY, SCION_BASE_URL, SCION_MODEL
-    3. Fallback env vars: ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL
-    4. Defaults: aihubmix endpoint, claude-sonnet-4-6
+    3. Timeout/retry env vars: SCION_LLM_TIMEOUT_SEC,
+       SCION_LLM_MAX_RETRIES, SCION_LLM_CODE_TIMEOUT_SEC,
+       SCION_LLM_CODE_MAX_RETRIES, SCION_LLM_FIX_TIMEOUT_SEC,
+       SCION_LLM_FIX_MAX_RETRIES, SCION_SDK_MAX_RETRIES
+    4. Fallback env vars: ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL
+    5. Defaults: aihubmix endpoint, claude-sonnet-4-6
     """
 
     def __init__(
@@ -236,21 +278,30 @@ class LLMClient:
         model: str | None = None,
         system_blocks: "list[dict] | None" = None,
         priority: str = "foreground",
+        request_kind: str | None = None,
     ) -> Dict[str, Any]:
         """Call LLM with tool_use and return the tool input dict directly.
 
         Supports both Anthropic (Claude) and OpenAI (GPT) models.
         """
         effective_model = model or self.model
+        policy = self.resolve_request_policy(request_kind=request_kind, tool=tool)
+        max_retries = policy["max_retries"]
+        timeout_sec = policy["timeout_sec"]
         attempt = 0
         last_error: Exception | None = None
         current_max_tokens = self.max_tokens
         truncation_retries = 0
 
-        while attempt <= self.max_retries:
+        while attempt <= max_retries:
             try:
                 result, truncated = self._tool_call_once(
-                    prompt, tool, effective_model, system_blocks, current_max_tokens,
+                    prompt,
+                    tool,
+                    effective_model,
+                    system_blocks,
+                    current_max_tokens,
+                    timeout_sec,
                 )
                 if truncated:
                     if truncation_retries < MAX_TRUNCATION_RETRIES:
@@ -278,9 +329,9 @@ class LLMClient:
 
             except LLMFormatError as exc:
                 last_error = exc
-                if attempt < self.max_retries:
+                if attempt < max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
-                    logger.warning("Tool call format error (attempt %d/%d): %s", attempt + 1, self.max_retries, exc)
+                    logger.warning("Tool call format error (attempt %d/%d): %s", attempt + 1, max_retries, exc)
                     time.sleep(delay)
                 attempt += 1
 
@@ -293,9 +344,9 @@ class LLMClient:
 
             except LLMTimeoutError as exc:
                 last_error = exc
-                if attempt < self.max_retries:
+                if attempt < max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
-                    logger.warning("Tool call timeout (attempt %d/%d)", attempt + 1, self.max_retries)
+                    logger.warning("Tool call timeout (attempt %d/%d)", attempt + 1, max_retries)
                     time.sleep(delay)
                 attempt += 1
 
@@ -315,15 +366,55 @@ class LLMClient:
                     raise
                 except LLMError as le:
                     last_error = le
-                if attempt < self.max_retries:
+                if attempt < max_retries:
                     delay = _BACKOFF_DELAYS[min(attempt, len(_BACKOFF_DELAYS) - 1)]
                     time.sleep(delay)
                 attempt += 1
 
         raise LLMRetryExhaustedError(
-            f"Tool call failed after {self.max_retries + 1} attempt(s). "
+            f"Tool call failed after {max_retries + 1} attempt(s). "
             f"Last error: {last_error}"
         ) from last_error
+
+    def resolve_request_policy(
+        self,
+        *,
+        request_kind: str | None = None,
+        tool: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Return the effective timeout/retry policy for one LLM request.
+
+        Code-generation requests are long non-streaming tool calls.  By default
+        they get a longer client timeout and no same-prompt transport retry, so
+        Scion does not abandon requests that often finish just after 60 seconds
+        and then duplicate them in the provider backend.
+        """
+        normalized = _normalize_request_kind(request_kind=request_kind, tool=tool)
+        timeout_sec = self.timeout_sec
+        max_retries = self.max_retries
+
+        if normalized in _CODE_REQUEST_KINDS:
+            timeout_sec = max(self.timeout_sec, _DEFAULT_CODE_TIMEOUT_SEC)
+            max_retries = _DEFAULT_CODE_MAX_RETRIES
+
+        env_key = _request_kind_env_key(normalized)
+        if env_key:
+            timeout_sec = _env_float(
+                f"SCION_LLM_{env_key}_TIMEOUT_SEC",
+                timeout_sec,
+            )
+            max_retries = _env_int(
+                f"SCION_LLM_{env_key}_MAX_RETRIES",
+                max_retries,
+            )
+
+        return {
+            "request_kind": normalized or "default",
+            "timeout_sec": timeout_sec,
+            "max_retries": max_retries,
+            "sdk_max_retries": self.sdk_max_retries,
+            "max_tokens": self.max_tokens,
+        }
 
     def _tool_call_once(
         self,
@@ -332,14 +423,29 @@ class LLMClient:
         model: str,
         system_blocks: "list[dict] | None",
         max_tokens: int,
+        timeout_sec: float,
     ) -> tuple[Dict[str, Any], bool]:
         """Execute one tool call. Returns (result_dict, was_truncated)."""
         if _is_openai_model(model):
-            return self._tool_call_once_openai(prompt, tool, model, system_blocks, max_tokens)
-        return self._tool_call_once_anthropic(prompt, tool, model, system_blocks, max_tokens)
+            return self._tool_call_once_openai(
+                prompt,
+                tool,
+                model,
+                system_blocks,
+                max_tokens,
+                timeout_sec,
+            )
+        return self._tool_call_once_anthropic(
+            prompt,
+            tool,
+            model,
+            system_blocks,
+            max_tokens,
+            timeout_sec,
+        )
 
     def _tool_call_once_anthropic(
-        self, prompt, tool, model, system_blocks, max_tokens,
+        self, prompt, tool, model, system_blocks, max_tokens, timeout_sec,
     ) -> tuple[Dict[str, Any], bool]:
         client = self._get_anthropic_client()
         kwargs: Dict[str, Any] = {
@@ -348,7 +454,7 @@ class LLMClient:
             "tools": [tool],
             "tool_choice": {"type": "tool", "name": tool["name"]},
             "messages": [{"role": "user", "content": prompt}],
-            "timeout": self.timeout_sec,
+            "timeout": timeout_sec,
         }
         if system_blocks:
             kwargs["system"] = system_blocks
@@ -379,7 +485,7 @@ class LLMClient:
         )
 
     def _tool_call_once_openai(
-        self, prompt, tool, model, system_blocks, max_tokens,
+        self, prompt, tool, model, system_blocks, max_tokens, timeout_sec,
     ) -> tuple[Dict[str, Any], bool]:
         client = self._get_openai_client()
         # Merge system blocks into user prompt to avoid incompatibility
@@ -407,10 +513,11 @@ class LLMClient:
 
         response = client.chat.completions.create(
             model=model,
-            max_completion_tokens=max_tokens,            messages=messages,
+            max_completion_tokens=max_tokens,
+            messages=messages,
             tools=[openai_tool],
             tool_choice={"type": "function", "function": {"name": tool_name}},
-            timeout=self.timeout_sec,
+            timeout=timeout_sec,
         )
 
         usage = response.usage

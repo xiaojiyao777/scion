@@ -139,6 +139,11 @@ class CreativeLayer:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         trace = _TraceWriter(self._trace_dir)
+        request_policy = _client_request_policy(
+            self._client,
+            request_kind=request_kind,
+            tool=tool,
+        )
         trace_path = trace.write_start(
             request_kind=request_kind,
             model=self._model,
@@ -146,6 +151,7 @@ class CreativeLayer:
             prompt=prompt,
             system_blocks=system_blocks,
             context=context,
+            request_policy=request_policy,
         )
         try:
             raw = self._client.call_with_tool(
@@ -176,6 +182,7 @@ class _TraceWriter:
         prompt: str,
         system_blocks: "list[dict]",
         context: Dict[str, Any],
+        request_policy: Dict[str, Any] | None = None,
     ) -> str | None:
         if not self._trace_dir:
             return None
@@ -201,6 +208,8 @@ class _TraceWriter:
             or tool.get("function", {}).get("parameters"),
             "ok": None,
         }
+        if request_policy:
+            payload["request_policy"] = request_policy
         _write_json(path, payload)
         return path
 
@@ -244,6 +253,22 @@ def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False, default=str)
+
+
+def _client_request_policy(
+    client: Any,
+    *,
+    request_kind: str,
+    tool: Dict[str, Any],
+) -> Dict[str, Any] | None:
+    resolver = getattr(client, "resolve_request_policy", None)
+    if resolver is None:
+        return None
+    try:
+        policy = resolver(request_kind=request_kind, tool=tool)
+    except Exception:
+        return None
+    return dict(policy) if isinstance(policy, Mapping) else None
 
 
 def _build_tool_selection_prompt(context: Dict[str, Any]) -> str:
