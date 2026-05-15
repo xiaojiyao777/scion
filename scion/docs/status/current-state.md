@@ -547,6 +547,20 @@ v1 specs with an `id` and uses already-legacy specs directly. Focused
 regression after this fix: `311 passed`. Full suite after the compatibility
 fix: `1673 passed, 1 skipped`.
 
+Second 2-round smoke:
+`/home/clawd/research/scion-experiments/v04-multifile-smoke-repair-sonnet-2r-20260515T152117Z`
+completed with exit code 0. It confirmed multi-file/code-phase framework
+control is stable, but showed `proposal.algorithm_smoke` was too narrow:
+round 1 passed Contract, Verification, and canary, then failed official
+screening on `tiny_6` with `solver_algorithm_runtime_error` (`'_Route' object
+is not subscriptable`). Round 2 was blocked by schema/target preview for
+overlong semantic-signature fields. Repair: solver-design algorithm smoke now
+runs canary plus up to two public screening cases using the first public
+screening seed. It remains tainted/non-promotional and reads no
+validation/frozen cases. Validation after this repair: targeted smoke
+regression `5 passed`, focused subset `312 passed`, full suite
+`1674 passed, 1 skipped`.
+
 Latest code-generation timeout-policy diagnosis and repair:
 
 ```text

@@ -2679,6 +2679,45 @@ def test_algorithm_smoke_rejects_solver_design_runtime_error(
     assert "policies/baseline_algorithm.py" in rendered
 
 
+def test_algorithm_smoke_runs_screening_case_preview(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    if instance.customer_count > 4:\n"
+                    "        raise RuntimeError('screening case only')\n"
+                    "    solution = context.make_solution(context.nearest_neighbor())\n"
+                    "    context.record_iteration('seed', 1)\n"
+                    "    return solution\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["passed"] is False
+    assert payload["workspace_materialized"] is True
+    assert payload["runtime_smoke"]["case_count"] == 3
+    assert "data/tiny_6.json" in rendered
+    assert "screening case only" in rendered
+
+
 def test_algorithm_smoke_rejects_preferred_solver_design_baseline_wrapper(
     tmp_path: Path,
 ) -> None:

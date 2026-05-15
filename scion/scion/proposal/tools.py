@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Mapping, Protocol
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from scion.contract.gate import ContractGate
@@ -68,6 +69,8 @@ _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
 _ALGORITHM_SMOKE_TIME_LIMIT_SEC = 3
 _ALGORITHM_SMOKE_TIMEOUT_SEC = 10
+_ALGORITHM_SMOKE_DEFAULT_SEED = 77
+_ALGORITHM_SMOKE_MAX_SCREENING_CASES = 2
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -110,6 +113,14 @@ class ProposalExposureLevel(str, Enum):
     FROZEN_AGGREGATE = "frozen_aggregate"
     TAINTED_MEMORY = "tainted_memory"
     SCRATCH = "scratch"
+
+
+@dataclass(frozen=True)
+class _RuntimeSmokeCase:
+    label: str
+    rel_path: str
+    seed: int
+    path: Path
 
 
 class ProposalTaint(str, Enum):
@@ -1779,28 +1790,77 @@ def _runtime_algorithm_smoke_preview(
                 ),
             )
             _apply_patch_to_runtime_smoke_workspace(workspace, patch)
-            instance_path = _resolve_smoke_instance_path(
+            smoke_cases, missing_cases = _runtime_smoke_cases(
                 workspace=workspace,
                 base_workspace=base_workspace,
                 canary_rel=canary_rel,
             )
-            if instance_path is None:
+            if not smoke_cases:
                 return {
                     "passed": False,
                     "skipped": False,
                     "workspace_materialized": True,
                     "runtime_smoke_run": False,
-                    "issues": [f"Canary case not found: {canary_rel}"],
+                    "issues": missing_cases
+                    or [f"No runnable smoke case found: {canary_rel}"],
                 }
             registry_path = workspace / "registry.yaml"
             if not registry_path.exists():
                 registry_path = workspace / "registry.json"
-            raw, run_payload = _run_solver_design_smoke(
-                workspace=workspace,
-                instance_path=instance_path,
-                registry_path=registry_path,
-                selected_surface=surface_name,
-            )
+            runs: list[dict[str, Any]] = []
+            representative: dict[str, Any] | None = None
+            issue: str | None = None
+            audit_failure: Mapping[str, Any] | None = None
+            for smoke_case in smoke_cases:
+                raw, run_payload = _run_solver_design_smoke(
+                    workspace=workspace,
+                    smoke_case=smoke_case,
+                    registry_path=registry_path,
+                    selected_surface=surface_name,
+                )
+                if raw is None:
+                    issue = str(run_payload.get("detail") or "solver run failed")
+                    representative = {
+                        "case": smoke_case.rel_path,
+                        "seed": smoke_case.seed,
+                        "label": smoke_case.label,
+                        "passed": False,
+                        "objective": None,
+                        "feasible": None,
+                        "runtime": {},
+                        "run": run_payload,
+                    }
+                    runs.append(representative)
+                    break
+
+                audit_failure = _runtime_smoke_audit_failure(
+                    raw,
+                    context=context,
+                    selected_surface=surface_name,
+                )
+                runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
+                run_result = {
+                    "case": smoke_case.rel_path,
+                    "seed": smoke_case.seed,
+                    "label": smoke_case.label,
+                    "passed": audit_failure is None,
+                    "objective": raw.get("objective")
+                    if isinstance(raw, Mapping)
+                    else None,
+                    "feasible": raw.get("feasible") if isinstance(raw, Mapping) else None,
+                    "runtime": _compact_runtime_smoke_payload(runtime),
+                    "run": run_payload,
+                }
+                if audit_failure is not None:
+                    issue = str(audit_failure.get("detail") or "runtime audit failed")
+                    run_result["runtime_audit_failure"] = (
+                        _compact_runtime_audit_failure(audit_failure)
+                    )
+                runs.append(run_result)
+                if representative is None or audit_failure is not None:
+                    representative = run_result
+                if audit_failure is not None:
+                    break
         except Exception as exc:
             return {
                 "passed": False,
@@ -1810,43 +1870,34 @@ def _runtime_algorithm_smoke_preview(
                 "issues": [f"runtime smoke setup failed: {type(exc).__name__}: {exc}"],
             }
 
-    if raw is None:
-        return {
-            "passed": False,
-            "skipped": False,
-            "workspace_materialized": True,
-            "runtime_smoke_run": True,
-            "issues": [run_payload["detail"]],
-            "run": run_payload,
-        }
-
-    audit_failure = _runtime_smoke_audit_failure(
-        raw,
-        context=context,
-        selected_surface=surface_name,
-    )
-    runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
-    runtime_payload = _compact_runtime_smoke_payload(runtime)
-    passed = audit_failure is None
-    issues = (
-        []
-        if passed
-        else [str(audit_failure.get("detail") or "runtime audit failed")]
-    )
+    representative = representative or {}
+    passed = issue is None
+    issues = [] if passed else [str(issue)]
     payload = {
         "passed": passed,
         "skipped": False,
         "workspace_materialized": True,
         "runtime_smoke_run": True,
         "selected_surface": surface_name,
-        "case": canary_rel,
-        "seed": 77,
+        "case": representative.get("case") or canary_rel,
+        "seed": representative.get("seed") or _ALGORITHM_SMOKE_DEFAULT_SEED,
+        "case_count": len(runs),
+        "cases": [
+            {
+                "label": run.get("label"),
+                "case": run.get("case"),
+                "seed": run.get("seed"),
+                "passed": run.get("passed"),
+            }
+            for run in runs
+        ],
         "time_limit_sec": _ALGORITHM_SMOKE_TIME_LIMIT_SEC,
-        "objective": raw.get("objective") if isinstance(raw, Mapping) else None,
-        "feasible": raw.get("feasible") if isinstance(raw, Mapping) else None,
-        "runtime": runtime_payload,
+        "objective": representative.get("objective"),
+        "feasible": representative.get("feasible"),
+        "runtime": representative.get("runtime") or {},
         "issues": issues,
-        "run": run_payload,
+        "run": representative.get("run") or {},
+        "runs": runs,
     }
     if audit_failure is not None:
         payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
@@ -1922,13 +1973,120 @@ def _ensure_runtime_smoke_path_writable(path: Path) -> None:
         path.chmod(writable_mode)
 
 
-def _resolve_smoke_instance_path(
+def _runtime_smoke_cases(
     *,
     workspace: Path,
     base_workspace: Path,
     canary_rel: str,
+) -> tuple[list[_RuntimeSmokeCase], list[str]]:
+    cases: list[_RuntimeSmokeCase] = []
+    missing: list[str] = []
+    seen: set[tuple[str, int]] = set()
+
+    def add_case(label: str, rel_path: Any, seed: Any) -> None:
+        rel = str(rel_path or "").strip()
+        if not rel:
+            return
+        try:
+            seed_value = int(seed)
+        except (TypeError, ValueError):
+            seed_value = _ALGORITHM_SMOKE_DEFAULT_SEED
+        key = (rel, seed_value)
+        if key in seen:
+            return
+        seen.add(key)
+        instance_path = _resolve_smoke_instance_path(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            case_rel=rel,
+        )
+        if instance_path is None:
+            missing.append(f"{label} smoke case not found: {rel}")
+            return
+        cases.append(
+            _RuntimeSmokeCase(
+                label=label,
+                rel_path=rel,
+                seed=seed_value,
+                path=instance_path,
+            )
+        )
+
+    add_case("canary", canary_rel, _ALGORITHM_SMOKE_DEFAULT_SEED)
+    split_payload = _load_runtime_smoke_yaml(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        filename="split_manifest.yaml",
+    )
+    seed_payload = _load_runtime_smoke_yaml(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        filename="seed_ledger.yaml",
+    )
+    screening_seed = _first_int(
+        seed_payload.get("screening"),
+        _ALGORITHM_SMOKE_DEFAULT_SEED,
+    )
+    for rel in _string_list(split_payload.get("screening"))[
+        :_ALGORITHM_SMOKE_MAX_SCREENING_CASES
+    ]:
+        add_case("screening", rel, screening_seed)
+    return cases, missing
+
+
+def _load_runtime_smoke_yaml(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    filename: str,
+) -> Mapping[str, Any]:
+    for root in (workspace, base_workspace):
+        path = root / filename
+        if not path.is_file():
+            continue
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+        if isinstance(payload, Mapping):
+            return payload
+        return {}
+    return {}
+
+
+def _first_int(value: Any, default: int) -> int:
+    if isinstance(value, (str, bytes)):
+        candidates = [value]
+    elif isinstance(value, (list, tuple)):
+        candidates = list(value)
+    else:
+        candidates = []
+    for item in candidates:
+        try:
+            return int(item)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    result: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _resolve_smoke_instance_path(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    case_rel: str,
 ) -> Path | None:
-    rel = Path(canary_rel)
+    rel = Path(case_rel)
     candidates = []
     if rel.is_absolute():
         candidates.append(rel)
@@ -1944,7 +2102,7 @@ def _resolve_smoke_instance_path(
 def _run_solver_design_smoke(
     *,
     workspace: Path,
-    instance_path: Path,
+    smoke_case: _RuntimeSmokeCase,
     registry_path: Path,
     selected_surface: str,
 ) -> tuple[Mapping[str, Any] | None, dict[str, Any]]:
@@ -1956,13 +2114,16 @@ def _run_solver_design_smoke(
     )
     result = runner.run_solver(
         workdir=str(workspace),
-        instance_path=str(instance_path),
-        seed=77,
+        instance_path=str(smoke_case.path),
+        seed=smoke_case.seed,
         time_limit_sec=_ALGORITHM_SMOKE_TIME_LIMIT_SEC,
         registry_path=str(registry_path),
         selected_surface=selected_surface,
     )
     run_payload = {
+        "case": smoke_case.rel_path,
+        "seed": smoke_case.seed,
+        "label": smoke_case.label,
         "success": result.success,
         "exit_code": result.exit_code,
         "elapsed_ms": result.elapsed_ms,
