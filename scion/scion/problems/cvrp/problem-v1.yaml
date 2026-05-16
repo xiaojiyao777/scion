@@ -1016,7 +1016,11 @@ research_surfaces:
         solver_algorithm_search_iterations and zero
         solver_algorithm_move_attempts, proposal.algorithm_smoke rejects it as
         a wrapper or construction-only path rather than an active algorithm
-        search.
+        search. If every successful smoke case stops almost immediately with
+        only a handful of iterations/move attempts, no smoke micro-benchmark
+        win, and a no_improvement-style stop reason, proposal.algorithm_smoke
+        rejects it as low active search effort rather than treating the
+        under-spend as a valid speedup.
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, or benchmark data. Do not import or monkeypatch solver.py,

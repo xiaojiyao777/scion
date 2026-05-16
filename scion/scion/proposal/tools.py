@@ -72,6 +72,18 @@ _ALGORITHM_SMOKE_TIME_LIMIT_SEC = 3
 _ALGORITHM_SMOKE_TIMEOUT_SEC = 15
 _ALGORITHM_SMOKE_DEFAULT_SEED = 77
 _ALGORITHM_SMOKE_MAX_SCREENING_CASES = 4
+_ALGORITHM_SMOKE_LOW_EFFORT_MIN_CASES = 2
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS = 5
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS = 30
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO = 0.35
+_ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS = frozenset(
+    {
+        "no_improvement",
+        "early_exit",
+        "construction_only",
+        "no_search",
+    }
+)
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -1924,6 +1936,13 @@ def _runtime_algorithm_smoke_preview(
                     runs=runs,
                 )
             if issue is None:
+                issue = _solver_design_low_effort_issue(
+                    patch=patch,
+                    hypothesis=hypothesis,
+                    runs=runs,
+                    micro_results=micro_results,
+                )
+            if issue is None:
                 issue = _solver_design_micro_benchmark_issue(micro_results)
         except Exception as exc:
             return {
@@ -2525,6 +2544,116 @@ def _solver_design_zero_effort_issue(
         "search loop, record real iterations or moves, or retarget the hypothesis "
         "as a bounded construction-only algorithm with explicit telemetry."
     )
+
+
+def _solver_design_low_effort_issue(
+    *,
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+    runs: list[dict[str, Any]],
+    micro_results: list[dict[str, Any]],
+) -> str | None:
+    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
+        return None
+    successful = [
+        run
+        for run in runs
+        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
+    ]
+    if len(successful) < _ALGORITHM_SMOKE_LOW_EFFORT_MIN_CASES:
+        return None
+    if any(result.get("comparison") == "win" for result in micro_results):
+        return None
+
+    micro_by_case_seed = {
+        (str(result.get("case") or ""), _nonnegative_int(result.get("seed"))): result
+        for result in micro_results
+    }
+    low_effort: list[dict[str, Any]] = []
+    for run in successful:
+        runtime = run.get("runtime")
+        if not isinstance(runtime, Mapping):
+            continue
+        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
+        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
+        stop_reason = _runtime_stop_reason(
+            runtime.get("solver_algorithm_stop_reason")
+        )
+        if iterations > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS:
+            continue
+        if attempts > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS:
+            continue
+        if stop_reason not in _ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS:
+            continue
+        if not _solver_design_smoke_runtime_underspent(
+            run,
+            micro_by_case_seed=micro_by_case_seed,
+        ):
+            continue
+        low_effort.append(
+            {
+                "case": run.get("case"),
+                "seed": run.get("seed"),
+                "iterations": iterations,
+                "attempts": attempts,
+                "stop_reason": stop_reason,
+            }
+        )
+
+    if len(low_effort) != len(successful):
+        return None
+    targets = ", ".join(_solver_design_patch_paths(patch))
+    return (
+        "solver_design smoke observed low active search effort on all "
+        f"{len(successful)} successful smoke case(s): each run stopped with "
+        f"{sorted(_ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS)} after at most "
+        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS} search iteration(s) and "
+        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS} move attempt(s), while "
+        "using only a small fraction of the smoke/champion runtime and producing "
+        "no smoke micro-benchmark win. This candidate touches or claims "
+        f"search-bearing solver code ({targets}) but appears to truncate the "
+        "active ALNS/VNS/search loop. Keep real search budget and telemetry, or "
+        "retarget the hypothesis as a bounded construction/runtime-speed change "
+        "that does not claim search improvement."
+    )
+
+
+def _solver_design_smoke_runtime_underspent(
+    run: Mapping[str, Any],
+    *,
+    micro_by_case_seed: Mapping[tuple[str, int], Mapping[str, Any]],
+) -> bool:
+    elapsed = _nonnegative_int((run.get("run") or {}).get("elapsed_ms"))
+    runtime = run.get("runtime")
+    solver_elapsed = 0
+    if isinstance(runtime, Mapping):
+        solver_elapsed = _nonnegative_int(runtime.get("solver_algorithm_elapsed_ms"))
+    candidate_elapsed = elapsed or solver_elapsed
+    if candidate_elapsed <= 0:
+        return False
+
+    key = (str(run.get("case") or ""), _nonnegative_int(run.get("seed")))
+    micro = micro_by_case_seed.get(key)
+    if isinstance(micro, Mapping):
+        champion_elapsed = _nonnegative_int(micro.get("champion_elapsed_ms"))
+        if champion_elapsed > 0:
+            return (
+                candidate_elapsed / champion_elapsed
+                <= _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+            )
+    return (
+        candidate_elapsed
+        <= int(
+            _ALGORITHM_SMOKE_TIME_LIMIT_SEC
+            * 1000
+            * _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+        )
+    )
+
+
+def _runtime_stop_reason(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text or "unknown"
 
 
 def _solver_design_patch_claims_search_effort(

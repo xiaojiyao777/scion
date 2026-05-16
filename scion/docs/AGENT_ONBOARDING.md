@@ -378,6 +378,11 @@ Important current interpretation:
   `solver_algorithm_move_attempts` on every successful smoke case. This catches
   wrapper/constructor rewrites that pass validity by avoiding the algorithm
   search rather than improving it.
+- It also rejects low-effort search-bearing candidates when every successful
+  smoke case stops almost immediately with only a handful of iterations/move
+  attempts, no smoke micro-benchmark win, and a `no_improvement`-style stop
+  reason. Runtime speedup is still a valid objective, but not when it comes
+  from truncating the active search loop the hypothesis claims to improve.
 - Algorithm smoke now uses the active campaign split/seed first, not the
   branch workspace's tiny split. For framework validation in this area, run at
   least 3 rounds; 2-round smokes are only debugging probes.

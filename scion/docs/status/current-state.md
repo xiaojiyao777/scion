@@ -172,10 +172,13 @@ that must be reachable from the solver path, replaces line-count caps on
 scheduler/entrypoint integration with stable runtime-contract checks, and makes
 `proposal.algorithm_smoke` reject solver-design candidates that claim or touch
 search-bearing code while recording zero search iterations and zero move
-attempts on every successful smoke case. Multi-module solver-design patches may
-now integrate through `scheduler.py` / `baseline_algorithm.py` when those files
-preserve the `_ALNSVNSSolver(...).solve(instance, rng)` call chain and avoid
-detached top-level scheduler entrypoints.
+attempts on every successful smoke case, and now also rejects low-effort
+search-bearing candidates that stop almost immediately with no smoke
+micro-benchmark win and a `no_improvement`-style stop reason. Multi-module
+solver-design patches may now integrate through `scheduler.py` /
+`baseline_algorithm.py` when those files preserve the
+`_ALNSVNSSolver(...).solve(instance, rng)` call chain and avoid detached
+top-level scheduler entrypoints.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the

@@ -69,6 +69,7 @@ from scion.proposal.tools import (
     ProposalToolPermission,
     ProposalToolRegistry,
     _resolve_smoke_instance_path,
+    _solver_design_low_effort_issue,
 )
 
 _COMPACT_FEEDBACK_TOOL_NAMES = {
@@ -2774,6 +2775,138 @@ def test_algorithm_smoke_rejects_zero_search_solver_design_candidate(
     assert "zero active search effort" in rendered
     assert "solver_algorithm_search_iterations=0" in rendered
     assert "solver_algorithm_move_attempts=0" in rendered
+
+
+def test_solver_design_low_effort_issue_rejects_search_bearing_under_spend() -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content="def seed_pool(instance):\n    return []\n",
+        additional_changes=(
+            SimpleNamespace(
+                file_path="policies/baseline_modules/scheduler.py",
+                action="modify",
+                code_content="class _ALNSVNSSolver:\n    def solve(self, instance, rng):\n        return instance\n",
+            ),
+        ),
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Improve ALNS/VNS search by changing construction seeds.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+    )
+    runs = [
+        {
+            "case": "cvrplib/A/A-n32-k5.vrp",
+            "seed": 11,
+            "passed": True,
+            "runtime": {
+                "solver_algorithm_search_iterations": 4,
+                "solver_algorithm_move_attempts": 24,
+                "solver_algorithm_stop_reason": "no_improvement",
+                "solver_algorithm_elapsed_ms": 120,
+            },
+            "run": {"elapsed_ms": 130},
+        },
+        {
+            "case": "cvrplib/B/B-n31-k5.vrp",
+            "seed": 11,
+            "passed": True,
+            "runtime": {
+                "solver_algorithm_search_iterations": 1,
+                "solver_algorithm_move_attempts": 6,
+                "solver_algorithm_stop_reason": "no_improvement",
+                "solver_algorithm_elapsed_ms": 90,
+            },
+            "run": {"elapsed_ms": 100},
+        },
+    ]
+    micro_results = [
+        {
+            "case": "cvrplib/A/A-n32-k5.vrp",
+            "seed": 11,
+            "comparison": "tie",
+            "candidate_elapsed_ms": 130,
+            "champion_elapsed_ms": 3000,
+        },
+        {
+            "case": "cvrplib/B/B-n31-k5.vrp",
+            "seed": 11,
+            "comparison": "loss",
+            "candidate_elapsed_ms": 100,
+            "champion_elapsed_ms": 3000,
+        },
+    ]
+
+    issue = _solver_design_low_effort_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+        runs=runs,
+        micro_results=micro_results,
+    )
+
+    assert issue is not None
+    assert "low active search effort" in issue
+    assert "no smoke micro-benchmark win" in issue
+    assert "policies/baseline_modules/scheduler.py" in issue
+
+
+def test_solver_design_low_effort_issue_allows_smoke_micro_win() -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content="def seed_pool(instance):\n    return []\n",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Improve ALNS search from better construction seeds.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+    )
+    runs = [
+        {
+            "case": "cvrplib/A/A-n32-k5.vrp",
+            "seed": 11,
+            "passed": True,
+            "runtime": {
+                "solver_algorithm_search_iterations": 2,
+                "solver_algorithm_move_attempts": 12,
+                "solver_algorithm_stop_reason": "no_improvement",
+            },
+            "run": {"elapsed_ms": 100},
+        },
+        {
+            "case": "cvrplib/B/B-n31-k5.vrp",
+            "seed": 11,
+            "passed": True,
+            "runtime": {
+                "solver_algorithm_search_iterations": 2,
+                "solver_algorithm_move_attempts": 12,
+                "solver_algorithm_stop_reason": "no_improvement",
+            },
+            "run": {"elapsed_ms": 100},
+        },
+    ]
+    micro_results = [
+        {
+            "case": "cvrplib/A/A-n32-k5.vrp",
+            "seed": 11,
+            "comparison": "win",
+            "candidate_elapsed_ms": 100,
+            "champion_elapsed_ms": 3000,
+        }
+    ]
+
+    assert (
+        _solver_design_low_effort_issue(
+            patch=patch,
+            hypothesis=hypothesis,
+            runs=runs,
+            micro_results=micro_results,
+        )
+        is None
+    )
 
 
 def test_algorithm_smoke_runs_screening_case_preview(
