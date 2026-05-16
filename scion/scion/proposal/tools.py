@@ -1713,6 +1713,7 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                             context,
                             patch_preview["patch_object"],
                             selected_surface,
+                            hypothesis_object,
                         )
                         if smoke_preview is not None:
                             payload["runtime_smoke"] = smoke_preview
@@ -1760,6 +1761,7 @@ def _runtime_algorithm_smoke_preview(
     context: ProposalToolContext,
     patch: PatchProposal,
     selected_surface: str | None,
+    hypothesis: HypothesisProposal | None = None,
 ) -> dict[str, Any] | None:
     surface_name = str(selected_surface or "").strip()
     if surface_name != "solver_design":
@@ -1915,6 +1917,12 @@ def _runtime_algorithm_smoke_preview(
                 )
                 run_result["micro_benchmark"] = micro_result
                 micro_results.append(micro_result)
+            if issue is None:
+                issue = _solver_design_zero_effort_issue(
+                    patch=patch,
+                    hypothesis=hypothesis,
+                    runs=runs,
+                )
             if issue is None:
                 issue = _solver_design_micro_benchmark_issue(micro_results)
         except Exception as exc:
@@ -2478,6 +2486,111 @@ def _solver_design_micro_benchmark_issue(
             f"{len(comparable)} comparable smoke case(s) against the current champion"
         )
     return None
+
+
+def _solver_design_zero_effort_issue(
+    *,
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+    runs: list[dict[str, Any]],
+) -> str | None:
+    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
+        return None
+    successful = [
+        run
+        for run in runs
+        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
+    ]
+    if not successful:
+        return None
+    zero_effort = []
+    for run in successful:
+        runtime = run.get("runtime")
+        if not isinstance(runtime, Mapping):
+            continue
+        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
+        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
+        if iterations == 0 and attempts == 0:
+            zero_effort.append(run)
+    if len(zero_effort) != len(successful):
+        return None
+    targets = ", ".join(_solver_design_patch_paths(patch))
+    return (
+        "solver_design smoke observed zero active search effort on all "
+        f"{len(successful)} successful smoke case(s): "
+        "solver_algorithm_search_iterations=0 and "
+        "solver_algorithm_move_attempts=0. This candidate touches or claims "
+        f"search-bearing solver code ({targets}) but behaves like a construction/"
+        "wrapper-only path. Wire the changed mechanism into the active ALNS/VNS/"
+        "search loop, record real iterations or moves, or retarget the hypothesis "
+        "as a bounded construction-only algorithm with explicit telemetry."
+    )
+
+
+def _solver_design_patch_claims_search_effort(
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    paths = set(_solver_design_patch_paths(patch))
+    if paths & {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/destroy_repair.py",
+        "policies/baseline_modules/acceptance.py",
+    }:
+        return True
+    text_parts = []
+    if hypothesis is not None:
+        for name in (
+            "hypothesis_text",
+            "target_weakness",
+            "expected_effect",
+            "runtime_budget_strategy",
+            "target_runtime_effect",
+        ):
+            value = getattr(hypothesis, name, None)
+            if value:
+                text_parts.append(str(value))
+    text = " ".join(text_parts).lower()
+    if not text:
+        return False
+    search_terms = (
+        "alns",
+        "vns",
+        "search",
+        "local",
+        "move",
+        "operator",
+        "destroy",
+        "repair",
+        "acceptance",
+        "anneal",
+        "scheduler",
+    )
+    return any(term in text for term in search_terms)
+
+
+def _solver_design_patch_paths(patch: PatchProposal) -> list[str]:
+    paths: list[str] = []
+    for change in patch_file_changes(patch):
+        try:
+            path = normalize_relative_patch_path(change.file_path)
+        except ValueError:
+            path = str(change.file_path or "")
+        if path:
+            paths.append(path)
+    return paths
+
+
+def _nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _compact_solver_design_micro_benchmark(

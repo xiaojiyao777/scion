@@ -1391,6 +1391,97 @@ def test_contract_gate_rejects_inert_solver_design_helper(
     assert "_ALNSVNSSolver.solve" in c9e.detail
 
 
+def test_contract_gate_rejects_inert_solver_design_class_method(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "acceptance.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "acceptance.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = (
+        base_code
+        + "\n\n"
+        + "    def notify_segment_end(self):\n"
+        + "        self.temperature = self.start_temp\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/acceptance.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "notify_segment_end" in c9e.detail
+    assert "inert_helpers" in c9e.detail
+
+
+def test_contract_gate_rejects_broad_unapproved_scheduler_integration_edit(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    construction_target = champion / "policies" / "baseline_modules" / "construction.py"
+    scheduler_target = champion / "policies" / "baseline_modules" / "scheduler.py"
+    construction_target.parent.mkdir(parents=True)
+    construction_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "construction.py"
+    ).read_text(encoding="utf-8")
+    scheduler_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "scheduler.py"
+    ).read_text(encoding="utf-8")
+    construction_target.write_text(construction_code, encoding="utf-8")
+    scheduler_target.write_text(scheduler_code, encoding="utf-8")
+    broad_scheduler = (
+        "class _ALNSVNSSolver:\n"
+        "    def __init__(self, *args, **kwargs):\n"
+        "        self.context = kwargs.get('context')\n\n"
+        "    def solve(self, instance, rng):\n"
+        "        return instance\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/construction.py",
+            action="modify",
+            code_content=construction_code,
+            additional_changes=(
+                SimpleNamespace(
+                    file_path="policies/baseline_modules/scheduler.py",
+                    action="modify",
+                    code_content=broad_scheduler,
+                ),
+            ),
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "integration edits to scheduler/entrypoint must stay bounded" in c9e.detail
+    assert "primary_target=policies/baseline_modules/construction.py" in c9e.detail
+
+
 def test_cvrp_preview_rejects_bad_scheduler_entrypoint_import_in_integration_edit() -> None:
     spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     adapter = CvrpAdapter(spec)
@@ -3335,6 +3426,7 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "do not call context.baseline" in solver_design_prompt_text
     assert "context.objective_key" in solver_design_prompt_text
     assert "context.record_move" in solver_design_prompt_text
+    assert "solver_algorithm_search_iterations=0" in solver_design_prompt_text
     assert "shallow wrapper" in solver_design_prompt_text
     assert "instance.depot" in solver_design_prompt_text
     assert "adapter/solver remains the authority" in solver_design_prompt_text

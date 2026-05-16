@@ -4957,7 +4957,10 @@ def _solver_design_code_scope_control(
                 "approved target_file; choose target modules by mechanism "
                 "ownership, put entrypoint/scheduler/module wiring in "
                 "additional_changes, and ensure any new helper is called from "
-                "an existing solver path."
+                "an existing solver path. If scheduler.py or "
+                "baseline_algorithm.py is only an integration edit, keep it "
+                "small; broad orchestration rewrites must target that file "
+                "directly."
             ),
             "import_rule": (
                 "Use package-relative imports inside policies, for example "
@@ -4980,7 +4983,9 @@ def _solver_design_code_scope_control(
             ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "
-                "optimization objective and evidence field."
+                "optimization objective and evidence field. Search-bearing "
+                "solver-design patches must record real iterations or move "
+                "attempts; zero effort on every smoke case fails preview."
             ),
             "local_search_rule": (
                 "For local_search targets, integrate new move operators through "

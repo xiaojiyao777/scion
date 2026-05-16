@@ -364,6 +364,17 @@ Important current interpretation:
   this path by screening a `local_search.py` candidate that would previously
   have been falsely rejected, then correctly abandoning it for worse and
   slower solver quality.
+- C9e also checks newly added class methods and bounded integration edits. A
+  method added to helper classes such as `_SimulatedAnnealing` must be called
+  from the active solver path, and `scheduler.py` / `baseline_algorithm.py`
+  changes inside `additional_changes` must stay small unless one of those files
+  is the approved primary target.
+- `proposal.algorithm_smoke` rejects solver-design candidates that claim or
+  touch search-bearing solver code but record zero
+  `solver_algorithm_search_iterations` and zero
+  `solver_algorithm_move_attempts` on every successful smoke case. This catches
+  wrapper/constructor rewrites that pass validity by avoiding the algorithm
+  search rather than improving it.
 - Algorithm smoke now uses the active campaign split/seed first, not the
   branch workspace's tiny split. For framework validation in this area, run at
   least 3 rounds; 2-round smokes are only debugging probes.

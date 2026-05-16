@@ -2741,6 +2741,41 @@ def test_algorithm_smoke_rejects_solver_design_runtime_error(
     assert "policies/baseline_algorithm.py" in rendered
 
 
+def test_algorithm_smoke_rejects_zero_search_solver_design_candidate(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    return context.nearest_neighbor()\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["passed"] is False
+    assert payload["runtime_smoke"]["passed"] is False
+    assert "zero active search effort" in rendered
+    assert "solver_algorithm_search_iterations=0" in rendered
+    assert "solver_algorithm_move_attempts=0" in rendered
+
+
 def test_algorithm_smoke_runs_screening_case_preview(
     tmp_path: Path,
 ) -> None:
@@ -3763,6 +3798,8 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "target file should own the mechanism" in rendered_system
     assert "scheduler edits as wiring" in rendered_system
     assert "scheduler as orchestration" in rendered_system
+    assert "Broad scheduler/entrypoint rewrites" in rendered_system
+    assert "zero iterations and zero move attempts" in rendered_system
     assert "_default_vns_operators()" in rendered_system
     assert "detached `_run`/`run`" in rendered_system
     assert "do not implement a full portfolio" in rendered_system

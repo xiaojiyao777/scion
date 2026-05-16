@@ -262,7 +262,7 @@ Suggested MVP tool set:
 | `proposal.draft_hypothesis` | draft_patch | Pydantic validated. |
 | `proposal.draft_patch` | draft_patch | Complete file content artifact. |
 | `proposal.contract_preview` | contract_preview | Static only, no workspace materialization. |
-| `proposal.algorithm_smoke` | contract_preview | Deterministic post-code smoke; tainted and non-promotional. Static synthetic preview stays in-process, while approved `solver_design` algorithm patches are also applied to a temporary tainted workspace and run on the canary case before official evaluation. |
+| `proposal.algorithm_smoke` | contract_preview | Deterministic post-code smoke; tainted and non-promotional. Static synthetic preview stays in-process, while approved `solver_design` algorithm patches are also applied to a temporary tainted workspace and run on canary plus bounded active-split screening cases before official evaluation. |
 | `proposal.finalize` | draft_patch | Emits final session output. |
 
 Everything else remains outside the proposal agent.
@@ -292,10 +292,12 @@ After a patch passes static Contract preview, APS may invoke
 problem-owned preview path, calls the candidate algorithm on synthetic cases,
 and returns compact pass/fail plus problem-preview issues. For approved
 `solver_design` algorithm-file patches, it also applies the patch to a
-temporary tainted workspace and runs the canary case through the normal solver
-subprocess. It can guide one bounded code repair attempt before official
-evaluation, but it remains tainted proposal evidence. Verification, Protocol,
-and Decision remain the only promotion path.
+temporary tainted workspace and runs canary plus bounded active-split screening
+cases through the normal solver subprocess. It also rejects search-bearing
+solver-design candidates that record zero search iterations and zero move
+attempts on every successful smoke case. It can guide one bounded code repair
+attempt before official evaluation, but it remains tainted proposal evidence.
+Verification, Protocol, and Decision remain the only promotion path.
 
 Active problem-object boundary guidance is separate from forced-surface
 diagnostics. During `--force-surface` campaigns, tool guidance renders the

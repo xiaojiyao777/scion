@@ -167,9 +167,12 @@ seeds `11` and `29`. A deeper trace review shows that candidate quality is
 still weak for framework reasons: the acceptance candidate added a reheat hook
 without wiring it into the scheduler, and the construction candidate rewrote
 the scheduler into a near-zero-search path that swallowed a bad `_vns` call.
-The next control repair should make contract/smoke reject inert new helpers,
-broad unapproved scheduler rewrites, and solver-design candidates that claim a
-search improvement while recording zero search iterations or move attempts.
+The follow-up control repair now makes C9e treat new class methods as helpers
+that must be reachable from the solver path, caps broad scheduler/entrypoint
+integration edits when those files are not the approved primary target, and
+makes `proposal.algorithm_smoke` reject solver-design candidates that claim or
+touch search-bearing code while recording zero search iterations and zero move
+attempts on every successful smoke case.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the

@@ -869,6 +869,16 @@ def _split_code_context(
         "`.baseline_modules.scheduler`, instantiate it, and call "
         "`solver.solve(instance, rng)`. Do not import `solve`, `run`, or "
         "`main` from scheduler.\n"
+        "- If `additional_changes` touches `policies/baseline_modules/scheduler.py` "
+        "or `policies/baseline_algorithm.py` while another file is the approved "
+        "target, keep those edits as small wiring changes. Broad orchestration "
+        "or entrypoint rewrites must make the orchestration file the approved "
+        "primary target.\n"
+        "- A solver-design patch that claims or touches search-bearing code "
+        "must record real algorithm effort on smoke cases. If every successful "
+        "case reports `solver_algorithm_search_iterations=0` and "
+        "`solver_algorithm_move_attempts=0`, algorithm smoke will reject it as "
+        "a wrapper/constructor-only path.\n"
         "- The active package state model uses `_Solution.routes` as `_Route` "
         "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
         "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
@@ -907,6 +917,10 @@ def _split_code_context(
         "`policies/baseline_algorithm.py` the primary patch unless it is the "
         "approved target. Do not leave a newly created helper or module "
         "inert.\n"
+        "- When adding class methods or helper functions, wire them into the "
+        "active solver call path in the same patch. Static preview treats "
+        "unreached methods and functions as inert, including methods added to "
+        "helper classes such as acceptance schedules.\n"
         "- `additional_changes` must be a JSON array of objects, never a string "
         "containing JSON text.\n"
         "- Do not add new `instance.name`, `getattr(instance, 'name')`, or "
@@ -1126,9 +1140,10 @@ def _solver_design_scope_control_section(
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
         "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
         "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it, and call `solver.solve(instance, rng)`; do not import scheduler `solve`, `run`, or `main`.",
+        "- If scheduler.py or baseline_algorithm.py is only an integration edit, keep it small. Broad scheduler/entrypoint rewrites must make that file the approved primary target.",
         "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
-        "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
+        "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",
     ]
     if mode:
         lines.append(f"- Current code-generation mode: `{mode}`.")

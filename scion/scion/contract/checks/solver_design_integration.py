@@ -11,6 +11,7 @@ reachability edges even when the helper is not called at definition time.
 from __future__ import annotations
 
 import ast
+import difflib
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -41,6 +42,7 @@ def check_solver_design_integration(
     root_calls: set[str] = set()
     changed_paths: list[str] = []
     changed_files = 0
+    primary_path = _primary_patch_path(patch)
 
     for change in patch_file_changes(patch):
         if change.action == "delete":
@@ -53,18 +55,32 @@ def check_solver_design_integration(
             continue
         changed_files += 1
         changed_paths.append(file_rel)
+        champion_code = champion_file_content(file_rel)
+        wiring_error = _additional_wiring_edit_error(
+            file_rel=file_rel,
+            primary_path=primary_path,
+            champion_code=champion_code,
+            candidate_code=change.code_content,
+        )
+        if wiring_error is not None:
+            return SolverDesignIntegrationResult(False, wiring_error)
         try:
             tree = ast.parse(change.code_content)
         except SyntaxError:
             return SolverDesignIntegrationResult(False, "unparseable code")
 
-        champion_code = champion_file_content(file_rel)
         current_defs = _module_level_function_defs(tree)
         champion_defs = _module_level_function_defs_from_source(champion_code)
         local_new = current_defs - champion_defs
+        current_methods = _class_method_defs(tree)
+        champion_methods = _class_method_defs_from_source(champion_code)
+        local_new_methods = _new_class_method_names(current_methods, champion_methods)
         if local_new:
             new_functions.update(local_new)
             new_functions_by_file[file_rel] = set(local_new)
+        if local_new_methods:
+            new_functions.update(local_new_methods)
+            new_functions_by_file.setdefault(file_rel, set()).update(local_new_methods)
         local_existing = current_defs - local_new
 
         module_calls, function_calls, class_method_calls = _module_call_references(tree)
@@ -87,21 +103,27 @@ def check_solver_design_integration(
                     root_method="solve",
                 )
             )
+            root_calls.add("solve")
         for name, calls in function_calls.items():
             call_graph.setdefault(name, set()).update(calls)
+        for method_calls in class_method_calls.values():
+            for name, calls in method_calls.items():
+                call_graph.setdefault(name, set()).update(calls)
 
     if changed_files == 0 or not new_functions:
         return SolverDesignIntegrationResult(True, "no new solver_design helper functions")
 
     reachable = set(root_calls)
-    queue = list(root_calls & new_functions)
+    queue = list(root_calls)
+    seen = set(queue)
     while queue:
         name = queue.pop()
         for called in call_graph.get(name, set()):
             if called in reachable:
                 continue
             reachable.add(called)
-            if called in new_functions:
+            if called not in seen:
+                seen.add(called)
                 queue.append(called)
 
     inert = sorted(new_functions - reachable)
@@ -131,6 +153,66 @@ def check_solver_design_integration(
         True,
         "new solver_design helper functions are integrated",
     )
+
+
+def _primary_patch_path(patch: PatchProposal) -> str:
+    for change in patch_file_changes(patch):
+        try:
+            return normalize_relative_patch_path(change.file_path)
+        except ValueError:
+            return str(change.file_path or "")
+    return ""
+
+
+def _additional_wiring_edit_error(
+    *,
+    file_rel: str,
+    primary_path: str,
+    champion_code: str | None,
+    candidate_code: str,
+) -> str | None:
+    if file_rel == primary_path:
+        return None
+    if file_rel not in {
+        "policies/baseline_algorithm.py",
+        "policies/baseline_modules/scheduler.py",
+    }:
+        return None
+    if not champion_code:
+        return None
+    changed_lines = _changed_line_count(champion_code, candidate_code)
+    max_changed = (
+        30
+        if file_rel == "policies/baseline_algorithm.py"
+        else 80
+    )
+    if changed_lines <= max_changed:
+        return None
+    return (
+        "solver_design integration edits to scheduler/entrypoint must stay "
+        "bounded when they are not the approved primary target. "
+        f"primary_target={primary_path}; integration_file={file_rel}; "
+        f"changed_lines={changed_lines}; max_wiring_changed_lines={max_changed}. "
+        "Put the mechanism in the approved construction/destroy-repair/local-search/"
+        "acceptance module and keep scheduler or baseline_algorithm edits as small "
+        "wiring changes. Make scheduler.py or baseline_algorithm.py the primary "
+        "target for a broad orchestration rewrite."
+    )
+
+
+def _changed_line_count(before: str, after: str) -> int:
+    diff = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        lineterm="",
+    )
+    count = 0
+    for line in diff:
+        if line.startswith(("+++", "---", "@@")):
+            continue
+        if line.startswith(("+", "-")):
+            count += 1
+    return count
 
 
 def _module_level_function_defs(tree: ast.AST) -> set[str]:
@@ -167,6 +249,47 @@ def _module_level_class_defs_from_source(code: str | None) -> set[str]:
     except SyntaxError:
         return set()
     return _module_level_class_defs(tree)
+
+
+def _class_method_defs(tree: ast.AST) -> dict[str, set[str]]:
+    if not isinstance(tree, ast.Module):
+        return {}
+    result: dict[str, set[str]] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        result[node.name] = {
+            item.name
+            for item in node.body
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+    return result
+
+
+def _class_method_defs_from_source(code: str | None) -> dict[str, set[str]]:
+    if not code:
+        return {}
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return {}
+    return _class_method_defs(tree)
+
+
+def _new_class_method_names(
+    current: dict[str, set[str]],
+    champion: dict[str, set[str]],
+) -> set[str]:
+    new: set[str] = set()
+    for class_name, methods in current.items():
+        inherited = champion.get(class_name, set())
+        for method_name in methods - inherited:
+            if method_name == "solve":
+                continue
+            if method_name.startswith("__") and method_name.endswith("__"):
+                continue
+            new.add(method_name)
+    return new
 
 
 def _module_call_references(

@@ -1011,7 +1011,12 @@ research_surfaces:
         but must not force the algorithm into predeclared components. Accepted
         moves are not automatically improvements; pass positive delta or
         best_improved=True only for objective-improving moves so the audit can
-        distinguish improving and neutral accepted moves.
+        distinguish improving and neutral accepted moves. If a candidate claims
+        or touches search-bearing solver code but every smoke case records zero
+        solver_algorithm_search_iterations and zero
+        solver_algorithm_move_attempts, proposal.algorithm_smoke rejects it as
+        a wrapper or construction-only path rather than an active algorithm
+        search.
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, or benchmark data. Do not import or monkeypatch solver.py,
@@ -1022,7 +1027,11 @@ research_surfaces:
         stable entrypoint policies/baseline_algorithm.py must not call
         context.baseline, and changing only baseline budget or params, or
         adding millisecond-scale polishing without a bounded algorithmic search
-        loop is not a valid solver-design candidate.
+        loop is not a valid solver-design candidate. Do not add helper
+        functions or class methods that are not reachable from the active solver
+        path. Do not put broad scheduler.py or baseline_algorithm.py rewrites
+        in additional_changes when another file is the approved target; keep
+        those edits as wiring unless the orchestration file is the target.
     target_files:
       - "policies/baseline_algorithm.py"
       - "policies/solver_algorithm.py"
