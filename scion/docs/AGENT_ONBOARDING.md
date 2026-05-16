@@ -378,6 +378,21 @@ Important current interpretation:
   `solve`/`run`/`main` entrypoints. If a module-level change needs a new seed
   or initial-state hook, integrate it inside scheduler methods rather than
   changing the entrypoint call protocol.
+- Solver-design cross-module imports are statically audited against the
+  candidate workspace after applying `additional_changes`. If a scheduler or
+  entrypoint edit imports a sibling helper, that exact symbol must exist in the
+  candidate or champion module. Do not invent helper names such as
+  `_clarke_wright` unless the matching module defines them.
+- `proposal.algorithm_smoke` failure detail must preserve actionable subprocess
+  information (`exit_code`, `error_category`, elapsed time, and bounded
+  stdout/stderr) so code repair can respond to the actual runtime failure
+  rather than a generic `solver run failed`.
+- Proposal tool code is intentionally being decomposed. Solver-design runtime
+  smoke and its audit helpers now live in `scion/proposal/solver_design_smoke.py`;
+  `scion/proposal/tools.py` should remain focused on tool registry/orchestration
+  and compatibility exports. Agentic proposal tool tests are split by topic
+  under `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks
+  back into the legacy aggregate file.
 - `proposal.algorithm_smoke` rejects solver-design candidates that claim or
   touch search-bearing solver code but record zero
   `solver_algorithm_search_iterations` and zero

@@ -184,6 +184,19 @@ scheduler entrypoints. The 2026-05-16 low-effort-smoke follow-up exposed why
 this must be static: generated construction/acceptance candidates tried to pass
 custom seeds through `baseline_algorithm.py` or rewrote the scheduler
 constructor API, so all 3 rounds failed before official screening.
+The follow-up 3-round validation produced one formal screening candidate and
+two acceptance-code failures. The first candidate proved the entrypoint API
+repair works: it passed Contract, smoke, Verification, and screening before
+being abandoned for `SCREENING_FAIL_WIN_RATE`. The remaining failures exposed
+two narrower controls now repaired: C9e statically checks solver-design
+cross-module imports against candidate/champion exports, and algorithm smoke
+keeps actionable subprocess failure detail instead of collapsing to generic
+`solver run failed`.
+As part of the same maintainability pass, solver-design smoke helpers were
+moved from `proposal/tools.py` into `proposal/solver_design_smoke.py`, and the
+4k+ line `test_agentic_proposal_tools.py` file was split into topic-specific
+test modules for context, schema, solver-design smoke, feedback, and session
+behavior.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the

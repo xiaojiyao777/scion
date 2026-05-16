@@ -1,0 +1,1141 @@
+"""Solver-design runtime smoke helpers for proposal tools."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import stat
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING, Any, Mapping
+
+import yaml
+
+from scion.core.models import (
+    ExperimentStage,
+    HypothesisProposal,
+    PatchFileChange,
+    PatchProposal,
+    patch_file_changes,
+)
+from scion.core.paths import normalize_relative_patch_path
+from scion.problem.bridge import legacy_problem_spec_from_v1
+
+if TYPE_CHECKING:
+    from scion.proposal.tools import ProposalToolContext
+else:
+    ProposalToolContext = Any
+
+_ALGORITHM_SMOKE_TIME_LIMIT_SEC = 3
+_ALGORITHM_SMOKE_TIMEOUT_SEC = 15
+_ALGORITHM_SMOKE_DEFAULT_SEED = 77
+_ALGORITHM_SMOKE_MAX_SCREENING_CASES = 4
+_ALGORITHM_SMOKE_LOW_EFFORT_MIN_CASES = 2
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS = 5
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS = 30
+_ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO = 0.35
+_ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS = frozenset(
+    {
+        "no_improvement",
+        "early_exit",
+        "construction_only",
+        "no_search",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _RuntimeSmokeCase:
+    label: str
+    rel_path: str
+    seed: int
+    path: Path
+
+
+def _runtime_algorithm_smoke_preview(
+    context: ProposalToolContext,
+    patch: PatchProposal,
+    selected_surface: str | None,
+    hypothesis: HypothesisProposal | None = None,
+) -> dict[str, Any] | None:
+    surface_name = str(selected_surface or "").strip()
+    if surface_name != "solver_design":
+        return None
+    patch_paths = [
+        _normalize_rel_path(change.file_path) for change in patch_file_changes(patch)
+    ]
+    if not any(_is_solver_design_runtime_patch_path(path) for path in patch_paths):
+        return None
+
+    base_workspace = _runtime_smoke_base_workspace(context)
+    canary_rel = str(_attr(context.problem_spec, "canary_case_path", "") or "").strip()
+    if base_workspace is None:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "issues": ["No runnable base workspace found for solver_design smoke."],
+        }
+    if not canary_rel:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "issues": ["No canary_case_path configured for solver_design smoke."],
+        }
+
+    with tempfile.TemporaryDirectory(prefix="scion_algorithm_smoke_") as tmp:
+        workspace = Path(tmp) / "workspace"
+        champion_workspace = Path(tmp) / "champion"
+        try:
+            shutil.copytree(
+                base_workspace,
+                workspace,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                ),
+            )
+            shutil.copytree(
+                base_workspace,
+                champion_workspace,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                ),
+            )
+            _apply_patch_to_runtime_smoke_workspace(workspace, patch)
+            smoke_cases, missing_cases = _runtime_smoke_cases(
+                workspace=workspace,
+                base_workspace=base_workspace,
+                canary_rel=canary_rel,
+                split_manifest=context.split_manifest,
+                seed_ledger=context.seed_ledger,
+            )
+            if not smoke_cases:
+                return {
+                    "passed": False,
+                    "skipped": False,
+                    "workspace_materialized": True,
+                    "runtime_smoke_run": False,
+                    "issues": missing_cases
+                    or [f"No runnable smoke case found: {canary_rel}"],
+                }
+            registry_path = workspace / "registry.yaml"
+            if not registry_path.exists():
+                registry_path = workspace / "registry.json"
+            champion_registry_path = champion_workspace / "registry.yaml"
+            if not champion_registry_path.exists():
+                champion_registry_path = champion_workspace / "registry.json"
+            runs: list[dict[str, Any]] = []
+            micro_results: list[dict[str, Any]] = []
+            representative: dict[str, Any] | None = None
+            issue: str | None = None
+            audit_failure: Mapping[str, Any] | None = None
+            for smoke_case in smoke_cases:
+                raw, run_payload = _run_solver_design_smoke(
+                    workspace=workspace,
+                    smoke_case=smoke_case,
+                    registry_path=registry_path,
+                    selected_surface=surface_name,
+                )
+                if raw is None:
+                    issue = str(run_payload.get("detail") or "solver run failed")
+                    representative = {
+                        "case": smoke_case.rel_path,
+                        "seed": smoke_case.seed,
+                        "label": smoke_case.label,
+                        "passed": False,
+                        "objective": None,
+                        "feasible": None,
+                        "runtime": {},
+                        "run": run_payload,
+                    }
+                    runs.append(representative)
+                    break
+
+                audit_failure = _runtime_smoke_audit_failure(
+                    raw,
+                    context=context,
+                    selected_surface=surface_name,
+                )
+                runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
+                run_result = {
+                    "case": smoke_case.rel_path,
+                    "seed": smoke_case.seed,
+                    "label": smoke_case.label,
+                    "passed": audit_failure is None,
+                    "objective": raw.get("objective")
+                    if isinstance(raw, Mapping)
+                    else None,
+                    "feasible": raw.get("feasible") if isinstance(raw, Mapping) else None,
+                    "runtime": _compact_runtime_smoke_payload(runtime),
+                    "run": run_payload,
+                }
+                if audit_failure is not None:
+                    issue = str(audit_failure.get("detail") or "runtime audit failed")
+                    repair_guidance = _solver_design_smoke_repair_guidance(
+                        audit_failure,
+                        runtime=runtime,
+                        run_payload=run_payload,
+                    )
+                    run_result["runtime_audit_failure"] = (
+                        _compact_runtime_audit_failure(audit_failure)
+                    )
+                    if repair_guidance:
+                        run_result["repair_guidance"] = repair_guidance
+                runs.append(run_result)
+                if representative is None or audit_failure is not None:
+                    representative = run_result
+                if audit_failure is not None:
+                    break
+                champion_raw, champion_run = _run_solver_design_smoke(
+                    workspace=champion_workspace,
+                    smoke_case=smoke_case,
+                    registry_path=champion_registry_path,
+                    selected_surface=surface_name,
+                )
+                micro_result = _solver_design_micro_benchmark_result(
+                    candidate_raw=raw,
+                    candidate_run=run_payload,
+                    champion_raw=champion_raw,
+                    champion_run=champion_run,
+                    smoke_case=smoke_case,
+                )
+                run_result["micro_benchmark"] = micro_result
+                micro_results.append(micro_result)
+            if issue is None:
+                issue = _solver_design_zero_effort_issue(
+                    patch=patch,
+                    hypothesis=hypothesis,
+                    runs=runs,
+                )
+            if issue is None:
+                issue = _solver_design_low_effort_issue(
+                    patch=patch,
+                    hypothesis=hypothesis,
+                    runs=runs,
+                    micro_results=micro_results,
+                )
+            if issue is None:
+                issue = _solver_design_micro_benchmark_issue(micro_results)
+        except Exception as exc:
+            return {
+                "passed": False,
+                "skipped": False,
+                "workspace_materialized": True,
+                "runtime_smoke_run": False,
+                "issues": [f"runtime smoke setup failed: {type(exc).__name__}: {exc}"],
+            }
+
+    representative = representative or {}
+    passed = issue is None
+    issues = [] if passed else [str(issue)]
+    payload = {
+        "passed": passed,
+        "skipped": False,
+        "workspace_materialized": True,
+        "runtime_smoke_run": True,
+        "selected_surface": surface_name,
+        "case": representative.get("case") or canary_rel,
+        "seed": representative.get("seed") or _ALGORITHM_SMOKE_DEFAULT_SEED,
+        "case_count": len(runs),
+        "cases": [
+            {
+                "label": run.get("label"),
+                "case": run.get("case"),
+                "seed": run.get("seed"),
+                "passed": run.get("passed"),
+            }
+            for run in runs
+        ],
+        "time_limit_sec": _ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+        "objective": representative.get("objective"),
+        "feasible": representative.get("feasible"),
+        "runtime": representative.get("runtime") or {},
+        "issues": issues,
+        "run": representative.get("run") or {},
+        "runs": runs,
+        "micro_benchmark": _compact_solver_design_micro_benchmark(micro_results),
+    }
+    if audit_failure is not None:
+        payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
+            audit_failure
+        )
+        repair_guidance = _solver_design_smoke_repair_guidance(
+            audit_failure,
+            runtime=representative.get("runtime"),
+            run_payload=representative.get("run"),
+        )
+        if repair_guidance:
+            payload["repair_guidance"] = repair_guidance
+    return payload
+
+
+def _runtime_smoke_base_workspace(context: ProposalToolContext) -> Path | None:
+    champion_path = _attr(context.champion, "code_snapshot_path")
+    if champion_path:
+        path = Path(str(champion_path)).expanduser().resolve(strict=False)
+        if path.is_dir() and (path / "solver.py").is_file():
+            return path
+    root_dir = _attr(context.problem_spec, "root_dir")
+    if root_dir:
+        path = Path(str(root_dir)).expanduser().resolve(strict=False)
+        if path.is_dir() and (path / "solver.py").is_file():
+            return path
+    return None
+
+
+def _is_solver_design_runtime_patch_path(path: str | None) -> bool:
+    normalized = str(path or "").replace("\\", "/").lstrip("/")
+    return normalized in {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+    } or (
+        normalized.startswith("policies/baseline_modules/")
+        and normalized.endswith(".py")
+    )
+
+
+def _apply_patch_to_runtime_smoke_workspace(
+    workspace: Path,
+    patch: PatchProposal,
+) -> None:
+    for change in patch_file_changes(patch):
+        _apply_file_change_to_runtime_smoke_workspace(workspace, change)
+
+
+def _apply_file_change_to_runtime_smoke_workspace(
+    workspace: Path,
+    change: PatchFileChange,
+) -> None:
+    rel = normalize_relative_patch_path(change.file_path)
+    target = (workspace / rel).resolve(strict=False)
+    target.relative_to(workspace.resolve(strict=False))
+    action = str(change.action or "modify")
+    if action in {"modify", "add", "create", "create_new"}:
+        _ensure_runtime_smoke_path_writable(target.parent)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_runtime_smoke_path_writable(target)
+        target.write_text(str(change.code_content or ""), encoding="utf-8")
+    elif action in {"remove", "delete"}:
+        if target.exists():
+            _ensure_runtime_smoke_path_writable(target.parent)
+            _ensure_runtime_smoke_path_writable(target)
+            target.unlink()
+    else:
+        raise ValueError(f"unsupported patch action for smoke: {action}")
+
+
+def _ensure_runtime_smoke_path_writable(path: Path) -> None:
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError:
+        return
+    writable_mode = mode | stat.S_IWUSR
+    if path.is_dir():
+        writable_mode |= stat.S_IXUSR
+    if writable_mode != mode:
+        path.chmod(writable_mode)
+
+
+def _runtime_smoke_cases(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    canary_rel: str,
+    split_manifest: Any = None,
+    seed_ledger: Any = None,
+) -> tuple[list[_RuntimeSmokeCase], list[str]]:
+    cases: list[_RuntimeSmokeCase] = []
+    missing: list[str] = []
+    seen: set[tuple[str, int]] = set()
+
+    def add_case(label: str, rel_path: Any, seed: Any) -> None:
+        rel = str(rel_path or "").strip()
+        if not rel:
+            return
+        try:
+            seed_value = int(seed)
+        except (TypeError, ValueError):
+            seed_value = _ALGORITHM_SMOKE_DEFAULT_SEED
+        key = (rel, seed_value)
+        if key in seen:
+            return
+        seen.add(key)
+        instance_path = _resolve_smoke_instance_path(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            case_rel=rel,
+        )
+        if instance_path is None:
+            missing.append(f"{label} smoke case not found: {rel}")
+            return
+        cases.append(
+            _RuntimeSmokeCase(
+                label=label,
+                rel_path=rel,
+                seed=seed_value,
+                path=instance_path,
+            )
+        )
+
+    if split_manifest is None:
+        split_manifest = _load_runtime_smoke_yaml(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            filename="split_manifest.yaml",
+        )
+    if seed_ledger is None:
+        seed_ledger = _load_runtime_smoke_yaml(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            filename="seed_ledger.yaml",
+        )
+
+    canary_seed = _first_int(
+        _runtime_smoke_stage_value(seed_ledger, "canary"),
+        _ALGORITHM_SMOKE_DEFAULT_SEED,
+    )
+    canary_cases = _string_list(_runtime_smoke_stage_value(split_manifest, "canary"))
+    if canary_rel and canary_rel not in canary_cases:
+        canary_cases.append(canary_rel)
+    for rel in canary_cases[:1]:
+        add_case("canary", rel, canary_seed)
+
+    screening_seed = _first_int(
+        _runtime_smoke_stage_value(seed_ledger, "screening"),
+        _ALGORITHM_SMOKE_DEFAULT_SEED,
+    )
+    screening_cases = _select_runtime_smoke_screening_cases(
+        _string_list(_runtime_smoke_stage_value(split_manifest, "screening")),
+        _ALGORITHM_SMOKE_MAX_SCREENING_CASES,
+    )
+    for rel in screening_cases:
+        add_case("screening", rel, screening_seed)
+    return cases, missing
+
+
+def _runtime_smoke_stage_value(source: Any, stage: str) -> Any:
+    if source is None:
+        return None
+    if isinstance(source, Mapping):
+        return source.get(stage)
+    if stage == "canary":
+        getter = getattr(source, "get_canary_cases", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        seed_getter = getattr(source, "get_canary_seeds", None)
+        if callable(seed_getter):
+            try:
+                return seed_getter()
+            except Exception:
+                return None
+    getter = getattr(source, "get_cases", None)
+    if callable(getter):
+        arguments = _runtime_smoke_stage_arguments(stage)
+        for argument in arguments:
+            try:
+                return getter(argument)
+            except Exception:
+                continue
+    seed_getter = getattr(source, "get_seeds", None)
+    if callable(seed_getter):
+        arguments = _runtime_smoke_stage_arguments(stage)
+        for argument in arguments:
+            try:
+                return seed_getter(argument)
+            except Exception:
+                continue
+    try:
+        return getattr(source, stage)
+    except Exception:
+        return None
+
+
+def _runtime_smoke_stage_arguments(stage: str) -> tuple[Any, ...]:
+    enum_stage = getattr(ExperimentStage, stage.upper(), None)
+    if enum_stage is None:
+        return (stage,)
+    return (enum_stage, stage)
+
+
+def _select_runtime_smoke_screening_cases(paths: list[str], max_cases: int) -> list[str]:
+    cases = [path for path in paths if str(path or "").strip()]
+    total = len(cases)
+    if max_cases <= 0 or total <= 0:
+        return []
+    if max_cases >= total:
+        return cases
+    if max_cases == 1:
+        return [cases[total // 2]]
+
+    indices = [round(i * (total - 1) / (max_cases - 1)) for i in range(max_cases)]
+    selected: list[int] = []
+    seen: set[int] = set()
+    for idx in indices:
+        if idx in seen:
+            continue
+        selected.append(idx)
+        seen.add(idx)
+    for idx in range(total):
+        if len(selected) >= max_cases:
+            break
+        if idx in seen:
+            continue
+        selected.append(idx)
+        seen.add(idx)
+    return [cases[idx] for idx in sorted(selected[:max_cases])]
+
+
+def _load_runtime_smoke_yaml(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    filename: str,
+) -> Mapping[str, Any]:
+    for root in (workspace, base_workspace):
+        path = root / filename
+        if not path.is_file():
+            continue
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+        if isinstance(payload, Mapping):
+            return payload
+        return {}
+    return {}
+
+
+def _first_int(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (str, bytes)):
+        candidates = [value]
+    elif isinstance(value, (list, tuple)):
+        candidates = list(value)
+    else:
+        candidates = []
+    for item in candidates:
+        try:
+            return int(item)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    result: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _resolve_smoke_instance_path(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    case_rel: str,
+) -> Path | None:
+    rel = Path(case_rel)
+    candidates = []
+    if rel.is_absolute():
+        candidates.append(rel)
+    else:
+        candidates.append(workspace / rel)
+        candidates.append(base_workspace / rel)
+        data_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
+        if data_root:
+            candidates.append(Path(data_root).expanduser().resolve(strict=False) / rel)
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def _run_solver_design_smoke(
+    *,
+    workspace: Path,
+    smoke_case: _RuntimeSmokeCase,
+    registry_path: Path,
+    selected_surface: str,
+) -> tuple[Mapping[str, Any] | None, dict[str, Any]]:
+    from scion.runtime.runner import ResourceLimits
+    from scion.runtime.subprocess_runner import LocalSubprocessRunner
+
+    runner = LocalSubprocessRunner(
+        ResourceLimits(timeout_sec=_ALGORITHM_SMOKE_TIMEOUT_SEC, memory_mb=2048)
+    )
+    result = runner.run_solver(
+        workdir=str(workspace),
+        instance_path=str(smoke_case.path),
+        seed=smoke_case.seed,
+        time_limit_sec=_ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+        registry_path=str(registry_path),
+        selected_surface=selected_surface,
+    )
+    run_payload = {
+        "case": smoke_case.rel_path,
+        "seed": smoke_case.seed,
+        "label": smoke_case.label,
+        "success": result.success,
+        "exit_code": result.exit_code,
+        "elapsed_ms": result.elapsed_ms,
+        "error_category": result.error_category,
+        "stdout": _limit_text(result.stdout or "", 800),
+        "stderr": _limit_text(result.stderr or "", 800),
+    }
+    if not result.success or result.output_path is None:
+        detail = _solver_run_failure_detail(result)
+        run_payload["detail"] = detail
+        return None, run_payload
+    try:
+        with open(result.output_path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception as exc:
+        run_payload["detail"] = f"could not read solver output: {exc}"
+        return None, run_payload
+    run_payload["detail"] = "solver smoke completed"
+    return raw, run_payload
+
+
+def _solver_run_failure_detail(result: Any) -> str:
+    parts = [
+        "solver run failed",
+        f"exit_code={getattr(result, 'exit_code', None)}",
+    ]
+    error_category = getattr(result, "error_category", None)
+    if error_category:
+        parts.append(f"error_category={error_category}")
+    elapsed_ms = getattr(result, "elapsed_ms", None)
+    if elapsed_ms is not None:
+        parts.append(f"elapsed_ms={elapsed_ms}")
+    stderr = str(getattr(result, "stderr", "") or "").strip()
+    stdout = str(getattr(result, "stdout", "") or "").strip()
+    if stderr:
+        parts.append("stderr=" + _limit_text(stderr, 1200))
+    if stdout:
+        parts.append("stdout=" + _limit_text(stdout, 1200))
+    return "; ".join(parts)
+
+
+def _runtime_smoke_audit_failure(
+    raw: Mapping[str, Any],
+    *,
+    context: ProposalToolContext,
+    selected_surface: str,
+) -> Mapping[str, Any] | None:
+    from scion.runtime.audit import runtime_audit_failure_from_raw
+
+    problem_spec = _problem_spec_for_runtime_audit(context.problem_spec)
+    return runtime_audit_failure_from_raw(
+        raw,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+    )
+
+
+def _problem_spec_for_runtime_audit(problem_spec: Any) -> Any:
+    if (
+        str(_attr(problem_spec, "spec_version", "") or "") == "problem-v1"
+        and _attr(problem_spec, "id") is not None
+    ):
+        return legacy_problem_spec_from_v1(problem_spec)
+    return problem_spec
+
+
+def _compact_runtime_smoke_payload(runtime: Any) -> dict[str, Any]:
+    if not isinstance(runtime, Mapping):
+        return {}
+    keys = (
+        "solver_algorithm_path",
+        "solver_algorithm_loaded",
+        "solver_algorithm_active",
+        "solver_algorithm_errors",
+        "solver_algorithm_events",
+        "solver_algorithm_elapsed_ms",
+        "solver_algorithm_solution_valid",
+        "solver_algorithm_total_distance",
+        "solver_algorithm_fleet_violation",
+        "solver_algorithm_search_iterations",
+        "solver_algorithm_move_attempts",
+        "solver_algorithm_accepted_moves",
+        "solver_algorithm_improving_moves",
+        "solver_algorithm_neutral_accepted_moves",
+        "solver_algorithm_best_improving_moves",
+        "solver_algorithm_best_delta",
+        "solver_algorithm_phase_delta_sum",
+        "solver_algorithm_phase_best_delta",
+        "solver_algorithm_phase_improvement_counts",
+        "solver_algorithm_stop_reason",
+    )
+    return {key: runtime.get(key) for key in keys if key in runtime}
+
+
+def _compact_runtime_audit_failure(value: Mapping[str, Any]) -> dict[str, Any]:
+    keys = (
+        "error_category",
+        "detail",
+        "failed_runtime_fields",
+        "solver_algorithm_errors",
+        "solver_algorithm_events",
+    )
+    return {key: value.get(key) for key in keys if key in value}
+
+
+def _solver_design_micro_benchmark_result(
+    *,
+    candidate_raw: Mapping[str, Any],
+    candidate_run: Mapping[str, Any],
+    champion_raw: Mapping[str, Any] | None,
+    champion_run: Mapping[str, Any],
+    smoke_case: _RuntimeSmokeCase,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "case": smoke_case.rel_path,
+        "seed": smoke_case.seed,
+        "label": smoke_case.label,
+        "candidate_elapsed_ms": candidate_run.get("elapsed_ms"),
+        "champion_elapsed_ms": champion_run.get("elapsed_ms"),
+    }
+    if champion_raw is None:
+        result.update(
+            {
+                "comparison": "incomparable",
+                "champion_failed": True,
+                "champion_error_category": champion_run.get("error_category"),
+                "champion_detail": _limit_text(
+                    str(champion_run.get("detail") or ""),
+                    320,
+                ),
+            }
+        )
+        return result
+
+    comparison = _compare_solver_design_raw_outputs(candidate_raw, champion_raw)
+    result.update(comparison)
+    try:
+        result["runtime_delta_ms"] = int(candidate_run.get("elapsed_ms") or 0) - int(
+            champion_run.get("elapsed_ms") or 0
+        )
+    except (TypeError, ValueError):
+        pass
+    return result
+
+
+def _compare_solver_design_raw_outputs(
+    candidate_raw: Mapping[str, Any],
+    champion_raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    candidate_obj = candidate_raw.get("objective")
+    champion_obj = champion_raw.get("objective")
+    if not isinstance(candidate_obj, Mapping) or not isinstance(champion_obj, Mapping):
+        return {"comparison": "incomparable"}
+    candidate_fleet = _float_or_none(candidate_obj.get("fleet_violation"))
+    champion_fleet = _float_or_none(champion_obj.get("fleet_violation"))
+    candidate_distance = _float_or_none(candidate_obj.get("total_distance"))
+    champion_distance = _float_or_none(champion_obj.get("total_distance"))
+    comparison = "tie"
+    delta = 0.0
+    decisive_metric = "total_distance"
+    if candidate_fleet is not None and champion_fleet is not None:
+        fleet_delta = champion_fleet - candidate_fleet
+        if abs(fleet_delta) > 1e-9:
+            comparison = "win" if fleet_delta > 0 else "loss"
+            delta = fleet_delta
+            decisive_metric = "fleet_violation"
+    if comparison == "tie" and candidate_distance is not None and champion_distance is not None:
+        distance_delta = champion_distance - candidate_distance
+        if abs(distance_delta) > 1e-9:
+            comparison = "win" if distance_delta > 0 else "loss"
+            delta = distance_delta
+        else:
+            delta = 0.0
+    return {
+        "comparison": comparison,
+        "delta": delta,
+        "decisive_metric": decisive_metric,
+        "candidate_objective": {
+            key: candidate_obj.get(key)
+            for key in ("fleet_violation", "total_distance")
+            if key in candidate_obj
+        },
+        "champion_objective": {
+            key: champion_obj.get(key)
+            for key in ("fleet_violation", "total_distance")
+            if key in champion_obj
+        },
+    }
+
+
+def _solver_design_micro_benchmark_issue(
+    micro_results: list[dict[str, Any]],
+) -> str | None:
+    comparable = [
+        result
+        for result in micro_results
+        if result.get("comparison") in {"win", "loss", "tie"}
+    ]
+    if not comparable:
+        return None
+    losses = sum(1 for result in comparable if result.get("comparison") == "loss")
+    wins = sum(1 for result in comparable if result.get("comparison") == "win")
+    ties = sum(1 for result in comparable if result.get("comparison") == "tie")
+    if losses == len(comparable) and wins == 0 and ties == 0:
+        return (
+            "tainted micro-benchmark objective regression: candidate lost all "
+            f"{len(comparable)} comparable smoke case(s) against the current champion"
+        )
+    return None
+
+
+def _solver_design_zero_effort_issue(
+    *,
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+    runs: list[dict[str, Any]],
+) -> str | None:
+    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
+        return None
+    successful = [
+        run
+        for run in runs
+        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
+    ]
+    if not successful:
+        return None
+    zero_effort = []
+    for run in successful:
+        runtime = run.get("runtime")
+        if not isinstance(runtime, Mapping):
+            continue
+        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
+        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
+        if iterations == 0 and attempts == 0:
+            zero_effort.append(run)
+    if len(zero_effort) != len(successful):
+        return None
+    targets = ", ".join(_solver_design_patch_paths(patch))
+    return (
+        "solver_design smoke observed zero active search effort on all "
+        f"{len(successful)} successful smoke case(s): "
+        "solver_algorithm_search_iterations=0 and "
+        "solver_algorithm_move_attempts=0. This candidate touches or claims "
+        f"search-bearing solver code ({targets}) but behaves like a construction/"
+        "wrapper-only path. Wire the changed mechanism into the active ALNS/VNS/"
+        "search loop, record real iterations or moves, or retarget the hypothesis "
+        "as a bounded construction-only algorithm with explicit telemetry."
+    )
+
+
+def _solver_design_low_effort_issue(
+    *,
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+    runs: list[dict[str, Any]],
+    micro_results: list[dict[str, Any]],
+) -> str | None:
+    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
+        return None
+    successful = [
+        run
+        for run in runs
+        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
+    ]
+    if len(successful) < _ALGORITHM_SMOKE_LOW_EFFORT_MIN_CASES:
+        return None
+    if any(result.get("comparison") == "win" for result in micro_results):
+        return None
+
+    micro_by_case_seed = {
+        (str(result.get("case") or ""), _nonnegative_int(result.get("seed"))): result
+        for result in micro_results
+    }
+    low_effort: list[dict[str, Any]] = []
+    for run in successful:
+        runtime = run.get("runtime")
+        if not isinstance(runtime, Mapping):
+            continue
+        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
+        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
+        stop_reason = _runtime_stop_reason(
+            runtime.get("solver_algorithm_stop_reason")
+        )
+        if iterations > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS:
+            continue
+        if attempts > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS:
+            continue
+        if stop_reason not in _ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS:
+            continue
+        if not _solver_design_smoke_runtime_underspent(
+            run,
+            micro_by_case_seed=micro_by_case_seed,
+        ):
+            continue
+        low_effort.append(
+            {
+                "case": run.get("case"),
+                "seed": run.get("seed"),
+                "iterations": iterations,
+                "attempts": attempts,
+                "stop_reason": stop_reason,
+            }
+        )
+
+    if len(low_effort) != len(successful):
+        return None
+    targets = ", ".join(_solver_design_patch_paths(patch))
+    return (
+        "solver_design smoke observed low active search effort on all "
+        f"{len(successful)} successful smoke case(s): each run stopped with "
+        f"{sorted(_ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS)} after at most "
+        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS} search iteration(s) and "
+        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS} move attempt(s), while "
+        "using only a small fraction of the smoke/champion runtime and producing "
+        "no smoke micro-benchmark win. This candidate touches or claims "
+        f"search-bearing solver code ({targets}) but appears to truncate the "
+        "active ALNS/VNS/search loop. Keep real search budget and telemetry, or "
+        "retarget the hypothesis as a bounded construction/runtime-speed change "
+        "that does not claim search improvement."
+    )
+
+
+def _solver_design_smoke_runtime_underspent(
+    run: Mapping[str, Any],
+    *,
+    micro_by_case_seed: Mapping[tuple[str, int], Mapping[str, Any]],
+) -> bool:
+    elapsed = _nonnegative_int((run.get("run") or {}).get("elapsed_ms"))
+    runtime = run.get("runtime")
+    solver_elapsed = 0
+    if isinstance(runtime, Mapping):
+        solver_elapsed = _nonnegative_int(runtime.get("solver_algorithm_elapsed_ms"))
+    candidate_elapsed = elapsed or solver_elapsed
+    if candidate_elapsed <= 0:
+        return False
+
+    key = (str(run.get("case") or ""), _nonnegative_int(run.get("seed")))
+    micro = micro_by_case_seed.get(key)
+    if isinstance(micro, Mapping):
+        champion_elapsed = _nonnegative_int(micro.get("champion_elapsed_ms"))
+        if champion_elapsed > 0:
+            return (
+                candidate_elapsed / champion_elapsed
+                <= _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+            )
+    return (
+        candidate_elapsed
+        <= int(
+            _ALGORITHM_SMOKE_TIME_LIMIT_SEC
+            * 1000
+            * _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+        )
+    )
+
+
+def _runtime_stop_reason(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text or "unknown"
+
+
+def _solver_design_patch_claims_search_effort(
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    paths = set(_solver_design_patch_paths(patch))
+    if paths & {
+        "policies/baseline_algorithm.py",
+        "policies/solver_algorithm.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/destroy_repair.py",
+        "policies/baseline_modules/acceptance.py",
+    }:
+        return True
+    text_parts = []
+    if hypothesis is not None:
+        for name in (
+            "hypothesis_text",
+            "target_weakness",
+            "expected_effect",
+            "runtime_budget_strategy",
+            "target_runtime_effect",
+        ):
+            value = getattr(hypothesis, name, None)
+            if value:
+                text_parts.append(str(value))
+    text = " ".join(text_parts).lower()
+    if not text:
+        return False
+    search_terms = (
+        "alns",
+        "vns",
+        "search",
+        "local",
+        "move",
+        "operator",
+        "destroy",
+        "repair",
+        "acceptance",
+        "anneal",
+        "scheduler",
+    )
+    return any(term in text for term in search_terms)
+
+
+def _solver_design_patch_paths(patch: PatchProposal) -> list[str]:
+    paths: list[str] = []
+    for change in patch_file_changes(patch):
+        try:
+            path = normalize_relative_patch_path(change.file_path)
+        except ValueError:
+            path = str(change.file_path or "")
+        if path:
+            paths.append(path)
+    return paths
+
+
+def _nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _compact_solver_design_micro_benchmark(
+    micro_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    comparable = [
+        result
+        for result in micro_results
+        if result.get("comparison") in {"win", "loss", "tie"}
+    ]
+    wins = sum(1 for result in comparable if result.get("comparison") == "win")
+    losses = sum(1 for result in comparable if result.get("comparison") == "loss")
+    ties = sum(1 for result in comparable if result.get("comparison") == "tie")
+    return {
+        "non_promotional": True,
+        "tainted_debug": True,
+        "comparable_cases": len(comparable),
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "results": [
+            {
+                key: result.get(key)
+                for key in (
+                    "label",
+                    "case",
+                    "seed",
+                    "comparison",
+                    "delta",
+                    "decisive_metric",
+                    "runtime_delta_ms",
+                )
+                if key in result
+            }
+            for result in micro_results[:_ALGORITHM_SMOKE_MAX_SCREENING_CASES + 1]
+        ],
+    }
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _solver_design_smoke_repair_guidance(
+    audit_failure: Mapping[str, Any],
+    *,
+    runtime: Any,
+    run_payload: Any,
+) -> list[str]:
+    if audit_failure.get("error_category") != "solver_algorithm_runtime_error":
+        return []
+    events = audit_failure.get("solver_algorithm_events")
+    text = " ".join(
+        str(part)
+        for part in (
+            audit_failure.get("detail"),
+            audit_failure.get("error_category"),
+            events,
+            run_payload.get("detail") if isinstance(run_payload, Mapping) else None,
+        )
+        if part not in (None, "", [], {})
+    )
+    guidance = [
+        "Failure occurred inside the candidate solver_design solve path during tainted algorithm smoke; repair the candidate algorithm code, not protocol or adapter files.",
+        "Use the current CVRP object model: _Solution has .instance, .routes, .total_cost, .copy(), .rebuild_index(), .remove_empty_routes(), .is_feasible(), and .routes_as_tuples(); it does not expose ._instance.",
+        "_Solution.routes contains _Route objects. A _Route has .customers, .load, .cost, .insert(), .remove(), .can_insert(), .cost_of_insert(), .cost_of_remove(), and .recalculate(); do not treat routes as plain customer lists unless you explicitly use route.customers.",
+        "CvrpInstance.distance(i, j), demand(i), route_load(route), and route_distance(route) use integer node/customer ids; keep depot/customer ids explicit and rebuild solution indexes after direct route edits.",
+    ]
+    if "_Solution' object has no attribute '_instance'" in text:
+        guidance.insert(
+            1,
+            "Specific fix: replace solution._instance with solution.instance; only _Route carries the private _instance slot.",
+        )
+    if "int' object has no attribute 'distance'" in text or '".distance"' in text:
+        guidance.insert(
+            1,
+            "Specific fix: do not call .distance on an int, route, or customer id; call instance.distance(prev_id, next_id).",
+        )
+    if runtime in (None, {}, ""):
+        guidance.append(
+            "Runtime payload was missing or empty; first make solve(...) return a valid _Solution and context telemetry before adding new search breadth."
+        )
+    return guidance[:6]
+
+
+def _attr(value: Any, name: str, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, Mapping):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def _normalize_rel_path(path: str) -> str | None:
+    raw_path = str(path).replace(os.sep, "/")
+    if raw_path.startswith("/"):
+        return None
+    raw = raw_path
+    if not raw or raw in {".", ".."}:
+        return None
+    parts = PurePosixPath(raw).parts
+    if any(part in {"..", ""} for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _limit_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    suffix = "\n[truncated by proposal tool result budget]"
+    return text[: max(0, max_chars - len(suffix))] + suffix
