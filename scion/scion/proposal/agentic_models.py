@@ -58,7 +58,7 @@ class AgenticToolLoopConfig:
     max_steps: int = 22
     max_tool_calls: int = 18
     max_observation_chars: int = 96000
-    max_wall_time_sec: float = 120.0
+    max_wall_time_sec: float = 240.0
     max_repeated_tool_calls: int = 2
     max_code_tool_calls: int = 4
     max_code_repair_attempts: int = 2

@@ -406,6 +406,10 @@ Important current interpretation:
   now rejects invented bridge calls/definitions, and repeated failures are
   classified as `object_model_loop` with `inspect_agent_trace` guidance rather
   than a generic infra loop.
+- APS default session wall time is 240 seconds. This intentionally exceeds the
+  180 second default code/fix LLM request timeout so a repaired patch can still
+  receive terminal Contract/smoke preview. Use
+  `--agentic-session-timeout-sec` only for deliberate diagnostics.
 - `proposal.algorithm_smoke` rejects solver-design candidates that claim or
   touch search-bearing solver code but record zero
   `solver_algorithm_search_iterations` and zero

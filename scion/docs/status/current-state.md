@@ -231,6 +231,20 @@ focused helpers: `agentic_models.py`, `agentic_artifacts.py`,
 `agentic_utils.py`. Future APS work should keep new models, artifact logic,
 preview logic, and prompt-shaping helpers in those focused modules.
 
+The first 3-round monitored smoke after that repair
+`/home/clawd/research/scion-experiments/v04-object-model-control-sonnet-3r-20260516T170823Z`
+exited normally and produced one formal screening experiment. Rounds 1 and 2
+failed in code-stage Contract preview, but trace review showed the important
+control issue: after one or two code-repair generations, APS hit the 120 second
+session wall-time limit before it could re-run the terminal Contract preview
+on the latest repaired patch. Round 3 targeted `local_search.py`, passed
+Contract preview, algorithm smoke, Verification, and screening, then was
+correctly abandoned by Decision (`SCREENING_FAIL_WIN_RATE`, win rate `0.0`,
+median delta `0.0`, runtime ratio median about `1.005`). This validates the
+object-model repair path but exposes a budget mismatch. Code/fix LLM calls can
+legitimately take up to 180 seconds, so the default APS session budget is now
+240 seconds; CLI `--agentic-session-timeout-sec` still overrides it.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
