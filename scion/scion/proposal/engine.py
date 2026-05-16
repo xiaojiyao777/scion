@@ -867,14 +867,25 @@ def _split_code_context(
         "- If `additional_changes` touches `policies/baseline_algorithm.py`, "
         "keep the stable entrypoint shape: import `_ALNSVNSSolver` from "
         "`.baseline_modules.scheduler`, instantiate it, and call "
-        "`solver.solve(instance, rng)`. Do not import `solve`, `run`, or "
-        "`main` from scheduler.\n"
+        "`solver.solve(instance, rng)` with no extra seed/context/initial_solution "
+        "arguments. The constructor must use the current explicit keyword API: "
+        "`time_limit`, `destroy_ratio`, `segment_length`, `reaction_factor`, "
+        "`vns_max_no_improve`, `use_vns`, `cw_threshold`, `vns_threshold`, "
+        "`alns_threshold`, `max_destroy_customers`, `max_routes`, and `context`. "
+        "Do not import `solve`, `run`, or `main` from scheduler. If a new seed "
+        "or construction hook is needed, integrate it inside "
+        "`baseline_modules/scheduler.py` while keeping this entrypoint call "
+        "shape.\n"
         "- If `additional_changes` touches `policies/baseline_modules/scheduler.py` "
         "or `policies/baseline_algorithm.py` while another file is the approved "
         "target, preserve the stable runtime contract: `baseline_algorithm.py` "
         "must keep `_ALNSVNSSolver(...).solve(instance, rng)`, and "
-        "`scheduler.py` must keep the class-based `_ALNSVNSSolver.solve` path "
-        "without adding top-level `solve`, `run`, or `main` entrypoints. "
+        "`scheduler.py` must keep the class-based `_ALNSVNSSolver.__init__(self, "
+        "*, time_limit, destroy_ratio, segment_length, reaction_factor, "
+        "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
+        "alns_threshold, max_destroy_customers, max_routes, context)` and "
+        "`_ALNSVNSSolver.solve(self, instance, rng)` path without adding "
+        "top-level `solve`, `run`, or `main` entrypoints. "
         "Multi-module algorithm integration is allowed when it stays inside "
         "that auditable call chain.\n"
         "- A solver-design patch that claims or touches search-bearing code "
@@ -1146,8 +1157,8 @@ def _solver_design_scope_control_section(
         "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
         "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
-        "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it, and call `solver.solve(instance, rng)`; do not import scheduler `solve`, `run`, or `main`.",
-        "- If scheduler.py or baseline_algorithm.py is only an integration edit, preserve the stable runtime contract: baseline_algorithm.py calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py keeps the class-based `_ALNSVNSSolver.solve` path without top-level `solve`, `run`, or `main` entrypoints. Multi-module changes are allowed when they remain inside this auditable call chain.",
+        "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it with the current explicit keywords (`time_limit`, `destroy_ratio`, `segment_length`, `reaction_factor`, `vns_max_no_improve`, `use_vns`, `cw_threshold`, `vns_threshold`, `alns_threshold`, `max_destroy_customers`, `max_routes`, `context`), and call `solver.solve(instance, rng)` with no extra arguments; do not import scheduler `solve`, `run`, or `main`.",
+        "- If scheduler.py or baseline_algorithm.py is only an integration edit, preserve the stable runtime contract: baseline_algorithm.py calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py keeps the class-based `_ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio, segment_length, reaction_factor, vns_max_no_improve, use_vns, cw_threshold, vns_threshold, alns_threshold, max_destroy_customers, max_routes, context)` plus `_ALNSVNSSolver.solve(self, instance, rng)` path without top-level `solve`, `run`, or `main` entrypoints. Multi-module changes are allowed when they remain inside this auditable call chain; put new construction seeds or initial-state hooks inside scheduler methods instead of changing the entrypoint call protocol.",
         "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",

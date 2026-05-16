@@ -4961,8 +4961,14 @@ def _solver_design_code_scope_control(
                 "baseline_algorithm.py is only an integration edit, preserve "
                 "the stable runtime contract: baseline_algorithm.py calls "
                 "_ALNSVNSSolver(...).solve(instance, rng), and scheduler.py "
-                "keeps the class-based _ALNSVNSSolver.solve path without "
-                "top-level solve, run, or main entrypoints."
+                "keeps the class-based _ALNSVNSSolver.__init__(self, *, "
+                "time_limit, destroy_ratio, segment_length, reaction_factor, "
+                "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
+                "alns_threshold, max_destroy_customers, max_routes, context) "
+                "plus _ALNSVNSSolver.solve(self, instance, rng) path without "
+                "top-level solve, run, or main entrypoints. Put new seed or "
+                "initial-state hooks inside scheduler methods, not by changing "
+                "the baseline_algorithm.py call protocol."
             ),
             "import_rule": (
                 "Use package-relative imports inside policies, for example "
@@ -4973,8 +4979,13 @@ def _solver_design_code_scope_control(
             "entrypoint_rule": (
                 "If additional_changes touches policies/baseline_algorithm.py, "
                 "keep the stable scheduler class API: import _ALNSVNSSolver "
-                "from .baseline_modules.scheduler, instantiate it, and call "
-                "solver.solve(instance, rng). Do not import scheduler solve, "
+                "from .baseline_modules.scheduler, instantiate it with the "
+                "current explicit keywords (time_limit, destroy_ratio, "
+                "segment_length, reaction_factor, vns_max_no_improve, use_vns, "
+                "cw_threshold, vns_threshold, alns_threshold, "
+                "max_destroy_customers, max_routes, context), and call "
+                "solver.solve(instance, rng) with no extra seed/context/"
+                "initial_solution arguments. Do not import scheduler solve, "
                 "run, or main."
             ),
             "context_api_rule": (

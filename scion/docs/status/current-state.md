@@ -177,8 +177,13 @@ search-bearing candidates that stop almost immediately with no smoke
 micro-benchmark win and a `no_improvement`-style stop reason. Multi-module
 solver-design patches may now integrate through `scheduler.py` /
 `baseline_algorithm.py` when those files preserve the
-`_ALNSVNSSolver(...).solve(instance, rng)` call chain and avoid detached
-top-level scheduler entrypoints.
+`_ALNSVNSSolver(...).solve(instance, rng)` call chain, keep the current
+explicit scheduler constructor keywords, keep
+`_ALNSVNSSolver.solve(self, instance, rng)`, and avoid detached top-level
+scheduler entrypoints. The 2026-05-16 low-effort-smoke follow-up exposed why
+this must be static: generated construction/acceptance candidates tried to pass
+custom seeds through `baseline_algorithm.py` or rewrote the scheduler
+constructor API, so all 3 rounds failed before official screening.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
@@ -2082,6 +2087,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-solver-design-target-diversity-c9e-operator-ref-20260516.md`](../experiments/v0.4/v0.4-solver-design-target-diversity-c9e-operator-ref-20260516.md)
+  [`v0.4-solver-design-integration-api-repair-20260516.md`](../experiments/v0.4/v0.4-solver-design-integration-api-repair-20260516.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

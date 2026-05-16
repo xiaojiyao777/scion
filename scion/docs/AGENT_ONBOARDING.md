@@ -369,9 +369,15 @@ Important current interpretation:
   active solver path. Multi-module solver-design patches may integrate through
   `scheduler.py` / `baseline_algorithm.py` in `additional_changes`, but they
   must preserve the stable runtime API: `baseline_algorithm.py` calls
-  `_ALNSVNSSolver(...).solve(instance, rng)`, and `scheduler.py` keeps the
-  class-based `_ALNSVNSSolver.solve` path without adding top-level
-  `solve`/`run`/`main` entrypoints.
+  `_ALNSVNSSolver(...).solve(instance, rng)` with no extra seed or
+  `initial_solution` arguments, and `scheduler.py` keeps the class-based
+  `_ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio, segment_length,
+  reaction_factor, vns_max_no_improve, use_vns, cw_threshold, vns_threshold,
+  alns_threshold, max_destroy_customers, max_routes, context)` plus
+  `_ALNSVNSSolver.solve(self, instance, rng)` path without adding top-level
+  `solve`/`run`/`main` entrypoints. If a module-level change needs a new seed
+  or initial-state hook, integrate it inside scheduler methods rather than
+  changing the entrypoint call protocol.
 - `proposal.algorithm_smoke` rejects solver-design candidates that claim or
   touch search-bearing solver code but record zero
   `solver_algorithm_search_iterations` and zero

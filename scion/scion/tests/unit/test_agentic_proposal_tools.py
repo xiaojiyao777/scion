@@ -3932,7 +3932,9 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "stable runtime contract" in rendered_system
     assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
-    assert "class-based `_ALNSVNSSolver.solve` path" in rendered_system
+    assert "_ALNSVNSSolver.__init__(self, *" in rendered_system
+    assert "_ALNSVNSSolver.solve(self, instance, rng)" in rendered_system
+    assert "initial-state hooks inside scheduler methods" in rendered_system
     assert "zero iterations and zero move attempts" in rendered_system
     assert "_default_vns_operators()" in rendered_system
     assert "detached `_run`/`run`" in rendered_system

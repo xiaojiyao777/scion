@@ -1036,9 +1036,15 @@ research_surfaces:
         path. If scheduler.py or baseline_algorithm.py appears in
         additional_changes while another file is the approved target, preserve
         the stable runtime contract: baseline_algorithm.py calls
-        _ALNSVNSSolver(...).solve(instance, rng), and scheduler.py keeps the
-        class-based _ALNSVNSSolver.solve path without top-level solve, run, or
-        main entrypoints.
+        _ALNSVNSSolver(...).solve(instance, rng) with no extra seed or
+        initial_solution arguments, and scheduler.py keeps the class-based
+        _ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio,
+        segment_length, reaction_factor, vns_max_no_improve, use_vns,
+        cw_threshold, vns_threshold, alns_threshold, max_destroy_customers,
+        max_routes, context) plus _ALNSVNSSolver.solve(self, instance, rng)
+        path without top-level solve, run, or main entrypoints. If a new seed
+        or construction hook is needed, integrate it inside scheduler methods
+        rather than changing the baseline_algorithm.py call protocol.
     target_files:
       - "policies/baseline_algorithm.py"
       - "policies/solver_algorithm.py"

@@ -24,6 +24,24 @@ class SolverDesignIntegrationResult:
     detail: str
 
 
+_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS = (
+    "time_limit",
+    "destroy_ratio",
+    "segment_length",
+    "reaction_factor",
+    "vns_max_no_improve",
+    "use_vns",
+    "cw_threshold",
+    "vns_threshold",
+    "alns_threshold",
+    "max_destroy_customers",
+    "max_routes",
+    "context",
+)
+_STABLE_SOLVER_CONSTRUCTOR_KEYWORD_SET = set(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)
+_STABLE_SOLVER_SOLVE_SIGNATURE = ("self", "instance", "rng")
+
+
 def check_solver_design_integration(
     patch: PatchProposal,
     *,
@@ -218,6 +236,18 @@ def _baseline_algorithm_integration_error(
             "wrapper when they are not the approved primary target. "
             f"primary_target={primary_path}; expected _ALNSVNSSolver and solve(...)."
         )
+    constructor_error = _baseline_algorithm_constructor_call_error(
+        tree,
+        primary_path=primary_path,
+    )
+    if constructor_error is not None:
+        return constructor_error
+    solve_call_error = _baseline_algorithm_solver_solve_call_error(
+        tree,
+        primary_path=primary_path,
+    )
+    if solve_call_error is not None:
+        return solve_call_error
     return None
 
 
@@ -264,6 +294,162 @@ def _scheduler_integration_contract_error(
             f"primary target. primary_target={primary_path}; "
             f"runtime_classes={sorted(runtime_classes)}."
         )
+    constructor_error = _scheduler_constructor_contract_error(
+        tree,
+        runtime_classes=runtime_classes,
+        primary_path=primary_path,
+    )
+    if constructor_error is not None:
+        return constructor_error
+    solve_signature_error = _scheduler_solve_signature_contract_error(
+        tree,
+        runtime_classes=runtime_classes,
+        primary_path=primary_path,
+    )
+    if solve_signature_error is not None:
+        return solve_signature_error
+    return None
+
+
+def _baseline_algorithm_constructor_call_error(
+    tree: ast.AST,
+    *,
+    primary_path: str,
+) -> str | None:
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _is_alnsvns_constructor_call(node)
+    ]
+    if not calls:
+        return (
+            "baseline_algorithm.py integration edits must instantiate "
+            "_ALNSVNSSolver with the stable constructor keyword arguments "
+            "when they are not the approved primary target. "
+            f"primary_target={primary_path}; no constructor call found."
+        )
+    for call in calls:
+        if call.args:
+            return (
+                "baseline_algorithm.py integration edits must instantiate "
+                "_ALNSVNSSolver with explicit stable keyword arguments, not "
+                "positional arguments, when they are not the approved primary "
+                f"target. primary_target={primary_path}; line={call.lineno}; "
+                f"expected_keywords={list(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)}."
+            )
+        if any(keyword.arg is None for keyword in call.keywords):
+            return (
+                "baseline_algorithm.py integration edits must list the stable "
+                "_ALNSVNSSolver constructor keywords explicitly instead of "
+                "using **kwargs when they are not the approved primary target. "
+                f"primary_target={primary_path}; line={call.lineno}; "
+                f"expected_keywords={list(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)}."
+            )
+        keyword_names = {str(keyword.arg) for keyword in call.keywords}
+        missing = sorted(_STABLE_SOLVER_CONSTRUCTOR_KEYWORD_SET - keyword_names)
+        extra = sorted(keyword_names - _STABLE_SOLVER_CONSTRUCTOR_KEYWORD_SET)
+        if missing or extra:
+            return (
+                "baseline_algorithm.py integration edits must preserve the "
+                "stable _ALNSVNSSolver constructor API when they are not the "
+                f"approved primary target. primary_target={primary_path}; "
+                f"line={call.lineno}; missing_keywords={missing}; "
+                f"unexpected_keywords={extra}; "
+                f"expected_keywords={list(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)}."
+            )
+    return None
+
+
+def _baseline_algorithm_solver_solve_call_error(
+    tree: ast.AST,
+    *,
+    primary_path: str,
+) -> str | None:
+    solver_names = _alnsvns_solver_instance_names(tree)
+    solve_calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr != "solve":
+            continue
+        if isinstance(func.value, ast.Name) and func.value.id in solver_names:
+            solve_calls.append(node)
+        elif isinstance(func.value, ast.Call) and _is_alnsvns_constructor_call(func.value):
+            solve_calls.append(node)
+    if not solve_calls:
+        return (
+            "baseline_algorithm.py integration edits must call "
+            "solver.solve(instance, rng) on the stable _ALNSVNSSolver instance "
+            "when they are not the approved primary target. "
+            f"primary_target={primary_path}; no stable solver.solve call found."
+        )
+    for call in solve_calls:
+        if len(call.args) != 2 or call.keywords:
+            return (
+                "baseline_algorithm.py integration edits must keep the stable "
+                "solver.solve(instance, rng) call without extra positional or "
+                "keyword arguments when they are not the approved primary "
+                f"target. primary_target={primary_path}; line={call.lineno}; "
+                f"positional_args={len(call.args)}; "
+                f"keyword_args={[keyword.arg for keyword in call.keywords]}."
+            )
+    return None
+
+
+def _scheduler_constructor_contract_error(
+    tree: ast.AST,
+    *,
+    runtime_classes: set[str],
+    primary_path: str,
+) -> str | None:
+    for class_name in sorted(runtime_classes):
+        init_node = _class_method_node(tree, class_name, "__init__")
+        if init_node is None:
+            return (
+                "scheduler.py integration edits must preserve the explicit "
+                "_ALNSVNSSolver constructor keyword API when they are not the "
+                f"approved primary target. primary_target={primary_path}; "
+                f"runtime_class={class_name}; no __init__ method found; "
+                f"expected_keywords={list(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)}."
+            )
+        accepted_keywords = _function_keyword_parameter_names(init_node, skip_first=True)
+        missing = sorted(_STABLE_SOLVER_CONSTRUCTOR_KEYWORD_SET - accepted_keywords)
+        if missing:
+            return (
+                "scheduler.py integration edits must keep _ALNSVNSSolver "
+                "constructor-compatible with baseline_algorithm.py when they "
+                f"are not the approved primary target. primary_target={primary_path}; "
+                f"runtime_class={class_name}; missing_keywords={missing}; "
+                f"expected_keywords={list(_STABLE_SOLVER_CONSTRUCTOR_KEYWORDS)}."
+            )
+    return None
+
+
+def _scheduler_solve_signature_contract_error(
+    tree: ast.AST,
+    *,
+    runtime_classes: set[str],
+    primary_path: str,
+) -> str | None:
+    for class_name in sorted(runtime_classes):
+        solve_node = _class_method_node(tree, class_name, "solve")
+        if solve_node is None:
+            continue
+        positional = _function_positional_parameter_names(solve_node)
+        if (
+            tuple(positional) != _STABLE_SOLVER_SOLVE_SIGNATURE
+            or solve_node.args.vararg is not None
+            or solve_node.args.kwonlyargs
+            or solve_node.args.kwarg is not None
+        ):
+            return (
+                "scheduler.py integration edits must keep the stable "
+                "_ALNSVNSSolver.solve(self, instance, rng) signature when they "
+                f"are not the approved primary target. primary_target={primary_path}; "
+                f"runtime_class={class_name}; found_signature="
+                f"{_function_signature_text(solve_node)}."
+            )
     return None
 
 
@@ -443,6 +629,77 @@ def _load_names(node: ast.AST) -> set[str]:
         for child in ast.walk(node)
         if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
     }
+
+
+def _is_alnsvns_constructor_call(node: ast.Call) -> bool:
+    return isinstance(node.func, ast.Name) and node.func.id == "_ALNSVNSSolver"
+
+
+def _alnsvns_solver_instance_names(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if not isinstance(value, ast.Call) or not _is_alnsvns_constructor_call(value):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+    return names
+
+
+def _class_method_node(
+    tree: ast.AST,
+    class_name: str,
+    method_name: str,
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    if not isinstance(tree, ast.Module):
+        return None
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for item in node.body:
+            if (
+                isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and item.name == method_name
+            ):
+                return item
+    return None
+
+
+def _function_positional_parameter_names(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[str]:
+    return [arg.arg for arg in [*node.args.posonlyargs, *node.args.args]]
+
+
+def _function_keyword_parameter_names(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    *,
+    skip_first: bool,
+) -> set[str]:
+    positional = _function_positional_parameter_names(node)
+    if skip_first and positional:
+        positional = positional[1:]
+    return set(positional) | {arg.arg for arg in node.args.kwonlyargs}
+
+
+def _function_signature_text(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    parts = _function_positional_parameter_names(node)
+    if node.args.vararg is not None:
+        parts.append("*" + node.args.vararg.arg)
+    elif node.args.kwonlyargs:
+        parts.append("*")
+    parts.extend(arg.arg for arg in node.args.kwonlyargs)
+    if node.args.kwarg is not None:
+        parts.append("**" + node.args.kwarg.arg)
+    return f"{node.name}({', '.join(parts)})"
 
 
 def _scheduler_entrypoint_imports(tree: ast.AST) -> list[str]:
