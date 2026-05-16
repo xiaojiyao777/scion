@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-15*
+*Last updated: 2026-05-16*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -320,6 +320,19 @@ Important current interpretation:
   algorithm smoke, pass Verification, and run 16/16 formal screening pairs with
   required `solver_algorithm_*` telemetry. Solver quality remains weak, so the
   next step is an 8-round Sonnet validation, not promotion-quality claims.
+- The latest 6-round solver-design validation reached official screening for
+  three candidates and correctly abandoned all three on solver quality. The
+  other three rounds exposed pre-screen control issues: C9e falsely rejected
+  helpers called from solver class methods/runtime aliases, and C6 did not
+  compile parsed code to catch repeated keyword arguments. C6 now parses and
+  compiles patch code; C9e now treats the runtime solver class `solve(...)`
+  call chain as an integration root while still rejecting helpers reachable
+  only from detached classes.
+- `ContractGate` is being decomposed incrementally. C9e now lives in
+  `contract/checks/solver_design_integration.py`; `gate.py` remains the
+  orchestrator that wraps focused checks into auditable `CheckResult`s. Use
+  this pattern for future C7/C9b/C9c extraction instead of growing the
+  monolithic gate file.
 - Real-cost validation should use Sonnet by default
   (`SCION_MODEL=claude-sonnet-4-6`). Reserve Opus for explicitly chosen deep
   research attempts after the framework path is stable.

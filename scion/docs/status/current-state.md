@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-15*
+*Last updated: 2026-05-16*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -74,6 +74,19 @@ experiments, both normal algorithm-quality abandons rather than framework gate
 failures: scheduler ensemble construction tied the champion with a small
 runtime tie-speedup below the promotion threshold, while local-search
 round-robin VNS worsened quality and slowed runtime.
+
+The latest 6-round contract-integration validation showed that the framework
+path is mostly healthy but C9e was too narrow for class-based solver modules.
+Only three candidates entered screening because rounds 1 and 6 were falsely
+rejected before screening: their new helpers were called from solver class
+methods or a runtime `_ALNSVNSSolver = _PBIGSolver` alias, but C9e only
+recognized module-level entrypoint/function reachability. Round 2 was a real
+generated-code error with a repeated keyword argument that C6 should have
+caught earlier. Repair: C6 now compiles parsed patch code, and C9e now treats
+the runtime solver class `solve(...)` call chain as a valid integration root
+while still rejecting helpers reachable only from detached classes. C9e was
+also extracted from the monolithic `ContractGate` file into
+`contract/checks/solver_design_integration.py`.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
@@ -514,6 +527,26 @@ screening pairs as controlled algorithm-body changes. Solver promotion quality
 is still a later gate under the existing `solver_algorithm_*` evidence.
 
 ## Latest Experiment
+
+Latest contract-integration gate validation and repair:
+
+```text
+run_root=/home/clawd/research/scion-experiments/v04-contract-integration-gate-sonnet-6r-20260515T230605Z
+model=claude-sonnet-4-6
+rounds_requested=6
+screened_experiments=3
+champion_version=1
+stopped_reason=max_rounds_exhausted
+```
+
+Interpretation: the three screened candidates were valid solver-design
+algorithm edits and were correctly abandoned by `SCREENING_FAIL_WIN_RATE`.
+The agent behavior was directionally reasonable: it stayed on branch-owned
+solver modules, used screening/runtime feedback, pivoted from scheduler to
+local search, and eventually attempted a larger PBIG-style solver
+restructure. The non-screened rounds revealed framework gate issues rather
+than research-object drift. Detailed analysis:
+[`v0.4-contract-integration-gate-sonnet-6r-20260515.md`](../experiments/v0.4/v0.4-contract-integration-gate-sonnet-6r-20260515.md)
 
 Latest solver-design module-subject smoke and repair:
 

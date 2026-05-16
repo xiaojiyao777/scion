@@ -22,6 +22,9 @@ from scion.core.models import (
     PatchProposal,
     patch_file_changes,
 )
+from scion.contract.checks.solver_design_integration import (
+    check_solver_design_integration,
+)
 from scion.contract.surface_interface import check_surface_interface
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
 
@@ -519,7 +522,9 @@ class ContractGate:
         if patch.action == "delete":
             return _cr("C6_ast_syntax", True, "light", "delete action — no syntax check", t0)
         try:
-            ast.parse(patch.code_content)
+            filename = patch.file_path or "<patch>"
+            tree = ast.parse(patch.code_content, filename=filename)
+            compile(tree, filename, "exec")
             return _cr("C6_ast_syntax", True, "light", "syntax ok", t0)
         except SyntaxError as e:
             return _cr("C6_ast_syntax", False, "light", f"SyntaxError: {e}", t0)
@@ -852,103 +857,18 @@ class ContractGate:
         selected_surface: str | None = None,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
-        if not self._selected_surface_is_solver_design(selected_surface, patch):
-            return _cr(
-                "C9e_solver_design_integration",
-                True,
-                "light",
-                "not a solver_design patch",
-                t0,
-            )
-
-        new_functions: set[str] = set()
-        call_graph: dict[str, set[str]] = {}
-        root_calls: set[str] = set()
-        changed_files = 0
-
-        for change in patch_file_changes(patch):
-            if change.action == "delete":
-                continue
-            try:
-                file_rel = normalize_relative_patch_path(change.file_path)
-            except ValueError as exc:
-                return _cr(
-                    "C9e_solver_design_integration",
-                    False,
-                    "light",
-                    str(exc),
-                    t0,
-                )
-            if not self._is_solver_design_patch_path(file_rel):
-                continue
-            changed_files += 1
-            try:
-                tree = ast.parse(change.code_content)
-            except SyntaxError:
-                return _cr(
-                    "C9e_solver_design_integration",
-                    False,
-                    "light",
-                    "unparseable code",
-                    t0,
-                )
-
-            current_defs = _module_level_function_defs(tree)
-            champion_defs = _module_level_function_defs_from_source(
-                self._champion_file_content(file_rel)
-            )
-            local_new = current_defs - champion_defs
-            if local_new:
-                new_functions.update(local_new)
-            local_existing = current_defs - local_new
-
-            module_calls, function_calls = _module_call_references(tree)
-            root_calls.update(module_calls)
-            if file_rel in {
-                "policies/baseline_algorithm.py",
-                "policies/solver_algorithm.py",
-            } and "solve" in current_defs:
-                root_calls.add("solve")
-            for root in local_existing:
-                root_calls.update(function_calls.get(root, set()))
-            for name, calls in function_calls.items():
-                call_graph.setdefault(name, set()).update(calls)
-
-        if changed_files == 0 or not new_functions:
-            return _cr(
-                "C9e_solver_design_integration",
-                True,
-                "light",
-                "no new solver_design helper functions",
-                t0,
-            )
-
-        reachable = set(root_calls)
-        queue = list(root_calls & new_functions)
-        while queue:
-            name = queue.pop()
-            for called in call_graph.get(name, set()):
-                if called in reachable:
-                    continue
-                reachable.add(called)
-                if called in new_functions:
-                    queue.append(called)
-
-        inert = sorted(new_functions - reachable)
-        if inert:
-            return _cr(
-                "C9e_solver_design_integration",
-                False,
-                "light",
-                "new solver_design helper functions are not called from any "
-                f"existing entrypoint/module function in this patch: {inert}",
-                t0,
-            )
+        result = check_solver_design_integration(
+            patch,
+            selected_surface=selected_surface,
+            selected_surface_is_solver_design=self._selected_surface_is_solver_design,
+            is_solver_design_patch_path=self._is_solver_design_patch_path,
+            champion_file_content=self._champion_file_content,
+        )
         return _cr(
             "C9e_solver_design_integration",
-            True,
+            result.passed,
             "light",
-            "new solver_design helper functions are integrated",
+            result.detail,
             t0,
         )
 
@@ -1855,55 +1775,6 @@ def _subtract_inherited_identity_violations(
             continue
         remaining.append(violation)
     return remaining
-
-
-def _module_level_function_defs(tree: ast.AST) -> set[str]:
-    if not isinstance(tree, ast.Module):
-        return set()
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-
-
-def _module_level_function_defs_from_source(code: str | None) -> set[str]:
-    if not code:
-        return set()
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return set()
-    return _module_level_function_defs(tree)
-
-
-def _module_call_references(tree: ast.AST) -> tuple[set[str], dict[str, set[str]]]:
-    if not isinstance(tree, ast.Module):
-        return set(), {}
-
-    module_calls: set[str] = set()
-    function_calls: dict[str, set[str]] = {}
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            function_calls[node.name] = _call_reference_names(node)
-        elif isinstance(node, ast.ClassDef):
-            continue
-        else:
-            module_calls.update(_call_reference_names(node))
-    return module_calls, function_calls
-
-
-def _call_reference_names(node: ast.AST) -> set[str]:
-    names: set[str] = set()
-    for child in ast.walk(node):
-        if not isinstance(child, ast.Call):
-            continue
-        func = child.func
-        if isinstance(func, ast.Name):
-            names.add(func.id)
-        elif isinstance(func, ast.Attribute):
-            names.add(func.attr)
-    return names
 
 
 def _enclosing_statement_source(

@@ -338,6 +338,22 @@ class TestC6AstSyntax:
         assert not c6.passed
         assert not result.passed
 
+    def test_compile_time_syntax_error_fails(self, gate: ContractGate):
+        patch = PatchProposal(
+            file_path="operators/op.py",
+            action="create",
+            code_content=(
+                "class Op:\n"
+                "    def execute(self, solution, rng):\n"
+                "        dict(attempted=1, attempted=0)\n"
+            ),
+        )
+        result = gate.validate_patch(patch)
+        c6 = next(c for c in result.checks if c.name == "C6_ast_syntax")
+        assert not c6.passed
+        assert "keyword argument repeated" in c6.detail
+        assert not result.passed
+
     def test_delete_action_skips_syntax(self, gate: ContractGate):
         patch = PatchProposal(
             file_path="operators/op.py",
