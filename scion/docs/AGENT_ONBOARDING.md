@@ -346,6 +346,19 @@ Important current interpretation:
   failure, then reached screening. Both candidates were abandoned for solver
   quality (`win_rate=0.0`), so this is framework-path evidence, not
   solver-quality evidence.
+- Solver-design target diversity is now an active control. Wildcard module
+  targets are expanded into concrete `policies/baseline_modules/*.py` files,
+  and repeated scheduler-only win-rate-zero failures should push hypotheses
+  toward the module that owns the mechanism, such as construction,
+  destroy/repair, local search, or acceptance. Scheduler should be wiring or
+  orchestration unless the scheduler itself is the mechanism.
+- C9e solver-design integration now recognizes first-class operator-list
+  references. A local-search helper returned from `_default_vns_operators()`
+  and consumed by `_vns(...)` is integrated; a helper that is never reachable
+  from the branch solver path is still rejected. The latest smoke validated
+  this path by screening a `local_search.py` candidate that would previously
+  have been falsely rejected, then correctly abandoning it for worse and
+  slower solver quality.
 - `ContractGate` is being decomposed incrementally. C9e now lives in
   `contract/checks/solver_design_integration.py`; `gate.py` remains the
   orchestrator that wraps focused checks into auditable `CheckResult`s. Use

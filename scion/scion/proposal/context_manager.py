@@ -5,6 +5,7 @@ import os
 import json
 import re
 from collections import Counter
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from scion.core.models import (
@@ -152,9 +153,13 @@ class ContextManager:
             champion,
             research_surfaces=research_surfaces,
         )
-        active_boundary_target_files = _surface_target_files_for_names(
+        active_boundary_declared_target_files = _surface_target_files_for_names(
             research_surfaces,
             active_problem_boundary_surfaces,
+        )
+        active_boundary_target_files = _expand_surface_targets_for_champion(
+            champion,
+            active_boundary_declared_target_files,
         )
         effective_operator_categories = (
             active_problem_boundary_surfaces
@@ -1274,6 +1279,11 @@ def _build_search_control_guidance(
             + ", ".join(repeated_fail_families)
         )
     if len(recent_winless_solver_design) >= 2:
+        target_counts = Counter(
+            str(s.hypothesis.target_file or "").strip()
+            for s in recent_winless_solver_design
+            if str(s.hypothesis.target_file or "").strip()
+        )
         lines.append(
             "- Solver-design plateau: recent full-algorithm candidates reached "
             "screening with win_rate=0. Do not submit another shallow scheduler "
@@ -1283,6 +1293,18 @@ def _build_search_control_guidance(
             "entrypoint or include explicit scheduler/entrypoint integration for "
             "any helper-module changes."
         )
+        if target_counts:
+            common_targets = ", ".join(
+                f"{target} x{count}"
+                for target, count in target_counts.most_common(3)
+            )
+            lines.append(
+                "- Solver-design target diversity: recent winless target files "
+                f"were {common_targets}. If the failed pattern is scheduler-only, "
+                "target a concrete mechanism module such as construction.py, "
+                "destroy_repair.py, local_search.py, or acceptance.py, and use "
+                "scheduler/entrypoint edits only as integration wiring."
+            )
     if forced_surface:
         lines.append(
             "- Forced-surface diagnostic: keep exploration on "
@@ -3027,6 +3049,46 @@ def _surface_target_files_for_names(
             if target not in files:
                 files.append(target)
     return sorted(files)
+
+
+def _expand_surface_targets_for_champion(
+    champion: ChampionState,
+    targets: list[str],
+) -> list[str]:
+    if not targets:
+        return []
+    root_text = str(getattr(champion, "code_snapshot_path", "") or "").strip()
+    root = Path(root_text).expanduser() if root_text else None
+    concrete: list[str] = []
+    patterns: list[str] = []
+    for raw_target in targets:
+        target = str(raw_target or "").strip().lstrip("/")
+        if not target:
+            continue
+        if "*" not in target:
+            _append_unique(concrete, target)
+            continue
+        if root is not None and root.is_dir():
+            try:
+                for path in sorted(root.glob(target)):
+                    if not path.is_file():
+                        continue
+                    try:
+                        rel = path.relative_to(root).as_posix()
+                    except ValueError:
+                        continue
+                    if rel.endswith("/__init__.py"):
+                        continue
+                    _append_unique(concrete, rel)
+            except OSError:
+                pass
+        _append_unique(patterns, target)
+    return concrete + [pattern for pattern in patterns if pattern not in concrete]
+
+
+def _append_unique(items: list[str], value: str) -> None:
+    if value not in items:
+        items.append(value)
 
 
 def _summarise_siblings(siblings: List[Branch]) -> str:

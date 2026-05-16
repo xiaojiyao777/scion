@@ -124,6 +124,27 @@ positive framework evidence: repair feedback is now sequential and auditable,
 while promotion remains controlled by Contract, Verification, Protocol, and
 Decision.
 
+The latest target-diversity/C9e repair separates framework progress from
+solver-quality failure. Hypothesis context now expands
+`policies/baseline_modules/*.py` into concrete champion module paths and adds
+plateau guidance after repeated win-rate-zero scheduler attempts, so the agent
+is pushed toward the module that owns the mechanism instead of another
+scheduler-only reshuffle. A 3-round Sonnet smoke first validated that target
+diversity was live: round 1 targeted `destroy_repair.py` and reached
+screening, while rounds 2 and 3 targeted `local_search.py`. Those later rounds
+exposed a C9e false negative: new VNS move functions returned from
+`_default_vns_operators()` were legitimate first-class operator references,
+but the static integration check only recognized direct function calls. C9e
+now treats loaded function-name references as reachability edges, and
+solver-design code prompts explicitly tell local-search candidates to wire new
+moves through `_default_vns_operators()` / `_vns(...)` rather than inventing
+detached scheduler `_run`/`run` entrypoints. The follow-up 2-round Sonnet
+smoke reached formal screening in both rounds. Round 2 modified
+`local_search.py` and no longer failed C9e; it was correctly abandoned because
+the algorithm was worse and slower (`win_rate=0.0`, median delta `-10.25`,
+runtime ratio median `1.2055`). This is framework-positive but not
+solver-quality evidence.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
@@ -210,6 +231,13 @@ Current interpretation:
   current blocker is whether APS can use the direct `solve(...)` boundary to
   produce repeated solver-quality movement without modifying objective or
   constraint semantics.
+- Solver-design target selection is now more concrete: wildcard module
+  targets are expanded from the champion snapshot, and repeated scheduler-only
+  win-rate-zero failures should steer the next hypothesis toward
+  `construction.py`, `destroy_repair.py`, `local_search.py`, or
+  `acceptance.py` when those modules own the mechanism. C9e recognizes
+  first-class operator-list integration such as local-search functions returned
+  by `_default_vns_operators()`, while still rejecting truly inert helpers.
 - Scion's role is boundary/protocol/audit control, not replacing the research
   agent with prompt-only field exposure. The latest short run showed that
   hypothesis-stage tools were not enough: the code stage also needs bounded
@@ -2014,6 +2042,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md`](../experiments/v0.4/v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md)
+  [`v0.4-solver-design-target-diversity-c9e-operator-ref-20260516.md`](../experiments/v0.4/v0.4-solver-design-target-diversity-c9e-operator-ref-20260516.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

@@ -200,10 +200,13 @@ modules. Candidates should materially rework these branch copies, or the
 entrypoint when necessary, not call `context.baseline(...)` and then polish
 the result. Candidates may add, delete, or modify modules under
 `policies/baseline_modules/*.py`; `policies/baseline_modules/__init__.py`
-stays frozen. APS `context.read_surface` includes bounded support-artifact
-previews for those modules when reading `solver_design`, so the model can
-inspect the actual algorithm internals under the normal exposure policy. The
-adapter/solver remains authoritative for objective
+stays frozen. Proposal context expands that wildcard into concrete champion
+module paths so APS can target the file that owns the mechanism rather than
+defaulting to scheduler orchestration. APS `context.read_surface` includes
+bounded support-artifact previews for those modules when reading
+`solver_design`, so the model can inspect the actual algorithm internals under
+the normal exposure policy. The adapter/solver remains authoritative for
+objective
 recomputation, feasibility, parser behavior, seeds, protocol splits, and
 Decision. The legacy `main_search_strategy` surface still exists for
 regression coverage; it is not the preferred research object.
@@ -216,6 +219,10 @@ Preferred-target preview also fails candidates that call `context.baseline(...)`
 from `policies/baseline_algorithm.py`. `proposal.algorithm_smoke` applies
 entrypoint or support-module patches in a temporary workspace and runs the
 stable entrypoint on the configured canary before official evaluation.
+Contract C9e rejects newly added solver-design helper functions that are not
+reachable from the branch solver path, but it recognizes first-class operator
+references such as local-search move functions returned from
+`_default_vns_operators()` and consumed by `_vns(...)`.
 
 The model-facing interface and `problem-v1.yaml` require solver-design
 hypotheses to populate semantic identity through fields such as

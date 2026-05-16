@@ -3,7 +3,10 @@
 This module keeps solver-design call-graph reasoning out of the ContractGate
 orchestrator. The check remains static and conservative: new module-level helper
 functions must be reachable from a module entrypoint or from the runtime solver
-class's ``solve`` call chain inside the same candidate patch.
+class's ``solve`` call chain inside the same candidate patch. Solver modules may
+also pass functions as first-class operators, for example from
+``_default_vns_operators()`` into ``_vns(...)``; those name references count as
+reachability edges even when the helper is not called at definition time.
 """
 from __future__ import annotations
 
@@ -247,6 +250,8 @@ def _reachable_class_method_calls(
 def _call_reference_names(node: ast.AST) -> set[str]:
     names: set[str] = set()
     for child in ast.walk(node):
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
+            names.add(child.id)
         if not isinstance(child, ast.Call):
             continue
         func = child.func

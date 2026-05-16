@@ -1433,6 +1433,48 @@ def test_contract_gate_allows_integrated_solver_design_helper(
     assert c9e.passed
 
 
+def test_contract_gate_allows_solver_design_helper_referenced_as_vns_operator(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "local_search.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "local_search.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = base_code.replace(
+        "        _two_opt_star,\n",
+        "        _two_opt_star,\n"
+        "        _or_opt_intra_1,\n",
+        1,
+    )
+    code += (
+        "\n\n"
+        "def _or_opt_intra_1(solution, context, reserve):\n"
+        "    return False\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/local_search.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert c9e.passed
+
+
 def test_contract_gate_allows_solver_design_helper_called_from_solver_class(
     tmp_path: Path,
 ) -> None:
@@ -3331,10 +3373,97 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
     assert "policies/solver_algorithm.py" in ctx["targetable_files"]
     assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/construction.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/destroy_repair.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/local_search.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/scheduler.py" in ctx["targetable_files"]
     assert "policies/baseline_policy.py" not in ctx["targetable_files"]
     assert "Set `change_locus` to one of: solver_design." in user_prompt
     assert "Do not choose a component policy" in user_prompt
+    assert "choose the target file by mechanism ownership" in user_prompt
+    assert "target that concrete module" in user_prompt
     assert "Choose a research surface from" not in user_prompt
+
+
+def test_solver_design_winless_scheduler_plateau_guides_target_diversity() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="branch-solver-design",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    steps = []
+    for round_num in (1, 2):
+        hypothesis = HypothesisProposal(
+            hypothesis_text="Try another scheduler variant.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+        )
+        steps.append(
+            StepRecord(
+                round_num=round_num,
+                branch_id=branch.branch_id,
+                hypothesis=hypothesis,
+                patch=PatchProposal(
+                    file_path="policies/baseline_modules/scheduler.py",
+                    action="modify",
+                    code_content="# scheduler\n",
+                ),
+                contract_passed=True,
+                verification_passed=True,
+                protocol_result=ProtocolResult(
+                    stage=ExperimentStage.SCREENING,
+                    stats=EvalStats(
+                        n_cases=8,
+                        wins=0,
+                        losses=1,
+                        ties=7,
+                        win_rate=0.0,
+                        median_delta=0.0,
+                        ci_low=0.0,
+                        ci_high=0.0,
+                    ),
+                    gate_outcome="fail",
+                    reason_codes=("SCREENING_FAIL_WIN_RATE",),
+                    exposed_summary="screening failed with zero wins",
+                    raw_metrics_ref="/tmp/screening.json",
+                    selected_surface="solver_design",
+                ),
+                decision=Decision.ABANDON,
+                failure_stage="screening",
+                failure_detail="T4: win_rate < 0.3",
+            )
+        )
+    manager = ContextManager(adapter=CvrpAdapter(spec_v1))
+
+    ctx = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        active_hypotheses=[],
+        blacklist=[],
+        step_history=steps,
+    )
+    system_blocks, user_prompt = _split_hypothesis_context(ctx)
+    prompt_text = "\n".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "Solver-design plateau" in prompt_text
+    assert "Solver-design target diversity" in prompt_text
+    assert "policies/baseline_modules/scheduler.py x2" in prompt_text
+    assert "construction.py" in prompt_text
+    assert "destroy_repair.py" in prompt_text
+    assert "local_search.py" in prompt_text
+    assert "scheduler/entrypoint edits only as integration wiring" in prompt_text
 
 
 def test_context_still_renders_legacy_v1_surface_metadata(tmp_path: Path) -> None:

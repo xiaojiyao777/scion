@@ -686,6 +686,26 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 'If action is "modify" or "remove", provide `target_file` '
                 f"from the active boundary files: {targetable_files}."
             )
+        if "solver_design" in active_boundary:
+            lines.extend(
+                [
+                    "For `solver_design`, choose the target file by mechanism ownership, not by convenience.",
+                    (
+                        "Use `policies/baseline_modules/scheduler.py` mainly "
+                        "for orchestration or wiring. If the new mechanism is "
+                        "construction, destroy/repair, local improvement, or "
+                        "acceptance, target that concrete module and put any "
+                        "needed scheduler/entrypoint integration in "
+                        "`additional_changes`."
+                    ),
+                    (
+                        "After win-rate-zero scheduler variants, prefer a "
+                        "non-scheduler mechanism module or a stable-entrypoint "
+                        "algorithm-body change over another phase-order or "
+                        "weight tweak."
+                    ),
+                ]
+            )
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")
@@ -833,6 +853,17 @@ def _split_code_context(
         "`context.record_move` or `context.record_iteration`.\n"
         "- Do not submit a shallow wrapper that changes baseline budget/params "
         "or adds a tiny post-baseline polish.\n"
+        "- If the target is `policies/baseline_modules/scheduler.py`, treat "
+        "scheduler as orchestration. A scheduler-only patch must change an "
+        "actual bounded search trajectory, not only operator weights, phase "
+        "order, or runtime allocation. When the hypothesis needs new "
+        "construction, destroy/repair, local-search, or acceptance behavior, "
+        "put the concrete mechanism module in `additional_changes` and use "
+        "scheduler only to call it.\n"
+        "- If the target is `policies/baseline_modules/local_search.py`, "
+        "integrate new move operators through the existing `_default_vns_operators()` "
+        "and `_vns(...)` path. Do not invent a detached scheduler `_run`/`run` "
+        "entrypoint to call them.\n"
         "- The active package state model uses `_Solution.routes` as `_Route` "
         "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
         "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
@@ -1081,8 +1112,10 @@ def _solver_design_scope_control_section(
         "## Compact Solver-Design Implementation Scope",
         "- Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
         "- Implement one primary mechanism now. Prefer a direct seed/construction plus one bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
+        "- The target file should own the mechanism. If the target is scheduler.py after win-rate-zero scheduler attempts, keep scheduler edits as wiring and place the actual construction/destroy-repair/local-search/acceptance mechanism in the matching module via `additional_changes`.",
         "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
+        "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
     ]

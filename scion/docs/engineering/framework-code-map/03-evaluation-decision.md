@@ -62,7 +62,12 @@ Patch checks:
   generated surface code must not branch on `instance.name` or direct
   `getattr(instance, "name")` / `hasattr(instance, "name")` probes;
 - non-`rng` randomness detection;
-- complexity bound for high-order/uncapped enumeration.
+- complexity bound for high-order/uncapped enumeration;
+- solver-design helper integration through C9e. New module-level helpers must
+  be reachable from the selected branch solver path. C9e recognizes direct
+  calls, runtime solver-class `solve(...)` call chains, runtime aliases such
+  as `_ALNSVNSSolver = _PBIGSolver`, and first-class function references such
+  as local-search helpers returned from `_default_vns_operators()`.
 
 For v2 research surfaces, the complexity guard uses
 `bounds.complexity_scale_terms` from the approved selected surface when present,

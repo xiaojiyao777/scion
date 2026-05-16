@@ -3583,6 +3583,8 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
     assert "active problem-object research boundary" in rendered
     assert "algorithm_family" in rendered
     assert "runtime_budget_strategy" in rendered
+    assert "choose the target file by mechanism ownership" in rendered
+    assert "target that concrete module" in rendered
 
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
@@ -3671,6 +3673,11 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert (
         "Do not implement more than two move/neighborhood families" in rendered_system
     )
+    assert "target file should own the mechanism" in rendered_system
+    assert "scheduler edits as wiring" in rendered_system
+    assert "scheduler as orchestration" in rendered_system
+    assert "_default_vns_operators()" in rendered_system
+    assert "detached `_run`/`run`" in rendered_system
     assert "do not implement a full portfolio" in rendered_system
     assert "_Solution.routes" in rendered_system
     assert "not `list[list[int]]`" in rendered_system

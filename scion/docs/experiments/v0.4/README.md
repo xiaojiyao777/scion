@@ -54,6 +54,7 @@ referenced, not copied into development prompts.
 - [Solver-design C9c and smoke permission repair, 2026-05-15](v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md)
 - [Solver-design module subject repair, 2026-05-15](v0.4-solver-design-module-subject-repair-20260515.md)
 - [Code-repair feedback and micro-benchmark repair, 2026-05-16](v0.4-code-repair-feedback-microbench-20260516.md)
+- [Solver-design target diversity and C9e operator-reference repair, 2026-05-16](v0.4-solver-design-target-diversity-c9e-operator-ref-20260516.md)
 
 ## Related
 
