@@ -145,6 +145,20 @@ the algorithm was worse and slower (`win_rate=0.0`, median delta `-10.25`,
 runtime ratio median `1.2055`). This is framework-positive but not
 solver-quality evidence.
 
+The follow-up 6-round Sonnet smoke exposed that the pre-screen algorithm
+smoke was still too narrow. It used the tiny split copied into the branch
+workspace, while formal screening used the active CVRP formal split. That let
+some candidates pass smoke and then fail formal screening with larger-case
+runtime errors. Algorithm smoke now receives the active campaign
+`split_manifest` and `seed_ledger` through `ProposalToolContext`, runs canary
+plus four evenly spaced screening cases, and resolves external formal cases
+through `SCION_PROBLEM_DATA_ROOT`. CVRP preview also fails early for two
+repeated interface mistakes: importing `solve`/`run`/`main` from
+`baseline_modules.scheduler` in `baseline_algorithm.py`, and passing
+arguments to `context.nearest_neighbor()`. After this repair, framework
+validation smokes should use at least 3 rounds; 2-round runs are useful for
+debugging only and are too weak to validate this class of control change.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
@@ -238,6 +252,10 @@ Current interpretation:
   `acceptance.py` when those modules own the mechanism. C9e recognizes
   first-class operator-list integration such as local-search functions returned
   by `_default_vns_operators()`, while still rejecting truly inert helpers.
+- Solver-design smoke now samples the active campaign split rather than the
+  branch workspace's tiny fallback split. It runs canary plus four evenly
+  spaced screening cases and uses the active seeds, so larger-case API/runtime
+  failures are caught before formal screening when possible.
 - Scion's role is boundary/protocol/audit control, not replacing the research
   agent with prompt-only field exposure. The latest short run showed that
   hypothesis-stage tools were not enough: the code stage also needs bounded
@@ -550,9 +568,10 @@ first by the singleton execution file `policies/baseline_algorithm.py`, with
   `context.objective`, `context.is_valid`, `context.remaining_time`,
   `context.elapsed_ms`, `context.record_phase`, `context.record_iteration`,
   `context.record_move`, and `context.set_stop_reason`;
-- `context.nearest_neighbor(...)` returns a `CvrpSolution`; use it directly as
-  a candidate solution. `context.make_solution(...)` accepts route iterables
-  and is idempotent for existing solution objects;
+- `context.nearest_neighbor()` takes no arguments and returns a
+  `CvrpSolution`; use it directly as a candidate solution.
+  `context.make_solution(...)` accepts route iterables and is idempotent for
+  existing solution objects;
 - compatibility helper: `context.baseline(...)` may exist for older
   `solver_algorithm.py` experiments, but preferred
   `baseline_algorithm.py` candidates must not call it;

@@ -970,7 +970,7 @@ research_surfaces:
         instance.demands[customer_id], instance.capacity,
         instance.distance(i, j), instance.route_load(route), and
         instance.route_distance(route). Use context.make_solution(routes),
-        context.nearest_neighbor(...), context.objective(solution),
+        context.nearest_neighbor(), context.objective(solution),
         context.objective_key(solution),
         context.is_better(candidate, incumbent), context.is_valid(solution),
         context.remaining_time() in seconds, context.remaining_time_ms(),
@@ -981,10 +981,11 @@ research_surfaces:
         context.set_stop_reason(reason). context.objective returns a
         mapping with fleet_violation and total_distance and also compares
         lexicographically as (fleet_violation, total_distance); explicit field
-        access or context.objective_key is preferred. context.nearest_neighbor
-        returns a CvrpSolution, not a route iterable; use it directly as a
-        candidate solution. context.make_solution accepts route iterables and
-        is idempotent for an existing CvrpSolution or equivalent object.
+        access or context.objective_key is preferred. context.nearest_neighbor()
+        takes no arguments and returns a CvrpSolution, not a route iterable;
+        use it directly as a candidate solution. context.make_solution accepts
+        route iterables and is idempotent for an existing CvrpSolution or
+        equivalent object.
         Runtime is part of the
         algorithm objective: use finite max_rounds/max_passes/top_k caps and
         poll context.remaining_time() in seconds or context.remaining_time_ms()

@@ -470,6 +470,8 @@ def compose_campaign_services(
         circuit_breaker=owner._circuit_breaker,
         mark_balance_exhausted=lambda: setattr(owner, "_balance_exhausted", True),
         lineage_registry=owner._registry,
+        split_manifest=owner._split_manifest,
+        seed_ledger=owner._seed_ledger,
         use_agentic_proposal=use_agentic_proposal,
         agentic_artifact_dir=agentic_artifact_dir,
         agentic_session_timeout_sec=agentic_session_timeout_sec,

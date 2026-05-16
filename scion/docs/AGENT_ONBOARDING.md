@@ -110,9 +110,9 @@ Important current interpretation:
   `nearest_neighbor`, `make_solution`, `objective`,
   `objective_key`, `is_better`, `is_valid`, `remaining_time`, `elapsed_ms`,
   `record_phase`, `record_iteration`, `record_move`, and `set_stop_reason`.
-  `nearest_neighbor(...)` returns a `CvrpSolution`; use it directly as a
-  candidate solution. `make_solution(...)` accepts route iterables and is
-  idempotent for an existing solution object.
+  `nearest_neighbor()` takes no arguments and returns a `CvrpSolution`; use it
+  directly as a candidate solution. `make_solution(...)` accepts route
+  iterables and is idempotent for an existing solution object.
   `context.baseline` remains available only for the older compatibility hook;
   preferred `baseline_algorithm.py` candidates must study and modify the
   controlled algorithm body instead of calling `context.baseline`.
@@ -135,6 +135,10 @@ Important current interpretation:
   runtime failures, and meets `runtime.tie_speedup_ratio` can progress through
   screening/validation/frozen with `*_PASS_RUNTIME_TIE_IMPROVEMENT`; it still
   cannot bypass the three-layer protocol.
+- Solver-design algorithm smoke must use the active campaign split/seed
+  configuration, not a tiny split copied into a branch workspace. Smoke now
+  runs canary plus a deterministic spread of screening cases so framework
+  validation sees the same problem scale that formal screening will use.
 - `context.remaining_time()` returns seconds. Use
   `context.remaining_time_ms()` for millisecond comparisons; Contract preview
   rejects preferred `baseline_algorithm.py` patches that compare seconds to
@@ -252,8 +256,9 @@ Important current interpretation:
   only when they have a visible counter-bound break or directly shrink a finite
   collection on each non-break iteration. CVRP synthetic preview times out
   `solve(...)`, and APS turns a hung `proposal.contract_preview` into a
-  controlled tool error. Run a 1-2 round smoke before any longer CVRP
-  solver-quality validation.
+  controlled tool error. For current `solver_design` framework validation,
+  run at least a 3-round smoke before any longer CVRP solver-quality
+  validation; 1-2 rounds are debugging probes only.
 - Latest C9c/smoke boundary repair: C9c now also accepts explicit bounded
   collection-size loops such as `while len(removed) < q` when the collection is
   visibly grown toward the bound and the bound is either directly bounded or
@@ -359,6 +364,9 @@ Important current interpretation:
   this path by screening a `local_search.py` candidate that would previously
   have been falsely rejected, then correctly abandoning it for worse and
   slower solver quality.
+- Algorithm smoke now uses the active campaign split/seed first, not the
+  branch workspace's tiny split. For framework validation in this area, run at
+  least 3 rounds; 2-round smokes are only debugging probes.
 - `ContractGate` is being decomposed incrementally. C9e now lives in
   `contract/checks/solver_design_integration.py`; `gate.py` remains the
   orchestrator that wraps focused checks into auditable `CheckResult`s. Use

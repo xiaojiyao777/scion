@@ -1391,6 +1391,54 @@ def test_contract_gate_rejects_inert_solver_design_helper(
     assert "_ALNSVNSSolver.solve" in c9e.detail
 
 
+def test_cvrp_preview_rejects_bad_scheduler_entrypoint_import_in_integration_edit() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    adapter = CvrpAdapter(spec)
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/construction.py",
+        action="modify",
+        code_content="def unchanged_construction_helper():\n    return None\n",
+        additional_changes=(
+            SimpleNamespace(
+                file_path="policies/baseline_algorithm.py",
+                action="modify",
+                code_content=(
+                    "from .baseline_modules.scheduler import solve as scheduler_solve\n\n"
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    return scheduler_solve(instance, rng)\n"
+                ),
+            ),
+        ),
+    )
+
+    payload = adapter.preview_research_surface_patch(patch=patch)
+    checks = {check["name"]: check["passed"] for check in payload["checks"]}
+
+    assert payload["passed"] is False
+    assert checks["baseline_algorithm_scheduler_entrypoint_api"] is False
+    assert "_ALNSVNSSolver" in str(payload["issues"])
+
+
+def test_cvrp_preview_rejects_context_nearest_neighbor_with_arguments() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    adapter = CvrpAdapter(spec)
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_repair.py",
+        action="modify",
+        code_content=(
+            "def bad_seed(context, rng):\n"
+            "    return context.nearest_neighbor(rng)\n"
+        ),
+    )
+
+    payload = adapter.preview_research_surface_patch(patch=patch)
+    checks = {check["name"]: check["passed"] for check in payload["checks"]}
+
+    assert payload["passed"] is False
+    assert checks["solver_design_context_nearest_neighbor_no_args"] is False
+    assert "takes no arguments" in str(payload["issues"])
+
+
 def test_contract_gate_allows_integrated_solver_design_helper(
     tmp_path: Path,
 ) -> None:

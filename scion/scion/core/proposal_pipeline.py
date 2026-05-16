@@ -213,6 +213,8 @@ class ProposalPipeline:
     agentic_artifact_dir: str | None = None
     agentic_session_timeout_sec: float | None = None
     lineage_registry: Any | None = None
+    split_manifest: Any | None = None
+    seed_ledger: Any | None = None
     campaign_id: str = ""
     problem_id: str | None = None
     problem_spec_hash: str | None = None
@@ -575,6 +577,8 @@ class ProposalPipeline:
             branch=branch,
             champion=champion,
             problem_spec=problem_spec,
+            split_manifest=self.split_manifest,
+            seed_ledger=self.seed_ledger,
             adapter=adapter,
             step_history=tuple(self.step_history),
             search_memory=self.search_memory,

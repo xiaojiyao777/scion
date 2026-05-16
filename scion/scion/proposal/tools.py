@@ -69,9 +69,9 @@ _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
 _ALGORITHM_SMOKE_TIME_LIMIT_SEC = 3
-_ALGORITHM_SMOKE_TIMEOUT_SEC = 10
+_ALGORITHM_SMOKE_TIMEOUT_SEC = 15
 _ALGORITHM_SMOKE_DEFAULT_SEED = 77
-_ALGORITHM_SMOKE_MAX_SCREENING_CASES = 2
+_ALGORITHM_SMOKE_MAX_SCREENING_CASES = 4
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -196,6 +196,8 @@ class ProposalToolContext:
     branch: Branch | None = None
     champion: ChampionState | None = None
     problem_spec: Any = None
+    split_manifest: Any = None
+    seed_ledger: Any = None
     adapter: Any = None
     step_history: tuple[StepRecord, ...] = ()
     search_memory: Any = None
@@ -1818,6 +1820,8 @@ def _runtime_algorithm_smoke_preview(
                 workspace=workspace,
                 base_workspace=base_workspace,
                 canary_rel=canary_rel,
+                split_manifest=context.split_manifest,
+                seed_ledger=context.seed_ledger,
             )
             if not smoke_cases:
                 return {
@@ -2038,6 +2042,8 @@ def _runtime_smoke_cases(
     workspace: Path,
     base_workspace: Path,
     canary_rel: str,
+    split_manifest: Any = None,
+    seed_ledger: Any = None,
 ) -> tuple[list[_RuntimeSmokeCase], list[str]]:
     cases: list[_RuntimeSmokeCase] = []
     missing: list[str] = []
@@ -2072,26 +2078,115 @@ def _runtime_smoke_cases(
             )
         )
 
-    add_case("canary", canary_rel, _ALGORITHM_SMOKE_DEFAULT_SEED)
-    split_payload = _load_runtime_smoke_yaml(
-        workspace=workspace,
-        base_workspace=base_workspace,
-        filename="split_manifest.yaml",
-    )
-    seed_payload = _load_runtime_smoke_yaml(
-        workspace=workspace,
-        base_workspace=base_workspace,
-        filename="seed_ledger.yaml",
-    )
-    screening_seed = _first_int(
-        seed_payload.get("screening"),
+    if split_manifest is None:
+        split_manifest = _load_runtime_smoke_yaml(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            filename="split_manifest.yaml",
+        )
+    if seed_ledger is None:
+        seed_ledger = _load_runtime_smoke_yaml(
+            workspace=workspace,
+            base_workspace=base_workspace,
+            filename="seed_ledger.yaml",
+        )
+
+    canary_seed = _first_int(
+        _runtime_smoke_stage_value(seed_ledger, "canary"),
         _ALGORITHM_SMOKE_DEFAULT_SEED,
     )
-    for rel in _string_list(split_payload.get("screening"))[
-        :_ALGORITHM_SMOKE_MAX_SCREENING_CASES
-    ]:
+    canary_cases = _string_list(_runtime_smoke_stage_value(split_manifest, "canary"))
+    if canary_rel and canary_rel not in canary_cases:
+        canary_cases.append(canary_rel)
+    for rel in canary_cases[:1]:
+        add_case("canary", rel, canary_seed)
+
+    screening_seed = _first_int(
+        _runtime_smoke_stage_value(seed_ledger, "screening"),
+        _ALGORITHM_SMOKE_DEFAULT_SEED,
+    )
+    screening_cases = _select_runtime_smoke_screening_cases(
+        _string_list(_runtime_smoke_stage_value(split_manifest, "screening")),
+        _ALGORITHM_SMOKE_MAX_SCREENING_CASES,
+    )
+    for rel in screening_cases:
         add_case("screening", rel, screening_seed)
     return cases, missing
+
+
+def _runtime_smoke_stage_value(source: Any, stage: str) -> Any:
+    if source is None:
+        return None
+    if isinstance(source, Mapping):
+        return source.get(stage)
+    if stage == "canary":
+        getter = getattr(source, "get_canary_cases", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        seed_getter = getattr(source, "get_canary_seeds", None)
+        if callable(seed_getter):
+            try:
+                return seed_getter()
+            except Exception:
+                return None
+    getter = getattr(source, "get_cases", None)
+    if callable(getter):
+        arguments = _runtime_smoke_stage_arguments(stage)
+        for argument in arguments:
+            try:
+                return getter(argument)
+            except Exception:
+                continue
+    seed_getter = getattr(source, "get_seeds", None)
+    if callable(seed_getter):
+        arguments = _runtime_smoke_stage_arguments(stage)
+        for argument in arguments:
+            try:
+                return seed_getter(argument)
+            except Exception:
+                continue
+    try:
+        return getattr(source, stage)
+    except Exception:
+        return None
+
+
+def _runtime_smoke_stage_arguments(stage: str) -> tuple[Any, ...]:
+    enum_stage = getattr(ExperimentStage, stage.upper(), None)
+    if enum_stage is None:
+        return (stage,)
+    return (enum_stage, stage)
+
+
+def _select_runtime_smoke_screening_cases(paths: list[str], max_cases: int) -> list[str]:
+    cases = [path for path in paths if str(path or "").strip()]
+    total = len(cases)
+    if max_cases <= 0 or total <= 0:
+        return []
+    if max_cases >= total:
+        return cases
+    if max_cases == 1:
+        return [cases[total // 2]]
+
+    indices = [round(i * (total - 1) / (max_cases - 1)) for i in range(max_cases)]
+    selected: list[int] = []
+    seen: set[int] = set()
+    for idx in indices:
+        if idx in seen:
+            continue
+        selected.append(idx)
+        seen.add(idx)
+    for idx in range(total):
+        if len(selected) >= max_cases:
+            break
+        if idx in seen:
+            continue
+        selected.append(idx)
+        seen.add(idx)
+    return [cases[idx] for idx in sorted(selected[:max_cases])]
 
 
 def _load_runtime_smoke_yaml(
@@ -2115,6 +2210,10 @@ def _load_runtime_smoke_yaml(
 
 
 def _first_int(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
     if isinstance(value, (str, bytes)):
         candidates = [value]
     elif isinstance(value, (list, tuple)):
@@ -2130,6 +2229,9 @@ def _first_int(value: Any, default: int) -> int:
 
 
 def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
     if not isinstance(value, (list, tuple)):
         return []
     result: list[str] = []
@@ -2153,6 +2255,9 @@ def _resolve_smoke_instance_path(
     else:
         candidates.append(workspace / rel)
         candidates.append(base_workspace / rel)
+        data_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
+        if data_root:
+            candidates.append(Path(data_root).expanduser().resolve(strict=False) / rel)
     for path in candidates:
         if path.is_file():
             return path

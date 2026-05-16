@@ -864,6 +864,11 @@ def _split_code_context(
         "integrate new move operators through the existing `_default_vns_operators()` "
         "and `_vns(...)` path. Do not invent a detached scheduler `_run`/`run` "
         "entrypoint to call them.\n"
+        "- If `additional_changes` touches `policies/baseline_algorithm.py`, "
+        "keep the stable entrypoint shape: import `_ALNSVNSSolver` from "
+        "`.baseline_modules.scheduler`, instantiate it, and call "
+        "`solver.solve(instance, rng)`. Do not import `solve`, `run`, or "
+        "`main` from scheduler.\n"
         "- The active package state model uses `_Solution.routes` as `_Route` "
         "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
         "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
@@ -912,6 +917,10 @@ def _split_code_context(
         "`from .baseline_modules.local_search import _vns` or "
         "`from .state import _Solution`. Do not import "
         "`policies.baseline_modules.*`; that path is outside the whitelist.\n"
+        "- `context.nearest_neighbor()` takes no arguments and returns a "
+        "`CvrpSolution`; do not pass `rng` and do not call `.copy()` on that "
+        "public solution. The internal `_Solution` type is separate and lives "
+        "under `policies/baseline_modules/state.py`.\n"
         if is_solver_design_surface
         else ""
     )
@@ -1116,6 +1125,8 @@ def _solver_design_scope_control_section(
         "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
         "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
+        "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it, and call `solver.solve(instance, rng)`; do not import scheduler `solve`, `run`, or `main`.",
+        "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it.",
     ]

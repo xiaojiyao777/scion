@@ -4965,6 +4965,19 @@ def _solver_design_code_scope_control(
                 "from .state import _Solution. Do not import "
                 "policies.baseline_modules.*."
             ),
+            "entrypoint_rule": (
+                "If additional_changes touches policies/baseline_algorithm.py, "
+                "keep the stable scheduler class API: import _ALNSVNSSolver "
+                "from .baseline_modules.scheduler, instantiate it, and call "
+                "solver.solve(instance, rng). Do not import scheduler solve, "
+                "run, or main."
+            ),
+            "context_api_rule": (
+                "context.nearest_neighbor() takes no arguments and returns a "
+                "public CvrpSolution; do not pass rng and do not call .copy() "
+                "on that public solution. Internal _Solution.copy() applies "
+                "only to baseline_modules/state.py objects."
+            ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "
                 "optimization objective and evidence field."

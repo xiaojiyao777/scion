@@ -10,6 +10,7 @@ import threading
 import types
 from typing import Any, Mapping, Sequence
 
+from scion.core.models import patch_file_changes
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
 from scion.problems.cvrp.cvrplib import load_cvrplib_instance
@@ -988,6 +989,8 @@ class CvrpAdapter:
 
         issues: list[str] = []
         checks: list[dict[str, Any]] = []
+        if surface_name in {"solver_design", "solver_algorithm"}:
+            _preview_solver_design_patch_api_boundary(patch, issues, checks)
         try:
             module = _module_from_policy_code(
                 str(getattr(patch, "file_path", "<policy>")),
@@ -1279,6 +1282,127 @@ def _preview_baseline_algorithm_boundary(
     )
     if not time_units_passed:
         issues.append(time_units_detail)
+
+
+def _preview_solver_design_patch_api_boundary(
+    patch: Any,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    for change in patch_file_changes(patch):
+        path = str(getattr(change, "file_path", "") or "")
+        normalized = path.replace("\\", "/").lstrip("/")
+        if not (
+            _is_baseline_algorithm_path(normalized)
+            or _is_solver_design_module_path(normalized)
+            or normalized == "policies/solver_algorithm.py"
+        ):
+            continue
+        code = str(getattr(change, "code_content", "") or "")
+        if _is_baseline_algorithm_path(normalized):
+            _preview_baseline_algorithm_scheduler_api(
+                normalized,
+                code,
+                issues,
+                checks,
+            )
+        _preview_solver_design_context_api(normalized, code, issues, checks)
+
+
+def _preview_baseline_algorithm_scheduler_api(
+    path: str,
+    code: str,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    bad_names = _baseline_algorithm_scheduler_entrypoint_imports(code)
+    passed = not bad_names
+    detail = (
+        "baseline_algorithm uses the stable scheduler class entrypoint"
+        if passed
+        else (
+            f"{path} must keep scheduler integration through "
+            "`_ALNSVNSSolver(...).solve(instance, rng)`; do not import "
+            f"scheduler entrypoint names {bad_names}"
+        )
+    )
+    checks.append(
+        {
+            "name": "baseline_algorithm_scheduler_entrypoint_api",
+            "passed": passed,
+            "detail": detail,
+        }
+    )
+    if not passed:
+        issues.append(detail)
+
+
+def _baseline_algorithm_scheduler_entrypoint_imports(code: str) -> list[str]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    bad: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = str(node.module or "")
+        if not module.endswith("baseline_modules.scheduler"):
+            continue
+        for alias in node.names:
+            name = str(alias.name or "")
+            if name in {"solve", "run", "main", "_run", "_run_scheduler"}:
+                bad.append(name)
+    return sorted(set(bad))
+
+
+def _preview_solver_design_context_api(
+    path: str,
+    code: str,
+    issues: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    bad_lines = _context_nearest_neighbor_argument_calls(code)
+    passed = not bad_lines
+    detail = (
+        "solver_design context.nearest_neighbor() calls use the no-argument API"
+        if passed
+        else (
+            f"{path} calls context.nearest_neighbor with arguments at lines "
+            f"{bad_lines}; the API takes no arguments and returns CvrpSolution"
+        )
+    )
+    checks.append(
+        {
+            "name": "solver_design_context_nearest_neighbor_no_args",
+            "passed": passed,
+            "detail": detail,
+        }
+    )
+    if not passed:
+        issues.append(detail)
+
+
+def _context_nearest_neighbor_argument_calls(code: str) -> list[int]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "nearest_neighbor"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "context"
+        ):
+            continue
+        if node.args or node.keywords:
+            lines.append(int(getattr(node, "lineno", 0) or 0))
+    return lines
 
 
 def _context_baseline_call_count(code: str) -> int:
