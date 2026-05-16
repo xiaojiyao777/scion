@@ -245,6 +245,20 @@ object-model repair path but exposes a budget mismatch. Code/fix LLM calls can
 legitimately take up to 180 seconds, so the default APS session budget is now
 240 seconds; CLI `--agentic-session-timeout-sec` still overrides it.
 
+The immediate 3-round validation after the 240-second budget repair
+`/home/clawd/research/scion-experiments/v04-aps-budget-sonnet-3r-20260516T172901Z`
+also exited normally and produced one formal screening experiment. Round 1
+targeted `scheduler.py`, passed APS, Contract preview, algorithm smoke,
+Verification, and screening, then was correctly abandoned for
+`SCREENING_FAIL_WIN_RATE` (`win_rate=0.0`, median delta `0.0`, runtime ratio
+median about `1.001`). Rounds 2 and 3 targeted `destroy_repair.py`; both failed
+before formal screening with auditable Contract/smoke findings, not framework
+timeouts. Round 2 reached terminal algorithm smoke and failed on an invalid
+`_vns(..., time_limit_sec=...)` call. Round 3 exhausted bounded Contract repair
+on unresolved imports/inert helper integration. This is stable enough for a
+6-round Sonnet background validation: failures are now either official
+algorithm-quality abandonments or precise pre-screen boundary failures.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
