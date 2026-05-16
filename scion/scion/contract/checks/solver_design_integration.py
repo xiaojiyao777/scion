@@ -33,8 +33,10 @@ def check_solver_design_integration(
         return SolverDesignIntegrationResult(True, "not a solver_design patch")
 
     new_functions: set[str] = set()
+    new_functions_by_file: dict[str, set[str]] = {}
     call_graph: dict[str, set[str]] = {}
     root_calls: set[str] = set()
+    changed_paths: list[str] = []
     changed_files = 0
 
     for change in patch_file_changes(patch):
@@ -47,6 +49,7 @@ def check_solver_design_integration(
         if not is_solver_design_patch_path(file_rel):
             continue
         changed_files += 1
+        changed_paths.append(file_rel)
         try:
             tree = ast.parse(change.code_content)
         except SyntaxError:
@@ -58,6 +61,7 @@ def check_solver_design_integration(
         local_new = current_defs - champion_defs
         if local_new:
             new_functions.update(local_new)
+            new_functions_by_file[file_rel] = set(local_new)
         local_existing = current_defs - local_new
 
         module_calls, function_calls, class_method_calls = _module_call_references(tree)
@@ -99,10 +103,26 @@ def check_solver_design_integration(
 
     inert = sorted(new_functions - reachable)
     if inert:
+        inert_by_file = {
+            path: sorted(names & set(inert))
+            for path, names in sorted(new_functions_by_file.items())
+            if names & set(inert)
+        }
+        guidance = (
+            "Solver-design helper functions must be reachable from an existing "
+            "module function, baseline_algorithm.py::solve, solver_algorithm.py::solve, "
+            "or the runtime solver class _ALNSVNSSolver.solve call chain. If a helper "
+            "is added in a helper-only module such as local_search.py, include the "
+            "scheduler.py or baseline_algorithm.py import/call-site edit in "
+            "additional_changes. Do not add a legacy top-level run(...) entrypoint "
+            "unless the current target already uses that entrypoint."
+        )
         return SolverDesignIntegrationResult(
             False,
-            "new solver_design helper functions are not called from any "
-            f"existing entrypoint/module function or solver class in this patch: {inert}",
+            "new solver_design helper functions are not integrated. "
+            f"inert_helpers={inert}; changed_files={changed_paths}; "
+            f"recognized_roots={sorted(root_calls)}; inert_helpers_by_file={inert_by_file}. "
+            + guidance,
         )
     return SolverDesignIntegrationResult(
         True,

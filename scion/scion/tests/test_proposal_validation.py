@@ -233,3 +233,33 @@ def test_valid_patch_with_test_hint():
     }
     result = _parse_patch(raw)
     assert result.test_hint == "Check feasibility"
+
+
+def test_patch_parses_additional_changes_json_string():
+    """Model responses sometimes return additional_changes as a JSON string."""
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "additional_changes": (
+            '[{"file_path": "policies/baseline_modules/helper.py", '
+            '"action": "create", '
+            '"code_content": "def helper():\\n    return 1\\n"}]'
+        ),
+    }
+    result = _parse_patch(raw)
+    assert len(result.additional_changes) == 1
+    assert result.additional_changes[0].file_path == (
+        "policies/baseline_modules/helper.py"
+    )
+
+
+def test_patch_rejects_unparseable_additional_changes_string():
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "additional_changes": "not-json",
+    }
+    with pytest.raises(ProposalValidationError, match="additional_changes"):
+        _parse_patch(raw)

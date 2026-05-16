@@ -88,6 +88,42 @@ while still rejecting helpers reachable only from detached classes. C9e was
 also extracted from the monolithic `ContractGate` file into
 `contract/checks/solver_design_integration.py`.
 
+The follow-up Sonnet/Opus 6-round integration smokes confirmed a different
+code-stage repairability gap. Screened candidates were correctly abandoned for
+solver quality, including faster but objectively worse scheduler rewrites. The
+pre-screen failures were mostly recoverable: `additional_changes` emitted as a
+JSON string, inert helper-only local-search edits without scheduler/entrypoint
+integration, and branch solver object-model mistakes such as `_Solution._instance`
+or calling `.distance` on an integer. Current repair keeps the same
+solver-design boundary but makes code-stage feedback deeper: schema parsing
+tolerates JSON-string `additional_changes`, C9e reports inert helpers and
+recognized roots, algorithm-smoke returns targeted repair guidance, and a
+tainted non-promotional candidate-vs-champion canary micro-benchmark blocks
+only candidates that lose every comparable smoke case before formal screening.
+Repeated recent `solver_design` `win_rate=0` screening failures now produce
+plateau guidance that demands a materially different algorithm-body hypothesis
+instead of another shallow scheduler/budget/post-polish variant.
+
+The first smoke after that repair showed the next code-repair control issue:
+the model fixed an inert-helper C9e failure but introduced a fresh C9d
+`instance.name` violation in the repair patch. C9d was correct; the APS loop
+was too shallow. Code-stage preview repair now has two bounded attempts,
+re-running Contract preview after each repair, and solver-design code prompts
+explicitly forbid adding new `instance.name`/`getattr(instance, 'name')` uses
+even in error messages.
+
+The subsequent 2-round Sonnet smoke validated the framework repair. Round 1
+passed Contract preview, algorithm smoke, Verification, and screening, then
+was correctly abandoned for solver quality (`win_rate=0.0`, median delta
+`0.0`, runtime ratio median `0.778`). Round 2 used round-1 feedback, hit an
+algorithm-smoke runtime failure, then a C9c Contract failure, and the second
+bounded repair produced a patch that passed Contract preview plus algorithm
+smoke and reached formal screening. It was also correctly abandoned
+(`win_rate=0.0`, median delta `0.0`, runtime ratio median `0.903`). This is
+positive framework evidence: repair feedback is now sequential and auditable,
+while promotion remains controlled by Contract, Verification, Protocol, and
+Decision.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median

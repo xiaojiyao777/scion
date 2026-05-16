@@ -1387,6 +1387,8 @@ def test_contract_gate_rejects_inert_solver_design_helper(
     )
     assert not c9e.passed
     assert "_adaptive_vns" in c9e.detail
+    assert "additional_changes" in c9e.detail
+    assert "_ALNSVNSSolver.solve" in c9e.detail
 
 
 def test_contract_gate_allows_integrated_solver_design_helper(

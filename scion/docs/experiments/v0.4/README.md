@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-15*
+*Last updated: 2026-05-16*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -53,6 +53,7 @@ referenced, not copied into development prompts.
 - [Runtime tie-speedup repair Sonnet 2R smoke, 2026-05-15](v0.4-runtime-tie-speedup-repair-sonnet-2r-20260515.md)
 - [Solver-design C9c and smoke permission repair, 2026-05-15](v0.4-solver-design-boundary-c9c-smoke-permission-repair-20260515.md)
 - [Solver-design module subject repair, 2026-05-15](v0.4-solver-design-module-subject-repair-20260515.md)
+- [Code-repair feedback and micro-benchmark repair, 2026-05-16](v0.4-code-repair-feedback-microbench-20260516.md)
 
 ## Related
 

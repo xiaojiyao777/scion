@@ -328,6 +328,24 @@ Important current interpretation:
   compiles patch code; C9e now treats the runtime solver class `solve(...)`
   call chain as an integration root while still rejecting helpers reachable
   only from detached classes.
+- The follow-up Sonnet/Opus integration smokes showed that code-stage repair
+  feedback still needed to be more actionable. Current repair tolerates
+  JSON-string `additional_changes`, makes C9e report inert helpers and
+  recognized integration roots, preserves solver object-model repair guidance
+  from algorithm smoke, and adds a tainted non-promotional candidate-vs-champion
+  canary micro-benchmark. This micro-benchmark may reject a candidate that
+  loses every comparable smoke case before official screening, but it cannot
+  promote or validate a candidate.
+- Code-stage preview repair now has two bounded attempts. This is intentional:
+  a repair can fix one Contract issue and introduce a different one, such as
+  changing an inert-helper failure into a new forbidden `instance.name` use.
+  Contract remains fail-closed after the bounded attempts are exhausted.
+- The latest 2-round Sonnet smoke validated that loop in live APS: one round
+  passed directly through Contract preview and algorithm smoke to screening;
+  the next repaired an algorithm-smoke runtime failure, then repaired a C9c
+  failure, then reached screening. Both candidates were abandoned for solver
+  quality (`win_rate=0.0`), so this is framework-path evidence, not
+  solver-quality evidence.
 - `ContractGate` is being decomposed incrementally. C9e now lives in
   `contract/checks/solver_design_integration.py`; `gate.py` remains the
   orchestrator that wraps focused checks into auditable `CheckResult`s. Use

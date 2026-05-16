@@ -4159,6 +4159,24 @@ def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
                         {"type": "error", "message": "'_Route' object is not subscriptable"}
                     ],
                 },
+                "micro_benchmark": {
+                    "non_promotional": True,
+                    "tainted_debug": True,
+                    "comparable_cases": 1,
+                    "wins": 0,
+                    "losses": 1,
+                    "ties": 0,
+                    "results": [
+                        {
+                            "label": "canary",
+                            "case": "controlled/data/canary.vrp",
+                            "comparison": "loss",
+                            "delta": -3.0,
+                            "decisive_metric": "total_distance",
+                            "runtime_delta_ms": -100,
+                        }
+                    ],
+                },
                 "run": {"success": True, "detail": "solver smoke completed"},
             },
         },
@@ -4178,6 +4196,9 @@ def test_compact_algorithm_smoke_observation_preserves_pass_signal() -> None:
     assert "_Route" in compact.structured_payload["runtime_smoke"][
         "runtime_audit_failure"
     ]["detail"]
+    assert compact.structured_payload["runtime_smoke"]["micro_benchmark"][
+        "losses"
+    ] == 1
     assert compact.structured_payload["compact_due_to_budget"] is True
 
 
@@ -4233,6 +4254,44 @@ def test_code_prompt_observation_payload_preserves_algorithm_smoke_runtime_detai
     assert "DESTROY_RATIO_LOW" in rendered
     assert detail is not None
     assert "DESTROY_RATIO_LOW" in detail
+
+
+def test_algorithm_smoke_failure_detail_includes_repair_guidance() -> None:
+    observation = ProposalObservation(
+        observation_id="smoke-runtime",
+        session_id="session-1",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-12",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload={
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "issues": ["solver runtime audit reported solver_algorithm_errors=1"],
+                "runtime": {
+                    "solver_algorithm_errors": 1,
+                    "solver_algorithm_events": [
+                        {
+                            "policy": "policies/baseline_algorithm.py",
+                            "status": "error",
+                            "detail": "solve failed: '_Solution' object has no attribute '_instance'",
+                        }
+                    ],
+                },
+                "repair_guidance": [
+                    "Specific fix: replace solution._instance with solution.instance.",
+                    "_Solution.routes contains _Route objects.",
+                ],
+            },
+        },
+    )
+
+    detail = _algorithm_smoke_failure_detail([observation])
+
+    assert detail is not None
+    assert "_Solution" in detail
+    assert "solution.instance" in detail
 
 
 def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(
@@ -5796,6 +5855,66 @@ def test_agentic_session_contract_preview_failure_fails_closed(
     assert output.self_check.contract_preview_passed is False
     assert output.self_check.contract_preview_codes
     assert output.self_check.contract_preview_codes[0] in output.failure_detail
+
+
+def test_agentic_session_repairs_two_contract_preview_failures(
+    tmp_path: Path,
+) -> None:
+    missing_function = PatchProposal(
+        **_valid_policy_patch_payload(
+            code_content=(
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.35\n"
+            )
+        )
+    )
+    bad_import = PatchProposal(
+        **_valid_policy_patch_payload(
+            code_content=(
+                "import os\n\n"
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    return 0.35\n\n"
+                "def max_operator_rounds(instance, time_limit_sec):\n"
+                "    return 10\n"
+            )
+        )
+    )
+    good_patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = SequentialPatchCreative(
+        [
+            missing_function,
+            bad_import,
+            good_patch,
+        ]
+    )
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == good_patch
+    assert len(creative.code_contexts) == 3
+    assert "agentic_preview_feedback" in creative.code_contexts[1]
+    assert "agentic_preview_feedback" in creative.code_contexts[2]
 
 
 def test_agentic_session_repairs_self_reported_unresolved_patch_issue(

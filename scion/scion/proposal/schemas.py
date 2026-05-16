@@ -1,6 +1,7 @@
 """JSON schemas and prompt templates for hypothesis and patch proposals."""
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -67,6 +68,25 @@ class PatchFileChangeInput(BaseModel):
 
 class PatchProposalInput(PatchFileChangeInput):
     additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
+
+    @field_validator("additional_changes", mode="before")
+    @classmethod
+    def parse_additional_changes_json_string(cls, value: Any) -> Any:
+        if value in (None, ""):
+            return []
+        if not isinstance(value, str):
+            return value
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "additional_changes must be a JSON array, not an unparseable string"
+            ) from exc
+        if not isinstance(parsed, list):
+            raise ValueError(
+                "additional_changes JSON string must decode to an array"
+            )
+        return parsed
 
     @model_validator(mode="after")
     def additional_changes_have_unique_paths(self) -> "PatchProposalInput":

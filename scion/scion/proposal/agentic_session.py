@@ -88,6 +88,7 @@ _APS_FEEDBACK_CALL_RESERVE_CHARS = 6000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
 _SELF_CHECK_OBSERVATION_RESERVE_CHARS = 24000
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
+_ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC = 36.0
 _SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:has|contains)\s+(?:a\s+)?syntax error\b"), "syntax_error"),
     (re.compile(r"\binvalid syntax\b"), "syntax_error"),
@@ -160,6 +161,12 @@ def _can_use_signal_timeout() -> bool:
     )
 
 
+def _preview_tool_timeout_sec(name: str) -> float:
+    if name == "proposal.algorithm_smoke":
+        return _ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC
+    return _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC
+
+
 class AgenticTerminationReason(str, Enum):
     """Typed reason for session termination."""
 
@@ -199,7 +206,7 @@ class AgenticToolLoopConfig:
     max_wall_time_sec: float = 120.0
     max_repeated_tool_calls: int = 2
     max_code_tool_calls: int = 4
-    max_code_repair_attempts: int = 1
+    max_code_repair_attempts: int = 2
     max_code_generation_timeout_retries: int = 1
 
 
@@ -1120,91 +1127,22 @@ class AgenticProposalSession:
             return self._persist(output, state)
 
         if tool_context is not None:
-            patch_preview = self._run_contract_preview_tool(
-                tool_context,
-                hypothesis,
-                patch,
-                state,
-            )
-            observations.append(patch_preview)
-            evidence.extend(_evidence_from_observations((patch_preview,)))
-            latest_preview = patch_preview
-            if (
-                not patch_preview.is_error
-                and not bool(patch_preview.structured_payload.get("passed"))
-                and code_repair_attempts_used
-                < self._tool_loop_config.max_code_repair_attempts
-                and not self._session_timeout_reached(state)
-            ):
-                try:
-                    patch = self._repair_patch_after_preview(
-                        request=request,
-                        state=state,
-                        hypothesis=hypothesis,
-                        code_context=code_context,
-                        observations=observations,
-                        failed_preview=patch_preview,
-                        repair_attempt=code_repair_attempts_used + 1,
-                    )
-                    code_repair_attempts_used += 1
-                except self._SESSION_ERROR_TYPES as exc:
-                    output = self._partial_hypothesis_output(
-                        request=request,
-                        session_id=session_id,
-                        hypothesis=hypothesis,
-                        detail=str(exc),
-                        evidence_used=tuple(evidence),
-                        self_check=_self_check_from_previews(observations),
-                    )
-                    state.status = output.status
-                    state.note(
-                        AgenticProposalPhase.FINALIZE,
-                        "Patch repair generation failed after Contract preview feedback.",
-                        metadata={"error": type(exc).__name__},
-                    )
-                    return self._persist(output, state)
-                self_reported_issue = _patch_self_reported_unresolved_issue(patch)
-                if self_reported_issue is not None:
-                    output = self._partial_hypothesis_output(
-                        request=request,
-                        session_id=session_id,
-                        hypothesis=hypothesis,
-                        detail=self_reported_issue,
-                        evidence_used=tuple(evidence),
-                        self_check=_self_check_from_previews(observations),
-                    )
-                    state.status = output.status
-                    state.note(
-                        AgenticProposalPhase.FINALIZE,
-                        "Patch repair failed because generated patch self-reported an unresolved code issue.",
-                        metadata={"detail": self_reported_issue},
-                    )
-                    return self._persist(output, state)
-                repair_preview = self._run_contract_preview_tool(
+            while True:
+                patch_preview = self._run_contract_preview_tool(
                     tool_context,
                     hypothesis,
                     patch,
                     state,
                 )
-                observations.append(repair_preview)
-                evidence.extend(_evidence_from_observations((repair_preview,)))
-                latest_preview = repair_preview
-
-            if _preview_observation_passed(latest_preview):
-                smoke_preview = self._run_algorithm_smoke_tool(
-                    tool_context,
-                    hypothesis,
-                    patch,
-                    state,
-                )
-                observations.append(smoke_preview)
-                evidence.extend(_evidence_from_observations((smoke_preview,)))
-                if (
-                    not _preview_observation_passed(smoke_preview)
-                    and code_repair_attempts_used
-                    < self._tool_loop_config.max_code_repair_attempts
-                    and not self._session_timeout_reached(state)
-                ):
+                observations.append(patch_preview)
+                evidence.extend(_evidence_from_observations((patch_preview,)))
+                if not _preview_observation_passed(patch_preview):
+                    if (
+                        code_repair_attempts_used
+                        >= self._tool_loop_config.max_code_repair_attempts
+                        or self._session_timeout_reached(state)
+                    ):
+                        break
                     try:
                         patch = self._repair_patch_after_preview(
                             request=request,
@@ -1212,7 +1150,7 @@ class AgenticProposalSession:
                             hypothesis=hypothesis,
                             code_context=code_context,
                             observations=observations,
-                            failed_preview=smoke_preview,
+                            failed_preview=patch_preview,
                             repair_attempt=code_repair_attempts_used + 1,
                         )
                         code_repair_attempts_used += 1
@@ -1228,7 +1166,7 @@ class AgenticProposalSession:
                         state.status = output.status
                         state.note(
                             AgenticProposalPhase.FINALIZE,
-                            "Patch repair generation failed after algorithm-smoke feedback.",
+                            "Patch repair generation failed after Contract preview feedback.",
                             metadata={"error": type(exc).__name__},
                         )
                         return self._persist(output, state)
@@ -1249,27 +1187,68 @@ class AgenticProposalSession:
                             metadata={"detail": self_reported_issue},
                         )
                         return self._persist(output, state)
-                    repaired_contract_preview = self._run_contract_preview_tool(
-                        tool_context,
-                        hypothesis,
-                        patch,
-                        state,
+                    continue
+
+                smoke_preview = self._run_algorithm_smoke_tool(
+                    tool_context,
+                    hypothesis,
+                    patch,
+                    state,
+                )
+                observations.append(smoke_preview)
+                evidence.extend(_evidence_from_observations((smoke_preview,)))
+                if _preview_observation_passed(smoke_preview):
+                    break
+                if (
+                    code_repair_attempts_used
+                    >= self._tool_loop_config.max_code_repair_attempts
+                    or self._session_timeout_reached(state)
+                ):
+                    break
+                try:
+                    patch = self._repair_patch_after_preview(
+                        request=request,
+                        state=state,
+                        hypothesis=hypothesis,
+                        code_context=code_context,
+                        observations=observations,
+                        failed_preview=smoke_preview,
+                        repair_attempt=code_repair_attempts_used + 1,
                     )
-                    observations.append(repaired_contract_preview)
-                    evidence.extend(
-                        _evidence_from_observations((repaired_contract_preview,))
+                    code_repair_attempts_used += 1
+                except self._SESSION_ERROR_TYPES as exc:
+                    output = self._partial_hypothesis_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        detail=str(exc),
+                        evidence_used=tuple(evidence),
+                        self_check=_self_check_from_previews(observations),
                     )
-                    if _preview_observation_passed(repaired_contract_preview):
-                        repaired_smoke_preview = self._run_algorithm_smoke_tool(
-                            tool_context,
-                            hypothesis,
-                            patch,
-                            state,
-                        )
-                        observations.append(repaired_smoke_preview)
-                        evidence.extend(
-                            _evidence_from_observations((repaired_smoke_preview,))
-                        )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Patch repair generation failed after algorithm-smoke feedback.",
+                        metadata={"error": type(exc).__name__},
+                    )
+                    return self._persist(output, state)
+                self_reported_issue = _patch_self_reported_unresolved_issue(patch)
+                if self_reported_issue is not None:
+                    output = self._partial_hypothesis_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        detail=self_reported_issue,
+                        evidence_used=tuple(evidence),
+                        self_check=_self_check_from_previews(observations),
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Patch repair failed because generated patch self-reported an unresolved code issue.",
+                        metadata={"detail": self_reported_issue},
+                    )
+                    return self._persist(output, state)
 
         state.note(AgenticProposalPhase.SELF_CHECK, "Recorded APS-1 schema self-check.")
         self_check = (
@@ -2588,11 +2567,13 @@ class AgenticProposalSession:
                 or "Algorithm smoke failed before official screening: "
                 f"{failed_preview.summary}"
             )
+            feedback_kind = "algorithm-smoke"
         else:
             repair_context["prior_code_failure"] = (
                 "Contract preview failed before workspace materialization: "
                 f"{failed_preview.summary}"
             )
+            feedback_kind = "Contract-preview"
         repair_context["agentic_preview_feedback"] = _observation_prompt_payload(
             failed_preview
         )
@@ -2608,11 +2589,12 @@ class AgenticProposalSession:
         ]
         state.note(
             AgenticProposalPhase.DRAFT_PATCH,
-            "Regenerating patch proposal with Contract-preview feedback.",
+            f"Regenerating patch proposal with {feedback_kind} feedback.",
             metadata={
                 "selected_surface": hypothesis.change_locus,
                 "target_file": hypothesis.target_file,
                 "repair_attempt": repair_attempt,
+                "feedback_tool": failed_preview.tool_name,
             },
         )
         repair_context = _with_code_scope_control(
@@ -3184,6 +3166,7 @@ class AgenticProposalSession:
                     tool_call_id=step_id,
                 )
             except _ProposalToolTimeout as exc:
+                timeout_sec = _preview_tool_timeout_sec(name)
                 observation = ProposalObservation(
                     observation_id=str(uuid.uuid4()),
                     session_id=context.session_id,
@@ -3192,7 +3175,7 @@ class AgenticProposalSession:
                     observation_type="tool_error",
                     summary=str(exc),
                     structured_payload={
-                        "timeout_sec": _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC,
+                        "timeout_sec": timeout_sec,
                         "tool_name": name,
                     },
                     is_error=True,
@@ -3270,8 +3253,9 @@ class AgenticProposalSession:
                 "Preview timed out before workspace materialization."
             )
 
+        timeout_sec = _preview_tool_timeout_sec(name)
         signal.signal(signal.SIGALRM, _raise_timeout)
-        signal.setitimer(signal.ITIMER_REAL, _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC)
+        signal.setitimer(signal.ITIMER_REAL, timeout_sec)
         try:
             return self.tool_registry.call(
                 name,
@@ -4068,7 +4052,7 @@ def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
-            "issue_summary": _limit_string(value.get("issue_summary"), 240),
+            "issue_summary": _limit_string(value.get("issue_summary"), 700),
             "contract": _compact_contract_mapping(value.get("contract")),
             "needs_hypothesis": value.get("needs_hypothesis"),
             "errors": _bounded_string_list(value.get("errors"), limit=4),
@@ -4094,7 +4078,7 @@ def _minimal_contract_preview_section(value: Any) -> dict[str, Any] | None:
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
-            "issue_summary": _limit_string(value.get("issue_summary"), 120),
+            "issue_summary": _limit_string(value.get("issue_summary"), 360),
             "errors": _bounded_string_list(value.get("errors"), limit=2),
             "issues": _bounded_string_list(value.get("issues"), limit=2),
             "failed_checks": failed_checks[:3],
@@ -4119,7 +4103,14 @@ def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
             "case": value.get("case"),
             "case_count": value.get("case_count"),
             "issues": _bounded_string_list(value.get("issues"), limit=2),
+            "repair_guidance": _bounded_string_list(
+                value.get("repair_guidance"),
+                limit=4,
+            ),
             "runtime_audit_failure": _limit_string(audit_detail, 180),
+            "micro_benchmark": _compact_micro_benchmark_section(
+                value.get("micro_benchmark")
+            ),
         }
     )
     return compact or None
@@ -4137,8 +4128,15 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
             "seed": value.get("seed"),
             "case_count": value.get("case_count"),
             "issues": _bounded_string_list(value.get("issues"), limit=4),
+            "repair_guidance": _bounded_string_list(
+                value.get("repair_guidance"),
+                limit=6,
+            ),
             "runtime_audit_failure": _compact_runtime_audit_failure_section(
                 value.get("runtime_audit_failure")
+            ),
+            "micro_benchmark": _compact_micro_benchmark_section(
+                value.get("micro_benchmark")
             ),
             "runtime": _compact_runtime_section(value.get("runtime")),
             "run": _compact_smoke_run_section(value.get("run")),
@@ -4154,7 +4152,7 @@ def _compact_runtime_audit_failure_section(value: Any) -> dict[str, Any] | None:
         return {"detail": text} if text else None
     compact = {
         "error_category": _limit_string(value.get("error_category"), 80),
-        "detail": _limit_string(value.get("detail"), 360),
+        "detail": _limit_string(value.get("detail"), 700),
         "failed_runtime_fields": _bounded_string_list(
             value.get("failed_runtime_fields"),
             limit=6,
@@ -4172,6 +4170,40 @@ def _compact_runtime_audit_failure_section(value: Any) -> dict[str, Any] | None:
             500,
         )
     return _drop_empty_mapping(compact)
+
+
+def _compact_micro_benchmark_section(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    results = value.get("results")
+    compact_results: list[dict[str, Any]] = []
+    if isinstance(results, list):
+        for item in results[:3]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_results.append(
+                _drop_empty_mapping(
+                    {
+                        "label": item.get("label"),
+                        "case": item.get("case"),
+                        "comparison": item.get("comparison"),
+                        "delta": item.get("delta"),
+                        "decisive_metric": item.get("decisive_metric"),
+                        "runtime_delta_ms": item.get("runtime_delta_ms"),
+                    }
+                )
+            )
+    return _drop_empty_mapping(
+        {
+            "non_promotional": value.get("non_promotional"),
+            "tainted_debug": value.get("tainted_debug"),
+            "comparable_cases": value.get("comparable_cases"),
+            "wins": value.get("wins"),
+            "losses": value.get("losses"),
+            "ties": value.get("ties"),
+            "results": compact_results,
+        }
+    )
 
 
 def _compact_runtime_section(value: Any) -> dict[str, Any] | None:
@@ -4235,6 +4267,10 @@ def _compact_smoke_runs(value: Any) -> list[dict[str, Any]]:
                 "runtime_audit_failure": _compact_runtime_audit_failure_section(
                     item.get("runtime_audit_failure")
                 ),
+                "repair_guidance": _bounded_string_list(
+                    item.get("repair_guidance"),
+                    limit=4,
+                ),
                 "runtime": _compact_runtime_section(item.get("runtime")),
             }
         )
@@ -4287,7 +4323,7 @@ def _failed_preview_checks(value: Any) -> list[dict[str, Any]]:
                     "name": item.get("name"),
                     "passed": False,
                     "severity": item.get("severity"),
-                    "detail": _limit_string(item.get("detail"), 240),
+                    "detail": _limit_string(item.get("detail"), 700),
                 }
             )
         )
@@ -4309,7 +4345,7 @@ def _existing_failed_preview_checks(value: Any, *, limit: int) -> list[dict[str,
                     "name": item.get("name"),
                     "passed": False if item.get("passed") is False else None,
                     "severity": item.get("severity"),
-                    "detail": _limit_string(item.get("detail"), 160),
+                    "detail": _limit_string(item.get("detail"), 360),
                 }
             )
         )
@@ -4323,7 +4359,7 @@ def _bounded_string_list(value: Any, *, limit: int) -> list[str]:
         return []
     out: list[str] = []
     for item in value:
-        text = _limit_string(item, 160)
+        text = _limit_string(item, 320)
         if text:
             out.append(text)
         if len(out) >= limit:
@@ -5914,10 +5950,20 @@ def _algorithm_smoke_runtime_failure_text(value: Any) -> str | None:
             if runtime.get("solver_algorithm_errors") not in (None, "")
             else None
         )
+    primary: str | None = None
     for candidate in candidates:
         text = _limit_string(candidate, 360)
         if text:
-            return text
+            primary = text
+            break
+    guidance_items = _bounded_string_list(value.get("repair_guidance"), limit=4)
+    guidance = "; ".join(guidance_items)
+    if primary and guidance:
+        return _limit_string(f"{primary}; repair guidance: {guidance}", 1200)
+    if primary:
+        return primary
+    if guidance:
+        return _limit_string(f"repair guidance: {guidance}", 1200)
     return None
 
 

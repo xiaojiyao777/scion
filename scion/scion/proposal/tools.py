@@ -63,8 +63,8 @@ _COMPACT_FEEDBACK_TEXT_CHARS = 8000
 _COMPACT_FEEDBACK_STRING_CHARS = 1200
 _COMPACT_FEEDBACK_LIST_ITEMS = 8
 _COMPACT_FEEDBACK_MAP_ITEMS = 32
-_PREVIEW_CHECK_DETAIL_CHARS = 500
-_PREVIEW_FAILURE_REASON_CHARS = 800
+_PREVIEW_CHECK_DETAIL_CHARS = 900
+_PREVIEW_FAILURE_REASON_CHARS = 1200
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
@@ -1789,10 +1789,22 @@ def _runtime_algorithm_smoke_preview(
 
     with tempfile.TemporaryDirectory(prefix="scion_algorithm_smoke_") as tmp:
         workspace = Path(tmp) / "workspace"
+        champion_workspace = Path(tmp) / "champion"
         try:
             shutil.copytree(
                 base_workspace,
                 workspace,
+                ignore=shutil.ignore_patterns(
+                    "__pycache__",
+                    "*.pyc",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                ),
+            )
+            shutil.copytree(
+                base_workspace,
+                champion_workspace,
                 ignore=shutil.ignore_patterns(
                     "__pycache__",
                     "*.pyc",
@@ -1819,7 +1831,11 @@ def _runtime_algorithm_smoke_preview(
             registry_path = workspace / "registry.yaml"
             if not registry_path.exists():
                 registry_path = workspace / "registry.json"
+            champion_registry_path = champion_workspace / "registry.yaml"
+            if not champion_registry_path.exists():
+                champion_registry_path = champion_workspace / "registry.json"
             runs: list[dict[str, Any]] = []
+            micro_results: list[dict[str, Any]] = []
             representative: dict[str, Any] | None = None
             issue: str | None = None
             audit_failure: Mapping[str, Any] | None = None
@@ -1865,14 +1881,38 @@ def _runtime_algorithm_smoke_preview(
                 }
                 if audit_failure is not None:
                     issue = str(audit_failure.get("detail") or "runtime audit failed")
+                    repair_guidance = _solver_design_smoke_repair_guidance(
+                        audit_failure,
+                        runtime=runtime,
+                        run_payload=run_payload,
+                    )
                     run_result["runtime_audit_failure"] = (
                         _compact_runtime_audit_failure(audit_failure)
                     )
+                    if repair_guidance:
+                        run_result["repair_guidance"] = repair_guidance
                 runs.append(run_result)
                 if representative is None or audit_failure is not None:
                     representative = run_result
                 if audit_failure is not None:
                     break
+                champion_raw, champion_run = _run_solver_design_smoke(
+                    workspace=champion_workspace,
+                    smoke_case=smoke_case,
+                    registry_path=champion_registry_path,
+                    selected_surface=surface_name,
+                )
+                micro_result = _solver_design_micro_benchmark_result(
+                    candidate_raw=raw,
+                    candidate_run=run_payload,
+                    champion_raw=champion_raw,
+                    champion_run=champion_run,
+                    smoke_case=smoke_case,
+                )
+                run_result["micro_benchmark"] = micro_result
+                micro_results.append(micro_result)
+            if issue is None:
+                issue = _solver_design_micro_benchmark_issue(micro_results)
         except Exception as exc:
             return {
                 "passed": False,
@@ -1910,11 +1950,19 @@ def _runtime_algorithm_smoke_preview(
         "issues": issues,
         "run": representative.get("run") or {},
         "runs": runs,
+        "micro_benchmark": _compact_solver_design_micro_benchmark(micro_results),
     }
     if audit_failure is not None:
         payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
             audit_failure
         )
+        repair_guidance = _solver_design_smoke_repair_guidance(
+            audit_failure,
+            runtime=representative.get("runtime"),
+            run_payload=representative.get("run"),
+        )
+        if repair_guidance:
+            payload["repair_guidance"] = repair_guidance
     return payload
 
 
@@ -2219,6 +2267,198 @@ def _compact_runtime_audit_failure(value: Mapping[str, Any]) -> dict[str, Any]:
         "solver_algorithm_events",
     )
     return {key: value.get(key) for key in keys if key in value}
+
+
+def _solver_design_micro_benchmark_result(
+    *,
+    candidate_raw: Mapping[str, Any],
+    candidate_run: Mapping[str, Any],
+    champion_raw: Mapping[str, Any] | None,
+    champion_run: Mapping[str, Any],
+    smoke_case: _RuntimeSmokeCase,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "case": smoke_case.rel_path,
+        "seed": smoke_case.seed,
+        "label": smoke_case.label,
+        "candidate_elapsed_ms": candidate_run.get("elapsed_ms"),
+        "champion_elapsed_ms": champion_run.get("elapsed_ms"),
+    }
+    if champion_raw is None:
+        result.update(
+            {
+                "comparison": "incomparable",
+                "champion_failed": True,
+                "champion_error_category": champion_run.get("error_category"),
+                "champion_detail": _limit_text(
+                    str(champion_run.get("detail") or ""),
+                    320,
+                ),
+            }
+        )
+        return result
+
+    comparison = _compare_solver_design_raw_outputs(candidate_raw, champion_raw)
+    result.update(comparison)
+    try:
+        result["runtime_delta_ms"] = int(candidate_run.get("elapsed_ms") or 0) - int(
+            champion_run.get("elapsed_ms") or 0
+        )
+    except (TypeError, ValueError):
+        pass
+    return result
+
+
+def _compare_solver_design_raw_outputs(
+    candidate_raw: Mapping[str, Any],
+    champion_raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    candidate_obj = candidate_raw.get("objective")
+    champion_obj = champion_raw.get("objective")
+    if not isinstance(candidate_obj, Mapping) or not isinstance(champion_obj, Mapping):
+        return {"comparison": "incomparable"}
+    candidate_fleet = _float_or_none(candidate_obj.get("fleet_violation"))
+    champion_fleet = _float_or_none(champion_obj.get("fleet_violation"))
+    candidate_distance = _float_or_none(candidate_obj.get("total_distance"))
+    champion_distance = _float_or_none(champion_obj.get("total_distance"))
+    comparison = "tie"
+    delta = 0.0
+    decisive_metric = "total_distance"
+    if candidate_fleet is not None and champion_fleet is not None:
+        fleet_delta = champion_fleet - candidate_fleet
+        if abs(fleet_delta) > 1e-9:
+            comparison = "win" if fleet_delta > 0 else "loss"
+            delta = fleet_delta
+            decisive_metric = "fleet_violation"
+    if comparison == "tie" and candidate_distance is not None and champion_distance is not None:
+        distance_delta = champion_distance - candidate_distance
+        if abs(distance_delta) > 1e-9:
+            comparison = "win" if distance_delta > 0 else "loss"
+            delta = distance_delta
+        else:
+            delta = 0.0
+    return {
+        "comparison": comparison,
+        "delta": delta,
+        "decisive_metric": decisive_metric,
+        "candidate_objective": {
+            key: candidate_obj.get(key)
+            for key in ("fleet_violation", "total_distance")
+            if key in candidate_obj
+        },
+        "champion_objective": {
+            key: champion_obj.get(key)
+            for key in ("fleet_violation", "total_distance")
+            if key in champion_obj
+        },
+    }
+
+
+def _solver_design_micro_benchmark_issue(
+    micro_results: list[dict[str, Any]],
+) -> str | None:
+    comparable = [
+        result
+        for result in micro_results
+        if result.get("comparison") in {"win", "loss", "tie"}
+    ]
+    if not comparable:
+        return None
+    losses = sum(1 for result in comparable if result.get("comparison") == "loss")
+    wins = sum(1 for result in comparable if result.get("comparison") == "win")
+    ties = sum(1 for result in comparable if result.get("comparison") == "tie")
+    if losses == len(comparable) and wins == 0 and ties == 0:
+        return (
+            "tainted micro-benchmark objective regression: candidate lost all "
+            f"{len(comparable)} comparable smoke case(s) against the current champion"
+        )
+    return None
+
+
+def _compact_solver_design_micro_benchmark(
+    micro_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    comparable = [
+        result
+        for result in micro_results
+        if result.get("comparison") in {"win", "loss", "tie"}
+    ]
+    wins = sum(1 for result in comparable if result.get("comparison") == "win")
+    losses = sum(1 for result in comparable if result.get("comparison") == "loss")
+    ties = sum(1 for result in comparable if result.get("comparison") == "tie")
+    return {
+        "non_promotional": True,
+        "tainted_debug": True,
+        "comparable_cases": len(comparable),
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "results": [
+            {
+                key: result.get(key)
+                for key in (
+                    "label",
+                    "case",
+                    "seed",
+                    "comparison",
+                    "delta",
+                    "decisive_metric",
+                    "runtime_delta_ms",
+                )
+                if key in result
+            }
+            for result in micro_results[:_ALGORITHM_SMOKE_MAX_SCREENING_CASES + 1]
+        ],
+    }
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _solver_design_smoke_repair_guidance(
+    audit_failure: Mapping[str, Any],
+    *,
+    runtime: Any,
+    run_payload: Any,
+) -> list[str]:
+    if audit_failure.get("error_category") != "solver_algorithm_runtime_error":
+        return []
+    events = audit_failure.get("solver_algorithm_events")
+    text = " ".join(
+        str(part)
+        for part in (
+            audit_failure.get("detail"),
+            audit_failure.get("error_category"),
+            events,
+            run_payload.get("detail") if isinstance(run_payload, Mapping) else None,
+        )
+        if part not in (None, "", [], {})
+    )
+    guidance = [
+        "Failure occurred inside the candidate solver_design solve path during tainted algorithm smoke; repair the candidate algorithm code, not protocol or adapter files.",
+        "Use the current CVRP object model: _Solution has .instance, .routes, .total_cost, .copy(), .rebuild_index(), .remove_empty_routes(), .is_feasible(), and .routes_as_tuples(); it does not expose ._instance.",
+        "_Solution.routes contains _Route objects. A _Route has .customers, .load, .cost, .insert(), .remove(), .can_insert(), .cost_of_insert(), .cost_of_remove(), and .recalculate(); do not treat routes as plain customer lists unless you explicitly use route.customers.",
+        "CvrpInstance.distance(i, j), demand(i), route_load(route), and route_distance(route) use integer node/customer ids; keep depot/customer ids explicit and rebuild solution indexes after direct route edits.",
+    ]
+    if "_Solution' object has no attribute '_instance'" in text:
+        guidance.insert(
+            1,
+            "Specific fix: replace solution._instance with solution.instance; only _Route carries the private _instance slot.",
+        )
+    if "int' object has no attribute 'distance'" in text or '".distance"' in text:
+        guidance.insert(
+            1,
+            "Specific fix: do not call .distance on an int, route, or customer id; call instance.distance(prev_id, next_id).",
+        )
+    if runtime in (None, {}, ""):
+        guidance.append(
+            "Runtime payload was missing or empty; first make solve(...) return a valid _Solution and context telemetry before adding new search breadth."
+        )
+    return guidance[:6]
 
 
 def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal:
@@ -2634,7 +2874,7 @@ def _contract_preview_issue_strings(value: Any) -> list[str]:
     issues: list[str] = []
 
     def add(text: Any) -> None:
-        item = _limit_text(str(text or "").strip(), 240)
+        item = _limit_text(str(text or "").strip(), 700)
         if item and item not in issues:
             issues.append(item)
 

@@ -1242,6 +1242,13 @@ def _build_search_control_guidance(
         1 for s in recent_screening
         if s.protocol_result.gate_outcome == "fail"
     )
+    recent_winless_solver_design = [
+        s
+        for s in recent_screening[-4:]
+        if s.protocol_result.gate_outcome == "fail"
+        and (s.protocol_result.stats.win_rate or 0.0) <= 0.0
+        and str(s.protocol_result.selected_surface or "") == "solver_design"
+    ]
     repeated_fail_families = [
         fam.family_id for fam in families
         if _count_trailing_failures(fam.statuses) >= 2
@@ -1265,6 +1272,16 @@ def _build_search_control_guidance(
         lines.append(
             "- Avoid saturated failure families: "
             + ", ".join(repeated_fail_families)
+        )
+    if len(recent_winless_solver_design) >= 2:
+        lines.append(
+            "- Solver-design plateau: recent full-algorithm candidates reached "
+            "screening with win_rate=0. Do not submit another shallow scheduler "
+            "variant, budget tweak, or post-processing polish. The next hypothesis "
+            "must name the failed mechanism pattern, explain why the new algorithm "
+            "body is materially different, and either modify the stable algorithm "
+            "entrypoint or include explicit scheduler/entrypoint integration for "
+            "any helper-module changes."
         )
     if forced_surface:
         lines.append(
