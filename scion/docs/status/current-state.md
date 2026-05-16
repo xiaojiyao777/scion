@@ -208,6 +208,29 @@ repair guidance. This validates the framework repair and decomposition: failures
 are now diagnosable before formal screening, while weak candidate algorithms are
 still blocked by smoke or Decision rather than promoted.
 
+The follow-up 6-round Sonnet diagnostic
+`/home/clawd/research/scion-experiments/v04-smoke-diagnostics-sonnet-6r-20260516T150140Z`
+showed that explicit smoke errors were not enough: five rounds failed before
+screening, mostly because code-stage candidates repeatedly invented branch
+state bridge APIs such as `_Solution.from_public(...)`,
+`_Solution.from_routes(...)`, `_Solution.from_cvrp_solution(...)`, or
+`solution.to_public()`. This is not solver-quality evidence; it is an APS
+object-model control gap. The repair makes the internal `_Solution` / `_Route`
+model explicit in solver-design prompts, CVRP interface text, and support
+artifact summaries; C9e now statically rejects invented bridge calls and
+bridge method definitions on `baseline_modules/state.py`. APS final failure
+detail now reports the latest evaluative Contract/smoke preview instead of
+stale or non-evaluative skipped preview observations, and stagnation classifies
+repeated object-model/API failures as `object_model_loop` with
+`inspect_agent_trace` guidance.
+
+As part of the same maintainability repair, `agentic_session.py` has been
+reduced from a 6k-line all-in-one module into a session orchestrator plus
+focused helpers: `agentic_models.py`, `agentic_artifacts.py`,
+`agentic_diagnostics.py`, `agentic_code_context.py`, `agentic_preview.py`, and
+`agentic_utils.py`. Future APS work should keep new models, artifact logic,
+preview logic, and prompt-shaping helpers in those focused modules.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median

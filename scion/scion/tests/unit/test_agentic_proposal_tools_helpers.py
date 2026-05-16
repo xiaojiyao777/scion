@@ -50,6 +50,7 @@ from scion.proposal.agentic_session import (
     _compact_contract_preview_observation,
     _compact_feedback_observation_for_budget,
     _algorithm_smoke_failure_detail,
+    _latest_preview_failure_detail,
     _code_observation_prompt_payload,
     _code_prompt_observations,
     _json_size,

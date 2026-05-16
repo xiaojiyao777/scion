@@ -8,6 +8,17 @@ from scion.core.models import Decision, StepRecord
 
 # Threshold for infra_loop detection (same failure_code streak)
 _INFRA_LOOP_THRESHOLD = 5
+_OBJECT_MODEL_LOOP_MARKERS = (
+    "_solution",
+    "_route",
+    "from_public",
+    "from_cvrp_solution",
+    "from_routes",
+    "to_public",
+    "cannot be coerced to cvrpsolution",
+    "solver_algorithm_errors=",
+    "object model",
+)
 
 
 @dataclass
@@ -74,13 +85,57 @@ class StagnationDetector:
         if plateau:
             signals.append(plateau)
 
-        # 5. Infra loop: same failure_code streak >= threshold
+        # 5. Repeated proposal/code failures from object-model/API misuse are
+        # not infrastructure failures; they need trace-level agent analysis and
+        # solver surface/API repair.
         if failure_streak:
-            infra_loop = self._check_infra_loop(failure_streak)
-            if infra_loop:
-                signals.append(infra_loop)
+            object_model_loop = self._check_object_model_loop(
+                step_history,
+                failure_streak,
+            )
+            if object_model_loop:
+                signals.append(object_model_loop)
+            else:
+                infra_loop = self._check_infra_loop(failure_streak)
+                if infra_loop:
+                    signals.append(infra_loop)
 
         return signals
+
+    def _check_object_model_loop(
+        self,
+        steps: List[StepRecord],
+        failure_streak: Dict[str, int],
+    ) -> Optional[StagnationSignal]:
+        if not any(streak >= _INFRA_LOOP_THRESHOLD for streak in failure_streak.values()):
+            return None
+        recent_failures = [
+            step
+            for step in steps[-_INFRA_LOOP_THRESHOLD:]
+            if step.failure_stage in {"proposal", "code_generation"}
+            and step.failure_detail
+        ]
+        marker_hits: list[str] = []
+        for step in recent_failures:
+            detail = str(step.failure_detail or "").lower()
+            if not any(marker in detail for marker in _OBJECT_MODEL_LOOP_MARKERS):
+                continue
+            marker_hits.append(str(step.failure_detail or "")[:180])
+        if len(marker_hits) < 2:
+            return None
+        streak_text = ", ".join(
+            f"{code}={streak}" for code, streak in sorted(failure_streak.items())
+        )
+        return StagnationSignal(
+            kind="object_model_loop",
+            severity="critical",
+            detail=(
+                "Repeated proposal/code failures look like solver object-model "
+                f"or API misuse rather than environment failure. streaks={streak_text}; "
+                f"recent_examples={marker_hits[-3:]}"
+            ),
+            suggested_action="inspect_agent_trace",
+        )
 
     # ------------------------------------------------------------------
     # Individual detectors
@@ -246,7 +301,9 @@ class StagnationDetector:
 
         # Determine recommendation from signal kinds
         kinds = {s.kind for s in signals}
-        if "infra_loop" in kinds or "timeout_cascade" in kinds or "collapse" in kinds:
+        if "object_model_loop" in kinds:
+            recommendation = "inspect_agent_trace"
+        elif "infra_loop" in kinds or "timeout_cascade" in kinds or "collapse" in kinds:
             recommendation = "check_environment"
         elif "oscillation" in kinds:
             recommendation = "diversify_locus"

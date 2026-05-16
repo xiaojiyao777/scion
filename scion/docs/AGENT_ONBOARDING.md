@@ -393,6 +393,19 @@ Important current interpretation:
   and compatibility exports. Agentic proposal tool tests are split by topic
   under `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks
   back into the legacy aggregate file.
+- APS itself is also being decomposed. Shared models, artifact storage,
+  diagnostics, code-context shaping, preview/self-check helpers, and utilities
+  now live in focused `scion/proposal/agentic_*.py` modules. Keep
+  `agentic_session.py` as the session orchestrator; do not add new large helper
+  blocks back into it.
+- Repeated branch object-model API mistakes are framework-relevant. The
+  `_Solution` object in `baseline_modules/state.py` does not expose
+  `from_public`, `from_routes`, `from_cvrp_solution`, or `to_public`, and
+  candidates must not add those bridge APIs to state. Use `_Route` objects plus
+  `context.make_solution(solution.routes_as_tuples())` at the boundary. C9e
+  now rejects invented bridge calls/definitions, and repeated failures are
+  classified as `object_model_loop` with `inspect_agent_trace` guidance rather
+  than a generic infra loop.
 - `proposal.algorithm_smoke` rejects solver-design candidates that claim or
   touch search-bearing solver code but record zero
   `solver_algorithm_search_iterations` and zero
@@ -429,6 +442,12 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   contract changes.
 - Do not read raw experiment artifacts in the main session by default. Use
   bounded experiment docs or delegate raw-artifact analysis when needed.
+- After every real-cost experiment, do not stop at summary metrics. Inspect or
+  delegate a trace-level review of each round: hypothesis prompt/output, code
+  prompt/output, APS transcript tool calls, preview/smoke results, branch patch,
+  and Decision evidence. Classify failures as framework boundary/control,
+  prompt/API/object-model, repair-loop, provider/infra, or genuine
+  algorithm-quality abandonment before starting the next repair.
 - Do not read source code by default for design or experiment interpretation.
   Use engineering maps first, then inspect only relevant paths for code tasks.
 - Use the project Python:

@@ -156,7 +156,10 @@ class TestFailureRouterStateful:
 # T3: StagnationDetector infra_loop
 # ---------------------------------------------------------------------------
 
-def _make_step(failure_stage: Optional[str] = None) -> StepRecord:
+def _make_step(
+    failure_stage: Optional[str] = None,
+    failure_detail: Optional[str] = None,
+) -> StepRecord:
     hyp = HypothesisProposal(
         hypothesis_text="test",
         change_locus="order_level",
@@ -172,7 +175,7 @@ def _make_step(failure_stage: Optional[str] = None) -> StepRecord:
         protocol_result=None,
         decision=None,
         failure_stage=failure_stage,
-        failure_detail=None,
+        failure_detail=failure_detail,
     )
 
 
@@ -228,6 +231,28 @@ class TestStagnationDetectorInfraLoop:
         diagnosis = detector.diagnose(5, steps, failure_streak=streak)
         assert diagnosis is not None
         assert diagnosis.recommendation == "check_environment"
+
+    def test_object_model_loop_overrides_generic_infra_loop(self):
+        """Repeated code API misuse should not be classified as environment."""
+        detector = StagnationDetector(window_size=5)
+        detail = (
+            "agentic_proposal:code_generation_failed: _Solution.from_public "
+            "missing; solver_algorithm_errors=1"
+        )
+        steps = [
+            _make_step("code_generation", detail)
+            for _ in range(5)
+        ]
+        streak = {"agentic_proposal:code_generation_failed": 5}
+
+        signals = detector.check(steps, failure_streak=streak)
+        kinds = {signal.kind for signal in signals}
+        diagnosis = detector.diagnose(5, steps, failure_streak=streak)
+
+        assert "object_model_loop" in kinds
+        assert "infra_loop" not in kinds
+        assert diagnosis is not None
+        assert diagnosis.recommendation == "inspect_agent_trace"
 
 
 # ---------------------------------------------------------------------------

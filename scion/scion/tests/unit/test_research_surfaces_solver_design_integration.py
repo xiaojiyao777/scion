@@ -628,6 +628,121 @@ def test_cvrp_preview_rejects_context_nearest_neighbor_with_arguments() -> None:
     assert "takes no arguments" in str(payload["issues"])
 
 
+def test_contract_gate_rejects_invented_solution_bridge_api(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "destroy_repair.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "destroy_repair.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = (
+        "from .state import _Solution\n\n"
+        "def _bad_repair(context):\n"
+        "    return _Solution.from_public(context.nearest_neighbor())\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/destroy_repair.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "inventing _Solution bridge APIs" in c9e.detail
+    assert "from_public" in c9e.detail
+    assert "routes_as_tuples" in c9e.detail
+
+
+def test_contract_gate_rejects_state_bridge_method_definition(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "state.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "state.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = base_code.replace(
+        "    def routes_as_tuples(self):\n",
+        "    def from_cvrp_solution(self, solution):\n"
+        "        return self\n\n"
+        "    def routes_as_tuples(self):\n",
+        1,
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/state.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "forbidden_definitions" in c9e.detail
+    assert "from_cvrp_solution" in c9e.detail
+
+
+def test_contract_gate_rejects_invented_solution_to_public_bridge(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "local_search.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        (_CVRP_ROOT / "policies" / "baseline_modules" / "local_search.py").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
+    code = "def _bad_move(solution):\n    return solution.to_public()\n"
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/local_search.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "inventing _Solution bridge APIs" in c9e.detail
+    assert "to_public" in c9e.detail
+
+
 def test_contract_gate_allows_integrated_solver_design_helper(
     tmp_path: Path,
 ) -> None:

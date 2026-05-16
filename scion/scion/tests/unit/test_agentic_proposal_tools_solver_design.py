@@ -25,6 +25,7 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     _context,
     _cvrp_context,
     _json_size,
+    _latest_preview_failure_detail,
     _observation_prompt_payload,
     _resolve_smoke_instance_path,
     _solver_design_low_effort_issue,
@@ -760,7 +761,47 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "do not implement a full portfolio" in rendered_system
     assert "_Solution.routes" in rendered_system
     assert "not `list[list[int]]`" in rendered_system
+    assert "from_public" in rendered_system
+    assert "from_cvrp_solution" in rendered_system
+    assert "context.make_solution(solution.routes_as_tuples())" in rendered_system
+    assert "Do not edit `policies/baseline_modules/state.py`" in rendered_prompt
     assert "complete contents of the target algorithm module" in rendered_prompt
+
+
+def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:
+    smoke = ProposalObservation(
+        observation_id="smoke-1",
+        session_id="session-1",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="call-1",
+        observation_type="tool_result",
+        summary="Algorithm smoke failed.",
+        structured_payload={
+            "passed": False,
+            "runtime_smoke": {
+                "issues": ["old runtime failure"],
+            },
+        },
+    )
+    contract = ProposalObservation(
+        observation_id="contract-1",
+        session_id="session-1",
+        tool_name="proposal.contract_preview",
+        tool_call_id="call-2",
+        observation_type="tool_result",
+        summary="Contract preview failed.",
+        structured_payload={
+            "passed": False,
+            "issue_summary": "new object model API misuse",
+        },
+    )
+
+    detail = _latest_preview_failure_detail([smoke, contract])
+
+    assert detail is not None
+    assert "contract preview did not pass" in detail
+    assert "new object model API misuse" in detail
+    assert "old runtime failure" not in detail
 
 
 def test_solver_run_failure_detail_includes_category_exit_and_stdout() -> None:

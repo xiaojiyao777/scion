@@ -3426,6 +3426,13 @@ def _python_api_summary_for_file(path: Path, *, max_chars: int = 1800) -> str:
             lines.append("def " + _python_function_signature(node))
         if len(lines) >= 28:
             break
+    if path.name == "state.py" and path.parent.name == "baseline_modules":
+        lines.append(
+            "state model note: _Solution has no from_routes/from_public/"
+            "from_cvrp_solution/to_public bridge methods; use construction.py "
+            "helpers or _Solution(instance, [_Route(instance, route) for route "
+            "in routes]) and return via routes_as_tuples()."
+        )
     if not lines:
         return ""
     return _limit_text("\n".join(lines), max_chars)

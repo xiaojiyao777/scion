@@ -845,12 +845,16 @@ def _split_code_context(
         "and perturbation all at once. Select one vertical algorithm slice that "
         "can run and screen now; later rounds can add breadth after it proves "
         "movement.\n"
-        "- The preferred target is `policies/baseline_algorithm.py`: change "
-        "the controlled algorithm body directly and do not call "
-        "`context.baseline` there. The older `policies/solver_algorithm.py` "
-        "compatibility hook may use `context.baseline` only when paired with "
-        "a bounded algorithmic search loop and telemetry via "
-        "`context.record_move` or `context.record_iteration`.\n"
+        "- When the approved target is `policies/baseline_algorithm.py`, "
+        "change the controlled algorithm body directly and do not call "
+        "`context.baseline` there. When the approved target is under "
+        "`policies/baseline_modules/`, keep that module as the primary "
+        "research object and use scheduler/entrypoint edits only as minimal "
+        "wiring into the branch-owned solver. The older "
+        "`policies/solver_algorithm.py` compatibility hook may use "
+        "`context.baseline` only when paired with a bounded algorithmic "
+        "search loop and telemetry via `context.record_move` or "
+        "`context.record_iteration`.\n"
         "- Do not submit a shallow wrapper that changes baseline budget/params "
         "or adds a tiny post-baseline polish.\n"
         "- If the target is `policies/baseline_modules/scheduler.py`, treat "
@@ -906,6 +910,15 @@ def _split_code_context(
         "`.routes_as_tuples()`. Do not slice, concatenate, or overwrite "
         "`solution.routes` as customer lists; edit `route.customers` or use "
         "route methods, then rebuild indexes when route membership changes.\n"
+        "- `_Solution` does not expose `from_routes`, `from_public`, "
+        "`from_cvrp_solution`, or `to_public`. Do not add those bridge "
+        "methods to `state.py` to compensate for API confusion. Existing "
+        "construction helpers in `construction.py` already return internal "
+        "`_Solution` objects. If you truly need to turn public route tuples "
+        "into an internal solution, import `_Route` and `_Solution` from "
+        "`.state` and construct `_Solution(instance, [_Route(instance, route) "
+        "for route in routes])`; return public output with "
+        "`context.make_solution(solution.routes_as_tuples())`.\n"
         "- You may change algorithm strategy and runtime scheduling, but not "
         "problem objective semantics, feasibility constraints, parsing, seeds, "
         "protocol splits, Decision rules, or adapter/runtime files.\n"
@@ -953,6 +966,11 @@ def _split_code_context(
         "`CvrpSolution`; do not pass `rng` and do not call `.copy()` on that "
         "public solution. The internal `_Solution` type is separate and lives "
         "under `policies/baseline_modules/state.py`.\n"
+        "- Do not edit `policies/baseline_modules/state.py` as an "
+        "`additional_changes` bridge unless it is the approved target; it is "
+        "the branch object model, not an adapter escape hatch. Prefer using "
+        "the construction/local_search/destroy_repair/scheduler APIs already "
+        "declared by the support artifacts.\n"
         if is_solver_design_surface
         else ""
     )
@@ -1160,6 +1178,8 @@ def _solver_design_scope_control_section(
         "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it with the current explicit keywords (`time_limit`, `destroy_ratio`, `segment_length`, `reaction_factor`, `vns_max_no_improve`, `use_vns`, `cw_threshold`, `vns_threshold`, `alns_threshold`, `max_destroy_customers`, `max_routes`, `context`), and call `solver.solve(instance, rng)` with no extra arguments; do not import scheduler `solve`, `run`, or `main`.",
         "- If scheduler.py or baseline_algorithm.py is only an integration edit, preserve the stable runtime contract: baseline_algorithm.py calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py keeps the class-based `_ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio, segment_length, reaction_factor, vns_max_no_improve, use_vns, cw_threshold, vns_threshold, alns_threshold, max_destroy_customers, max_routes, context)` plus `_ALNSVNSSolver.solve(self, instance, rng)` path without top-level `solve`, `run`, or `main` entrypoints. Multi-module changes are allowed when they remain inside this auditable call chain; put new construction seeds or initial-state hooks inside scheduler methods instead of changing the entrypoint call protocol.",
         "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
+        "- `_Solution` has no `from_routes`, `from_public`, `from_cvrp_solution`, or `to_public`. Do not add these bridge methods to state.py. Use construction.py helpers that already return internal `_Solution`, or construct `_Solution(instance, [_Route(instance, route) for route in routes])` and return via `context.make_solution(solution.routes_as_tuples())`.",
+        "- Do not use state.py as an additional-change adapter bridge unless it is the approved target; keep object-model edits explicit and auditable.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",
     ]

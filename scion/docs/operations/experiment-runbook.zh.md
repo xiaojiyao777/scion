@@ -661,7 +661,67 @@ jq -r '
 jq '.failures' "$METRICS"
 ```
 
-### 9.9 重建一轮的完整故事
+### 9.9 每轮 trace 级调试清单
+
+真实 LLM 实验结束后，不能只看 `campaign_summary.json` 的表面结果。至少逐轮
+检查一次 APS artifact 和 LLM trace；如果有子 agent，就把原始 artifact
+walk 委托出去，再由主线程归纳 bounded 结论。
+
+先看 APS 紧凑 transcript：
+
+```bash
+jq -r '
+  .compact_transcript[]?
+  | [
+      .phase,
+      .message,
+      (.metadata.tool_name // ""),
+      (.metadata.status // ""),
+      (.metadata.error_code // ""),
+      (.metadata.selection_source // ""),
+      (.metadata.result_summary // "")
+    ]
+  | @tsv
+' "$APS_REF"
+```
+
+再按时间打开该轮所有相关 LLM trace，至少记录这些字段：
+
+```bash
+REQUEST_ID=$(jq -r '.request_id // empty' "$APS_REF")
+for TRACE in "$CAMPAIGN_DIR"/llm_traces/*.json; do
+  jq -r '
+    select((.branch_id // "") == env.BRANCH or (.request_id // "") == env.REQUEST_ID)
+    | [.request_kind, .trace_id, (.ok|tostring), (.error // ""), (.prompt_hash // "")]
+    | @tsv
+  ' "$TRACE"
+done
+```
+
+需要确认模型真实上下文时看输入，但不要粘贴大段正文进文档：
+
+```bash
+jq '{request_kind, system_blocks, user_prompt, tool_schema, response, error}' "$TRACE"
+```
+
+逐轮分类时必须区分：
+
+- `framework_boundary_control`：Contract/C9x、preview、surface、objective/
+  constraint、tool exposure 或 artifact 逻辑有误。
+- `prompt_or_object_model`：模型反复误用 branch API、对象模型、模块接口，且
+  framework 没有足够早、足够明确地阻断或反馈。
+- `repair_loop`：第一次失败可修，但 APS repair 没把最新失败反馈给下一次代码
+  生成，或 stale failure detail 覆盖了真正失败。
+- `provider_or_infra`：超时、API 错误、trace 缺失、进程异常；必须用 trace 和
+  `run.log` 证明。
+- `algorithm_quality`：代码通过 Contract、smoke、Verification、Protocol，但被
+  Decision 因 win rate、median delta、runtime gate 等 deterministic evidence
+  正确淘汰。
+
+如果出现同类 proposal/code 错误跨轮重复，先修框架控制或对象适配；不要继续堆
+轮数。
+
+### 9.10 重建一轮的完整故事
 
 每轮分析按这个顺序写：
 
@@ -676,7 +736,7 @@ Round N / branch_id
 7. 解释：这是 proposal 问题、实现问题、runtime/环境问题、还是算法质量问题。
 ```
 
-### 9.10 复跑同一配置
+### 9.11 复跑同一配置
 
 不要在原 `CAMPAIGN_DIR` 上直接复跑，除非你明确要污染/续写同一个 lineage。
 复现实验配置时，新建 run root，但 source 原始 `launch.env`：
@@ -704,7 +764,7 @@ git -C /home/clawd/research/or-autoresearch-agent status --short
 有未提交工作区改动时，先判断这些改动是否属于实验。如果旧实验对应的代码没有
 保留成 commit，就只能复现“配置和 artifact 分析”，不能保证重跑代码完全一致。
 
-### 9.11 手动复跑某个 solver pair
+### 9.12 手动复跑某个 solver pair
 
 当你怀疑某个 case×seed 的 solver 输出，可以直接在 champion/candidate
 workspace 上复跑 CVRP solver。
