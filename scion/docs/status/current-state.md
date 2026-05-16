@@ -197,6 +197,16 @@ moved from `proposal/tools.py` into `proposal/solver_design_smoke.py`, and the
 4k+ line `test_agentic_proposal_tools.py` file was split into topic-specific
 test modules for context, schema, solver-design smoke, feedback, and session
 behavior.
+The post-split 3-round Sonnet smoke
+`/home/clawd/research/scion-experiments/v04-smoke-diagnostics-sonnet-3r-20260516T144014Z`
+completed normally at commit `1303f60`. It produced one official screening
+candidate, which passed Contract/smoke/Verification/screening before the
+Decision layer abandoned it for `win_rate < 0.3`. The other two attempts failed
+in code-stage algorithm smoke with explicit branch object-model errors
+(`_Solution.from_public` and `_Solution.from_cvrp_solution` do not exist) plus
+repair guidance. This validates the framework repair and decomposition: failures
+are now diagnosable before formal screening, while weak candidate algorithms are
+still blocked by smoke or Decision rather than promoted.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
