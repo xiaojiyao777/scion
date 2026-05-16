@@ -157,7 +157,19 @@ repeated interface mistakes: importing `solve`/`run`/`main` from
 `baseline_modules.scheduler` in `baseline_algorithm.py`, and passing
 arguments to `context.nearest_neighbor()`. After this repair, framework
 validation smokes should use at least 3 rounds; 2-round runs are useful for
-debugging only and are too weak to validate this class of control change.
+debugging only and are too weak to validate this class of control change. The
+3-round validation smoke after the repair completed with exit code `0`; all
+three candidates passed APS, Contract preview, algorithm smoke, Verification,
+and formal screening before being correctly abandoned by
+`SCREENING_FAIL_WIN_RATE`. Targets were `acceptance.py`, `local_search.py`,
+and `construction.py`; each screened on 8 formal cases and 16 pairs with
+seeds `11` and `29`. A deeper trace review shows that candidate quality is
+still weak for framework reasons: the acceptance candidate added a reheat hook
+without wiring it into the scheduler, and the construction candidate rewrote
+the scheduler into a near-zero-search path that swallowed a bad `_vns` call.
+The next control repair should make contract/smoke reject inert new helpers,
+broad unapproved scheduler rewrites, and solver-design candidates that claim a
+search improvement while recording zero search iterations or move attempts.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
