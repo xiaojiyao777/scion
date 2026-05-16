@@ -11,7 +11,6 @@ reachability edges even when the helper is not called at definition time.
 from __future__ import annotations
 
 import ast
-import difflib
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -173,46 +172,99 @@ def _additional_wiring_edit_error(
 ) -> str | None:
     if file_rel == primary_path:
         return None
-    if file_rel not in {
-        "policies/baseline_algorithm.py",
-        "policies/baseline_modules/scheduler.py",
-    }:
-        return None
-    if not champion_code:
-        return None
-    changed_lines = _changed_line_count(champion_code, candidate_code)
-    max_changed = (
-        30
-        if file_rel == "policies/baseline_algorithm.py"
-        else 80
-    )
-    if changed_lines <= max_changed:
-        return None
-    return (
-        "solver_design integration edits to scheduler/entrypoint must stay "
-        "bounded when they are not the approved primary target. "
-        f"primary_target={primary_path}; integration_file={file_rel}; "
-        f"changed_lines={changed_lines}; max_wiring_changed_lines={max_changed}. "
-        "Put the mechanism in the approved construction/destroy-repair/local-search/"
-        "acceptance module and keep scheduler or baseline_algorithm edits as small "
-        "wiring changes. Make scheduler.py or baseline_algorithm.py the primary "
-        "target for a broad orchestration rewrite."
-    )
+    if file_rel == "policies/baseline_algorithm.py":
+        return _baseline_algorithm_integration_error(
+            primary_path=primary_path,
+            candidate_code=candidate_code,
+        )
+    if file_rel == "policies/baseline_modules/scheduler.py":
+        return _scheduler_integration_contract_error(
+            primary_path=primary_path,
+            champion_code=champion_code,
+            candidate_code=candidate_code,
+        )
+    return None
 
 
-def _changed_line_count(before: str, after: str) -> int:
-    diff = difflib.unified_diff(
-        before.splitlines(),
-        after.splitlines(),
-        lineterm="",
+def _baseline_algorithm_integration_error(
+    *,
+    primary_path: str,
+    candidate_code: str,
+) -> str | None:
+    try:
+        tree = ast.parse(candidate_code)
+    except SyntaxError:
+        return None
+    bad_imports = _scheduler_entrypoint_imports(tree)
+    call_refs = _call_reference_names(tree)
+    load_names = _load_names(tree)
+    if bad_imports:
+        return (
+            "baseline_algorithm.py integration edits must keep the stable "
+            "scheduler class API when they are not the approved primary target. "
+            f"primary_target={primary_path}; bad_scheduler_imports={bad_imports}. "
+            "Import _ALNSVNSSolver, instantiate it, and call solver.solve(instance, rng)."
+        )
+    if "solve_with_context" in call_refs:
+        return (
+            "baseline_algorithm.py integration edits must not introduce a new "
+            "scheduler runtime API when they are not the approved primary target. "
+            f"primary_target={primary_path}; found solve_with_context call. "
+            "Keep _ALNSVNSSolver.solve(instance, rng) as the stable branch entrypoint."
+        )
+    if "_ALNSVNSSolver" not in load_names or "solve" not in call_refs:
+        return (
+            "baseline_algorithm.py integration edits must remain a stable wiring "
+            "wrapper when they are not the approved primary target. "
+            f"primary_target={primary_path}; expected _ALNSVNSSolver and solve(...)."
+        )
+    return None
+
+
+def _scheduler_integration_contract_error(
+    *,
+    primary_path: str,
+    champion_code: str | None,
+    candidate_code: str,
+) -> str | None:
+    try:
+        tree = ast.parse(candidate_code)
+    except SyntaxError:
+        return None
+    top_level_functions = _module_level_function_defs(tree)
+    legacy_entrypoints = sorted(
+        top_level_functions & {"solve", "run", "main", "_run", "_run_scheduler"}
     )
-    count = 0
-    for line in diff:
-        if line.startswith(("+++", "---", "@@")):
-            continue
-        if line.startswith(("+", "-")):
-            count += 1
-    return count
+    if legacy_entrypoints:
+        return (
+            "scheduler.py integration edits must keep the class-based solver "
+            "runtime entrypoint when they are not the approved primary target. "
+            f"primary_target={primary_path}; legacy_entrypoints={legacy_entrypoints}. "
+            "Wire the mechanism through _ALNSVNSSolver.solve instead of adding "
+            "top-level solve/run/main functions."
+        )
+
+    champion_classes = _module_level_class_defs_from_source(champion_code)
+    runtime_classes = _solver_design_runtime_class_roots(
+        tree,
+        champion_classes=champion_classes,
+    )
+    method_defs = _class_method_defs(tree)
+    if not runtime_classes:
+        return (
+            "scheduler.py integration edits must preserve an active runtime "
+            "solver class when they are not the approved primary target. "
+            f"primary_target={primary_path}; expected _ALNSVNSSolver or a "
+            "_ALNSVNSSolver class alias."
+        )
+    if not any("solve" in method_defs.get(class_name, set()) for class_name in runtime_classes):
+        return (
+            "scheduler.py integration edits must preserve "
+            "_ALNSVNSSolver.solve(instance, rng) when they are not the approved "
+            f"primary target. primary_target={primary_path}; "
+            f"runtime_classes={sorted(runtime_classes)}."
+        )
+    return None
 
 
 def _module_level_function_defs(tree: ast.AST) -> set[str]:
@@ -383,3 +435,26 @@ def _call_reference_names(node: ast.AST) -> set[str]:
         elif isinstance(func, ast.Attribute):
             names.add(func.attr)
     return names
+
+
+def _load_names(node: ast.AST) -> set[str]:
+    return {
+        child.id
+        for child in ast.walk(node)
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+    }
+
+
+def _scheduler_entrypoint_imports(tree: ast.AST) -> list[str]:
+    bad: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = str(node.module or "")
+        if not module.endswith("baseline_modules.scheduler"):
+            continue
+        for alias in node.names:
+            name = str(alias.name or "")
+            if name in {"solve", "run", "main", "_run", "_run_scheduler"}:
+                bad.add(name)
+    return sorted(bad)

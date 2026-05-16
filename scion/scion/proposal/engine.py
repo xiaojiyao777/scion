@@ -871,9 +871,12 @@ def _split_code_context(
         "`main` from scheduler.\n"
         "- If `additional_changes` touches `policies/baseline_modules/scheduler.py` "
         "or `policies/baseline_algorithm.py` while another file is the approved "
-        "target, keep those edits as small wiring changes. Broad orchestration "
-        "or entrypoint rewrites must make the orchestration file the approved "
-        "primary target.\n"
+        "target, preserve the stable runtime contract: `baseline_algorithm.py` "
+        "must keep `_ALNSVNSSolver(...).solve(instance, rng)`, and "
+        "`scheduler.py` must keep the class-based `_ALNSVNSSolver.solve` path "
+        "without adding top-level `solve`, `run`, or `main` entrypoints. "
+        "Multi-module algorithm integration is allowed when it stays inside "
+        "that auditable call chain.\n"
         "- A solver-design patch that claims or touches search-bearing code "
         "must record real algorithm effort on smoke cases. If every successful "
         "case reports `solver_algorithm_search_iterations=0` and "
@@ -1135,12 +1138,12 @@ def _solver_design_scope_control_section(
         "## Compact Solver-Design Implementation Scope",
         "- Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
         "- Implement one primary mechanism now. Prefer a direct seed/construction plus one bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
-        "- The target file should own the mechanism. If the target is scheduler.py after win-rate-zero scheduler attempts, keep scheduler edits as wiring and place the actual construction/destroy-repair/local-search/acceptance mechanism in the matching module via `additional_changes`.",
+        "- The target file should own the mechanism. If the target is scheduler.py after win-rate-zero scheduler attempts, keep scheduler as the active `_ALNSVNSSolver.solve` orchestration path and place the concrete construction/destroy-repair/local-search/acceptance mechanism in the matching module via `additional_changes`.",
         "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
         "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
         "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
         "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it, and call `solver.solve(instance, rng)`; do not import scheduler `solve`, `run`, or `main`.",
-        "- If scheduler.py or baseline_algorithm.py is only an integration edit, keep it small. Broad scheduler/entrypoint rewrites must make that file the approved primary target.",
+        "- If scheduler.py or baseline_algorithm.py is only an integration edit, preserve the stable runtime contract: baseline_algorithm.py calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py keeps the class-based `_ALNSVNSSolver.solve` path without top-level `solve`, `run`, or `main` entrypoints. Multi-module changes are allowed when they remain inside this auditable call chain.",
         "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",

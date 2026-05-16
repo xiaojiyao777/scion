@@ -1029,9 +1029,12 @@ research_surfaces:
         adding millisecond-scale polishing without a bounded algorithmic search
         loop is not a valid solver-design candidate. Do not add helper
         functions or class methods that are not reachable from the active solver
-        path. Do not put broad scheduler.py or baseline_algorithm.py rewrites
-        in additional_changes when another file is the approved target; keep
-        those edits as wiring unless the orchestration file is the target.
+        path. If scheduler.py or baseline_algorithm.py appears in
+        additional_changes while another file is the approved target, preserve
+        the stable runtime contract: baseline_algorithm.py calls
+        _ALNSVNSSolver(...).solve(instance, rng), and scheduler.py keeps the
+        class-based _ALNSVNSSolver.solve path without top-level solve, run, or
+        main entrypoints.
     target_files:
       - "policies/baseline_algorithm.py"
       - "policies/solver_algorithm.py"

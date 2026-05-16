@@ -4958,9 +4958,11 @@ def _solver_design_code_scope_control(
                 "ownership, put entrypoint/scheduler/module wiring in "
                 "additional_changes, and ensure any new helper is called from "
                 "an existing solver path. If scheduler.py or "
-                "baseline_algorithm.py is only an integration edit, keep it "
-                "small; broad orchestration rewrites must target that file "
-                "directly."
+                "baseline_algorithm.py is only an integration edit, preserve "
+                "the stable runtime contract: baseline_algorithm.py calls "
+                "_ALNSVNSSolver(...).solve(instance, rng), and scheduler.py "
+                "keeps the class-based _ALNSVNSSolver.solve path without "
+                "top-level solve, run, or main entrypoints."
             ),
             "import_rule": (
                 "Use package-relative imports inside policies, for example "

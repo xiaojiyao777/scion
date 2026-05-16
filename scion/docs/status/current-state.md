@@ -168,11 +168,14 @@ still weak for framework reasons: the acceptance candidate added a reheat hook
 without wiring it into the scheduler, and the construction candidate rewrote
 the scheduler into a near-zero-search path that swallowed a bad `_vns` call.
 The follow-up control repair now makes C9e treat new class methods as helpers
-that must be reachable from the solver path, caps broad scheduler/entrypoint
-integration edits when those files are not the approved primary target, and
-makes `proposal.algorithm_smoke` reject solver-design candidates that claim or
-touch search-bearing code while recording zero search iterations and zero move
-attempts on every successful smoke case.
+that must be reachable from the solver path, replaces line-count caps on
+scheduler/entrypoint integration with stable runtime-contract checks, and makes
+`proposal.algorithm_smoke` reject solver-design candidates that claim or touch
+search-bearing code while recording zero search iterations and zero move
+attempts on every successful smoke case. Multi-module solver-design patches may
+now integrate through `scheduler.py` / `baseline_algorithm.py` when those files
+preserve the `_ALNSVNSSolver(...).solve(instance, rng)` call chain and avoid
+detached top-level scheduler entrypoints.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the

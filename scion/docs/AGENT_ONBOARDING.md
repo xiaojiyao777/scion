@@ -364,11 +364,14 @@ Important current interpretation:
   this path by screening a `local_search.py` candidate that would previously
   have been falsely rejected, then correctly abandoning it for worse and
   slower solver quality.
-- C9e also checks newly added class methods and bounded integration edits. A
-  method added to helper classes such as `_SimulatedAnnealing` must be called
-  from the active solver path, and `scheduler.py` / `baseline_algorithm.py`
-  changes inside `additional_changes` must stay small unless one of those files
-  is the approved primary target.
+- C9e also checks newly added class methods and integration contracts. A method
+  added to helper classes such as `_SimulatedAnnealing` must be called from the
+  active solver path. Multi-module solver-design patches may integrate through
+  `scheduler.py` / `baseline_algorithm.py` in `additional_changes`, but they
+  must preserve the stable runtime API: `baseline_algorithm.py` calls
+  `_ALNSVNSSolver(...).solve(instance, rng)`, and `scheduler.py` keeps the
+  class-based `_ALNSVNSSolver.solve` path without adding top-level
+  `solve`/`run`/`main` entrypoints.
 - `proposal.algorithm_smoke` rejects solver-design candidates that claim or
   touch search-bearing solver code but record zero
   `solver_algorithm_search_iterations` and zero

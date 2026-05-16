@@ -3796,9 +3796,10 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
         "Do not implement more than two move/neighborhood families" in rendered_system
     )
     assert "target file should own the mechanism" in rendered_system
-    assert "scheduler edits as wiring" in rendered_system
+    assert "stable runtime contract" in rendered_system
+    assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
-    assert "Broad scheduler/entrypoint rewrites" in rendered_system
+    assert "class-based `_ALNSVNSSolver.solve` path" in rendered_system
     assert "zero iterations and zero move attempts" in rendered_system
     assert "_default_vns_operators()" in rendered_system
     assert "detached `_run`/`run`" in rendered_system
