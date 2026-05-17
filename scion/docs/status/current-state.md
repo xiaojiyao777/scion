@@ -278,6 +278,21 @@ destroy/repair symbols into operator pools), and makes C9e missing-import
 feedback report `available_exports` from the imported sibling module. This is
 still a framework/control repair, not solver-quality evidence.
 
+The monitored 3-round Sonnet validation after the API-manifest repair
+`/home/clawd/research/scion-experiments/v04-api-manifest-sonnet-3r-20260517T034512Z`
+completed normally at commit `88e27aa`. It produced three official screening
+experiments and kept champion v1. Targets were `scheduler.py`,
+`destroy_repair.py`, and `local_search.py`; all three sessions completed APS,
+Contract preview, algorithm smoke, Verification, and formal screening before
+Decision abandoned them for `SCREENING_FAIL_WIN_RATE`. The destroy/repair
+round is the important framework signal: it generated a pure
+`destroy_repair.py` patch with no scheduler integration edit, no invented
+construction imports, and no C9e/C9c loop. All three screened candidates had
+16/16 valid pairs, zero candidate solver failures, nonzero search iterations
+and move attempts on every pair, and slight median runtime speedups, but no
+objective wins (`win_rate=0.0`, `median_delta=0.0`). This is stable enough to
+run a 6-round background validation; it is not solver-quality progress.
+
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
 lexicographic objective, has no runtime failures, and beats champion median
