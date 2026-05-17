@@ -724,6 +724,14 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
                 ],
                 "failure_detail": "code_generation_timeout",
             },
+            "solver_design_api_manifest": (
+                "Approved target_file: policies/baseline_modules/destroy_repair.py\n"
+                "- policies/baseline_modules/construction.py: exports "
+                "def _clarke_wright_savings(instance, target_routes); "
+                "def _nearest_neighbor(instance)\n"
+                "Target-specific rule for destroy_repair.py: scheduler.py "
+                "may only import exact new symbols from .destroy_repair."
+            ),
             "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
             "import_whitelist": "math, random, time",
             "champion_operators_code": "",
@@ -766,6 +774,9 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "context.make_solution(solution.routes_as_tuples())" in rendered_system
     assert "Do not edit `policies/baseline_modules/state.py`" in rendered_prompt
     assert "complete contents of the target algorithm module" in rendered_prompt
+    assert "Solver-Design Module API Manifest" in rendered_prompt
+    assert "_clarke_wright_savings" in rendered_prompt
+    assert "may only import exact new symbols from .destroy_repair" in rendered_prompt
 
 
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:

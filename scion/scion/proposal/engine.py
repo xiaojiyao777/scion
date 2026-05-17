@@ -423,10 +423,12 @@ _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS = 1800
 _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS = 1800
 _SOLVER_DESIGN_CODE_INTERFACE_CHARS = 2400
 _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS = 3000
+_SOLVER_DESIGN_CODE_API_MANIFEST_CHARS = 4200
 _SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS = 1200
 _SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS = 1200
 _SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS = 1600
 _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS = 1600
+_SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS = 2600
 _SOLVER_DESIGN_BROAD_SCOPE_TERMS = (
     "hybrid",
     "alns",
@@ -815,13 +817,28 @@ def _split_code_context(
             ),
             label="surface interface",
         )
+        solver_design_api_manifest = _limit_code_phase_text(
+            str(D["solver_design_api_manifest"]).strip(),
+            (
+                _SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS
+                if compact_timeout_retry
+                else _SOLVER_DESIGN_CODE_API_MANIFEST_CHARS
+            ),
+            label="solver-design API manifest",
+        )
     else:
         interface_spec = str(D["operator_interface_spec"])
+        solver_design_api_manifest = ""
     problem_object_section = (
         f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
     )
     solver_mechanics_section = (
         f"## Solver Execution Model\n{solver_mechanics}\n\n" if solver_mechanics else ""
+    )
+    solver_design_api_manifest_section = (
+        f"## Solver-Design Module API Manifest\n{solver_design_api_manifest}\n\n"
+        if solver_design_api_manifest
+        else ""
     )
 
     surface_label = (
@@ -868,6 +885,13 @@ def _split_code_context(
         "integrate new move operators through the existing `_default_vns_operators()` "
         "and `_vns(...)` path. Do not invent a detached scheduler `_run`/`run` "
         "entrypoint to call them.\n"
+        "- If the target is `policies/baseline_modules/destroy_repair.py`, "
+        "make this file own the destroy/repair mechanism. Use scheduler.py "
+        "only as a minimal operator-pool wiring edit: import exact new symbols "
+        "from `.destroy_repair` and add them to `destroy_ops` or `repair_ops`. "
+        "Do not add construction.py imports in scheduler.py for a "
+        "destroy_repair target unless the same patch also modifies "
+        "construction.py and defines that exact symbol.\n"
         "- If `additional_changes` touches `policies/baseline_algorithm.py`, "
         "keep the stable entrypoint shape: import `_ALNSVNSSolver` from "
         "`.baseline_modules.scheduler`, instantiate it, and call "
@@ -941,6 +965,9 @@ def _split_code_context(
         "model for sibling modules. In particular, read "
         "`policies/baseline_modules/state.py` before changing scheduler or "
         "local-search route edits.\n"
+        "- Use the `Solver-Design Module API Manifest` below as the exact "
+        "branch-owned object model for sibling imports. If a name is not in "
+        "that manifest and not defined by the same patch, do not import it.\n"
         "- If the approved solver-design change requires more than one file "
         "to be executable, set the top-level `file_path` exactly to the "
         "approved `target_file` below and put scheduler/entrypoint/module "
@@ -1063,6 +1090,7 @@ def _split_code_context(
     user_prompt = (
         f"{prior_failure_section}"
         f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
+        f"{solver_design_api_manifest_section}"
         f"## Target File (current content)\n{D['target_file_code']}\n\n"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"

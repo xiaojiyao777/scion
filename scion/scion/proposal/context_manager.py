@@ -1,6 +1,7 @@
 """ContextManager — builds LLM input contexts with exposure control (§5.3)."""
 from __future__ import annotations
 
+import ast
 import os
 import json
 import re
@@ -347,6 +348,7 @@ class ContextManager:
         champion: ChampionState,
         problem_spec: ProblemSpec,
         prior_failure: Optional[str] = None,
+        branch_workspace: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Context for generate_code (Round 2).
 
@@ -355,6 +357,9 @@ class ContextManager:
         Does NOT contain experiment stats or branch history.
         If prior_failure is set, a previous code generation attempt failed for
         this hypothesis — the failure detail is included so the LLM can learn.
+        If branch_workspace is set for a previously verified branch, read the
+        current branch research-object code rather than falling back to the
+        champion snapshot.
         """
         problem_summary = _build_problem_summary(problem_spec, adapter=self._adapter)
         problem_object = _build_problem_object(adapter=self._adapter)
@@ -363,10 +368,18 @@ class ContextManager:
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
         surface = _find_research_surface(research_surfaces, hypothesis.change_locus)
+        source_root = (
+            branch_workspace
+            if branch_workspace and os.path.isdir(branch_workspace)
+            else champion.code_snapshot_path
+        )
         if hypothesis.action == "create_new":
             target_file_code = "(new file — will be created)"
         else:
-            target_file_code = _read_target_file(champion, hypothesis.target_file)
+            target_file_code = _read_target_file_from_root(
+                source_root,
+                hypothesis.target_file,
+            )
         champion_operators_code = _read_champion_research_code(
             champion,
             research_surfaces=research_surfaces,
@@ -405,6 +418,12 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        if _is_solver_design_context_surface(hypothesis.change_locus, surface):
+            ctx["solver_design_api_manifest"] = _build_solver_design_api_manifest(
+                source_root=source_root,
+                champion_root=champion.code_snapshot_path,
+                target_file=hypothesis.target_file,
+            )
         if prior_failure is not None:
             ctx["prior_code_failure"] = prior_failure
         return ctx
@@ -3188,13 +3207,172 @@ def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> st
     """Read the target file from the champion snapshot."""
     if not target_file or not champion.code_snapshot_path:
         return "(no target file specified)"
-    candidate = os.path.join(champion.code_snapshot_path, target_file.lstrip("/"))
+    return _read_target_file_from_root(champion.code_snapshot_path, target_file)
+
+
+def _read_target_file_from_root(root: str, target_file: Optional[str]) -> str:
+    if not target_file or not root:
+        return "(no target file specified)"
+    candidate = os.path.join(root, target_file.lstrip("/"))
     try:
         with open(candidate, encoding="utf-8") as fh:
             content = fh.read()
         return f"File: {target_file}\n```python\n{content}\n```"
     except OSError as exc:
         return f"(could not read {target_file}: {exc})"
+
+
+_SOLVER_DESIGN_API_MODULES = (
+    "policies/baseline_algorithm.py",
+    "policies/baseline_modules/scheduler.py",
+    "policies/baseline_modules/construction.py",
+    "policies/baseline_modules/destroy_repair.py",
+    "policies/baseline_modules/local_search.py",
+    "policies/baseline_modules/acceptance.py",
+    "policies/baseline_modules/state.py",
+    "policies/baseline_modules/config.py",
+)
+
+
+def _is_solver_design_context_surface(surface_name: str, surface: Any) -> bool:
+    name = str(surface_name or "").strip()
+    kind = str(getattr(surface, "kind", "") or "").strip()
+    return name in {"solver_design", "solver_algorithm"} or kind in {
+        "solver_design",
+        "solver_algorithm",
+    }
+
+
+def _build_solver_design_api_manifest(
+    *,
+    source_root: str,
+    champion_root: str,
+    target_file: Optional[str],
+) -> str:
+    root = Path(source_root or champion_root).expanduser()
+    fallback_root = Path(champion_root).expanduser()
+    normalized_target = str(target_file or "").replace("\\", "/").lstrip("/")
+    lines = [
+        f"Approved target_file: {normalized_target or '(none)'}",
+        (
+            "Exact importable module API from the current branch snapshot. "
+            "Use these names instead of inventing sibling helper imports."
+        ),
+    ]
+    for rel in _SOLVER_DESIGN_API_MODULES:
+        path = root / rel
+        if not path.is_file() and fallback_root != root:
+            path = fallback_root / rel
+        summary = _python_api_manifest_for_file(path)
+        if summary:
+            lines.append(f"- {rel}: {summary}")
+    target_guidance = _solver_design_target_api_guidance(normalized_target)
+    if target_guidance:
+        lines.append(target_guidance)
+    return "\n".join(lines)
+
+
+def _python_api_manifest_for_file(path: Path) -> str:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return ""
+    exports: list[str] = []
+    imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            exports.append("def " + _python_signature_text(node))
+        elif isinstance(node, ast.ClassDef):
+            methods = [
+                _python_signature_text(child)
+                for child in node.body
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+            if methods:
+                exports.append(f"class {node.name}: " + "; ".join(methods[:8]))
+            else:
+                exports.append(f"class {node.name}")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                exports.extend(sorted(_assigned_names_for_manifest(target)))
+        elif isinstance(node, ast.ImportFrom) and node.level > 0:
+            imported = ", ".join(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name != "*"
+            )
+            if imported:
+                dots = "." * int(node.level or 0)
+                imports.append(f"from {dots}{node.module or ''} import {imported}")
+    parts: list[str] = []
+    if exports:
+        parts.append("exports " + "; ".join(exports[:14]))
+    if imports:
+        parts.append("current imports " + "; ".join(imports[:8]))
+    return " | ".join(parts)
+
+
+def _python_signature_text(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    args = node.args
+    parts: list[str] = []
+    for arg in [*args.posonlyargs, *args.args]:
+        parts.append(arg.arg)
+    if args.vararg is not None:
+        parts.append("*" + args.vararg.arg)
+    elif args.kwonlyargs:
+        parts.append("*")
+    for arg in args.kwonlyargs:
+        parts.append(arg.arg)
+    if args.kwarg is not None:
+        parts.append("**" + args.kwarg.arg)
+    return f"{node.name}({', '.join(parts)})"
+
+
+def _assigned_names_for_manifest(node: ast.AST) -> set[str]:
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for item in node.elts:
+            names.update(_assigned_names_for_manifest(item))
+        return names
+    return set()
+
+
+def _solver_design_target_api_guidance(target_file: str) -> str:
+    if target_file == "policies/baseline_modules/destroy_repair.py":
+        return (
+            "Target-specific rule for destroy_repair.py: make destroy/repair "
+            "operators the primary mechanism in this file. A scheduler.py "
+            "additional_change may only import newly defined destroy/repair "
+            "symbols from .destroy_repair and add them to destroy_ops or "
+            "repair_ops. Do not add scheduler imports from construction.py "
+            "while destroy_repair.py is the approved target, unless the same "
+            "patch also changes construction.py and defines that exact symbol. "
+            "Existing construction exports are _clarke_wright_savings, "
+            "_nearest_neighbor, _sweep_construction, and "
+            "_capacity_balanced_construction; names like _clarke_wright, "
+            "_clarke_wright_solution, _nearest_neighbor_solution, "
+            "_nearest_neighbor_construction, _savings_solution, and "
+            "_savings_construction do not exist. Prefer bounded for-loops or "
+            "while loops with a visibly incremented counter cap."
+        )
+    if target_file == "policies/baseline_modules/construction.py":
+        return (
+            "Target-specific rule for construction.py: construction helpers "
+            "must return internal _Solution objects. Wire new seed helpers "
+            "through scheduler.py only by importing the exact new symbol from "
+            ".construction and calling it inside _ALNSVNSSolver methods."
+        )
+    if target_file == "policies/baseline_modules/local_search.py":
+        return (
+            "Target-specific rule for local_search.py: integrate new moves "
+            "through _default_vns_operators() or the existing _vns(...) call "
+            "path. Scheduler.py should keep calling _vns(candidate, "
+            "_default_vns_operators(), ...)."
+        )
+    return ""
 
 
 def _read_branch_code(

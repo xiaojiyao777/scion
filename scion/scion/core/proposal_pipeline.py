@@ -364,6 +364,7 @@ class ProposalPipeline:
             hypothesis=hypothesis,
             champion=self._champion_snapshot(),
             prior_failure=prior_failure,
+            branch_workspace=self.branch_workspaces.get(branch.branch_id),
         )
         try:
             result = self.creative.generate_code(context)
@@ -514,6 +515,7 @@ class ProposalPipeline:
                 hypothesis=hypothesis,
                 champion=champion,
                 prior_failure=prior_failure,
+                branch_workspace=self.branch_workspaces.get(branch.branch_id),
             )
 
         return AgenticProposalRequest(

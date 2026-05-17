@@ -578,6 +578,8 @@ def test_contract_gate_rejects_solver_design_missing_sibling_import_symbol(
     assert "missing_import_symbols" in c9e.detail
     assert "_clarke_wright" in c9e.detail
     assert "policies/baseline_modules/construction.py" in c9e.detail
+    assert "available_exports" in c9e.detail
+    assert "_clarke_wright_savings" in c9e.detail
 
 
 def test_cvrp_preview_rejects_bad_scheduler_entrypoint_import_in_integration_edit() -> None:

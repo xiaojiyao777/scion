@@ -141,6 +141,7 @@ def check_solver_design_integration(
     import_error = _solver_design_import_export_error(
         candidate_sources,
         champion_file_content=champion_file_content,
+        primary_path=primary_path,
     )
     if import_error is not None:
         return SolverDesignIntegrationResult(False, import_error)
@@ -596,6 +597,7 @@ def _solver_design_import_export_error(
     candidate_sources: dict[str, str],
     *,
     champion_file_content: Callable[[str], str | None],
+    primary_path: str,
 ) -> str | None:
     if not candidate_sources:
         return None
@@ -636,6 +638,7 @@ def _solver_design_import_export_error(
                         "line": getattr(node, "lineno", None),
                         "module": target_rel,
                         "missing": missing_names,
+                        "available_exports": sorted(exports)[:80],
                     }
                 )
     if not missing:
@@ -643,7 +646,12 @@ def _solver_design_import_export_error(
     return (
         "solver_design module imports must resolve against the candidate "
         "workspace after applying all additional_changes. "
-        f"missing_import_symbols={missing}. If a module-level integration edit "
+        f"primary_target={primary_path}; missing_import_symbols={missing}. "
+        "Use only names listed in available_exports, or define the exact "
+        "symbol in the imported module in the same patch. If scheduler.py is "
+        "only wiring a non-scheduler primary target, keep scheduler imports "
+        "minimal and do not introduce unrelated construction/local_search "
+        "imports. If a module-level integration edit "
         "imports a sibling helper, define that exact symbol in the changed "
         "module or keep the existing champion import name; do not invent "
         "scheduler/construction/local_search helper names."

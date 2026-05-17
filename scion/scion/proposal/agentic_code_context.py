@@ -228,6 +228,9 @@ def _solver_design_code_scope_control(
                 "summary and align with the existing _Route/_Solution methods "
                 "instead of inventing conversion methods."
             ),
+            "target_module_rule": _solver_design_target_module_rule(
+                hypothesis.target_file
+            ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "
                 "optimization objective and evidence field. Search-bearing "
@@ -255,6 +258,32 @@ def _solver_design_broad_terms(
     )
     text = "\n".join(str(field or "") for field in fields).lower()
     return [term for term in _SOLVER_DESIGN_BROAD_TERMS if term in text]
+
+
+def _solver_design_target_module_rule(target_file: str | None) -> str:
+    target = str(target_file or "").replace("\\", "/").lstrip("/")
+    if target == "policies/baseline_modules/destroy_repair.py":
+        return (
+            "destroy_repair.py is the primary mechanism owner. Implement "
+            "destroy/repair operators in that file; scheduler.py may only "
+            "wire exact destroy_repair symbols into destroy_ops/repair_ops. "
+            "Do not add scheduler imports from construction.py for a "
+            "destroy_repair target unless the same patch also changes "
+            "construction.py and defines that exact imported symbol."
+        )
+    if target == "policies/baseline_modules/local_search.py":
+        return (
+            "local_search.py is the primary move owner. Wire new move "
+            "functions through _default_vns_operators() or existing _vns(...) "
+            "calls; do not create detached scheduler entrypoints."
+        )
+    if target == "policies/baseline_modules/construction.py":
+        return (
+            "construction.py is the primary seed owner. New construction "
+            "helpers must return internal _Solution objects and scheduler.py "
+            "may only import exact construction symbols defined by the branch."
+        )
+    return ""
 
 
 def _code_prompt_observations(
@@ -432,6 +461,7 @@ def _code_context_tool_summary(code_context: Mapping[str, Any]) -> dict[str, Any
         "problem_summary",
         "problem_object",
         "solver_mechanics",
+        "solver_design_api_manifest",
     ):
         value = code_context.get(key)
         if value is not None:

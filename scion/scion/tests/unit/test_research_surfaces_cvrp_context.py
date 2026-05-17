@@ -263,6 +263,102 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "shallow wrapper" in solver_design_prompt_text
     assert "instance.depot" in solver_design_prompt_text
     assert "adapter/solver remains the authority" in solver_design_prompt_text
+    assert "solver_design_api_manifest" in solver_design_code_ctx
+    assert "Approved target_file" in solver_design_code_ctx["solver_design_api_manifest"]
+
+
+def test_solver_design_code_context_includes_module_api_manifest() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    manager = ContextManager(adapter=CvrpAdapter(spec_v1))
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Improve destroy and repair operators.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="destroy repair search",
+        expected_effect="better ALNS repairs",
+    )
+
+    code_ctx = manager.build_code_context(
+        branch=branch,
+        hypothesis=hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    manifest = code_ctx["solver_design_api_manifest"]
+
+    assert "_clarke_wright_savings" in manifest
+    assert "_nearest_neighbor" in manifest
+    assert "_random_removal" in manifest
+    assert "Target-specific rule for destroy_repair.py" in manifest
+
+
+def test_code_context_reads_branch_workspace_target_when_available(
+    tmp_path: Path,
+) -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    champion_root = tmp_path / "champion"
+    branch_root = tmp_path / "branch"
+    (champion_root / "policies").mkdir(parents=True)
+    (branch_root / "policies").mkdir(parents=True)
+    (champion_root / "policies" / "search_policy.py").write_text(
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    return 0.5\n",
+        encoding="utf-8",
+    )
+    (branch_root / "policies" / "search_policy.py").write_text(
+        "def baseline_time_fraction(instance, time_limit_sec):\n"
+        "    return 0.75\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(champion_root),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    manager = ContextManager(adapter=CvrpAdapter(spec_v1))
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Tune branch policy.",
+        change_locus="search_policy",
+        action="modify",
+        target_file="policies/search_policy.py",
+        target_weakness="budget",
+        expected_effect="better budget",
+    )
+
+    code_ctx = manager.build_code_context(
+        branch=branch,
+        hypothesis=hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+        branch_workspace=str(branch_root),
+    )
+
+    assert "return 0.75" in code_ctx["target_file_code"]
+    assert "return 0.5" not in code_ctx["target_file_code"]
 
 
 def test_solver_design_verification_failure_guides_retry_not_surface_fallback() -> None:

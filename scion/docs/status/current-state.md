@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-16*
+*Last updated: 2026-05-17*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -258,6 +258,25 @@ timeouts. Round 2 reached terminal algorithm smoke and failed on an invalid
 on unresolved imports/inert helper integration. This is stable enough for a
 6-round Sonnet background validation: failures are now either official
 algorithm-quality abandonments or precise pre-screen boundary failures.
+
+The follow-up 6-round Sonnet background validation
+`/home/clawd/research/scion-experiments/v04-aps-budget-sonnet-6r-20260516T174845Z`
+also exited normally. It produced two formal screening experiments and kept
+champion v1. The budget repair remained valid: no APS session ended via
+`session_timeout`, and the earlier `_Solution.from_*` / `to_public`
+object-model loop did not recur. The new repeated failure pattern was
+destroy/repair code-stage misadaptation: candidates targeting
+`policies/baseline_modules/destroy_repair.py` repeatedly used `scheduler.py`
+as the real research surface, invented construction imports such as
+`_clarke_wright_solution`, `_nearest_neighbor_solution`, and
+`_savings_construction`, or emitted uncapped `while` loops in scheduler
+integration edits. Current repair makes code context branch-aware for
+previously verified branches, injects an exact solver-design module API
+manifest into code prompts, gives destroy/repair targets a stricter ownership
+rule (destroy_repair owns the mechanism; scheduler only wires exact
+destroy/repair symbols into operator pools), and makes C9e missing-import
+feedback report `available_exports` from the imported sibling module. This is
+still a framework/control repair, not solver-quality evidence.
 
 The May 15 runtime-governance repair makes algorithm compute time a real
 positive optimization signal under strict boundaries. A candidate that ties the
