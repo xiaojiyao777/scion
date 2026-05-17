@@ -151,6 +151,51 @@ def test_read_surface_full_and_explicit_max_code_chars(tmp_path: Path) -> None:
     assert len(capped_artifact["content_preview"]) <= 80
 
 
+def test_read_surface_prefers_branch_workspace_code_when_available(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+    branch_root = tmp_path / "branch_workspace"
+    branch_target = branch_root / "policies" / "baseline_modules" / "scheduler.py"
+    branch_target.parent.mkdir(parents=True)
+    branch_target.write_text(
+        "class _ALNSVNSSolver:\n"
+        "    def solve(self, instance, rng):\n"
+        "        return 'BRANCH_SCHEDULER_SENTINEL'\n",
+        encoding="utf-8",
+    )
+    champion_target = (
+        Path(context.champion.code_snapshot_path)
+        / "policies"
+        / "baseline_modules"
+        / "scheduler.py"
+    )
+    champion_target.write_text(
+        "class _ALNSVNSSolver:\n"
+        "    def solve(self, instance, rng):\n"
+        "        return 'CHAMPION_SCHEDULER_SENTINEL'\n",
+        encoding="utf-8",
+    )
+    context = replace(context, branch_workspace=str(branch_root))
+
+    observation = registry.call(
+        "context.read_surface",
+        {
+            "surface": "solver_design",
+            "target_file": "policies/baseline_modules/scheduler.py",
+            "detail": "full",
+        },
+        context,
+    )
+
+    artifact = observation.structured_payload["current_artifact"]
+    assert observation.is_error is False
+    assert artifact["source"] == "branch_workspace"
+    assert "BRANCH_SCHEDULER_SENTINEL" in artifact["content_preview"]
+    assert "CHAMPION_SCHEDULER_SENTINEL" not in artifact["content_preview"]
+
+
 def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
     tmp_path: Path,
 ) -> None:

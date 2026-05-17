@@ -533,6 +533,58 @@ class TestC9SensitiveApi:
         c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
         assert not c9.passed
 
+    def test_dynamic_import_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        mod = __import__('math')\n"
+            "        return mod.sqrt(4)\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "__import__" in c9.detail
+
+    def test_importlib_import_module_is_blocked(self, gate: ContractGate):
+        code = (
+            "import importlib\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return importlib.import_module('math').sqrt(4)\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "importlib.import_module" in c9.detail
+
+    def test_reflective_dynamic_getattr_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        attr = 'vehicles'\n"
+            "        return getattr(solution, attr)\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "dynamic_name" in c9.detail
+
+    def test_os_environ_is_blocked(self, gate: ContractGate):
+        code = (
+            "import os\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return os.environ.get('SCION_CASE')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "os.environ" in c9.detail
+
 
 # ---------------------------------------------------------------------------
 # C9c: Complexity bound

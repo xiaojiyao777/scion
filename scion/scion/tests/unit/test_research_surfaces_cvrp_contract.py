@@ -385,6 +385,70 @@ def test_contract_gate_rejects_getattr_instance_name_on_search_policy() -> None:
     assert not result.passed
 
 
+def test_contract_gate_rejects_instance_identity_reflection_on_search_policy() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    cases = [
+        ("return repr(instance)\n", "repr(instance)"),
+        ("return str(instance)\n", "str(instance)"),
+        ("return vars(instance).get('customer_count', 0)\n", "vars(instance)"),
+        ("return instance.__dict__.get('customer_count', 0)\n", "instance.__dict__"),
+        ("field = 'name'\n    return getattr(instance, field)\n", "getattr(instance"),
+        (
+            "import dataclasses\n    return dataclasses.asdict(instance).get('name')\n",
+            "dataclasses.asdict",
+        ),
+    ]
+    for body, expected in cases:
+        result = gate.validate_patch(
+            PatchProposal(
+                file_path="policies/search_policy.py",
+                action="modify",
+                code_content=(
+                    "def baseline_time_fraction(instance, time_limit_sec):\n"
+                    f"    {body}\n"
+                    "\n"
+                    "def max_operator_rounds(instance, time_limit_sec):\n"
+                    "    return 20\n\n"
+                    "def enable_post_baseline_operators(instance, time_limit_sec):\n"
+                    "    return True\n"
+                ),
+            )
+        )
+
+        c9d = next(
+            check
+            for check in result.checks
+            if check.name == "C9d_surface_instance_identity"
+        )
+        assert not c9d.passed
+        assert expected in c9d.detail
+        assert not result.passed
+
+
+def test_contract_gate_rejects_baseline_algorithm_context_baseline_call() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_algorithm.py",
+            action="modify",
+            code_content=(
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return context.baseline(time_limit_sec=0.1)\n"
+            ),
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "context.baseline" in c9.detail
+    assert not result.passed
+
+
 def test_contract_gate_allows_safe_policy_instance_api() -> None:
     spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
     gate = ContractGate(legacy_problem_spec_from_v1(spec))

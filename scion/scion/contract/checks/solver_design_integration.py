@@ -889,8 +889,6 @@ def _reachable_class_method_calls(
 def _call_reference_names(node: ast.AST) -> set[str]:
     names: set[str] = set()
     for child in ast.walk(node):
-        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
-            names.add(child.id)
         if not isinstance(child, ast.Call):
             continue
         func = child.func
@@ -898,7 +896,46 @@ def _call_reference_names(node: ast.AST) -> set[str]:
             names.add(func.id)
         elif isinstance(func, ast.Attribute):
             names.add(func.attr)
+        for arg in child.args:
+            names.update(_active_registration_reference_names(arg))
+        for keyword in child.keywords:
+            names.update(_active_registration_reference_names(keyword.value))
+    for child in ast.walk(node):
+        if isinstance(child, ast.Return):
+            names.update(_active_registration_reference_names(child.value))
+        elif isinstance(child, (ast.Assign, ast.AnnAssign)):
+            targets = list(child.targets) if isinstance(child, ast.Assign) else [child.target]
+            if any(_is_active_registration_target(target) for target in targets):
+                names.update(_active_registration_reference_names(child.value))
     return names
+
+
+def _active_registration_reference_names(node: ast.AST | None) -> set[str]:
+    if node is None:
+        return set()
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+        return {node.id}
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        names: set[str] = set()
+        for item in node.elts:
+            names.update(_active_registration_reference_names(item))
+        return names
+    if isinstance(node, ast.Dict):
+        names: set[str] = set()
+        for item in [*node.keys, *node.values]:
+            names.update(_active_registration_reference_names(item))
+        return names
+    return set()
+
+
+def _is_active_registration_target(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Name):
+        return False
+    lowered = node.id.lower()
+    return any(
+        token in lowered
+        for token in ("operator", "operators", "registry", "registrations", "hooks")
+    )
 
 
 def _load_names(node: ast.AST) -> set[str]:

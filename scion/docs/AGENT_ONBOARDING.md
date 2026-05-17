@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-16*
+*Last updated: 2026-05-17*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -84,6 +84,23 @@ reject inert helper drops before official screening.
 The adapter/solver remains authoritative for parsing, feasibility, objective
 recomputation, seeds, protocol splits, time limits, and Decision rules.
 `policies/solver_algorithm.py` remains only as an older compatibility hook.
+
+Latest framework repair: `proposal.tools` is a package, not a monolithic
+module. Tool definitions remain tainted proposal-layer capabilities; they are
+registered through `scion.proposal.tools.ProposalToolRegistry` and exposed to
+the LLM through prompt/tool-spec protocol, not as Decision inputs. Contract is
+the authoritative boundary for static solver-design invariants. Prompt text,
+APS preview, and algorithm smoke may give earlier feedback, but core Contract
+must fail closed for boundary rules such as dynamic sensitive APIs, instance
+identity leaks, inert helper additions, and preferred
+`baseline_algorithm.py` wrappers around `context.baseline`.
+
+Code-phase context must describe the branch-current algorithm, not only the
+champion or the approved target file. For `solver_design`, mandatory surface
+reads and branch-current integration files are expected so `additional_changes`
+can make minimal scheduler/entrypoint/module wiring against the actual branch
+state. This is still inside v3's model: the LLM proposes code, while Contract,
+Verification, Protocol, and Decision remain deterministic control layers.
 
 The older `policies/main_search_strategy.py` lifecycle table remains as a
 legacy `main_search_strategy` config surface for regression coverage and
@@ -389,10 +406,14 @@ Important current interpretation:
   rather than a generic `solver run failed`.
 - Proposal tool code is intentionally being decomposed. Solver-design runtime
   smoke and its audit helpers now live in `scion/proposal/solver_design_smoke.py`;
-  `scion/proposal/tools.py` should remain focused on tool registry/orchestration
-  and compatibility exports. Agentic proposal tool tests are split by topic
-  under `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks
-  back into the legacy aggregate file.
+  `scion/proposal/tools/` is the proposal-tool package. Keep registry/call
+  orchestration in `tools/registry.py`, public context readers in
+  `tools/context.py`, surface reads in `tools/surface.py`, feedback tools in
+  `tools/feedback.py`, preview tools in `tools/preview.py`, and shared models
+  or helpers in `tools/models.py`, `tools/base.py`, and `tools/utils.py`.
+  Agentic proposal tool tests are split by topic under
+  `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks back
+  into the legacy aggregate file.
 - APS itself is also being decomposed. Shared models, artifact storage,
   diagnostics, code-context shaping, preview/self-check helpers, and utilities
   now live in focused `scion/proposal/agentic_*.py` modules. Keep

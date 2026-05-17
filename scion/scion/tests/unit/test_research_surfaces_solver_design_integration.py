@@ -155,6 +155,50 @@ def test_contract_gate_rejects_inert_solver_design_helper(
     assert "_ALNSVNSSolver.solve" in c9e.detail
 
 
+def test_contract_gate_rejects_solver_design_helper_dead_load_reference(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "local_search.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "local_search.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = base_code.replace(
+        "def _vns(solution, operators, max_no_improve, context, reserve):\n",
+        "def _vns(solution, operators, max_no_improve, context, reserve):\n"
+        "    unused = _adaptive_vns\n",
+        1,
+    )
+    code += (
+        "\n\n"
+        "def _adaptive_vns(solution, operators, max_no_improve, context, reserve):\n"
+        "    return False\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/local_search.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert not c9e.passed
+    assert "_adaptive_vns" in c9e.detail
+    assert "inert_helpers" in c9e.detail
+
+
 def test_contract_gate_rejects_inert_solver_design_class_method(
     tmp_path: Path,
 ) -> None:

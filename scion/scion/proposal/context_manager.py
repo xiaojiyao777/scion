@@ -424,6 +424,13 @@ class ContextManager:
                 champion_root=champion.code_snapshot_path,
                 target_file=hypothesis.target_file,
             )
+            ctx["solver_design_branch_current_integration_files"] = (
+                _build_solver_design_branch_current_integration_files(
+                    source_root=source_root,
+                    champion_root=champion.code_snapshot_path,
+                    target_file=hypothesis.target_file,
+                )
+            )
         if prior_failure is not None:
             ctx["prior_code_failure"] = prior_failure
         return ctx
@@ -3233,6 +3240,20 @@ _SOLVER_DESIGN_API_MODULES = (
     "policies/baseline_modules/config.py",
 )
 
+_SOLVER_DESIGN_INTEGRATION_FULL_FILES = (
+    "policies/baseline_algorithm.py",
+    "policies/baseline_modules/scheduler.py",
+    "policies/baseline_modules/state.py",
+)
+
+_SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES = (
+    "policies/baseline_modules/construction.py",
+    "policies/baseline_modules/destroy_repair.py",
+    "policies/baseline_modules/local_search.py",
+    "policies/baseline_modules/acceptance.py",
+    "policies/baseline_modules/config.py",
+)
+
 
 def _is_solver_design_context_surface(surface_name: str, surface: Any) -> bool:
     name = str(surface_name or "").strip()
@@ -3270,6 +3291,97 @@ def _build_solver_design_api_manifest(
     if target_guidance:
         lines.append(target_guidance)
     return "\n".join(lines)
+
+
+def _build_solver_design_branch_current_integration_files(
+    *,
+    source_root: str,
+    champion_root: str,
+    target_file: Optional[str],
+) -> str:
+    normalized_target = str(target_file or "").replace("\\", "/").lstrip("/")
+    lines = [
+        (
+            "These files are branch-current integration context for "
+            "solver_design additional_changes. The approved target full "
+            "content remains the Target File section; use this section only "
+            "for minimal necessary wiring based on current content."
+        ),
+        f"Approved target_file: {normalized_target or '(none)'}",
+    ]
+    for rel in _SOLVER_DESIGN_INTEGRATION_FULL_FILES:
+        artifact = _read_solver_design_context_artifact(
+            rel,
+            source_root=source_root,
+            champion_root=champion_root,
+        )
+        lines.append(
+            f"### {rel}\n"
+            f"Provenance: {artifact['source']}; readable={artifact['readable']}\n"
+            f"```python\n{artifact['content']}\n```"
+        )
+    summary_lines: list[str] = []
+    for rel in _SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES:
+        artifact = _read_solver_design_context_artifact(
+            rel,
+            source_root=source_root,
+            champion_root=champion_root,
+        )
+        summary = _python_api_manifest_for_file(Path(str(artifact["path"])))
+        if not summary:
+            summary = artifact["reason"]
+        summary_lines.append(
+            f"- {rel}: provenance={artifact['source']}; {summary}"
+        )
+    if summary_lines:
+        lines.append(
+            "### Compact sibling API summaries\n" + "\n".join(summary_lines)
+        )
+    return "\n\n".join(lines)
+
+
+def _read_solver_design_context_artifact(
+    rel: str,
+    *,
+    source_root: str,
+    champion_root: str,
+) -> dict[str, Any]:
+    normalized = rel.replace("\\", "/").lstrip("/")
+    roots: list[tuple[Path, str]] = []
+    if source_root:
+        source = Path(source_root).expanduser()
+        champion = Path(champion_root).expanduser() if champion_root else None
+        source_kind = (
+            "branch_workspace"
+            if champion is not None and source.resolve() != champion.resolve()
+            else "champion_snapshot"
+        )
+        roots.append((source, source_kind))
+    if champion_root:
+        fallback = Path(champion_root).expanduser()
+        if not roots or fallback.resolve() != roots[0][0].resolve():
+            roots.append((fallback, "champion_snapshot_fallback"))
+    for root, source_kind in roots:
+        path = root / normalized
+        try:
+            if not path.is_file() or path.is_symlink():
+                continue
+            return {
+                "path": path,
+                "source": source_kind,
+                "readable": True,
+                "reason": "ok",
+                "content": path.read_text(encoding="utf-8"),
+            }
+        except OSError:
+            continue
+    return {
+        "path": Path(source_root or champion_root or "") / normalized,
+        "source": "missing",
+        "readable": False,
+        "reason": "not_found",
+        "content": f"# could not read {normalized}",
+    }
 
 
 def _python_api_manifest_for_file(path: Path) -> str:

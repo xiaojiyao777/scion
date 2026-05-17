@@ -15,6 +15,23 @@ was still too componentized: Scion could select `solver_design`, yet generated
 candidates mostly filled a `main_search_plan` lifecycle table and optimized
 exposed knobs rather than studying the algorithm itself.
 
+The 2026-05-17 v3-aligned design repair keeps that interpretation explicit:
+Scion is the boundary/protocol/audit framework, while the proposal agent must
+be able to study and modify the branch-owned algorithm body inside the declared
+problem boundary. `proposal.tools` is now a package (`registry`, `context`,
+`surface`, `feedback`, `preview`, `models`, `base`, `utils`) instead of a
+single long module, so tool registration and future tool expansion have a
+clear home while preserving `from scion.proposal.tools import ...`
+compatibility. ContractGate is now the authoritative fail-closed layer for
+solver-design boundary rules that previously lived only in prompts or APS
+preview: dynamic sensitive API forms, reflective instance identity leaks, dead
+helper references, and preferred `baseline_algorithm.py` calls to
+`context.baseline(...)` are rejected statically. Code-phase APS now treats the
+full selected-surface read as mandatory, filters feedback to the active
+single-surface problem boundary, and provides branch-current integration files
+for solver-design `additional_changes` so candidates wire the current branch
+algorithm instead of rewriting scheduler from stale or missing context.
+
 The current repair changes the active CVRP research object. `solver_design`
 now targets a branch-owned solver-design package: stable entrypoint
 `policies/baseline_algorithm.py::solve(...)` plus focused algorithm modules

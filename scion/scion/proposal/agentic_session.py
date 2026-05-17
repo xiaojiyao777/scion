@@ -2045,7 +2045,11 @@ class AgenticProposalSession:
 
         observations: list[ProposalObservation] = []
         for name, args in calls:
-            if self._code_phase_budget_reserved(state):
+            mandatory_surface_read = (
+                name == "context.read_surface"
+                and selection_source == "code_phase_required"
+            )
+            if self._code_phase_budget_reserved(state) and not mandatory_surface_read:
                 state.note(
                     AgenticProposalPhase.INSPECT_INTERFACE,
                     "Skipped code-phase fallback tool to reserve patch self-check budget.",
@@ -2056,8 +2060,13 @@ class AgenticProposalSession:
                         "skip_reason": "code_self_check_budget_reserved",
                     },
                 )
-                break
-            if self._tool_loop_limit_reached(state):
+                continue
+            if self._tool_loop_limit_reached(state) and not (
+                mandatory_surface_read
+                and self._remaining_tool_calls(state) > 0
+                and self._remaining_tool_steps(state) > 0
+                and not self._session_timeout_reached(state)
+            ):
                 self._record_loop_stop(state, self._current_loop_stop_reason(state))
                 break
             observations.append(
@@ -3003,7 +3012,7 @@ class AgenticProposalSession:
     ) -> bool:
         if name != "context.read_surface":
             return False
-        if selection_source == "selected_surface_required":
+        if selection_source in {"selected_surface_required", "code_phase_required"}:
             return False
         return (
             self._remaining_observation_chars(state)
@@ -3737,6 +3746,14 @@ def _feedback_query_args(context: ProposalToolContext) -> dict[str, Any]:
     args: dict[str, Any] = {}
     if context.forced_surface:
         args["surface"] = context.forced_surface
+    else:
+        active_boundary = [
+            str(surface or "").strip()
+            for surface in context.active_problem_boundary_surfaces
+            if str(surface or "").strip()
+        ]
+        if len(active_boundary) == 1:
+            args["surface"] = active_boundary[0]
     return args
 
 

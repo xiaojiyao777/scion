@@ -96,6 +96,53 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
     assert read_surface_guidance["allowed_surface_ids"] == ["solver_design"]
     assert "active_problem_boundary_rule" in read_surface_guidance
     assert "forced_surface_rule" not in read_surface_guidance
+    assert creative.planner_contexts[0]["tool_arg_guidance"][
+        "feedback.query_screening"
+    ]["recommended_args"] == {"surface": "solver_design"}
+    assert creative.planner_contexts[0]["tool_arg_guidance"][
+        "feedback.query_runtime"
+    ]["recommended_args"] == {"surface": "solver_design"}
+
+
+def test_code_phase_required_full_surface_read_bypasses_self_check_reserve(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
+    config = AgenticToolLoopConfig(max_steps=8, max_tool_calls=8)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-budget",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_step_count=4,
+        tool_call_count=4,
+        tool_loop_config=config.__dict__,
+    )
+
+    observations = session._run_code_context_fixed_tools(
+        context,
+        state,
+        hypothesis,
+        [],
+        selection_source="code_phase_required",
+    )
+
+    assert [observation.tool_name for observation in observations] == [
+        "context.read_surface"
+    ]
+    assert observations[0].is_error is False
+    assert observations[0].structured_payload["detail"] == "full"
+    assert observations[0].structured_payload["target_file"] == hypothesis.target_file
+    assert any(
+        event.metadata.get("tool_name") == "context.read_branch_state"
+        and event.metadata.get("skip_reason") == "code_self_check_budget_reserved"
+        for event in state.transcript
+    )
 
 
 def test_agentic_session_records_tool_observations_in_evidence_and_transcript(

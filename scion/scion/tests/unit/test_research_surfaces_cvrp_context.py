@@ -307,6 +307,74 @@ def test_solver_design_code_context_includes_module_api_manifest() -> None:
     assert "Target-specific rule for destroy_repair.py" in manifest
 
 
+def test_solver_design_code_context_includes_branch_current_integration_files(
+    tmp_path: Path,
+) -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec_v1)
+    branch_root = tmp_path / "branch"
+    for rel, content in {
+        "policies/baseline_algorithm.py": (
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return 'BRANCH_BASELINE_SENTINEL'\n"
+        ),
+        "policies/baseline_modules/scheduler.py": (
+            "class _ALNSVNSSolver:\n"
+            "    def solve(self, instance, rng):\n"
+            "        return 'BRANCH_SCHEDULER_SENTINEL'\n"
+        ),
+        "policies/baseline_modules/state.py": (
+            "class _Solution:\n"
+            "    BRANCH_STATE_SENTINEL = True\n"
+        ),
+        "policies/baseline_modules/local_search.py": (
+            "def _vns(candidate, operators, instance, rng, max_no_improve, context):\n"
+            "    return candidate\n"
+        ),
+    }.items():
+        path = branch_root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    manager = ContextManager(adapter=CvrpAdapter(spec_v1))
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Improve local search while preserving solver wiring.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness="local search stagnates",
+        expected_effect="better bounded improvement",
+    )
+
+    code_ctx = manager.build_code_context(
+        branch=branch,
+        hypothesis=hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+        branch_workspace=str(branch_root),
+    )
+    integration = code_ctx["solver_design_branch_current_integration_files"]
+
+    assert "BRANCH_BASELINE_SENTINEL" in integration
+    assert "BRANCH_SCHEDULER_SENTINEL" in integration
+    assert "BRANCH_STATE_SENTINEL" in integration
+    assert "Provenance: branch_workspace; readable=True" in integration
+    assert "Compact sibling API summaries" in integration
+    assert "policies/baseline_modules/destroy_repair.py" in integration
+
+
 def test_code_context_reads_branch_workspace_target_when_available(
     tmp_path: Path,
 ) -> None:

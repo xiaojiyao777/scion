@@ -596,6 +596,7 @@ class ProposalPipeline:
                 if forced_surface
                 else tuple(active_boundary)
             ),
+            branch_workspace=self.branch_workspaces.get(branch.branch_id),
         )
 
     def _generate_agentic_hypothesis(

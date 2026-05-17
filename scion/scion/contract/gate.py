@@ -40,6 +40,13 @@ _SENSITIVE_APIS = frozenset(
 
 # os.* calls that are forbidden
 _SENSITIVE_OS_ATTRS = frozenset({"system", "popen", "execve", "execvp", "execv"})
+_SENSITIVE_OS_ENV_CALLS = frozenset({"getenv", "putenv", "unsetenv"})
+_REFLECTIVE_PRIMITIVES = frozenset(
+    {"getattr", "setattr", "delattr", "globals", "locals", "vars"}
+)
+_DANGEROUS_FILE_READ_ATTRS = frozenset(
+    {"open", "read_text", "read_bytes", "readlink", "iterdir", "glob", "rglob"}
+)
 
 _STATIC_UNKNOWN = object()
 
@@ -706,33 +713,31 @@ class ContractGate:
         except SyntaxError:
             return _cr("C9_sensitive_api", False, "heavy", "unparseable code", t0)
 
+        module_aliases, imported_call_aliases = _collect_import_name_aliases(tree)
         violations: List[str] = []
         for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and _is_os_environ_attr(
+                node,
+                module_aliases,
+            ):
+                violations.append("os.environ")
+                continue
+
             if not isinstance(node, ast.Call):
                 continue
 
-            func = node.func
-
-            # Direct call: eval(...), exec(...), subprocess(...), open(...)
-            if isinstance(func, ast.Name):
-                if func.id in _SENSITIVE_APIS:
-                    violations.append(func.id)
-                elif func.id == "open":
-                    violations.append("open(...)")
-
-            # Attribute call: os.system(...), subprocess.Popen(...),
-            # socket.socket(...), Path(...).read_text(), path.open(), etc.
-            elif isinstance(func, ast.Attribute):
-                obj_name: Optional[str] = None
-                if isinstance(func.value, ast.Name):
-                    obj_name = func.value.id
-
-                if obj_name == "os" and func.attr in _SENSITIVE_OS_ATTRS:
-                    violations.append(f"os.{func.attr}")
-                elif obj_name in _SENSITIVE_APIS:
-                    violations.append(f"{obj_name}.{func.attr}")
-                elif func.attr in {"open", "read_text", "read_bytes"}:
-                    violations.append(f"*.{func.attr}(...)")
+            violations.extend(
+                _sensitive_call_violations(
+                    node,
+                    module_aliases=module_aliases,
+                    imported_call_aliases=imported_call_aliases,
+                )
+            )
+            if _is_context_baseline_call_in_baseline_algorithm(patch.file_path, node):
+                violations.append(
+                    "policies/baseline_algorithm.py must not call "
+                    "context.baseline(...)"
+                )
 
         passed = len(violations) == 0
         detail = "no sensitive APIs" if passed else f"sensitive APIs detected: {violations}"
@@ -999,7 +1004,7 @@ class ContractGate:
                 scale_names,
                 runtime_guard_names,
             ):
-                violations.append(_uncapped_while_violation(node))
+                violations.append(_uncapped_while_violation(patch.code_content, node))
 
         loop_guard = _ProblemScaleLoopGuard(scale_names)
         loop_guard.visit(tree)
@@ -1729,6 +1734,7 @@ def _instance_identity_violations(
         for child in ast.iter_child_nodes(node):
             parent[child] = node
 
+    module_aliases, imported_call_aliases = _collect_import_name_aliases(tree)
     violations: list[str] = []
     for node in ast.walk(tree):
         label: str | None = None
@@ -1740,6 +1746,13 @@ def _instance_identity_violations(
         ):
             label = "instance.name"
         elif (
+            isinstance(node, ast.Attribute)
+            and node.attr == "__dict__"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "instance"
+        ):
+            label = "instance.__dict__"
+        elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id in {"getattr", "hasattr"}
@@ -1750,11 +1763,63 @@ def _instance_identity_violations(
             and node.args[1].value == "name"
         ):
             label = f"{node.func.id}(instance, 'name')"
+        elif isinstance(node, ast.Call):
+            label = _instance_identity_call_label(
+                node,
+                module_aliases=module_aliases,
+                imported_call_aliases=imported_call_aliases,
+            )
         if label is None:
             continue
         statement = _enclosing_statement_source(code, node, parent)
         violations.append(statement or label)
     return violations
+
+
+def _instance_identity_call_label(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+) -> str | None:
+    if not node.args or not _is_instance_name(node.args[0]):
+        return None
+    func = node.func
+    if isinstance(func, ast.Name):
+        if func.id in {"repr", "str", "vars"}:
+            return f"{func.id}(instance)"
+        if func.id == "getattr" and len(node.args) >= 2:
+            if _is_string_literal_node(node.args[1]):
+                if node.args[1].value == "name":
+                    return "getattr(instance, 'name')"
+                return None
+            return "getattr(instance, <computed>)"
+        dataclass_alias = imported_call_aliases.get(func.id)
+        if dataclass_alias in {
+            ("dataclasses", "asdict"),
+            ("dataclasses", "astuple"),
+            ("dataclasses", "fields"),
+            ("dataclasses", "is_dataclass"),
+        }:
+            return f"dataclasses.{dataclass_alias[1]}(instance)"
+    elif isinstance(func, ast.Attribute):
+        module_name = (
+            module_aliases.get(func.value.id, func.value.id)
+            if isinstance(func.value, ast.Name)
+            else ""
+        )
+        if module_name == "dataclasses" and func.attr in {
+            "asdict",
+            "astuple",
+            "fields",
+            "is_dataclass",
+        }:
+            return f"dataclasses.{func.attr}(instance)"
+    return None
+
+
+def _is_instance_name(node: ast.AST) -> bool:
+    return isinstance(node, ast.Name) and node.id == "instance"
 
 
 def _subtract_inherited_identity_violations(
@@ -2022,6 +2087,151 @@ def _hypothesis_action_for_patch_action(action: str) -> str | None:
 def _in_whitelist(module_top: str, whitelist: set) -> bool:
     """Return True if module_top is explicitly allowed."""
     return module_top in whitelist
+
+
+def _collect_import_name_aliases(
+    tree: ast.AST,
+) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
+    module_aliases: dict[str, str] = {}
+    imported_call_aliases: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                module_aliases[local] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            module = str(node.module or "")
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                local = alias.asname or alias.name
+                imported_call_aliases[local] = (module, alias.name)
+    return module_aliases, imported_call_aliases
+
+
+def _sensitive_call_violations(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+) -> list[str]:
+    func = node.func
+    violations: list[str] = []
+
+    if isinstance(func, ast.Name):
+        resolved = imported_call_aliases.get(func.id)
+        if func.id in _SENSITIVE_APIS:
+            violations.append(func.id)
+        elif func.id == "open" or resolved == ("io", "open"):
+            violations.append("open(...)")
+        elif func.id == "__import__":
+            violations.append("__import__(...)")
+        elif resolved == ("importlib", "import_module"):
+            violations.append("importlib.import_module(...)")
+        elif func.id in _REFLECTIVE_PRIMITIVES:
+            violation = _reflective_primitive_violation(func.id, node)
+            if violation is not None:
+                violations.append(violation)
+
+    elif isinstance(func, ast.Attribute):
+        obj_name = func.value.id if isinstance(func.value, ast.Name) else None
+        resolved_obj = module_aliases.get(obj_name or "", obj_name or "")
+
+        if resolved_obj == "os" and func.attr in _SENSITIVE_OS_ATTRS:
+            violations.append(f"os.{func.attr}")
+        elif resolved_obj == "os" and func.attr in _SENSITIVE_OS_ENV_CALLS:
+            violations.append(f"os.{func.attr}(...)")
+        elif resolved_obj in _SENSITIVE_APIS:
+            violations.append(f"{resolved_obj}.{func.attr}")
+        elif resolved_obj == "importlib" and func.attr == "import_module":
+            violations.append("importlib.import_module(...)")
+        elif _is_dynamic_import_call(func.value):
+            violations.append(f"dynamic_import.{func.attr}(...)")
+        elif func.attr in _DANGEROUS_FILE_READ_ATTRS:
+            violations.append(f"*.{func.attr}(...)")
+
+    elif isinstance(func, ast.Call):
+        if _is_getattr_dynamic_import_call(func):
+            violations.append("getattr(__import__(...), ...)(...)")
+        elif (
+            isinstance(func.func, ast.Name)
+            and func.func.id == "getattr"
+            and _getattr_uses_dynamic_attr_name(func)
+        ):
+            violations.append("getattr(..., dynamic_name)(...)")
+
+    return violations
+
+
+def _reflective_primitive_violation(name: str, node: ast.Call) -> str | None:
+    if name in {"setattr", "delattr", "globals", "locals", "vars"}:
+        return f"{name}(...)"
+    if name != "getattr":
+        return None
+    if _is_getattr_dynamic_import_call(node):
+        return "getattr(__import__(...), ...)"
+    if _getattr_uses_dynamic_attr_name(node):
+        return "getattr(..., dynamic_name)"
+    return None
+
+
+def _getattr_uses_dynamic_attr_name(node: ast.Call) -> bool:
+    return len(node.args) >= 2 and not _is_string_literal_node(node.args[1])
+
+
+def _is_string_literal_node(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _is_dynamic_import_call(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name) and func.id == "__import__":
+        return True
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "import_module"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "importlib"
+    )
+
+
+def _is_getattr_dynamic_import_call(node: ast.Call) -> bool:
+    return (
+        isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and bool(node.args)
+        and _is_dynamic_import_call(node.args[0])
+    )
+
+
+def _is_os_environ_attr(
+    node: ast.Attribute,
+    module_aliases: dict[str, str],
+) -> bool:
+    if node.attr != "environ" or not isinstance(node.value, ast.Name):
+        return False
+    return module_aliases.get(node.value.id, node.value.id) == "os"
+
+
+def _is_context_baseline_call_in_baseline_algorithm(
+    file_path: str,
+    node: ast.Call,
+) -> bool:
+    try:
+        normalized = normalize_relative_patch_path(file_path)
+    except ValueError:
+        normalized = str(file_path or "").replace("\\", "/").lstrip("/")
+    if normalized != "policies/baseline_algorithm.py":
+        return False
+    func = node.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "baseline"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "context"
+    )
 
 
 def _collect_itertools_aliases(tree: ast.AST) -> dict[str, str]:
@@ -2423,11 +2633,22 @@ def _contains_break(body: list[ast.stmt]) -> bool:
     return any(isinstance(child, ast.Break) for stmt in body for child in ast.walk(stmt))
 
 
-def _uncapped_while_violation(node: ast.While) -> str:
+def _uncapped_while_violation(code: str, node: ast.While) -> str:
     line = getattr(node, "lineno", None)
+    source = ast.get_source_segment(code, node.test)
+    snippet = ""
+    if source:
+        snippet = " ".join(source.strip().split())
+        if len(snippet) > 80:
+            snippet = snippet[:77] + "..."
+    hint = "add an iteration cap, runtime guard, or bounded break"
     if line is None:
-        return "uncapped while loop"
-    return f"uncapped while loop at line {line}"
+        base = "uncapped while loop"
+    else:
+        base = f"uncapped while loop at line {line}"
+    if snippet:
+        return f"{base} condition={snippet!r}; hint: {hint}"
+    return f"{base}; hint: {hint}"
 
 
 def _collect_runtime_guard_function_names(tree: ast.AST) -> frozenset[str]:

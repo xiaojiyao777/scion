@@ -363,6 +363,7 @@ def _compact_code_support_artifacts(value: Any) -> list[dict[str, Any]]:
                     "file_path": item.get("file_path"),
                     "readable": item.get("readable"),
                     "reason": item.get("reason"),
+                    "source": item.get("source"),
                     "truncated": item.get("truncated"),
                     "size_chars": item.get("size_chars"),
                     "content_preview": _limit_string(preview, 1000),
@@ -384,6 +385,7 @@ def _code_artifact_metadata(artifact: Mapping[str, Any]) -> dict[str, Any]:
         "file_path": artifact.get("file_path"),
         "readable": artifact.get("readable"),
         "reason": artifact.get("reason"),
+        "source": artifact.get("source"),
         "truncated": artifact.get("truncated"),
         "size_chars": artifact.get("size_chars"),
         "max_chars": artifact.get("max_chars"),
@@ -462,6 +464,7 @@ def _code_context_tool_summary(code_context: Mapping[str, Any]) -> dict[str, Any
         "problem_object",
         "solver_mechanics",
         "solver_design_api_manifest",
+        "solver_design_branch_current_integration_files",
     ):
         value = code_context.get(key)
         if value is not None:

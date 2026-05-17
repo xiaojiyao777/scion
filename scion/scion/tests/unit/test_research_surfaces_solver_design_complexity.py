@@ -199,6 +199,8 @@ def test_cvrp_solver_algorithm_complexity_rejects_unbounded_improvement_flag_loo
 
     assert not c9c.passed
     assert "uncapped while loop" in c9c.detail
+    assert "condition='improved'" in c9c.detail
+    assert "iteration cap" in c9c.detail
 
 
 def test_cvrp_solver_algorithm_complexity_rejects_fake_runtime_guard_helper() -> None:
@@ -225,3 +227,5 @@ def test_cvrp_solver_algorithm_complexity_rejects_fake_runtime_guard_helper() ->
 
     assert not c9c.passed
     assert "uncapped while loop" in c9c.detail
+    assert "condition='always(context)'" in c9c.detail
+    assert "runtime guard" in c9c.detail

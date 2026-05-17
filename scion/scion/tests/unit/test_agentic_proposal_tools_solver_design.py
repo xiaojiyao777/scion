@@ -732,6 +732,22 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
                 "Target-specific rule for destroy_repair.py: scheduler.py "
                 "may only import exact new symbols from .destroy_repair."
             ),
+            "solver_design_branch_current_integration_files": (
+                "### policies/baseline_algorithm.py\n"
+                "Provenance: branch_workspace; readable=True\n"
+                "```python\n"
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    solver = _ALNSVNSSolver(context=context)\n"
+                "    return solver.solve(instance, rng)\n"
+                "```\n"
+                "### policies/baseline_modules/scheduler.py\n"
+                "Provenance: branch_workspace; readable=True\n"
+                "```python\n"
+                "class _ALNSVNSSolver:\n"
+                "    def solve(self, instance, rng):\n"
+                "        return None\n"
+                "```"
+            ),
             "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
             "import_whitelist": "math, random, time",
             "champion_operators_code": "",
@@ -758,6 +774,10 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     )
     assert "target file should own the mechanism" in rendered_system
     assert "stable runtime contract" in rendered_system
+    assert "Approved Target File Full Current Content" in rendered_prompt
+    assert "Branch-Current Integration Files" in rendered_prompt
+    assert "branch_workspace" in rendered_prompt
+    assert "smallest necessary wiring edits" in rendered_prompt
     assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
     assert "_ALNSVNSSolver.__init__(self, *" in rendered_system

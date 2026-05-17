@@ -424,11 +424,13 @@ _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS = 1800
 _SOLVER_DESIGN_CODE_INTERFACE_CHARS = 2400
 _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS = 3000
 _SOLVER_DESIGN_CODE_API_MANIFEST_CHARS = 4200
+_SOLVER_DESIGN_CODE_INTEGRATION_FILES_CHARS = 22000
 _SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS = 1200
 _SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS = 1200
 _SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS = 1600
 _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS = 1600
 _SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS = 2600
+_SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS = 12000
 _SOLVER_DESIGN_BROAD_SCOPE_TERMS = (
     "hybrid",
     "alns",
@@ -826,9 +828,19 @@ def _split_code_context(
             ),
             label="solver-design API manifest",
         )
+        solver_design_integration_files = _limit_code_phase_text(
+            str(D["solver_design_branch_current_integration_files"]).strip(),
+            (
+                _SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS
+                if compact_timeout_retry
+                else _SOLVER_DESIGN_CODE_INTEGRATION_FILES_CHARS
+            ),
+            label="solver-design branch-current integration files",
+        )
     else:
         interface_spec = str(D["operator_interface_spec"])
         solver_design_api_manifest = ""
+        solver_design_integration_files = ""
     problem_object_section = (
         f"## Problem Object\n{problem_object}\n\n" if problem_object else ""
     )
@@ -838,6 +850,16 @@ def _split_code_context(
     solver_design_api_manifest_section = (
         f"## Solver-Design Module API Manifest\n{solver_design_api_manifest}\n\n"
         if solver_design_api_manifest
+        else ""
+    )
+    solver_design_integration_files_section = (
+        "## Branch-Current Integration Files\n"
+        "These files are not the approved target unless their path matches "
+        "`target_file`. Use them as current-content provenance for "
+        "`additional_changes`; preserve their existing contracts and make only "
+        "the smallest necessary wiring edits.\n"
+        f"{solver_design_integration_files}\n\n"
+        if solver_design_integration_files
         else ""
     )
 
@@ -973,8 +995,10 @@ def _split_code_context(
         "approved `target_file` below and put scheduler/entrypoint/module "
         "integration edits in `additional_changes`. Do not make "
         "`policies/baseline_algorithm.py` the primary patch unless it is the "
-        "approved target. Do not leave a newly created helper or module "
-        "inert.\n"
+        "approved target. Base each `additional_changes` file on the "
+        "branch-current integration content provided below, and change only "
+        "the minimal lines needed to call the approved mechanism. Do not leave "
+        "a newly created helper or module inert.\n"
         "- When adding class methods or helper functions, wire them into the "
         "active solver call path in the same patch. Static preview treats "
         "unreached methods and functions as inert, including methods added to "
@@ -1091,7 +1115,8 @@ def _split_code_context(
         f"{prior_failure_section}"
         f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{solver_design_api_manifest_section}"
-        f"## Target File (current content)\n{D['target_file_code']}\n\n"
+        f"## Approved Target File Full Current Content\n{D['target_file_code']}\n\n"
+        f"{solver_design_integration_files_section}"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
