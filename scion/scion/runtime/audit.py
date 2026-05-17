@@ -244,7 +244,7 @@ def declared_surface_required_runtime_fields(
 ) -> tuple[str, ...]:
     """Return declared required runtime fields for a selected surface, if any."""
 
-    surface_name = (selected_surface or "").strip()
+    surface_name = normalize_surface_name(selected_surface)
     if not surface_name:
         return ()
     surface = _find_research_surface(problem_spec, surface_name)
@@ -307,7 +307,7 @@ def _surface_runtime_contract_failure(
     require_declared_surface: bool,
     runtime_missing: bool = False,
 ) -> dict[str, Any] | None:
-    surface_name = (selected_surface or "").strip()
+    surface_name = normalize_surface_name(selected_surface)
     if not surface_name:
         if require_declared_surface:
             return _surface_issue(
@@ -404,14 +404,24 @@ def _surface_issue(
 
 
 def _find_research_surface(problem_spec: Any | None, name: str) -> Any | None:
+    name = normalize_surface_name(name)
     surfaces = getattr(problem_spec, "research_surfaces", None)
     if not surfaces:
         return None
     for surface in surfaces:
-        surface_name = _get_field(surface, "name")
+        surface_name = str(_get_field(surface, "name") or "").strip()
         if surface_name == name:
             return surface
     return None
+
+
+def normalize_surface_name(name: Any) -> str:
+    """Normalize public compatibility aliases to declared research surfaces."""
+
+    surface_name = str(name or "").strip()
+    if surface_name == "solver_algorithm":
+        return "solver_design"
+    return surface_name
 
 
 def _required_runtime_fields(surface: Any) -> tuple[str, ...]:

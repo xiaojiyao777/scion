@@ -52,6 +52,9 @@ class _RuntimeSmokeCase:
     rel_path: str
     seed: int
     path: Path
+    data_root: str | None = None
+    data_root_source: str = "unknown"
+    data_root_status: str = "unresolved"
 
 
 def _runtime_algorithm_smoke_preview(
@@ -60,7 +63,7 @@ def _runtime_algorithm_smoke_preview(
     selected_surface: str | None,
     hypothesis: HypothesisProposal | None = None,
 ) -> dict[str, Any] | None:
-    surface_name = str(selected_surface or "").strip()
+    surface_name = _normalize_solver_design_surface(selected_surface)
     if surface_name != "solver_design":
         return None
     patch_paths = [
@@ -153,6 +156,10 @@ def _runtime_algorithm_smoke_preview(
                     issue = str(run_payload.get("detail") or "solver run failed")
                     representative = {
                         "case": smoke_case.rel_path,
+                        "resolved_case_path": str(smoke_case.path),
+                        "data_root": smoke_case.data_root,
+                        "data_root_source": smoke_case.data_root_source,
+                        "data_root_status": smoke_case.data_root_status,
                         "seed": smoke_case.seed,
                         "label": smoke_case.label,
                         "passed": False,
@@ -172,6 +179,10 @@ def _runtime_algorithm_smoke_preview(
                 runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
                 run_result = {
                     "case": smoke_case.rel_path,
+                    "resolved_case_path": str(smoke_case.path),
+                    "data_root": smoke_case.data_root,
+                    "data_root_source": smoke_case.data_root_source,
+                    "data_root_status": smoke_case.data_root_status,
                     "seed": smoke_case.seed,
                     "label": smoke_case.label,
                     "passed": audit_failure is None,
@@ -248,12 +259,20 @@ def _runtime_algorithm_smoke_preview(
         "runtime_smoke_run": True,
         "selected_surface": surface_name,
         "case": representative.get("case") or canary_rel,
+        "resolved_case_path": representative.get("resolved_case_path"),
+        "data_root": representative.get("data_root"),
+        "data_root_source": representative.get("data_root_source"),
+        "data_root_status": representative.get("data_root_status"),
         "seed": representative.get("seed") or _ALGORITHM_SMOKE_DEFAULT_SEED,
         "case_count": len(runs),
         "cases": [
             {
                 "label": run.get("label"),
                 "case": run.get("case"),
+                "resolved_case_path": run.get("resolved_case_path"),
+                "data_root": run.get("data_root"),
+                "data_root_source": run.get("data_root_source"),
+                "data_root_status": run.get("data_root_status"),
                 "seed": run.get("seed"),
                 "passed": run.get("passed"),
             }
@@ -373,12 +392,12 @@ def _runtime_smoke_cases(
         if key in seen:
             return
         seen.add(key)
-        instance_path = _resolve_smoke_instance_path(
+        resolution = _resolve_smoke_instance(
             workspace=workspace,
             base_workspace=base_workspace,
             case_rel=rel,
         )
-        if instance_path is None:
+        if resolution["path"] is None:
             missing.append(f"{label} smoke case not found: {rel}")
             return
         cases.append(
@@ -386,7 +405,10 @@ def _runtime_smoke_cases(
                 label=label,
                 rel_path=rel,
                 seed=seed_value,
-                path=instance_path,
+                path=resolution["path"],
+                data_root=resolution["data_root"],
+                data_root_source=resolution["data_root_source"],
+                data_root_status=resolution["data_root_status"],
             )
         )
 
@@ -560,20 +582,56 @@ def _resolve_smoke_instance_path(
     base_workspace: Path,
     case_rel: str,
 ) -> Path | None:
+    return _resolve_smoke_instance(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        case_rel=case_rel,
+    )["path"]
+
+
+def _resolve_smoke_instance(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    case_rel: str,
+) -> dict[str, Any]:
     rel = Path(case_rel)
-    candidates = []
+    candidates: list[tuple[Path, str | None, str, str]] = []
     if rel.is_absolute():
-        candidates.append(rel)
+        candidates.append((rel, str(rel.parent), "absolute_path", "absolute"))
     else:
-        candidates.append(workspace / rel)
-        candidates.append(base_workspace / rel)
+        candidates.append((workspace / rel, str(workspace), "workspace", "relative"))
+        candidates.append(
+            (base_workspace / rel, str(base_workspace), "base_workspace", "relative")
+        )
         data_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
         if data_root:
-            candidates.append(Path(data_root).expanduser().resolve(strict=False) / rel)
-    for path in candidates:
+            resolved_data_root = Path(data_root).expanduser().resolve(strict=False)
+            candidates.append(
+                (
+                    resolved_data_root / rel,
+                    str(resolved_data_root),
+                    "SCION_PROBLEM_DATA_ROOT",
+                    "env_configured",
+                )
+            )
+    for path, data_root, source, status in candidates:
         if path.is_file():
-            return path
-    return None
+            return {
+                "path": path,
+                "data_root": data_root,
+                "data_root_source": source,
+                "data_root_status": status,
+            }
+    env_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
+    return {
+        "path": None,
+        "data_root": str(Path(env_root).expanduser().resolve(strict=False))
+        if env_root
+        else None,
+        "data_root_source": "SCION_PROBLEM_DATA_ROOT" if env_root else "not_configured",
+        "data_root_status": "missing",
+    }
 
 
 def _run_solver_design_smoke(
@@ -599,6 +657,10 @@ def _run_solver_design_smoke(
     )
     run_payload = {
         "case": smoke_case.rel_path,
+        "resolved_case_path": str(smoke_case.path),
+        "data_root": smoke_case.data_root,
+        "data_root_source": smoke_case.data_root_source,
+        "data_root_status": smoke_case.data_root_status,
         "seed": smoke_case.seed,
         "label": smoke_case.label,
         "success": result.success,
@@ -680,6 +742,8 @@ def _compact_runtime_smoke_payload(runtime: Any) -> dict[str, Any]:
         "solver_algorithm_solution_valid",
         "solver_algorithm_total_distance",
         "solver_algorithm_fleet_violation",
+        "solver_algorithm_baseline_calls",
+        "solver_algorithm_baseline_errors",
         "solver_algorithm_search_iterations",
         "solver_algorithm_move_attempts",
         "solver_algorithm_accepted_moves",
@@ -1119,6 +1183,13 @@ def _attr(value: Any, name: str, default: Any = None) -> Any:
     if isinstance(value, Mapping):
         return value.get(name, default)
     return getattr(value, name, default)
+
+
+def _normalize_solver_design_surface(value: Any) -> str:
+    surface = str(value or "").strip()
+    if surface == "solver_algorithm":
+        return "solver_design"
+    return surface
 
 
 def _normalize_rel_path(path: str) -> str | None:

@@ -24,6 +24,13 @@ class SolverDesignIntegrationResult:
     detail: str
 
 
+@dataclass(frozen=True)
+class _LoopSignature:
+    kind: str
+    detail: str
+    line: int | None
+
+
 _STABLE_SOLVER_CONSTRUCTOR_KEYWORDS = (
     "time_limit",
     "destroy_ratio",
@@ -145,6 +152,14 @@ def check_solver_design_integration(
     )
     if import_error is not None:
         return SolverDesignIntegrationResult(False, import_error)
+
+    solve_structure_error = _scheduler_additional_solve_structure_error(
+        candidate_sources,
+        champion_file_content=champion_file_content,
+        primary_path=primary_path,
+    )
+    if solve_structure_error is not None:
+        return SolverDesignIntegrationResult(False, solve_structure_error)
 
     if changed_files == 0 or not new_functions:
         return SolverDesignIntegrationResult(True, "no new solver_design helper functions")
@@ -593,6 +608,212 @@ def _scheduler_solve_signature_contract_error(
     return None
 
 
+def _scheduler_solve_structure_contract_error(
+    tree: ast.AST,
+    *,
+    champion_code: str | None,
+    runtime_classes: set[str],
+    primary_path: str,
+) -> str | None:
+    if not champion_code:
+        return None
+    try:
+        champion_tree = ast.parse(champion_code)
+    except SyntaxError:
+        return None
+
+    champion_solve = _class_method_node(champion_tree, "_ALNSVNSSolver", "solve")
+    if champion_solve is None:
+        return None
+    candidate_solve = _class_method_node(tree, "_ALNSVNSSolver", "solve")
+    if candidate_solve is None:
+        for class_name in sorted(runtime_classes):
+            candidate_solve = _class_method_node(tree, class_name, "solve")
+            if candidate_solve is not None:
+                break
+    if candidate_solve is None:
+        return None
+
+    champion_loops = _solve_loop_signatures(champion_solve)
+    candidate_loops = _solve_loop_signatures(candidate_solve)
+    champion_whiles = [loop for loop in champion_loops if loop.kind == "while"]
+    candidate_whiles = [loop for loop in candidate_loops if loop.kind == "while"]
+    champion_fors = [loop for loop in champion_loops if loop.kind == "for"]
+    candidate_fors = [loop for loop in candidate_loops if loop.kind == "for"]
+
+    violations: list[str] = []
+    if len(candidate_whiles) > len(champion_whiles):
+        added = _unmatched_candidate_loops(champion_whiles, candidate_whiles)
+        violations.append(
+            "added_while_loops="
+            + repr([{"line": loop.line, "test": loop.detail} for loop in added])
+        )
+    if len(candidate_whiles) < len(champion_whiles):
+        removed = _unmatched_candidate_loops(candidate_whiles, champion_whiles)
+        violations.append(
+            "removed_while_loops="
+            + repr([{"line": loop.line, "test": loop.detail} for loop in removed])
+        )
+    for index, (champion_loop, candidate_loop) in enumerate(
+        zip(champion_whiles, candidate_whiles, strict=False)
+    ):
+        if champion_loop.detail != candidate_loop.detail:
+            violations.append(
+                "changed_while_condition="
+                + repr(
+                    {
+                        "index": index,
+                        "line": candidate_loop.line,
+                        "from": champion_loop.detail,
+                        "to": candidate_loop.detail,
+                    }
+                )
+            )
+    if len(candidate_fors) > len(champion_fors):
+        added = _unmatched_candidate_loops(champion_fors, candidate_fors)
+        violations.append(
+            "added_for_loops="
+            + repr([{"line": loop.line, "iter": loop.detail} for loop in added])
+        )
+    if len(candidate_fors) < len(champion_fors):
+        removed = _unmatched_candidate_loops(candidate_fors, champion_fors)
+        violations.append(
+            "removed_for_loops="
+            + repr([{"line": loop.line, "iter": loop.detail} for loop in removed])
+        )
+    for index, (champion_loop, candidate_loop) in enumerate(
+        zip(champion_fors, candidate_fors, strict=False)
+    ):
+        if champion_loop.detail != candidate_loop.detail:
+            violations.append(
+                "changed_for_loop="
+                + repr(
+                    {
+                        "index": index,
+                        "line": candidate_loop.line,
+                        "from": champion_loop.detail,
+                        "to": candidate_loop.detail,
+                    }
+                )
+            )
+
+    if not violations:
+        return None
+    return (
+        "scheduler.py additional_changes for a non-scheduler primary target "
+        "may only perform minimal wiring. They must not rewrite "
+        "_ALNSVNSSolver.solve's main search loop or add/replace "
+        "search-bearing while/for loops. "
+        f"primary_target={primary_path}; loop_changes={violations}. "
+        "If you need to change scheduler.py's main loop, make "
+        "policies/baseline_modules/scheduler.py the approved target; otherwise "
+        "limit scheduler.py to import and operator registration wiring."
+    )
+
+
+def _scheduler_additional_solve_structure_error(
+    candidate_sources: dict[str, str],
+    *,
+    champion_file_content: Callable[[str], str | None],
+    primary_path: str,
+) -> str | None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    if primary_path == scheduler_path:
+        return None
+    candidate_code = candidate_sources.get(scheduler_path)
+    if candidate_code is None:
+        return None
+    try:
+        tree = ast.parse(candidate_code)
+    except SyntaxError:
+        return None
+    champion_code = champion_file_content(scheduler_path)
+    champion_classes = _module_level_class_defs_from_source(champion_code)
+    runtime_classes = _solver_design_runtime_class_roots(
+        tree,
+        champion_classes=champion_classes,
+    )
+    if not runtime_classes:
+        return None
+    return _scheduler_solve_structure_contract_error(
+        tree,
+        champion_code=champion_code,
+        runtime_classes=runtime_classes,
+        primary_path=primary_path,
+    )
+
+
+def _unmatched_candidate_loops(
+    champion_loops: list[_LoopSignature],
+    candidate_loops: list[_LoopSignature],
+) -> list[_LoopSignature]:
+    remaining = [loop.detail for loop in champion_loops]
+    unmatched: list[_LoopSignature] = []
+    for loop in candidate_loops:
+        if loop.detail in remaining:
+            remaining.remove(loop.detail)
+        else:
+            unmatched.append(loop)
+    return unmatched
+
+
+def _solve_loop_signatures(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[_LoopSignature]:
+    visitor = _SolveLoopSignatureVisitor()
+    for stmt in node.body:
+        visitor.visit(stmt)
+    return visitor.loops
+
+
+class _SolveLoopSignatureVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.loops: list[_LoopSignature] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return None
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return None
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return None
+
+    def visit_While(self, node: ast.While) -> None:
+        self.loops.append(
+            _LoopSignature(
+                kind="while",
+                detail=_normalized_ast_detail(node.test),
+                line=getattr(node, "lineno", None),
+            )
+        )
+        self.generic_visit(node)
+
+    def visit_For(self, node: ast.For) -> None:
+        self.loops.append(
+            _LoopSignature(
+                kind="for",
+                detail=_normalized_ast_detail(node.iter),
+                line=getattr(node, "lineno", None),
+            )
+        )
+        self.generic_visit(node)
+
+    def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+        self.loops.append(
+            _LoopSignature(
+                kind="for",
+                detail=_normalized_ast_detail(node.iter),
+                line=getattr(node, "lineno", None),
+            )
+        )
+        self.generic_visit(node)
+
+
+def _normalized_ast_detail(node: ast.AST) -> str:
+    return ast.dump(node, annotate_fields=True, include_attributes=False)
+
+
 def _solver_design_import_export_error(
     candidate_sources: dict[str, str],
     *,
@@ -932,6 +1153,18 @@ def _is_active_registration_target(node: ast.AST) -> bool:
     if not isinstance(node, ast.Name):
         return False
     lowered = node.id.lower()
+    if lowered in {
+        "destroy_ops",
+        "repair_ops",
+        "local_search_ops",
+        "construction_ops",
+        "construction_methods",
+        "construction_candidates",
+        "constructors",
+    }:
+        return True
+    if lowered.endswith("_ops") or lowered.endswith("_operators"):
+        return True
     return any(
         token in lowered
         for token in ("operator", "operators", "registry", "registrations", "hooks")

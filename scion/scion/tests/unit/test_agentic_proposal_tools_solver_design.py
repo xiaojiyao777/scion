@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scion.proposal.solver_design_smoke import _runtime_algorithm_smoke_preview
+
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     AgenticProposalSession,
     AgenticProposalSessionState,
@@ -85,7 +87,48 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     assert payload["runtime_smoke"]["runtime"]["solver_algorithm_path"] == (
         "policies/baseline_algorithm.py"
     )
+    assert payload["runtime_smoke"]["resolved_case_path"]
+    assert payload["runtime_smoke"]["data_root"]
+    assert payload["runtime_smoke"]["data_root_source"] in {
+        "absolute_path",
+        "workspace",
+        "base_workspace",
+        "SCION_PROBLEM_DATA_ROOT",
+    }
+    assert payload["runtime_smoke"]["data_root_status"] in {
+        "absolute",
+        "relative",
+        "env_configured",
+    }
     assert after == before
+
+
+def test_algorithm_smoke_normalizes_solver_algorithm_surface_alias(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.make_solution(context.nearest_neighbor())\n"
+            "    context.record_iteration('seed', 1)\n"
+            "    context.record_move('seed', attempted=1, accepted=1)\n"
+            "    return solution\n"
+        ),
+    )
+
+    payload = _runtime_algorithm_smoke_preview(
+        context,
+        patch,
+        "solver_algorithm",
+    )
+
+    assert payload is not None
+    assert payload["selected_surface"] == "solver_design"
+    assert payload["runtime_smoke_run"] is True
+    assert payload["resolved_case_path"]
 
 
 def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(

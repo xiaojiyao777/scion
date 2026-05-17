@@ -32,6 +32,22 @@ single-surface problem boundary, and provides branch-current integration files
 for solver-design `additional_changes` so candidates wire the current branch
 algorithm instead of rewriting scheduler from stale or missing context.
 
+The follow-up control-closure repair addresses the remaining audit and
+experiment-loop gaps before the next live run. Non-scheduler primary
+solver-design patches may no longer use `additional_changes` to rewrite
+`scheduler.py`'s `_ALNSVNSSolver.solve` loop; those edits are limited to
+import/operator registration wiring unless `scheduler.py` is the approved
+target. Pending code retries are now marked as retry attempts and do not
+advance campaign `total_rounds`, idle-round accounting, or the outer
+`max_rounds` budget. The `solver_algorithm` compatibility surface is
+normalized to `solver_design` for runtime audit, protocol execution, and
+algorithm smoke. Generic protocol runtime summaries now include
+`solver_algorithm_*` telemetry, champion-side process/audit failures emit
+progress updates, and smoke payloads record resolved case paths/data-root
+provenance. `agentic_session.py` has also started its package-like split:
+budget, tool-selection, and feedback helpers now live in focused
+`agentic_session_*` modules while the session class remains the orchestrator.
+
 The current repair changes the active CVRP research object. `solver_design`
 now targets a branch-owned solver-design package: stable entrypoint
 `policies/baseline_algorithm.py::solve(...)` plus focused algorithm modules

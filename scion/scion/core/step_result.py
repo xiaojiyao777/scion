@@ -23,3 +23,4 @@ class StepResult:
     decision: Optional[Decision] = None
     stopped: bool = False
     reason: str = ""
+    counts_toward_max_rounds: bool = True

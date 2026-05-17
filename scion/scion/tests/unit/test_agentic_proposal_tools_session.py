@@ -104,6 +104,62 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
     ]["recommended_args"] == {"surface": "solver_design"}
 
 
+def test_feedback_query_args_use_single_active_boundary_without_forcing(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    multi_boundary_context = replace(
+        context,
+        active_problem_boundary_surfaces=("solver_design", "runtime_policy"),
+    )
+    forced_context = replace(
+        multi_boundary_context,
+        forced_surface="solver_design",
+    )
+
+    assert agentic_session_module._feedback_query_args(context) == {
+        "surface": "solver_design"
+    }
+    assert agentic_session_module._feedback_query_args(multi_boundary_context) == {}
+    assert agentic_session_module._feedback_query_args(forced_context) == {
+        "surface": "solver_design"
+    }
+
+
+def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    tool_names = (
+        "",
+        "feedback.query_holdout_summary",
+        "proposal.algorithm_smoke",
+        "proposal.contract_preview",
+        "context.read_surface",
+        "context.read_surface",
+        "feedback.query_runtime",
+    )
+
+    model_facing = agentic_session_module._filter_model_facing_tool_names(
+        tool_names,
+        context,
+    )
+    code_phase = agentic_session_module._filter_code_phase_tool_names(
+        tool_names,
+        context,
+    )
+
+    assert model_facing == (
+        "proposal.contract_preview",
+        "context.read_surface",
+        "feedback.query_runtime",
+    )
+    assert code_phase == ("context.read_surface", "feedback.query_runtime")
+
+
 def test_code_phase_required_full_surface_read_bypasses_self_check_reserve(
     tmp_path: Path,
 ) -> None:
@@ -142,6 +198,35 @@ def test_code_phase_required_full_surface_read_bypasses_self_check_reserve(
         event.metadata.get("tool_name") == "context.read_branch_state"
         and event.metadata.get("skip_reason") == "code_self_check_budget_reserved"
         for event in state.transcript
+    )
+
+
+def test_budget_denial_does_not_apply_to_mandatory_code_surface_read(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_observation_chars=48000)
+    state = AgenticProposalSessionState(
+        session_id="session-budget",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        observation_chars_used=47000,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+
+    assert session._should_deny_optional_tool_for_budget(
+        "context.read_surface",
+        selection_source="planner_selected",
+        state=state,
+    )
+    assert not session._should_deny_optional_tool_for_budget(
+        "context.read_surface",
+        selection_source="code_phase_required",
+        state=state,
     )
 
 

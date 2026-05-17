@@ -33,7 +33,13 @@ class CampaignLoop:
         """Run the campaign until a termination condition is met."""
         self.write_status()
         final_reason: str | None = None
-        for _ in range(max_rounds):
+        counted_rounds = 0
+        attempts = 0
+        # Non-round steps such as pending code retries should not consume the
+        # exploration round budget, but still need a hard guard against loops.
+        attempt_limit = max(1, int(max_rounds)) * 3 + 10
+        while counted_rounds < max_rounds and attempts < attempt_limit:
+            attempts += 1
             self.drain_weight_opt_events()
             if self.should_stop():
                 final_reason = self.get_last_stop_reason() or "termination condition met"
@@ -54,6 +60,8 @@ class CampaignLoop:
                 break
 
             result = self.run_one_step()
+            if getattr(result, "counts_toward_max_rounds", True):
+                counted_rounds += 1
             self.write_status(last_result=result)
             if result.stopped:
                 final_reason = result.reason or "stopped"
@@ -61,8 +69,10 @@ class CampaignLoop:
 
             self.run_stagnation_check()
             self.check_soft_stagnation()
-        else:
+        if final_reason is None and counted_rounds >= max_rounds:
             final_reason = "max_rounds_exhausted"
+        elif final_reason is None:
+            final_reason = "attempt_limit_exhausted"
 
         self.set_last_stop_reason(final_reason)
         if final_reason == "max_rounds_exhausted":

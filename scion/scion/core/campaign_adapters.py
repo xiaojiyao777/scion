@@ -278,6 +278,7 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
             "_proposal_session_ref_for",
             lambda branch_id: None,
         ),
+        get_current_round=lambda: getattr(owner, "_round_num", 0),
     )
 
 

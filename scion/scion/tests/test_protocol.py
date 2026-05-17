@@ -658,6 +658,174 @@ def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
     ]
 
 
+def test_run_experiment_normalizes_solver_algorithm_surface_alias(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "solver_algorithm_loaded": True,
+        "solver_algorithm_active": True,
+        "solver_algorithm_errors": 0,
+        "solver_algorithm_stop_reason": "completed",
+    }
+    pair = [
+        _make_run_result(2, 1000, runtime={}),
+        _make_run_result(1, 900, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_design",
+            required_runtime_fields=(
+                "solver_algorithm_loaded",
+                "solver_algorithm_active",
+                "solver_algorithm_errors",
+                "solver_algorithm_stop_reason",
+            ),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_algorithm",
+    )
+
+    assert result.selected_surface == "solver_design"
+    assert result.candidate_surface_runtime_summary["selected_surface"] == "solver_design"
+    assert result.stats.failed_pairs == 0
+    assert {
+        call.kwargs["selected_surface"]
+        for call in runner.run_solver.call_args_list
+    } == {"solver_design"}
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["selected_surface"] == "solver_design"
+
+
+def test_solver_algorithm_surface_declaration_fails_closed(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, runtime={}),
+        _make_run_result(
+            1,
+            900,
+            runtime={
+                "solver_algorithm_loaded": True,
+                "solver_algorithm_active": True,
+                "solver_algorithm_errors": 0,
+            },
+        ),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_algorithm",
+            required_runtime_fields=("solver_algorithm_loaded",),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_algorithm",
+    )
+
+    assert result.selected_surface == "solver_design"
+    assert result.stats.candidate_failed_pairs == 4
+    assert result.candidate_runtime_failure_categories == {
+        "surface_contract_error": 4,
+    }
+    assert result.candidate_first_runtime_failure is not None
+    assert result.candidate_first_runtime_failure["surface"] == "solver_design"
+    assert "not declared" in result.candidate_first_runtime_failure["detail_summary"]
+
+
+def test_runtime_summary_includes_solver_algorithm_telemetry_without_selected_surface(
+    tmp_path,
+):
+    runner = MagicMock()
+    candidate_runtime = {
+        "solver_algorithm_stop_reason": "no_improvement",
+        "solver_algorithm_search_iterations": 7,
+        "solver_algorithm_move_attempts": 42,
+        "solver_algorithm_accepted_moves": 5,
+        "solver_algorithm_improving_moves": 3,
+        "solver_algorithm_neutral_accepted_moves": 2,
+        "solver_algorithm_baseline_calls": 1,
+        "solver_algorithm_errors": 0,
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=110, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.candidate_runtime_stop_reasons == {"no_improvement": 4}
+    assert "candidate_solver_algorithm_iterations=28" in result.exposed_summary
+    assert "candidate_solver_algorithm_move_attempts=168" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    candidate_runtime_summary = raw["pairs"][0]["candidate_runtime"]
+    assert candidate_runtime_summary["solver_algorithm_stop_reason"] == "no_improvement"
+    assert candidate_runtime_summary["solver_algorithm_search_iterations"] == 7
+    assert candidate_runtime_summary["solver_algorithm_move_attempts"] == 42
+    assert candidate_runtime_summary["solver_algorithm_accepted_moves"] == 5
+    assert candidate_runtime_summary["solver_algorithm_improving_moves"] == 3
+    assert candidate_runtime_summary["solver_algorithm_neutral_accepted_moves"] == 2
+    assert candidate_runtime_summary["solver_algorithm_baseline_calls"] == 1
+
+
+@pytest.mark.parametrize(
+    "champion_result",
+    [
+        _make_run_failure("crash"),
+        _make_run_result(
+            2,
+            1000,
+            runtime={
+                "operator_errors": 1,
+                "operator_events": [{"detail": "champion operator failed"}],
+            },
+        ),
+    ],
+)
+def test_champion_failure_branches_emit_progress_callback(
+    tmp_path,
+    champion_result,
+):
+    runner = MagicMock()
+    candidate = _make_run_result(1, 900)
+    runner.run_solver.side_effect = [champion_result, candidate] * 4
+    proto = _make_protocol(runner, tmp_path)
+    progress_events = []
+    proto.set_progress_callback(lambda **payload: progress_events.append(payload))
+
+    result = proto.run_experiment(
+        ExperimentStage.VALIDATION,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.stats.champion_failed_pairs == 4
+    assert len(progress_events) == 9
+    assert progress_events[-1]["attempted_pairs"] == 4
+    assert progress_events[-1]["completed_pairs"] == 0
+
+
 def test_run_experiment_screening_fail(tmp_path):
     """Candidate always loses → fail.
     champ=better(splits=1, cost=900), cand=worse(splits=3, cost=1500).

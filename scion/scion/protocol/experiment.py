@@ -27,6 +27,7 @@ from scion.protocol.gates import (
 from scion.runtime.audit import (
     declared_surface_required_runtime_fields,
     format_runtime_audit_failure,
+    normalize_surface_name,
     runtime_audit_failure_from_result,
 )
 
@@ -452,14 +453,23 @@ class ExperimentProtocol:
             "policy_errors": 0,
             "construction_errors": 0,
             "portfolio_errors": 0,
+            "solver_algorithm_errors": 0,
+            "solver_algorithm_search_iterations": 0,
+            "solver_algorithm_move_attempts": 0,
+            "solver_algorithm_accepted_moves": 0,
+            "solver_algorithm_improving_moves": 0,
+            "solver_algorithm_neutral_accepted_moves": 0,
+            "solver_algorithm_baseline_calls": 0,
+            "solver_algorithm_baseline_errors": 0,
         }
         candidate_runtime_stop_reasons: dict[str, int] = {}
+        normalized_selected_surface = normalize_surface_name(selected_surface) or None
         surface_required_runtime_fields = declared_surface_required_runtime_fields(
             self._problem_spec,
-            selected_surface,
+            normalized_selected_surface,
         )
         candidate_surface_runtime_summary = _surface_runtime_summary_template(
-            selected_surface=selected_surface,
+            selected_surface=normalized_selected_surface,
             required_fields=surface_required_runtime_fields,
         )
 
@@ -468,7 +478,7 @@ class ExperimentProtocol:
                 json.dump(
                     {
                         "stage": stage.value,
-                        "selected_surface": selected_surface,
+                        "selected_surface": normalized_selected_surface,
                         "case_ids": cases,
                         "seed_set": seeds,
                         "total_pairs": total_pairs,
@@ -523,7 +533,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(champion_ws, "registry.yaml"),
-                    selected_surface=selected_surface,
+                    selected_surface=normalized_selected_surface,
                 )
                 cand_r = self.runner.run_solver(
                     workdir=candidate_ws,
@@ -531,7 +541,7 @@ class ExperimentProtocol:
                     seed=seed,
                     time_limit_sec=self.time_limit_sec,
                     registry_path=os.path.join(candidate_ws, "registry.yaml"),
-                    selected_surface=selected_surface,
+                    selected_surface=normalized_selected_surface,
                 )
                 _record_surface_runtime_sample(
                     cand_r,
@@ -656,6 +666,15 @@ class ExperimentProtocol:
                         champ_r.elapsed_ms,
                     )
                     _write_metrics_snapshot(complete=False)
+                    self._emit_progress(
+                        stage=stage.value,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=valid_pairs,
+                        total_pairs=total_pairs,
+                        raw_metrics_ref=raw_ref,
+                    )
                     continue
 
                 if cand_r.output is None or champ_r.output is None:
@@ -690,12 +709,21 @@ class ExperimentProtocol:
                         "failure": failure_record,
                     })
                     _write_metrics_snapshot(complete=False)
+                    self._emit_progress(
+                        stage=stage.value,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=valid_pairs,
+                        total_pairs=total_pairs,
+                        raw_metrics_ref=raw_ref,
+                    )
                     continue
 
                 cand_audit_failure = runtime_audit_failure_from_result(
                     cand_r,
                     problem_spec=self._problem_spec,
-                    selected_surface=selected_surface,
+                    selected_surface=normalized_selected_surface,
                 )
                 if cand_audit_failure is not None:
                     audit_category = _candidate_audit_failure_category(cand_audit_failure)
@@ -791,6 +819,15 @@ class ExperimentProtocol:
                         format_runtime_audit_failure(champ_audit_failure),
                     )
                     _write_metrics_snapshot(complete=False)
+                    self._emit_progress(
+                        stage=stage.value,
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=valid_pairs,
+                        total_pairs=total_pairs,
+                        raw_metrics_ref=raw_ref,
+                    )
                     continue
 
                 cmp, breakdown = self._compare_objectives(
@@ -927,6 +964,20 @@ class ExperimentProtocol:
             f"{candidate_runtime_counters['operator_errors']}"
             " candidate_invalid_outputs="
             f"{candidate_runtime_counters['operator_invalid_outputs']}"
+            " candidate_solver_algorithm_iterations="
+            f"{candidate_runtime_counters['solver_algorithm_search_iterations']}"
+            " candidate_solver_algorithm_move_attempts="
+            f"{candidate_runtime_counters['solver_algorithm_move_attempts']}"
+            " candidate_solver_algorithm_accepted_moves="
+            f"{candidate_runtime_counters['solver_algorithm_accepted_moves']}"
+            " candidate_solver_algorithm_improving_moves="
+            f"{candidate_runtime_counters['solver_algorithm_improving_moves']}"
+            " candidate_solver_algorithm_neutral_moves="
+            f"{candidate_runtime_counters['solver_algorithm_neutral_accepted_moves']}"
+            " candidate_solver_algorithm_baseline_calls="
+            f"{candidate_runtime_counters['solver_algorithm_baseline_calls']}"
+            " candidate_solver_algorithm_errors="
+            f"{candidate_runtime_counters['solver_algorithm_errors']}"
         )
 
         # Exposure control
@@ -967,7 +1018,7 @@ class ExperimentProtocol:
             pair_feedback=tuple(all_pair_feedback) if stage == ExperimentStage.SCREENING else (),
             case_feedback=case_fb,
             pattern_summary=pattern,
-            selected_surface=selected_surface,
+            selected_surface=normalized_selected_surface or selected_surface,
             candidate_surface_runtime_summary=_finalize_surface_runtime_summary(
                 candidate_surface_runtime_summary
             ),
@@ -1005,6 +1056,28 @@ def _candidate_runtime_observation(result: RunResult) -> dict[str, Any]:
         "policy_errors": _as_int(runtime.get("policy_errors")),
         "construction_errors": _as_int(runtime.get("construction_errors")),
         "portfolio_errors": _as_int(runtime.get("portfolio_errors")),
+        "solver_algorithm_errors": _as_int(runtime.get("solver_algorithm_errors")),
+        "solver_algorithm_search_iterations": _as_int(
+            runtime.get("solver_algorithm_search_iterations")
+        ),
+        "solver_algorithm_move_attempts": _as_int(
+            runtime.get("solver_algorithm_move_attempts")
+        ),
+        "solver_algorithm_accepted_moves": _as_int(
+            runtime.get("solver_algorithm_accepted_moves")
+        ),
+        "solver_algorithm_improving_moves": _as_int(
+            runtime.get("solver_algorithm_improving_moves")
+        ),
+        "solver_algorithm_neutral_accepted_moves": _as_int(
+            runtime.get("solver_algorithm_neutral_accepted_moves")
+        ),
+        "solver_algorithm_baseline_calls": _as_int(
+            runtime.get("solver_algorithm_baseline_calls")
+        ),
+        "solver_algorithm_baseline_errors": _as_int(
+            runtime.get("solver_algorithm_baseline_errors")
+        ),
     }
     categories: dict[str, int] = {}
     first_failure: dict[str, Any] | None = None
@@ -1013,6 +1086,8 @@ def _candidate_runtime_observation(result: RunResult) -> dict[str, Any]:
         ("construction_errors", "construction_error"),
         ("portfolio_errors", "portfolio_error"),
         ("policy_errors", "policy_error"),
+        ("solver_algorithm_errors", "solver_algorithm_error"),
+        ("solver_algorithm_baseline_errors", "solver_algorithm_baseline_error"),
         ("operator_invalid_outputs", "invalid_output"),
         ("operator_errors", "operator_error"),
     ):
@@ -1033,9 +1108,10 @@ def _candidate_runtime_observation(result: RunResult) -> dict[str, Any]:
         categories["no_accepted_moves"] = categories.get("no_accepted_moves", 0) + 1
 
     stop_reasons: dict[str, int] = {}
-    stop_reason = str(runtime.get("operator_stop_reason") or "").strip()
-    if stop_reason:
-        stop_reasons[stop_reason] = 1
+    for key in ("operator_stop_reason", "solver_algorithm_stop_reason"):
+        stop_reason = str(runtime.get(key) or "").strip()
+        if stop_reason:
+            stop_reasons[stop_reason] = stop_reasons.get(stop_reason, 0) + 1
 
     return {
         "categories": categories,
@@ -1082,6 +1158,8 @@ def _candidate_audit_failure_category(issue: dict[str, Any]) -> str:
         return "construction_error"
     if raw == "portfolio_runtime_error":
         return "portfolio_error"
+    if raw == "solver_algorithm_runtime_error":
+        return "solver_algorithm_error"
     if raw == "surface_runtime_contract_error":
         return "surface_contract_error"
     if raw == "baseline_runtime_error":
@@ -1202,8 +1280,15 @@ def _runtime_audit_summary(
     summary = {
         key: value
         for key, value in runtime.items()
-        if key.startswith(("baseline_", "operator_", "policy_", "construction_", "portfolio_"))
-        and key not in ("operator_events", "policy_events")
+        if key.startswith((
+            "baseline_",
+            "operator_",
+            "policy_",
+            "construction_",
+            "portfolio_",
+            "solver_algorithm_",
+        ))
+        and key not in ("operator_events", "policy_events", "solver_algorithm_events")
         and _is_json_scalar(value)
     }
     for field in required_runtime_fields:
@@ -1215,6 +1300,9 @@ def _runtime_audit_summary(
     policy_events = runtime.get("policy_events")
     if isinstance(policy_events, list):
         summary["policy_events"] = policy_events[:5]
+    solver_algorithm_events = runtime.get("solver_algorithm_events")
+    if isinstance(solver_algorithm_events, list):
+        summary["solver_algorithm_events"] = solver_algorithm_events[:5]
     return summary
 
 

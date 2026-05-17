@@ -66,7 +66,6 @@ from scion.proposal.agentic_code_context import (
 )
 from scion.proposal.agentic_diagnostics import (
     _research_diagnosis_from_observations,
-    _research_diagnosis_has_signal,
 )
 from scion.proposal.agentic_preview import (
     AgenticSelfCheck,
@@ -81,10 +80,46 @@ from scion.proposal.agentic_preview import (
     _self_check_from_previews,
     _self_check_required,
 )
+from scion.proposal.agentic_session_budget import (
+    _code_phase_budget_reserved as _code_phase_budget_reserved_for_config,
+    _diagnosis_budget_reserved as _diagnosis_budget_reserved_for_config,
+    _diagnosis_feedback_budget_reserved as _diagnosis_feedback_budget_reserved_for_config,
+    _minimum_budgeted_observation_chars,
+    _observation_budget_exhausted as _observation_budget_exhausted_for_config,
+    _optional_surface_read_budget_floor as _optional_surface_read_budget_floor_for_config,
+    _remaining_observation_chars as _remaining_observation_chars_for_config,
+    _remaining_tool_calls as _remaining_tool_calls_for_config,
+    _remaining_tool_steps as _remaining_tool_steps_for_config,
+    _self_check_observation_reserve_chars as _self_check_observation_reserve_chars_for_config,
+    _self_check_step_reserve as _self_check_step_reserve_for_config,
+    _self_check_tool_call_reserve as _self_check_tool_call_reserve_for_config,
+    _should_deny_optional_tool_for_budget as _should_deny_optional_tool_for_budget_config,
+)
+from scion.proposal.agentic_session_feedback import (
+    _compact_feedback_observation_for_budget,
+    _feedback_query_args,
+    _has_feedback_screening_history,
+    _observation_satisfies_compact_requirement,
+)
+from scion.proposal.agentic_session_tools import (
+    _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+    _APS_CODE_SURFACE_READ_CODE_CHARS,
+    _APS_SURFACE_READ_CODE_CHARS,
+    _budgeted_tool_args,
+    _filter_code_phase_tool_names,
+    _filter_model_facing_tool_names,
+    _has_code_phase_surface_read,
+    _has_successful_code_phase_reusable_observation,
+    _has_successful_reusable_observation,
+    _has_successful_surface_read,
+    _has_successful_tool,
+    _is_solver_design_algorithm_target,
+    _is_solver_design_support_module_target,
+    _observation_selection_payload,
+    _surface_names_from_observations,
+)
 from scion.proposal.agentic_utils import (
-    _bounded_string_list,
     _drop_empty_dict,
-    _drop_empty_mapping,
     _enum_value,
     _json_size,
     _limit_string,
@@ -106,53 +141,6 @@ from scion.proposal.tools import (
     _active_boundary_novelty_requirements,
 )
 
-_RAW_REF_MARKERS = (
-    "raw_metrics_ref",
-    "raw metrics",
-    "raw_ref",
-    "raw ref",
-    "SECRET_RAW",
-    "SECRET_VALIDATION",
-    "SECRET_FROZEN",
-    "SECRET_HOLDOUT",
-)
-_COMPACT_FEEDBACK_TOOLS = (
-    "memory.query",
-    "feedback.query_screening",
-    "feedback.query_runtime",
-)
-_HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
-_CODE_PHASE_TOOL_ALLOWLIST = frozenset(
-    {
-        "context.list_surfaces",
-        "context.read_problem",
-        "context.read_surface",
-        "context.read_objective_policy",
-        "context.read_champion_summary",
-        "context.read_branch_state",
-        "memory.query",
-        "feedback.query_screening",
-        "feedback.query_runtime",
-    }
-)
-_SINGLE_SUCCESS_OBSERVATION_TOOLS = (
-    "context.list_surfaces",
-    "context.read_problem",
-    "context.read_branch_state",
-    "memory.query",
-)
-_MIN_BUDGETED_OBSERVATION_CHARS = 512
-_OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
-_APS_SURFACE_READ_CODE_CHARS = 800
-_APS_CODE_SURFACE_READ_CODE_CHARS = 12000
-_APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
-_APS_FEEDBACK_OBSERVATION_TARGET_CHARS = 6000
-_APS_FEEDBACK_TEXT_CHARS = 1200
-_APS_FEEDBACK_LIST_ITEMS = 4
-_APS_FEEDBACK_MAP_ITEMS = 16
-_APS_FEEDBACK_CALL_RESERVE_CHARS = 6000
-_SELF_CHECK_TOOL_CALL_RESERVE = 4
-_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 24000
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
 _ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC = 36.0
 _SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -2087,13 +2075,10 @@ class AgenticProposalSession:
     ) -> tuple[str, ...]:
         if self.tool_registry is None:
             return ()
-        allowed = set(
-            _filter_model_facing_tool_names(
-                self.tool_registry.allowed_tools(context),
-                context,
-            )
+        return _filter_code_phase_tool_names(
+            self.tool_registry.allowed_tools(context),
+            context,
         )
-        return tuple(sorted(allowed.intersection(_CODE_PHASE_TOOL_ALLOWLIST)))
 
     def _code_phase_allowed_tool_specs(
         self,
@@ -2112,16 +2097,10 @@ class AgenticProposalSession:
         self,
         state: AgenticProposalSessionState,
     ) -> bool:
-        if self._remaining_tool_calls(state) <= 4:
-            return True
-        if self._remaining_tool_steps(state) <= 4:
-            return True
-        reserve = max(
-            self._minimum_budgeted_observation_chars(),
-            self._self_check_observation_reserve_chars(),
-            min(8000, max(0, int(self._tool_loop_config.max_observation_chars) // 8)),
+        return _code_phase_budget_reserved_for_config(
+            self._tool_loop_config,
+            state,
         )
-        return self._remaining_observation_chars(state) <= reserve
 
     def _code_tool_arg_guidance(
         self,
@@ -2916,92 +2895,48 @@ class AgenticProposalSession:
         self,
         state: AgenticProposalSessionState,
     ) -> int:
-        return max(
-            0,
-            int(self._tool_loop_config.max_observation_chars)
-            - int(state.observation_chars_used),
-        )
+        return _remaining_observation_chars_for_config(self._tool_loop_config, state)
 
     def _remaining_tool_calls(self, state: AgenticProposalSessionState) -> int:
-        return max(
-            0,
-            int(self._tool_loop_config.max_tool_calls) - int(state.tool_call_count),
-        )
+        return _remaining_tool_calls_for_config(self._tool_loop_config, state)
 
     def _remaining_tool_steps(self, state: AgenticProposalSessionState) -> int:
-        return max(
-            0, int(self._tool_loop_config.max_steps) - int(state.tool_step_count)
-        )
+        return _remaining_tool_steps_for_config(self._tool_loop_config, state)
 
     def _self_check_tool_call_reserve(self) -> int:
-        max_calls = max(0, int(self._tool_loop_config.max_tool_calls))
-        if max_calls < 8:
-            return 0
-        return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_calls // 3)
+        return _self_check_tool_call_reserve_for_config(self._tool_loop_config)
 
     def _self_check_step_reserve(self) -> int:
-        max_steps = max(0, int(self._tool_loop_config.max_steps))
-        if max_steps < 8:
-            return 0
-        return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_steps // 3)
+        return _self_check_step_reserve_for_config(self._tool_loop_config)
 
     def _self_check_observation_reserve_chars(self) -> int:
-        max_chars = max(0, int(self._tool_loop_config.max_observation_chars))
-        if max_chars < _SELF_CHECK_OBSERVATION_RESERVE_CHARS * 2:
-            return 0
-        return min(_SELF_CHECK_OBSERVATION_RESERVE_CHARS, max_chars // 3)
+        return _self_check_observation_reserve_chars_for_config(
+            self._tool_loop_config
+        )
 
     def _diagnosis_budget_reserved(self, state: AgenticProposalSessionState) -> bool:
-        call_reserve = self._self_check_tool_call_reserve()
-        if call_reserve and self._remaining_tool_calls(state) <= call_reserve:
-            return True
-        step_reserve = self._self_check_step_reserve()
-        if step_reserve and self._remaining_tool_steps(state) <= step_reserve:
-            return True
-        observation_reserve = self._self_check_observation_reserve_chars()
-        if (
-            observation_reserve
-            and self._remaining_observation_chars(state) <= observation_reserve
-        ):
-            return True
-        return False
+        return _diagnosis_budget_reserved_for_config(self._tool_loop_config, state)
 
     def _diagnosis_feedback_budget_reserved(
         self,
         state: AgenticProposalSessionState,
     ) -> bool:
-        observation_reserve = self._self_check_observation_reserve_chars()
-        if not observation_reserve:
-            return False
-        return self._remaining_observation_chars(state) <= (
-            observation_reserve + _APS_FEEDBACK_CALL_RESERVE_CHARS
+        return _diagnosis_feedback_budget_reserved_for_config(
+            self._tool_loop_config,
+            state,
         )
 
     def _observation_budget_exhausted(
         self,
         state: AgenticProposalSessionState,
     ) -> bool:
-        remaining = self._remaining_observation_chars(state)
-        if remaining <= 0:
-            return True
-        return remaining < self._minimum_budgeted_observation_chars()
+        return _observation_budget_exhausted_for_config(self._tool_loop_config, state)
 
     def _minimum_budgeted_observation_chars(self) -> int:
-        return _MIN_BUDGETED_OBSERVATION_CHARS
+        return _minimum_budgeted_observation_chars()
 
     def _optional_surface_read_budget_floor(self) -> int:
-        self_check_reserve = self._self_check_observation_reserve_chars()
-        minimum = self._minimum_budgeted_observation_chars()
-        optional_floor = min(
-            _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS,
-            max(0, int(self._tool_loop_config.max_observation_chars) // 8),
-        )
-        if self_check_reserve:
-            return max(minimum, optional_floor, self_check_reserve + minimum)
-        return max(
-            minimum,
-            optional_floor,
-        )
+        return _optional_surface_read_budget_floor_for_config(self._tool_loop_config)
 
     def _should_deny_optional_tool_for_budget(
         self,
@@ -3010,13 +2945,11 @@ class AgenticProposalSession:
         selection_source: str,
         state: AgenticProposalSessionState,
     ) -> bool:
-        if name != "context.read_surface":
-            return False
-        if selection_source in {"selected_surface_required", "code_phase_required"}:
-            return False
-        return (
-            self._remaining_observation_chars(state)
-            < self._optional_surface_read_budget_floor()
+        return _should_deny_optional_tool_for_budget_config(
+            name,
+            selection_source=selection_source,
+            config=self._tool_loop_config,
+            state=state,
         )
 
     def _budgeted_tool_args(
@@ -3026,53 +2959,7 @@ class AgenticProposalSession:
         *,
         selection_source: str,
     ) -> Mapping[str, Any]:
-        if name != "context.read_surface":
-            return args
-        budgeted = dict(args)
-        if selection_source.startswith("code_phase"):
-            target_file = str(budgeted.get("target_file") or "").strip()
-            if _is_solver_design_algorithm_target(target_file):
-                budgeted["section"] = "target_preview"
-            if _is_solver_design_support_module_target(target_file):
-                budgeted["max_code_chars"] = min(
-                    _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
-                    _coerce_positive_int(
-                        budgeted.get("max_code_chars"),
-                        _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
-                    ),
-                )
-                if budgeted.get("detail") != "full":
-                    budgeted["detail"] = "full"
-                return budgeted
-            if budgeted.get("detail") != "full":
-                budgeted["detail"] = "full"
-            max_code_chars = budgeted.get("max_code_chars")
-            if max_code_chars is None:
-                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
-                return budgeted
-            try:
-                requested = int(max_code_chars)
-            except Exception:
-                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
-                return budgeted
-            if requested > _APS_CODE_SURFACE_READ_CODE_CHARS or requested < 0:
-                budgeted["max_code_chars"] = _APS_CODE_SURFACE_READ_CODE_CHARS
-            return budgeted
-        if budgeted.get("detail") != "compact":
-            budgeted["detail"] = "compact"
-        max_code_chars = budgeted.get("max_code_chars")
-        if max_code_chars is None:
-            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
-            return budgeted
-        try:
-            requested = int(max_code_chars)
-        except Exception:
-            return budgeted
-        if requested > _APS_SURFACE_READ_CODE_CHARS:
-            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
-        elif selection_source == "selected_surface_required" and requested < 0:
-            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
-        return budgeted
+        return _budgeted_tool_args(name, args, selection_source=selection_source)
 
     def _session_timeout_reached(self, state: AgenticProposalSessionState) -> bool:
         return (
@@ -3330,662 +3217,6 @@ def _evidence_from_observations(
         )
         for observation in observations
     ]
-
-
-def _filter_model_facing_tool_names(
-    tool_names: tuple[str, ...] | list[str],
-    context: ProposalToolContext,
-) -> tuple[str, ...]:
-    filtered: list[str] = []
-    for raw_name in tool_names:
-        name = str(raw_name or "").strip()
-        if not name:
-            continue
-        if name == _HOLDOUT_SUMMARY_TOOL:
-            # The direct tool remains available to deterministic callers, but
-            # model-facing planner prompts cannot safely render a tool name
-            # containing holdout terminology under strict sanitization.
-            continue
-        if name == "proposal.algorithm_smoke":
-            # This tool needs a completed patch; the session invokes it
-            # deterministically after code generation instead of exposing it to
-            # pre-code planning.
-            continue
-        filtered.append(name)
-    return tuple(dict.fromkeys(filtered))
-
-
-def _compact_feedback_observation_for_budget(
-    observation: ProposalObservation,
-) -> ProposalObservation:
-    if observation.is_error or observation.tool_name not in {
-        "feedback.query_screening",
-        "feedback.query_runtime",
-    }:
-        return observation
-    payload = observation.structured_payload
-    if not isinstance(payload, Mapping):
-        return observation
-    if observation.tool_name == "feedback.query_screening":
-        compact_payload = _compact_screening_feedback_payload(payload)
-    else:
-        compact_payload = _compact_runtime_feedback_payload(payload)
-    compact_observation = replace(
-        observation,
-        summary=_limit_string(observation.summary, 260) or "Returned compact feedback.",
-        structured_payload=compact_payload,
-        repair_hint=None,
-    )
-    if _json_size(_observation_prompt_payload(compact_observation)) <= _json_size(
-        _observation_prompt_payload(observation)
-    ):
-        return compact_observation
-    return observation
-
-
-def _compact_screening_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    rows = payload.get("screening_steps")
-    compact_rows = []
-    if isinstance(rows, list):
-        compact_rows = [
-            _compact_screening_step_for_budget(row)
-            for row in rows[:_APS_FEEDBACK_LIST_ITEMS]
-            if isinstance(row, Mapping)
-        ]
-    compact = _drop_empty_mapping(
-        {
-            "branch_id": payload.get("branch_id"),
-            "surface": payload.get("surface"),
-            "query_scope": _compact_feedback_value_for_budget(
-                payload.get("query_scope")
-            ),
-            "available_screening_step_count": payload.get(
-                "available_screening_step_count"
-            ),
-            "matched_screening_step_count": payload.get("matched_screening_step_count"),
-            "screening_steps": compact_rows,
-            "metrics_file_ref_exposed": False,
-            "payload_truncated": True,
-            "compacted_for_agentic_budget": True,
-        }
-    )
-    return _shrink_feedback_payload_to_target(compact)
-
-
-def _compact_runtime_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    attribution = payload.get("screening_runtime_attribution")
-    compact_attribution = []
-    if isinstance(attribution, list):
-        compact_attribution = [
-            _compact_runtime_attribution_for_budget(row)
-            for row in attribution[:_APS_FEEDBACK_LIST_ITEMS]
-            if isinstance(row, Mapping)
-        ]
-    compact = _drop_empty_mapping(
-        {
-            "branch_id": payload.get("branch_id"),
-            "surface": payload.get("surface"),
-            "query_scope": _compact_feedback_value_for_budget(
-                payload.get("query_scope")
-            ),
-            "runtime_feedback": _limit_string(
-                payload.get("runtime_feedback"),
-                _APS_FEEDBACK_TEXT_CHARS,
-            ),
-            "runtime_failure_guidance": _limit_string(
-                payload.get("runtime_failure_guidance"),
-                _APS_FEEDBACK_TEXT_CHARS,
-            ),
-            "screening_runtime_attribution": compact_attribution,
-            "research_diagnosis": _compact_research_diagnosis_for_budget(
-                payload.get("research_diagnosis")
-            ),
-            "screening_only": payload.get("screening_only"),
-            "metrics_file_refs_exposed": False,
-            "payload_truncated": True,
-            "compacted_for_agentic_budget": True,
-        }
-    )
-    return _shrink_feedback_payload_to_target(compact)
-
-
-def _compact_screening_step_for_budget(row: Mapping[str, Any]) -> dict[str, Any]:
-    return _drop_empty_mapping(
-        {
-            "round_num": row.get("round_num"),
-            "branch_id": row.get("branch_id"),
-            "surface": row.get("surface"),
-            "action": row.get("action"),
-            "target_file": row.get("target_file"),
-            "gate_outcome": row.get("gate_outcome"),
-            "reason_codes": _bounded_string_list(row.get("reason_codes"), limit=6),
-            "stats": _compact_eval_stats_for_budget(row.get("stats")),
-            "candidate_runtime_failure_categories": _compact_counts_for_budget(
-                row.get("candidate_runtime_failure_categories")
-            ),
-            "candidate_first_runtime_failure": _compact_feedback_value_for_budget(
-                row.get("candidate_first_runtime_failure")
-            ),
-            "candidate_runtime_stop_reasons": _compact_counts_for_budget(
-                row.get("candidate_runtime_stop_reasons")
-            ),
-            "candidate_surface_runtime_attribution": _compact_runtime_attribution_for_budget(
-                row.get("candidate_surface_runtime_attribution")
-            ),
-        }
-    )
-
-
-def _compact_runtime_attribution_for_budget(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    highlights = value.get("runtime_field_highlights")
-    compact_highlights = []
-    if isinstance(highlights, list):
-        compact_highlights = [
-            _compact_runtime_highlight_for_budget(highlight)
-            for highlight in highlights[: _APS_FEEDBACK_LIST_ITEMS * 2]
-            if isinstance(highlight, Mapping)
-        ]
-    return _drop_empty_mapping(
-        {
-            "round_num": value.get("round_num"),
-            "surface": value.get("surface"),
-            "target_file": value.get("target_file"),
-            "gate_outcome": value.get("gate_outcome"),
-            "reason_codes": _bounded_string_list(value.get("reason_codes"), limit=6),
-            "stats": _compact_eval_stats_for_budget(value.get("stats")),
-            "runtime_field_highlights": compact_highlights,
-        }
-    )
-
-
-def _compact_runtime_highlight_for_budget(value: Mapping[str, Any]) -> dict[str, Any]:
-    return _drop_empty_mapping(
-        {
-            "field": value.get("field"),
-            "present": value.get("present"),
-            "missing": value.get("missing"),
-            "empty": value.get("empty"),
-            "failed": value.get("failed"),
-            "numeric_summary": _compact_feedback_value_for_budget(
-                value.get("numeric_summary")
-            ),
-        }
-    )
-
-
-def _compact_research_diagnosis_for_budget(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    recent_steps = value.get("recent_screening_steps")
-    runtime_rows = value.get("runtime_signal_rows")
-    return _drop_empty_mapping(
-        {
-            "schema_version": value.get("schema_version"),
-            "screening_only": value.get("screening_only"),
-            "screening_step_count": value.get("screening_step_count"),
-            "reason_code_counts": _compact_counts_for_budget(
-                value.get("reason_code_counts")
-            ),
-            "surface_counts": _compact_counts_for_budget(value.get("surface_counts")),
-            "declared_solver_design_surfaces": _bounded_string_list(
-                value.get("declared_solver_design_surfaces"),
-                limit=6,
-            ),
-            "failed_solver_design_surfaces": _bounded_string_list(
-                value.get("failed_solver_design_surfaces"),
-                limit=6,
-            ),
-            "screening_failed_solver_design_surfaces": _bounded_string_list(
-                value.get("screening_failed_solver_design_surfaces"),
-                limit=6,
-            ),
-            "unselected_solver_design_surfaces": _bounded_string_list(
-                value.get("unselected_solver_design_surfaces"),
-                limit=6,
-            ),
-            "gate_outcome_counts": _compact_counts_for_budget(
-                value.get("gate_outcome_counts")
-            ),
-            "failure_mode_tags": _bounded_string_list(
-                value.get("failure_mode_tags"),
-                limit=8,
-            ),
-            "runtime_signal_rows": [
-                _compact_feedback_value_for_budget(row)
-                for row in (
-                    runtime_rows[:_APS_FEEDBACK_LIST_ITEMS]
-                    if isinstance(runtime_rows, list)
-                    else []
-                )
-            ],
-            "recent_screening_steps": [
-                _compact_screening_step_for_budget(row)
-                for row in (
-                    recent_steps[:_APS_FEEDBACK_LIST_ITEMS]
-                    if isinstance(recent_steps, list)
-                    else []
-                )
-                if isinstance(row, Mapping)
-            ],
-            "next_hypothesis_requirements": _bounded_string_list(
-                value.get("next_hypothesis_requirements"),
-                limit=6,
-            ),
-        }
-    )
-
-
-def _compact_eval_stats_for_budget(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    keys = (
-        "n_cases",
-        "wins",
-        "losses",
-        "ties",
-        "win_rate",
-        "median_delta",
-        "runtime_ratio_median",
-        "runtime_delta_median_ms",
-        "runtime_regression_rate",
-        "valid_pairs",
-        "failed_pairs",
-        "candidate_failed_pairs",
-    )
-    return _drop_empty_mapping({key: value.get(key) for key in keys})
-
-
-def _compact_counts_for_budget(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    compact: dict[str, Any] = {}
-    for index, (key, item) in enumerate(
-        sorted(value.items(), key=lambda pair: str(pair[0]))
-    ):
-        if index >= _APS_FEEDBACK_MAP_ITEMS:
-            compact["_truncated_items"] = len(value) - _APS_FEEDBACK_MAP_ITEMS
-            break
-        compact[str(key)] = item
-    return _drop_empty_mapping(compact)
-
-
-def _compact_feedback_value_for_budget(value: Any, *, depth: int = 0) -> Any:
-    if depth > 4:
-        return _limit_string(value, 200)
-    if isinstance(value, Mapping):
-        compact: dict[str, Any] = {}
-        for index, (key, item) in enumerate(value.items()):
-            if index >= _APS_FEEDBACK_MAP_ITEMS:
-                compact["_truncated_items"] = len(value) - _APS_FEEDBACK_MAP_ITEMS
-                break
-            compact[str(key)] = _compact_feedback_value_for_budget(
-                item,
-                depth=depth + 1,
-            )
-        return _drop_empty_mapping(compact)
-    if isinstance(value, tuple):
-        value = list(value)
-    if isinstance(value, list):
-        items = [
-            _compact_feedback_value_for_budget(item, depth=depth + 1)
-            for item in value[:_APS_FEEDBACK_LIST_ITEMS]
-        ]
-        if len(value) > _APS_FEEDBACK_LIST_ITEMS:
-            items.append({"_truncated_items": len(value) - _APS_FEEDBACK_LIST_ITEMS})
-        return items
-    if isinstance(value, str):
-        return _limit_string(value, max(200, _APS_FEEDBACK_TEXT_CHARS // (depth + 1)))
-    return value
-
-
-def _shrink_feedback_payload_to_target(payload: dict[str, Any]) -> dict[str, Any]:
-    if _json_size(payload) <= _APS_FEEDBACK_OBSERVATION_TARGET_CHARS:
-        return payload
-    shrunk = dict(payload)
-    if "runtime_feedback" in shrunk:
-        shrunk["runtime_feedback"] = _limit_string(shrunk.get("runtime_feedback"), 600)
-    if "runtime_failure_guidance" in shrunk:
-        shrunk["runtime_failure_guidance"] = _limit_string(
-            shrunk.get("runtime_failure_guidance"),
-            600,
-        )
-    for key in (
-        "screening_steps",
-        "screening_runtime_attribution",
-        "runtime_signal_rows",
-        "recent_screening_steps",
-    ):
-        value = shrunk.get(key)
-        if isinstance(value, list) and len(value) > 2:
-            shrunk[key] = value[:2] + [{"_truncated_items": len(value) - 2}]
-    if _json_size(shrunk) <= _APS_FEEDBACK_OBSERVATION_TARGET_CHARS:
-        return _drop_empty_mapping(shrunk)
-    return _drop_empty_mapping(
-        {
-            "branch_id": payload.get("branch_id"),
-            "surface": payload.get("surface"),
-            "query_scope": payload.get("query_scope"),
-            "available_screening_step_count": payload.get(
-                "available_screening_step_count"
-            ),
-            "matched_screening_step_count": payload.get("matched_screening_step_count"),
-            "screening_steps": _minimal_screening_rows_for_budget(
-                payload.get("screening_steps")
-            ),
-            "screening_only": payload.get("screening_only"),
-            "research_diagnosis": payload.get("research_diagnosis"),
-            "metrics_file_refs_exposed": False,
-            "metrics_file_ref_exposed": False,
-            "payload_truncated": True,
-            "compacted_for_agentic_budget": True,
-            "summary": "APS feedback payload was summarized to preserve preview budget.",
-        }
-    )
-
-
-def _minimal_screening_rows_for_budget(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    rows: list[dict[str, Any]] = []
-    for row in value[:2]:
-        if not isinstance(row, Mapping):
-            continue
-        rows.append(
-            _drop_empty_mapping(
-                {
-                    "round_num": row.get("round_num"),
-                    "surface": row.get("surface"),
-                    "target_file": row.get("target_file"),
-                    "gate_outcome": row.get("gate_outcome"),
-                    "reason_codes": _bounded_string_list(
-                        row.get("reason_codes"),
-                        limit=4,
-                    ),
-                    "stats": _compact_eval_stats_for_budget(row.get("stats")),
-                }
-            )
-        )
-    return rows
-
-
-def _observation_selection_payload(observation: ProposalObservation) -> dict[str, Any]:
-    return {
-        "observation_id": observation.observation_id,
-        "tool_name": observation.tool_name,
-        "observation_type": observation.observation_type,
-        "summary": _sanitize_agentic_value(observation.summary),
-        "is_error": observation.is_error,
-        "failure_code": _enum_value(observation.failure_code),
-        "exposure_level": _enum_value(observation.exposure_level),
-    }
-
-
-def _surface_names_from_observations(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> list[str]:
-    names: list[str] = []
-    for observation in observations:
-        if observation.is_error or observation.tool_name != "context.list_surfaces":
-            continue
-        surfaces = observation.structured_payload.get("surfaces", ())
-        if not isinstance(surfaces, (list, tuple)):
-            continue
-        for surface in surfaces:
-            if not isinstance(surface, Mapping):
-                continue
-            for key in ("id", "name"):
-                value = surface.get(key)
-                if value:
-                    names.append(str(value))
-    return list(dict.fromkeys(names))
-
-
-def _feedback_query_args(context: ProposalToolContext) -> dict[str, Any]:
-    args: dict[str, Any] = {}
-    if context.forced_surface:
-        args["surface"] = context.forced_surface
-    else:
-        active_boundary = [
-            str(surface or "").strip()
-            for surface in context.active_problem_boundary_surfaces
-            if str(surface or "").strip()
-        ]
-        if len(active_boundary) == 1:
-            args["surface"] = active_boundary[0]
-    return args
-
-
-def _has_feedback_screening_history(context: ProposalToolContext) -> bool:
-    forced_surface = str(context.forced_surface or "").strip()
-    for step in context.step_history:
-        if _step_stage_name(step) != "screening":
-            continue
-        if forced_surface and _step_surface_name(step) != forced_surface:
-            continue
-        return True
-    return False
-
-
-def _step_surface_name(step: Any) -> str:
-    hypothesis = getattr(step, "hypothesis", None)
-    return str(getattr(hypothesis, "change_locus", "") or "").strip()
-
-
-def _step_stage_name(step: Any) -> str:
-    protocol = getattr(step, "protocol_result", None)
-    stage = getattr(protocol, "stage", None)
-    value = getattr(stage, "value", stage)
-    return str(value or "").strip().lower()
-
-
-def _is_solver_design_support_module_target(target_file: Any) -> bool:
-    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
-    return normalized.startswith("policies/baseline_modules/") and normalized.endswith(
-        ".py"
-    )
-
-
-def _is_solver_design_algorithm_target(target_file: Any) -> bool:
-    normalized = str(target_file or "").replace("\\", "/").lstrip("/")
-    return normalized in {
-        "policies/baseline_algorithm.py",
-        "policies/solver_algorithm.py",
-    } or _is_solver_design_support_module_target(normalized)
-
-
-def _coerce_positive_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except Exception:
-        return default
-    return parsed if parsed > 0 else default
-
-
-def _observation_satisfies_compact_requirement(
-    context: ProposalToolContext | None,
-    observation: ProposalObservation,
-) -> bool:
-    if observation.is_error:
-        return False
-    if observation.tool_name == "feedback.query_screening":
-        return _screening_feedback_observation_has_rows(observation)
-    if observation.tool_name == "feedback.query_runtime":
-        return _runtime_feedback_observation_has_content(observation)
-    return True
-
-
-def _screening_feedback_observation_has_rows(
-    observation: ProposalObservation,
-) -> bool:
-    payload = observation.structured_payload
-    rows = payload.get("screening_steps") if isinstance(payload, Mapping) else None
-    return isinstance(rows, list) and bool(rows)
-
-
-def _runtime_feedback_observation_has_content(
-    observation: ProposalObservation,
-) -> bool:
-    payload = observation.structured_payload
-    if not isinstance(payload, Mapping):
-        return False
-    for key in ("runtime_feedback", "runtime_failure_guidance"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return True
-    attribution = payload.get("screening_runtime_attribution")
-    if isinstance(attribution, list) and bool(attribution):
-        return True
-    diagnosis = payload.get("research_diagnosis")
-    return isinstance(diagnosis, Mapping) and _research_diagnosis_has_signal(diagnosis)
-
-
-def _has_successful_surface_read(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    surface_name: str,
-) -> bool:
-    for observation in observations:
-        if observation.is_error or observation.tool_name != "context.read_surface":
-            continue
-        payload = observation.structured_payload
-        if not isinstance(payload, Mapping):
-            continue
-        surface = payload.get("surface")
-        if isinstance(surface, Mapping) and surface.get("name") == surface_name:
-            return True
-    return False
-
-
-def _has_successful_reusable_observation(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    tool_name: str,
-    args: Mapping[str, Any],
-    *,
-    forced_surface: str | None = None,
-) -> bool:
-    if tool_name in {"feedback.query_screening", "feedback.query_runtime"}:
-        requested_surface = str(args.get("surface") or forced_surface or "").strip()
-        requested_branch = str(args.get("branch_id") or "").strip()
-        for observation in observations:
-            if observation.tool_name != tool_name:
-                continue
-            if not _observation_satisfies_compact_requirement(None, observation):
-                continue
-            payload = observation.structured_payload
-            if not isinstance(payload, Mapping):
-                continue
-            observed_surface = str(payload.get("surface") or "").strip()
-            if (
-                requested_surface
-                and observed_surface
-                and observed_surface != requested_surface
-            ):
-                continue
-            observed_branch = str(payload.get("branch_id") or "").strip()
-            if requested_branch and observed_branch != requested_branch:
-                continue
-            return True
-        return False
-    if tool_name in _SINGLE_SUCCESS_OBSERVATION_TOOLS:
-        return any(
-            observation.tool_name == tool_name and not observation.is_error
-            for observation in observations
-        )
-    if tool_name != "context.read_surface":
-        return False
-    requested_surface = str(args.get("surface") or forced_surface or "").strip()
-    if not requested_surface:
-        return False
-    return _has_successful_surface_read(observations, requested_surface)
-
-
-def _has_successful_tool(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    tool_name: str,
-) -> bool:
-    return any(
-        observation.tool_name == tool_name and not observation.is_error
-        for observation in observations
-    )
-
-
-def _has_successful_code_phase_reusable_observation(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    tool_name: str,
-    args: Mapping[str, Any],
-    *,
-    hypothesis: HypothesisProposal,
-) -> bool:
-    if tool_name in {
-        "memory.query",
-        "feedback.query_screening",
-        "feedback.query_runtime",
-    }:
-        return False
-    if tool_name == "context.read_surface":
-        requested_surface = str(
-            args.get("surface") or hypothesis.change_locus or ""
-        ).strip()
-        requested_target = str(
-            args.get("target_file") or hypothesis.target_file or ""
-        ).strip()
-        return _has_code_phase_surface_read(
-            observations,
-            hypothesis,
-            surface=requested_surface,
-            target_file=requested_target or None,
-        )
-    return _has_successful_tool(observations, tool_name)
-
-
-def _has_code_phase_surface_read(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    hypothesis: HypothesisProposal,
-    *,
-    surface: str | None = None,
-    target_file: str | None = None,
-) -> bool:
-    expected_surface = str(surface or hypothesis.change_locus or "").strip()
-    expected_target = str(target_file or hypothesis.target_file or "").strip()
-    if not expected_surface:
-        return False
-    for observation in observations:
-        if observation.is_error or observation.tool_name != "context.read_surface":
-            continue
-        payload = observation.structured_payload
-        if not isinstance(payload, Mapping):
-            continue
-        observed_surface = payload.get("surface")
-        if not (
-            isinstance(observed_surface, Mapping)
-            and observed_surface.get("name") == expected_surface
-        ):
-            continue
-        if str(payload.get("detail") or "") != "full":
-            continue
-        observed_target = str(payload.get("target_file") or "").strip()
-        if expected_target and observed_target and observed_target != expected_target:
-            continue
-        artifact = payload.get("current_artifact")
-        if not isinstance(artifact, Mapping):
-            return True
-        if not bool(artifact.get("readable", True)):
-            continue
-        try:
-            max_chars = int(artifact.get("max_chars") or 0)
-        except (TypeError, ValueError):
-            max_chars = 0
-        required_chars = (
-            _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
-            if _is_solver_design_support_module_target(expected_target)
-            else _APS_CODE_SURFACE_READ_CODE_CHARS
-        )
-        if max_chars >= required_chars or not artifact.get(
-            "truncated"
-        ):
-            return True
-    return False
 
 
 def _patch_self_reported_unresolved_issue(patch: PatchProposal) -> str | None:

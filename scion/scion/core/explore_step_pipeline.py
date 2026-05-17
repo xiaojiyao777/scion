@@ -125,14 +125,19 @@ class ExploreStepPipeline:
     decision_reason_codes_for: Callable[[str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]]
     proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
+    get_current_round: Optional[Callable[[], int]] = None
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
         bid = branch.branch_id
-        rnum = self.increment_round()
-        self.increment_rounds_since_last_promote()
-
         pending = self.pending_hypotheses.pop(bid, None)
+        retry_attempt = pending is not None
+        if retry_attempt:
+            rnum = self._current_round_num()
+        else:
+            rnum = self.increment_round()
+            self.increment_rounds_since_last_promote()
+
         prior_failure: Optional[str] = None
 
         if pending is None:
@@ -171,13 +176,18 @@ class ExploreStepPipeline:
                         failure_stage="hypothesis_contract",
                         failure_detail=c_result_pending.failure_reason,
                         hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=self.proposal_session_ref_for(bid),
+                        proposal_session_ref=self._proposal_session_ref(
+                            bid,
+                            retry_attempt=retry_attempt,
+                            prior_failure=prior_failure,
+                        ),
                     )
                 )
                 return StepResult(
                     action="explore",
                     branch_id=bid,
                     reason="pending hypothesis re-failed contract gate",
+                    counts_toward_max_rounds=False,
                 )
             self.branch_hypotheses[bid] = hypothesis
         else:
@@ -200,7 +210,7 @@ class ExploreStepPipeline:
                         decision=None,
                         failure_stage="proposal",
                         failure_detail=failure_detail,
-                        proposal_session_ref=self.proposal_session_ref_for(bid),
+                        proposal_session_ref=self._proposal_session_ref(bid),
                     )
                 )
                 return StepResult(
@@ -245,7 +255,7 @@ class ExploreStepPipeline:
                         failure_stage="hypothesis_contract",
                         failure_detail=c_result.failure_reason,
                         hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=self.proposal_session_ref_for(bid),
+                        proposal_session_ref=self._proposal_session_ref(bid),
                     )
                 )
                 return StepResult(
@@ -304,13 +314,18 @@ class ExploreStepPipeline:
                     failure_stage="code_generation",
                     failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self.proposal_session_ref_for(bid),
+                    proposal_session_ref=self._proposal_session_ref(
+                        bid,
+                        retry_attempt=retry_attempt,
+                        prior_failure=prior_failure,
+                    ),
                 )
             )
             return StepResult(
                 action="explore",
                 branch_id=bid,
                 reason="code generation failed",
+                counts_toward_max_rounds=not retry_attempt,
             )
 
         p_result = self.contract_gate.validate_patch(
@@ -341,13 +356,18 @@ class ExploreStepPipeline:
                     failure_stage="patch_contract",
                     failure_detail=p_result.failure_reason,
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self.proposal_session_ref_for(bid),
+                    proposal_session_ref=self._proposal_session_ref(
+                        bid,
+                        retry_attempt=retry_attempt,
+                        prior_failure=prior_failure,
+                    ),
                 )
             )
             return StepResult(
                 action="explore",
                 branch_id=bid,
                 reason="patch contract failed",
+                counts_toward_max_rounds=not retry_attempt,
             )
 
         workspace = self.setup_workspace(branch)
@@ -371,13 +391,18 @@ class ExploreStepPipeline:
                     failure_stage="workspace",
                     failure_detail="workspace setup failed",
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self.proposal_session_ref_for(bid),
+                    proposal_session_ref=self._proposal_session_ref(
+                        bid,
+                        retry_attempt=retry_attempt,
+                        prior_failure=prior_failure,
+                    ),
                 )
             )
             return StepResult(
                 action="explore",
                 branch_id=bid,
                 reason="workspace setup failed",
+                counts_toward_max_rounds=not retry_attempt,
             )
 
         try:
@@ -410,13 +435,18 @@ class ExploreStepPipeline:
                     failure_stage="workspace",
                     failure_detail=f"apply_patch: {exc}",
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self.proposal_session_ref_for(bid),
+                    proposal_session_ref=self._proposal_session_ref(
+                        bid,
+                        retry_attempt=retry_attempt,
+                        prior_failure=prior_failure,
+                    ),
                 )
             )
             return StepResult(
                 action="explore",
                 branch_id=bid,
                 reason="apply_patch failed",
+                counts_toward_max_rounds=not retry_attempt,
             )
 
         champion = self.get_champion()
@@ -439,6 +469,8 @@ class ExploreStepPipeline:
                 vresult=vresult,
                 code_hash=code_hash,
                 champion_workspace=champ_ws,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
             )
             if verification_outcome.step_result is not None:
                 return verification_outcome.step_result
@@ -459,6 +491,7 @@ class ExploreStepPipeline:
                 action="skip",
                 branch_id=bid,
                 reason="stale_during_explore",
+                counts_toward_max_rounds=not retry_attempt,
             )
 
         self.branch_controller.next_stage(bid)
@@ -501,9 +534,15 @@ class ExploreStepPipeline:
                     bid,
                     protocol_result,
                 ),
-                proposal_session_ref=self.proposal_session_ref_for(bid),
+                proposal_session_ref=self._proposal_session_ref(
+                    bid,
+                    retry_attempt=retry_attempt,
+                    prior_failure=prior_failure,
+                ),
             )
         )
+        if retry_attempt:
+            result.counts_toward_max_rounds = False
         return result
 
     def _validate_hypothesis(self, hypothesis: HypothesisProposal) -> Any:
@@ -528,6 +567,8 @@ class ExploreStepPipeline:
         vresult: VerificationResult,
         code_hash: str,
         champion_workspace: str,
+        retry_attempt: bool = False,
+        prior_failure: Optional[str] = None,
     ) -> "_VerificationOutcome":
         bid = branch.branch_id
         severity = vresult.failure_severity or "light"
@@ -598,6 +639,8 @@ class ExploreStepPipeline:
                     h_record=h_record,
                     vresult=vresult,
                     archive_ref=archive_ref,
+                    retry_attempt=retry_attempt,
+                    prior_failure=prior_failure,
                 )
             )
             return _VerificationOutcome(
@@ -605,6 +648,7 @@ class ExploreStepPipeline:
                     action="explore",
                     branch_id=bid,
                     reason="verification failed (light)",
+                    counts_toward_max_rounds=not retry_attempt,
                 ),
                 code_hash=code_hash,
                 verification_result=vresult,
@@ -638,6 +682,8 @@ class ExploreStepPipeline:
                 h_record=h_record,
                 vresult=vresult,
                 archive_ref=archive_ref,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
             )
         )
         return _VerificationOutcome(
@@ -645,6 +691,7 @@ class ExploreStepPipeline:
                 action="explore",
                 branch_id=bid,
                 reason="verification failed (heavy)",
+                counts_toward_max_rounds=not retry_attempt,
             ),
             code_hash=code_hash,
             verification_result=vresult,
@@ -660,6 +707,8 @@ class ExploreStepPipeline:
         h_record: HypothesisRecord,
         vresult: VerificationResult,
         archive_ref: Optional[str],
+        retry_attempt: bool = False,
+        prior_failure: Optional[str] = None,
     ) -> StepRecord:
         return StepRecord(
             round_num=rnum,
@@ -675,8 +724,36 @@ class ExploreStepPipeline:
             verification_detail=build_verification_detail(vresult),
             code_archive_ref=archive_ref,
             hypothesis_id=h_record.hypothesis_id,
-            proposal_session_ref=self.proposal_session_ref_for(bid),
+            proposal_session_ref=self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            ),
         )
+
+    def _proposal_session_ref(
+        self,
+        branch_id: str,
+        *,
+        retry_attempt: bool = False,
+        prior_failure: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        ref = self.proposal_session_ref_for(branch_id)
+        if not retry_attempt:
+            return ref
+
+        retry_ref: dict[str, Any] = {"retry_attempt": True}
+        if prior_failure:
+            retry_ref["retry_prior_failure"] = prior_failure
+        if ref is None:
+            return retry_ref
+        return {**ref, **retry_ref}
+
+    def _current_round_num(self) -> int:
+        if self.get_current_round is not None:
+            return self.get_current_round()
+        owner = getattr(self.increment_round, "__self__", None)
+        return int(getattr(owner, "_round_num", 0))
 
     def _record_contract_failure(
         self,
