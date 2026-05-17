@@ -59,6 +59,7 @@ referenced, not copied into development prompts.
 - [Solver-design integration API repair, 2026-05-16](v0.4-solver-design-integration-api-repair-20260516.md)
 - [v3-aligned tools, boundary, and branch-context repair, 2026-05-17](v0.4-v3-tools-boundary-context-repair-20260517.md)
 - [v3 control-closure repair before live validation, 2026-05-17](v0.4-v3-control-closure-repair-20260517.md)
+- [v3 control-closure Sonnet 6R postrun analysis, 2026-05-17](v0.4-v3-control-closure-sonnet-6r-postrun-20260517.md)
 
 ## Related
 

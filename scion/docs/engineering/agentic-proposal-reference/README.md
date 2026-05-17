@@ -43,6 +43,9 @@ holdout detail, or smuggle free text into `DecisionFeatures`.
 - `04-scion-agentic-proposal-design-implications.md`: minimum viable Scion
   design, CVRP workflow, output schema, permission boundary, and extension
   points.
+- `05-claude-code-source-reference-for-scion-v3.md`: source-inspection-backed
+  reference for repairing Scion's active solver grounding, tool protocol,
+  structured patch output, patch-set graph validation, and context projection.
 
 ## Sources Read
 
@@ -86,6 +89,8 @@ Scion design/code-map documents read:
 
 ## Claude Code Source Read
 
-No Claude Code source under `/home/clawd/research/claude-code-src/src` was read
-for this reference. The available analysis documents were sufficient for the
-agent loop, tool model, context, memory, and coordination questions.
+Documents `01` through `04` were based on the analysis documents only. Document
+`05` includes source-inspection conclusions delegated to subagents, at the
+user's request, while preserving the Scion boundary that the main design work
+uses those findings as references rather than copying a general coding-agent
+execution model.
