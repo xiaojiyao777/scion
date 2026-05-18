@@ -67,7 +67,17 @@ def _sanitize_agentic_value(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_text = str(key)
-            if key_text in {"raw_metrics_ref", "case_ids", "seed_set", "pair_feedback"}:
+            if key_text in {
+                "artifact_path",
+                "audit_payload_json",
+                "internal_audit_payload",
+                "raw_metrics_path",
+                "raw_metrics_public_ref",
+                "raw_metrics_ref",
+                "case_ids",
+                "seed_set",
+                "pair_feedback",
+            }:
                 continue
             cleaned[key_text] = _sanitize_agentic_value(item)
         return cleaned

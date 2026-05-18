@@ -1059,7 +1059,7 @@ def _build_recent_objective_feedback(
     lines = ["## Recent Objective Feedback"]
     lines.append(
         f"Last screening outcome={last.gate_outcome}, "
-        f"win_rate={last.stats.win_rate:.2f}, "
+        f"case_win_rate={last.stats.win_rate:.2f}, "
         f"median_delta={last.stats.median_delta:.4f}."
     )
 
@@ -1312,7 +1312,7 @@ def _build_search_control_guidance(
         )
         lines.append(
             "- Solver-design plateau: recent full-algorithm candidates reached "
-            "screening with win_rate=0. Do not submit another shallow scheduler "
+            "screening with case_win_rate=0. Do not submit another shallow scheduler "
             "variant, budget tweak, or post-processing polish. The next hypothesis "
             "must name the failed mechanism pattern, explain why the new algorithm "
             "body is materially different, and either modify the stable algorithm "
@@ -1609,7 +1609,8 @@ def _build_experiment_history(
             pr = s.protocol_result
             st = pr.stats
             line += (
-                f"\n    screening: win_rate={st.win_rate:.2f}"
+                f"\n    screening: case_win_rate={st.win_rate:.2f}"
+                f"  gate_win_rate={st.win_rate:.2f}"
                 f"  median_delta={st.median_delta:.4f}"
                 f"  outcome={pr.gate_outcome}"
             )
@@ -2560,6 +2561,9 @@ def _surface_runtime_summary_note(protocol: Any) -> str:
         return ""
 
     candidates: list[tuple[tuple[int, int, str], str]] = []
+    guard_note = _telemetry_guard_summary_note(summary)
+    if guard_note:
+        candidates.append(((0, -1, "telemetry_guard"), guard_note))
     for field, field_summary in fields.items():
         if not isinstance(field_summary, dict):
             continue
@@ -2591,6 +2595,34 @@ def _surface_runtime_summary_note(protocol: Any) -> str:
     if not interesting:
         return ""
     return f"selected_surface_runtime[{surface}]=" + "; ".join(interesting)
+
+
+def _telemetry_guard_summary_note(summary: dict[str, Any]) -> str:
+    guard = summary.get("telemetry_guard")
+    if not isinstance(guard, dict):
+        return ""
+    failures = guard.get("failures")
+    warnings = guard.get("warnings")
+    parts: list[str] = []
+    if isinstance(failures, list) and failures:
+        codes = [
+            str(item.get("code"))
+            for item in failures
+            if isinstance(item, dict) and item.get("code")
+        ]
+        if codes:
+            parts.append("fail=" + ",".join(codes[:4]))
+    if isinstance(warnings, list) and warnings:
+        codes = [
+            str(item.get("code"))
+            for item in warnings
+            if isinstance(item, dict) and item.get("code")
+        ]
+        if codes:
+            parts.append("warn=" + ",".join(codes[:4]))
+    if not parts:
+        return ""
+    return "telemetry_guard(" + ";".join(parts) + ")"
 
 
 _SURFACE_RUNTIME_PRIORITY_SUFFIXES = (
@@ -2859,13 +2891,13 @@ def _build_what_worked_section(
             taxonomy=taxonomy,
             preferred_label=h.change_locus,
         )
-        tag = "(high screening win_rate)"
+        tag = "(high screening case_win_rate)"
         wr_str = ""
         if (
             s.protocol_result
             and s.protocol_result.stage == ExperimentStage.SCREENING
         ):
-            wr_str = f", wr={s.protocol_result.stats.win_rate:.2f}"
+            wr_str = f", case_wr={s.protocol_result.stats.win_rate:.2f}"
         lines.append(
             f"- {mechanism} ({h.change_locus}/{h.action}) {tag}{wr_str}: "
             f"{(h.hypothesis_text or '')[:100]}"
@@ -3143,6 +3175,16 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
         lines.append(f"complexity_claim: {hypothesis.complexity_claim}")
     if hypothesis.runtime_budget_strategy:
         lines.append(f"runtime_budget_strategy: {hypothesis.runtime_budget_strategy}")
+    expected_telemetry = getattr(hypothesis, "expected_telemetry", None)
+    if expected_telemetry:
+        lines.append(
+            "expected_telemetry: "
+            + json.dumps(
+                expected_telemetry,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
     if hypothesis.novelty_signature:
         lines.append(
             "hypothesis_metadata_novelty_signature: "

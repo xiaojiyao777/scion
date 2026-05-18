@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Mapping
 
 from scion.core.models import HypothesisProposal
@@ -12,6 +14,29 @@ from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
 from scion.proposal.tools import ProposalObservation, ProposalToolContext
 
 _HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
+_PLANNER_HIDDEN_PREVIEW_TOOLS = frozenset(
+    {
+        "proposal.schema_preview",
+        "proposal.target_permission_preview",
+        "proposal.contract_preview",
+        "proposal.algorithm_smoke",
+    }
+)
+_ACTIVE_SOLVER_TOOL_ALLOWLIST = frozenset(
+    {
+        "context.read_active_solver_design",
+        "context.read_solver_call_graph",
+        "context.list_algorithm_files",
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    }
+)
+_ACTIVE_SOLVER_FILE_READ_TOOLS = frozenset(
+    {
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    }
+)
 _CODE_PHASE_TOOL_ALLOWLIST = frozenset(
     {
         "context.list_surfaces",
@@ -24,12 +49,13 @@ _CODE_PHASE_TOOL_ALLOWLIST = frozenset(
         "feedback.query_screening",
         "feedback.query_runtime",
     }
-)
+) | _ACTIVE_SOLVER_TOOL_ALLOWLIST
 _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
     "context.list_surfaces",
     "context.read_problem",
     "context.read_branch_state",
     "memory.query",
+    *_ACTIVE_SOLVER_TOOL_ALLOWLIST,
 )
 _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
@@ -51,10 +77,10 @@ def _filter_model_facing_tool_names(
             # model-facing planner prompts cannot safely render a tool name
             # containing holdout terminology under strict sanitization.
             continue
-        if name == "proposal.algorithm_smoke":
-            # This tool needs a completed patch; the session invokes it
-            # deterministically after code generation instead of exposing it to
-            # pre-code planning.
+        if name in _PLANNER_HIDDEN_PREVIEW_TOOLS:
+            # Preview tools are deterministic gates over the approved
+            # hypothesis/patch. Planner exploration must not generate preview
+            # observations that can be mistaken for authoritative self-checks.
             continue
         filtered.append(name)
     return tuple(dict.fromkeys(filtered))
@@ -77,6 +103,21 @@ def _budgeted_tool_args(
     if name != "context.read_surface":
         return args
     budgeted = dict(args)
+    if selection_source == "code_phase_required_compact":
+        if budgeted.get("detail") != "compact":
+            budgeted["detail"] = "compact"
+        max_code_chars = budgeted.get("max_code_chars")
+        if max_code_chars is None:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+            return budgeted
+        try:
+            requested = int(max_code_chars)
+        except Exception:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+            return budgeted
+        if requested > _APS_SURFACE_READ_CODE_CHARS or requested < 0:
+            budgeted["max_code_chars"] = _APS_SURFACE_READ_CODE_CHARS
+        return budgeted
     if selection_source.startswith("code_phase"):
         target_file = str(budgeted.get("target_file") or "").strip()
         if _is_solver_design_algorithm_target(target_file):
@@ -124,9 +165,25 @@ def _budgeted_tool_args(
 
 
 def _observation_selection_payload(observation: ProposalObservation) -> dict[str, Any]:
+    structured_payload = _sanitize_agentic_value(observation.structured_payload)
+    digest_payload = {
+        "tool_name": observation.tool_name,
+        "observation_type": observation.observation_type,
+        "summary": observation.summary,
+        "structured_payload": structured_payload,
+    }
+    digest = hashlib.sha256(
+        json.dumps(digest_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
     return {
         "observation_id": observation.observation_id,
         "tool_name": observation.tool_name,
+        "source": {
+            "tool_call_id": observation.tool_call_id,
+            "artifact_ref": observation.artifact_ref,
+        },
+        "phase": "agentic_tool_selection",
+        "digest": digest,
         "observation_type": observation.observation_type,
         "summary": _sanitize_agentic_value(observation.summary),
         "is_error": observation.is_error,
@@ -153,6 +210,101 @@ def _surface_names_from_observations(
                 if value:
                     names.append(str(value))
     return list(dict.fromkeys(names))
+
+
+def _algorithm_file_path_guidance(
+    context: ProposalToolContext,
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation] = (),
+) -> dict[str, Any]:
+    from scion.proposal.tools.active_solver import algorithm_file_path_guidance
+
+    guidance = dict(algorithm_file_path_guidance(context))
+    observed_allowed_paths = _algorithm_file_paths_from_observations(observations)
+    if observed_allowed_paths:
+        guidance["allowed_file_paths"] = observed_allowed_paths
+        guidance["allowed_file_count"] = len(observed_allowed_paths)
+        guidance["allowed_paths_source"] = "existing_tool_observation"
+        guidance["example_file_path"] = observed_allowed_paths[0]
+    guidance.setdefault(
+        "sequence_rule",
+        (
+            "Call context.list_algorithm_files before context.read_algorithm_file "
+            "or context.read_algorithm_symbol, then pass one returned file_path."
+        ),
+    )
+    guidance.setdefault(
+        "surface_id_rule",
+        "solver_design is a research surface id; it is not a valid file_path.",
+    )
+    return guidance
+
+
+def _recommended_algorithm_file_path(
+    guidance: Mapping[str, Any],
+    preferred: Any = None,
+) -> str:
+    allowed_paths = [
+        str(path)
+        for path in guidance.get("allowed_file_paths", ())
+        if str(path or "").strip()
+    ]
+    preferred_path = str(preferred or "").replace("\\", "/").strip()
+    if preferred_path and preferred_path in set(allowed_paths):
+        return preferred_path
+    if allowed_paths:
+        return allowed_paths[0]
+    return "<file_path returned by context.list_algorithm_files>"
+
+
+def _algorithm_file_paths_from_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[str]:
+    for observation in reversed(tuple(observations)):
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if observation.tool_name == "context.list_algorithm_files":
+            paths = _file_paths_from_list_algorithm_files_payload(payload)
+            if paths:
+                return paths
+        if observation.tool_name in _ACTIVE_SOLVER_FILE_READ_TOOLS:
+            paths = _file_paths_from_algorithm_guidance_payload(payload)
+            if paths:
+                return paths
+    return []
+
+
+def _file_paths_from_list_algorithm_files_payload(
+    payload: Mapping[str, Any],
+) -> list[str]:
+    files = payload.get("files")
+    if not isinstance(files, (list, tuple)):
+        return []
+    paths: list[str] = []
+    for item in files:
+        if not isinstance(item, Mapping):
+            continue
+        path = str(item.get("file_path") or "").strip()
+        if path:
+            paths.append(path)
+    return list(dict.fromkeys(paths))
+
+
+def _file_paths_from_algorithm_guidance_payload(
+    payload: Mapping[str, Any],
+) -> list[str]:
+    for key in ("allowed_file_paths", "allowed_files"):
+        paths = payload.get(key)
+        if not isinstance(paths, (list, tuple)):
+            continue
+        cleaned = [
+            str(path).strip()
+            for path in paths
+            if str(path or "").strip()
+        ]
+        if cleaned:
+            return list(dict.fromkeys(cleaned))
+    return []
 
 
 def _has_successful_surface_read(

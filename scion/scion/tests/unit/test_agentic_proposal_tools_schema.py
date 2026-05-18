@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA, PatchProposalInput
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     AgenticProposalSession,
     AgenticProposalSessionState,
@@ -24,6 +25,20 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     json,
     replace,
 )
+
+
+def test_old_style_patch_json_is_accepted_without_transport_premise_check() -> None:
+    raw = {
+        "file_path": "policies/search_policy.py",
+        "action": "modify",
+        "code_content": "def choose():\n    return 1\n",
+    }
+
+    parsed = PatchProposalInput.model_validate(raw)
+
+    assert "premise_check" not in PATCH_PROPOSAL_SCHEMA.get("required", [])
+    assert parsed.premise_check == "supported"
+    assert parsed.file_path == raw["file_path"]
 
 
 def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(

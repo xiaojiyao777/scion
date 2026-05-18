@@ -539,7 +539,30 @@ def _compact_evidence_payload(surface: Any) -> dict[str, Any]:
         {
             "required_runtime_fields": _coerce_compact_list(
                 _attr(evidence, "required_runtime_fields", [])
-            )
+            ),
+            "optional_runtime_fields": _coerce_compact_list(
+                _attr(evidence, "optional_runtime_fields", [])
+            ),
+            "activity_runtime_fields": _coerce_compact_list(
+                _attr(evidence, "activity_runtime_fields", [])
+            ),
+            "activation_runtime_fields": _compact_mapping_payload(
+                _attr(evidence, "activation_runtime_fields", {})
+            ),
+            "effect_probe_runtime_fields": _coerce_compact_list(
+                _attr(evidence, "effect_probe_runtime_fields", [])
+            ),
+            "stage_budget_runtime_fields": _coerce_compact_list(
+                _attr(evidence, "stage_budget_runtime_fields", [])
+            ),
+            "fail_closed_on_zero_activity": _attr(
+                evidence, "fail_closed_on_zero_activity", False
+            ),
+            "fail_closed_on_stage_budget_starvation": _attr(
+                evidence,
+                "fail_closed_on_stage_budget_starvation",
+                False,
+            ),
         }
     )
 

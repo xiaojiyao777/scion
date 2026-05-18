@@ -259,6 +259,58 @@ def test_contract_gate_rejects_inert_solver_design_class_method(
     assert "inert_helpers" in c9e.detail
 
 
+def test_contract_gate_rejects_getattr_context_baseline_in_baseline_algorithm(
+    tmp_path: Path,
+) -> None:
+    baseline_path = "policies/baseline_algorithm.py"
+    gate, _codes = _gate_with_cvrp_champion(tmp_path, (baseline_path,))
+    code = (
+        "def solve(instance, rng, time_limit_sec, context):\n"
+        "    return getattr(context, 'baseline')(\n"
+        "        time_budget_sec=context.remaining_time()\n"
+        "    )\n"
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path=baseline_path,
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "getattr(context, 'baseline')" in c9.detail
+
+
+def test_contract_gate_rejects_context_baseline_alias_in_baseline_algorithm(
+    tmp_path: Path,
+) -> None:
+    baseline_path = "policies/baseline_algorithm.py"
+    gate, _codes = _gate_with_cvrp_champion(tmp_path, (baseline_path,))
+    code = (
+        "def solve(instance, rng, time_limit_sec, context):\n"
+        "    ctx = context\n"
+        "    run_baseline = ctx.baseline\n"
+        "    return run_baseline(time_budget_sec=context.remaining_time())\n"
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path=baseline_path,
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9 = next(check for check in result.checks if check.name == "C9_sensitive_api")
+    assert not c9.passed
+    assert "context.baseline alias" in c9.detail
+
+
 def test_contract_gate_allows_multimodule_scheduler_integration_edit(
     tmp_path: Path,
 ) -> None:
@@ -317,6 +369,104 @@ def test_contract_gate_allows_multimodule_scheduler_integration_edit(
         check for check in result.checks if check.name == "C9e_solver_design_integration"
     )
     assert c9e.passed
+
+
+def test_contract_gate_allows_same_patch_recombination_relative_import(
+    tmp_path: Path,
+) -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    recombination_path = "policies/baseline_modules/recombination.py"
+    gate, codes = _gate_with_cvrp_champion(tmp_path, (scheduler_path,))
+    recombination_code = (
+        "class _ElitePool:\n"
+        "    pass\n\n"
+        "_MAX_CALLS = 1\n\n"
+        "def _try_recombination(solution, instance, rng, elite_pool, max_calls):\n"
+        "    return solution\n"
+    )
+    scheduler_code = codes[scheduler_path].replace(
+        "from .local_search import _default_vns_operators, _vns\n",
+        "from .local_search import _default_vns_operators, _vns\n"
+        "from .recombination import _ElitePool, _try_recombination, _MAX_CALLS\n",
+        1,
+    ).replace(
+        "        best = current.copy()\n",
+        "        best = current.copy()\n"
+        "        best = _try_recombination(\n"
+        "            best, instance, rng, _ElitePool(), _MAX_CALLS\n"
+        "        )\n",
+        1,
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path=recombination_path,
+            action="create",
+            code_content=recombination_code,
+            additional_changes=(
+                SimpleNamespace(
+                    file_path=scheduler_path,
+                    action="modify",
+                    code_content=scheduler_code,
+                ),
+            ),
+        ),
+        selected_surface="solver_design",
+    )
+
+    c8 = next(
+        check
+        for check in result.checks
+        if check.name == "additional_changes[0].C8_import_whitelist"
+    )
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert c8.passed
+    assert c9e.passed
+
+
+def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c9e(
+    tmp_path: Path,
+) -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    recombination_path = "policies/baseline_modules/recombination.py"
+    gate, codes = _gate_with_cvrp_champion(tmp_path, (scheduler_path,))
+    scheduler_code = codes[scheduler_path].replace(
+        "from .local_search import _default_vns_operators, _vns\n",
+        "from .local_search import _default_vns_operators, _vns\n"
+        "from .recombination import _missing_recombination\n",
+        1,
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path=recombination_path,
+            action="create",
+            code_content="def _try_recombination(solution):\n    return solution\n",
+            additional_changes=(
+                SimpleNamespace(
+                    file_path=scheduler_path,
+                    action="modify",
+                    code_content=scheduler_code,
+                ),
+            ),
+        ),
+        selected_surface="solver_design",
+    )
+
+    c8 = next(
+        check
+        for check in result.checks
+        if check.name == "additional_changes[0].C8_import_whitelist"
+    )
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert c8.passed
+    assert not c9e.passed
+    assert "missing_import_symbols" in c9e.detail
+    assert "_missing_recombination" in c9e.detail
 
 
 def test_contract_gate_rejects_scheduler_additional_change_added_time_budget_loop(

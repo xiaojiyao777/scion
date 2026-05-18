@@ -5,6 +5,7 @@ import os
 import statistics
 import uuid as _uuid_mod
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional, Sequence, TYPE_CHECKING
 
@@ -30,6 +31,7 @@ from scion.runtime.audit import (
     normalize_surface_name,
     runtime_audit_failure_from_result,
 )
+from scion.runtime.telemetry_guard import build_telemetry_guard_summary
 
 if TYPE_CHECKING:
     from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
@@ -413,6 +415,7 @@ class ExperimentProtocol:
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
+        expected_telemetry: Mapping[str, Any] | None = None,
     ) -> ProtocolResult:
         """Execute paired A/B evaluation for the given stage.
 
@@ -463,6 +466,9 @@ class ExperimentProtocol:
             "solver_algorithm_baseline_errors": 0,
         }
         candidate_runtime_stop_reasons: dict[str, int] = {}
+        candidate_guard_runtimes: list[Mapping[str, Any]] = []
+        champion_guard_runtimes: list[Mapping[str, Any]] = []
+        candidate_telemetry_guard_summary: dict[str, Any] = {}
         normalized_selected_surface = normalize_surface_name(selected_surface) or None
         surface_required_runtime_fields = declared_surface_required_runtime_fields(
             self._problem_spec,
@@ -492,9 +498,13 @@ class ExperimentProtocol:
                             runtime_deltas_ms,
                         ),
                         "candidate_surface_runtime_summary": (
-                            _finalize_surface_runtime_summary(
-                                candidate_surface_runtime_summary
+                            _surface_runtime_summary_with_guard(
+                                candidate_surface_runtime_summary,
+                                candidate_telemetry_guard_summary,
                             )
+                        ),
+                        "candidate_telemetry_guard_summary": (
+                            candidate_telemetry_guard_summary
                         ),
                         "complete": complete,
                         "pairs": raw_pairs,
@@ -552,6 +562,8 @@ class ExperimentProtocol:
                     champ_r,
                     candidate_required_runtime_fields=surface_required_runtime_fields,
                 )
+                _append_guard_runtime(candidate_guard_runtimes, cand_r)
+                _append_guard_runtime(champion_guard_runtimes, champ_r)
                 _record_runtime_sample(
                     runtime_fields,
                     runtime_ratios,
@@ -944,8 +956,32 @@ class ExperimentProtocol:
                     reason_codes.append("CHAMPION_RUNTIME_FAILURE")
                 gate = GateResult(outcome="fail", reason_codes=tuple(reason_codes))
 
+        candidate_telemetry_guard_summary = build_telemetry_guard_summary(
+            candidate_runtimes=candidate_guard_runtimes,
+            champion_runtimes=champion_guard_runtimes,
+            problem_spec=self._problem_spec,
+            selected_surface=normalized_selected_surface,
+            expected_telemetry=expected_telemetry,
+        )
+        telemetry_guard_failures = candidate_telemetry_guard_summary.get("failures")
+        if isinstance(telemetry_guard_failures, list) and telemetry_guard_failures:
+            guard_codes = tuple(
+                str(item.get("code") or "TELEMETRY_GUARD_FAILED")
+                for item in telemetry_guard_failures
+                if isinstance(item, Mapping)
+            )
+            gate = GateResult(
+                outcome="fail",
+                reason_codes=(
+                    *tuple(gate.reason_codes),
+                    "TELEMETRY_GUARD_FAILED",
+                    *guard_codes[:3],
+                ),
+            )
+
         # Persist final raw metrics snapshot.
         _write_metrics_snapshot(complete=True)
+        pair_counts = _pair_feedback_counts(all_pair_feedback)
         runtime_summary = _format_runtime_summary(stats)
         failure_category_summary = _format_runtime_failure_categories(
             candidate_runtime_categories
@@ -979,14 +1015,23 @@ class ExperimentProtocol:
             " candidate_solver_algorithm_errors="
             f"{candidate_runtime_counters['solver_algorithm_errors']}"
         )
+        telemetry_guard_summary = _format_telemetry_guard_summary(
+            candidate_telemetry_guard_summary
+        )
 
         # Exposure control
         if stage == ExperimentStage.SCREENING:
             exposed = (
-                f"stage={stage.value} win_rate={stats.win_rate:.2f} "
+                f"stage={stage.value} case_win_rate={stats.win_rate:.2f} "
+                f"gate_win_rate={stats.win_rate:.2f} "
+                f"pair_win_rate={pair_counts['win_rate']:.2f} "
+                f"pair_wins={pair_counts['wins']} "
+                f"pair_losses={pair_counts['losses']} "
+                f"pair_ties={pair_counts['ties']} "
                 f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
                 f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
                 f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
+                f"{telemetry_guard_summary}"
             )
         else:
             # Validation / Frozen: aggregate summary only, no per-case data
@@ -997,6 +1042,7 @@ class ExperimentProtocol:
                 f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
                 f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
                 f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
+                f"{telemetry_guard_summary}"
             )
 
         # Build case-level feedback for screening only
@@ -1019,8 +1065,9 @@ class ExperimentProtocol:
             case_feedback=case_fb,
             pattern_summary=pattern,
             selected_surface=normalized_selected_surface or selected_surface,
-            candidate_surface_runtime_summary=_finalize_surface_runtime_summary(
-                candidate_surface_runtime_summary
+            candidate_surface_runtime_summary=_surface_runtime_summary_with_guard(
+                candidate_surface_runtime_summary,
+                candidate_telemetry_guard_summary,
             ),
             candidate_runtime_failure_categories=dict(candidate_runtime_categories),
             candidate_first_runtime_failure=candidate_first_runtime_failure,
@@ -1269,6 +1316,15 @@ def _runtime_fields(
     return fields
 
 
+def _append_guard_runtime(
+    target: list[Mapping[str, Any]],
+    result: RunResult | None,
+) -> None:
+    runtime = getattr(getattr(result, "output", None), "runtime", None)
+    if isinstance(runtime, Mapping):
+        target.append(runtime)
+
+
 def _runtime_audit_summary(
     result: RunResult | None,
     *,
@@ -1425,6 +1481,21 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
             for field, field_summary in fields.items()
         },
     }
+
+
+def _surface_runtime_summary_with_guard(
+    summary: dict[str, Any],
+    telemetry_guard: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = _finalize_surface_runtime_summary(summary)
+    if telemetry_guard and (
+        payload
+        or telemetry_guard.get("expected_telemetry_present")
+        or telemetry_guard.get("failures")
+        or telemetry_guard.get("warnings")
+    ):
+        payload["telemetry_guard"] = dict(telemetry_guard)
+    return payload
 
 
 def _surface_runtime_numeric_summary(values: dict[str, int]) -> dict[str, Any]:
@@ -1670,6 +1741,52 @@ def _format_runtime_summary(stats: EvalStats) -> str:
         f"runtime_delta_median_ms={delta} "
         f"runtime_regression_rate={regression}"
     )
+
+
+def _format_telemetry_guard_summary(summary: Mapping[str, Any]) -> str:
+    if not summary:
+        return ""
+    if not (
+        summary.get("selected_surface")
+        or summary.get("expected_telemetry_present")
+        or summary.get("failures")
+        or summary.get("warnings")
+    ):
+        return ""
+    failures = summary.get("failures")
+    warnings = summary.get("warnings")
+    failure_codes = [
+        str(item.get("code"))
+        for item in failures or []
+        if isinstance(item, Mapping) and item.get("code")
+    ]
+    warning_codes = [
+        str(item.get("code"))
+        for item in warnings or []
+        if isinstance(item, Mapping) and item.get("code")
+    ]
+    if not failure_codes and not warning_codes:
+        return " telemetry_guard=pass"
+    parts = []
+    if failure_codes:
+        parts.append("failures=" + ",".join(failure_codes[:4]))
+    if warning_codes:
+        parts.append("warnings=" + ",".join(warning_codes[:4]))
+    return " telemetry_guard=" + ";".join(parts)
+
+
+def _pair_feedback_counts(pairs: Sequence[PairwiseCaseFeedback]) -> dict[str, Any]:
+    wins = sum(1 for pair in pairs if pair.comparison == "win")
+    losses = sum(1 for pair in pairs if pair.comparison == "loss")
+    ties = len(pairs) - wins - losses
+    total = wins + losses + ties
+    return {
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "total": total,
+        "win_rate": wins / total if total else 0.0,
+    }
 
 
 def _aggregate_pairs_to_case_level(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -28,6 +28,7 @@ class HypothesisProposalInput(BaseModel):
     target_runtime_effect: Optional[str] = None
     complexity_claim: Optional[str] = None
     runtime_budget_strategy: Optional[str] = None
+    expected_telemetry: Dict[str, Any] = Field(default_factory=dict)
     novelty_signature: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("hypothesis_text", "change_locus")
@@ -66,7 +67,98 @@ class PatchFileChangeInput(BaseModel):
         return v
 
 
-class PatchProposalInput(PatchFileChangeInput):
+PremiseCheck = Literal["supported", "contradicted", "duplicate", "wrong_owner"]
+
+
+def normalize_patch_output_with_repair_attribution(
+    raw: Mapping[str, Any],
+) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
+    """Normalize host-repairable patch output shape issues and record why."""
+
+    normalized = dict(raw)
+    repairs: list[dict[str, Any]] = []
+    if "additional_changes" not in normalized:
+        return normalized, ()
+
+    value = normalized.get("additional_changes")
+    if value in (None, ""):
+        normalized["additional_changes"] = []
+        repairs.append(
+            {
+                "field": "additional_changes",
+                "repair_kind": "host_mechanical_normalization",
+                "root_cause": "empty_or_null",
+                "action": "normalized_to_empty_array",
+            }
+        )
+        return normalized, tuple(repairs)
+
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return normalized, ()
+        if isinstance(parsed, list):
+            normalized["additional_changes"] = parsed
+            value = parsed
+            repairs.append(
+                {
+                    "field": "additional_changes",
+                    "repair_kind": "host_mechanical_normalization",
+                    "root_cause": "json_string_array",
+                    "action": "parsed_json_string_to_array",
+                }
+            )
+        else:
+            return normalized, tuple(repairs)
+
+    if isinstance(value, list):
+        compacted: list[Any] = []
+        removed_empty = 0
+        removed_duplicates = 0
+        seen: set[str] = set()
+        for item in value:
+            if item in (None, "", {}):
+                removed_empty += 1
+                continue
+            fingerprint = json.dumps(item, sort_keys=True, default=str)
+            if fingerprint in seen:
+                removed_duplicates += 1
+                continue
+            seen.add(fingerprint)
+            compacted.append(item)
+        if removed_empty:
+            repairs.append(
+                {
+                    "field": "additional_changes",
+                    "repair_kind": "host_mechanical_normalization",
+                    "root_cause": "empty_or_null_item",
+                    "action": "dropped_empty_items",
+                    "count": removed_empty,
+                }
+            )
+        if removed_duplicates:
+            repairs.append(
+                {
+                    "field": "additional_changes",
+                    "repair_kind": "host_mechanical_normalization",
+                    "root_cause": "exact_duplicate_item",
+                    "action": "deduplicated_exact_items",
+                    "count": removed_duplicates,
+                }
+            )
+        if removed_empty or removed_duplicates:
+            normalized["additional_changes"] = compacted
+    return normalized, tuple(repairs)
+
+
+class PatchProposalInput(BaseModel):
+    premise_check: PremiseCheck = "supported"
+    premise_check_reason: str = ""
+    file_path: str = ""
+    action: str = "modify"
+    code_content: str = ""
+    test_hint: Optional[str] = None
     additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
 
     @field_validator("additional_changes", mode="before")
@@ -89,7 +181,19 @@ class PatchProposalInput(PatchFileChangeInput):
         return parsed
 
     @model_validator(mode="after")
-    def additional_changes_have_unique_paths(self) -> "PatchProposalInput":
+    def validate_supported_patch_fields(self) -> "PatchProposalInput":
+        if self.premise_check != "supported":
+            return self
+        if not self.file_path or not self.file_path.strip():
+            raise ValueError("file_path must not be empty")
+        if self.action != "delete" and (
+            not self.code_content or not self.code_content.strip()
+        ):
+            raise ValueError("code_content must not be empty")
+        if self.action not in ("modify", "create", "delete"):
+            raise ValueError(
+                f"action must be modify/create/delete, got '{self.action}'"
+            )
         paths = [
             self.file_path,
             *[change.file_path for change in self.additional_changes],
@@ -200,6 +304,17 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": ["string", "null"],
             "description": "How the implementation should bound solve time, e.g. top-k candidates, sampling, early exit, or bounded neighborhoods.",
         },
+        "expected_telemetry": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": (
+                "Structured runtime telemetry probes expected to show candidate "
+                "activity or effect. Keys should be categories such as "
+                "activity, activation, effect, and budget; values must be "
+                "runtime telemetry field names declared by the selected "
+                "research surface evidence contract."
+            ),
+        },
         "novelty_signature": {
             "type": "object",
             "additionalProperties": True,
@@ -212,6 +327,17 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "required": ["file_path", "action", "code_content"],
     "properties": {
+        "premise_check": {
+            "type": "string",
+            "enum": ["supported", "contradicted", "duplicate", "wrong_owner"],
+            "description": (
+                "Return supported only when the approved hypothesis is still "
+                "valid, novel, and owned by this target. For contradicted, "
+                "duplicate, or wrong_owner, provide premise_check_reason and "
+                "do not generate a patch."
+            ),
+        },
+        "premise_check_reason": {"type": "string"},
         "file_path": {"type": "string"},
         "action": {
             "type": "string",
@@ -285,6 +411,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
+        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
@@ -403,6 +530,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `target_runtime_effect` to the expected runtime impact (improve/neutral/risk/unknown or short text)
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
+- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{
@@ -416,7 +544,13 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
   "suggested_weight": <sampling weight 0.0–1.0 or null>,
   "target_runtime_effect": "<expected runtime effect or null>",
   "complexity_claim": "<complexity/candidate-bound claim or null>",
-  "runtime_budget_strategy": "<runtime budget strategy or null>"
+  "runtime_budget_strategy": "<runtime budget strategy or null>",
+  "expected_telemetry": {{
+    "activity": ["<declared runtime counter expected to be positive>"],
+    "activation": ["<declared runtime field proving the mechanism ran>"],
+    "effect": ["<declared runtime field proving the claimed effect>"],
+    "budget": ["<declared runtime field proving stage budget was not starved>"]
+  }}
 }}
 """
 
@@ -469,6 +603,8 @@ Produce the complete file content that implements the hypothesis.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
+  "premise_check": "supported" | "contradicted" | "duplicate" | "wrong_owner",
+  "premise_check_reason": "<brief reason when not supported, otherwise empty>",
   "file_path": "<relative path within workspace, e.g. operators/my_operator.py>",
   "action": "modify" | "create" | "delete",
   "code_content": "<complete file contents as a single string>",
@@ -515,6 +651,8 @@ Make only the minimal changes needed to fix the reported failure.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
+  "premise_check": "supported",
+  "premise_check_reason": "",
   "file_path": "<same relative path as original>",
   "action": "modify" | "create" | "delete",
   "code_content": "<complete corrected file contents>",

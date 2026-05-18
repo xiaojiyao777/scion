@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scion.evidence.final_evidence_refs import (
+    FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+    FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
+    FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
+    FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL,
+    build_final_evidence_closure_refs,
+)
 from scion.evidence.formal_readiness import validate_formal_readiness
 
 
@@ -32,6 +39,36 @@ def test_no_final_evidence_refs_is_not_formal_ready() -> None:
 
     assert report.formal_ready is False
     assert report.missing == ("final_evidence_refs",)
+    assert report.status == "missing_final_evidence_refs"
+
+
+def test_non_formal_closure_is_closed_without_missing_package() -> None:
+    refs = build_final_evidence_closure_refs(
+        reason="short stress validation completed without formal final evaluation",
+        reason_code=FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+    )
+
+    report = validate_formal_readiness(refs)
+
+    assert report.formal_ready is False
+    assert report.missing == ()
+    assert report.status == FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED
+    assert report.reason_code == FINAL_EVIDENCE_REASON_NORMAL_COMPLETION
+
+
+def test_pending_external_closure_still_requires_formal_package() -> None:
+    refs = build_final_evidence_closure_refs(
+        reason="formal final evaluation has not run",
+        reason_code=FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
+        status=FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL,
+        required_for_formal_readiness=True,
+    )
+
+    report = validate_formal_readiness(refs)
+
+    assert report.formal_ready is False
+    assert report.missing == ("final_evidence_refs.package",)
+    assert report.status == "missing_final_evidence_package"
 
 
 def test_missing_one_required_artifact_is_not_formal_ready(tmp_path: Path) -> None:
@@ -42,6 +79,7 @@ def test_missing_one_required_artifact_is_not_formal_ready(tmp_path: Path) -> No
 
     assert report.formal_ready is False
     assert report.missing == ("final_quality.artifacts.runtime_summary",)
+    assert report.status == "incomplete_final_evidence_package"
 
 
 def test_complete_final_evidence_package_is_formal_ready(tmp_path: Path) -> None:
@@ -51,5 +89,5 @@ def test_complete_final_evidence_package_is_formal_ready(tmp_path: Path) -> None
 
     assert report.formal_ready is True
     assert report.missing == ()
+    assert report.status == "formal_ready"
     assert report.refs == refs
-

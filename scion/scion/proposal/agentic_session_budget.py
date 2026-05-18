@@ -125,7 +125,9 @@ def _should_deny_optional_tool_for_budget(
 ) -> bool:
     if name != "context.read_surface":
         return False
-    if selection_source in {"selected_surface_required", "code_phase_required"}:
+    if selection_source == "selected_surface_required" or selection_source.startswith(
+        "code_phase_required"
+    ):
         return False
     return (
         _remaining_observation_chars(config, state)

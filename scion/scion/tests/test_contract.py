@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
 
 from scion.config.problem import ProblemSpec, SearchSpace, SolverConfig
 from scion.contract.gate import ContractGate
@@ -105,6 +106,50 @@ class TestC1Schema:
         result = gate.validate_hypothesis(h, [], [])
         c1 = next(c for c in result.checks if c.name == "C1_schema")
         assert not c1.passed
+
+
+def test_hypothesis_expected_telemetry_must_use_declared_surface_fields():
+    spec = make_spec(
+        categories=("solver",),
+        editable=("policies/*.py",),
+        frozen=(),
+    )
+    object.__setattr__(
+        spec,
+        "research_surfaces",
+        [
+            SimpleNamespace(
+                name="solver",
+                kind="solver_design",
+                target_files=["policies/solver.py"],
+                evidence=SimpleNamespace(
+                    required_runtime_fields=[
+                        "solver_loaded",
+                        "solver_active",
+                        "solver_errors",
+                        "solver_search_iterations",
+                    ],
+                ),
+            )
+        ],
+    )
+    gate = ContractGate(spec)
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Run a bounded search loop.",
+        change_locus="solver",
+        action="modify",
+        target_file="policies/solver.py",
+        expected_telemetry={"activity": ["missing_search_iterations"]},
+    )
+
+    result = gate.validate_hypothesis(hypothesis, [], [])
+
+    assert result.passed is False
+    c11 = next(
+        check for check in result.checks if check.name == "C11_expected_telemetry"
+    )
+    assert c11.passed is False
+    assert "undeclared runtime field" in c11.detail
 
 
 # ---------------------------------------------------------------------------
@@ -546,6 +591,33 @@ class TestC9SensitiveApi:
         assert not c9.passed
         assert "__import__" in c9.detail
 
+    def test_dynamic_import_alias_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        imp = __import__\n"
+            "        return imp('os').system('true')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "__import__" in c9.detail
+
+    def test_dynamic_import_result_alias_is_blocked(self, gate: ContractGate):
+        code = (
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        imp = __import__\n"
+            "        mod = imp('os')\n"
+            "        return mod.system('true')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "dynamic_import.system" in c9.detail
+
     def test_importlib_import_module_is_blocked(self, gate: ContractGate):
         code = (
             "import importlib\n"
@@ -558,6 +630,63 @@ class TestC9SensitiveApi:
         c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
         assert not c9.passed
         assert "importlib.import_module" in c9.detail
+
+    def test_importlib_import_module_alias_is_blocked(self, gate: ContractGate):
+        code = (
+            "import importlib\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        dyn = importlib.import_module\n"
+            "        return dyn('os').system('true')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "importlib.import_module" in c9.detail
+
+    def test_os_system_callable_alias_is_blocked(self, gate: ContractGate):
+        code = (
+            "import os\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        run = os.system\n"
+            "        return run('true')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "os.system" in c9.detail
+
+    def test_literal_reflective_os_system_is_blocked(self, gate: ContractGate):
+        code = (
+            "import os\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return getattr(os, 'system')('true')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "getattr(os, 'system')" in c9.detail
+
+    def test_literal_reflective_importlib_import_module_is_blocked(
+        self,
+        gate: ContractGate,
+    ):
+        code = (
+            "import importlib\n"
+            "class Op:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return getattr(importlib, 'import_module')('math')\n"
+        )
+        patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "getattr(importlib, 'import_module')" in c9.detail
 
     def test_reflective_dynamic_getattr_is_blocked(self, gate: ContractGate):
         code = (
@@ -584,6 +713,26 @@ class TestC9SensitiveApi:
         c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
         assert not c9.passed
         assert "os.environ" in c9.detail
+
+    def test_context_baseline_getattr_alias_is_blocked(self, gate: ContractGate):
+        gate = ContractGate(
+            make_spec(editable=("operators/*.py", "policies/baseline_algorithm.py"))
+        )
+        code = (
+            "def solve(context):\n"
+            "    get = getattr\n"
+            "    run_baseline = get(context, 'baseline')\n"
+            "    return run_baseline(time_limit_sec=0.1)\n"
+        )
+        patch = PatchProposal(
+            file_path="policies/baseline_algorithm.py",
+            action="modify",
+            code_content=code,
+        )
+        result = gate.validate_patch(patch)
+        c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
+        assert not c9.passed
+        assert "context.baseline alias" in c9.detail
 
 
 # ---------------------------------------------------------------------------

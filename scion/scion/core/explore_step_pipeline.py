@@ -25,6 +25,10 @@ from scion.core.verification_call import run_verification_gate
 
 logger = logging.getLogger(__name__)
 
+_AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
+_PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
+_AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
+
 
 def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
     return HypothesisProposal(
@@ -36,6 +40,27 @@ def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
         target_weakness="proposal_generation",
         expected_effect="no candidate generated",
     )
+
+
+def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
+    text = str(detail or "")
+    return (
+        _AGENT_QUALITY_BLOCKED in text
+        or _PROPOSAL_PREMISE_CONTRADICTED in text
+        or _AGENT_GROUNDING_FAILURE in text
+    )
+
+
+def _proposal_failure_stage(detail: str | None, default: str) -> str:
+    if _is_agent_quality_blocked_detail(detail):
+        return _AGENT_QUALITY_BLOCKED
+    return default
+
+
+def _proposal_failure_reason(detail: str | None, default: str) -> str:
+    if _is_agent_quality_blocked_detail(detail):
+        return _AGENT_QUALITY_BLOCKED
+    return default
 
 
 def _is_candidate_scoped_heavy_failure(
@@ -126,6 +151,7 @@ class ExploreStepPipeline:
     proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: None
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
     get_current_round: Optional[Callable[[], int]] = None
+    persist_branch_state: Callable[[str], None] = lambda _branch_id: None
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
@@ -208,7 +234,10 @@ class ExploreStepPipeline:
                         verification_passed=False,
                         protocol_result=None,
                         decision=None,
-                        failure_stage="proposal",
+                        failure_stage=_proposal_failure_stage(
+                            failure_detail,
+                            "proposal",
+                        ),
                         failure_detail=failure_detail,
                         proposal_session_ref=self._proposal_session_ref(bid),
                     )
@@ -216,7 +245,10 @@ class ExploreStepPipeline:
                 return StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason="hypothesis generation failed",
+                    reason=_proposal_failure_reason(
+                        failure_detail,
+                        "hypothesis generation failed",
+                    ),
                 )
             if h_record is None:
                 raise RuntimeError(
@@ -279,12 +311,17 @@ class ExploreStepPipeline:
                 len(patch.code_content or ""),
             )
             if prior_failure is not None:
-                branch.pending_retry = False
-                branch.consecutive_llm_retries = 0
+                self._mark_code_generation_recovered(branch, h_record)
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
-            if prior_failure is not None:
+            quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
+            if quality_blocked:
+                branch.pending_retry = False
+                branch.consecutive_llm_retries = 0
+                self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+                failure_detail = detailed_failure or _AGENT_QUALITY_BLOCKED
+            elif prior_failure is not None:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
@@ -311,7 +348,10 @@ class ExploreStepPipeline:
                     verification_passed=False,
                     protocol_result=None,
                     decision=None,
-                    failure_stage="code_generation",
+                    failure_stage=_proposal_failure_stage(
+                        failure_detail,
+                        "code_generation",
+                    ),
                     failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=self._proposal_session_ref(
@@ -324,7 +364,10 @@ class ExploreStepPipeline:
             return StepResult(
                 action="explore",
                 branch_id=bid,
-                reason="code generation failed",
+                reason=_proposal_failure_reason(
+                    failure_detail,
+                    "code generation failed",
+                ),
                 counts_toward_max_rounds=not retry_attempt,
             )
 
@@ -544,6 +587,32 @@ class ExploreStepPipeline:
         if retry_attempt:
             result.counts_toward_max_rounds = False
         return result
+
+    def _mark_code_generation_recovered(
+        self,
+        branch: Branch,
+        h_record: HypothesisRecord,
+    ) -> None:
+        branch.pending_retry = False
+        branch.consecutive_llm_retries = 0
+        branch.updated_at = datetime.now()
+        try:
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "active")
+            h_record.status = "active"
+        except Exception as exc:
+            logger.debug(
+                "HypothesisStore.mark_status(%s, active) failed after code retry: %s",
+                h_record.hypothesis_id,
+                exc,
+            )
+        try:
+            self.persist_branch_state(branch.branch_id)
+        except Exception as exc:
+            logger.debug(
+                "BranchStore.save(%s) failed after code retry recovery: %s",
+                branch.branch_id,
+                exc,
+            )
 
     def _validate_hypothesis(self, hypothesis: HypothesisProposal) -> Any:
         champion = self.get_champion()

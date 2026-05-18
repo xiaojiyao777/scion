@@ -18,6 +18,7 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.public_refs import contains_absolute_path, public_artifact_ref
 from scion.proposal.agentic_session import (
     AgenticProposalOutput,
     AgenticProposalRequest,
@@ -46,6 +47,11 @@ from scion.proposal.tools import (
 
 logger = logging.getLogger(__name__)
 
+_AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
+_LEGACY_PREMISE_CONTRADICTED = "premise_contradicted"
+_PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
+_AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
+
 
 def _now_iso() -> str:
     return datetime.now().isoformat()
@@ -60,6 +66,10 @@ def _runtime_attr(runtime: Any, name: str) -> Any:
         return getattr(runtime, name)
     except Exception:
         return None
+
+
+def _agentic_value(value: Any) -> str:
+    return str(getattr(value, "value", value) or "")
 
 
 def _active_problem_boundary_surfaces_for_runtime(runtime: Any) -> tuple[str, ...]:
@@ -126,6 +136,39 @@ def _agentic_self_check_failure_detail(
                 f"{suffix}"
             )
     return None
+
+
+def _agentic_quality_block_classification(
+    output: AgenticProposalOutput,
+) -> dict[str, str] | None:
+    structured = (
+        output.structured_rejection
+        if isinstance(output.structured_rejection, Mapping)
+        else {}
+    )
+    termination_reason = _agentic_value(output.termination_reason)
+    failure_category = _agentic_value(output.failure_category)
+    failure_code = str(structured.get("failure_code") or "")
+    premise_check = str(structured.get("premise_check") or "")
+    if (
+        failure_code == _PROPOSAL_PREMISE_CONTRADICTED
+        or failure_category in {
+            _AGENT_GROUNDING_FAILURE,
+            _LEGACY_PREMISE_CONTRADICTED,
+        }
+        or termination_reason == _LEGACY_PREMISE_CONTRADICTED
+        or premise_check == "contradicted"
+    ):
+        return {
+            "failure_class": _AGENT_GROUNDING_FAILURE,
+            "failure_code": _PROPOSAL_PREMISE_CONTRADICTED,
+            "block_reason": _AGENT_QUALITY_BLOCKED,
+        }
+    return None
+
+
+def _agentic_output_is_quality_blocked(output: AgenticProposalOutput) -> bool:
+    return _agentic_quality_block_classification(output) is not None
 
 
 class CreativeLayerLike(Protocol):
@@ -703,12 +746,11 @@ class ProposalPipeline:
                     bid,
                     detail,
                 )
-                self.handle_failure(
+                self._record_agentic_code_failure(
                     branch,
-                    FailureEvent(category="proposal", detail=detail),
+                    detail=detail,
+                    output=output,
                 )
-                self.hypothesis_failure_details[bid] = detail
-                self.circuit_breaker.record_failure(detail)
                 return None
             if output.is_completed:
                 self.circuit_breaker.record_success()
@@ -720,12 +762,11 @@ class ProposalPipeline:
                     bid,
                     detail,
                 )
-                self.handle_failure(
+                self._record_agentic_code_failure(
                     branch,
-                    FailureEvent(category="proposal", detail=detail),
+                    detail=detail,
+                    output=output,
                 )
-                self.hypothesis_failure_details[bid] = detail
-                self.circuit_breaker.record_failure(detail)
                 return None
 
         if output is None or self._agentic_output_can_continue(output, hypothesis):
@@ -785,9 +826,11 @@ class ProposalPipeline:
                 bid,
                 detail,
             )
-            self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
-            self.hypothesis_failure_details[bid] = detail
-            self.circuit_breaker.record_failure(detail)
+            self._record_agentic_code_failure(
+                branch,
+                detail=detail,
+                output=output,
+            )
             return None
 
         if output.is_completed:
@@ -800,9 +843,11 @@ class ProposalPipeline:
             bid,
             detail,
         )
-        self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
-        self.hypothesis_failure_details[bid] = detail
-        self.circuit_breaker.record_failure(detail)
+        self._record_agentic_code_failure(
+            branch,
+            detail=detail,
+            output=output,
+        )
         return None
 
     def _agentic_output_can_continue(
@@ -1007,9 +1052,35 @@ class ProposalPipeline:
         if output is not None:
             self.agentic_outputs[branch.branch_id] = output
         self.hypothesis_failure_details[branch.branch_id] = detail
-        self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+        self._record_agentic_failure_lifecycle(branch, detail, output)
         self.circuit_breaker.record_failure(detail)
         return None, None
+
+    def _record_agentic_code_failure(
+        self,
+        branch: Branch,
+        *,
+        detail: str,
+        output: AgenticProposalOutput | None,
+    ) -> None:
+        self.hypothesis_failure_details[branch.branch_id] = detail
+        self._record_agentic_failure_lifecycle(branch, detail, output)
+        self.circuit_breaker.record_failure(detail)
+
+    def _record_agentic_failure_lifecycle(
+        self,
+        branch: Branch,
+        detail: str,
+        output: AgenticProposalOutput | None,
+    ) -> None:
+        if output is not None and _agentic_output_is_quality_blocked(output):
+            logger.info(
+                "Branch %s: agentic quality block recorded outside infra/proposal streaks: %s",
+                branch.branch_id,
+                detail,
+            )
+            return
+        self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
 
     def _with_agentic_resume_context(
         self,
@@ -1096,6 +1167,17 @@ class ProposalPipeline:
             if isinstance(reason, AgenticTerminationReason)
             else str(reason)
         )
+        quality = _agentic_quality_block_classification(output)
+        if quality is not None:
+            prefix = (
+                f"agentic_proposal:{reason_value}: "
+                f"{_AGENT_QUALITY_BLOCKED}:"
+                f"{quality['failure_code']}:"
+                f"{quality['failure_class']}"
+            )
+            if output.failure_detail:
+                return f"{prefix}: {output.failure_detail}"
+            return prefix
         if output.failure_detail:
             return f"agentic_proposal:{reason_value}: {output.failure_detail}"
         return f"agentic_proposal:{reason_value}"
@@ -1103,6 +1185,11 @@ class ProposalPipeline:
     def _record_agentic_lineage_event(self, output: AgenticProposalOutput) -> None:
         if self.lineage_registry is None:
             return
+        tainted_artifact_refs = list(output.tainted_artifact_refs)
+        public_tainted_artifact_refs = [
+            public_artifact_ref(ref) for ref in tainted_artifact_refs
+        ]
+        tainted_refs_internal_only = contains_absolute_path(tainted_artifact_refs)
         payload = {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
@@ -1115,7 +1202,10 @@ class ProposalPipeline:
             "termination_reason": output.termination_reason.value
             if isinstance(output.termination_reason, AgenticTerminationReason)
             else str(output.termination_reason),
-            "tainted_artifact_refs": list(output.tainted_artifact_refs),
+            "tainted_artifact_refs": public_tainted_artifact_refs,
+            "tainted_artifact_ref_scope": "public_relative",
+            "tainted_artifact_refs_internal_only": tainted_refs_internal_only,
+            "internal_only": tainted_refs_internal_only,
             "contract_preview_passed": output.self_check.contract_preview_passed,
             "contract_preview_codes": list(output.self_check.contract_preview_codes),
         }
@@ -1159,6 +1249,12 @@ class ProposalPipeline:
             ),
             output.tainted_artifact_refs[-1] if output.tainted_artifact_refs else None,
         )
+        structured = (
+            output.structured_rejection
+            if isinstance(output.structured_rejection, Mapping)
+            else {}
+        )
+        quality = _agentic_quality_block_classification(output)
         return {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
@@ -1172,6 +1268,11 @@ class ProposalPipeline:
             "status": output.status.value
             if isinstance(output.status, AgenticProposalStatus)
             else str(output.status),
+            "failure_category": _agentic_value(output.failure_category),
+            "failure_code": str(structured.get("failure_code") or ""),
+            "agent_block_reason": (
+                quality["block_reason"] if quality is not None else ""
+            ),
         }
 
     def _hypothesis_record(

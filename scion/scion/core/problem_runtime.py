@@ -65,7 +65,14 @@ class ProblemRuntime:
 
     def build_code_context(self, **kwargs):
         kwargs.setdefault("problem_spec", self._spec)
-        return self._ctx_manager.build_code_context(**kwargs)
+        try:
+            return self._ctx_manager.build_code_context(**kwargs)
+        except TypeError as exc:
+            if "branch_workspace" not in str(exc) or "branch_workspace" not in kwargs:
+                raise
+            compat_kwargs = dict(kwargs)
+            compat_kwargs.pop("branch_workspace", None)
+            return self._ctx_manager.build_code_context(**compat_kwargs)
 
     def build_fix_context(self, **kwargs):
         kwargs.setdefault("problem_spec", self._spec)

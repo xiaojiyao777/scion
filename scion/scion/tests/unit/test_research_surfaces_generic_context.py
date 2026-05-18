@@ -679,14 +679,14 @@ def test_validation_and_frozen_raw_metric_refs_stay_out_of_context(
     assert "promoted=" not in prompt_text
     assert "failed_validation" not in prompt_text
     assert "failed_frozen" not in prompt_text
-    assert "screening: win_rate=0.83" in prompt_text
+    assert "screening: case_win_rate=0.83" in prompt_text
     assert "median_delta=0.1234" in prompt_text
     assert "outcome=expand" in prompt_text
     assert "screening_expand=1" in prompt_text
     assert "n=1" in prompt_text
-    assert "win_rate=0.42" not in prompt_text
+    assert "case_win_rate=0.42" not in prompt_text
     assert "median_delta=0.4242" not in prompt_text
-    assert "win_rate=0.95" not in prompt_text
+    assert "case_win_rate=0.95" not in prompt_text
     assert "median_delta=9.1919" not in prompt_text
     assert "n=17" not in prompt_text
     assert "n=19" not in prompt_text

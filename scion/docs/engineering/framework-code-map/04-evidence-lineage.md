@@ -97,9 +97,9 @@ summaries, and screening case feedback summaries when present.
 
 ## Final Evidence Refs and Readiness
 
-`final_evidence_refs.py` lets callers attach final quality package references to an `EvidenceRecorder` without changing `StepRecord`. The helper reads package/result metadata already in memory and records stable artifact refs.
+`final_evidence_refs.py` lets callers attach final quality package references to an `EvidenceRecorder` without changing `StepRecord`. The helper reads package/result metadata already in memory and records stable artifact refs. If a campaign ends normally without an attached final-quality package, the summary records a public non-formal closure refs payload with a machine-readable status and reason code instead of leaving final evidence refs absent.
 
-`formal_readiness.py` validates only the refs structure. It checks for required package metadata and artifact keys such as manifest, final quality JSON/CSV, per-case quality CSV, runtime summary, and failure summary. It does not open artifact files.
+`formal_readiness.py` validates only the refs structure. It checks for required package metadata and artifact keys such as manifest, final quality JSON/CSV, per-case quality CSV, runtime summary, and failure summary. Non-formal closure refs keep `formal_ready=false` but do not report a missing package. The validator does not open artifact files.
 
 Final quality artifact writing is generic in `scion/scion/evidence/final_quality.py`. CVRP-specific final evidence builders under `scion/scion/evidence/cvrp_*` adapt CVRP result rows or runner-backed evaluations into the generic final-quality package.
 

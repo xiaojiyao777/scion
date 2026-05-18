@@ -177,7 +177,7 @@ class TestT06ObservabilityFields:
         assert len(summary["family_coverage"]) > 0
 
     def test_failed_code_archived_in_steps(self, tmp_path):
-        """Steps with code_archive_ref show archive path in summary."""
+        """Steps with code_archive_ref show public archive refs in summary."""
         mgr = self._build_mock_campaign(tmp_path)
         mgr._step_history = [
             _make_step(
@@ -190,7 +190,8 @@ class TestT06ObservabilityFields:
         mgr._write_campaign_summary()
         summary = json.loads((tmp_path / "campaign_summary.json").read_text())
         step = summary["steps"][0]
-        assert step["code_archive_ref"] == "/tmp/archive/round_1_abc12345"
+        assert not step["code_archive_ref"].startswith("/")
+        assert "round_1_abc12345" in step["code_archive_ref"]
         assert step["verification_detail"] is None  # no verification_detail was set
 
 

@@ -279,6 +279,7 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
             lambda branch_id: None,
         ),
         get_current_round=lambda: getattr(owner, "_round_num", 0),
+        persist_branch_state=getattr(owner, "_persist_branch_state", lambda bid: None),
     )
 
 

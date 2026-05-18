@@ -154,6 +154,39 @@ def test_code_prompt_contains_prior_failure():
     assert "Avoid the same mistake" in user_prompt
 
 
+def test_code_prompt_classifies_hypothesis_generation_prior_failure():
+    ctx = _base_context(
+        prior_code_failure=(
+            "agentic_proposal:hypothesis_generation_failed: schema preview failed"
+        )
+    )
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "previous hypothesis generation" in user_prompt.lower()
+    assert "previous code generation failed" not in user_prompt.lower()
+    assert "not treat this as a previous code implementation failure" in user_prompt
+
+
+def test_code_prompt_classifies_self_check_prior_failure():
+    ctx = _base_context(
+        prior_code_failure="agentic_proposal:self_check_failed: contract preview failed"
+    )
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "previous deterministic self-check failed" in user_prompt.lower()
+    assert "previous code generation failed" not in user_prompt.lower()
+
+
+def test_code_prompt_classifies_code_generation_prior_failure():
+    ctx = _base_context(
+        prior_code_failure="agentic_proposal:code_generation_failed: invalid patch"
+    )
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "previous code generation failed" in user_prompt.lower()
+    assert "invalid patch" in user_prompt
+
+
 def test_hypothesis_prompt_never_contains_validation_per_case():
     """hypothesis prompt 不含 validation/frozen per-case 数据"""
     # Even if we pass validation details in other fields, they should not appear

@@ -7,6 +7,14 @@ from typing import Any, Mapping
 
 from pydantic import ValidationError
 
+from scion.proposal.tools.active_solver import (
+    ContextListAlgorithmFilesTool,
+    ContextReadActiveSolverDesignTool,
+    ContextReadAlgorithmFileTool,
+    ContextReadAlgorithmSymbolTool,
+    ContextReadSolverCallGraphTool,
+    algorithm_file_path_guidance_for_tool,
+)
 from scion.proposal.tools.context import (
     ContextListSurfacesTool,
     ContextReadBranchStateTool,
@@ -89,14 +97,28 @@ class ProposalToolRegistry:
         for name in self.allowed_tools(context):
             tool = self._tools[name]
             schema = tool.input_schema.model_json_schema()
+            structured_guidance = algorithm_file_path_guidance_for_tool(
+                context,
+                name,
+            )
+            if structured_guidance:
+                schema = _schema_with_algorithm_file_path_guidance(
+                    schema,
+                    structured_guidance,
+                )
+            spec = {
+                "name": name,
+                "input_schema": _strip_forbidden_payload_refs(schema),
+                "permission": tool.permission.value,
+                "read_only": tool.read_only,
+                "max_result_chars": tool.max_result_chars,
+            }
+            if structured_guidance:
+                spec["structured_guidance"] = _strip_forbidden_payload_refs(
+                    structured_guidance
+                )
             specs.append(
-                {
-                    "name": name,
-                    "input_schema": _strip_forbidden_payload_refs(schema),
-                    "permission": tool.permission.value,
-                    "read_only": tool.read_only,
-                    "max_result_chars": tool.max_result_chars,
-                }
+                spec
             )
         return tuple(specs)
 
@@ -177,6 +199,11 @@ class ProposalToolRegistry:
             [
                 ContextListSurfacesTool(),
                 ContextReadProblemTool(),
+                ContextReadActiveSolverDesignTool(),
+                ContextReadSolverCallGraphTool(),
+                ContextListAlgorithmFilesTool(),
+                ContextReadAlgorithmFileTool(),
+                ContextReadAlgorithmSymbolTool(),
                 ContextReadSurfaceTool(),
                 ContextReadObjectivePolicyTool(),
                 ContextReadChampionSummaryTool(),
@@ -194,6 +221,38 @@ class ProposalToolRegistry:
                 AlgorithmSmokeTool(),
             ]
         )
+
+
+def _schema_with_algorithm_file_path_guidance(
+    schema: Mapping[str, Any],
+    guidance: Mapping[str, Any],
+) -> dict[str, Any]:
+    patched = dict(schema)
+    properties = dict(patched.get("properties") or {})
+    file_path_schema = dict(properties.get("file_path") or {})
+    description = str(file_path_schema.get("description") or "").strip()
+    required_text = (
+        "Call context.list_algorithm_files first and use exactly one returned "
+        "files[].file_path value; solver_design is a surface id, not a file_path."
+    )
+    if required_text not in description:
+        file_path_schema["description"] = (
+            f"{description} {required_text}".strip()
+            if description
+            else required_text
+        )
+    allowed_paths = [
+        str(path)
+        for path in guidance.get("allowed_file_paths", ())
+        if str(path or "").strip()
+    ]
+    if allowed_paths:
+        file_path_schema["enum"] = allowed_paths
+        file_path_schema["examples"] = allowed_paths[:3]
+    properties["file_path"] = file_path_schema
+    patched["properties"] = properties
+    patched["x-structured-guidance"] = dict(guidance)
+    return patched
 
 
 __all__ = ["ProposalToolRegistry"]

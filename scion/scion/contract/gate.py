@@ -25,8 +25,10 @@ from scion.core.models import (
 from scion.contract.checks.solver_design_integration import (
     check_solver_design_integration,
 )
+from scion.contract.patch_graph import PatchSetGraph
 from scion.contract.surface_interface import check_surface_interface
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
+from scion.runtime.telemetry_guard import validate_expected_telemetry_contract
 
 # Sensitive API calls that are forbidden in operator code
 _SENSITIVE_APIS = frozenset(
@@ -152,6 +154,7 @@ class ContractGate:
         checks.append(self._c1_schema(hypothesis))
         checks.append(self._c2_change_locus(hypothesis))
         checks.append(self._c3_action_target(hypothesis))
+        checks.append(self._c11_expected_telemetry(hypothesis))
         checks.append(self._c10_novelty(
             hypothesis,
             active_hypotheses,
@@ -177,6 +180,7 @@ class ContractGate:
         selected_surface_name = (
             self._selected_surface_name(contract_hypothesis) or selected_surface
         )
+        patch_graph = PatchSetGraph.from_patch(patch)
         for index, change in enumerate(patch_file_changes(patch)):
             is_primary = index == 0
             change_patch = PatchProposal(
@@ -190,6 +194,7 @@ class ContractGate:
                 contract_hypothesis if is_primary else None,
                 selected_surface=selected_surface_name,
                 enforce_hypothesis_target=is_primary,
+                patch_graph=patch_graph,
             )
             if is_primary:
                 checks.extend(change_checks)
@@ -215,6 +220,7 @@ class ContractGate:
         *,
         selected_surface: str | None,
         enforce_hypothesis_target: bool,
+        patch_graph: PatchSetGraph | None,
     ) -> List[CheckResult]:
         checks: List[CheckResult] = []
         checks.append(self._c4_file_whitelist(patch))
@@ -240,7 +246,7 @@ class ContractGate:
                 selected_surface=selected_surface,
             )
         )
-        checks.append(self._c8_import_whitelist(patch))
+        checks.append(self._c8_import_whitelist(patch, patch_graph=patch_graph))
         checks.append(self._c9_sensitive_api(patch))
         checks.append(
             self._c9d_surface_instance_identity(
@@ -362,6 +368,50 @@ class ContractGate:
                 )
 
         return _cr("C3_action_target", passed, "heavy", detail, t0)
+
+    # ------------------------------------------------------------------
+    # C11: proposal-declared telemetry must be adapter-declared.
+    # ------------------------------------------------------------------
+
+    def _c11_expected_telemetry(self, h: HypothesisProposal) -> CheckResult:
+        t0 = time.monotonic_ns()
+        expected = getattr(h, "expected_telemetry", None)
+        if expected in (None, "", [], (), {}):
+            return _cr(
+                "C11_expected_telemetry",
+                True,
+                "light",
+                "no expected telemetry declared",
+                t0,
+            )
+        if not isinstance(expected, dict):
+            return _cr(
+                "C11_expected_telemetry",
+                False,
+                "heavy",
+                "expected_telemetry must be an object",
+                t0,
+            )
+        errors = validate_expected_telemetry_contract(
+            problem_spec=self._spec,
+            selected_surface=h.change_locus,
+            expected_telemetry=expected,
+        )
+        if errors:
+            return _cr(
+                "C11_expected_telemetry",
+                False,
+                "heavy",
+                "; ".join(errors),
+                t0,
+            )
+        return _cr(
+            "C11_expected_telemetry",
+            True,
+            "light",
+            "expected telemetry fields declared by selected surface",
+            t0,
+        )
 
     # ------------------------------------------------------------------
     # C4: file whitelist — file_path must match an editable pattern
@@ -670,7 +720,12 @@ class ContractGate:
     # C8: Import whitelist
     # ------------------------------------------------------------------
 
-    def _c8_import_whitelist(self, patch: PatchProposal) -> CheckResult:
+    def _c8_import_whitelist(
+        self,
+        patch: PatchProposal,
+        *,
+        patch_graph: PatchSetGraph | None = None,
+    ) -> CheckResult:
         t0 = time.monotonic_ns()
         if patch.action == "delete":
             return _cr("C8_import_whitelist", True, "heavy", "delete action — no import check", t0)
@@ -690,10 +745,24 @@ class ContractGate:
                     if not _in_whitelist(top, whitelist):
                         violations.append(alias.name)
             elif isinstance(node, ast.ImportFrom):
+                if (
+                    patch_graph is not None
+                    and patch_graph.allows_same_patch_relative_import(
+                        importer_path=patch.file_path,
+                        node=node,
+                        is_editable_solver_file=self._is_solver_design_patch_path,
+                    )
+                ):
+                    continue
                 if node.module:
                     top = node.module.split(".")[0]
                     if not _in_whitelist(top, whitelist):
                         violations.append(node.module)
+                elif node.level > 0:
+                    for alias in node.names:
+                        name = str(alias.name or "")
+                        if name and name != "*" and not _in_whitelist(name, whitelist):
+                            violations.append(name)
 
         passed = len(violations) == 0
         detail = "imports ok" if passed else f"non-whitelisted imports: {violations}"
@@ -714,7 +783,18 @@ class ContractGate:
             return _cr("C9_sensitive_api", False, "heavy", "unparseable code", t0)
 
         module_aliases, imported_call_aliases = _collect_import_name_aliases(tree)
+        sensitive_call_aliases, dynamic_module_aliases = _collect_sensitive_aliases(
+            tree,
+            module_aliases=module_aliases,
+            imported_call_aliases=imported_call_aliases,
+        )
         violations: List[str] = []
+        violations.extend(
+            _context_baseline_call_violations_in_baseline_algorithm(
+                patch.file_path,
+                tree,
+            )
+        )
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and _is_os_environ_attr(
                 node,
@@ -731,13 +811,10 @@ class ContractGate:
                     node,
                     module_aliases=module_aliases,
                     imported_call_aliases=imported_call_aliases,
+                    sensitive_call_aliases=sensitive_call_aliases,
+                    dynamic_module_aliases=dynamic_module_aliases,
                 )
             )
-            if _is_context_baseline_call_in_baseline_algorithm(patch.file_path, node):
-                violations.append(
-                    "policies/baseline_algorithm.py must not call "
-                    "context.baseline(...)"
-                )
 
         passed = len(violations) == 0
         detail = "no sensitive APIs" if passed else f"sensitive APIs detected: {violations}"
@@ -2109,53 +2186,254 @@ def _collect_import_name_aliases(
     return module_aliases, imported_call_aliases
 
 
+def _collect_sensitive_aliases(
+    tree: ast.AST,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+) -> tuple[dict[str, str], set[str]]:
+    sensitive_call_aliases: dict[str, str] = {}
+    dynamic_module_aliases: set[str] = set()
+    assignments: list[tuple[set[str], ast.AST]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            target_names = _assigned_name_targets(list(node.targets))
+            if target_names:
+                assignments.append((target_names, node.value))
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target_names = _assigned_name_targets([node.target])
+            if target_names:
+                assignments.append((target_names, node.value))
+        elif isinstance(node, ast.NamedExpr):
+            target_names = _assigned_name_targets([node.target])
+            if target_names:
+                assignments.append((target_names, node.value))
+
+    changed = True
+    while changed:
+        changed = False
+        for target_names, value in assignments:
+            callable_identity = _sensitive_callable_identity(
+                value,
+                module_aliases=module_aliases,
+                imported_call_aliases=imported_call_aliases,
+                sensitive_call_aliases=sensitive_call_aliases,
+                dynamic_module_aliases=dynamic_module_aliases,
+            )
+            if callable_identity is not None:
+                for target_name in target_names:
+                    if sensitive_call_aliases.get(target_name) != callable_identity:
+                        sensitive_call_aliases[target_name] = callable_identity
+                        changed = True
+
+            if _is_dynamic_import_result(
+                value,
+                module_aliases=module_aliases,
+                imported_call_aliases=imported_call_aliases,
+                sensitive_call_aliases=sensitive_call_aliases,
+                dynamic_module_aliases=dynamic_module_aliases,
+            ):
+                before = len(dynamic_module_aliases)
+                dynamic_module_aliases.update(target_names)
+                changed = changed or len(dynamic_module_aliases) != before
+
+    return sensitive_call_aliases, dynamic_module_aliases
+
+
+def _assigned_name_targets(targets: list[ast.AST]) -> set[str]:
+    names: set[str] = set()
+    for target in targets:
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            names.update(_assigned_name_targets(list(target.elts)))
+    return names
+
+
+def _sensitive_callable_identity(
+    node: ast.AST,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        alias_identity = sensitive_call_aliases.get(node.id)
+        if alias_identity is not None:
+            return alias_identity
+        return _direct_sensitive_name_identity(
+            node.id,
+            imported_call_aliases=imported_call_aliases,
+        )
+
+    if isinstance(node, ast.Attribute):
+        return _sensitive_attribute_identity(
+            node,
+            module_aliases=module_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+            dynamic_module_aliases=dynamic_module_aliases,
+        )
+
+    if isinstance(node, ast.Call):
+        literal_violation = _literal_reflective_sensitive_violation(
+            node,
+            module_aliases=module_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+            dynamic_module_aliases=dynamic_module_aliases,
+        )
+        if literal_violation is not None:
+            return literal_violation
+        if _is_getattr_dynamic_import_call(
+            node,
+            module_aliases=module_aliases,
+            imported_call_aliases=imported_call_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+        ):
+            return "getattr(__import__(...), ...)"
+
+    return None
+
+
+def _direct_sensitive_name_identity(
+    name: str,
+    *,
+    imported_call_aliases: dict[str, tuple[str, str]],
+) -> str | None:
+    resolved = imported_call_aliases.get(name)
+    if name in _SENSITIVE_APIS:
+        return name
+    if name == "open" or resolved == ("io", "open"):
+        return "open"
+    if name == "__import__":
+        return "__import__"
+    if resolved == ("importlib", "import_module"):
+        return "importlib.import_module"
+    if name in _REFLECTIVE_PRIMITIVES:
+        return name
+    if resolved is None:
+        return None
+
+    module_name, attr_name = resolved
+    if module_name == "os" and attr_name in _SENSITIVE_OS_ATTRS:
+        return f"os.{attr_name}"
+    if module_name == "os" and attr_name in _SENSITIVE_OS_ENV_CALLS:
+        return f"os.{attr_name}"
+    if module_name in _SENSITIVE_APIS:
+        return f"{module_name}.{attr_name}"
+    return None
+
+
+def _sensitive_attribute_identity(
+    node: ast.Attribute,
+    *,
+    module_aliases: dict[str, str],
+    sensitive_call_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
+) -> str | None:
+    obj_name = node.value.id if isinstance(node.value, ast.Name) else None
+    resolved_obj = module_aliases.get(obj_name or "", obj_name or "")
+
+    if obj_name in dynamic_module_aliases:
+        return f"dynamic_import.{node.attr}"
+    if resolved_obj == "os" and node.attr in _SENSITIVE_OS_ATTRS:
+        return f"os.{node.attr}"
+    if resolved_obj == "os" and node.attr in _SENSITIVE_OS_ENV_CALLS:
+        return f"os.{node.attr}"
+    if resolved_obj in _SENSITIVE_APIS:
+        return f"{resolved_obj}.{node.attr}"
+    if resolved_obj == "importlib" and node.attr == "import_module":
+        return "importlib.import_module"
+    if _is_dynamic_import_call(
+        node.value,
+        module_aliases=module_aliases,
+        imported_call_aliases={},
+        sensitive_call_aliases=sensitive_call_aliases,
+    ):
+        return f"dynamic_import.{node.attr}"
+    if node.attr in _DANGEROUS_FILE_READ_ATTRS:
+        return f"*.{node.attr}"
+    return None
+
+
+def _is_dynamic_import_result(
+    node: ast.AST,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
+) -> bool:
+    if isinstance(node, ast.Name) and node.id in dynamic_module_aliases:
+        return True
+    return _is_dynamic_import_call(
+        node,
+        module_aliases=module_aliases,
+        imported_call_aliases=imported_call_aliases,
+        sensitive_call_aliases=sensitive_call_aliases,
+    )
+
+
 def _sensitive_call_violations(
     node: ast.Call,
     *,
     module_aliases: dict[str, str],
     imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
 ) -> list[str]:
     func = node.func
     violations: list[str] = []
 
     if isinstance(func, ast.Name):
-        resolved = imported_call_aliases.get(func.id)
-        if func.id in _SENSITIVE_APIS:
-            violations.append(func.id)
-        elif func.id == "open" or resolved == ("io", "open"):
-            violations.append("open(...)")
-        elif func.id == "__import__":
-            violations.append("__import__(...)")
-        elif resolved == ("importlib", "import_module"):
-            violations.append("importlib.import_module(...)")
-        elif func.id in _REFLECTIVE_PRIMITIVES:
-            violation = _reflective_primitive_violation(func.id, node)
+        sensitive_identity = _sensitive_callable_identity(
+            func,
+            module_aliases=module_aliases,
+            imported_call_aliases=imported_call_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+            dynamic_module_aliases=dynamic_module_aliases,
+        )
+        if sensitive_identity in _REFLECTIVE_PRIMITIVES:
+            literal_violation = _literal_reflective_sensitive_violation(
+                node,
+                module_aliases=module_aliases,
+                sensitive_call_aliases=sensitive_call_aliases,
+                dynamic_module_aliases=dynamic_module_aliases,
+            )
+            if literal_violation is not None:
+                violations.append(literal_violation)
+            violation = _reflective_primitive_violation(
+                sensitive_identity,
+                node,
+                module_aliases=module_aliases,
+                imported_call_aliases=imported_call_aliases,
+                sensitive_call_aliases=sensitive_call_aliases,
+            )
             if violation is not None:
                 violations.append(violation)
+        elif sensitive_identity is not None:
+            violations.append(_format_sensitive_call_violation(func.id, sensitive_identity))
 
     elif isinstance(func, ast.Attribute):
-        obj_name = func.value.id if isinstance(func.value, ast.Name) else None
-        resolved_obj = module_aliases.get(obj_name or "", obj_name or "")
-
-        if resolved_obj == "os" and func.attr in _SENSITIVE_OS_ATTRS:
-            violations.append(f"os.{func.attr}")
-        elif resolved_obj == "os" and func.attr in _SENSITIVE_OS_ENV_CALLS:
-            violations.append(f"os.{func.attr}(...)")
-        elif resolved_obj in _SENSITIVE_APIS:
-            violations.append(f"{resolved_obj}.{func.attr}")
-        elif resolved_obj == "importlib" and func.attr == "import_module":
-            violations.append("importlib.import_module(...)")
-        elif _is_dynamic_import_call(func.value):
-            violations.append(f"dynamic_import.{func.attr}(...)")
-        elif func.attr in _DANGEROUS_FILE_READ_ATTRS:
-            violations.append(f"*.{func.attr}(...)")
+        sensitive_identity = _sensitive_attribute_identity(
+            func,
+            module_aliases=module_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+            dynamic_module_aliases=dynamic_module_aliases,
+        )
+        if sensitive_identity is not None:
+            violations.append(_format_sensitive_call_violation(None, sensitive_identity))
 
     elif isinstance(func, ast.Call):
-        if _is_getattr_dynamic_import_call(func):
+        if _is_getattr_dynamic_import_call(
+            func,
+            module_aliases=module_aliases,
+            imported_call_aliases=imported_call_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+        ):
             violations.append("getattr(__import__(...), ...)(...)")
         elif (
-            isinstance(func.func, ast.Name)
-            and func.func.id == "getattr"
+            _is_getattr_name(func.func, sensitive_call_aliases)
             and _getattr_uses_dynamic_attr_name(func)
         ):
             violations.append("getattr(..., dynamic_name)(...)")
@@ -2163,12 +2441,63 @@ def _sensitive_call_violations(
     return violations
 
 
-def _reflective_primitive_violation(name: str, node: ast.Call) -> str | None:
+def _format_sensitive_call_violation(alias_name: str | None, identity: str) -> str:
+    suffix = "" if identity.endswith("(...)") else "(...)"
+    if alias_name is not None and alias_name != identity:
+        return f"{identity} alias {alias_name}{suffix}"
+    return f"{identity}{suffix}"
+
+
+def _literal_reflective_sensitive_violation(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    sensitive_call_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
+) -> str | None:
+    if not (
+        _is_getattr_name(node.func, sensitive_call_aliases)
+        and len(node.args) >= 2
+        and _is_string_literal_node(node.args[1])
+        and isinstance(node.args[0], ast.Name)
+    ):
+        return None
+    obj_name = node.args[0].id
+    if obj_name in dynamic_module_aliases:
+        return "getattr(dynamic_import, ...)"
+    module_name = module_aliases.get(obj_name, obj_name)
+    attr_name = str(getattr(node.args[1], "value", "") or "")
+    if module_name == "os" and attr_name in _SENSITIVE_OS_ATTRS:
+        return f"getattr(os, {attr_name!r})(...)"
+    if module_name == "os" and attr_name in _SENSITIVE_OS_ENV_CALLS:
+        return f"getattr(os, {attr_name!r})(...)"
+    if module_name == "os" and attr_name == "environ":
+        return "getattr(os, 'environ')"
+    if module_name == "importlib" and attr_name == "import_module":
+        return "getattr(importlib, 'import_module')(...)"
+    if module_name in _SENSITIVE_APIS:
+        return f"getattr({module_name}, {attr_name!r})(...)"
+    return None
+
+
+def _reflective_primitive_violation(
+    name: str,
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+) -> str | None:
     if name in {"setattr", "delattr", "globals", "locals", "vars"}:
         return f"{name}(...)"
     if name != "getattr":
         return None
-    if _is_getattr_dynamic_import_call(node):
+    if _is_getattr_dynamic_import_call(
+        node,
+        module_aliases=module_aliases,
+        imported_call_aliases=imported_call_aliases,
+        sensitive_call_aliases=sensitive_call_aliases,
+    ):
         return "getattr(__import__(...), ...)"
     if _getattr_uses_dynamic_attr_name(node):
         return "getattr(..., dynamic_name)"
@@ -2179,30 +2508,62 @@ def _getattr_uses_dynamic_attr_name(node: ast.Call) -> bool:
     return len(node.args) >= 2 and not _is_string_literal_node(node.args[1])
 
 
+def _is_getattr_name(
+    node: ast.AST,
+    sensitive_call_aliases: dict[str, str],
+) -> bool:
+    return (
+        isinstance(node, ast.Name)
+        and (node.id == "getattr" or sensitive_call_aliases.get(node.id) == "getattr")
+    )
+
+
 def _is_string_literal_node(node: ast.AST) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
-def _is_dynamic_import_call(node: ast.AST) -> bool:
+def _is_dynamic_import_call(
+    node: ast.AST,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+) -> bool:
     if not isinstance(node, ast.Call):
         return False
     func = node.func
-    if isinstance(func, ast.Name) and func.id == "__import__":
-        return True
+    if isinstance(func, ast.Name):
+        if func.id == "__import__":
+            return True
+        if sensitive_call_aliases.get(func.id) in {"__import__", "importlib.import_module"}:
+            return True
+        if imported_call_aliases.get(func.id) == ("importlib", "import_module"):
+            return True
+        return False
     return (
         isinstance(func, ast.Attribute)
         and func.attr == "import_module"
         and isinstance(func.value, ast.Name)
-        and func.value.id == "importlib"
+        and module_aliases.get(func.value.id, func.value.id) == "importlib"
     )
 
 
-def _is_getattr_dynamic_import_call(node: ast.Call) -> bool:
+def _is_getattr_dynamic_import_call(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    imported_call_aliases: dict[str, tuple[str, str]],
+    sensitive_call_aliases: dict[str, str],
+) -> bool:
     return (
-        isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
+        _is_getattr_name(node.func, sensitive_call_aliases)
         and bool(node.args)
-        and _is_dynamic_import_call(node.args[0])
+        and _is_dynamic_import_call(
+            node.args[0],
+            module_aliases=module_aliases,
+            imported_call_aliases=imported_call_aliases,
+            sensitive_call_aliases=sensitive_call_aliases,
+        )
     )
 
 
@@ -2215,22 +2576,120 @@ def _is_os_environ_attr(
     return module_aliases.get(node.value.id, node.value.id) == "os"
 
 
-def _is_context_baseline_call_in_baseline_algorithm(
+def _context_baseline_call_violations_in_baseline_algorithm(
     file_path: str,
-    node: ast.Call,
-) -> bool:
+    tree: ast.AST,
+) -> list[str]:
     try:
         normalized = normalize_relative_patch_path(file_path)
     except ValueError:
         normalized = str(file_path or "").replace("\\", "/").lstrip("/")
     if normalized != "policies/baseline_algorithm.py":
-        return False
-    func = node.func
+        return []
+
+    context_aliases = {"context"}
+    getattr_aliases = {"getattr"}
+    baseline_aliases: set[str] = set()
+    assignments: list[tuple[set[str], ast.AST]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value
+            if value is None:
+                continue
+            targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
+            target_names = _assigned_name_targets_for_contract_baseline(targets)
+            if target_names:
+                assignments.append((target_names, value))
+
+    changed = True
+    while changed:
+        changed = False
+        for target_names, value in assignments:
+            if isinstance(value, ast.Name) and value.id in context_aliases:
+                before = len(context_aliases)
+                context_aliases.update(target_names)
+                changed = changed or len(context_aliases) != before
+            elif isinstance(value, ast.Name) and value.id in getattr_aliases:
+                before = len(getattr_aliases)
+                getattr_aliases.update(target_names)
+                changed = changed or len(getattr_aliases) != before
+            elif isinstance(value, ast.Name) and value.id in baseline_aliases:
+                before = len(baseline_aliases)
+                baseline_aliases.update(target_names)
+                changed = changed or len(baseline_aliases) != before
+            elif _is_context_baseline_attribute(value, context_aliases) or (
+                isinstance(value, ast.Call)
+                and _is_context_baseline_getattr(
+                    value,
+                    context_aliases,
+                    getattr_aliases,
+                )
+            ):
+                before = len(baseline_aliases)
+                baseline_aliases.update(target_names)
+                changed = changed or len(baseline_aliases) != before
+
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if _is_context_baseline_attribute(func, context_aliases):
+            findings.append("context.baseline(...)")
+        elif isinstance(func, ast.Call) and _is_context_baseline_getattr(
+            func,
+            context_aliases,
+            getattr_aliases,
+        ):
+            findings.append("getattr(context, 'baseline')(...)")
+        elif isinstance(func, ast.Name) and func.id in baseline_aliases:
+            findings.append(f"context.baseline alias {func.id}(...)")
+
+    if not findings:
+        return []
+    return [
+        "policies/baseline_algorithm.py must not call context.baseline(...): "
+        + ", ".join(sorted(set(findings)))
+    ]
+
+
+def _assigned_name_targets_for_contract_baseline(
+    targets: list[ast.AST],
+) -> set[str]:
+    names: set[str] = set()
+    for target in targets:
+        if isinstance(target, ast.Name):
+            names.add(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            names.update(_assigned_name_targets_for_contract_baseline(list(target.elts)))
+    return names
+
+
+def _is_context_baseline_attribute(
+    node: ast.AST,
+    context_aliases: set[str],
+) -> bool:
     return (
-        isinstance(func, ast.Attribute)
-        and func.attr == "baseline"
-        and isinstance(func.value, ast.Name)
-        and func.value.id == "context"
+        isinstance(node, ast.Attribute)
+        and node.attr == "baseline"
+        and isinstance(node.value, ast.Name)
+        and node.value.id in context_aliases
+    )
+
+
+def _is_context_baseline_getattr(
+    node: ast.Call,
+    context_aliases: set[str],
+    getattr_aliases: set[str],
+) -> bool:
+    return (
+        isinstance(node.func, ast.Name)
+        and node.func.id in getattr_aliases
+        and len(node.args) >= 2
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id in context_aliases
+        and _is_string_literal_node(node.args[1])
+        and node.args[1].value == "baseline"
     )
 
 

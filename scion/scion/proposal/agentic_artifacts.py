@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from scion.core.models import ChampionState, PatchProposal
+from scion.core.public_refs import public_artifact_ref
 from scion.proposal.agentic_models import (
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticProposalOutput,
@@ -38,6 +39,100 @@ _RAW_REF_MARKERS = (
     "SECRET_FROZEN",
     "SECRET_HOLDOUT",
 )
+_PROMPT_MANIFEST_REF_MARKER = "api_visible_prompt_manifest"
+_PROMPT_MANIFEST_NOT_REQUIRED_REASON = "no_llm_call_recorded_for_session"
+_PROMPT_MANIFEST_TOOL_ONLY_REASON = (
+    "tool_context_recorded_but_no_model_prompt_call_recorded_for_session"
+)
+
+
+def _dedupe_public_refs(values: Any) -> tuple[str, ...]:
+    if isinstance(values, str):
+        candidates = (values,)
+    elif isinstance(values, (list, tuple)):
+        candidates = tuple(str(value) for value in values if value)
+    else:
+        try:
+            candidates = tuple(str(value) for value in values or () if value)
+        except TypeError:
+            candidates = (str(values),) if values else ()
+    refs: list[str] = []
+    for candidate in candidates:
+        public_ref = public_artifact_ref(candidate)
+        if public_ref and public_ref not in refs:
+            refs.append(public_ref)
+    return tuple(refs)
+
+
+def _prompt_manifest_refs_from_output(
+    output: AgenticProposalOutput,
+) -> tuple[str, ...]:
+    return _dedupe_public_refs(
+        ref
+        for ref in output.tainted_artifact_refs
+        if _PROMPT_MANIFEST_REF_MARKER in str(ref)
+    )
+
+
+def _prompt_manifest_refs_from_index_item(item: Mapping[str, Any]) -> tuple[str, ...]:
+    refs = list(
+        _dedupe_public_refs(
+            item.get("prompt_manifest_artifact_refs")
+            or item.get("prompt_manifest_refs")
+            or ()
+        )
+    )
+    single_ref = str(item.get("prompt_manifest_artifact_ref") or "")
+    for ref in _dedupe_public_refs(single_ref):
+        if ref not in refs:
+            refs.append(ref)
+    return tuple(refs)
+
+
+def _prompt_manifest_not_required_reason_for_output(
+    output: AgenticProposalOutput,
+) -> str:
+    if _output_has_tool_activity(output):
+        return _PROMPT_MANIFEST_TOOL_ONLY_REASON
+    return _PROMPT_MANIFEST_NOT_REQUIRED_REASON
+
+
+def _prompt_manifest_not_required_reason_for_index_item(
+    item: Mapping[str, Any],
+) -> str:
+    stored_reason = str(item.get("prompt_manifest_not_required_reason") or "")
+    if stored_reason and stored_reason != _PROMPT_MANIFEST_NOT_REQUIRED_REASON:
+        return stored_reason
+    if _index_item_has_tool_activity(item):
+        return _PROMPT_MANIFEST_TOOL_ONLY_REASON
+    return stored_reason or _PROMPT_MANIFEST_NOT_REQUIRED_REASON
+
+
+def _output_has_tool_activity(output: AgenticProposalOutput) -> bool:
+    if _tool_budget_has_activity(output.tool_budget_used):
+        return True
+    for event in output.transcript:
+        metadata = getattr(event, "metadata", {}) or {}
+        if isinstance(metadata, Mapping) and metadata.get("tool_name"):
+            return True
+    return False
+
+
+def _index_item_has_tool_activity(item: Mapping[str, Any]) -> bool:
+    return _tool_budget_has_activity(item.get("tool_budget_used") or {})
+
+
+def _tool_budget_has_activity(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    for key in ("tool_steps", "tool_calls"):
+        try:
+            if int(value.get(key) or 0) > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
 
 class AgenticSessionStore:
     """File-backed, ops-safe index for persisted APS output artifacts."""
@@ -59,9 +154,17 @@ class AgenticSessionStore:
     ) -> AgenticSessionIndexEntry:
         artifact_path = Path(artifact_ref).resolve()
         self._ensure_inside_root(artifact_path)
+        public_ref = self._public_artifact_ref(artifact_path)
         now = datetime.now().isoformat()
         entries = self._read_entries()
         existing_created_at = None
+        prompt_manifest_refs = _prompt_manifest_refs_from_output(output)
+        prompt_manifest_required = bool(prompt_manifest_refs)
+        prompt_manifest_not_required_reason = (
+            ""
+            if prompt_manifest_required
+            else _prompt_manifest_not_required_reason_for_output(output)
+        )
         kept: list[AgenticSessionIndexEntry] = []
         for entry in entries:
             if entry.session_id == output.session_id:
@@ -73,16 +176,26 @@ class AgenticSessionStore:
             session_id=output.session_id,
             request_id=output.request_id or output.session_id,
             idempotency_key=output.idempotency_key,
-            artifact_ref=str(artifact_path),
-            artifact_path=str(artifact_path),
+            artifact_ref=public_ref,
+            artifact_path=public_ref,
             transcript_digest=output.transcript_digest,
             termination_reason=str(_enum_value(output.termination_reason)),
             status=str(_enum_value(output.status)),
             created_at=existing_created_at or now,
             updated_at=now,
             tainted=True,
+            artifact_ref_scope="artifact_dir_relative",
+            artifact_path_internal_only=True,
             tool_loop_config=dict(output.tool_loop_config),
             tool_budget_used=dict(output.tool_budget_used),
+            prompt_manifest_required=prompt_manifest_required,
+            prompt_manifest_artifact_ref=(
+                prompt_manifest_refs[-1] if prompt_manifest_refs else ""
+            ),
+            prompt_manifest_artifact_refs=prompt_manifest_refs,
+            prompt_manifest_ref_scope="artifact_dir_relative",
+            raw_prompt_saved=False,
+            prompt_manifest_not_required_reason=prompt_manifest_not_required_reason,
         )
         kept.append(entry)
         self._write_entries(kept)
@@ -136,8 +249,7 @@ class AgenticSessionStore:
     ) -> AgenticStoredSession:
         artifact: Mapping[str, Any] | None = None
         try:
-            artifact_path = Path(entry.artifact_path).resolve()
-            self._ensure_inside_root(artifact_path)
+            artifact_path = self._resolve_artifact_path(entry.artifact_path)
             artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
             validation = validate_agentic_session_artifact(artifact)
         except Exception as exc:
@@ -163,26 +275,47 @@ class AgenticSessionStore:
             if not isinstance(item, Mapping):
                 continue
             try:
+                artifact_path = self._resolve_artifact_path(
+                    str(item.get("artifact_path") or item.get("artifact_ref") or "")
+                )
+                public_ref = self._public_artifact_ref(artifact_path)
+                prompt_manifest_refs = _prompt_manifest_refs_from_index_item(item)
+                prompt_manifest_required = bool(prompt_manifest_refs)
+                prompt_manifest_not_required_reason = (
+                    ""
+                    if prompt_manifest_required
+                    else _prompt_manifest_not_required_reason_for_index_item(item)
+                )
                 entries.append(
                     AgenticSessionIndexEntry(
                         schema_version=str(item.get("schema_version") or ""),
                         session_id=str(item.get("session_id") or ""),
                         request_id=str(item.get("request_id") or ""),
                         idempotency_key=str(item.get("idempotency_key") or ""),
-                        artifact_ref=str(
-                            item.get("artifact_ref") or item.get("artifact_path") or ""
-                        ),
-                        artifact_path=str(
-                            item.get("artifact_path") or item.get("artifact_ref") or ""
-                        ),
+                        artifact_ref=public_ref,
+                        artifact_path=public_ref,
                         transcript_digest=str(item.get("transcript_digest") or ""),
                         termination_reason=str(item.get("termination_reason") or ""),
                         status=str(item.get("status") or ""),
                         created_at=str(item.get("created_at") or ""),
                         updated_at=str(item.get("updated_at") or ""),
                         tainted=bool(item.get("tainted", True)),
+                        artifact_ref_scope="artifact_dir_relative",
+                        artifact_path_internal_only=bool(
+                            item.get("artifact_path_internal_only", True)
+                        ),
                         tool_loop_config=dict(item.get("tool_loop_config") or {}),
                         tool_budget_used=dict(item.get("tool_budget_used") or {}),
+                        prompt_manifest_required=prompt_manifest_required,
+                        prompt_manifest_artifact_ref=(
+                            prompt_manifest_refs[-1] if prompt_manifest_refs else ""
+                        ),
+                        prompt_manifest_artifact_refs=prompt_manifest_refs,
+                        prompt_manifest_ref_scope="artifact_dir_relative",
+                        raw_prompt_saved=False,
+                        prompt_manifest_not_required_reason=(
+                            prompt_manifest_not_required_reason
+                        ),
                     )
                 )
             except Exception:
@@ -201,6 +334,20 @@ class AgenticSessionStore:
     def _ensure_inside_root(self, path: Path) -> None:
         if path != self._root and self._root not in path.parents:
             raise ValueError("agentic session artifact path escapes index root")
+
+    def _resolve_artifact_path(self, value: str) -> Path:
+        if not value:
+            raise ValueError("missing agentic session artifact path")
+        path = Path(value)
+        if not path.is_absolute():
+            path = self._root / path
+        resolved = path.resolve()
+        self._ensure_inside_root(resolved)
+        return resolved
+
+    def _public_artifact_ref(self, path: Path) -> str:
+        ref = public_artifact_ref(path, base_dir=self._root, kind="artifact")
+        return ref or path.name
 
     @staticmethod
     def _latest_entry(
@@ -362,12 +509,23 @@ def inspect_agentic_session_artifact(
     """Return a compact ops-safe APS artifact summary."""
     payload = _load_artifact_payload(artifact)
     validation = validate_agentic_session_artifact(payload)
+    failure_ledger = (
+        payload.get("failure_ledger", {})
+        if isinstance(payload.get("failure_ledger"), Mapping)
+        else {}
+    )
     return {
         "schema_version": payload.get("schema_version"),
         "session_id": payload.get("session_id"),
         "request_id": payload.get("request_id"),
         "termination_reason": payload.get("termination_reason"),
         "status": payload.get("status"),
+        "failure_category": payload.get("failure_category"),
+        "failure_ledger": {
+            "first_root_cause": failure_ledger.get("first_root_cause"),
+            "latest_failure": failure_ledger.get("latest_failure"),
+            "entry_count": failure_ledger.get("entry_count", 0),
+        },
         "tool_loop_config": payload.get("tool_loop_config", {}),
         "tool_budget_used": payload.get("tool_budget_used", {}),
         "transcript_digest": payload.get("transcript_digest"),
@@ -407,6 +565,11 @@ def resume_from_artifact(
                 ),
             }
         )
+    failure_ledger = (
+        payload.get("failure_ledger", {})
+        if isinstance(payload.get("failure_ledger"), Mapping)
+        else {}
+    )
     context = {
         "schema_version": payload.get("schema_version"),
         "session_id": payload.get("session_id"),
@@ -416,6 +579,10 @@ def resume_from_artifact(
         "tool_budget_used": payload.get("tool_budget_used", {}),
         "tool_steps": tool_steps,
     }
+    if payload.get("failure_category"):
+        context["failure_category"] = payload.get("failure_category")
+    if int(failure_ledger.get("entry_count") or 0) > 0:
+        context["failure_ledger"] = failure_ledger
     summary = json.dumps(context, sort_keys=True, default=str)
     if len(summary) > max_chars:
         allowed_steps: list[dict[str, Any]] = []
@@ -543,6 +710,25 @@ def _agentic_transcript_artifact(
         "termination_reason": state.loop_stop_reason,
         "tool_loop_config": dict(state.tool_loop_config),
         "tool_budget_used": _tool_budget_used_payload(state),
+        "failure_ledger": _json_ready(
+            _sanitize_agentic_value(
+                {
+                    "schema_version": "agentic-retry-error-ledger.v1",
+                    "entries": list(state.failure_ledger),
+                    "entry_count": len(state.failure_ledger),
+                    "first_root_cause": (
+                        state.failure_ledger[0].get("root_cause")
+                        if state.failure_ledger
+                        else None
+                    ),
+                    "latest_failure": (
+                        state.failure_ledger[-1].get("category")
+                        if state.failure_ledger
+                        else None
+                    ),
+                }
+            )
+        ),
         "transcript_digest": _transcript_digest(compact_transcript),
         "compact_transcript": compact_transcript,
         "tainted": True,
@@ -592,6 +778,11 @@ def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
         "self_check": _json_ready(output.self_check),
         "compact_transcript": compact_transcript,
         "failure_detail": _sanitize_agentic_value(output.failure_detail),
+        "failure_category": _enum_value(output.failure_category),
+        "structured_rejection": _sanitize_agentic_value(output.structured_rejection),
+        "failure_ledger": _json_ready(
+            _sanitize_agentic_value(output.failure_ledger)
+        ),
         "tainted": True,
     }
     return _json_ready(_sanitize_agentic_value(artifact))

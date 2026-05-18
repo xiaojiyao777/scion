@@ -22,6 +22,10 @@ from scion.core.models import (
 )
 from scion.core.paths import normalize_relative_patch_path
 from scion.problem.bridge import legacy_problem_spec_from_v1
+from scion.runtime.telemetry_guard import (
+    build_telemetry_guard_summary,
+    format_telemetry_guard_issue,
+)
 
 if TYPE_CHECKING:
     from scion.proposal.tools import ProposalToolContext
@@ -55,6 +59,7 @@ class _RuntimeSmokeCase:
     data_root: str | None = None
     data_root_source: str = "unknown"
     data_root_status: str = "unresolved"
+    case_source: str = "runtime_smoke_manifest"
 
 
 def _runtime_algorithm_smoke_preview(
@@ -124,6 +129,7 @@ def _runtime_algorithm_smoke_preview(
                 canary_rel=canary_rel,
                 split_manifest=context.split_manifest,
                 seed_ledger=context.seed_ledger,
+                safe_data_roots=_runtime_smoke_safe_data_roots(context),
             )
             if not smoke_cases:
                 return {
@@ -142,6 +148,9 @@ def _runtime_algorithm_smoke_preview(
                 champion_registry_path = champion_workspace / "registry.json"
             runs: list[dict[str, Any]] = []
             micro_results: list[dict[str, Any]] = []
+            candidate_guard_runtimes: list[Mapping[str, Any]] = []
+            champion_guard_runtimes: list[Mapping[str, Any]] = []
+            telemetry_guard_summary: dict[str, Any] = {}
             representative: dict[str, Any] | None = None
             issue: str | None = None
             audit_failure: Mapping[str, Any] | None = None
@@ -155,11 +164,7 @@ def _runtime_algorithm_smoke_preview(
                 if raw is None:
                     issue = str(run_payload.get("detail") or "solver run failed")
                     representative = {
-                        "case": smoke_case.rel_path,
-                        "resolved_case_path": str(smoke_case.path),
-                        "data_root": smoke_case.data_root,
-                        "data_root_source": smoke_case.data_root_source,
-                        "data_root_status": smoke_case.data_root_status,
+                        **_runtime_smoke_case_public_payload(smoke_case),
                         "seed": smoke_case.seed,
                         "label": smoke_case.label,
                         "passed": False,
@@ -177,12 +182,10 @@ def _runtime_algorithm_smoke_preview(
                     selected_surface=surface_name,
                 )
                 runtime = raw.get("runtime") if isinstance(raw, Mapping) else None
+                if isinstance(runtime, Mapping):
+                    candidate_guard_runtimes.append(runtime)
                 run_result = {
-                    "case": smoke_case.rel_path,
-                    "resolved_case_path": str(smoke_case.path),
-                    "data_root": smoke_case.data_root,
-                    "data_root_source": smoke_case.data_root_source,
-                    "data_root_status": smoke_case.data_root_status,
+                    **_runtime_smoke_case_public_payload(smoke_case),
                     "seed": smoke_case.seed,
                     "label": smoke_case.label,
                     "passed": audit_failure is None,
@@ -223,8 +226,28 @@ def _runtime_algorithm_smoke_preview(
                     champion_run=champion_run,
                     smoke_case=smoke_case,
                 )
+                champion_runtime = (
+                    champion_raw.get("runtime")
+                    if isinstance(champion_raw, Mapping)
+                    else None
+                )
+                if isinstance(champion_runtime, Mapping):
+                    champion_guard_runtimes.append(champion_runtime)
                 run_result["micro_benchmark"] = micro_result
                 micro_results.append(micro_result)
+            if issue is None:
+                telemetry_guard_summary = build_telemetry_guard_summary(
+                    candidate_runtimes=candidate_guard_runtimes,
+                    champion_runtimes=champion_guard_runtimes,
+                    problem_spec=_problem_spec_for_runtime_audit(context.problem_spec),
+                    selected_surface=surface_name,
+                    expected_telemetry=getattr(hypothesis, "expected_telemetry", None),
+                    implicit_activity_claim=_solver_design_patch_claims_search_effort(
+                        patch,
+                        hypothesis,
+                    ),
+                )
+                issue = format_telemetry_guard_issue(telemetry_guard_summary)
             if issue is None:
                 issue = _solver_design_zero_effort_issue(
                     patch=patch,
@@ -260,9 +283,11 @@ def _runtime_algorithm_smoke_preview(
         "selected_surface": surface_name,
         "case": representative.get("case") or canary_rel,
         "resolved_case_path": representative.get("resolved_case_path"),
+        "case_path_ref": representative.get("case_path_ref"),
         "data_root": representative.get("data_root"),
         "data_root_source": representative.get("data_root_source"),
         "data_root_status": representative.get("data_root_status"),
+        "provenance": _runtime_smoke_payload_provenance(representative),
         "seed": representative.get("seed") or _ALGORITHM_SMOKE_DEFAULT_SEED,
         "case_count": len(runs),
         "cases": [
@@ -270,9 +295,11 @@ def _runtime_algorithm_smoke_preview(
                 "label": run.get("label"),
                 "case": run.get("case"),
                 "resolved_case_path": run.get("resolved_case_path"),
+                "case_path_ref": run.get("case_path_ref"),
                 "data_root": run.get("data_root"),
                 "data_root_source": run.get("data_root_source"),
                 "data_root_status": run.get("data_root_status"),
+                "provenance": run.get("provenance"),
                 "seed": run.get("seed"),
                 "passed": run.get("passed"),
             }
@@ -287,6 +314,8 @@ def _runtime_algorithm_smoke_preview(
         "runs": runs,
         "micro_benchmark": _compact_solver_design_micro_benchmark(micro_results),
     }
+    if telemetry_guard_summary:
+        payload["telemetry_guard"] = telemetry_guard_summary
     if audit_failure is not None:
         payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
             audit_failure
@@ -375,12 +404,13 @@ def _runtime_smoke_cases(
     canary_rel: str,
     split_manifest: Any = None,
     seed_ledger: Any = None,
+    safe_data_roots: Any = None,
 ) -> tuple[list[_RuntimeSmokeCase], list[str]]:
     cases: list[_RuntimeSmokeCase] = []
     missing: list[str] = []
     seen: set[tuple[str, int]] = set()
 
-    def add_case(label: str, rel_path: Any, seed: Any) -> None:
+    def add_case(label: str, rel_path: Any, seed: Any, case_source: str) -> None:
         rel = str(rel_path or "").strip()
         if not rel:
             return
@@ -396,6 +426,8 @@ def _runtime_smoke_cases(
             workspace=workspace,
             base_workspace=base_workspace,
             case_rel=rel,
+            safe_data_roots=safe_data_roots,
+            case_source=case_source,
         )
         if resolution["path"] is None:
             missing.append(f"{label} smoke case not found: {rel}")
@@ -409,6 +441,7 @@ def _runtime_smoke_cases(
                 data_root=resolution["data_root"],
                 data_root_source=resolution["data_root_source"],
                 data_root_status=resolution["data_root_status"],
+                case_source=case_source,
             )
         )
 
@@ -424,16 +457,19 @@ def _runtime_smoke_cases(
             base_workspace=base_workspace,
             filename="seed_ledger.yaml",
         )
+    if safe_data_roots is None:
+        safe_data_roots = _runtime_smoke_safe_data_roots_from_manifest(split_manifest)
 
     canary_seed = _first_int(
         _runtime_smoke_stage_value(seed_ledger, "canary"),
         _ALGORITHM_SMOKE_DEFAULT_SEED,
     )
     canary_cases = _string_list(_runtime_smoke_stage_value(split_manifest, "canary"))
+    case_source = _runtime_smoke_case_source(split_manifest)
     if canary_rel and canary_rel not in canary_cases:
         canary_cases.append(canary_rel)
     for rel in canary_cases[:1]:
-        add_case("canary", rel, canary_seed)
+        add_case("canary", rel, canary_seed, case_source)
 
     screening_seed = _first_int(
         _runtime_smoke_stage_value(seed_ledger, "screening"),
@@ -444,7 +480,7 @@ def _runtime_smoke_cases(
         _ALGORITHM_SMOKE_MAX_SCREENING_CASES,
     )
     for rel in screening_cases:
-        add_case("screening", rel, screening_seed)
+        add_case("screening", rel, screening_seed, case_source)
     return cases, missing
 
 
@@ -576,16 +612,185 @@ def _string_list(value: Any) -> list[str]:
     return result
 
 
+def _runtime_smoke_safe_data_roots(context: ProposalToolContext) -> tuple[Path, ...]:
+    roots: list[Any] = []
+    for source in (
+        getattr(context, "split_manifest", None),
+        getattr(context, "problem_spec", None),
+        _attr(getattr(context, "adapter", None), "spec"),
+    ):
+        roots.extend(_runtime_smoke_safe_data_roots_from_manifest(source))
+    return _normalize_runtime_smoke_safe_roots(roots)
+
+
+def _runtime_smoke_safe_data_roots_from_manifest(source: Any) -> list[Any]:
+    if source is None:
+        return []
+    values: list[Any] = []
+    keys = (
+        "safe_data_roots",
+        "safe_data_root",
+        "data_roots",
+        "data_root",
+        "problem_data_roots",
+        "problem_data_root",
+    )
+    for key in keys:
+        value = _attr(source, key)
+        if value in (None, "", [], ()):
+            continue
+        if isinstance(value, Mapping):
+            values.extend(value.values())
+        elif isinstance(value, (list, tuple, set)):
+            values.extend(value)
+        else:
+            values.append(value)
+    return values
+
+
+def _normalize_runtime_smoke_safe_roots(value: Any) -> tuple[Path, ...]:
+    if value in (None, "", [], ()):
+        return ()
+    raw_values = value if isinstance(value, (list, tuple, set)) else (value,)
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for item in raw_values:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        root = Path(text).expanduser().resolve(strict=False)
+        key = str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(root)
+    return tuple(roots)
+
+
+def _runtime_smoke_case_source(split_manifest: Any) -> str:
+    if split_manifest is None:
+        return "workspace_split_manifest"
+    source = str(_attr(split_manifest, "source") or "").strip()
+    if source:
+        return source
+    if isinstance(split_manifest, Mapping):
+        return "campaign_config_manifest"
+    return "campaign_split_manifest"
+
+
+def _runtime_smoke_relative_path(case_rel: str) -> Path | None:
+    text = str(case_rel or "").replace("\\", "/").strip()
+    if not text:
+        return None
+    pure = PurePosixPath(text)
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        return None
+    return Path(*pure.parts)
+
+
+def _runtime_smoke_candidate_within_root(
+    path: Path,
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    safe_data_roots: Any,
+) -> bool:
+    candidate = path.expanduser().resolve(strict=False)
+    roots = (
+        workspace.expanduser().resolve(strict=False),
+        base_workspace.expanduser().resolve(strict=False),
+        *_normalize_runtime_smoke_safe_roots(safe_data_roots),
+    )
+    for root in roots:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _runtime_smoke_audited_manifest_ref(
+    *,
+    workspace: Path,
+    base_workspace: Path,
+    rel_path: str,
+) -> str | None:
+    for root in (workspace, base_workspace):
+        root = root.expanduser().resolve(strict=False)
+        for manifest_path in sorted(root.glob("**/manifests/*.json")):
+            try:
+                payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, Mapping):
+                continue
+            if payload.get("schema") != "scion.cvrp_case_manifest.v1":
+                continue
+            cases = payload.get("cases")
+            if not isinstance(cases, list):
+                continue
+            for case in cases:
+                if not isinstance(case, Mapping):
+                    continue
+                if str(case.get("source_path") or "").strip() != rel_path:
+                    continue
+                try:
+                    return manifest_path.relative_to(root).as_posix()
+                except ValueError:
+                    return "problem_case_manifest"
+    return None
+
+
+def _runtime_smoke_case_public_payload(
+    smoke_case: _RuntimeSmokeCase,
+) -> dict[str, Any]:
+    case_ref = f"{smoke_case.data_root_source}:{smoke_case.rel_path}"
+    provenance = {
+        "source": smoke_case.case_source,
+        "case_path_ref": case_ref,
+        "data_root_source": smoke_case.data_root_source,
+        "data_root_status": smoke_case.data_root_status,
+        "absolute_paths_exposed": False,
+    }
+    return {
+        "case": smoke_case.rel_path,
+        "resolved_case_path": smoke_case.rel_path,
+        "case_path_ref": case_ref,
+        "data_root": smoke_case.data_root,
+        "data_root_source": smoke_case.data_root_source,
+        "data_root_status": smoke_case.data_root_status,
+        "provenance": provenance,
+    }
+
+
+def _runtime_smoke_payload_provenance(
+    representative: Mapping[str, Any],
+) -> dict[str, Any]:
+    provenance = representative.get("provenance")
+    if isinstance(provenance, Mapping):
+        result = dict(provenance)
+    else:
+        result = {
+            "source": "runtime_smoke_manifest",
+            "absolute_paths_exposed": False,
+        }
+    result.setdefault("absolute_paths_exposed", False)
+    return result
+
+
 def _resolve_smoke_instance_path(
     *,
     workspace: Path,
     base_workspace: Path,
     case_rel: str,
+    safe_data_roots: Any = None,
 ) -> Path | None:
     return _resolve_smoke_instance(
         workspace=workspace,
         base_workspace=base_workspace,
         case_rel=case_rel,
+        safe_data_roots=safe_data_roots,
     )["path"]
 
 
@@ -594,42 +799,71 @@ def _resolve_smoke_instance(
     workspace: Path,
     base_workspace: Path,
     case_rel: str,
+    safe_data_roots: Any = None,
+    case_source: str = "runtime_smoke_manifest",
 ) -> dict[str, Any]:
-    rel = Path(case_rel)
+    rel = _runtime_smoke_relative_path(case_rel)
+    if rel is None:
+        path = Path(str(case_rel or ""))
+        source = "rejected_absolute_path" if path.is_absolute() else "rejected_case_path"
+        status = "absolute_path_rejected" if path.is_absolute() else "unsafe_relative_rejected"
+        return {
+            "path": None,
+            "data_root": None,
+            "data_root_source": source,
+            "data_root_status": status,
+        }
     candidates: list[tuple[Path, str | None, str, str]] = []
-    if rel.is_absolute():
-        candidates.append((rel, str(rel.parent), "absolute_path", "absolute"))
-    else:
-        candidates.append((workspace / rel, str(workspace), "workspace", "relative"))
-        candidates.append(
-            (base_workspace / rel, str(base_workspace), "base_workspace", "relative")
+    candidates.append(
+        (workspace / rel, "workspace", "workspace", "safe_root_relative")
+    )
+    candidates.append(
+        (
+            base_workspace / rel,
+            "base_workspace",
+            "base_workspace",
+            "safe_root_relative",
         )
-        data_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
-        if data_root:
-            resolved_data_root = Path(data_root).expanduser().resolve(strict=False)
-            candidates.append(
-                (
-                    resolved_data_root / rel,
-                    str(resolved_data_root),
-                    "SCION_PROBLEM_DATA_ROOT",
-                    "env_configured",
-                )
+    )
+    for index, safe_root in enumerate(
+        _normalize_runtime_smoke_safe_roots(safe_data_roots)
+    ):
+        candidates.append(
+            (
+                safe_root / rel,
+                f"safe_data_root:{index}",
+                "safe_data_root",
+                "safe_root_relative",
             )
+        )
     for path, data_root, source, status in candidates:
+        if not _runtime_smoke_candidate_within_root(
+            path,
+            workspace=workspace,
+            base_workspace=base_workspace,
+            safe_data_roots=safe_data_roots,
+        ):
+            continue
         if path.is_file():
+            manifest_ref = _runtime_smoke_audited_manifest_ref(
+                workspace=workspace,
+                base_workspace=base_workspace,
+                rel_path=rel.as_posix(),
+            )
+            if manifest_ref:
+                source = "audited_problem_data_manifest"
+                status = "audited_manifest_relative"
+                data_root = manifest_ref
             return {
                 "path": path,
                 "data_root": data_root,
                 "data_root_source": source,
                 "data_root_status": status,
             }
-    env_root = str(os.environ.get("SCION_PROBLEM_DATA_ROOT") or "").strip()
     return {
         "path": None,
-        "data_root": str(Path(env_root).expanduser().resolve(strict=False))
-        if env_root
-        else None,
-        "data_root_source": "SCION_PROBLEM_DATA_ROOT" if env_root else "not_configured",
+        "data_root": None,
+        "data_root_source": case_source,
         "data_root_status": "missing",
     }
 
@@ -656,22 +890,30 @@ def _run_solver_design_smoke(
         selected_surface=selected_surface,
     )
     run_payload = {
-        "case": smoke_case.rel_path,
-        "resolved_case_path": str(smoke_case.path),
-        "data_root": smoke_case.data_root,
-        "data_root_source": smoke_case.data_root_source,
-        "data_root_status": smoke_case.data_root_status,
+        **_runtime_smoke_case_public_payload(smoke_case),
         "seed": smoke_case.seed,
         "label": smoke_case.label,
         "success": result.success,
         "exit_code": result.exit_code,
         "elapsed_ms": result.elapsed_ms,
         "error_category": result.error_category,
-        "stdout": _limit_text(result.stdout or "", 800),
-        "stderr": _limit_text(result.stderr or "", 800),
+        "stdout": _redact_runtime_smoke_paths(
+            _limit_text(result.stdout or "", 800),
+            workspace,
+            smoke_case.path,
+        ),
+        "stderr": _redact_runtime_smoke_paths(
+            _limit_text(result.stderr or "", 800),
+            workspace,
+            smoke_case.path,
+        ),
     }
     if not result.success or result.output_path is None:
-        detail = _solver_run_failure_detail(result)
+        detail = _redact_runtime_smoke_paths(
+            _solver_run_failure_detail(result),
+            workspace,
+            smoke_case.path,
+        )
         run_payload["detail"] = detail
         return None, run_payload
     try:
@@ -702,6 +944,19 @@ def _solver_run_failure_detail(result: Any) -> str:
     if stdout:
         parts.append("stdout=" + _limit_text(stdout, 1200))
     return "; ".join(parts)
+
+
+def _redact_runtime_smoke_paths(text: str, *paths: Path) -> str:
+    redacted = str(text or "")
+    replacements = {
+        str(path.expanduser().resolve(strict=False)): "<runtime_smoke_path>"
+        for path in paths
+        if path is not None
+    }
+    for raw, marker in sorted(replacements.items(), key=lambda item: -len(item[0])):
+        if raw:
+            redacted = redacted.replace(raw, marker)
+    return redacted
 
 
 def _runtime_smoke_audit_failure(

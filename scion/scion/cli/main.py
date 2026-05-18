@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Optional
 import typer
 
+from scion.core.public_refs import public_artifact_ref
+
 app = typer.Typer(
     name="scion",
     help="Scion — autonomous operator optimisation framework.",
@@ -821,6 +823,23 @@ def report_summary(
         contract_failures = db_summary.get("contract_failures", 0)
         verification_failures = db_summary.get("verification_failures", 0)
         by_decision = db_summary.get("by_decision", {})
+        screening_rate_fields = {
+            key: db_summary.get(key)
+            for key in (
+                "screening_win_rate_scope",
+                "screening_case_wins",
+                "screening_case_losses",
+                "screening_case_ties",
+                "screening_case_total",
+                "screening_case_win_rate",
+                "screening_gate_win_rate",
+                "screening_pair_wins",
+                "screening_pair_losses",
+                "screening_pair_ties",
+                "screening_pair_total",
+                "screening_pair_win_rate",
+            )
+        }
 
         # Family distribution from hypotheses.change_locus
         import sqlite3 as _sqlite3
@@ -866,6 +885,7 @@ def report_summary(
     else:
         total_events = n_champions = contract_failures = verification_failures = 0
         by_decision = {}
+        screening_rate_fields = {}
         family_dist = {}
         weight_opt_summary = None
         stagnation_signals = []
@@ -881,7 +901,11 @@ def report_summary(
     promoted = by_decision.get("promote", 0)
 
     report = {
-        "campaign_dir": str(campaign_path),
+        "campaign_dir": public_artifact_ref(
+            campaign_path,
+            base_dir=campaign_path.parent,
+            kind="campaign",
+        ),
         "problem_name": meta.get("problem_name", "unknown"),
         "total_experiments": total_events,
         "champion_promotions": promoted,
@@ -889,6 +913,7 @@ def report_summary(
         "contract_intercept_rate": c_intercept,
         "verification_intercept_rate": v_intercept,
         "screening_pass_rate": screening_pass_rate,
+        **screening_rate_fields,
         "by_decision": by_decision,
         "family_distribution": family_dist,
         "verification_failure_breakdown": vfail_breakdown,
@@ -907,6 +932,17 @@ def report_summary(
             f"- Contract intercept rate: {c_intercept:.1%}",
             f"- Verification intercept rate: {v_intercept:.1%}",
             f"- Screening pass rate: {screening_pass_rate:.1%}",
+            (
+                "- Screening case/gate win rate: "
+                f"{(screening_rate_fields.get('screening_case_win_rate') or 0.0):.1%}"
+            ),
+            (
+                "- Screening pair win rate: "
+                f"{(screening_rate_fields.get('screening_pair_win_rate') or 0.0):.1%} "
+                f"({screening_rate_fields.get('screening_pair_wins') or 0}W/"
+                f"{screening_rate_fields.get('screening_pair_losses') or 0}L/"
+                f"{screening_rate_fields.get('screening_pair_ties') or 0}T)"
+            ),
             "",
         ]
         if family_dist:
@@ -1122,10 +1158,16 @@ def postmortem(
         for s in promoted_steps:
             hyp = s.get("hypothesis", {})
             pr = s.get("protocol_result", {})
-            wr = pr.get("win_rate", "?") if pr else "?"
+            wr = (
+                pr.get("screening_case_win_rate")
+                or pr.get("case_win_rate")
+                or pr.get("win_rate", "?")
+                if pr
+                else "?"
+            )
             lines.append(
                 f"- Round {s.get('round', '?')}: {hyp.get('action', '?')} {hyp.get('target_file', '?')}"
-                f" (win_rate={wr})"
+                f" (case_win_rate={wr})"
             )
             lines.append(f"  Hypothesis: {(hyp.get('text') or '')[:120]}")
         lines.append("")

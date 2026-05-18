@@ -20,6 +20,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
+from scion.core.public_refs import contains_absolute_path
 from scion.proposal.agentic_session import (
     AgenticEvidenceRef,
     AgenticProposalOutput,
@@ -811,7 +812,7 @@ def test_agentic_completed_output_produces_existing_hypothesis_and_patch_shapes(
     artifact_refs = sorted(
         str(p)
         for p in artifact_dir.rglob("*.json")
-        if p.name != "agentic_session_index.json"
+        if p.name in {"output.json", "transcript.json"}
     )
     assert len(artifact_refs) == 4
     for ref in artifact_refs:
@@ -846,6 +847,52 @@ def test_agentic_partial_session_returns_no_patch_and_routes_proposal_failure() 
     assert failures[0][1].category == "proposal"
     assert "agentic_proposal:code_generation_failed" in failures[0][1].detail
     assert circuit.failures == [failures[0][1].detail]
+
+
+def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="premise-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.PREMISE_CONTRADICTED,
+        failure_detail="active solver already contains the claimed missing move",
+        failure_category="agent_grounding_failure",
+        structured_rejection={
+            "premise_check": "contradicted",
+            "failure_category": "agent_grounding_failure",
+            "failure_code": "proposal_premise_contradicted",
+            "agent_block_reason": "agent_quality_blocked",
+        },
+    )
+    failure_streak = {"proposal": 2}
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    pipeline.failure_streak = failure_streak
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert failures == []
+    assert failure_streak == {"proposal": 2}
+    assert detail is not None
+    assert "agent_quality_blocked" in detail
+    assert "proposal_premise_contradicted" in detail
+    assert "agent_grounding_failure" in detail
+    assert circuit.failures == [detail]
+    assert session_ref is not None
+    assert session_ref["failure_category"] == "agent_grounding_failure"
+    assert session_ref["failure_code"] == "proposal_premise_contradicted"
+    assert session_ref["agent_block_reason"] == "agent_quality_blocked"
 
 
 def test_agentic_pipeline_passes_compact_resume_context_from_failed_artifact(
@@ -1207,6 +1254,49 @@ def test_agentic_lineage_records_tainted_session_without_decision_rationale() ->
     assert "private rationale" not in rendered
     assert "context.list_surfaces" not in rendered
     assert "raw_metrics_ref" in event
+
+
+def test_agentic_lineage_audit_payload_marks_absolute_tainted_refs_internal(
+    tmp_path,
+) -> None:
+    registry = MemoryLineageRegistry()
+    pipeline, branch, _, _, _, _ = _pipeline(
+        use_agentic_proposal=True,
+        lineage_registry=registry,
+    )
+    absolute_output_ref = tmp_path / "agentic" / "session-1" / "output.json"
+
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.COMPLETED,
+        session_id="session-1",
+        campaign_id="camp-1",
+        branch_id=branch.branch_id,
+        request_id="request-1",
+        idempotency_key="idempotency-1",
+        transcript_digest="digest-1",
+        self_check=AgenticSelfCheck(
+            schema_valid=True,
+            contract_preview_passed=True,
+            contract_preview_codes=("C1",),
+        ),
+        tainted_artifact_refs=(
+            str(absolute_output_ref),
+            "artifacts/session-1/transcript.json",
+        ),
+        termination_reason=AgenticTerminationReason.COMPLETED,
+    )
+
+    pipeline._record_agentic_lineage_event(output)
+
+    event = registry.events[-1]
+    payload = json.loads(event["audit_payload_json"])
+    assert event["event_kind"] == "agentic_proposal_session"
+    assert payload["internal_only"] is True
+    assert payload["tainted_artifact_refs_internal_only"] is True
+    assert payload["tainted_artifact_ref_scope"] == "public_relative"
+    assert not contains_absolute_path(payload)
+    assert payload["tainted_artifact_refs"][0].startswith("artifact:output.json#")
+    assert payload["tainted_artifact_refs"][1] == "artifacts/session-1/transcript.json"
 
 
 def test_attempt_fix_builds_fix_context_and_returns_patch() -> None:

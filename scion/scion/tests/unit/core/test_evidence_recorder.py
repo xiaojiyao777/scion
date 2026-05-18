@@ -17,10 +17,13 @@ from scion.core.models import (
     HypothesisProposal,
     OperatorConfig,
     PatchProposal,
+    PairwiseCaseFeedback,
     ProtocolResult,
     StepRecord,
     VerificationResult,
 )
+from scion.core.public_refs import contains_absolute_path
+from scion.lineage.registry import LineageRegistry
 from scion.problem.spec import FamilyTaxonomySpec
 
 
@@ -157,7 +160,19 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["branch_id"] == "branch-1"
     assert summary_step["decision"] == "queue_validate"
     assert summary_step["hypothesis"]["text"] == "Improve route insertion with regret scoring."
-    assert summary_step["protocol_result"]["raw_metrics_ref"] == "/tmp/metrics-round-3.json"
+    assert not summary_step["protocol_result"]["raw_metrics_ref"].startswith("/")
+    assert "metrics-round-3.json" in summary_step["protocol_result"]["raw_metrics_ref"]
+    assert summary_step["protocol_result"]["raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
+    assert summary_step["protocol_result"]["raw_metrics_internal_only"] is True
+    assert summary_step["protocol_result"]["win_rate_scope"] == "case_level_gate"
+    assert summary_step["protocol_result"]["screening_case_win_rate"] == 0.67
+    assert summary_step["protocol_result"]["screening_gate_win_rate"] == 0.67
+    assert summary_step["protocol_result"]["screening_win_rate"] == 0.67
+    assert summary_step["protocol_result"]["screening_win_rate_scope"] == (
+        "case_level_gate"
+    )
     assert summary_step["protocol_result"]["reason_codes"] == [
         "screening_positive",
         "runtime_ok",
@@ -208,6 +223,61 @@ def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
     assert protocol["decision_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
     assert protocol["effective_reason_codes"] == ["CANDIDATE_RUNTIME_FAILURE"]
     assert protocol["effective_reason_source"] == "decision_engine"
+
+
+def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    pair_results = (
+        ["win"] * 2
+        + ["tie"] * 12
+        + ["loss"] * 2
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=-0.01,
+            ci_high=0.01,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="case-level gate failed",
+        raw_metrics_ref="/tmp/r2-like-screening.json",
+        pair_feedback=tuple(
+            PairwiseCaseFeedback(
+                case_id=f"case-{idx // 4}",
+                seed=idx,
+                comparison=result,
+                delta=1.0 if result == "win" else -1.0 if result == "loss" else 0.0,
+            )
+            for idx, result in enumerate(pair_results)
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["screening_win_rate"] == 0.0
+    assert protocol["screening_win_rate_scope"] == "case_level_gate"
+    assert protocol["screening_case_win_rate"] == 0.0
+    assert protocol["screening_gate_win_rate"] == 0.0
+    assert protocol["screening_pair_wins"] == 2
+    assert protocol["screening_pair_losses"] == 2
+    assert protocol["screening_pair_ties"] == 12
+    assert protocol["screening_pair_total"] == 16
+    assert protocol["screening_pair_win_rate"] == 0.125
 
 
 def test_campaign_summary_exposes_bounded_runtime_failure_summary(
@@ -357,7 +427,7 @@ def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
     assert summary["family_coverage"] == {"alpha": 1, "beta": 1}
 
 
-def test_protocol_progress_status_preserves_raw_metrics_ref(tmp_path: Path) -> None:
+def test_protocol_progress_status_uses_public_raw_metrics_ref(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
@@ -372,10 +442,131 @@ def test_protocol_progress_status_preserves_raw_metrics_ref(tmp_path: Path) -> N
     )
 
     status = json.loads((tmp_path / "status.json").read_text())
-    assert progress["raw_metrics_ref"] == "/tmp/progress-metrics.json"
-    assert status["current_progress"]["raw_metrics_ref"] == "/tmp/progress-metrics.json"
+    assert progress["raw_metrics_ref"] != "/tmp/progress-metrics.json"
+    assert not progress["raw_metrics_ref"].startswith("/")
+    assert "progress-metrics.json" in progress["raw_metrics_ref"]
+    assert progress["raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert progress["raw_metrics_internal_only"] is True
+    assert status["current_progress"]["raw_metrics_ref"] == progress["raw_metrics_ref"]
+    assert not status["current_progress"]["raw_metrics_ref"].startswith("/")
     assert status["current_progress"]["completed_cases"] == 2
     assert "last_progress_at" in status["current_progress"]
+
+
+def test_public_summary_and_status_redact_nested_diagnostics_and_branches(
+    tmp_path: Path,
+) -> None:
+    branch_workspace = tmp_path / "workspaces" / "branch-1"
+    branch_trace = tmp_path / "traces" / "branch-1.json"
+    diagnostic_log = tmp_path / "diagnostics" / "branch-1.log"
+    branch_summary = f"retry workspace {branch_workspace} before promotion"
+    trace_note = f"trace captured at {branch_trace}, retryable"
+    diagnostic_message = (
+        f"runtime log stored at {diagnostic_log}; workspace={branch_workspace}"
+    )
+    colon_note = f"log:{diagnostic_log}; workspace:{branch_workspace}"
+    local_uri_note = (
+        f"log uri file://{diagnostic_log.as_posix()}, "
+        f"workspace file://localhost{branch_workspace.as_posix()}"
+    )
+    trace_uri_note = f"trace uri file://{branch_trace.as_posix()}"
+    branch_colon_summary = f"retry workspace:{branch_workspace} before promotion"
+    external_note = "external diagnostic copied from /var/tmp/scion-internal.log"
+    assert contains_absolute_path(trace_note)
+    assert contains_absolute_path(diagnostic_message)
+    assert contains_absolute_path(colon_note)
+    assert contains_absolute_path(local_uri_note)
+    assert contains_absolute_path(trace_uri_note)
+    assert contains_absolute_path(branch_colon_summary)
+    assert contains_absolute_path(external_note)
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "n_active_branches": 1,
+            "branches": [
+                {
+                    "branch_id": "branch-1",
+                    "workspace_path": str(branch_workspace),
+                    "branch_summary": branch_summary,
+                    "branch_colon_summary": branch_colon_summary,
+                    "diagnostics": {
+                        "trace_path": str(branch_trace),
+                        "trace_note": trace_note,
+                        "trace_uri_note": trace_uri_note,
+                    },
+                }
+            ],
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[_step()],
+        round_num=1,
+        champion=_champion(),
+        diagnostics=[
+            {
+                "kind": "runtime",
+                "payload": {
+                    "log_path": str(diagnostic_log),
+                    "message": diagnostic_message,
+                    "colon_note": colon_note,
+                    "local_uri_note": local_uri_note,
+                    "external_note": external_note,
+                    "raw_metrics_ref": f"metrics captured in {diagnostic_log}",
+                    "branches": [
+                        {
+                            "workspace": str(branch_workspace),
+                            "note": f"branch workspace:{branch_workspace}",
+                        }
+                    ],
+                },
+            }
+        ],
+    )
+    status = recorder.write_status()
+
+    assert not contains_absolute_path(summary)
+    assert not contains_absolute_path(status)
+    assert not contains_absolute_path(
+        json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    )
+    assert summary["diagnostics"][0]["payload"]["log_path"] == (
+        "diagnostics/branch-1.log"
+    )
+    assert summary["diagnostics"][0]["payload"]["message"] == (
+        "runtime log stored at diagnostics/branch-1.log; "
+        "workspace=workspaces/branch-1"
+    )
+    assert summary["diagnostics"][0]["payload"]["colon_note"] == (
+        "log:diagnostics/branch-1.log; workspace:workspaces/branch-1"
+    )
+    assert summary["diagnostics"][0]["payload"]["local_uri_note"] == (
+        "log uri diagnostics/branch-1.log, workspace workspaces/branch-1"
+    )
+    assert summary["diagnostics"][0]["payload"]["external_note"].startswith(
+        "external diagnostic copied from artifact:scion-internal.log#"
+    )
+    assert summary["diagnostics"][0]["payload"]["raw_metrics_ref"] == (
+        "metrics captured in diagnostics/branch-1.log"
+    )
+    assert summary["diagnostics"][0]["payload"]["branches"][0]["note"] == (
+        "branch workspace:workspaces/branch-1"
+    )
+    assert summary["branches"][0]["workspace_path"] == "workspaces/branch-1"
+    assert summary["branches"][0]["branch_summary"] == (
+        "retry workspace workspaces/branch-1 before promotion"
+    )
+    assert summary["branches"][0]["branch_colon_summary"] == (
+        "retry workspace:workspaces/branch-1 before promotion"
+    )
+    assert status["branches"][0]["diagnostics"]["trace_path"] == "traces/branch-1.json"
+    assert status["branches"][0]["diagnostics"]["trace_note"] == (
+        "trace captured at traces/branch-1.json, retryable"
+    )
+    assert status["branches"][0]["diagnostics"]["trace_uri_note"] == (
+        "trace uri traces/branch-1.json"
+    )
 
 
 def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics_ref(
@@ -448,10 +639,41 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
 
     assert event["branch_id"] == "branch-1"
     assert event["decision"] == "promote"
-    assert event["raw_metrics_ref"] == "/tmp/promotion-metrics.json"
+    assert not event["raw_metrics_ref"].startswith("/")
+    assert "promotion-metrics.json" in event["raw_metrics_ref"]
     assert metadata["current_champion_version"] == 8
-    assert metadata["protocol_raw_metrics_ref"] == "/tmp/promotion-metrics.json"
-    assert metadata["metrics_refs"]["protocol_raw_metrics_ref"] == "/tmp/promotion-metrics.json"
+    assert metadata["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert metadata["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert metadata["raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert metadata["raw_metrics_internal_only"] is True
+    assert metadata["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert metadata["metrics_refs"]["raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert metadata["metrics_refs"]["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert metadata["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
+    assert metadata["metrics_refs"]["raw_metrics_internal_only"] is True
+    assert metadata["metrics_refs"]["audit_payload_stored_in"] == (
+        "experiment_events.audit_payload_json"
+    )
+    audit_payload = json.loads(event["audit_payload_json"])
+    assert audit_payload["internal_only"] is True
+    assert audit_payload["raw_metrics_internal_only"] is True
+    assert audit_payload["raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert audit_payload["raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert audit_payload["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["metrics_refs"]["raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
+    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref"] == (
+        event["raw_metrics_ref"]
+    )
+    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
+    assert not contains_absolute_path(audit_payload)
     assert metadata["decision_reason_codes"] == ["frozen_positive", "runtime_ok"]
     assert metadata["runtime_guard"]["metadata"]["ratio"] == 1.2
     assert metadata["runtime_stats"]["runtime_ratio_median"] == 1.18
@@ -466,6 +688,56 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert payload_features["runtime_guard"]["metadata"]["case_id"] == "case-1"
     assert payload_features["runtime_stats"]["runtime_regression_rate"] == 0.5
     assert reason_codes == ["frozen_positive", "runtime_ok"]
+
+
+def test_db_audit_payload_uses_public_raw_metrics_refs(tmp_path: Path) -> None:
+    registry = LineageRegistry(str(tmp_path / "scion.db"))
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        registry=registry,
+    )
+    metrics_path = tmp_path / "metrics" / "screening-metrics.json"
+
+    recorder.record_step_lineage(
+        branch=_branch(),
+        hypothesis=_hypothesis(),
+        patch=_patch(),
+        contract_result=ContractResult(
+            passed=True,
+            checks=(CheckResult("contract", True, "light", "ok", 1),),
+        ),
+        verification_result=VerificationResult(passed=True, checks=()),
+        canary_result=CanaryResult(passed=True),
+        protocol_result=_protocol_result(str(metrics_path)),
+        decision=Decision.ABANDON,
+        champion=_champion(),
+        hypothesis_id="hyp-1",
+    )
+
+    rows = registry.query_by_branch("branch-1")
+    event = next(row for row in rows if row["event_kind"] == "experiment")
+    audit_payload = json.loads(event["audit_payload_json"])
+
+    assert event["raw_metrics_ref"] == "metrics/screening-metrics.json"
+    assert not contains_absolute_path(event["raw_metrics_ref"])
+    assert not contains_absolute_path(audit_payload)
+    assert audit_payload["internal_only"] is True
+    assert audit_payload["raw_metrics_internal_only"] is True
+    assert audit_payload["raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert audit_payload["raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
+    assert audit_payload["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
+    assert audit_payload["metrics_refs"]["raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
+    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref"] == (
+        event["raw_metrics_ref"]
+    )
+    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
+        "public_artifact_ref"
+    )
 
 
 def test_future_final_evidence_refs_do_not_change_step_schema(tmp_path: Path) -> None:
@@ -487,6 +759,5 @@ def test_future_final_evidence_refs_do_not_change_step_schema(tmp_path: Path) ->
     )
 
     assert set(after["steps"][0].keys()) == before_step_keys
-    assert after["final_evidence_refs"] == {
-        "frozen_quality_report": "/tmp/final-quality.json"
-    }
+    assert not contains_absolute_path(after["final_evidence_refs"])
+    assert "final-quality.json" in after["final_evidence_refs"]["frozen_quality_report"]

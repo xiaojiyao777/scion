@@ -658,6 +658,54 @@ def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
     ]
 
 
+def test_run_experiment_fails_closed_on_declared_zero_activity_probe(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "generic_solver_loaded": True,
+        "generic_solver_active": True,
+        "generic_solver_errors": 0,
+        "generic_solver_search_iterations": 0,
+    }
+    champion_runtime = {
+        "generic_solver_search_iterations": 8,
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime=champion_runtime),
+        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="generic_solver",
+            required_runtime_fields=(
+                "generic_solver_loaded",
+                "generic_solver_active",
+                "generic_solver_errors",
+                "generic_solver_search_iterations",
+            ),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="generic_solver",
+        expected_telemetry={"activity": ["generic_solver_search_iterations"]},
+    )
+
+    assert result.gate_outcome == "fail"
+    assert "TELEMETRY_GUARD_FAILED" in result.reason_codes
+    assert "TELEMETRY_ACTIVITY_NOT_OBSERVED" in result.reason_codes
+    guard = result.candidate_surface_runtime_summary["telemetry_guard"]
+    assert guard["passed"] is False
+    assert guard["failures"][0]["field"] == "generic_solver_search_iterations"
+    assert "telemetry_guard=" in result.exposed_summary
+
+
 def test_run_experiment_normalizes_solver_algorithm_surface_alias(tmp_path):
     runner = MagicMock()
     candidate_runtime = {

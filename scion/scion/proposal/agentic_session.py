@@ -44,6 +44,7 @@ from scion.proposal.agentic_artifacts import (
 from scion.proposal.agentic_models import (
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticEvidenceRef,
+    AgenticFailureCategory,
     AgenticProposalOutput,
     AgenticProposalPhase,
     AgenticProposalRequest,
@@ -67,6 +68,7 @@ from scion.proposal.agentic_code_context import (
 from scion.proposal.agentic_diagnostics import (
     _research_diagnosis_from_observations,
 )
+from scion.proposal.mechanism_novelty import MechanismNoveltyGate
 from scion.proposal.agentic_preview import (
     AgenticSelfCheck,
     _algorithm_smoke_failure_detail,
@@ -105,6 +107,7 @@ from scion.proposal.agentic_session_tools import (
     _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
     _APS_CODE_SURFACE_READ_CODE_CHARS,
     _APS_SURFACE_READ_CODE_CHARS,
+    _algorithm_file_path_guidance,
     _budgeted_tool_args,
     _filter_code_phase_tool_names,
     _filter_model_facing_tool_names,
@@ -116,6 +119,7 @@ from scion.proposal.agentic_session_tools import (
     _is_solver_design_algorithm_target,
     _is_solver_design_support_module_target,
     _observation_selection_payload,
+    _recommended_algorithm_file_path,
     _surface_names_from_observations,
 )
 from scion.proposal.agentic_utils import (
@@ -129,6 +133,10 @@ from scion.proposal.llm_client import (
     LLMFormatError,
     LLMRetryExhaustedError,
     LLMTimeoutError,
+)
+from scion.proposal.prompt_manifest import (
+    build_api_visible_prompt_manifest,
+    stable_digest,
 )
 from scion.proposal.tools import (
     ProposalExposureLevel,
@@ -173,7 +181,27 @@ _CODE_PROMPT_FEEDBACK_TOOLS = frozenset(
         "context.read_branch_state",
     }
 )
+_AUTHORITATIVE_PREVIEW_TOOL_NAMES = frozenset(
+    {
+        "proposal.schema_preview",
+        "proposal.target_permission_preview",
+        "proposal.contract_preview",
+        "proposal.algorithm_smoke",
+    }
+)
+_AUTHORITATIVE_PREVIEW_SELECTION_SOURCES = frozenset({"fallback_selected"})
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
+_HYPOTHESIS_PROMPT_COMPACT_REQUIREMENT_TOOLS = frozenset(
+    {
+        "feedback.query_screening",
+        "feedback.query_runtime",
+    }
+)
+_SOLVER_DESIGN_GROUNDING_TOOLS = (
+    "context.read_active_solver_design",
+    "context.read_solver_call_graph",
+)
+_SOLVER_DESIGN_FILE_DISCOVERY_TOOLS = ("context.list_algorithm_files",)
 _SOLVER_DESIGN_BROAD_TERMS = (
     "hybrid",
     "alns",
@@ -192,10 +220,77 @@ _SOLVER_DESIGN_BROAD_TERMS = (
     "restart",
     "perturb",
 )
+_PATCH_METADATA_FIELDS = frozenset(
+    {"premise_check", "premise_check_reason", "repair_attribution"}
+)
+_FAILURE_LEDGER_SCHEMA_VERSION = "agentic-retry-error-ledger.v1"
+_MECHANISM_NOVELTY_GATE = MechanismNoveltyGate()
+_SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS = 24000
+_PREVIEW_OBSERVATION_BUDGET_EXHAUSTED_CODE = "observation_budget_exhausted"
+_PREVIEW_SESSION_TIMEOUT_CODE = "session_timeout"
+_AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
+_LEGACY_PREMISE_CONTRADICTED = AgenticFailureCategory.PREMISE_CONTRADICTED.value
+_PROPOSAL_PREMISE_CONTRADICTED_CODE = "proposal_premise_contradicted"
+_AGENT_QUALITY_BLOCKED_REASON = "agent_quality_blocked"
 
 
 class _ProposalToolTimeout(BaseException):
     pass
+
+
+def _authoritative_preview_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    state: AgenticProposalSessionState,
+) -> tuple[ProposalObservation, ...]:
+    """Return deterministic self-check previews, excluding planner exploration."""
+    ids = _authoritative_preview_observation_ids(state)
+    return tuple(
+        observation for observation in observations if observation.observation_id in ids
+    )
+
+
+def _authoritative_preview_observation_ids(
+    state: AgenticProposalSessionState,
+) -> set[str]:
+    ids: set[str] = set()
+    for event in state.transcript:
+        if str(event.phase or "") != AgenticProposalPhase.SELF_CHECK.value:
+            continue
+        metadata = dict(event.metadata or {})
+        if metadata.get("tool_name") not in _AUTHORITATIVE_PREVIEW_TOOL_NAMES:
+            continue
+        if (
+            str(metadata.get("selection_source") or "")
+            not in _AUTHORITATIVE_PREVIEW_SELECTION_SOURCES
+        ):
+            continue
+        observation_id = str(
+            metadata.get("observation_id") or metadata.get("evidence_ref") or ""
+        ).strip()
+        if observation_id:
+            ids.add(observation_id)
+    return ids
+
+
+def _is_authoritative_self_check_preview_call(
+    name: str,
+    phase: AgenticProposalPhase,
+    selection_source: str,
+) -> bool:
+    return (
+        phase == AgenticProposalPhase.SELF_CHECK
+        and name in _AUTHORITATIVE_PREVIEW_TOOL_NAMES
+        and selection_source in _AUTHORITATIVE_PREVIEW_SELECTION_SOURCES
+    )
+
+
+def _preview_limit_error_code(tool_name: str, stop_reason: str) -> str:
+    if stop_reason == "session_timeout":
+        return _PREVIEW_SESSION_TIMEOUT_CODE
+    if stop_reason == "observation_budget_exhausted":
+        return _PREVIEW_OBSERVATION_BUDGET_EXHAUSTED_CODE
+    suffix = str(tool_name or "preview").split(".")[-1]
+    return f"tool_loop_limit_before_{suffix}"
 
 
 def _can_use_signal_timeout() -> bool:
@@ -248,6 +343,24 @@ class AgenticProposalSession:
 
     def idempotency_key_for_request(self, request: AgenticProposalRequest) -> str:
         return compute_agentic_idempotency_key(request, self._tool_loop_config)
+
+    def _self_check_from_authoritative_previews(
+        self,
+        observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+        state: AgenticProposalSessionState,
+    ) -> AgenticSelfCheck:
+        return _self_check_from_previews(
+            _authoritative_preview_observations(observations, state)
+        )
+
+    def _latest_authoritative_preview_failure_detail(
+        self,
+        observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+        state: AgenticProposalSessionState,
+    ) -> str | None:
+        return _latest_preview_failure_detail(
+            _authoritative_preview_observations(observations, state)
+        )
 
     def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
         session_id = str(uuid.uuid4())
@@ -317,7 +430,8 @@ class AgenticProposalSession:
                 return self._persist(output, state)
             if fatal_observation_error is None:
                 fatal_observation_error = self._missing_required_context_error(
-                    observations
+                    observations,
+                    context=tool_context,
                 )
             if fatal_observation_error is not None:
                 termination_reason = (
@@ -398,6 +512,10 @@ class AgenticProposalSession:
                         _sanitize_agentic_value(constraints)
                     )
                 if observations:
+                    prompt_observations = _hypothesis_prompt_observations(
+                        observations,
+                        tool_context,
+                    )
                     research_diagnosis = _research_diagnosis_from_observations(
                         observations
                     )
@@ -407,10 +525,27 @@ class AgenticProposalSession:
                         )
                     hypothesis_context["agentic_tool_observations"] = [
                         _observation_prompt_payload(observation)
-                        for observation in observations
+                        for observation in prompt_observations
                     ]
+                else:
+                    prompt_observations = []
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="hypothesis",
+                    prompt_context=hypothesis_context,
+                    observations=prompt_observations,
+                )
                 hypothesis = self._creative.generate_hypothesis(hypothesis_context)
             except self._SESSION_ERROR_TYPES as exc:
+                failure_category = _structured_output_failure_category(exc)
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    category=failure_category,
+                    detail=str(exc),
+                    source="hypothesis_generation_exception",
+                    attempt=1,
+                )
                 output = self._failed_output(
                     request=request,
                     session_id=session_id,
@@ -418,6 +553,7 @@ class AgenticProposalSession:
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
                     detail=str(exc),
                     evidence_used=tuple(evidence),
+                    failure_category=failure_category,
                 )
                 state.status = output.status
                 state.note(
@@ -448,6 +584,7 @@ class AgenticProposalSession:
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
                     detail=forced_violation,
                     evidence_used=tuple(evidence),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                 )
                 state.status = output.status
                 state.note(
@@ -458,6 +595,46 @@ class AgenticProposalSession:
                 return self._persist(output, state)
 
             if tool_context is not None:
+                if _is_solver_design_hypothesis(hypothesis):
+                    grounding_observations = self._run_solver_design_grounding_tools(
+                        tool_context,
+                        state,
+                        observations,
+                        selection_source="solver_design_grounding_required",
+                    )
+                    observations.extend(grounding_observations)
+                    evidence.extend(_evidence_from_observations(grounding_observations))
+                    grounding_error = _missing_solver_design_grounding_error(
+                        observations,
+                        hypothesis=hypothesis,
+                    )
+                    if grounding_error is not None:
+                        output = self._failed_output(
+                            request=request,
+                            session_id=session_id,
+                            status=AgenticProposalStatus.FAILED,
+                            termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                            detail=grounding_error,
+                            evidence_used=tuple(evidence),
+                            failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                        )
+                        state.status = output.status
+                        state.note(
+                            AgenticProposalPhase.FINALIZE,
+                            "Session failed closed before solver_design hypothesis approval because active solver grounding was missing.",
+                            metadata={"detail": grounding_error},
+                        )
+                        return self._persist(output, state)
+                    novelty_output = self._mechanism_novelty_failed_output(
+                        request=request,
+                        session_id=session_id,
+                        state=state,
+                        hypothesis=hypothesis,
+                        observations=observations,
+                        evidence_used=tuple(evidence),
+                    )
+                    if novelty_output is not None:
+                        return novelty_output
                 selected_surface_observations = (
                     self._run_selected_surface_observation_tool(
                         tool_context,
@@ -477,13 +654,23 @@ class AgenticProposalSession:
                 )
                 observations.extend(preview_observations)
                 evidence.extend(_evidence_from_observations(preview_observations))
-                self_check = _self_check_from_previews(observations)
+                self_check = self._self_check_from_authoritative_previews(
+                    observations,
+                    state,
+                )
                 self_check_detail = _self_check_failure_detail(
                     self_check,
                     require_schema_preview=_self_check_required(tool_context),
                     require_contract_preview=False,
                 )
                 if self_check_detail is not None:
+                    _record_failure_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.SELF_CHECK,
+                        category=_preview_failure_category(preview_observations),
+                        detail=self_check_detail,
+                        source="hypothesis_preview_failure",
+                    )
                     output = self._self_check_failed_output(
                         request=request,
                         session_id=session_id,
@@ -492,6 +679,7 @@ class AgenticProposalSession:
                         termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
                         evidence_used=tuple(evidence),
                         self_check=self_check,
+                        failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                     )
                     state.status = output.status
                     state.note(
@@ -509,7 +697,11 @@ class AgenticProposalSession:
                     detail="hypothesis awaits ContractGate approval",
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
                     evidence_used=tuple(evidence),
-                    self_check=_self_check_from_previews(observations),
+                    self_check=self._self_check_from_authoritative_previews(
+                        observations,
+                        state,
+                    ),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                 )
                 state.status = output.status
                 state.note(
@@ -540,7 +732,10 @@ class AgenticProposalSession:
                     detail=str(exc),
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED,
                     evidence_used=tuple(evidence),
-                    self_check=_self_check_from_previews(observations),
+                    self_check=self._self_check_from_authoritative_previews(
+                        observations,
+                        state,
+                    ),
                 )
                 state.status = output.status
                 state.note(
@@ -559,7 +754,11 @@ class AgenticProposalSession:
                     or "hypothesis approval failed",
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_APPROVAL_FAILED,
                     evidence_used=tuple(evidence),
-                    self_check=_self_check_from_previews(observations),
+                    self_check=self._self_check_from_authoritative_previews(
+                        observations,
+                        state,
+                    ),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                 )
                 state.status = output.status
                 state.note(
@@ -581,6 +780,7 @@ class AgenticProposalSession:
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
                     detail=forced_violation,
                     evidence_used=tuple(evidence),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                 )
                 state.status = output.status
                 state.note(
@@ -589,6 +789,46 @@ class AgenticProposalSession:
                     metadata={"detail": forced_violation},
                 )
                 return self._persist(output, state)
+            if _is_solver_design_hypothesis(hypothesis):
+                grounding_observations = self._run_solver_design_grounding_tools(
+                    tool_context,
+                    state,
+                    observations,
+                    selection_source="solver_design_grounding_required",
+                )
+                observations.extend(grounding_observations)
+                evidence.extend(_evidence_from_observations(grounding_observations))
+                grounding_error = _missing_solver_design_grounding_error(
+                    observations,
+                    hypothesis=hypothesis,
+                )
+                if grounding_error is not None:
+                    output = self._failed_output(
+                        request=request,
+                        session_id=session_id,
+                        status=AgenticProposalStatus.FAILED,
+                        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                        detail=grounding_error,
+                        evidence_used=tuple(evidence),
+                        failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Session failed closed before solver_design hypothesis approval because active solver grounding was missing.",
+                        metadata={"detail": grounding_error},
+                    )
+                    return self._persist(output, state)
+                novelty_output = self._mechanism_novelty_failed_output(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    hypothesis=hypothesis,
+                    observations=observations,
+                    evidence_used=tuple(evidence),
+                )
+                if novelty_output is not None:
+                    return novelty_output
             selected_surface_observations = self._run_selected_surface_observation_tool(
                 tool_context,
                 hypothesis,
@@ -604,13 +844,23 @@ class AgenticProposalSession:
             )
             observations.extend(preview_observations)
             evidence.extend(_evidence_from_observations(preview_observations))
-            self_check = _self_check_from_previews(observations)
+            self_check = self._self_check_from_authoritative_previews(
+                observations,
+                state,
+            )
             self_check_detail = _self_check_failure_detail(
                 self_check,
                 require_schema_preview=_self_check_required(tool_context),
                 require_contract_preview=False,
             )
             if self_check_detail is not None:
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.SELF_CHECK,
+                    category=_preview_failure_category(preview_observations),
+                    detail=self_check_detail,
+                    source="hypothesis_preview_failure",
+                )
                 output = self._self_check_failed_output(
                     request=request,
                     session_id=session_id,
@@ -619,6 +869,7 @@ class AgenticProposalSession:
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
                     evidence_used=tuple(evidence),
                     self_check=self_check,
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
                 )
                 state.status = output.status
                 state.note(
@@ -668,6 +919,11 @@ class AgenticProposalSession:
                     _code_observation_prompt_payload(observation)
                     for observation in _code_prompt_observations(observations)
                 ]
+                active_mechanisms = _active_solver_mechanism_evidence_for_code_context(
+                    observations
+                )
+                if active_mechanisms:
+                    code_context["agentic_active_solver_mechanisms"] = active_mechanisms
             code_context = _with_code_scope_control(
                 code_context,
                 hypothesis,
@@ -682,13 +938,18 @@ class AgenticProposalSession:
             )
             code_repair_attempts_used = 0
         except self._SESSION_ERROR_TYPES as exc:
+            failure_category = _structured_output_failure_category(exc)
             output = self._partial_hypothesis_output(
                 request=request,
                 session_id=session_id,
                 hypothesis=hypothesis,
                 detail=str(exc),
                 evidence_used=tuple(evidence),
-                self_check=_self_check_from_previews(observations),
+                self_check=self._self_check_from_authoritative_previews(
+                    observations,
+                    state,
+                ),
+                failure_category=failure_category,
             )
             state.status = output.status
             state.note(
@@ -704,6 +965,39 @@ class AgenticProposalSession:
                 evidence_used=tuple(evidence),
             )
             state.status = output.status
+            return self._persist(output, state)
+
+        premise_rejection = _patch_premise_rejection(patch, hypothesis)
+        if premise_rejection is not None:
+            _record_failure_ledger_entry(
+                state,
+                phase=AgenticProposalPhase.DRAFT_PATCH,
+                category=str(premise_rejection["failure_category"]),
+                detail=str(premise_rejection.get("reason") or ""),
+                source="premise_check",
+                attempt=1,
+            )
+            output = self._structured_rejection_output(
+                request=request,
+                session_id=session_id,
+                hypothesis=hypothesis,
+                rejection=premise_rejection,
+                evidence_used=tuple(evidence),
+                self_check=self._self_check_from_authoritative_previews(
+                    observations,
+                    state,
+                ),
+            )
+            state.status = output.status
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Code phase rejected the approved hypothesis after premise check.",
+                metadata={
+                    "premise_check": premise_rejection["premise_check"],
+                    "failure_category": premise_rejection["failure_category"],
+                    "structured_rejection": premise_rejection,
+                },
+            )
             return self._persist(output, state)
 
         self_reported_issue = _patch_self_reported_unresolved_issue(patch)
@@ -724,15 +1018,57 @@ class AgenticProposalSession:
                 repair_attempt=code_repair_attempts_used + 1,
             )
             code_repair_attempts_used += 1
+            premise_rejection = _patch_premise_rejection(patch, hypothesis)
+            if premise_rejection is not None:
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_PATCH,
+                    category=str(premise_rejection["failure_category"]),
+                    detail=str(premise_rejection.get("reason") or ""),
+                    source="premise_check",
+                    repair_attempt=code_repair_attempts_used,
+                )
+                output = self._structured_rejection_output(
+                    request=request,
+                    session_id=session_id,
+                    hypothesis=hypothesis,
+                    rejection=premise_rejection,
+                    evidence_used=tuple(evidence),
+                    self_check=self._self_check_from_authoritative_previews(
+                        observations,
+                        state,
+                    ),
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Patch repair rejected the approved hypothesis after premise check.",
+                    metadata={
+                        "premise_check": premise_rejection["premise_check"],
+                        "failure_category": premise_rejection["failure_category"],
+                    },
+                )
+                return self._persist(output, state)
             self_reported_issue = _patch_self_reported_unresolved_issue(patch)
         if self_reported_issue is not None:
+            _record_failure_ledger_entry(
+                state,
+                phase=AgenticProposalPhase.DRAFT_PATCH,
+                category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
+                detail=self_reported_issue,
+                source="patch_self_reported_issue",
+            )
             output = self._partial_hypothesis_output(
                 request=request,
                 session_id=session_id,
                 hypothesis=hypothesis,
                 detail=self_reported_issue,
                 evidence_used=tuple(evidence),
-                self_check=_self_check_from_previews(observations),
+                self_check=self._self_check_from_authoritative_previews(
+                    observations,
+                    state,
+                ),
+                failure_category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
             )
             state.status = output.status
             state.note(
@@ -753,6 +1089,20 @@ class AgenticProposalSession:
                 observations.append(patch_preview)
                 evidence.extend(_evidence_from_observations((patch_preview,)))
                 if not _preview_observation_passed(patch_preview):
+                    preview_category = _preview_failure_category([patch_preview])
+                    _record_failure_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.SELF_CHECK,
+                        category=preview_category,
+                        detail=(
+                            _latest_preview_failure_detail([patch_preview])
+                            or patch_preview.summary
+                        ),
+                        source="preview_failure",
+                        tool_name=patch_preview.tool_name,
+                        observation=patch_preview,
+                        repair_attempt=code_repair_attempts_used,
+                    )
                     if (
                         code_repair_attempts_used
                         >= self._tool_loop_config.max_code_repair_attempts
@@ -771,13 +1121,18 @@ class AgenticProposalSession:
                         )
                         code_repair_attempts_used += 1
                     except self._SESSION_ERROR_TYPES as exc:
+                        failure_category = _structured_output_failure_category(exc)
                         output = self._partial_hypothesis_output(
                             request=request,
                             session_id=session_id,
                             hypothesis=hypothesis,
                             detail=str(exc),
                             evidence_used=tuple(evidence),
-                            self_check=_self_check_from_previews(observations),
+                            self_check=self._self_check_from_authoritative_previews(
+                                observations,
+                                state,
+                            ),
+                            failure_category=failure_category,
                         )
                         state.status = output.status
                         state.note(
@@ -786,15 +1141,60 @@ class AgenticProposalSession:
                             metadata={"error": type(exc).__name__},
                         )
                         return self._persist(output, state)
+                    premise_rejection = _patch_premise_rejection(patch, hypothesis)
+                    if premise_rejection is not None:
+                        _record_failure_ledger_entry(
+                            state,
+                            phase=AgenticProposalPhase.DRAFT_PATCH,
+                            category=str(premise_rejection["failure_category"]),
+                            detail=str(premise_rejection.get("reason") or ""),
+                            source="premise_check",
+                            repair_attempt=code_repair_attempts_used,
+                        )
+                        output = self._structured_rejection_output(
+                            request=request,
+                            session_id=session_id,
+                            hypothesis=hypothesis,
+                            rejection=premise_rejection,
+                            evidence_used=tuple(evidence),
+                            self_check=self._self_check_from_authoritative_previews(
+                                observations,
+                                state,
+                            ),
+                        )
+                        state.status = output.status
+                        state.note(
+                            AgenticProposalPhase.FINALIZE,
+                            "Patch repair rejected the approved hypothesis after premise check.",
+                            metadata={
+                                "premise_check": premise_rejection["premise_check"],
+                                "failure_category": premise_rejection[
+                                    "failure_category"
+                                ],
+                            },
+                        )
+                        return self._persist(output, state)
                     self_reported_issue = _patch_self_reported_unresolved_issue(patch)
                     if self_reported_issue is not None:
+                        _record_failure_ledger_entry(
+                            state,
+                            phase=AgenticProposalPhase.DRAFT_PATCH,
+                            category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
+                            detail=self_reported_issue,
+                            source="patch_self_reported_issue",
+                            repair_attempt=code_repair_attempts_used,
+                        )
                         output = self._partial_hypothesis_output(
                             request=request,
                             session_id=session_id,
                             hypothesis=hypothesis,
                             detail=self_reported_issue,
                             evidence_used=tuple(evidence),
-                            self_check=_self_check_from_previews(observations),
+                            self_check=self._self_check_from_authoritative_previews(
+                                observations,
+                                state,
+                            ),
+                            failure_category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
                         )
                         state.status = output.status
                         state.note(
@@ -815,6 +1215,20 @@ class AgenticProposalSession:
                 evidence.extend(_evidence_from_observations((smoke_preview,)))
                 if _preview_observation_passed(smoke_preview):
                     break
+                smoke_category = _preview_failure_category([smoke_preview])
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.SELF_CHECK,
+                    category=smoke_category,
+                    detail=(
+                        _latest_preview_failure_detail([smoke_preview])
+                        or smoke_preview.summary
+                    ),
+                    source="preview_failure",
+                    tool_name=smoke_preview.tool_name,
+                    observation=smoke_preview,
+                    repair_attempt=code_repair_attempts_used,
+                )
                 if (
                     code_repair_attempts_used
                     >= self._tool_loop_config.max_code_repair_attempts
@@ -833,13 +1247,18 @@ class AgenticProposalSession:
                     )
                     code_repair_attempts_used += 1
                 except self._SESSION_ERROR_TYPES as exc:
+                    failure_category = _structured_output_failure_category(exc)
                     output = self._partial_hypothesis_output(
                         request=request,
                         session_id=session_id,
                         hypothesis=hypothesis,
                         detail=str(exc),
                         evidence_used=tuple(evidence),
-                        self_check=_self_check_from_previews(observations),
+                        self_check=self._self_check_from_authoritative_previews(
+                            observations,
+                            state,
+                        ),
+                        failure_category=failure_category,
                     )
                     state.status = output.status
                     state.note(
@@ -848,15 +1267,60 @@ class AgenticProposalSession:
                         metadata={"error": type(exc).__name__},
                     )
                     return self._persist(output, state)
+                premise_rejection = _patch_premise_rejection(patch, hypothesis)
+                if premise_rejection is not None:
+                    _record_failure_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DRAFT_PATCH,
+                        category=str(premise_rejection["failure_category"]),
+                        detail=str(premise_rejection.get("reason") or ""),
+                        source="premise_check",
+                        repair_attempt=code_repair_attempts_used,
+                    )
+                    output = self._structured_rejection_output(
+                        request=request,
+                        session_id=session_id,
+                        hypothesis=hypothesis,
+                        rejection=premise_rejection,
+                        evidence_used=tuple(evidence),
+                        self_check=self._self_check_from_authoritative_previews(
+                            observations,
+                            state,
+                        ),
+                    )
+                    state.status = output.status
+                    state.note(
+                        AgenticProposalPhase.FINALIZE,
+                        "Patch repair rejected the approved hypothesis after premise check.",
+                        metadata={
+                            "premise_check": premise_rejection["premise_check"],
+                            "failure_category": premise_rejection[
+                                "failure_category"
+                            ],
+                        },
+                    )
+                    return self._persist(output, state)
                 self_reported_issue = _patch_self_reported_unresolved_issue(patch)
                 if self_reported_issue is not None:
+                    _record_failure_ledger_entry(
+                        state,
+                        phase=AgenticProposalPhase.DRAFT_PATCH,
+                        category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
+                        detail=self_reported_issue,
+                        source="patch_self_reported_issue",
+                        repair_attempt=code_repair_attempts_used,
+                    )
                     output = self._partial_hypothesis_output(
                         request=request,
                         session_id=session_id,
                         hypothesis=hypothesis,
                         detail=self_reported_issue,
                         evidence_used=tuple(evidence),
-                        self_check=_self_check_from_previews(observations),
+                        self_check=self._self_check_from_authoritative_previews(
+                            observations,
+                            state,
+                        ),
+                        failure_category=AgenticFailureCategory.MODEL_REPAIR_FAILED,
                     )
                     state.status = output.status
                     state.note(
@@ -868,12 +1332,19 @@ class AgenticProposalSession:
 
         state.note(AgenticProposalPhase.SELF_CHECK, "Recorded APS-1 schema self-check.")
         self_check = (
-            _self_check_from_previews(observations)
+            self._self_check_from_authoritative_previews(observations, state)
             if tool_context is not None
             else AgenticSelfCheck(schema_valid=True)
         )
-        preview_failure_detail = _latest_preview_failure_detail(observations)
+        preview_failure_detail = self._latest_authoritative_preview_failure_detail(
+            observations,
+            state,
+        )
         if preview_failure_detail is not None:
+            authoritative_previews = _authoritative_preview_observations(
+                observations,
+                state,
+            )
             output = self._self_check_failed_output(
                 request=request,
                 session_id=session_id,
@@ -882,6 +1353,7 @@ class AgenticProposalSession:
                 termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
                 evidence_used=tuple(evidence),
                 self_check=self_check,
+                failure_category=_preview_failure_category(authoritative_previews),
             )
             state.status = output.status
             state.note(
@@ -904,6 +1376,7 @@ class AgenticProposalSession:
                 termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
                 evidence_used=tuple(evidence),
                 self_check=self_check,
+                failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
             )
             state.status = output.status
             state.note(
@@ -1095,6 +1568,7 @@ class AgenticProposalSession:
         ),
         evidence_used: tuple[AgenticEvidenceRef, ...] = (),
         self_check: AgenticSelfCheck | None = None,
+        failure_category: AgenticFailureCategory | str | None = None,
     ) -> AgenticProposalOutput:
         return AgenticProposalOutput(
             status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
@@ -1117,6 +1591,47 @@ class AgenticProposalSession:
             self_check=self_check or AgenticSelfCheck(schema_valid=True),
             termination_reason=termination_reason,
             failure_detail=detail,
+            failure_category=failure_category,
+        )
+
+    def _structured_rejection_output(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        hypothesis: HypothesisProposal,
+        rejection: Mapping[str, Any],
+        evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+        self_check: AgenticSelfCheck | None = None,
+    ) -> AgenticProposalOutput:
+        rejection_payload = _normalized_structured_rejection(rejection)
+        detail = (
+            f"premise_check={rejection_payload.get('premise_check')}: "
+            f"{rejection_payload.get('reason') or 'code phase rejected premise'}"
+        )
+        return AgenticProposalOutput(
+            status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+            session_id=session_id,
+            campaign_id=request.campaign_id,
+            branch_id=request.branch.branch_id,
+            idempotency_key=self._idempotency_key_for_hypothesis(
+                request,
+                hypothesis,
+            ),
+            champion_version=_champion_version(request.champion),
+            champion_weight_revision=_champion_weight_revision(request.champion),
+            problem_id=request.problem_id,
+            problem_spec_hash=request.problem_spec_hash,
+            selected_surface=hypothesis.change_locus,
+            action=hypothesis.action,
+            hypothesis=hypothesis,
+            patch=None,
+            evidence_used=evidence_used,
+            self_check=self_check or AgenticSelfCheck(schema_valid=True),
+            termination_reason=_rejection_termination_reason(rejection_payload),
+            failure_detail=detail,
+            failure_category=str(rejection_payload.get("failure_category") or ""),
+            structured_rejection=rejection_payload,
         )
 
     def _self_check_failed_output(
@@ -1129,6 +1644,7 @@ class AgenticProposalSession:
         termination_reason: AgenticTerminationReason,
         evidence_used: tuple[AgenticEvidenceRef, ...] = (),
         self_check: AgenticSelfCheck | None = None,
+        failure_category: AgenticFailureCategory | str | None = None,
     ) -> AgenticProposalOutput:
         return AgenticProposalOutput(
             status=AgenticProposalStatus.FAILED,
@@ -1151,6 +1667,7 @@ class AgenticProposalSession:
             self_check=self_check or AgenticSelfCheck(schema_valid=False),
             termination_reason=termination_reason,
             failure_detail=detail,
+            failure_category=failure_category,
         )
 
     def _idempotency_key_for_hypothesis(
@@ -1172,6 +1689,7 @@ class AgenticProposalSession:
         termination_reason: AgenticTerminationReason,
         detail: str,
         evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+        failure_category: AgenticFailureCategory | str | None = None,
     ) -> AgenticProposalOutput:
         return AgenticProposalOutput(
             status=status,
@@ -1187,6 +1705,7 @@ class AgenticProposalSession:
             self_check=AgenticSelfCheck(schema_valid=False),
             termination_reason=termination_reason,
             failure_detail=detail,
+            failure_category=failure_category,
         )
 
     def _timeout_output(
@@ -1209,6 +1728,50 @@ class AgenticProposalSession:
             evidence_used=evidence_used,
         )
 
+    def _mechanism_novelty_failed_output(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        observations: list[ProposalObservation],
+        evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+    ) -> AgenticProposalOutput | None:
+        result = _MECHANISM_NOVELTY_GATE.evaluate(
+            hypothesis,
+            observations=observations,
+        )
+        if result is None:
+            return None
+        rejection = result.to_rejection(hypothesis)
+        _record_failure_ledger_entry(
+            state,
+            phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+            category=result.failure_category,
+            detail=result.reason,
+            source="mechanism_novelty_gate",
+        )
+        output = self._structured_rejection_output(
+            request=request,
+            session_id=session_id,
+            hypothesis=hypothesis,
+            rejection=rejection,
+            evidence_used=evidence_used,
+            self_check=AgenticSelfCheck(schema_valid=True),
+        )
+        state.status = output.status
+        state.note(
+            AgenticProposalPhase.FINALIZE,
+            "Mechanism novelty gate rejected the solver_design hypothesis before code context.",
+            metadata={
+                "premise_check": result.premise_check,
+                "failure_category": result.failure_category,
+                "mechanism": result.mechanism,
+            },
+        )
+        return self._persist(output, state)
+
     def _run_hypothesis_observation_tools(
         self,
         context: ProposalToolContext,
@@ -1217,20 +1780,34 @@ class AgenticProposalSession:
         selection_source: str = "fallback_selected",
         skip_successful_required_tools: set[str] | None = None,
     ) -> list[ProposalObservation]:
-        calls: tuple[tuple[str, Mapping[str, Any]], ...] = (
+        calls: list[tuple[str, Mapping[str, Any]]] = [
             ("context.list_surfaces", {}),
             ("context.read_problem", {}),
-            ("memory.query", {}),
-            (
-                "feedback.query_screening",
-                _feedback_query_args(context),
-            ),
-            (
-                "feedback.query_runtime",
-                _feedback_query_args(context),
-            ),
+        ]
+        if _context_requires_solver_design_grounding(context):
+            calls.extend(
+                (name, {"surface": "solver_design", "include_inactive": True})
+                for name in _SOLVER_DESIGN_FILE_DISCOVERY_TOOLS
+            )
+            calls.extend(
+                (name, {"surface": "solver_design"})
+                for name in _SOLVER_DESIGN_GROUNDING_TOOLS
+            )
+        calls.extend(
+            [
+                ("memory.query", {}),
+                (
+                    "feedback.query_screening",
+                    _feedback_query_args(context),
+                ),
+                (
+                    "feedback.query_runtime",
+                    _feedback_query_args(context),
+                ),
+            ]
         )
         skip_successful_required_tools = skip_successful_required_tools or set()
+        required_tool_names = set(_fallback_required_context_tool_names(context))
         observations: list[ProposalObservation] = []
         for name, args in calls:
             if name in skip_successful_required_tools:
@@ -1247,8 +1824,12 @@ class AgenticProposalSession:
                 )
                 continue
             if self._diagnosis_budget_reserved(state) and (
-                self._missing_required_context_error(observations) is None
-                or name not in {"context.list_surfaces", "context.read_problem"}
+                self._missing_required_context_error(
+                    observations,
+                    context=context,
+                )
+                is None
+                or name not in required_tool_names
             ):
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
@@ -1270,7 +1851,11 @@ class AgenticProposalSession:
             if (
                 name in {"feedback.query_screening", "feedback.query_runtime"}
                 and self._diagnosis_feedback_budget_reserved(state)
-                and self._missing_required_context_error(observations) is None
+                and self._missing_required_context_error(
+                    observations,
+                    context=context,
+                )
+                is None
             ):
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
@@ -1374,7 +1959,11 @@ class AgenticProposalSession:
                 break
             if (
                 self._diagnosis_budget_reserved(state)
-                and self._missing_required_context_error(observations) is None
+                and self._missing_required_context_error(
+                    observations,
+                    context=context,
+                )
+                is None
             ):
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
@@ -1594,7 +2183,11 @@ class AgenticProposalSession:
             if (
                 name in {"feedback.query_screening", "feedback.query_runtime"}
                 and self._diagnosis_feedback_budget_reserved(state)
-                and self._missing_required_context_error(observations) is None
+                and self._missing_required_context_error(
+                    observations,
+                    context=context,
+                )
+                is None
             ):
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
@@ -2037,6 +2630,9 @@ class AgenticProposalSession:
                 name == "context.read_surface"
                 and selection_source == "code_phase_required"
             )
+            call_args: Mapping[str, Any] = args
+            call_selection_source = selection_source
+            preserve_observation_chars = 0
             if self._code_phase_budget_reserved(state) and not mandatory_surface_read:
                 state.note(
                     AgenticProposalPhase.INSPECT_INTERFACE,
@@ -2049,8 +2645,54 @@ class AgenticProposalSession:
                     },
                 )
                 continue
+            if mandatory_surface_read:
+                preserve_observation_chars = self._minimum_budgeted_observation_chars()
+                remaining_chars = self._remaining_observation_chars(state)
+                if remaining_chars <= preserve_observation_chars:
+                    state.note(
+                        AgenticProposalPhase.INSPECT_INTERFACE,
+                        "Skipped mandatory code-phase surface read to preserve patch self-check observation budget.",
+                        metadata={
+                            "tool_name": name,
+                            "status": "skipped",
+                            "selection_source": selection_source,
+                            "skip_reason": "code_self_check_observation_budget_reserved",
+                            "remaining_observation_chars": remaining_chars,
+                            "preserved_observation_chars": preserve_observation_chars,
+                        },
+                    )
+                    continue
+                if self._code_phase_budget_reserved(state):
+                    compact_chars = max(
+                        0,
+                        min(
+                            _APS_SURFACE_READ_CODE_CHARS,
+                            remaining_chars - preserve_observation_chars,
+                        ),
+                    )
+                    call_args = {
+                        **dict(args),
+                        "detail": "compact",
+                        "max_code_chars": compact_chars,
+                    }
+                    call_selection_source = "code_phase_required_compact"
+                    state.note(
+                        AgenticProposalPhase.INSPECT_INTERFACE,
+                        "Compressed mandatory code-phase surface read to preserve patch self-check budget.",
+                        metadata={
+                            "tool_name": name,
+                            "status": "compressed",
+                            "selection_source": call_selection_source,
+                            "skip_reason": "code_self_check_budget_reserved",
+                            "remaining_observation_chars": remaining_chars,
+                            "preserved_observation_chars": preserve_observation_chars,
+                            "max_code_chars": compact_chars,
+                        },
+                    )
             if self._tool_loop_limit_reached(state) and not (
                 mandatory_surface_read
+                and self._current_loop_stop_reason(state)
+                == "observation_budget_exhausted"
                 and self._remaining_tool_calls(state) > 0
                 and self._remaining_tool_steps(state) > 0
                 and not self._session_timeout_reached(state)
@@ -2063,8 +2705,9 @@ class AgenticProposalSession:
                     state,
                     AgenticProposalPhase.INSPECT_INTERFACE,
                     name,
-                    args,
-                    selection_source=selection_source,
+                    call_args,
+                    selection_source=call_selection_source,
+                    preserve_observation_chars=preserve_observation_chars,
                 )
             )
         return observations
@@ -2162,6 +2805,75 @@ class AgenticProposalSession:
             "context.read_objective_policy": {"recommended_args": {}},
             "context.read_champion_summary": {"recommended_args": {}},
         }
+        if _is_solver_design_hypothesis(hypothesis):
+            algorithm_file_guidance = _algorithm_file_path_guidance(
+                context,
+                observations,
+            )
+            recommended_file_path = _recommended_algorithm_file_path(
+                algorithm_file_guidance,
+                hypothesis.target_file,
+            )
+            guidance["context.read_active_solver_design"] = {
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "include_file_previews": False,
+                },
+                "purpose": (
+                    "Ground solver_design implementation against the active "
+                    "branch/champion solver entrypoint and mechanism summary."
+                ),
+                "already_has_grounding": _has_successful_tool(
+                    observations,
+                    "context.read_active_solver_design",
+                ),
+            }
+            guidance["context.read_solver_call_graph"] = {
+                "recommended_args": {"surface": "solver_design"},
+                "purpose": (
+                    "Confirm the active solver_design call chain before choosing "
+                    "where the implementation belongs."
+                ),
+                "already_has_grounding": _has_successful_solver_call_graph_grounding(
+                    observations
+                ),
+            }
+            guidance["context.list_algorithm_files"] = {
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "include_inactive": True,
+                },
+                "purpose": "List allowlisted active solver files before targeted reads.",
+                "consumer_tools": [
+                    "context.read_algorithm_file",
+                    "context.read_algorithm_symbol",
+                ],
+                "already_has_file_list": _has_successful_tool(
+                    observations,
+                    "context.list_algorithm_files",
+                ),
+            }
+            guidance["context.read_algorithm_file"] = {
+                **algorithm_file_guidance,
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "file_path": recommended_file_path,
+                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
+                    if _is_solver_design_support_module_target(recommended_file_path)
+                    else _APS_CODE_SURFACE_READ_CODE_CHARS,
+                },
+                "purpose": "Read one allowlisted active solver file when full source is needed.",
+            }
+            guidance["context.read_algorithm_symbol"] = {
+                **algorithm_file_guidance,
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "file_path": recommended_file_path,
+                    "symbol": "solve",
+                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                },
+                "purpose": "Read one symbol from an allowlisted active solver file.",
+            }
         return guidance
 
     def _repair_patch_after_preview(
@@ -2292,8 +3004,23 @@ class AgenticProposalSession:
         attempt_context: Mapping[str, Any] = code_context
         for attempt in range(max_retries + 1):
             try:
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="code",
+                    prompt_context=attempt_context,
+                    observations=observations,
+                )
                 return self._creative.generate_code(attempt_context)
             except self._SESSION_ERROR_TYPES as exc:
+                category = _structured_output_failure_category(exc)
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_PATCH,
+                    category=category,
+                    detail=str(exc),
+                    source="code_generation_exception",
+                    attempt=attempt + 1,
+                )
                 if (
                     attempt >= max_retries
                     or self._session_timeout_reached(state)
@@ -2337,7 +3064,10 @@ class AgenticProposalSession:
         context: ProposalToolContext,
         observations: list[ProposalObservation],
     ) -> str | None:
-        required_error = self._missing_required_context_error(observations)
+        required_error = self._missing_required_context_error(
+            observations,
+            context=context,
+        )
         if required_error is not None:
             return required_error
         available_feedback = self._available_compact_feedback_tools(context)
@@ -2431,8 +3161,6 @@ class AgenticProposalSession:
                     "allowed_surface_ids"
                 ] = active_boundary
             guidance["proposal.draft_hypothesis"] = forced_constraint
-            guidance["proposal.schema_preview"] = forced_constraint
-            guidance["proposal.target_permission_preview"] = forced_constraint
         if surface_names:
             guidance["context.read_surface"].setdefault(
                 "allowed_surface_ids",
@@ -2461,6 +3189,57 @@ class AgenticProposalSession:
                 "tool call; prefer same-campaign or forced-surface scope."
             ),
         }
+        if _context_requires_solver_design_grounding(context):
+            algorithm_file_guidance = _algorithm_file_path_guidance(
+                context,
+                observations,
+            )
+            recommended_file_path = _recommended_algorithm_file_path(
+                algorithm_file_guidance
+            )
+            guidance["context.list_algorithm_files"] = {
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "include_inactive": True,
+                },
+                "purpose": (
+                    "List allowlisted solver_design algorithm file_path values "
+                    "before any targeted algorithm file or symbol read."
+                ),
+                "consumer_tools": [
+                    "context.read_algorithm_file",
+                    "context.read_algorithm_symbol",
+                ],
+                "already_has_file_list": _has_successful_tool(
+                    observations,
+                    "context.list_algorithm_files",
+                ),
+            }
+            guidance["context.read_algorithm_file"] = {
+                **algorithm_file_guidance,
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "file_path": recommended_file_path,
+                    "max_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
+                },
+                "purpose": (
+                    "Read one allowlisted active solver file only after "
+                    "context.list_algorithm_files has provided the file_path."
+                ),
+            }
+            guidance["context.read_algorithm_symbol"] = {
+                **algorithm_file_guidance,
+                "recommended_args": {
+                    "surface": "solver_design",
+                    "file_path": recommended_file_path,
+                    "symbol": "solve",
+                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                },
+                "purpose": (
+                    "Read one symbol from an allowlisted active solver file only "
+                    "after context.list_algorithm_files has provided the file_path."
+                ),
+            }
         return guidance
 
     def _hypothesis_constraints(
@@ -2551,7 +3330,10 @@ class AgenticProposalSession:
         )
         observations: list[ProposalObservation] = []
         for name, args in calls:
-            if self._tool_loop_limit_reached(state):
+            if self._tool_loop_limit_reached(
+                state,
+                ignore_observation_budget=True,
+            ):
                 self._record_loop_stop(state, self._current_loop_stop_reason(state))
                 break
             observations.append(
@@ -2562,6 +3344,60 @@ class AgenticProposalSession:
                     name,
                     args,
                     selection_source="fallback_selected",
+                )
+            )
+        return observations
+
+    def _run_solver_design_grounding_tools(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        prior_observations: list[ProposalObservation],
+        *,
+        selection_source: str,
+    ) -> list[ProposalObservation]:
+        observations: list[ProposalObservation] = []
+        for name in _SOLVER_DESIGN_GROUNDING_TOOLS:
+            if _has_successful_tool([*prior_observations, *observations], name):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Skipped solver_design grounding tool already completed successfully.",
+                    metadata={
+                        "tool_name": name,
+                        "status": "skipped",
+                        "selection_source": selection_source,
+                        "skip_reason": "already_succeeded",
+                    },
+                )
+                continue
+            if (
+                name == "context.read_solver_call_graph"
+                and _has_active_solver_embedded_call_graph(
+                    [*prior_observations, *observations]
+                )
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Skipped solver_design grounding tool already covered by active solver snapshot.",
+                    metadata={
+                        "tool_name": name,
+                        "status": "skipped",
+                        "selection_source": selection_source,
+                        "skip_reason": "active_solver_snapshot_includes_call_graph",
+                    },
+                )
+                continue
+            if self._tool_loop_limit_reached(state):
+                self._record_loop_stop(state, self._current_loop_stop_reason(state))
+                break
+            observations.append(
+                self._call_tool(
+                    context,
+                    state,
+                    AgenticProposalPhase.DIAGNOSE,
+                    name,
+                    {"surface": "solver_design"},
+                    selection_source=selection_source,
                 )
             )
         return observations
@@ -2612,23 +3448,30 @@ class AgenticProposalSession:
         patch: PatchProposal,
         state: AgenticProposalSessionState,
     ) -> ProposalObservation:
-        if self._tool_loop_limit_reached(state):
+        if self._tool_loop_limit_reached(
+            state,
+            ignore_observation_budget=True,
+        ):
             stop_reason = self._current_loop_stop_reason(state)
-            self._record_loop_stop(state, stop_reason)
-            return ProposalObservation(
-                observation_id=str(uuid.uuid4()),
-                session_id=context.session_id,
+            self._record_loop_stop(
+                state,
+                stop_reason,
+                error_code=_preview_limit_error_code(
+                    "proposal.contract_preview",
+                    stop_reason,
+                ),
                 tool_name="proposal.contract_preview",
-                tool_call_id="",
-                observation_type="tool_skipped",
+            )
+            return self._skipped_self_check_preview_observation(
+                context,
+                state,
+                tool_name="proposal.contract_preview",
                 summary=(
                     "Contract preview skipped because the session wall-time limit was reached."
                     if stop_reason == "session_timeout"
                     else "Contract preview skipped because the tool loop limit was reached."
                 ),
-                structured_payload={},
-                is_error=True,
-                failure_code=ProposalToolFailureCode.UNSUPPORTED,
+                stop_reason=stop_reason,
             )
         return self._call_tool(
             context,
@@ -2637,7 +3480,7 @@ class AgenticProposalSession:
             "proposal.contract_preview",
             {
                 "hypothesis": _proposal_payload(hypothesis),
-                "patch": _proposal_payload(patch),
+                "patch": _patch_payload_for_preview(patch),
             },
             selection_source="fallback_selected",
         )
@@ -2649,23 +3492,30 @@ class AgenticProposalSession:
         patch: PatchProposal,
         state: AgenticProposalSessionState,
     ) -> ProposalObservation:
-        if self._tool_loop_limit_reached(state):
+        if self._tool_loop_limit_reached(
+            state,
+            ignore_observation_budget=True,
+        ):
             stop_reason = self._current_loop_stop_reason(state)
-            self._record_loop_stop(state, stop_reason)
-            return ProposalObservation(
-                observation_id=str(uuid.uuid4()),
-                session_id=context.session_id,
+            self._record_loop_stop(
+                state,
+                stop_reason,
+                error_code=_preview_limit_error_code(
+                    "proposal.algorithm_smoke",
+                    stop_reason,
+                ),
                 tool_name="proposal.algorithm_smoke",
-                tool_call_id="",
-                observation_type="tool_skipped",
+            )
+            return self._skipped_self_check_preview_observation(
+                context,
+                state,
+                tool_name="proposal.algorithm_smoke",
                 summary=(
                     "Algorithm smoke skipped because the session wall-time limit was reached."
                     if stop_reason == "session_timeout"
                     else "Algorithm smoke skipped because the tool loop limit was reached."
                 ),
-                structured_payload={},
-                is_error=True,
-                failure_code=ProposalToolFailureCode.UNSUPPORTED,
+                stop_reason=stop_reason,
             )
         return self._call_tool(
             context,
@@ -2674,10 +3524,68 @@ class AgenticProposalSession:
             "proposal.algorithm_smoke",
             {
                 "hypothesis": _proposal_payload(hypothesis),
-                "patch": _proposal_payload(patch),
+                "patch": _patch_payload_for_preview(patch),
             },
             selection_source="fallback_selected",
         )
+
+    def _skipped_self_check_preview_observation(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        *,
+        tool_name: str,
+        summary: str,
+        stop_reason: str,
+    ) -> ProposalObservation:
+        error_code = _preview_limit_error_code(tool_name, stop_reason)
+        observation = ProposalObservation(
+            observation_id=str(uuid.uuid4()),
+            session_id=context.session_id,
+            tool_name=tool_name,
+            tool_call_id="",
+            observation_type="tool_skipped",
+            summary=summary,
+            structured_payload={
+                "skip_reason": stop_reason,
+                "budget_exhausted": (
+                    stop_reason
+                    in {
+                        "tool_loop_limit",
+                        "observation_budget_exhausted",
+                        "session_timeout",
+                    }
+                ),
+                "max_steps": self._tool_loop_config.max_steps,
+                "max_tool_calls": self._tool_loop_config.max_tool_calls,
+                "tool_steps": state.tool_step_count,
+                "tool_calls": state.tool_call_count,
+                "error_code": error_code,
+            },
+            is_error=True,
+            failure_code=error_code,
+            repair_hint="Start a new bounded proposal session with enough self-check budget.",
+        )
+        state.note(
+            AgenticProposalPhase.SELF_CHECK,
+            f"Proposal tool observation: {tool_name}",
+            metadata={
+                "tool_name": observation.tool_name,
+                "status": "error",
+                "taint": _enum_value(observation.taint),
+                "evidence_ref": observation.observation_id,
+                "result_summary": observation.summary,
+                "error_code": error_code,
+                "observation_id": observation.observation_id,
+                "observation_type": observation.observation_type,
+                "exposure_level": _enum_value(observation.exposure_level),
+                "is_error": True,
+                "failure_code": error_code,
+                "selection_source": "fallback_selected",
+                "skip_reason": stop_reason,
+            },
+        )
+        return observation
 
     def _call_tool(
         self,
@@ -2688,9 +3596,15 @@ class AgenticProposalSession:
         args: Mapping[str, Any],
         *,
         selection_source: str = "fallback_selected",
+        preserve_observation_chars: int = 0,
     ) -> ProposalObservation:
         assert self.tool_registry is not None
         args = self._budgeted_tool_args(name, args, selection_source=selection_source)
+        authoritative_preview = _is_authoritative_self_check_preview_call(
+            name,
+            phase,
+            selection_source,
+        )
         if self._session_timeout_reached(state):
             self._record_loop_stop(
                 state, "session_timeout", error_code="session_timeout"
@@ -2801,19 +3715,59 @@ class AgenticProposalSession:
                         "before requesting Contract preview or algorithm smoke again."
                     ),
                 )
-        observation = self._enforce_observation_budget(context, state, observation)
+        observation = _deduplicate_observation_if_already_read(
+            state,
+            observation,
+            tool_name=name,
+            args=args,
+            phase=phase,
+            args_hash=fingerprint,
+        )
+        if authoritative_preview:
+            observation = self._enforce_self_check_preview_budget(observation)
+        else:
+            observation = self._enforce_observation_budget(
+                context,
+                state,
+                observation,
+                preserve_observation_chars=preserve_observation_chars,
+            )
         prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
-        remaining = self._remaining_observation_chars(state)
+        remaining = (
+            self._self_check_preview_budget_chars()
+            if authoritative_preview
+            else max(
+                0,
+                self._remaining_observation_chars(state)
+                - max(0, int(preserve_observation_chars)),
+            )
+        )
         if prompt_payload_chars > remaining:
             observation = self._fit_observation_to_remaining(
                 observation,
                 remaining_chars=remaining,
             )
             prompt_payload_chars = _json_size(_observation_prompt_payload(observation))
-        state.observation_chars_used += prompt_payload_chars
-        if state.observation_chars_used > self._tool_loop_config.max_observation_chars:
-            state.observation_chars_used = self._tool_loop_config.max_observation_chars
-        if self._observation_budget_exhausted(state):
+        if not authoritative_preview:
+            previous_observation_chars = int(state.observation_chars_used)
+            projected_observation_chars = (
+                previous_observation_chars + prompt_payload_chars
+            )
+            charge_ceiling = max(
+                0,
+                self._tool_loop_config.max_observation_chars
+                - max(0, int(preserve_observation_chars)),
+            )
+            if preserve_observation_chars > 0:
+                projected_observation_chars = min(
+                    projected_observation_chars,
+                    max(previous_observation_chars, charge_ceiling),
+                )
+            state.observation_chars_used = min(
+                projected_observation_chars,
+                self._tool_loop_config.max_observation_chars,
+            )
+        if not authoritative_preview and self._observation_budget_exhausted(state):
             self._record_loop_stop(
                 state,
                 "tool_loop_limit",
@@ -2883,11 +3837,19 @@ class AgenticProposalSession:
             signal.setitimer(signal.ITIMER_REAL, *previous_timer)
             signal.signal(signal.SIGALRM, previous_handler)
 
-    def _tool_loop_limit_reached(self, state: AgenticProposalSessionState) -> bool:
+    def _tool_loop_limit_reached(
+        self,
+        state: AgenticProposalSessionState,
+        *,
+        ignore_observation_budget: bool = False,
+    ) -> bool:
         return (
             state.tool_step_count >= self._tool_loop_config.max_steps
             or state.tool_call_count >= self._tool_loop_config.max_tool_calls
-            or self._observation_budget_exhausted(state)
+            or (
+                not ignore_observation_budget
+                and self._observation_budget_exhausted(state)
+            )
             or self._session_timeout_reached(state)
         )
 
@@ -2938,6 +3900,18 @@ class AgenticProposalSession:
     def _optional_surface_read_budget_floor(self) -> int:
         return _optional_surface_read_budget_floor_for_config(self._tool_loop_config)
 
+    def _self_check_preview_budget_chars(self) -> int:
+        configured_reserve = self._self_check_observation_reserve_chars()
+        if configured_reserve > 0:
+            return configured_reserve
+        return max(
+            self._minimum_budgeted_observation_chars(),
+            min(
+                _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS,
+                max(0, int(self._tool_loop_config.max_observation_chars)),
+            ),
+        )
+
     def _should_deny_optional_tool_for_budget(
         self,
         name: str,
@@ -2970,6 +3944,13 @@ class AgenticProposalSession:
     def _current_loop_stop_reason(self, state: AgenticProposalSessionState) -> str:
         if self._session_timeout_reached(state):
             return "session_timeout"
+        if (
+            state.tool_step_count >= self._tool_loop_config.max_steps
+            or state.tool_call_count >= self._tool_loop_config.max_tool_calls
+        ):
+            return "tool_loop_limit"
+        if self._observation_budget_exhausted(state):
+            return "observation_budget_exhausted"
         return "tool_loop_limit"
 
     def _record_loop_stop(
@@ -3000,6 +3981,8 @@ class AgenticProposalSession:
         context: ProposalToolContext,
         state: AgenticProposalSessionState,
         observation: ProposalObservation,
+        *,
+        preserve_observation_chars: int = 0,
     ) -> ProposalObservation:
         observation = _compact_feedback_observation_for_budget(observation)
         compact_preview = _compact_self_check_preview_observation(observation)
@@ -3009,7 +3992,18 @@ class AgenticProposalSession:
         ):
             observation = compact_preview
         projected = _json_size(_observation_prompt_payload(observation))
-        remaining = self._remaining_observation_chars(state)
+        reserved = max(0, int(preserve_observation_chars))
+        remaining = max(0, self._remaining_observation_chars(state) - reserved)
+        if projected > remaining:
+            compact_active_solver = _compact_active_solver_observation_for_budget(
+                observation
+            )
+            if compact_active_solver is not None and (
+                _json_size(_observation_prompt_payload(compact_active_solver))
+                < projected
+            ):
+                observation = compact_active_solver
+                projected = _json_size(_observation_prompt_payload(observation))
         if projected <= remaining:
             return observation
         compact_preview = _compact_self_check_preview_observation(observation)
@@ -3036,7 +4030,34 @@ class AgenticProposalSession:
             estimated_chars=projected,
             budget_action="observation_truncated",
             source_observation=observation,
+            remaining_chars=remaining,
+            preserved_observation_chars=reserved,
             repair_hint="Request fewer or smaller observations.",
+        )
+
+    def _enforce_self_check_preview_budget(
+        self,
+        observation: ProposalObservation,
+    ) -> ProposalObservation:
+        limit = self._self_check_preview_budget_chars()
+        if _json_size(_observation_prompt_payload(observation)) <= limit:
+            return observation
+        compact_preview = _compact_self_check_preview_observation(observation)
+        if compact_preview is not None and (
+            _json_size(_observation_prompt_payload(compact_preview)) <= limit
+        ):
+            return compact_preview
+        minimal_preview = _minimal_self_check_preview_observation(observation)
+        if minimal_preview is not None:
+            if _json_size(_observation_prompt_payload(minimal_preview)) <= limit:
+                return minimal_preview
+            return self._fit_observation_to_remaining(
+                minimal_preview,
+                remaining_chars=limit,
+            )
+        return self._fit_observation_to_remaining(
+            observation,
+            remaining_chars=limit,
         )
 
     def _budget_error_observation(
@@ -3050,14 +4071,22 @@ class AgenticProposalSession:
         estimated_chars: int | None,
         budget_action: str,
         source_observation: ProposalObservation | None = None,
+        remaining_chars: int | None = None,
+        preserved_observation_chars: int = 0,
         repair_hint: str | None = None,
     ) -> ProposalObservation:
         payload = {
             "budget_action": budget_action,
             "max_observation_chars": self._tool_loop_config.max_observation_chars,
             "observation_chars_used": state.observation_chars_used,
-            "remaining_observation_chars": self._remaining_observation_chars(state),
+            "remaining_observation_chars": (
+                self._remaining_observation_chars(state)
+                if remaining_chars is None
+                else remaining_chars
+            ),
         }
+        if preserved_observation_chars:
+            payload["preserved_observation_chars"] = preserved_observation_chars
         if estimated_chars is not None:
             payload["estimated_chars"] = estimated_chars
         if source_observation is not None:
@@ -3090,7 +4119,11 @@ class AgenticProposalSession:
         )
         return self._fit_observation_to_remaining(
             observation,
-            remaining_chars=self._remaining_observation_chars(state),
+            remaining_chars=(
+                self._remaining_observation_chars(state)
+                if remaining_chars is None
+                else remaining_chars
+            ),
         )
 
     def _fit_observation_to_remaining(
@@ -3134,6 +4167,45 @@ class AgenticProposalSession:
             repair_hint=None,
         )
 
+    def _record_prompt_manifest(
+        self,
+        state: AgenticProposalSessionState,
+        *,
+        call_kind: str,
+        prompt_context: Mapping[str, Any],
+        observations: list[ProposalObservation],
+    ) -> None:
+        call_index = _next_prompt_manifest_index(state)
+        manifest = build_api_visible_prompt_manifest(
+            session_id=state.session_id,
+            phase=state.phase.value,
+            call_kind=call_kind,
+            prompt_context=prompt_context,
+            observations=tuple(observations),
+            call_index=call_index,
+        )
+        artifact_ref: str | None = None
+        if self._artifact_store is not None:
+            artifact_ref = self._artifact_store.write_scratch(
+                state.session_id,
+                f"api_visible_prompt_manifest_{call_index:04d}_{call_kind}.json",
+                manifest,
+            )
+            state.scratch_artifact_refs.append(artifact_ref)
+        state.note(
+            state.phase,
+            "Recorded API-visible prompt manifest.",
+            metadata={
+                "artifact_kind": "api_visible_prompt_manifest",
+                "call_kind": call_kind,
+                "call_index": call_index,
+                "section_names": manifest["section_names"],
+                "prompt_hash": manifest["prompt_hash"],
+                "manifest_artifact_ref": artifact_ref,
+                "raw_prompt_saved": False,
+            },
+        )
+
     def _fatal_observation_error(
         self,
         observations: list[ProposalObservation],
@@ -3153,6 +4225,8 @@ class AgenticProposalSession:
     def _missing_required_context_error(
         self,
         observations: list[ProposalObservation],
+        *,
+        context: ProposalToolContext | None = None,
     ) -> str | None:
         observed_ok = {
             observation.tool_name
@@ -3161,7 +4235,7 @@ class AgenticProposalSession:
         }
         missing = [
             name
-            for name in ("context.list_surfaces", "context.read_problem")
+            for name in _required_context_tool_names(context)
             if name not in observed_ok
         ]
         if missing:
@@ -3173,6 +4247,20 @@ class AgenticProposalSession:
         output: AgenticProposalOutput,
         state: AgenticProposalSessionState,
     ) -> AgenticProposalOutput:
+        terminal_category = _terminal_failure_category(output, state)
+        if (
+            output.status != AgenticProposalStatus.COMPLETED
+            and terminal_category
+            and not state.failure_ledger
+        ):
+            _record_failure_ledger_entry(
+                state,
+                phase=state.phase,
+                category=terminal_category,
+                detail=output.failure_detail,
+                source="terminal_output",
+            )
+        ledger = _failure_ledger_payload(state.failure_ledger)
         compact_transcript = _compact_transcript(tuple(state.transcript))
         transcript_digest = _transcript_digest(compact_transcript)
         output = replace(
@@ -3184,10 +4272,18 @@ class AgenticProposalSession:
             tool_loop_config=_tool_loop_config_payload(self._tool_loop_config),
             tool_budget_used=_tool_budget_used_payload(state),
             transcript_digest=transcript_digest,
+            failure_category=terminal_category,
+            failure_ledger=ledger,
         )
         state.idempotency_key = output.idempotency_key or state.idempotency_key
         if self._artifact_store is None:
             return output
+        output = replace(
+            output,
+            tainted_artifact_refs=tuple(
+                dict.fromkeys((*output.tainted_artifact_refs, *state.scratch_artifact_refs))
+            ),
+        )
         transcript_ref = self._artifact_store.write_transcript(state)
         output_with_transcript = replace(
             output,
@@ -3217,6 +4313,781 @@ def _evidence_from_observations(
         )
         for observation in observations
     ]
+
+
+def _record_failure_ledger_entry(
+    state: AgenticProposalSessionState,
+    *,
+    phase: AgenticProposalPhase,
+    category: AgenticFailureCategory | str,
+    detail: str | None = None,
+    source: str = "",
+    attempt: int | None = None,
+    repair_attempt: int | None = None,
+    tool_name: str | None = None,
+    observation: ProposalObservation | None = None,
+    failure_code: str | None = None,
+) -> None:
+    category_value = _failure_category_value(category)
+    if not category_value:
+        return
+    if category_value == _LEGACY_PREMISE_CONTRADICTED:
+        category_value = _AGENT_GROUNDING_FAILURE
+        failure_code = failure_code or _PROPOSAL_PREMISE_CONTRADICTED_CODE
+    observation_payload: dict[str, Any] = {}
+    if observation is not None:
+        observation_payload = {
+            "observation_id": observation.observation_id,
+            "tool_name": observation.tool_name,
+            "failure_code": _enum_value(observation.failure_code),
+        }
+    entry = _drop_empty_dict(
+        {
+            "entry_id": f"failure-{len(state.failure_ledger) + 1:04d}",
+            "phase": phase.value,
+            "category": category_value,
+            "root_cause": category_value,
+            "detail": _limit_string(str(detail or ""), 800),
+            "source": source,
+            "attempt": attempt,
+            "repair_attempt": repair_attempt,
+            "tool_name": tool_name or observation_payload.get("tool_name"),
+            "observation_id": observation_payload.get("observation_id"),
+            "failure_code": failure_code or observation_payload.get("failure_code"),
+        }
+    )
+    if _failure_ledger_latest_matches(state.failure_ledger, entry):
+        return
+    state.failure_ledger.append(entry)
+
+
+def _failure_ledger_latest_matches(
+    entries: list[Mapping[str, Any]],
+    candidate: Mapping[str, Any],
+) -> bool:
+    if not entries:
+        return False
+    latest = entries[-1]
+    return (
+        str(latest.get("phase") or "") == str(candidate.get("phase") or "")
+        and str(latest.get("category") or "") == str(candidate.get("category") or "")
+        and str(latest.get("detail") or "") == str(candidate.get("detail") or "")
+        and str(latest.get("source") or "") == str(candidate.get("source") or "")
+        and str(latest.get("tool_name") or "") == str(candidate.get("tool_name") or "")
+    )
+
+
+def _failure_ledger_payload(
+    entries: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    sanitized_entries = [
+        _sanitize_agentic_value(dict(entry)) for entry in entries if entry
+    ]
+    return {
+        "schema_version": _FAILURE_LEDGER_SCHEMA_VERSION,
+        "entries": sanitized_entries,
+        "entry_count": len(sanitized_entries),
+        "first_root_cause": (
+            sanitized_entries[0].get("root_cause") if sanitized_entries else None
+        ),
+        "first_failure_phase": (
+            sanitized_entries[0].get("phase") if sanitized_entries else None
+        ),
+        "latest_failure": (
+            sanitized_entries[-1].get("category") if sanitized_entries else None
+        ),
+        "latest_failure_phase": (
+            sanitized_entries[-1].get("phase") if sanitized_entries else None
+        ),
+    }
+
+
+def _failure_category_value(category: AgenticFailureCategory | str | None) -> str:
+    return str(_enum_value(category) or "")
+
+
+def _structured_output_failure_category(
+    exc: BaseException,
+) -> AgenticFailureCategory:
+    if isinstance(exc, LLMRetryExhaustedError):
+        return AgenticFailureCategory.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
+    return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
+
+
+def _normalized_structured_rejection(
+    rejection: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = dict(rejection)
+    if _structured_rejection_is_premise_contradicted(payload):
+        legacy_category = str(_enum_value(payload.get("failure_category")) or "")
+        if legacy_category and legacy_category != _AGENT_GROUNDING_FAILURE:
+            payload.setdefault("legacy_failure_category", legacy_category)
+        payload["failure_category"] = _AGENT_GROUNDING_FAILURE
+        payload.setdefault("failure_code", _PROPOSAL_PREMISE_CONTRADICTED_CODE)
+        payload.setdefault("agent_block_reason", _AGENT_QUALITY_BLOCKED_REASON)
+    return payload
+
+
+def _structured_rejection_is_premise_contradicted(
+    rejection: Mapping[str, Any],
+) -> bool:
+    failure_category = str(_enum_value(rejection.get("failure_category")) or "")
+    failure_code = str(rejection.get("failure_code") or "")
+    premise_check = str(rejection.get("premise_check") or "")
+    return (
+        failure_code == _PROPOSAL_PREMISE_CONTRADICTED_CODE
+        or premise_check == "contradicted"
+        or failure_category == _LEGACY_PREMISE_CONTRADICTED
+    )
+
+
+def _rejection_termination_reason(
+    rejection: Mapping[str, Any],
+) -> AgenticTerminationReason:
+    failure_category = str(_enum_value(rejection.get("failure_category")) or "")
+    if _structured_rejection_is_premise_contradicted(rejection) or (
+        failure_category == _AGENT_GROUNDING_FAILURE
+    ):
+        return AgenticTerminationReason.PREMISE_CONTRADICTED
+    if failure_category == AgenticFailureCategory.DUPLICATE_MECHANISM.value:
+        return AgenticTerminationReason.DUPLICATE_MECHANISM
+    if str(rejection.get("source") or "") == "mechanism_novelty_gate":
+        return AgenticTerminationReason.MECHANISM_NOVELTY_REJECTED
+    return AgenticTerminationReason.MECHANISM_NOVELTY_REJECTED
+
+
+def _terminal_failure_category(
+    output: AgenticProposalOutput,
+    state: AgenticProposalSessionState,
+) -> AgenticFailureCategory | str | None:
+    if output.status == AgenticProposalStatus.COMPLETED:
+        return None
+    if output.failure_category is not None:
+        return output.failure_category
+    if output.termination_reason in {
+        AgenticTerminationReason.TOOL_LOOP_LIMIT,
+        AgenticTerminationReason.SESSION_TIMEOUT,
+        AgenticTerminationReason.REPEATED_TOOL_CALL,
+    } or state.loop_stop_reason in {
+        "tool_loop_limit",
+        "observation_budget_exhausted",
+        "session_timeout",
+        "repeated_tool_call",
+    }:
+        return AgenticFailureCategory.TOOL_BUDGET_EXHAUSTED
+    return None
+
+
+def _hypothesis_prompt_observations(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    context: ProposalToolContext | None,
+) -> list[ProposalObservation]:
+    selected: list[ProposalObservation] = []
+    for observation in observations:
+        if observation.tool_name in _HYPOTHESIS_PROMPT_COMPACT_REQUIREMENT_TOOLS:
+            if _observation_satisfies_compact_requirement(context, observation):
+                selected.append(observation)
+            continue
+        selected.append(observation)
+    return selected
+
+
+def _next_prompt_manifest_index(state: AgenticProposalSessionState) -> int:
+    current = int(getattr(state, "_prompt_manifest_index", 0)) + 1
+    setattr(state, "_prompt_manifest_index", current)
+    return current
+
+
+def _deduplicate_observation_if_already_read(
+    state: AgenticProposalSessionState,
+    observation: ProposalObservation,
+    *,
+    tool_name: str,
+    args: Mapping[str, Any],
+    phase: AgenticProposalPhase,
+    args_hash: str,
+) -> ProposalObservation:
+    if observation.is_error or not str(tool_name).startswith("context."):
+        return observation
+    payload_digest = stable_digest(observation.structured_payload, length=16)
+    source_hash = _observation_source_hash(observation, payload_digest=payload_digest)
+    key = (
+        str(tool_name),
+        str(args_hash),
+        phase.value,
+        str(source_hash or payload_digest),
+    )
+    cache = _already_read_cache(state)
+    cached = cache.get(key)
+    if cached is not None:
+        return replace(
+            observation,
+            observation_type="already_read_ref",
+            summary=(
+                "Repeated proposal tool call returned an already-read reference "
+                "instead of duplicating the full payload."
+            ),
+            structured_payload=_already_read_payload(
+                observation,
+                cached,
+                args_hash=args_hash,
+                phase=phase.value,
+                payload_digest=payload_digest,
+                source_hash=source_hash,
+            ),
+            repair_hint=None,
+        )
+    cache[key] = {
+        "observation_id": observation.observation_id,
+        "tool_name": observation.tool_name,
+        "tool_call_id": observation.tool_call_id,
+        "args_hash": args_hash,
+        "args_digest": stable_digest(dict(args), length=16),
+        "phase": phase.value,
+        "payload_digest": payload_digest,
+        "source_hash": source_hash,
+    }
+    return observation
+
+
+def _already_read_cache(state: AgenticProposalSessionState) -> dict[tuple[str, ...], Any]:
+    cache = getattr(state, "_already_read_observation_cache", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        setattr(state, "_already_read_observation_cache", cache)
+    return cache
+
+
+def _already_read_payload(
+    observation: ProposalObservation,
+    cached: Mapping[str, Any],
+    *,
+    args_hash: str,
+    phase: str,
+    payload_digest: str,
+    source_hash: str,
+) -> dict[str, Any]:
+    payload = observation.structured_payload
+    return _drop_empty_dict(
+        {
+            "already_read_ref": {
+                "observation_id": cached.get("observation_id"),
+                "tool_name": cached.get("tool_name"),
+                "tool_call_id": cached.get("tool_call_id"),
+                "args_hash": args_hash,
+                "phase": phase,
+                "payload_digest": payload_digest,
+                "source_hash": source_hash,
+            },
+            "deduplicated": True,
+            "tool_name": observation.tool_name,
+            "surface": _already_read_surface_payload(payload),
+            "detail": payload.get("detail") if isinstance(payload, Mapping) else None,
+            "section": payload.get("section") if isinstance(payload, Mapping) else None,
+            "target_file": (
+                payload.get("target_file") if isinstance(payload, Mapping) else None
+            ),
+            "file_path": payload.get("file_path") if isinstance(payload, Mapping) else None,
+            "symbol": payload.get("symbol") if isinstance(payload, Mapping) else None,
+            "readable": payload.get("readable") if isinstance(payload, Mapping) else None,
+            "source": payload.get("source") if isinstance(payload, Mapping) else None,
+        }
+    )
+
+
+def _already_read_surface_payload(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return None
+    surface = value.get("surface")
+    if isinstance(surface, Mapping):
+        return {
+            key: surface.get(key)
+            for key in ("name", "id", "kind")
+            if surface.get(key) is not None
+        }
+    return surface
+
+
+def _observation_source_hash(
+    observation: ProposalObservation,
+    *,
+    payload_digest: str,
+) -> str:
+    source_payload = _observation_source_payload(observation.structured_payload)
+    if source_payload:
+        return stable_digest(source_payload, length=16)
+    return payload_digest
+
+
+def _observation_source_payload(value: Any) -> dict[str, Any]:
+    found: dict[str, Any] = {}
+
+    def visit(item: Any) -> None:
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                key_text = str(key)
+                if key_text in {"source_digest", "provenance"} and isinstance(
+                    child, Mapping
+                ):
+                    found.setdefault(key_text, _sanitize_agentic_value(dict(child)))
+                elif key_text in {
+                    "source",
+                    "digest",
+                    "sha256",
+                    "snapshot_digest",
+                    "branch_id",
+                    "base_champion_hash",
+                    "champion_code_snapshot_hash",
+                }:
+                    found.setdefault(key_text, _sanitize_agentic_value(child))
+                visit(child)
+        elif isinstance(item, (list, tuple)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return found
+
+
+def _required_context_tool_names(
+    context: ProposalToolContext | None,
+) -> tuple[str, ...]:
+    del context
+    return ("context.list_surfaces", "context.read_problem")
+
+
+def _fallback_required_context_tool_names(
+    context: ProposalToolContext | None,
+) -> tuple[str, ...]:
+    names = ["context.list_surfaces", "context.read_problem"]
+    if _context_requires_solver_design_grounding(context):
+        names.extend(_SOLVER_DESIGN_FILE_DISCOVERY_TOOLS)
+        names.extend(_SOLVER_DESIGN_GROUNDING_TOOLS)
+    return tuple(names)
+
+
+def _context_requires_solver_design_grounding(
+    context: ProposalToolContext | None,
+) -> bool:
+    if context is None:
+        return False
+    forced_surface = str(context.forced_surface or "").strip()
+    if forced_surface in _SOLVER_DESIGN_SURFACE_NAMES:
+        return True
+    boundary = {
+        str(surface or "").strip()
+        for surface in context.active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    }
+    return bool(boundary) and boundary.issubset(_SOLVER_DESIGN_SURFACE_NAMES)
+
+
+def _is_solver_design_hypothesis(hypothesis: HypothesisProposal) -> bool:
+    return str(hypothesis.change_locus or "").strip() in _SOLVER_DESIGN_SURFACE_NAMES
+
+
+def _missing_solver_design_grounding_error(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    hypothesis: HypothesisProposal,
+) -> str | None:
+    if not _is_solver_design_hypothesis(hypothesis):
+        return None
+    observed_ok = {
+        observation.tool_name
+        for observation in observations
+        if not observation.is_error
+    }
+    if _has_active_solver_embedded_call_graph(observations):
+        observed_ok.add("context.read_solver_call_graph")
+    missing = [
+        tool_name
+        for tool_name in _SOLVER_DESIGN_GROUNDING_TOOLS
+        if tool_name not in observed_ok
+    ]
+    if not missing:
+        return None
+    return (
+        "missing required solver_design grounding tools before hypothesis approval: "
+        + ", ".join(missing)
+    )
+
+
+def _has_successful_solver_call_graph_grounding(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> bool:
+    return _has_successful_tool(
+        observations,
+        "context.read_solver_call_graph",
+    ) or _has_active_solver_embedded_call_graph(observations)
+
+
+def _has_active_solver_embedded_call_graph(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> bool:
+    for observation in reversed(tuple(observations)):
+        if observation.is_error:
+            continue
+        if observation.tool_name != "context.read_active_solver_design":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        call_graph = payload.get("call_graph")
+        if not isinstance(call_graph, Mapping):
+            continue
+        if any(
+            key in call_graph
+            for key in (
+                "edges",
+                "edge_count",
+                "nodes",
+                "node_count",
+                "source_digest",
+                "provenance",
+            )
+        ):
+            return True
+    return False
+
+
+def _patch_payload_for_preview(patch: PatchProposal) -> dict[str, Any]:
+    payload = _proposal_payload(patch)
+    for field_name in _PATCH_METADATA_FIELDS:
+        payload.pop(field_name, None)
+    return payload
+
+
+def _patch_premise_rejection(
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any] | None:
+    premise_check = str(getattr(patch, "premise_check", "supported") or "supported")
+    if premise_check == "supported":
+        return None
+    if premise_check not in {"contradicted", "duplicate", "wrong_owner"}:
+        premise_check = "contradicted"
+    reason = str(getattr(patch, "premise_check_reason", "") or "").strip()
+    category = (
+        AgenticFailureCategory.DUPLICATE_MECHANISM.value
+        if premise_check == "duplicate"
+        else AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
+        if premise_check == "wrong_owner"
+        else _AGENT_GROUNDING_FAILURE
+    )
+    rejection = {
+        "artifact_kind": "agentic_code_premise_rejection",
+        "premise_check": premise_check,
+        "failure_category": category,
+        "reason": reason,
+        "selected_surface": hypothesis.change_locus,
+        "target_file": hypothesis.target_file,
+        "patch_generated": False,
+        "screening_allowed": False,
+    }
+    if premise_check == "contradicted":
+        rejection["legacy_failure_category"] = _LEGACY_PREMISE_CONTRADICTED
+        rejection["failure_code"] = _PROPOSAL_PREMISE_CONTRADICTED_CODE
+        rejection["agent_block_reason"] = _AGENT_QUALITY_BLOCKED_REASON
+    return rejection
+
+
+def _preview_failure_category(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> AgenticFailureCategory:
+    for observation in reversed(observations):
+        if not observation.is_error and _preview_observation_passed(observation):
+            continue
+        if observation.tool_name == "proposal.schema_preview":
+            return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
+        if observation.tool_name == "proposal.algorithm_smoke":
+            return AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE
+        if observation.tool_name == "proposal.contract_preview":
+            if _contract_preview_indicates_patch_graph_failure(observation):
+                return AgenticFailureCategory.PATCH_GRAPH_FAILURE
+            return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+        if observation.tool_name == "proposal.target_permission_preview":
+            return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+    return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+
+
+def _contract_preview_indicates_patch_graph_failure(
+    observation: ProposalObservation,
+) -> bool:
+    text_values = [
+        str(value).strip().lower()
+        for value in _preview_text_values(observation.structured_payload)
+        if str(value).strip()
+    ]
+    text_values.extend(
+        value
+        for value in (
+            str(observation.summary or "").strip().lower(),
+            str(_enum_value(observation.failure_code) or "").strip().lower(),
+        )
+        if value
+    )
+    joined = "\n".join(text_values)
+    if "import_graph" in joined or "import graph" in joined:
+        return True
+    return any(
+        value.startswith("c8")
+        or value.startswith("c9e")
+        or ": c8" in value
+        or ": c9e" in value
+        for value in text_values
+    )
+
+
+def _preview_text_values(value: Any) -> list[str]:
+    values: list[str] = []
+    if isinstance(value, Mapping):
+        for item in value.values():
+            values.extend(_preview_text_values(item))
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            values.extend(_preview_text_values(item))
+    elif value is not None:
+        values.append(str(value))
+    return values
+
+
+def _compact_active_solver_observation_for_budget(
+    observation: ProposalObservation,
+) -> ProposalObservation | None:
+    if observation.is_error or observation.tool_name not in {
+        "context.read_active_solver_design",
+        "context.read_solver_call_graph",
+        "context.list_algorithm_files",
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    }:
+        return None
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return None
+    if observation.tool_name == "context.read_active_solver_design":
+        compact_payload = _compact_active_solver_design_payload(payload)
+    elif observation.tool_name == "context.read_solver_call_graph":
+        compact_payload = _compact_solver_call_graph_payload(payload)
+    elif observation.tool_name == "context.list_algorithm_files":
+        compact_payload = _compact_algorithm_file_list_payload(payload)
+    else:
+        compact_payload = _compact_algorithm_read_payload(payload)
+    return replace(
+        observation,
+        summary=_limit_string(observation.summary, 220)
+        or "Returned compact active solver evidence.",
+        structured_payload=compact_payload,
+        repair_hint=None,
+    )
+
+
+def _compact_active_solver_design_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    call_graph = payload.get("call_graph")
+    return _drop_empty_dict(
+        {
+            "surface": payload.get("surface"),
+            "active_surface": payload.get("active_surface"),
+            "provenance": payload.get("provenance"),
+            "source_digest": _compact_source_digest(payload.get("source_digest")),
+            "entrypoint": payload.get("entrypoint"),
+            "active_files": _compact_algorithm_files(payload.get("active_files")),
+            "inactive_files": _compact_algorithm_files(payload.get("inactive_files")),
+            "call_graph": (
+                _compact_solver_call_graph_payload(call_graph)
+                if isinstance(call_graph, Mapping)
+                else None
+            ),
+            "mechanism_summary": _compact_mechanism_summary(
+                payload.get("mechanism_summary")
+            ),
+            "mechanism_keys": sorted(
+                str(key) for key in (payload.get("mechanism_summary") or {}).keys()
+            )
+            if isinstance(payload.get("mechanism_summary"), Mapping)
+            else None,
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_solver_call_graph_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    edges = payload.get("edges")
+    nodes = payload.get("nodes")
+    compact_edges: list[dict[str, Any]] = []
+    if isinstance(edges, list):
+        for edge in edges[:12]:
+            if not isinstance(edge, Mapping):
+                continue
+            compact_edges.append(
+                _drop_empty_dict(
+                    {
+                        "from": edge.get("from"),
+                        "to": edge.get("to"),
+                        "mechanism": _limit_string(edge.get("mechanism"), 260),
+                        "evidence": _compact_string_list(edge.get("evidence"), 8, 120),
+                    }
+                )
+            )
+    return _drop_empty_dict(
+        {
+            "surface": payload.get("surface"),
+            "provenance": payload.get("provenance"),
+            "source_digest": _compact_source_digest(payload.get("source_digest")),
+            "node_count": len(nodes) if isinstance(nodes, list) else None,
+            "edge_count": len(edges) if isinstance(edges, list) else None,
+            "edges": compact_edges,
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_algorithm_file_list_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_dict(
+        {
+            "surface": payload.get("surface"),
+            "allowlist_only": payload.get("allowlist_only"),
+            "file_count": payload.get("file_count"),
+            "files": _compact_algorithm_files(payload.get("files")),
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_algorithm_read_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_dict(
+        {
+            "file_path": payload.get("file_path"),
+            "symbol": payload.get("symbol"),
+            "readable": payload.get("readable"),
+            "reason": payload.get("reason"),
+            "source": payload.get("source"),
+            "active": payload.get("active"),
+            "role": payload.get("role"),
+            "module": payload.get("module"),
+            "line_start": payload.get("line_start"),
+            "line_end": payload.get("line_end"),
+            "sha256": payload.get("sha256"),
+            "digest": payload.get("digest"),
+            "truncated": payload.get("truncated"),
+            "provenance": payload.get("provenance"),
+            "content_preview": _limit_string(payload.get("content_preview"), 1600),
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_algorithm_files(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    files: list[dict[str, Any]] = []
+    for item in value[:12]:
+        if not isinstance(item, Mapping):
+            continue
+        files.append(
+            _drop_empty_dict(
+                {
+                    "file_path": item.get("file_path"),
+                    "module": item.get("module"),
+                    "role": item.get("role"),
+                    "active": item.get("active"),
+                    "readable": item.get("readable"),
+                    "reason": item.get("reason"),
+                    "source": item.get("source"),
+                    "digest": item.get("digest"),
+                }
+            )
+        )
+    return files
+
+
+def _compact_source_digest(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    files = value.get("files")
+    compact_files = {}
+    if isinstance(files, Mapping):
+        compact_files = {
+            str(path): str(digest)[:16]
+            for path, digest in list(files.items())[:12]
+        }
+    return _drop_empty_dict(
+        {
+            "algorithm": value.get("algorithm"),
+            "snapshot_digest": value.get("snapshot_digest"),
+            "files": compact_files,
+        }
+    )
+
+
+def _compact_mechanism_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    summary: dict[str, Any] = {}
+    for key, item in value.items():
+        if not isinstance(item, Mapping):
+            continue
+        summary[str(key)] = _drop_empty_dict(
+            {
+                "active": item.get("active"),
+                "summary": _limit_string(item.get("summary"), 600),
+                "evidence_symbols": _compact_string_list(
+                    item.get("evidence_symbols"),
+                    12,
+                    140,
+                ),
+            }
+        )
+    return _drop_empty_dict(summary)
+
+
+def _compact_string_list(value: Any, limit: int, max_chars: int) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    result: list[str] = []
+    for item in list(value)[: max(0, limit)]:
+        text = _limit_string(item, max_chars)
+        if text:
+            result.append(text)
+    return result
+
+
+def _active_solver_mechanism_evidence_for_code_context(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> dict[str, Any]:
+    for observation in reversed(tuple(observations)):
+        if observation.is_error:
+            continue
+        if observation.tool_name != "context.read_active_solver_design":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        mechanisms = _compact_mechanism_summary(payload.get("mechanism_summary"))
+        if not mechanisms:
+            continue
+        source_digest = payload.get("source_digest")
+        snapshot_digest = (
+            source_digest.get("snapshot_digest")
+            if isinstance(source_digest, Mapping)
+            else None
+        )
+        return _drop_empty_dict(
+            {
+                "source": "context.read_active_solver_design",
+                "snapshot_digest": snapshot_digest,
+                "mechanism_summary": mechanisms,
+                "premise_check_rule": (
+                    "Before returning premise_check='supported', compare the "
+                    "hypothesis against these active mechanisms. For "
+                    "related/proximity destroy proposals, account for existing "
+                    "_shaw_removal: seed-based removal using distance, demand, "
+                    "and original-route relatedness."
+                ),
+            }
+        )
+    return {}
 
 
 def _patch_self_reported_unresolved_issue(patch: PatchProposal) -> str | None:

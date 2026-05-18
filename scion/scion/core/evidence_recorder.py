@@ -24,13 +24,34 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.public_refs import (
+    public_artifact_ref,
+    public_case_ref,
+    redact_public_refs,
+)
 from scion.core.status_reporter import StatusReporter
+from scion.evidence.final_evidence_refs import (
+    FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+    FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
+    FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL,
+    build_final_evidence_closure_refs,
+)
 from scion.evidence.formal_readiness import validate_formal_readiness
 
 logger = logging.getLogger(__name__)
 
 
 StateProvider = Callable[[], Mapping[str, Any]]
+
+_NON_FORMAL_FINAL_EVIDENCE_STOP_REASONS = {"max_rounds_exhausted"}
+_DEFAULT_NON_FORMAL_FINAL_EVIDENCE_REASON = (
+    "campaign ended normally without an attached formal final evidence package; "
+    "recording a non-formal final evidence closure"
+)
+_DEFAULT_PENDING_FINAL_EVIDENCE_REASON = (
+    "final evidence package was not attached; post-campaign final evaluation "
+    "is still required for formal readiness"
+)
 
 
 def _serialize_verification_checks(
@@ -85,6 +106,67 @@ def _extract_protocol_runtime_stats(
         "candidate_failed_pairs": stats.candidate_failed_pairs,
         "champion_failed_pairs": stats.champion_failed_pairs,
     }
+
+
+def _stage_value(stage: Any) -> str:
+    return str(getattr(stage, "value", stage) or "")
+
+
+def _screening_pair_counts(protocol_result: ProtocolResult | None) -> Dict[str, Any]:
+    if protocol_result is None or _stage_value(protocol_result.stage) != "screening":
+        return {}
+    wins = losses = ties = 0
+    for feedback in protocol_result.pair_feedback or ():
+        comparison = str(getattr(feedback, "comparison", "") or "")
+        if comparison == "win":
+            wins += 1
+        elif comparison == "loss":
+            losses += 1
+        else:
+            ties += 1
+    total = wins + losses + ties
+    return {
+        "screening_pair_wins": wins,
+        "screening_pair_losses": losses,
+        "screening_pair_ties": ties,
+        "screening_pair_total": total,
+        "screening_pair_win_rate": wins / total if total else 0.0,
+    }
+
+
+def _screening_rate_fields(
+    protocol_result: ProtocolResult | None,
+) -> Dict[str, Any]:
+    if protocol_result is None or _stage_value(protocol_result.stage) != "screening":
+        return {}
+    stats = protocol_result.stats
+    return {
+        "screening_case_wins": stats.wins,
+        "screening_case_losses": stats.losses,
+        "screening_case_ties": stats.ties,
+        "screening_case_win_rate": stats.win_rate,
+        "screening_gate_win_rate": stats.win_rate,
+        "screening_win_rate": stats.win_rate,
+        "screening_win_rate_scope": "case_level_gate",
+        **_screening_pair_counts(protocol_result),
+    }
+
+
+def _default_final_evidence_closure_refs(
+    stopped_reason: str | None,
+) -> dict[str, Any]:
+    if stopped_reason in _NON_FORMAL_FINAL_EVIDENCE_STOP_REASONS:
+        return build_final_evidence_closure_refs(
+            reason=_DEFAULT_NON_FORMAL_FINAL_EVIDENCE_REASON,
+            reason_code=FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+            required_for_formal_readiness=False,
+        )
+    return build_final_evidence_closure_refs(
+        reason=_DEFAULT_PENDING_FINAL_EVIDENCE_REASON,
+        reason_code=FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
+        status=FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL,
+        required_for_formal_readiness=True,
+    )
 
 
 class EvidenceRecorder:
@@ -154,17 +236,22 @@ class EvidenceRecorder:
             payload["stopped_reason"] = stopped_reason
         if self.current_status_progress is not None:
             payload["current_progress"] = self.current_status_progress
+        public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:
-            self.status_reporter.write(payload)
+            self.status_reporter.write(public_payload)
         except Exception as exc:  # pragma: no cover - mirrors campaign best-effort behavior
             logger.debug("Failed to write status.json: %s", exc)
-        return payload
+        return public_payload
 
     def record_protocol_progress(self, **payload: Any) -> Dict[str, Any]:
         """Merge a protocol progress update and refresh ``status.json``."""
         progress = dict(self.current_status_progress or {})
         progress.update(payload)
+        if progress.get("raw_metrics_ref"):
+            progress["raw_metrics_ref_scope"] = "public_artifact_ref"
+            progress["raw_metrics_internal_only"] = True
         progress["last_progress_at"] = datetime.now().isoformat()
+        progress = redact_public_refs(progress, base_dir=self.campaign_dir)
         self.current_status_progress = progress
         self.write_status()
         return progress
@@ -192,19 +279,59 @@ class EvidenceRecorder:
         """Build the experiment event payload currently written to lineage."""
         stats = protocol_result.stats if protocol_result else None
         runtime_stats = _extract_protocol_runtime_stats(protocol_result)
+        raw_metrics_internal_ref = (
+            protocol_result.raw_metrics_ref if protocol_result else ""
+        )
+        raw_metrics_public_ref = (
+            public_artifact_ref(
+                raw_metrics_internal_ref,
+                base_dir=self.campaign_dir,
+                kind="metrics",
+            )
+            or ""
+        )
+        public_case_ids = [
+            public_case_ref(case, base_dir=self.campaign_dir)
+            for case in (protocol_result.case_ids if protocol_result else ())
+        ]
+        public_case_ids = [case for case in public_case_ids if case is not None]
+        internal_audit_payload = {
+            "schema": "scion.internal_audit_refs.v1",
+            "internal_only": True,
+            "raw_metrics_ref": raw_metrics_public_ref,
+            "raw_metrics_public_ref": raw_metrics_public_ref,
+            "raw_metrics_ref_scope": "public_artifact_ref",
+            "protocol_raw_metrics_ref": raw_metrics_public_ref,
+            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_internal_only": True,
+            "case_ids": public_case_ids,
+            "metrics_refs": {
+                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_ref_scope": "public_artifact_ref",
+                "protocol_raw_metrics_ref": raw_metrics_public_ref,
+                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+                "raw_metrics_internal_only": True,
+            },
+        }
         evidence_metadata = {
             "branch_state": branch.state.value,
             "branch_base_champion_id": branch.base_champion_id,
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "current_champion_version": champion.version,
             "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
-            "protocol_raw_metrics_ref": (
-                protocol_result.raw_metrics_ref if protocol_result else ""
-            ),
+            "protocol_raw_metrics_ref": raw_metrics_public_ref,
+            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_public_ref": raw_metrics_public_ref,
+            "raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_internal_only": True,
+            "internal_audit_payload": "experiment_events.audit_payload_json",
             "metrics_refs": {
-                "protocol_raw_metrics_ref": (
-                    protocol_result.raw_metrics_ref if protocol_result else ""
-                ),
+                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_ref_scope": "public_artifact_ref",
+                "protocol_raw_metrics_ref": raw_metrics_public_ref,
+                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+                "raw_metrics_internal_only": True,
+                "audit_payload_stored_in": "experiment_events.audit_payload_json",
             },
             "selected_surface": (
                 protocol_result.selected_surface if protocol_result else None
@@ -229,9 +356,9 @@ class EvidenceRecorder:
             "verification_result": "passed" if verification_result.passed else "failed",
             "canary_result": "passed" if canary_result.passed else "failed",
             "stage": protocol_result.stage.value if protocol_result else "",
-            "case_ids": json.dumps(list(protocol_result.case_ids)) if protocol_result else "[]",
+            "case_ids": json.dumps(public_case_ids) if protocol_result else "[]",
             "seed_set": json.dumps(list(protocol_result.seed_set)) if protocol_result else "[]",
-            "raw_metrics_ref": protocol_result.raw_metrics_ref if protocol_result else "",
+            "raw_metrics_ref": raw_metrics_public_ref,
             "screening_n_cases": stats.n_cases if stats else 0,
             "screening_win_rate": stats.win_rate if stats else None,
             "screening_median_delta": stats.median_delta if stats else None,
@@ -241,7 +368,9 @@ class EvidenceRecorder:
             "decision": decision.value,
             "model_id": self.model_id,
             "protocol_version": self.protocol_version,
+            "audit_payload_json": json.dumps(internal_audit_payload, sort_keys=True),
         }
+        event.update(_screening_rate_fields(protocol_result))
         if event_id:
             event["event_id"] = event_id
         return event
@@ -434,11 +563,17 @@ class EvidenceRecorder:
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))
+        if not refs:
+            refs = _default_final_evidence_closure_refs(effective_stopped_reason)
+        refs = redact_public_refs(refs, base_dir=self.campaign_dir)
         readiness = validate_formal_readiness(refs)
         summary["formal_readiness"] = {
             "formal_ready": readiness.formal_ready,
             "missing": list(readiness.missing),
+            "status": readiness.status,
         }
+        if readiness.reason_code:
+            summary["formal_readiness"]["reason_code"] = readiness.reason_code
         if refs:
             summary["final_evidence_refs"] = refs
         if self.state_provider is not None:
@@ -452,6 +587,7 @@ class EvidenceRecorder:
         for step in steps:
             summary["steps"].append(self._build_summary_step(step))
 
+        summary = redact_public_refs(summary, base_dir=self.campaign_dir)
         out_path = self.campaign_dir / "campaign_summary.json"
         try:
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -463,9 +599,13 @@ class EvidenceRecorder:
             logger.warning("Failed to write campaign_summary.json: %s", exc)
         return summary
 
-    @staticmethod
-    def _build_summary_step(step: StepRecord) -> Dict[str, Any]:
+    def _build_summary_step(self, step: StepRecord) -> Dict[str, Any]:
         decision_reason_codes = list(step.decision_reason_codes or ())
+        code_archive_ref = public_artifact_ref(
+            step.code_archive_ref,
+            base_dir=self.campaign_dir,
+            kind="artifact",
+        )
         step_data: Dict[str, Any] = {
             "round": step.round_num,
             "branch_id": step.branch_id,
@@ -476,7 +616,7 @@ class EvidenceRecorder:
             "failure_stage": step.failure_stage,
             "failure_detail": step.failure_detail,
             "verification_detail": step.verification_detail,
-            "code_archive_ref": step.code_archive_ref,
+            "code_archive_ref": code_archive_ref,
             "cache_stats": step.cache_stats,
             "hypothesis": {
                 "text": (step.hypothesis.hypothesis_text or "")[:200],
@@ -501,14 +641,30 @@ class EvidenceRecorder:
                 for key, value in dict(step.proposal_session_ref).items()
                 if key in allowed_ref_fields
             }
+            step_data["proposal_session_ref"] = redact_public_refs(
+                step_data["proposal_session_ref"],
+                base_dir=self.campaign_dir,
+            )
         if step.protocol_result and step.protocol_result.stats:
             stats = step.protocol_result.stats
             pr = step.protocol_result
             protocol_reason_codes = list(pr.reason_codes)
             effective_reason_codes = decision_reason_codes or protocol_reason_codes
+            raw_metrics_public_ref = public_artifact_ref(
+                pr.raw_metrics_ref,
+                base_dir=self.campaign_dir,
+                kind="metrics",
+            )
             step_data["protocol_result"] = {
                 "stage": pr.stage.value if hasattr(pr.stage, "value") else str(pr.stage),
                 "win_rate": stats.win_rate,
+                "win_rate_scope": (
+                    "case_level_gate"
+                    if _stage_value(pr.stage) == "screening"
+                    else "case_level"
+                ),
+                "case_win_rate": stats.win_rate,
+                "gate_win_rate": stats.win_rate,
                 "median_delta": stats.median_delta,
                 "ci_low": stats.ci_low,
                 "ci_high": stats.ci_high,
@@ -542,8 +698,18 @@ class EvidenceRecorder:
                 "effective_reason_source": (
                     "decision_engine" if decision_reason_codes else "protocol_gate"
                 ),
-                "raw_metrics_ref": pr.raw_metrics_ref,
-                "case_ids": list(pr.case_ids),
+                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_public_ref": raw_metrics_public_ref,
+                "raw_metrics_ref_scope": "public_artifact_ref",
+                "raw_metrics_internal_only": True,
+                "case_ids": [
+                    ref
+                    for ref in (
+                        public_case_ref(case, base_dir=self.campaign_dir)
+                        for case in pr.case_ids
+                    )
+                    if ref is not None
+                ],
                 "seed_set": list(pr.seed_set),
                 "selected_surface": pr.selected_surface,
                 "candidate_surface_runtime_summary": dict(
@@ -599,6 +765,7 @@ class EvidenceRecorder:
                     or {}
                 ),
             }
+            step_data["protocol_result"].update(_screening_rate_fields(pr))
             if pr.case_feedback:
                 step_data["case_feedback_summary"] = [
                     {

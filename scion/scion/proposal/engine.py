@@ -25,6 +25,7 @@ from scion.proposal.schemas import (
     HypothesisProposalInput,
     PatchProposalInput,
     ToolSelectionInput,
+    normalize_patch_output_with_repair_attribution,
 )
 
 
@@ -309,9 +310,14 @@ def _sanitize_tool_selection_context(value: Any) -> Any:
             key_text = str(key)
             if key_text in {
                 "raw_metrics_ref",
+                "raw_metrics_public_ref",
+                "raw_metrics_path",
                 "case_ids",
                 "seed_set",
                 "pair_feedback",
+                "audit_payload_json",
+                "internal_audit_payload",
+                "artifact_path",
                 "code",
                 "code_content",
                 "current_artifact",
@@ -367,14 +373,18 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         target_runtime_effect=validated.target_runtime_effect,
         complexity_claim=validated.complexity_claim,
         runtime_budget_strategy=validated.runtime_budget_strategy,
+        expected_telemetry=dict(validated.expected_telemetry or {}),
         novelty_signature=dict(validated.novelty_signature or {}),
     )
 
 
 def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
+    normalized_raw, repair_attribution = normalize_patch_output_with_repair_attribution(
+        raw
+    )
     try:
-        validated = PatchProposalInput(**raw)
+        validated = PatchProposalInput(**normalized_raw)
     except ValidationError as exc:
         raise ProposalValidationError(str(exc)) from exc
     return PatchProposal(
@@ -391,6 +401,9 @@ def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
             )
             for change in validated.additional_changes
         ),
+        premise_check=validated.premise_check,
+        premise_check_reason=validated.premise_check_reason,
+        repair_attribution=repair_attribution,
     )
 
 
@@ -1089,24 +1102,9 @@ def _split_code_context(
 
     prior_failure_section = ""
     if D["prior_code_failure"]:
-        prior_failure = str(D["prior_code_failure"])
-        if _is_timeout_failure(prior_failure):
-            prior_failure_section = (
-                "## Previous Attempt Failed\n"
-                "The previous code generation attempt timed out before "
-                "returning a patch. Keep the implementation compact and "
-                "bounded. Implement one coherent solver body with at most "
-                "a small set of helpers, prefer one construction path plus "
-                "one bounded improvement loop, and avoid large ALNS helper "
-                "forests unless absolutely necessary.\n\n"
-            )
-        else:
-            prior_failure_section = (
-                f"## Previous Attempt Failed\n"
-                f"The previous code generation failed with:\n"
-                f"{prior_failure}\n"
-                f"Avoid the same mistake.\n\n"
-            )
+        prior_failure_section = _prior_failure_prompt_section(
+            str(D["prior_code_failure"])
+        )
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     if agentic_context:
         prior_failure_section += f"{agentic_context}\n\n"
@@ -1123,6 +1121,8 @@ def _split_code_context(
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
         f"- Top-level `file_path` must be exactly the approved target_file: "
         f"{D['target_file']}\n"
+        f"- First set `premise_check` to one of: supported, contradicted, duplicate, wrong_owner.\n"
+        f"- If the target content already has the proposed mechanism, contradicts the hypothesis, or shows a different owner file should change, return that premise_check with `premise_check_reason` and leave patch fields empty.\n"
         f"- Conform to the active research-surface interface specification exactly\n"
         f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
         f"- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or the original if no valid move is found\n"
@@ -1130,6 +1130,8 @@ def _split_code_context(
         f"{solver_design_user_constraints}\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"
         f"{{\n"
+        f'  "premise_check": "supported" | "contradicted" | "duplicate" | "wrong_owner",\n'
+        f'  "premise_check_reason": "<brief reason when not supported, otherwise empty>",\n'
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
         f'  "action": "modify" | "create" | "delete",\n'
         f'  "code_content": "<complete file contents>",\n'
@@ -1292,6 +1294,52 @@ def _agentic_observation_chars(code_phase: bool) -> int:
 def _is_timeout_failure(text: str) -> bool:
     lowered = text.lower()
     return "timed out" in lowered or "timeout" in lowered
+
+
+def _prior_failure_prompt_section(prior_failure: str) -> str:
+    prior_failure = str(prior_failure or "").strip()
+    if not prior_failure:
+        return ""
+    lowered = prior_failure.lower()
+    if "hypothesis_generation_failed" in lowered:
+        return (
+            "## Previous Attempt Failed\n"
+            "The previous hypothesis generation or hypothesis self-check "
+            "failed before code generation with:\n"
+            f"{prior_failure}\n"
+            "Use the approved hypothesis supplied below; do not treat this "
+            "as a previous code implementation failure.\n\n"
+        )
+    if "self_check_failed" in lowered or "agentic_self_check_failed" in lowered:
+        return (
+            "## Previous Attempt Failed\n"
+            "The previous deterministic self-check failed with:\n"
+            f"{prior_failure}\n"
+            "Address the preview or contract issue directly.\n\n"
+        )
+    if _is_timeout_failure(prior_failure):
+        return (
+            "## Previous Attempt Failed\n"
+            "The previous code generation attempt timed out before "
+            "returning a patch. Keep the implementation compact and "
+            "bounded. Implement one coherent solver body with at most "
+            "a small set of helpers, prefer one construction path plus "
+            "one bounded improvement loop, and avoid large ALNS helper "
+            "forests unless absolutely necessary.\n\n"
+        )
+    if "code_generation_failed" in lowered:
+        return (
+            "## Previous Attempt Failed\n"
+            "The previous code generation failed with:\n"
+            f"{prior_failure}\n"
+            "Avoid the same mistake.\n\n"
+        )
+    return (
+        "## Previous Attempt Failed\n"
+        "The previous code generation failed with:\n"
+        f"{prior_failure}\n"
+        "Avoid the same mistake.\n\n"
+    )
 
 
 def _bounded_json(value: Any, max_chars: int) -> str:

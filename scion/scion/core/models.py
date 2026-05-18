@@ -63,6 +63,7 @@ class HypothesisProposal:
     target_runtime_effect: Optional[str] = None
     complexity_claim: Optional[str] = None
     runtime_budget_strategy: Optional[str] = None
+    expected_telemetry: Dict[str, Any] = field(default_factory=dict)
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
@@ -80,6 +81,14 @@ class PatchProposal:
     code_content: str
     test_hint: Optional[str] = None
     additional_changes: Tuple[PatchFileChange, ...] = ()
+    premise_check: Literal[
+        "supported",
+        "contradicted",
+        "duplicate",
+        "wrong_owner",
+    ] = "supported"
+    premise_check_reason: str = ""
+    repair_attribution: Tuple[Dict[str, Any], ...] = ()
 
     def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
         return patch_file_changes(self)
@@ -183,7 +192,7 @@ class ProtocolResult:
     gate_outcome: Literal["pass", "fail", "unclear", "expand", "continue"]
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
-    raw_metrics_ref: str  # Path to full JSON metrics
+    raw_metrics_ref: str  # Internal path to full JSON metrics; public payloads redact it.
     case_ids: Tuple[str, ...] = ()
     seed_set: Tuple[int, ...] = ()
     # Case-level feedback (screening only; empty for validation/frozen)

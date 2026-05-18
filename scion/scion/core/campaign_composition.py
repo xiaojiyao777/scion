@@ -411,6 +411,7 @@ def compose_campaign_services(
         decision_reason_codes_for=owner._decision_reason_codes_for,
         proposal_failure_detail_for=owner._proposal_failure_detail_for,
         proposal_session_ref_for=owner._proposal_session_ref_for,
+        persist_branch_state=owner._persist_branch_state,
     )
     owner._branch_step_runner = BranchStepRunner(
         branch_controller=owner._branch_ctrl,

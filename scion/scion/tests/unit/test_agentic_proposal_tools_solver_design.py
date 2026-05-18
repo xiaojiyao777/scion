@@ -3,6 +3,7 @@ from __future__ import annotations
 from scion.proposal.solver_design_smoke import _runtime_algorithm_smoke_preview
 
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
+    AgenticProposalRequest,
     AgenticProposalSession,
     AgenticProposalSessionState,
     AgenticToolLoopConfig,
@@ -13,6 +14,7 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     HypothesisProposal,
     PatchProposal,
     Path,
+    PlanningCreative,
     ProposalObservation,
     ProposalToolRegistry,
     RunResult,
@@ -26,6 +28,7 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     _compact_algorithm_smoke_observation,
     _context,
     _cvrp_context,
+    _cvrp_context_with_champion,
     _json_size,
     _latest_preview_failure_detail,
     _observation_prompt_payload,
@@ -40,6 +43,523 @@ from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     replace,
     shutil,
 )
+
+
+def test_active_solver_design_snapshot_exposes_active_mechanisms(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call("context.read_active_solver_design", {}, context)
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["surface"] == "solver_design"
+    assert payload["active_surface"]["entrypoint"] == (
+        "policies/baseline_algorithm.py::solve"
+    )
+    assert payload["provenance"]["source"] == "champion_snapshot"
+    assert payload["source_digest"]["snapshot_digest"]
+    assert "policies/baseline_modules/scheduler.py" in payload["source_digest"]["files"]
+    assert "_initial_solution" in rendered
+    assert "alns_loop" in rendered
+    assert "destroy_repair" in rendered
+    assert "_shaw_removal" in rendered
+    assert "seed-based related/proximity-cluster destroy operator" in rendered
+    assert "distance" in rendered
+    assert "demand" in rendered
+    assert "original-route relatedness" in rendered
+    assert "_AdaptiveWeights.update" in rendered
+    assert "_SimulatedAnnealing.accept" in rendered
+    assert "_or_opt_2" in rendered
+    assert "_or_opt_3" in rendered
+    assert "vns_embedded" in rendered
+    assert "legacy_inactive_surface_exclusion" in payload
+    assert "alns_vns_policy" in rendered
+    assert "must not be used as active evidence" in rendered
+    inactive_paths = {
+        item["file_path"]
+        for item in payload["inactive_files"]
+        if item["role"] == "compatibility_hook_not_primary"
+    }
+    assert inactive_paths == {"policies/solver_algorithm.py"}
+
+
+def test_solver_call_graph_marks_initial_solution_alns_vns_and_acceptance(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observation = registry.call("context.read_solver_call_graph", {}, context)
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["surface"] == "solver_design"
+    assert "scheduler._ALNSVNSSolver._initial_solution" in rendered
+    assert "ALNS destroy/repair loop" in rendered
+    assert "_shaw_removal" in rendered
+    assert "distance + demand + original-route relatedness" in rendered
+    assert "local_search._vns" in rendered
+    assert "_default_vns_operators" in rendered
+    assert "_SimulatedAnnealing.accept" in rendered
+    assert "_AdaptiveWeights" in rendered
+    assert "legacy_inactive_surface_exclusion" in payload
+
+
+def test_active_solver_algorithm_file_tools_are_allowlisted_with_provenance(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    listed = registry.call("context.list_algorithm_files", {}, context)
+    read_file = registry.call(
+        "context.read_algorithm_file",
+        {
+            "file_path": "policies/baseline_modules/scheduler.py",
+            "max_chars": 24000,
+        },
+        context,
+    )
+    read_symbol = registry.call(
+        "context.read_algorithm_symbol",
+        {
+            "file_path": "policies/baseline_modules/scheduler.py",
+            "symbol": "_ALNSVNSSolver._initial_solution",
+            "max_chars": 12000,
+        },
+        context,
+    )
+    denied = registry.call(
+        "context.read_algorithm_file",
+        {"file_path": "vrp/solver.py"},
+        context,
+    )
+
+    files = listed.structured_payload["files"]
+    by_path = {item["file_path"]: item for item in files}
+    assert listed.is_error is False
+    assert by_path["policies/baseline_algorithm.py"]["active"] is True
+    assert by_path["policies/solver_algorithm.py"]["active"] is False
+    assert by_path["policies/baseline_modules/scheduler.py"]["source"] == (
+        "champion_snapshot"
+    )
+    assert by_path["policies/baseline_modules/scheduler.py"]["digest"]
+
+    assert read_file.is_error is False
+    file_payload = read_file.structured_payload
+    assert file_payload["readable"] is True
+    assert file_payload["provenance"]["source"] == "champion_snapshot"
+    assert "class _ALNSVNSSolver" in file_payload["content_preview"]
+
+    assert read_symbol.is_error is False
+    symbol_payload = read_symbol.structured_payload
+    assert symbol_payload["readable"] is True
+    assert symbol_payload["symbol"] == "_ALNSVNSSolver._initial_solution"
+    assert "_sweep_construction" in symbol_payload["content_preview"]
+    assert "_nearest_neighbor" in symbol_payload["content_preview"]
+    assert symbol_payload["digest"]
+
+    assert denied.is_error is True
+    denied_payload = denied.structured_payload
+    assert denied_payload["readable"] is False
+    assert denied_payload["path_rejected"] is True
+    assert denied_payload["file_path"] == "<path_rejected>"
+    assert denied_payload["reason"] == "file_path_not_allowed"
+    assert "policies/baseline_algorithm.py" in denied_payload["allowed_files"]
+    assert denied_payload["allowed_file_paths"] == denied_payload["allowed_files"]
+    assert denied_payload["required_first_tool"] == "context.list_algorithm_files"
+    assert denied_payload["file_path_source_tool"] == "context.list_algorithm_files"
+    assert "vrp/solver.py" not in denied_payload["allowed_files"]
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    (
+        "<UNKNOWN>",
+        "solver_design",
+        "vrp/solver.py",
+        "../policies/baseline_algorithm.py",
+    ),
+)
+def test_active_solver_rejects_invalid_path_without_echoing_it(
+    tmp_path: Path,
+    bad_path: str,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    file_observation = registry.call(
+        "context.read_algorithm_file",
+        {"file_path": bad_path},
+        context,
+    )
+    symbol_observation = registry.call(
+        "context.read_algorithm_symbol",
+        {"file_path": bad_path, "symbol": "solve"},
+        context,
+    )
+
+    rendered = json.dumps(
+        {
+            "file_observation": file_observation,
+            "file_prompt": _observation_prompt_payload(file_observation),
+            "symbol_observation": symbol_observation,
+            "symbol_prompt": _observation_prompt_payload(symbol_observation),
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert file_observation.is_error is True
+    assert symbol_observation.is_error is True
+    for observation in (file_observation, symbol_observation):
+        assert observation.structured_payload["readable"] is False
+        assert observation.structured_payload["path_rejected"] is True
+        assert observation.structured_payload["file_path"] == "<path_rejected>"
+        assert observation.structured_payload["reason"] == "file_path_not_allowed"
+        assert observation.structured_payload["required_first_tool"] == (
+            "context.list_algorithm_files"
+        )
+        assert "policies/baseline_algorithm.py" in observation.structured_payload[
+            "allowed_file_paths"
+        ]
+        assert "solver_design is a research surface id" in observation.structured_payload[
+            "surface_id_rule"
+        ]
+        assert bad_path not in observation.summary
+    if bad_path != "solver_design":
+        assert bad_path not in rendered
+    assert '"file_path": "' + bad_path + '"' not in rendered
+
+
+def test_active_solver_rejects_absolute_path_without_echoing_it(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+    absolute_path = str(tmp_path / "private" / "solver.py")
+
+    file_observation = registry.call(
+        "context.read_algorithm_file",
+        {"file_path": absolute_path},
+        context,
+    )
+    symbol_observation = registry.call(
+        "context.read_algorithm_symbol",
+        {"file_path": absolute_path, "symbol": "solve"},
+        context,
+    )
+
+    payload = file_observation.structured_payload
+    rendered = json.dumps(
+        {
+            "file_observation": file_observation,
+            "file_prompt": _observation_prompt_payload(file_observation),
+            "symbol_observation": symbol_observation,
+            "symbol_prompt": _observation_prompt_payload(symbol_observation),
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert file_observation.is_error is True
+    assert symbol_observation.is_error is True
+    for observation in (file_observation, symbol_observation):
+        assert observation.structured_payload["readable"] is False
+        assert observation.structured_payload["path_rejected"] is True
+        assert observation.structured_payload["file_path"] == "<path_rejected>"
+        assert observation.structured_payload["reason"] == "file_path_not_allowed"
+        assert absolute_path not in observation.summary
+        assert str(tmp_path) not in observation.summary
+    assert absolute_path not in rendered
+    assert str(tmp_path) not in rendered
+
+
+def test_active_solver_provenance_payload_does_not_expose_absolute_paths(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    observations = [
+        registry.call("context.read_active_solver_design", {}, context),
+        registry.call("context.read_solver_call_graph", {}, context),
+        registry.call(
+            "context.read_algorithm_file",
+            {"file_path": "policies/baseline_algorithm.py"},
+            context,
+        ),
+        registry.call(
+            "context.read_algorithm_symbol",
+            {
+                "file_path": "policies/baseline_algorithm.py",
+                "symbol": "solve",
+            },
+            context,
+        ),
+    ]
+    payloads = [observation.structured_payload for observation in observations]
+    forbidden_keys = {
+        "source_root",
+        "branch_workspace",
+        "champion_code_snapshot_path",
+    }
+
+    def keys(value):
+        if isinstance(value, dict):
+            found = set(value)
+            for child in value.values():
+                found.update(keys(child))
+            return found
+        if isinstance(value, list):
+            found = set()
+            for child in value:
+                found.update(keys(child))
+            return found
+        return set()
+
+    rendered = json.dumps(payloads, sort_keys=True, default=str)
+    assert all(observation.is_error is False for observation in observations)
+    assert str(tmp_path) not in rendered
+    assert forbidden_keys.isdisjoint(keys(payloads))
+
+
+def test_hypothesis_planner_exposes_active_solver_tools_before_surface_fallback(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    creative = PlanningCreative([{"stop": True}])
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    allowed_tools = creative.planner_contexts[0]["allowed_tools"]
+    spec_names = [
+        spec["name"]
+        for spec in creative.planner_contexts[0]["allowed_tool_specs"]
+    ]
+    assert "context.read_active_solver_design" in allowed_tools
+    assert "context.read_solver_call_graph" in allowed_tools
+    assert "context.list_algorithm_files" in allowed_tools
+    assert "context.read_algorithm_file" in allowed_tools
+    assert "context.read_algorithm_symbol" in allowed_tools
+    assert spec_names.index("context.read_active_solver_design") < spec_names.index(
+        "context.read_surface"
+    )
+    file_guidance = creative.planner_contexts[0]["tool_arg_guidance"][
+        "context.read_algorithm_file"
+    ]
+    assert file_guidance["required_first_tool"] == "context.list_algorithm_files"
+    assert "policies/baseline_algorithm.py" in file_guidance["allowed_file_paths"]
+    assert file_guidance["recommended_args"]["file_path"] in file_guidance[
+        "allowed_file_paths"
+    ]
+
+
+def test_read_algorithm_tool_specs_expose_allowed_file_paths(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+
+    specs = {
+        spec["name"]: spec
+        for spec in registry.allowed_tool_specs(context)
+    }
+
+    for tool_name in (
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    ):
+        spec = specs[tool_name]
+        guidance = spec["structured_guidance"]
+        file_path_schema = spec["input_schema"]["properties"]["file_path"]
+        assert guidance["required_first_tool"] == "context.list_algorithm_files"
+        assert "policies/baseline_algorithm.py" in guidance["allowed_file_paths"]
+        assert file_path_schema["enum"] == guidance["allowed_file_paths"]
+        assert "context.list_algorithm_files" in file_path_schema["description"]
+        assert "solver_design is a surface id" in file_path_schema["description"]
+        assert "solver_design" not in file_path_schema["enum"]
+
+
+def test_code_phase_allowed_specs_include_active_solver_tools(tmp_path: Path) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    spec_names = {
+        spec["name"] for spec in session._code_phase_allowed_tool_specs(context)
+    }
+
+    assert {
+        "context.read_active_solver_design",
+        "context.read_solver_call_graph",
+        "context.list_algorithm_files",
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
+    }.issubset(spec_names)
+
+
+def test_solver_design_fallback_plan_reads_active_snapshot_and_call_graph(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(change_locus="solver_design")
+    )
+    session = AgenticProposalSession(
+        FakeCreative(hypothesis=hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    tool_names = [
+        event.metadata.get("tool_name")
+        for event in output.transcript
+        if event.metadata.get("selection_source") == "fallback_selected"
+    ]
+
+    assert "context.list_algorithm_files" in tool_names
+    assert "context.read_active_solver_design" in tool_names
+    assert "context.read_solver_call_graph" in tool_names
+    assert tool_names.index("context.list_algorithm_files") < tool_names.index(
+        "context.read_active_solver_design"
+    )
+
+
+def test_invalid_solver_design_file_path_fallback_lists_allowed_files_first(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": "solver_design",
+                },
+            }
+        ],
+        hypothesis=HypothesisProposal(
+            **_valid_hypothesis_payload(change_locus="solver_design")
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-invalid-solver-design-path",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+    )
+
+    observations = session._run_bounded_planner_tools(context, state)
+
+    tool_names = [observation.tool_name for observation in observations]
+    invalid_observation = observations[0]
+    rendered = json.dumps(
+        {
+            "observations": observations,
+            "planner_contexts": creative.planner_contexts,
+            "transcript": state.transcript,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert invalid_observation.tool_name == "context.read_algorithm_file"
+    assert invalid_observation.is_error is True
+    assert invalid_observation.structured_payload["file_path"] == "<path_rejected>"
+    assert invalid_observation.structured_payload["required_first_tool"] == (
+        "context.list_algorithm_files"
+    )
+    assert "policies/baseline_algorithm.py" in invalid_observation.structured_payload[
+        "allowed_file_paths"
+    ]
+    assert "context.list_algorithm_files" in tool_names
+    assert tool_names.index("context.list_algorithm_files") < tool_names.index(
+        "context.read_active_solver_design"
+    )
+    assert tool_names.index("context.list_algorithm_files") < tool_names.index(
+        "context.read_solver_call_graph"
+    )
+    assert str(tmp_path) not in rendered
+
+
+def test_solver_design_grounding_missing_fails_closed(tmp_path: Path) -> None:
+    base_context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    context = replace(
+        base_context,
+        policy=replace(base_context.policy, allow_champion_code_read=False),
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(change_locus="solver_design")
+    )
+    session = AgenticProposalSession(
+        FakeCreative(hypothesis=hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == "failed"
+    assert output.failure_detail is not None
+    assert "context.read_active_solver_design" in output.failure_detail
+    assert "context.read_solver_call_graph" in output.failure_detail
 
 
 def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
@@ -90,16 +610,17 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     assert payload["runtime_smoke"]["resolved_case_path"]
     assert payload["runtime_smoke"]["data_root"]
     assert payload["runtime_smoke"]["data_root_source"] in {
-        "absolute_path",
         "workspace",
         "base_workspace",
-        "SCION_PROBLEM_DATA_ROOT",
+        "safe_data_root",
+        "audited_problem_data_manifest",
     }
     assert payload["runtime_smoke"]["data_root_status"] in {
-        "absolute",
-        "relative",
-        "env_configured",
+        "safe_root_relative",
+        "audited_manifest_relative",
     }
+    assert payload["runtime_smoke"]["provenance"]["absolute_paths_exposed"] is False
+    assert str(tmp_path) not in json.dumps(payload["runtime_smoke"], sort_keys=True)
     assert after == before
 
 
@@ -647,11 +1168,12 @@ def test_algorithm_smoke_uses_active_formal_split_over_workspace_tiny_split(
     assert "controlled/data/synthetic_validation_micro_5.vrp" in rendered
     assert "controlled/data/synthetic_frozen_split_6.vrp" in rendered
     assert "controlled/data/synthetic_final_split_6.vrp" in rendered
+    assert "audited_problem_data_manifest" in rendered
     assert "data/tiny_6.json" not in rendered
     assert '"seed": 101' in rendered
 
 
-def test_runtime_smoke_resolves_external_problem_data_root(
+def test_runtime_smoke_does_not_resolve_ambient_env_data_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -671,7 +1193,47 @@ def test_runtime_smoke_resolves_external_problem_data_root(
         case_rel="cvrplib/A/A-n32-k5.vrp",
     )
 
+    assert resolved is None
+
+
+def test_runtime_smoke_resolves_explicit_safe_data_root(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    base_workspace = tmp_path / "base"
+    data_root = tmp_path / "problem_data"
+    workspace.mkdir()
+    base_workspace.mkdir()
+    case = data_root / "cvrplib" / "A" / "A-n32-k5.vrp"
+    case.parent.mkdir(parents=True)
+    case.write_text("NAME : A-n32-k5\n", encoding="utf-8")
+
+    resolved = _resolve_smoke_instance_path(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        case_rel="cvrplib/A/A-n32-k5.vrp",
+        safe_data_roots=(data_root,),
+    )
+
     assert resolved == case
+
+
+def test_runtime_smoke_rejects_absolute_case_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    base_workspace = tmp_path / "base"
+    workspace.mkdir()
+    base_workspace.mkdir()
+    case = tmp_path / "absolute.vrp"
+    case.write_text("NAME : absolute\n", encoding="utf-8")
+
+    resolved = _resolve_smoke_instance_path(
+        workspace=workspace,
+        base_workspace=base_workspace,
+        case_rel=str(case),
+        safe_data_roots=(tmp_path,),
+    )
+
+    assert resolved is None
 
 
 def test_algorithm_smoke_rejects_preferred_solver_design_baseline_wrapper(

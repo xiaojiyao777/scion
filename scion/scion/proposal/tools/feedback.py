@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scion.core.models import ExperimentStage, StepRecord
@@ -93,6 +94,144 @@ _RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES = (
     "_active",
     "_loaded",
 )
+
+@dataclass(frozen=True)
+class _FeedbackBoundaryScope:
+    active_steps: list[StepRecord]
+    inactive_reference_steps: list[StepRecord]
+    boundary_surfaces: tuple[str, ...]
+    requested_surface: str | None
+    enforced: bool
+    excluded_count: int
+
+    def payload(self) -> dict[str, Any]:
+        status = "not_configured"
+        requested_status = "not_requested"
+        if self.enforced:
+            status = "enforced"
+            if self.requested_surface:
+                requested_status = (
+                    "active_boundary"
+                    if self.requested_surface in self.boundary_surfaces
+                    else "inactive_reference"
+                )
+        elif self.requested_surface:
+            requested_status = "unrestricted"
+        return _drop_empty_items(
+            {
+                "status": status,
+                "active_boundary_surfaces": list(self.boundary_surfaces),
+                "requested_surface": self.requested_surface,
+                "requested_surface_status": requested_status,
+                "default_excludes_inactive_references": self.enforced,
+                "inactive_references_require_explicit_surface": self.enforced,
+                "excluded_inactive_reference_count": self.excluded_count,
+            }
+        )
+
+
+def _feedback_boundary_scope(
+    steps: list[StepRecord],
+    *,
+    context: ProposalToolContext,
+    requested_surface: str | None,
+) -> _FeedbackBoundaryScope:
+    boundary = tuple(
+        surface
+        for surface in (
+            str(item or "").strip()
+            for item in (context.active_problem_boundary_surfaces or ())
+        )
+        if surface
+    )
+    requested = str(requested_surface or "").strip() or None
+    if not boundary:
+        return _FeedbackBoundaryScope(
+            active_steps=list(steps),
+            inactive_reference_steps=[],
+            boundary_surfaces=(),
+            requested_surface=requested,
+            enforced=False,
+            excluded_count=0,
+        )
+
+    boundary_set = set(boundary)
+    active_steps: list[StepRecord] = []
+    inactive_steps: list[StepRecord] = []
+    excluded_count = 0
+    for step in steps:
+        surface = str(step.hypothesis.change_locus or "").strip()
+        if surface in boundary_set:
+            active_steps.append(step)
+            continue
+        excluded_count += 1
+        if requested and surface == requested:
+            inactive_steps.append(step)
+    return _FeedbackBoundaryScope(
+        active_steps=active_steps,
+        inactive_reference_steps=inactive_steps,
+        boundary_surfaces=boundary,
+        requested_surface=requested,
+        enforced=True,
+        excluded_count=excluded_count,
+    )
+
+
+def _feedback_payload_provenance(
+    *,
+    source: str,
+    feedback_scope: _FeedbackBoundaryScope,
+) -> dict[str, Any]:
+    role = (
+        "active_boundary_evidence"
+        if feedback_scope.enforced
+        else "screening_evidence"
+    )
+    return _drop_empty_items(
+        {
+            "source": source,
+            "evidence_role": role,
+            "active_boundary_filter_applied": feedback_scope.enforced,
+            "active_boundary_surfaces": list(feedback_scope.boundary_surfaces),
+            "inactive_reference_policy": (
+                "Boundary-external surfaces are excluded from active evidence by "
+                "default and are returned only as inactive_reference rows when "
+                "that surface is explicitly requested."
+                if feedback_scope.enforced
+                else None
+            ),
+        }
+    )
+
+
+def _feedback_step_provenance(
+    step: StepRecord,
+    *,
+    boundary_surfaces: tuple[str, ...],
+    role: str,
+) -> dict[str, Any]:
+    protocol = step.protocol_result
+    return _drop_empty_items(
+        {
+            "source": "screening_protocol_result",
+            "evidence_role": role,
+            "surface": step.hypothesis.change_locus,
+            "selected_surface": (
+                protocol.selected_surface if protocol is not None else None
+            ),
+            "active_boundary_surfaces": list(boundary_surfaces),
+        }
+    )
+
+
+def _with_feedback_provenance(
+    payload: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    result = dict(payload)
+    result["provenance"] = dict(provenance)
+    return result
+
 
 class MemoryQueryTool(_BaseReadOnlyTool):
     name = "memory.query"
@@ -210,9 +349,22 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
                 summary="Screening detail is disabled by ContextExposurePolicy.",
             )
         safe_steps = _filter_hypothesis_prompt_steps(list(context.step_history))
+        feedback_scope = _feedback_boundary_scope(
+            safe_steps,
+            context=context,
+            requested_surface=args.surface,
+        )
         available_screening_steps = [
             step
-            for step in safe_steps
+            for step in feedback_scope.active_steps
+            if (
+                step.protocol_result is not None
+                and step.protocol_result.stage == ExperimentStage.SCREENING
+            )
+        ]
+        inactive_reference_screening_steps = [
+            step
+            for step in feedback_scope.inactive_reference_steps
             if (
                 step.protocol_result is not None
                 and step.protocol_result.stage == ExperimentStage.SCREENING
@@ -231,19 +383,62 @@ class FeedbackQueryScreeningTool(_BaseReadOnlyTool):
                 continue
             matched_count += 1
             if len(rows) < args.max_items:
-                rows.append(_screening_step_payload(step))
+                rows.append(
+                    _screening_step_payload(
+                        step,
+                        provenance=_feedback_step_provenance(
+                            step,
+                            boundary_surfaces=feedback_scope.boundary_surfaces,
+                            role="active_boundary_evidence"
+                            if feedback_scope.enforced
+                            else "screening_evidence",
+                        ),
+                    )
+                )
+        inactive_reference_rows = []
+        inactive_reference_count = 0
+        for step in reversed(inactive_reference_screening_steps):
+            protocol = step.protocol_result
+            if protocol is None or protocol.stage != ExperimentStage.SCREENING:
+                continue
+            if args.branch_id and step.branch_id != args.branch_id:
+                continue
+            surface = step.hypothesis.change_locus
+            if args.surface and surface != args.surface:
+                continue
+            inactive_reference_count += 1
+            if len(inactive_reference_rows) < args.max_items:
+                inactive_reference_rows.append(
+                    _screening_step_payload(
+                        step,
+                        provenance=_feedback_step_provenance(
+                            step,
+                            boundary_surfaces=feedback_scope.boundary_surfaces,
+                            role="inactive_reference",
+                        ),
+                    )
+                )
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "provenance": _feedback_payload_provenance(
+                source="screening_step_history",
+                feedback_scope=feedback_scope,
+            ),
             "query_scope": {
                 "campaign_id": context.campaign_id,
                 "branch_filter_applied": bool(args.branch_id),
                 "surface_filter_applied": bool(args.surface),
                 "recent_first": True,
+                "active_boundary_filter_applied": feedback_scope.enforced,
             },
+            "active_boundary_filter": feedback_scope.payload(),
             "available_screening_step_count": len(available_screening_steps),
             "matched_screening_step_count": matched_count,
+            "excluded_inactive_reference_count": feedback_scope.excluded_count,
+            "matched_inactive_reference_count": inactive_reference_count,
             "screening_steps": rows,
+            "inactive_reference_steps": inactive_reference_rows,
         }
         payload = _bound_compact_feedback_payload(payload)
         return self._observation(
@@ -336,17 +531,38 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
         safe_steps = [
             step
             for step in _filter_hypothesis_prompt_steps(list(context.step_history))
-            if (not args.branch_id or step.branch_id == args.branch_id)
-            and (not args.surface or step.hypothesis.change_locus == args.surface)
+            if not args.branch_id or step.branch_id == args.branch_id
+        ]
+        feedback_scope = _feedback_boundary_scope(
+            safe_steps,
+            context=context,
+            requested_surface=args.surface,
+        )
+        active_steps = [
+            step
+            for step in feedback_scope.active_steps
+            if not args.surface or step.hypothesis.change_locus == args.surface
+        ]
+        inactive_reference_steps = [
+            step
+            for step in feedback_scope.inactive_reference_steps
+            if not args.surface or step.hypothesis.change_locus == args.surface
         ]
         rendered = _limit_text(
-            _build_runtime_feedback(safe_steps, max_items=args.max_items),
+            _build_runtime_feedback(active_steps, max_items=args.max_items),
+            _COMPACT_FEEDBACK_TEXT_CHARS,
+        )
+        inactive_rendered = _limit_text(
+            _build_runtime_feedback(
+                inactive_reference_steps,
+                max_items=args.max_items,
+            ),
             _COMPACT_FEEDBACK_TEXT_CHARS,
         )
         adapter_spec = _get_adapter_problem_spec(context.adapter)
         guidance = _limit_text(
             _build_runtime_failure_guidance(
-                safe_steps,
+                active_steps,
                 problem_spec=context.problem_spec,
                 adapter_spec=adapter_spec,
                 max_items=args.max_items,
@@ -357,31 +573,64 @@ class FeedbackQueryRuntimeTool(_BaseReadOnlyTool):
         payload = {
             "branch_id": args.branch_id,
             "surface": args.surface,
+            "provenance": _feedback_payload_provenance(
+                source="screening_runtime_history",
+                feedback_scope=feedback_scope,
+            ),
             "query_scope": {
                 "campaign_id": context.campaign_id,
                 "branch_filter_applied": bool(args.branch_id),
                 "surface_filter_applied": bool(args.surface),
                 "recent_first": True,
+                "active_boundary_filter_applied": feedback_scope.enforced,
             },
+            "active_boundary_filter": feedback_scope.payload(),
             "runtime_feedback": rendered,
             "runtime_failure_guidance": guidance,
             "screening_runtime_attribution": [
-                attribution
-                for attribution in (
-                    _surface_runtime_attribution_payload(step)
-                    for step in reversed(safe_steps)
-                    if (
-                        step.protocol_result is not None
-                        and step.protocol_result.stage == ExperimentStage.SCREENING
-                    )
+                _with_feedback_provenance(
+                    attribution,
+                    _feedback_step_provenance(
+                        step,
+                        boundary_surfaces=feedback_scope.boundary_surfaces,
+                        role="active_boundary_evidence"
+                        if feedback_scope.enforced
+                        else "screening_evidence",
+                    ),
                 )
-                if attribution
+                for step in reversed(active_steps)
+                for attribution in (_surface_runtime_attribution_payload(step),)
+                if (
+                    attribution
+                    and step.protocol_result is not None
+                    and step.protocol_result.stage == ExperimentStage.SCREENING
+                )
+            ][: args.max_items],
+            "inactive_reference_runtime_feedback": inactive_rendered,
+            "inactive_reference_runtime_attribution": [
+                _with_feedback_provenance(
+                    attribution,
+                    _feedback_step_provenance(
+                        step,
+                        boundary_surfaces=feedback_scope.boundary_surfaces,
+                        role="inactive_reference",
+                    ),
+                )
+                for step in reversed(inactive_reference_steps)
+                for attribution in (_surface_runtime_attribution_payload(step),)
+                if (
+                    attribution
+                    and step.protocol_result is not None
+                    and step.protocol_result.stage == ExperimentStage.SCREENING
+                )
             ][: args.max_items],
             "research_diagnosis": _research_diagnosis_payload(
-                safe_steps,
+                active_steps,
                 max_items=args.max_items,
                 problem_spec=context.problem_spec,
             ),
+            "excluded_inactive_reference_count": feedback_scope.excluded_count,
+            "matched_inactive_reference_count": len(inactive_reference_steps),
             "screening_only": True,
             "metrics_file_refs_exposed": False,
         }
@@ -979,7 +1228,11 @@ def _compact_runtime_attribution_values(values: Any) -> list[dict[str, Any]]:
         )
     return compact
 
-def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
+def _screening_step_payload(
+    step: StepRecord,
+    *,
+    provenance: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     protocol = step.protocol_result
     assert protocol is not None
     stats = protocol.stats
@@ -992,6 +1245,10 @@ def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
         "gate_outcome": protocol.gate_outcome,
         "reason_codes": list(protocol.reason_codes),
         "stats": _eval_stats_payload(stats),
+        "screening_win_rate_scope": "case_level_gate",
+        "screening_case_win_rate": stats.win_rate,
+        "screening_gate_win_rate": stats.win_rate,
+        **_screening_pair_stats(protocol),
         "candidate_runtime_failure_categories": dict(
             protocol.candidate_runtime_failure_categories or {}
         ),
@@ -1021,6 +1278,11 @@ def _screening_step_payload(step: StepRecord) -> dict[str, Any]:
             _model_payload(feedback) for feedback in (protocol.case_feedback or ())[:6]
         ],
         "metrics_file_ref_exposed": False,
+        "provenance": dict(provenance or _feedback_step_provenance(
+            step,
+            boundary_surfaces=(),
+            role="screening_evidence",
+        )),
     }
 
 def _holdout_step_payload(
@@ -1091,6 +1353,23 @@ def _eval_stats_payload(stats: Any) -> dict[str, Any]:
         "champion_failed_pairs",
     }
     return {name: _attr(stats, name) for name in allowed if hasattr(stats, name)}
+
+
+def _screening_pair_stats(protocol: Any) -> dict[str, Any]:
+    pair_feedback = list(getattr(protocol, "pair_feedback", ()) or ())
+    wins = sum(1 for item in pair_feedback if getattr(item, "comparison", None) == "win")
+    losses = sum(
+        1 for item in pair_feedback if getattr(item, "comparison", None) == "loss"
+    )
+    ties = len(pair_feedback) - wins - losses
+    total = wins + losses + ties
+    return {
+        "screening_pair_wins": wins,
+        "screening_pair_losses": losses,
+        "screening_pair_ties": ties,
+        "screening_pair_total": total,
+        "screening_pair_win_rate": wins / total if total else 0.0,
+    }
 
 def _bound_compact_feedback_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     estimated = _json_size(payload)

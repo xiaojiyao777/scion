@@ -10,9 +10,11 @@ from scion.core.models import (
     BranchState,
     CheckResult,
     ContractResult,
+    Decision,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
+    VerificationResult,
     StepRecord,
 )
 from scion.core.step_result import StepResult
@@ -77,12 +79,20 @@ def _pipeline(
     generate_hypothesis,
     generate_code,
     record_step,
+    branch_controller=SimpleNamespace(),
+    verification_gate=None,
+    setup_workspace=lambda branch: None,
+    apply_patch=lambda *args, **kwargs: None,
+    record_verification_pass=lambda branch, code_hash: None,
+    evaluate=lambda branch, workspace, hypothesis: None,
+    apply_decision_and_finalize=lambda **kwargs: None,
+    persist_branch_state=lambda branch_id: None,
 ) -> ExploreStepPipeline:
     store = _HypothesisStore()
     pipeline = ExploreStepPipeline(
-        branch_controller=SimpleNamespace(),
+        branch_controller=branch_controller,
         contract_gate=_ContractGate(),
-        verification_gate=None,
+        verification_gate=verification_gate,
         hypothesis_store=store,
         registry=SimpleNamespace(),
         campaign_id="campaign",
@@ -100,16 +110,17 @@ def _pipeline(
         attempt_fix=lambda branch, patch, vresult: None,
         handle_failure=lambda *args, **kwargs: None,
         record_step=record_step,
-        setup_workspace=lambda branch: None,
-        apply_patch=lambda *args, **kwargs: None,
-        record_verification_pass=lambda branch, code_hash: None,
+        setup_workspace=setup_workspace,
+        apply_patch=apply_patch,
+        record_verification_pass=record_verification_pass,
         archive_failed_workspace=lambda workspace, branch_id, round_num: None,
-        evaluate=lambda branch, workspace, hypothesis: None,
-        apply_decision_and_finalize=lambda **kwargs: None,
+        evaluate=evaluate,
+        apply_decision_and_finalize=apply_decision_and_finalize,
         decision_reason_codes_for=lambda branch_id, protocol_result: None,
         proposal_failure_detail_for=lambda branch_id: "forced code failure",
         proposal_session_ref_for=lambda branch_id: {"session_id": "s1"},
         get_current_round=get_current_round,
+        persist_branch_state=persist_branch_state,
     )
     pipeline._test_store = store
     return pipeline
@@ -163,6 +174,85 @@ def test_pending_code_retry_does_not_increment_exploration_round() -> None:
     assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
 
 
+def test_pending_code_retry_success_clears_retry_and_code_failed_status() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ", pending_retry=True)
+    branch.consecutive_llm_retries = 1
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    record.status = "code_failed"
+    pending = {
+        branch.branch_id: (hypothesis, record, "initial code generation failed"),
+    }
+    steps: list[StepRecord] = []
+    persisted: list[str] = []
+    verification_passes: list[tuple[str, str]] = []
+    patch = PatchProposal(
+        file_path="operators/local_search.py",
+        action="modify",
+        code_content="def solve():\n    return None\n",
+    )
+
+    class BranchController:
+        def get_branch(self, branch_id: str) -> Branch:
+            assert branch_id == branch.branch_id
+            return branch
+
+        def next_stage(self, branch_id: str) -> None:
+            assert branch_id == branch.branch_id
+
+    class VerificationGate:
+        def run(self, *_args, **_kwargs) -> VerificationResult:
+            return VerificationResult(
+                passed=True,
+                checks=(CheckResult("V", True, "light", "ok", 0),),
+            )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: (_ for _ in ()).throw(
+            AssertionError("pending retry must not increment the round")
+        ),
+        increment_rounds_since_last_promote=lambda: (_ for _ in ()).throw(
+            AssertionError("pending retry must not increment idle rounds")
+        ),
+        get_current_round=lambda: 7,
+        generate_hypothesis=lambda branch: (_ for _ in ()).throw(
+            AssertionError("pending retry must not generate a new hypothesis")
+        ),
+        generate_code=lambda branch, hypothesis, prior_failure=None: patch,
+        record_step=steps.append,
+        branch_controller=BranchController(),
+        verification_gate=VerificationGate(),
+        setup_workspace=lambda branch: "/tmp/workspace",
+        apply_patch=lambda *args, **kwargs: SimpleNamespace(code_hash="code-hash"),
+        record_verification_pass=lambda branch, code_hash: verification_passes.append(
+            (branch.branch_id, code_hash)
+        ),
+        evaluate=lambda branch, workspace, hypothesis: (Decision.ABANDON, None, None),
+        apply_decision_and_finalize=lambda **kwargs: StepResult(
+            action="explore",
+            branch_id=kwargs["branch"].branch_id,
+            decision=kwargs["decision"],
+            reason="screening complete",
+        ),
+        persist_branch_state=persisted.append,
+    )
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "screening complete"
+    assert result.counts_toward_max_rounds is False
+    assert branch.pending_retry is False
+    assert branch.consecutive_llm_retries == 0
+    assert record.status == "active"
+    assert persisted == [branch.branch_id]
+    assert pipeline._test_store.statuses == [("hyp-1", "active")]
+    assert pending == {}
+    assert verification_passes == [(branch.branch_id, "code-hash")]
+    assert steps[0].failure_stage is None
+    assert steps[0].patch == patch
+
+
 def test_new_hypothesis_attempt_increments_exploration_round() -> None:
     branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
     hypothesis = _hypothesis()
@@ -202,6 +292,39 @@ def test_new_hypothesis_attempt_increments_exploration_round() -> None:
         "forced code failure",
     )
     assert pipeline._test_store.statuses == [("hyp-1", "code_failed")]
+
+
+def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "agentic_proposal:premise_contradicted: "
+        "agent_quality_blocked:proposal_premise_contradicted:"
+        "agent_grounding_failure: active solver already has this move"
+    )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "agent_quality_blocked"
+    assert result.counts_toward_max_rounds is True
+    assert branch.pending_retry is False
+    assert pending == {}
+    assert steps[0].failure_stage == "agent_quality_blocked"
+    assert steps[0].failure_detail == detail
+    assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:

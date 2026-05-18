@@ -768,6 +768,7 @@ def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal
         target_runtime_effect=value.target_runtime_effect,
         complexity_claim=value.complexity_claim,
         runtime_budget_strategy=value.runtime_budget_strategy,
+        expected_telemetry=dict(value.expected_telemetry or {}),
         novelty_signature=dict(value.novelty_signature or {}),
     )
 
@@ -786,6 +787,8 @@ def _patch_from_input(value: PatchProposalInput) -> PatchProposal:
             )
             for change in value.additional_changes
         ),
+        premise_check=value.premise_check,
+        premise_check_reason=value.premise_check_reason,
     )
 
 def _schema_preview_hypothesis_payload(
@@ -844,6 +847,9 @@ def _hypothesis_preview_summary(
             "runtime_budget_strategy_chars": len(
                 hypothesis.runtime_budget_strategy or ""
             ),
+            "expected_telemetry": _compact_preview_value(
+                getattr(hypothesis, "expected_telemetry", {}) or {}
+            ),
         }
     )
 
@@ -871,7 +877,9 @@ def _compact_preview_value(value: Any, *, max_chars: int = 160) -> Any:
 
 def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
     try:
-        validated = DraftPatchInput.model_validate(dict(raw))
+        payload = dict(raw)
+        payload.pop("repair_attribution", None)
+        validated = DraftPatchInput.model_validate(payload)
     except ValidationError as exc:
         return {
             "passed": False,
@@ -912,7 +920,8 @@ def _hypothesis_schema_preview(
         [],
         current_champion_version=_champion_version(context.champion),
     )
-    c1_checks = [check for check in result.checks if check.name == "C1_schema"]
+    schema_check_names = {"C1_schema", "C11_expected_telemetry"}
+    c1_checks = [check for check in result.checks if check.name in schema_check_names]
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from scion.core.models import PairwiseCaseFeedback
+
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     Branch,
     BranchState,
@@ -105,6 +107,55 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "declared budget surface" in payload["runtime_failure_guidance"]
     assert "raw_metrics_ref" not in rendered
     assert "SECRET_RAW_REF" not in rendered
+
+
+def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    pair_results = ["win"] * 2 + ["tie"] * 12 + ["loss"] * 2
+    r2_like_step = replace(
+        context.step_history[0],
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(n_cases=4, wins=0, losses=0, ties=4, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="case-level gate failed",
+            raw_metrics_ref="/SECRET/raw/r2-like.json",
+            pair_feedback=tuple(
+                PairwiseCaseFeedback(
+                    case_id=f"case-{idx // 4}",
+                    seed=idx,
+                    comparison=result,
+                    delta=(
+                        1.0
+                        if result == "win"
+                        else -1.0
+                        if result == "loss"
+                        else 0.0
+                    ),
+                )
+                for idx, result in enumerate(pair_results)
+            ),
+        ),
+    )
+    context = replace(context, step_history=(r2_like_step,))
+
+    observation = registry.call("feedback.query_screening", {}, context)
+    rendered = json.dumps(observation.structured_payload, sort_keys=True)
+    row = observation.structured_payload["screening_steps"][0]
+
+    assert row["screening_case_win_rate"] == 0.0
+    assert row["screening_gate_win_rate"] == 0.0
+    assert row["screening_win_rate_scope"] == "case_level_gate"
+    assert row["screening_pair_wins"] == 2
+    assert row["screening_pair_losses"] == 2
+    assert row["screening_pair_ties"] == 12
+    assert row["screening_pair_win_rate"] == 0.125
+    assert "SECRET" not in rendered
+    assert "raw_metrics_ref" not in rendered
 
 
 def test_runtime_diagnosis_tags_unselected_declared_mechanism_surfaces(
@@ -240,6 +291,158 @@ def test_cvrp_prioritizes_solver_design_over_component_policy_diagnostics(
     assert "solver_design_not_selected" in diagnosis["failure_mode_tags"]
     assert "deep_surface_not_selected" not in diagnosis["failure_mode_tags"]
     assert "solver_design" in " ".join(diagnosis["next_hypothesis_requirements"])
+
+
+def test_feedback_defaults_to_active_boundary_and_excludes_legacy_surfaces(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    solver_step = StepRecord(
+        round_num=1,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Change the active solver lifecycle.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_algorithm.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=1, losses=0, ties=1, win_rate=0.5),
+            gate_outcome="continue",
+            reason_codes=("SCREENING_SIGNAL",),
+            exposed_summary="active solver-design summary",
+            raw_metrics_ref="/SECRET/raw/active.json",
+            selected_surface="solver_design",
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "solver_algorithm_active": {
+                        "present": 1,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                    }
+                }
+            },
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    legacy_step = StepRecord(
+        round_num=2,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Legacy component policy evidence.",
+            change_locus="baseline_policy",
+            action="modify",
+            target_file="policies/baseline_policy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=1, ties=1, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("LEGACY_FAIL",),
+            exposed_summary="legacy inactive summary",
+            raw_metrics_ref="/SECRET/raw/legacy.json",
+            selected_surface="baseline_policy",
+            candidate_surface_runtime_summary={
+                "fields": {
+                    "baseline_policy_active": {
+                        "present": 1,
+                        "missing": 0,
+                        "empty": 0,
+                        "failed": 0,
+                    }
+                }
+            },
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    context = replace(context, step_history=(solver_step, legacy_step))
+
+    screening = registry.call("feedback.query_screening", {}, context).structured_payload
+    runtime = registry.call("feedback.query_runtime", {}, context).structured_payload
+    rendered_default = json.dumps([screening, runtime], sort_keys=True)
+
+    assert screening["active_boundary_filter"]["status"] == "enforced"
+    assert [row["surface"] for row in screening["screening_steps"]] == [
+        "solver_design"
+    ]
+    assert screening["inactive_reference_steps"] == []
+    assert screening["excluded_inactive_reference_count"] == 1
+    assert screening["screening_steps"][0]["provenance"]["evidence_role"] == (
+        "active_boundary_evidence"
+    )
+    assert runtime["research_diagnosis"]["surface_counts"] == {"solver_design": 1}
+    assert runtime["inactive_reference_runtime_attribution"] == []
+    assert "legacy inactive summary" not in rendered_default
+
+
+def test_feedback_explicit_inactive_surface_returns_reference_provenance(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    legacy_step = StepRecord(
+        round_num=1,
+        branch_id="branch-cvrp",
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Request old component reference.",
+            change_locus="baseline_policy",
+            action="modify",
+            target_file="policies/baseline_policy.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(wins=0, losses=1, ties=1, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("LEGACY_FAIL",),
+            exposed_summary="legacy inactive summary",
+            raw_metrics_ref="/SECRET/raw/legacy.json",
+            selected_surface="baseline_policy",
+        ),
+        decision=None,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    context = replace(context, step_history=(legacy_step,))
+
+    observation = registry.call(
+        "feedback.query_screening",
+        {"surface": "baseline_policy"},
+        context,
+    )
+    payload = observation.structured_payload
+
+    assert payload["screening_steps"] == []
+    assert payload["active_boundary_filter"]["requested_surface_status"] == (
+        "inactive_reference"
+    )
+    assert [row["surface"] for row in payload["inactive_reference_steps"]] == [
+        "baseline_policy"
+    ]
+    assert payload["inactive_reference_steps"][0]["provenance"]["evidence_role"] == (
+        "inactive_reference"
+    )
 
 
 def test_cvrp_solver_design_preprotocol_failure_requests_boundary_retry(

@@ -31,11 +31,28 @@ class AgenticTerminationReason(str, Enum):
     HYPOTHESIS_APPROVAL_FAILED = "hypothesis_approval_failed"
     HYPOTHESIS_GENERATION_FAILED = "hypothesis_generation_failed"
     CODE_GENERATION_FAILED = "code_generation_failed"
+    PREMISE_CONTRADICTED = "premise_contradicted"
+    DUPLICATE_MECHANISM = "duplicate_mechanism"
+    MECHANISM_NOVELTY_REJECTED = "mechanism_novelty_rejected"
     INJECTED_OUTPUT = "injected_output"
     TOOL_LOOP_LIMIT = "tool_loop_limit"
     SESSION_TIMEOUT = "session_timeout"
     REPEATED_TOOL_CALL = "repeated_tool_call"
     UNHANDLED_ERROR = "unhandled_error"
+
+
+class AgenticFailureCategory(str, Enum):
+    """Coarse failure category for retry and audit attribution."""
+
+    SCHEMA_OUTPUT_FAILURE = "schema_output_failure"
+    STRUCTURED_OUTPUT_RETRY_EXHAUSTED = "structured_output_retry_exhausted"
+    CONTRACT_BOUNDARY_FAILURE = "contract_boundary_failure"
+    PATCH_GRAPH_FAILURE = "patch_graph_failure"
+    MODEL_REPAIR_FAILED = "model_repair_failed"
+    TOOL_BUDGET_EXHAUSTED = "tool_budget_exhausted"
+    PREMISE_CONTRADICTED = "premise_contradicted"
+    DUPLICATE_MECHANISM = "duplicate_mechanism"
+    ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
 
 
 class AgenticProposalPhase(str, Enum):
@@ -91,6 +108,7 @@ class AgenticProposalSessionState:
     status: AgenticProposalStatus | None = None
     transcript: list[AgenticTranscriptEvent] = field(default_factory=list)
     scratch_artifact_refs: list[str] = field(default_factory=list)
+    failure_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     tool_step_count: int = 0
     tool_call_count: int = 0
     observation_chars_used: int = 0
@@ -146,6 +164,9 @@ class AgenticProposalOutput:
     tool_budget_used: Mapping[str, int] = field(default_factory=dict)
     transcript_digest: str = ""
     failure_detail: str | None = None
+    failure_category: AgenticFailureCategory | str | None = None
+    structured_rejection: Mapping[str, Any] | None = None
+    failure_ledger: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def is_completed(self) -> bool:
@@ -205,8 +226,16 @@ class AgenticSessionIndexEntry:
     created_at: str
     updated_at: str
     tainted: bool
+    artifact_ref_scope: str = "artifact_dir_relative"
+    artifact_path_internal_only: bool = True
     tool_loop_config: Mapping[str, Any] = field(default_factory=dict)
     tool_budget_used: Mapping[str, Any] = field(default_factory=dict)
+    prompt_manifest_required: bool = False
+    prompt_manifest_artifact_ref: str = ""
+    prompt_manifest_artifact_refs: tuple[str, ...] = field(default_factory=tuple)
+    prompt_manifest_ref_scope: str = "artifact_dir_relative"
+    raw_prompt_saved: bool = False
+    prompt_manifest_not_required_reason: str = ""
 
 
 @dataclass(frozen=True)

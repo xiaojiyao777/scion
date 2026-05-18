@@ -29,6 +29,7 @@ class EvaluationRequest:
     expand: bool = False
     expand_round: int = 0
     selected_surface: str | None = None
+    expected_telemetry: Mapping[str, Any] | None = None
     patch: Optional[PatchProposal] = None
     retry_count: int = 0
     screening_expand_count: int = 0
@@ -66,6 +67,7 @@ class ExperimentProtocolLike(Protocol):
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
+        expected_telemetry: Mapping[str, Any] | None = None,
     ) -> ProtocolResult:
         ...
 
@@ -135,6 +137,7 @@ class EvaluationPipeline:
                         expand=request.expand,
                         expand_round=request.expand_round,
                         selected_surface=request.selected_surface,
+                        expected_telemetry=request.expected_telemetry,
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
@@ -188,6 +191,20 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         return result
 
     stats = result.stats
+    telemetry_guard = ""
+    surface_summary = result.candidate_surface_runtime_summary or {}
+    if isinstance(surface_summary, Mapping):
+        guard = surface_summary.get("telemetry_guard")
+        if isinstance(guard, Mapping):
+            failures = guard.get("failures")
+            warnings = guard.get("warnings")
+            failure_count = len(failures) if isinstance(failures, list) else 0
+            warning_count = len(warnings) if isinstance(warnings, list) else 0
+            telemetry_guard = (
+                f" telemetry_guard_passed={bool(guard.get('passed'))}"
+                f" telemetry_guard_failures={failure_count}"
+                f" telemetry_guard_warnings={warning_count}"
+            )
     exposed_summary = (
         f"stage={result.stage.value} outcome={result.gate_outcome} "
         f"stat={stats.statistical_status or 'legacy'} "
@@ -201,6 +218,7 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"{_fmt_category_counts(result.candidate_runtime_failure_categories)} "
         f"candidate_operator_attempts={result.candidate_operator_attempts} "
         f"candidate_operator_accepted={result.candidate_operator_accepted}"
+        f"{telemetry_guard}"
     )
     return replace(
         result,
@@ -232,12 +250,19 @@ def _run_protocol_experiment(
     **kwargs: object,
 ) -> ProtocolResult:
     selected_surface = kwargs.pop("selected_surface", None)
+    expected_telemetry = kwargs.pop("expected_telemetry", None)
     if _should_forward_selected_surface(
         protocol,
         "run_experiment",
         selected_surface,
     ):
         kwargs["selected_surface"] = selected_surface
+    if expected_telemetry and _method_accepts_keyword(
+        protocol,
+        "run_experiment",
+        "expected_telemetry",
+    ):
+        kwargs["expected_telemetry"] = expected_telemetry
     return protocol.run_experiment(**kwargs)
 
 

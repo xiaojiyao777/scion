@@ -120,6 +120,13 @@ class ResearchSurfaceBoundsSpec(_Strict):
 
 class ResearchSurfaceEvidenceSpec(_Strict):
     required_runtime_fields: list[str] = Field(default_factory=list)
+    optional_runtime_fields: list[str] = Field(default_factory=list)
+    activity_runtime_fields: list[str] = Field(default_factory=list)
+    activation_runtime_fields: dict[str, list[str]] = Field(default_factory=dict)
+    effect_probe_runtime_fields: list[str] = Field(default_factory=list)
+    stage_budget_runtime_fields: list[str] = Field(default_factory=list)
+    fail_closed_on_zero_activity: bool = False
+    fail_closed_on_stage_budget_starvation: bool = False
 
 
 class ResearchSurfaceNoveltySpec(_Strict):

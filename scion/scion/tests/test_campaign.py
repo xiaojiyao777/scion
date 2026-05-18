@@ -16,6 +16,10 @@ from scion.core.models import (
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
 from scion.core.termination import TerminationConfig
+from scion.evidence.final_evidence_refs import (
+    FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+    FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
+)
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -264,6 +268,19 @@ class TestCampaignBasics:
         assert status["n_active_branches"] == 0
         assert summary["stopped_reason"] == "max_rounds_exhausted"
         assert summary["n_active_branches"] == 0
+        assert summary["final_evidence_refs"]["status"] == (
+            FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED
+        )
+        assert summary["final_evidence_refs"]["reason_code"] == (
+            FINAL_EVIDENCE_REASON_NORMAL_COMPLETION
+        )
+        assert summary["final_evidence_refs"]["required_for_formal_readiness"] is False
+        assert summary["formal_readiness"] == {
+            "formal_ready": False,
+            "missing": [],
+            "status": FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
+            "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
+        }
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)

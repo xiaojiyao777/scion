@@ -1,6 +1,8 @@
 """Code-generation context helpers for agentic proposal sessions."""
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Mapping
 
 from scion.core.models import HypothesisProposal
@@ -35,15 +37,26 @@ _SOLVER_DESIGN_BROAD_TERMS = (
 )
 
 def _observation_prompt_payload(observation: ProposalObservation) -> dict[str, Any]:
+    structured_payload = _sanitize_agentic_value(observation.structured_payload)
+    digest_payload = {
+        "tool_name": observation.tool_name,
+        "observation_type": observation.observation_type,
+        "summary": observation.summary,
+        "structured_payload": structured_payload,
+    }
+    digest = hashlib.sha256(
+        json.dumps(digest_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
     return {
         "observation_id": observation.observation_id,
         "tool_name": observation.tool_name,
+        "digest": digest,
         "observation_type": observation.observation_type,
         "summary": observation.summary,
         "is_error": observation.is_error,
         "failure_code": _enum_value(observation.failure_code),
         "exposure_level": _enum_value(observation.exposure_level),
-        "structured_payload": _sanitize_agentic_value(observation.structured_payload),
+        "structured_payload": structured_payload,
     }
 
 

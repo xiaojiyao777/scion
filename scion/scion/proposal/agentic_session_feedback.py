@@ -62,6 +62,12 @@ def _compact_screening_feedback_payload(payload: Mapping[str, Any]) -> dict[str,
         {
             "branch_id": payload.get("branch_id"),
             "surface": payload.get("surface"),
+            "provenance": _compact_feedback_value_for_budget(
+                payload.get("provenance")
+            ),
+            "active_boundary_filter": _compact_feedback_value_for_budget(
+                payload.get("active_boundary_filter")
+            ),
             "query_scope": _compact_feedback_value_for_budget(
                 payload.get("query_scope")
             ),
@@ -70,6 +76,15 @@ def _compact_screening_feedback_payload(payload: Mapping[str, Any]) -> dict[str,
             ),
             "matched_screening_step_count": payload.get("matched_screening_step_count"),
             "screening_steps": compact_rows,
+            "inactive_reference_steps": [
+                _compact_screening_step_for_budget(row)
+                for row in (
+                    payload.get("inactive_reference_steps")[:_APS_FEEDBACK_LIST_ITEMS]
+                    if isinstance(payload.get("inactive_reference_steps"), list)
+                    else []
+                )
+                if isinstance(row, Mapping)
+            ],
             "metrics_file_ref_exposed": False,
             "payload_truncated": True,
             "compacted_for_agentic_budget": True,
@@ -91,6 +106,12 @@ def _compact_runtime_feedback_payload(payload: Mapping[str, Any]) -> dict[str, A
         {
             "branch_id": payload.get("branch_id"),
             "surface": payload.get("surface"),
+            "provenance": _compact_feedback_value_for_budget(
+                payload.get("provenance")
+            ),
+            "active_boundary_filter": _compact_feedback_value_for_budget(
+                payload.get("active_boundary_filter")
+            ),
             "query_scope": _compact_feedback_value_for_budget(
                 payload.get("query_scope")
             ),
@@ -103,6 +124,19 @@ def _compact_runtime_feedback_payload(payload: Mapping[str, Any]) -> dict[str, A
                 _APS_FEEDBACK_TEXT_CHARS,
             ),
             "screening_runtime_attribution": compact_attribution,
+            "inactive_reference_runtime_attribution": [
+                _compact_runtime_attribution_for_budget(row)
+                for row in (
+                    payload.get("inactive_reference_runtime_attribution")[
+                        :_APS_FEEDBACK_LIST_ITEMS
+                    ]
+                    if isinstance(
+                        payload.get("inactive_reference_runtime_attribution"), list
+                    )
+                    else []
+                )
+                if isinstance(row, Mapping)
+            ],
             "research_diagnosis": _compact_research_diagnosis_for_budget(
                 payload.get("research_diagnosis")
             ),
@@ -121,6 +155,7 @@ def _compact_screening_step_for_budget(row: Mapping[str, Any]) -> dict[str, Any]
             "round_num": row.get("round_num"),
             "branch_id": row.get("branch_id"),
             "surface": row.get("surface"),
+            "provenance": _compact_feedback_value_for_budget(row.get("provenance")),
             "action": row.get("action"),
             "target_file": row.get("target_file"),
             "gate_outcome": row.get("gate_outcome"),
@@ -157,6 +192,9 @@ def _compact_runtime_attribution_for_budget(value: Any) -> dict[str, Any]:
         {
             "round_num": value.get("round_num"),
             "surface": value.get("surface"),
+            "provenance": _compact_feedback_value_for_budget(
+                value.get("provenance")
+            ),
             "target_file": value.get("target_file"),
             "gate_outcome": value.get("gate_outcome"),
             "reason_codes": _bounded_string_list(value.get("reason_codes"), limit=6),

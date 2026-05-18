@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scion.evidence.final_evidence_refs import (
+    FINAL_EVIDENCE_CLOSURE_SCHEMA,
     FINAL_QUALITY_ARTIFACT_KEYS,
     MANIFEST_METADATA_KEYS,
 )
@@ -15,6 +16,8 @@ class FormalReadinessReport:
     formal_ready: bool
     missing: tuple[str, ...]
     refs: Mapping[str, Any]
+    status: str = "not_ready"
+    reason_code: str | None = None
 
 
 def validate_formal_readiness(
@@ -34,6 +37,17 @@ def validate_formal_readiness(
             formal_ready=False,
             missing=("final_evidence_refs",),
             refs=refs,
+            status="missing_final_evidence_refs",
+        )
+
+    if _is_non_formal_closure(refs):
+        reason_code = refs.get("reason_code")
+        return FormalReadinessReport(
+            formal_ready=False,
+            missing=(),
+            refs=refs,
+            status=str(refs.get("status") or "non_formal_final_evidence_closed"),
+            reason_code=str(reason_code) if reason_code else None,
         )
 
     package_label = _select_package_label(refs, label=label)
@@ -42,6 +56,7 @@ def validate_formal_readiness(
             formal_ready=False,
             missing=("final_evidence_refs.package",),
             refs=refs,
+            status="missing_final_evidence_package",
         )
 
     package = refs.get(package_label)
@@ -50,6 +65,7 @@ def validate_formal_readiness(
             formal_ready=False,
             missing=(f"{package_label}",),
             refs=refs,
+            status="invalid_final_evidence_package",
         )
 
     missing: list[str] = []
@@ -69,6 +85,14 @@ def validate_formal_readiness(
         formal_ready=not missing,
         missing=tuple(missing),
         refs=refs,
+        status="formal_ready" if not missing else "incomplete_final_evidence_package",
+    )
+
+
+def _is_non_formal_closure(refs: Mapping[str, Any]) -> bool:
+    return (
+        refs.get("schema") == FINAL_EVIDENCE_CLOSURE_SCHEMA
+        and refs.get("required_for_formal_readiness") is False
     )
 
 
@@ -85,4 +109,3 @@ def _select_package_label(
         if isinstance(value, Mapping):
             return str(key)
     return None
-

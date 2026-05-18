@@ -98,6 +98,10 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
         "target_runtime_effect": "neutral: same solve budget with fewer evaluated pairs",
         "complexity_claim": "O(k * routes) candidates with k <= 8, no all-pairs scan",
         "runtime_budget_strategy": "top-k route pairs, early exit after first feasible improvement",
+        "expected_telemetry": {
+            "activity": ["search_iterations"],
+            "effect": ["accepted_improvements"],
+        },
         "novelty_signature": {"selected_components": ["route_pair_swap"]},
     }
 
@@ -106,12 +110,14 @@ def test_hypothesis_runtime_intent_fields_parse_and_format():
     assert result.target_runtime_effect == raw["target_runtime_effect"]
     assert result.complexity_claim == raw["complexity_claim"]
     assert result.runtime_budget_strategy == raw["runtime_budget_strategy"]
+    assert result.expected_telemetry == raw["expected_telemetry"]
     assert result.novelty_signature == raw["novelty_signature"]
 
     formatted = _format_hypothesis(result)
     assert "target_runtime_effect: neutral" in formatted
     assert "complexity_claim: O(k * routes)" in formatted
     assert "runtime_budget_strategy: top-k route pairs" in formatted
+    assert "expected_telemetry:" in formatted
     assert "hypothesis_metadata_novelty_signature:" in formatted
     assert "do not copy novelty_signature into code" in formatted
 
@@ -128,6 +134,7 @@ def test_hypothesis_runtime_intent_fields_default_when_missing():
     assert result.target_runtime_effect is None
     assert result.complexity_claim is None
     assert result.runtime_budget_strategy is None
+    assert result.expected_telemetry == {}
     assert result.novelty_signature == {}
     assert "target_runtime_effect" not in _format_hypothesis(result)
 
@@ -141,6 +148,7 @@ def test_hypothesis_schema_exposes_optional_runtime_intent_fields():
         "target_runtime_effect",
         "complexity_claim",
         "runtime_budget_strategy",
+        "expected_telemetry",
         "novelty_signature",
     ):
         assert field_name in properties
@@ -251,6 +259,14 @@ def test_patch_parses_additional_changes_json_string():
     assert len(result.additional_changes) == 1
     assert result.additional_changes[0].file_path == (
         "policies/baseline_modules/helper.py"
+    )
+    assert result.repair_attribution == (
+        {
+            "field": "additional_changes",
+            "repair_kind": "host_mechanical_normalization",
+            "root_cause": "json_string_array",
+            "action": "parsed_json_string_to_array",
+        },
     )
 
 

@@ -48,6 +48,17 @@ class LineageRegistry:
                     raw_metrics_ref        TEXT,
                     screening_n_cases      INTEGER,
                     screening_win_rate     REAL,
+                    screening_win_rate_scope TEXT,
+                    screening_case_wins    INTEGER,
+                    screening_case_losses  INTEGER,
+                    screening_case_ties    INTEGER,
+                    screening_case_win_rate REAL,
+                    screening_gate_win_rate REAL,
+                    screening_pair_wins    INTEGER,
+                    screening_pair_losses  INTEGER,
+                    screening_pair_ties    INTEGER,
+                    screening_pair_total   INTEGER,
+                    screening_pair_win_rate REAL,
                     screening_median_delta REAL,
                     screening_ci_low       REAL,
                     screening_ci_high      REAL,
@@ -69,6 +80,17 @@ class LineageRegistry:
                 "prompt_tokens":     "INTEGER",
                 "completion_tokens": "INTEGER",
                 "audit_payload_json": "TEXT",
+                "screening_win_rate_scope": "TEXT",
+                "screening_case_wins": "INTEGER",
+                "screening_case_losses": "INTEGER",
+                "screening_case_ties": "INTEGER",
+                "screening_case_win_rate": "REAL",
+                "screening_gate_win_rate": "REAL",
+                "screening_pair_wins": "INTEGER",
+                "screening_pair_losses": "INTEGER",
+                "screening_pair_ties": "INTEGER",
+                "screening_pair_total": "INTEGER",
+                "screening_pair_win_rate": "REAL",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
@@ -321,6 +343,45 @@ class LineageRegistry:
                 "SELECT COUNT(*) FROM experiment_events "
                 "WHERE event_kind = 'experiment' AND verification_result = 'failed'"
             ).fetchone()[0]
+            screening = conn.execute("""
+                SELECT
+                    COALESCE(SUM(screening_n_cases), 0) AS case_total,
+                    COALESCE(
+                        SUM(
+                            COALESCE(
+                                screening_case_wins,
+                                ROUND(screening_win_rate * screening_n_cases)
+                            )
+                        ),
+                        0
+                    ) AS case_wins,
+                    COALESCE(SUM(screening_case_losses), 0) AS case_losses,
+                    COALESCE(SUM(screening_case_ties), 0) AS case_ties,
+                    COALESCE(SUM(screening_pair_wins), 0) AS pair_wins,
+                    COALESCE(SUM(screening_pair_losses), 0) AS pair_losses,
+                    COALESCE(SUM(screening_pair_ties), 0) AS pair_ties,
+                    COALESCE(SUM(screening_pair_total), 0) AS pair_total
+                FROM experiment_events
+                WHERE event_kind = 'experiment' AND stage = 'screening'
+            """).fetchone()
+            screening_case_total = int(screening[0] or 0)
+            screening_case_wins = int(screening[1] or 0)
+            screening_case_losses = int(screening[2] or 0)
+            screening_case_ties = int(screening[3] or 0)
+            screening_pair_wins = int(screening[4] or 0)
+            screening_pair_losses = int(screening[5] or 0)
+            screening_pair_ties = int(screening[6] or 0)
+            screening_pair_total = int(screening[7] or 0)
+            screening_case_win_rate = (
+                screening_case_wins / screening_case_total
+                if screening_case_total
+                else 0.0
+            )
+            screening_pair_win_rate = (
+                screening_pair_wins / screening_pair_total
+                if screening_pair_total
+                else 0.0
+            )
         return {
             "total_events": total,
             "by_decision": by_decision,
@@ -328,6 +389,19 @@ class LineageRegistry:
             "n_champions": n_champions,
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
+            "screening_win_rate": screening_case_win_rate,
+            "screening_win_rate_scope": "case_level_gate",
+            "screening_case_wins": screening_case_wins,
+            "screening_case_losses": screening_case_losses,
+            "screening_case_ties": screening_case_ties,
+            "screening_case_total": screening_case_total,
+            "screening_case_win_rate": screening_case_win_rate,
+            "screening_gate_win_rate": screening_case_win_rate,
+            "screening_pair_wins": screening_pair_wins,
+            "screening_pair_losses": screening_pair_losses,
+            "screening_pair_ties": screening_pair_ties,
+            "screening_pair_total": screening_pair_total,
+            "screening_pair_win_rate": screening_pair_win_rate,
         }
 
     # ------------------------------------------------------------------
