@@ -324,7 +324,69 @@ def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> N
     assert pending == {}
     assert steps[0].failure_stage == "agent_quality_blocked"
     assert steps[0].failure_detail == detail
+    assert steps[0].contract_passed is False
     assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
+
+
+def test_agentic_session_timeout_hypothesis_failure_stops_campaign() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    steps: list[StepRecord] = []
+    detail = (
+        "agentic_proposal:session_timeout: agentic proposal session exceeded "
+        "max_wall_time_sec=10"
+    )
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (None, None),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.stopped is True
+    assert result.reason == "agentic_session_timeout"
+    assert result.counts_toward_max_rounds is False
+    assert pending == {}
+    assert steps[0].failure_stage == "agentic_budget_control"
+    assert steps[0].failure_detail == detail
+
+
+def test_agentic_session_timeout_code_failure_stops_without_pending_retry() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "agentic_proposal:session_timeout: contract preview skipped by agentic "
+        "session_timeout/budget control"
+    )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.stopped is True
+    assert result.reason == "agentic_session_timeout"
+    assert result.counts_toward_max_rounds is False
+    assert pending == {}
+    assert branch.pending_retry is False
+    assert steps[0].failure_stage == "agentic_budget_control"
+    assert pipeline._test_store.statuses == [("hyp-1", "code_failed")]
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:
@@ -374,3 +436,43 @@ def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None
 
     assert calls == 2
     assert "max_rounds_exhausted" in stopped_reasons
+
+
+def test_campaign_loop_writes_status_heartbeat_before_step_execution() -> None:
+    status_calls: list[str] = []
+    calls = 0
+
+    def write_status(**kwargs: Any) -> None:
+        status_calls.append("stopped" if "stopped_reason" in kwargs else "heartbeat")
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        calls += 1
+        assert status_calls[:2] == ["heartbeat", "heartbeat"]
+        return StepResult(action="explore", branch_id="b1", stopped=True, reason="done")
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: status_calls.append(f"final:{reason}"),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 1
+    assert status_calls[0:2] == ["heartbeat", "heartbeat"]
+    assert "final:done" in status_calls

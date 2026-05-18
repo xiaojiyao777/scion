@@ -95,6 +95,16 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
                     "policy_loaded",
                     "policy_errors",
                 ],
+                "mechanism_telemetry": {
+                    "search_*": {
+                        "activation_runtime_fields": [
+                            "mechanisms.{mechanism}.active"
+                        ],
+                        "effect_probe_runtime_fields": [
+                            "mechanisms.{mechanism}.delta"
+                        ],
+                    }
+                },
             },
             "novelty": {
                 "strategy": "semantic_signature",
@@ -134,6 +144,12 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
         "policy_loaded",
         "policy_errors",
     ]
+    assert surface.evidence.mechanism_telemetry[
+        "search_*"
+    ].activation_runtime_fields == ["mechanisms.{mechanism}.active"]
+    assert surface.evidence.mechanism_telemetry[
+        "search_*"
+    ].effect_probe_runtime_fields == ["mechanisms.{mechanism}.delta"]
     assert surface.novelty is not None
     assert surface.novelty.strategy == "semantic_signature"
     assert surface.prompt is not None
@@ -160,6 +176,29 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
         "baseline_budget",
         "round_limit",
     ]
+
+
+def test_problem_spec_rejects_invalid_mechanism_telemetry_declaration(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["research_surfaces"] = [
+        {
+            "name": "search_policy",
+            "kind": "policy",
+            "targets": {"files": ["policies/search_policy.py"]},
+            "evidence": {
+                "mechanism_telemetry": {
+                    "BadMechanism": {
+                        "activation_runtime_fields": ["mechanisms.bad.active"],
+                    }
+                }
+            },
+        },
+    ]
+
+    with pytest.raises(ValueError, match="mechanism_telemetry keys"):
+        ProblemSpecV1(**payload)
 
 
 def test_v2_research_surface_metadata_is_problem_owned(tmp_path: Path) -> None:

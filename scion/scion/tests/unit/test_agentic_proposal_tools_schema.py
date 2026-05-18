@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA, PatchProposalInput
+from scion.proposal.schemas import (
+    HYPOTHESIS_PROPOSAL_SCHEMA,
+    HYPOTHESIS_TOOL,
+    PATCH_PROPOSAL_SCHEMA,
+    PatchProposalInput,
+)
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     AgenticProposalSession,
     AgenticProposalSessionState,
@@ -114,6 +119,66 @@ def test_cvrp_active_boundary_exposes_solver_design_novelty_requirements(
     assert "nonempty_sequence_fields" not in requirements
 
 
+def test_context_read_surface_exposes_solver_design_mechanism_telemetry(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+
+    observation = registry.call(
+        "context.read_surface",
+        {
+            "surface": "solver_design",
+            "section": "evidence",
+            "include_code": False,
+        },
+        context,
+    )
+
+    evidence = observation.structured_payload["surface"]["evidence"]
+    assert evidence["activation_runtime_fields"] == {
+        "{mechanism}": [
+            "solver_algorithm_context_records.{mechanism}_iterations",
+            "solver_algorithm_phase_runtime_ms.{mechanism}",
+        ]
+    }
+    assert evidence["effect_probe_runtime_fields"] == [
+        "solver_algorithm_phase_improvement_counts.{mechanism}",
+        "solver_algorithm_phase_best_delta.{mechanism}",
+    ]
+
+
+def test_context_read_surface_rejects_legacy_surface_under_active_boundary(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = replace(
+        _cvrp_context(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+
+    observation = registry.call(
+        "context.read_surface",
+        {
+            "surface": "baseline_policy",
+            "section": "all",
+            "include_code": False,
+        },
+        context,
+    )
+
+    assert observation.is_error is True
+    assert observation.failure_code == ProposalToolFailureCode.PERMISSION_DENIED
+    assert observation.structured_payload["surface_state"] == "inactive_legacy"
+    assert observation.structured_payload["active_problem_boundary_surfaces"] == [
+        "solver_design"
+    ]
+    assert "active_problem_boundary_constraint" in observation.summary
+
+
 def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
     tmp_path: Path,
 ) -> None:
@@ -164,6 +229,57 @@ def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
     guidance = preview.structured_payload["hypothesis"]["novelty_signature_guidance"]
     assert preview.structured_payload["passed"] is False
     assert guidance["missing_fields"] == ["algorithm_family"]
+
+
+def test_schema_preview_invalid_expected_telemetry_category_is_hard_feedback(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    hypothesis = _valid_hypothesis_payload(
+        expected_telemetry={"attribution": ["policy_loaded"]},
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": hypothesis},
+        context,
+    )
+    self_check = _self_check_from_previews([preview])
+    telemetry = preview.structured_payload["hypothesis"][
+        "expected_telemetry_contract"
+    ]
+
+    assert preview.structured_payload["passed"] is False
+    assert self_check.schema_valid is False
+    assert telemetry["invalid_categories"] == ["attribution"]
+    assert "activity" in telemetry["allowed_categories"]
+    assert "policy_loaded" in telemetry["declared_runtime_fields"]
+    assert any(
+        "C11_expected_telemetry" in code
+        for code in self_check.schema_preview_codes
+    )
+
+
+def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
+    description = HYPOTHESIS_PROPOSAL_SCHEMA["properties"]["expected_telemetry"][
+        "description"
+    ]
+    tool_description = HYPOTHESIS_TOOL["description"]
+
+    for category in ("activity", "activation", "effect", "budget"):
+        assert category in description
+        assert category in tool_description
+    for bad_category in (
+        "best_delta",
+        "improvement_counts",
+        "phase_runtime",
+        "runtime_ms",
+    ):
+        assert bad_category in description
+        assert bad_category in tool_description
+    assert "top-level categories" in description
+    assert "top-level expected_telemetry keys" in tool_description.lower()
 
 
 def test_draft_hypothesis_accepts_structured_fields_and_rejects_invalid_values(
@@ -1029,3 +1145,39 @@ def test_contract_preview_failure_issues_become_self_check_codes() -> None:
     )
     assert compact is not None
     assert "baseline_budget_policy" in json.dumps(compact.structured_payload)
+
+
+def test_contract_preview_hypothesis_c11_failure_marks_schema_invalid() -> None:
+    observation = ProposalObservation(
+        observation_id="contract-preview-c11-fail",
+        session_id="session-1",
+        tool_name="proposal.contract_preview",
+        tool_call_id="tool-9",
+        observation_type="contract_preview",
+        summary="Static contract preview found issues: C11_expected_telemetry.",
+        structured_payload={
+            "passed": False,
+            "hypothesis": {
+                "passed": False,
+                "checks": [
+                    {
+                        "name": "C11_expected_telemetry",
+                        "passed": False,
+                        "detail": (
+                            "expected_telemetry category 'attribution' is not "
+                            "supported"
+                        ),
+                    }
+                ],
+            },
+        },
+    )
+
+    self_check = _self_check_from_previews([observation])
+
+    assert self_check.schema_valid is False
+    assert any(
+        "C11_expected_telemetry" in code
+        for code in self_check.schema_preview_codes
+    )
+    assert self_check.contract_preview_passed is False

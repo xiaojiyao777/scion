@@ -9,9 +9,11 @@ from scion.proposal.agentic_models import (
 
 _MIN_BUDGETED_OBSERVATION_CHARS = 512
 _OPTIONAL_SURFACE_READ_BUDGET_FLOOR_CHARS = 3000
-_APS_FEEDBACK_CALL_RESERVE_CHARS = 6000
+_APS_FEEDBACK_CALL_RESERVE_CHARS = 3000
 _SELF_CHECK_TOOL_CALL_RESERVE = 4
-_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 24000
+_SELF_CHECK_OBSERVATION_RESERVE_CHARS = 16000
+_IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE = 2
+_IMPLEMENTATION_OBSERVATION_RESERVE_CHARS = 16000
 
 
 def _remaining_observation_chars(
@@ -42,14 +44,14 @@ def _self_check_tool_call_reserve(config: AgenticToolLoopConfig) -> int:
     max_calls = max(0, int(config.max_tool_calls))
     if max_calls < 8:
         return 0
-    return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_calls // 3)
+    return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_calls // 4)
 
 
 def _self_check_step_reserve(config: AgenticToolLoopConfig) -> int:
     max_steps = max(0, int(config.max_steps))
     if max_steps < 8:
         return 0
-    return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_steps // 3)
+    return min(_SELF_CHECK_TOOL_CALL_RESERVE, max_steps // 4)
 
 
 def _self_check_observation_reserve_chars(config: AgenticToolLoopConfig) -> int:
@@ -139,13 +141,22 @@ def _code_phase_budget_reserved(
     config: AgenticToolLoopConfig,
     state: AgenticProposalSessionState,
 ) -> bool:
-    if _remaining_tool_calls(config, state) <= 4:
+    if (
+        _remaining_tool_calls(config, state)
+        <= _IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE
+    ):
         return True
-    if _remaining_tool_steps(config, state) <= 4:
+    if (
+        _remaining_tool_steps(config, state)
+        <= _IMPLEMENTATION_FINAL_PREVIEW_TOOL_RESERVE
+    ):
         return True
     reserve = max(
         _minimum_budgeted_observation_chars(),
-        _self_check_observation_reserve_chars(config),
-        min(8000, max(0, int(config.max_observation_chars) // 8)),
+        min(
+            _IMPLEMENTATION_OBSERVATION_RESERVE_CHARS,
+            max(0, int(config.max_observation_chars) // 6),
+        ),
+        _self_check_observation_reserve_chars(config) // 2,
     )
     return _remaining_observation_chars(config, state) <= reserve

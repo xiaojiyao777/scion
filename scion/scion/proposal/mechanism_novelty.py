@@ -32,6 +32,7 @@ class MechanismNoveltyResult:
             "snapshot_digest": self.snapshot_digest,
             "patch_generated": False,
             "screening_allowed": False,
+            "source": "mechanism_novelty_gate",
             "gate_name": "MechanismNoveltyGate",
         }
 

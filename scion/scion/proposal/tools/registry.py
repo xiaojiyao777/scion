@@ -42,6 +42,7 @@ from scion.proposal.tools.preview import (
     InterfacePreviewTool,
     SchemaPreviewTool,
     TargetPermissionPreviewTool,
+    compact_algorithm_smoke_observation_for_agent,
 )
 from scion.proposal.tools.surface import ContextReadSurfaceTool
 from scion.proposal.tools.utils import (
@@ -179,6 +180,16 @@ class ProposalToolRegistry:
 
         object.__setattr__(observation, "tool_call_id", call_id)
         if _json_size(observation.structured_payload) > tool.max_result_chars:
+            compact_observation = compact_algorithm_smoke_observation_for_agent(
+                observation
+            )
+            if (
+                compact_observation is not None
+                and _json_size(compact_observation.structured_payload)
+                <= tool.max_result_chars
+            ):
+                object.__setattr__(compact_observation, "tool_call_id", call_id)
+                return compact_observation
             return _error_observation(
                 context,
                 tool_name=tool.name,

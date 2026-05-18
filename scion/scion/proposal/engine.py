@@ -11,7 +11,12 @@ from typing import Any, Dict, Mapping
 
 from pydantic import ValidationError
 
-from scion.core.models import HypothesisProposal, PatchFileChange, PatchProposal
+from scion.core.models import (
+    HypothesisProposal,
+    MechanismChange,
+    PatchFileChange,
+    PatchProposal,
+)
 from scion.proposal.schemas import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
     PATCH_PROPOSAL_SCHEMA,
@@ -375,6 +380,10 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
         runtime_budget_strategy=validated.runtime_budget_strategy,
         expected_telemetry=dict(validated.expected_telemetry or {}),
         novelty_signature=dict(validated.novelty_signature or {}),
+        mechanism_changes=tuple(
+            MechanismChange(id=change.id, change_type=change.change_type)
+            for change in validated.mechanism_changes
+        ),
     )
 
 
@@ -404,6 +413,10 @@ def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
         premise_check=validated.premise_check,
         premise_check_reason=validated.premise_check_reason,
         repair_attribution=repair_attribution,
+        mechanism_changes=tuple(
+            MechanismChange(id=change.id, change_type=change.change_type)
+            for change in validated.mechanism_changes
+        ),
     )
 
 
@@ -616,6 +629,11 @@ def _split_hypothesis_context(
         f"and the no-op condition that avoids harming protected objectives.\n"
         f"6. Fill the runtime intent fields: `target_runtime_effect`, `complexity_claim`, "
         f"and `runtime_budget_strategy`.\n\n"
+        f"Telemetry contract: `expected_telemetry` top-level keys must be only "
+        f"`activity`, `activation`, `effect`, or `budget`. Put declared runtime "
+        f"field paths under those categories; do not use metric names or suffixes "
+        f"such as `best_delta`, `improvement_counts`, `phase_runtime`, or "
+        f"`runtime_ms` as categories.\n\n"
         f"Runtime constraint: proposed research-surface changes are evaluated inside the problem solver and "
         f"algorithmic efficiency is part of the evidence. Do not propose unbounded high-order "
         f"enumeration over problem entities; describe any top-k, "
@@ -707,6 +725,13 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
             lines.extend(
                 [
                     "For `solver_design`, choose the target file by mechanism ownership, not by convenience.",
+                    (
+                        "For `solver_design` expected_telemetry, use the selected "
+                        "surface evidence contract categories only: activity, "
+                        "activation, effect, and budget. Runtime field names "
+                        "from the adapter belong inside those categories, never "
+                        "as top-level expected_telemetry keys."
+                    ),
                     (
                         "Use `policies/baseline_modules/scheduler.py` mainly "
                         "for orchestration or wiring. If the new mechanism is "
@@ -960,6 +985,13 @@ def _split_code_context(
         "attempts, no smoke micro-benchmark win, and a `no_improvement`-style "
         "stop reason, algorithm smoke will reject it as low active search "
         "effort rather than treating the under-spend as a valid speedup.\n"
+        "- If the approved hypothesis declares `mechanism_changes` or "
+        "`expected_telemetry`, use that exact mechanism id in the active "
+        "runtime telemetry helpers. For activation, record a positive iteration "
+        "or phase runtime for that mechanism on paths that execute it. For "
+        "effect, record move/improvement evidence for that same mechanism when "
+        "it improves the objective. Do not rename the mechanism or edit the "
+        "hypothesis telemetry contract to silence algorithm smoke.\n"
         "- The active package state model uses `_Solution.routes` as `_Route` "
         "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
         "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
@@ -1237,6 +1269,7 @@ def _solver_design_scope_control_section(
         "- Do not use state.py as an additional-change adapter bridge unless it is the approved target; keep object-model edits explicit and auditable.",
         "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
         "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",
+        "- If the approved hypothesis declares mechanism telemetry, all activation/effect records must use the exact declared mechanism id. A telemetry-guard repair should add the missing record on the active path; it should not change the mechanism id or weaken the expected telemetry contract.",
     ]
     if mode:
         lines.append(f"- Current code-generation mode: `{mode}`.")
@@ -1328,6 +1361,18 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "forests unless absolutely necessary.\n\n"
         )
     if "code_generation_failed" in lowered:
+        if "telemetry" in lowered or "algorithm_smoke" in lowered:
+            return (
+                "## Previous Attempt Failed\n"
+                "The previous code generation failed algorithm smoke or runtime "
+                "telemetry verification with:\n"
+                f"{prior_failure}\n"
+                "Repair the exact missing activation/effect evidence for the "
+                "declared mechanism id. Use the selected surface runtime "
+                "telemetry helpers on the active code path; do not rename the "
+                "mechanism, remove expected_telemetry, or change problem "
+                "objectives/constraints to silence the guard.\n\n"
+            )
         return (
             "## Previous Attempt Failed\n"
             "The previous code generation failed with:\n"
@@ -1400,6 +1445,10 @@ def _split_fix_context(
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
         f"- Preserve the research-surface interface described above exactly\n"
         f"- Make only the minimal changes needed to fix the reported failure\n"
+        f"- If the failure is a telemetry guard or algorithm smoke failure, keep "
+        f"the declared mechanism id stable and add the missing activation/effect "
+        f"runtime record on the active path. Do not edit objectives, constraints, "
+        f"or expected telemetry just to pass the guard.\n"
     )
 
     return system_blocks, user_prompt

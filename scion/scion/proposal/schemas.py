@@ -2,14 +2,91 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+_MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MECHANISM_CHANGE_TYPES = ("add", "modify", "replace", "remove", "integrate")
+_EXPECTED_TELEMETRY_CATEGORIES = ("activity", "activation", "effect", "budget")
+_EXPECTED_TELEMETRY_CATEGORY_TEXT = ", ".join(_EXPECTED_TELEMETRY_CATEGORIES)
+_EXPECTED_TELEMETRY_DESCRIPTION = (
+    "Structured runtime telemetry probes expected to show candidate activity, "
+    "activation, effect, or budget allocation. Top-level keys must be telemetry "
+    f"categories only: {_EXPECTED_TELEMETRY_CATEGORY_TEXT}. Values must be "
+    "runtime telemetry field names declared by the selected research surface "
+    "evidence contract. Do not use runtime field names, suffixes, or metrics "
+    "such as best_delta, improvement_counts, phase_runtime, or runtime_ms as "
+    "top-level categories; put those declared runtime fields under the matching "
+    "category instead."
+)
+MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
 
 
 # ---------------------------------------------------------------------------
 # Pydantic v2 validation models (T19)
 # ---------------------------------------------------------------------------
+
+class MechanismChangeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    change_type: MechanismChangeType
+
+    @field_validator("id")
+    @classmethod
+    def valid_mechanism_id(cls, value: str) -> str:
+        mechanism_id = str(value or "").strip()
+        if not _MECHANISM_ID_RE.fullmatch(mechanism_id):
+            raise ValueError(
+                "mechanism id must match ^[a-z][a-z0-9_]{0,63}$"
+            )
+        return mechanism_id
+
+
+def _mechanism_changes_json_schema() -> Dict[str, Any]:
+    return {
+        "type": "array",
+        "description": (
+            "Problem-neutral mechanism bindings touched by this proposal. "
+            "Use stable lowercase ids matching ^[a-z][a-z0-9_]{0,63}$ and "
+            "generic change_type values."
+        ),
+        "items": {
+            "type": "object",
+            "required": ["id", "change_type"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "pattern": r"^[a-z][a-z0-9_]{0,63}$",
+                },
+                "change_type": {
+                    "type": "string",
+                    "enum": list(_MECHANISM_CHANGE_TYPES),
+                },
+            },
+            "additionalProperties": False,
+        },
+    }
+
+
+def _empty_mechanism_changes_to_list(value: Any) -> Any:
+    return [] if value in (None, "") else value
+
+
+def _validate_unique_mechanism_change_ids(
+    changes: list[MechanismChangeInput],
+) -> None:
+    ids = [change.id for change in changes]
+    duplicates = sorted(
+        {mechanism_id for mechanism_id in ids if ids.count(mechanism_id) > 1}
+    )
+    if duplicates:
+        raise ValueError(
+            "mechanism_changes must not repeat id values: " + ", ".join(duplicates)
+        )
+
 
 class HypothesisProposalInput(BaseModel):
     hypothesis_text: str
@@ -28,8 +105,17 @@ class HypothesisProposalInput(BaseModel):
     target_runtime_effect: Optional[str] = None
     complexity_claim: Optional[str] = None
     runtime_budget_strategy: Optional[str] = None
-    expected_telemetry: Dict[str, Any] = Field(default_factory=dict)
+    expected_telemetry: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=_EXPECTED_TELEMETRY_DESCRIPTION,
+    )
     novelty_signature: Dict[str, Any] = Field(default_factory=dict)
+    mechanism_changes: list[MechanismChangeInput] = Field(default_factory=list)
+
+    @field_validator("mechanism_changes", mode="before")
+    @classmethod
+    def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
+        return _empty_mechanism_changes_to_list(value)
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -44,6 +130,11 @@ class HypothesisProposalInput(BaseModel):
         if v not in ("modify", "create_new", "remove"):
             raise ValueError(f"action must be modify/create_new/remove, got '{v}'")
         return v
+
+    @model_validator(mode="after")
+    def validate_unique_mechanism_changes(self) -> "HypothesisProposalInput":
+        _validate_unique_mechanism_change_ids(self.mechanism_changes)
+        return self
 
 
 class PatchFileChangeInput(BaseModel):
@@ -160,6 +251,12 @@ class PatchProposalInput(BaseModel):
     code_content: str = ""
     test_hint: Optional[str] = None
     additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
+    mechanism_changes: list[MechanismChangeInput] = Field(default_factory=list)
+
+    @field_validator("mechanism_changes", mode="before")
+    @classmethod
+    def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
+        return _empty_mechanism_changes_to_list(value)
 
     @field_validator("additional_changes", mode="before")
     @classmethod
@@ -207,6 +304,7 @@ class PatchProposalInput(BaseModel):
                 "additional_changes must not repeat file_path values: "
                 + ", ".join(duplicates)
             )
+        _validate_unique_mechanism_change_ids(self.mechanism_changes)
         return self
 
 
@@ -307,19 +405,14 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "expected_telemetry": {
             "type": "object",
             "additionalProperties": True,
-            "description": (
-                "Structured runtime telemetry probes expected to show candidate "
-                "activity or effect. Keys should be categories such as "
-                "activity, activation, effect, and budget; values must be "
-                "runtime telemetry field names declared by the selected "
-                "research surface evidence contract."
-            ),
+            "description": _EXPECTED_TELEMETRY_DESCRIPTION,
         },
         "novelty_signature": {
             "type": "object",
             "additionalProperties": True,
             "description": "Structured identity values for declared novelty.signature_fields on singleton semantic surfaces. Required when the selected surface declares novelty.strategy=semantic_signature. Use compact scalars, lists, or small objects; scalar strings must be <=120 characters. Do not put rationale prose here.",
         },
+        "mechanism_changes": _mechanism_changes_json_schema(),
     },
 }
 
@@ -369,6 +462,7 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "mechanism_changes": _mechanism_changes_json_schema(),
     },
 }
 
@@ -411,7 +505,8 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
-        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract.\n"
+        "- When the selected surface declares mechanism telemetry, include mechanism_changes with the specific mechanism id(s) and generic change_type values: add, modify, replace, remove, or integrate.\n"
+        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract. Top-level expected_telemetry keys must be only activity, activation, effect, or budget; do not use runtime metric names or suffixes such as best_delta, improvement_counts, phase_runtime, or runtime_ms as categories.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
@@ -432,6 +527,7 @@ PATCH_TOOL: Dict[str, Any] = {
         "- Write the COMPLETE file \u2014 not a diff, not a snippet. The entire file content.\n"
         "- Study the champion research-surface files for style, data model usage, and import patterns.\n"
         "- Follow the problem-specific research-surface interface EXACTLY.\n\n"
+        "- Echo the approved hypothesis mechanism_changes ids exactly when present.\n\n"
         "Code quality requirements:\n"
         "- Preserve every feasibility and consistency invariant described in the interface spec.\n"
         "- For operator surfaces, use the provided `rng` argument for ALL randomness.\n"
@@ -440,6 +536,11 @@ PATCH_TOOL: Dict[str, Any] = {
         "- Keep neighborhood enumeration bounded. Do NOT enumerate all 3/4-way "
         "problem-entity combinations; use top-k candidate caps, sampling, or pairwise "
         "moves with explicit limits.\n"
+        "- When the approved hypothesis declares mechanism_changes or "
+        "expected_telemetry, use the exact declared mechanism id in the runtime "
+        "telemetry helpers exposed by the selected surface. Activation/effect "
+        "telemetry failures are repaired by recording the declared mechanism, "
+        "not by renaming the mechanism or changing expected_telemetry.\n"
         "- Return a valid solution/artifact according to the problem adapter contract when implementing an operator surface.\n\n"
         "Common rejection causes:\n"
         "- Feasibility or solution consistency violation.\n"
@@ -466,7 +567,11 @@ FIX_TOOL: Dict[str, Any] = {
         "- V5_solution_consistency: output violates problem-specific solution consistency.\n"
         "- V8_nondeterminism: non-deterministic code (no uuid, use sorted(), use rng).\n"
         "- V1_syntax: indentation, parentheses, colons.\n"
-        "- V2_interface: missing Operator base class or wrong execute() signature."
+        "- V2_interface: missing Operator base class or wrong execute() signature.\n"
+        "- runtime_smoke.telemetry_guard: preserve the declared mechanism id and "
+        "add the missing activation/effect runtime records through the selected "
+        "surface telemetry helpers; do not change objectives, constraints, or "
+        "the approved hypothesis to silence the guard."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }
@@ -530,6 +635,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `target_runtime_effect` to the expected runtime impact (improve/neutral/risk/unknown or short text)
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
+- If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate.
 - Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
@@ -545,6 +651,9 @@ Respond with a single JSON object (no markdown fences, no extra text) matching t
   "target_runtime_effect": "<expected runtime effect or null>",
   "complexity_claim": "<complexity/candidate-bound claim or null>",
   "runtime_budget_strategy": "<runtime budget strategy or null>",
+  "mechanism_changes": [
+    {{"id": "<mechanism_id>", "change_type": "add" | "modify" | "replace" | "remove" | "integrate"}}
+  ],
   "expected_telemetry": {{
     "activity": ["<declared runtime counter expected to be positive>"],
     "activation": ["<declared runtime field proving the mechanism ran>"],
@@ -600,6 +709,8 @@ Produce the complete file content that implements the hypothesis.
 - If the approved algorithm change requires extra files to be executable, put
   them in `additional_changes`; each item must contain complete file contents
   and will be independently checked.
+- Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
+  drop mechanism ids in the patch response.
 
 Respond with a single JSON object (no markdown fences, no extra text):
 {{
@@ -614,6 +725,9 @@ Respond with a single JSON object (no markdown fences, no extra text):
       "action": "modify" | "create" | "delete",
       "code_content": "<complete file contents>"
     }}
+  ],
+  "mechanism_changes": [
+    {{"id": "<approved_mechanism_id>", "change_type": "add" | "modify" | "replace" | "remove" | "integrate"}}
   ],
   "test_hint": "<optional brief testing note, or null>"
 }}

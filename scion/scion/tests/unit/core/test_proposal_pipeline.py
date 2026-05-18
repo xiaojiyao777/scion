@@ -17,12 +17,15 @@ from scion.core.models import (
     FailureEvent,
     HypothesisProposal,
     PatchProposal,
+    StepRecord,
     VerificationResult,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
 from scion.core.public_refs import contains_absolute_path
+from scion.proposal.search_memory import CampaignSearchMemory
 from scion.proposal.agentic_session import (
     AgenticEvidenceRef,
+    AgenticFailureCategory,
     AgenticProposalOutput,
     AgenticProposalRequest,
     AgenticProposalSession,
@@ -516,7 +519,7 @@ def test_agentic_pipeline_hypothesis_request_denies_custom_code_context_read(
     assert target_reads == 0
     assert "SECRET_TARGET_CONTENT" not in str(pipeline.agentic_outputs)
     assert len(failures) == 1
-    assert circuit.failures == [detail]
+    assert circuit.failures == []
 
 
 def test_agentic_session_builds_code_context_only_after_hypothesis_contract_pass() -> None:
@@ -626,7 +629,7 @@ def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> 
     assert "forced_surface_constraint" in detail
     assert "solver_design" in detail
     assert len(failures) == 1
-    assert circuit.failures == [detail]
+    assert circuit.failures == []
     assert runtime.code_kwargs is None
     assert creative.code_calls == 0
 
@@ -864,10 +867,18 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
         failure_detail="active solver already contains the claimed missing move",
         failure_category="agent_grounding_failure",
         structured_rejection={
+            "source": "mechanism_novelty_gate",
+            "gate_name": "MechanismNoveltyGate",
+            "mechanism": "cross_route_or_opt_2_3",
             "premise_check": "contradicted",
             "failure_category": "agent_grounding_failure",
             "failure_code": "proposal_premise_contradicted",
             "agent_block_reason": "agent_quality_blocked",
+            "reason": (
+                "Hypothesis claims inter-route Or-opt is missing, but active "
+                "solver evidence already shows cross-route Or-opt."
+            ),
+            "evidence": ["_or_opt_1", "_or_opt_2", "_or_opt_3", "_or_opt"],
         },
     )
     failure_streak = {"proposal": 2}
@@ -888,11 +899,160 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     assert "agent_quality_blocked" in detail
     assert "proposal_premise_contradicted" in detail
     assert "agent_grounding_failure" in detail
-    assert circuit.failures == [detail]
+    assert circuit.failures == []
     assert session_ref is not None
     assert session_ref["failure_category"] == "agent_grounding_failure"
     assert session_ref["failure_code"] == "proposal_premise_contradicted"
     assert session_ref["agent_block_reason"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"] == {
+        "stage": "agent_quality_blocked",
+        "reason": "proposal_premise_contradicted",
+        "category": "agent_grounding_failure",
+        "code": "proposal_premise_contradicted",
+        "detail": "active solver already contains the claimed missing move",
+    }
+    assert session_ref["secondary_observations"] == []
+    assert session_ref["rejection_constraint"]["source"] == (
+        "mechanism_novelty_gate"
+    )
+    assert session_ref["rejection_constraint"]["mechanism"] == (
+        "cross_route_or_opt_2_3"
+    )
+    assert "active-solver evidence" in session_ref["rejection_constraint"][
+        "retry_constraint"
+    ]
+
+
+def test_agentic_algorithm_smoke_failure_is_quality_block_not_proposal_streak() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="smoke-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_detail=(
+            "algorithm smoke did not pass "
+            "(runtime_smoke.telemetry_guard: TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED)"
+        ),
+        failure_category=AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE,
+    )
+    failure_streak = {"proposal": 2}
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    pipeline.failure_streak = failure_streak
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert failures == []
+    assert failure_streak == {"proposal": 2}
+    assert detail is not None
+    assert "agent_quality_blocked" in detail
+    assert "algorithm_smoke_failure" in detail
+    assert circuit.failures == []
+    assert session_ref is not None
+    assert session_ref["primary_failure"]["stage"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["category"] == "algorithm_smoke_failure"
+
+
+def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -> None:
+    creative = FakeCreative()
+    search_memory = CampaignSearchMemory()
+    session_ref = {
+        "failure_category": "agent_grounding_failure",
+        "failure_code": "proposal_premise_contradicted",
+        "agent_block_reason": "agent_quality_blocked",
+        "primary_failure": {
+            "stage": "agent_quality_blocked",
+            "reason": "proposal_premise_contradicted",
+            "category": "agent_grounding_failure",
+            "code": "proposal_premise_contradicted",
+            "detail": "premise_check=contradicted: active solver has evidence",
+        },
+        "rejection_constraint": {
+            "source": "mechanism_novelty_gate",
+            "mechanism": "cross_route_or_opt_2_3",
+            "premise_check": "contradicted",
+            "failure_code": "proposal_premise_contradicted",
+            "agent_block_reason": "agent_quality_blocked",
+            "reason": (
+                "Hypothesis claims inter-route Or-opt is missing, but active "
+                "solver already has the mechanism."
+            ),
+            "evidence": ["_or_opt_1", "_or_opt_2", "_or_opt_3", "_or_opt"],
+        },
+    }
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=creative.hypothesis,
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:premise_contradicted: "
+            "agent_quality_blocked:proposal_premise_contradicted:"
+            "agent_grounding_failure"
+        ),
+        proposal_session_ref=session_ref,
+    )
+
+    search_memory.update(step)
+    rendered = search_memory.render(view="hypothesis")
+
+    assert "Agentic Grounding Blocks" in rendered
+    assert "do not repeat cross_route_or_opt_2_3" in rendered
+    assert "premise_check=contradicted" in rendered
+    assert "active solver already has" in rendered
+    assert "_or_opt_2" in rendered
+    assert "C11" not in rendered
+
+
+def test_agentic_provider_balance_failure_marks_balance_exhausted() -> None:
+    detail = (
+        "Tool call failed after 3 attempt(s). Last error: Transient provider error: "
+        "Error code: 403 - {'error': {'type': 'Aihubmix_api_error', "
+        "'message': 'Your account balance is insufficient. Please recharge your "
+        "account to continue using the API.'}}"
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="balance-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+        failure_detail=detail,
+    )
+    pipeline, branch, _, circuit, failures, balance = _pipeline(
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    recorded_detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+
+    assert hypothesis is None
+    assert record is None
+    assert balance["value"] is True
+    assert failures == []
+    assert recorded_detail is not None
+    assert "balance is insufficient" in recorded_detail
+    assert circuit.failures == [recorded_detail]
 
 
 def test_agentic_pipeline_passes_compact_resume_context_from_failed_artifact(
@@ -1048,6 +1208,42 @@ def test_agentic_failed_session_returns_typed_hypothesis_failure() -> None:
     assert detail == "agentic_proposal:hypothesis_generation_failed: no valid surface"
     assert len(failures) == 1
     assert circuit.failures == [detail]
+
+
+def test_agentic_session_timeout_routes_framework_control_without_llm_breaker() -> None:
+    failed_output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="session-timeout",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        termination_reason=AgenticTerminationReason.SESSION_TIMEOUT,
+        failure_detail="agentic proposal session exceeded max_wall_time_sec=10",
+        failure_category=AgenticFailureCategory.TOOL_BUDGET_EXHAUSTED,
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        use_agentic_proposal=True,
+        agentic_session=AgenticProposalSession(injected_output=failed_output),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is None
+    assert record is None
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    assert detail == (
+        "agentic_proposal:session_timeout: "
+        "agentic proposal session exceeded max_wall_time_sec=10"
+    )
+    assert len(failures) == 1
+    failed_branch, failure = failures[0]
+    assert failed_branch is branch
+    assert failure.category == "framework_control"
+    assert "session_timeout" in failure.detail
+    assert circuit.failures == []
 
 
 @pytest.mark.parametrize(

@@ -5,7 +5,7 @@ import pytest
 
 from scion.proposal.context_manager import _format_hypothesis
 from scion.proposal.engine import ProposalValidationError, _parse_hypothesis, _parse_patch
-from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA
+from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA, PATCH_PROPOSAL_SCHEMA
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +89,46 @@ def test_valid_hypothesis_passes_validation():
     assert result.suggested_weight == 0.5
 
 
+def test_hypothesis_mechanism_changes_parse_and_format():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "modify"},
+        ],
+    }
+
+    result = _parse_hypothesis(raw)
+
+    assert result.mechanism_changes[0].id == "search_seed"
+    assert result.mechanism_changes[0].change_type == "modify"
+    formatted = _format_hypothesis(result)
+    assert "mechanism_changes:" in formatted
+    assert "search_seed" in formatted
+
+
+def test_hypothesis_mechanism_changes_reject_bad_id_and_type():
+    raw = {
+        "hypothesis_text": "Modify a declared generic mechanism.",
+        "change_locus": "solver",
+        "action": "modify",
+        "target_file": "policies/solver.py",
+        "mechanism_changes": [
+            {"id": "SearchSeed", "change_type": "modify"},
+        ],
+    }
+    with pytest.raises(ProposalValidationError, match="mechanism id"):
+        _parse_hypothesis(raw)
+
+    raw["mechanism_changes"] = [
+        {"id": "search_seed", "change_type": "tweak"},
+    ]
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(raw)
+
+
 def test_hypothesis_runtime_intent_fields_parse_and_format():
     """Runtime intent fields should round-trip into HypothesisProposal context text."""
     raw = {
@@ -136,6 +176,7 @@ def test_hypothesis_runtime_intent_fields_default_when_missing():
     assert result.runtime_budget_strategy is None
     assert result.expected_telemetry == {}
     assert result.novelty_signature == {}
+    assert result.mechanism_changes == ()
     assert "target_runtime_effect" not in _format_hypothesis(result)
 
 
@@ -150,6 +191,7 @@ def test_hypothesis_schema_exposes_optional_runtime_intent_fields():
         "runtime_budget_strategy",
         "expected_telemetry",
         "novelty_signature",
+        "mechanism_changes",
     ):
         assert field_name in properties
         assert field_name not in required
@@ -241,6 +283,38 @@ def test_valid_patch_with_test_hint():
     }
     result = _parse_patch(raw)
     assert result.test_hint == "Check feasibility"
+
+
+def test_patch_mechanism_changes_parse_and_schema_is_optional():
+    raw = {
+        "file_path": "policies/solver.py",
+        "action": "modify",
+        "code_content": "VALUE = 1\n",
+        "mechanism_changes": [
+            {"id": "search_seed", "change_type": "integrate"},
+        ],
+    }
+
+    result = _parse_patch(raw)
+
+    assert result.mechanism_changes[0].id == "search_seed"
+    assert result.mechanism_changes[0].change_type == "integrate"
+    assert "mechanism_changes" in PATCH_PROPOSAL_SCHEMA["properties"]
+    assert "mechanism_changes" not in PATCH_PROPOSAL_SCHEMA["required"]
+
+
+def test_patch_mechanism_changes_reject_bad_id():
+    raw = {
+        "file_path": "policies/solver.py",
+        "action": "modify",
+        "code_content": "VALUE = 1\n",
+        "mechanism_changes": [
+            {"id": "bad-id", "change_type": "modify"},
+        ],
+    }
+
+    with pytest.raises(ProposalValidationError, match="mechanism id"):
+        _parse_patch(raw)
 
 
 def test_patch_parses_additional_changes_json_string():

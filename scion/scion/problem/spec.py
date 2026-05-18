@@ -5,6 +5,7 @@ All problem-specific configuration enters Scion through this schema.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -118,6 +119,15 @@ class ResearchSurfaceBoundsSpec(_Strict):
     complexity_scale_terms: list[str] = Field(default_factory=list)
 
 
+_MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MECHANISM_DECLARATION_RE = re.compile(r"^[a-z0-9_*]{1,64}$")
+
+
+class ResearchSurfaceMechanismTelemetrySpec(_Strict):
+    activation_runtime_fields: list[str] = Field(default_factory=list)
+    effect_probe_runtime_fields: list[str] = Field(default_factory=list)
+
+
 class ResearchSurfaceEvidenceSpec(_Strict):
     required_runtime_fields: list[str] = Field(default_factory=list)
     optional_runtime_fields: list[str] = Field(default_factory=list)
@@ -125,8 +135,41 @@ class ResearchSurfaceEvidenceSpec(_Strict):
     activation_runtime_fields: dict[str, list[str]] = Field(default_factory=dict)
     effect_probe_runtime_fields: list[str] = Field(default_factory=list)
     stage_budget_runtime_fields: list[str] = Field(default_factory=list)
+    mechanism_telemetry: dict[str, ResearchSurfaceMechanismTelemetrySpec] = Field(
+        default_factory=dict
+    )
     fail_closed_on_zero_activity: bool = False
     fail_closed_on_stage_budget_starvation: bool = False
+
+    @field_validator("mechanism_telemetry")
+    @classmethod
+    def _validate_mechanism_telemetry_declarations(
+        cls,
+        value: dict[str, ResearchSurfaceMechanismTelemetrySpec],
+    ) -> dict[str, ResearchSurfaceMechanismTelemetrySpec]:
+        for raw_declaration in value:
+            declaration = str(raw_declaration or "").strip()
+            if not _valid_mechanism_declaration(declaration):
+                raise ValueError(
+                    "mechanism_telemetry keys must be exact mechanism ids "
+                    "matching ^[a-z][a-z0-9_]{0,63}$ or wildcard patterns "
+                    "using only lowercase letters, digits, underscores, and *"
+                )
+        return value
+
+
+def _valid_mechanism_declaration(value: str) -> bool:
+    if _MECHANISM_ID_RE.fullmatch(value):
+        return True
+    if value == "*":
+        return True
+    if "*" not in value:
+        return False
+    if not _MECHANISM_DECLARATION_RE.fullmatch(value):
+        return False
+    if value[0] != "*" and not value[0].isalpha():
+        return False
+    return any(char != "*" for char in value)
 
 
 class ResearchSurfaceNoveltySpec(_Strict):

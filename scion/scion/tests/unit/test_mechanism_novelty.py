@@ -79,6 +79,18 @@ def _solver_design_hypothesis(text: str) -> HypothesisProposal:
     )
 
 
+class SequentialHypothesisCreative(FakeCreative):
+    def __init__(self, hypotheses: list[HypothesisProposal]) -> None:
+        super().__init__(hypothesis=hypotheses[-1])
+        self.hypotheses = list(hypotheses)
+
+    def generate_hypothesis(self, context):
+        self.hypothesis_contexts.append(dict(context))
+        if not self.hypotheses:
+            return self.hypothesis
+        return self.hypotheses.pop(0)
+
+
 @pytest.mark.parametrize("case_name,text,mechanism", FALSE_PREMISES)
 def test_mechanism_novelty_gate_blocks_known_false_premises(
     tmp_path,
@@ -331,6 +343,105 @@ def test_agentic_session_rejects_mechanism_false_premise_before_code_context(
     assert "proposal.schema_preview" not in tool_names
     assert "proposal.contract_preview" not in tool_names
     assert "proposal.algorithm_smoke" not in tool_names
+
+
+def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    rejected = _solver_design_hypothesis(
+        "The active solver lacks inter-route Or-opt segment relocation; "
+        "add an NN-filtered cross-route segment relocation neighborhood."
+    )
+    accepted = _solver_design_hypothesis(
+        "Improve existing cross-route Or-opt candidate ordering and delta scoring."
+    )
+    creative = SequentialHypothesisCreative([rejected, accepted])
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-mechanism",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "semantic-retry"},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    retry_context = creative.hypothesis_contexts[1]
+    retry_feedback = retry_context["agentic_hypothesis_semantic_rejections"][0]
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.termination_reason == (
+        AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+    )
+    assert output.hypothesis == accepted
+    assert len(creative.hypothesis_contexts) == 2
+    assert retry_feedback["source"] == "mechanism_novelty_gate"
+    assert retry_feedback["premise_check"] == "contradicted"
+    assert retry_feedback["failure_code"] == "proposal_premise_contradicted"
+    assert retry_feedback["mechanism"] == "cross_route_or_opt_2_3"
+    assert "active solver" in retry_feedback["reason"].lower()
+    assert "_or_opt_2" in json.dumps(retry_feedback, sort_keys=True)
+    assert "different mechanism family" in retry_context[
+        "agentic_hypothesis_retry_rule"
+    ]
+    assert not any(
+        entry.get("source") == "mechanism_novelty_gate"
+        for entry in output.failure_ledger["entries"]
+    )
+
+
+def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    repeated = _solver_design_hypothesis(
+        "The active solver lacks inter-route Or-opt segment relocation; "
+        "add an NN-filtered cross-route segment relocation neighborhood."
+    )
+    creative = SequentialHypothesisCreative([repeated, repeated])
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-mechanism",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "semantic-retry-fail"},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert len(creative.hypothesis_contexts) == 2
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.termination_reason == AgenticTerminationReason.PREMISE_CONTRADICTED
+    assert output.failure_category == "agent_grounding_failure"
+    assert output.structured_rejection["source"] == "mechanism_novelty_gate"
+    assert output.structured_rejection["mechanism"] == "cross_route_or_opt_2_3"
+    assert output.failure_ledger["entry_count"] == 1
+    assert output.failure_ledger["entries"][0]["source"] == "mechanism_novelty_gate"
 
 
 def test_agentic_session_code_context_exposes_shaw_evidence_for_premise_check(

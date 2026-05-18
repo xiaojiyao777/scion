@@ -18,14 +18,23 @@ from scion.proposal.llm_client import LLMRetryExhaustedError, LLMTimeoutError
 from scion.proposal.tools import ProposalObservation
 
 _CODE_PROMPT_STRING_CHARS = 1600
+_CODE_PROMPT_ALGORITHM_FILE_CHARS = 24000
+_CODE_PROMPT_ALGORITHM_SYMBOL_CHARS = 12000
 _CODE_PROMPT_LIST_ITEMS = 12
 _CODE_PROMPT_MAP_ITEMS = 32
+_CODE_PROMPT_MAX_ALGORITHM_READS = 3
 _CODE_PROMPT_FEEDBACK_TOOLS = frozenset(
     {
         "memory.query",
         "feedback.query_screening",
         "feedback.query_runtime",
         "context.read_branch_state",
+    }
+)
+_CODE_PROMPT_ALGORITHM_TOOLS = frozenset(
+    {
+        "context.read_algorithm_file",
+        "context.read_algorithm_symbol",
     }
 )
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
@@ -303,16 +312,34 @@ def _code_prompt_observations(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
 ) -> list[ProposalObservation]:
     selected: list[ProposalObservation] = []
-    latest_full_surface: ProposalObservation | None = None
+    latest_surface: ProposalObservation | None = None
+    algorithm_reads: list[ProposalObservation] = []
+    algorithm_read_keys: set[tuple[str, str, str]] = set()
     for observation in observations:
         if observation.tool_name == "context.read_surface":
             payload = observation.structured_payload
             if (
                 not observation.is_error
                 and isinstance(payload, Mapping)
-                and str(payload.get("detail") or "") == "full"
             ):
-                latest_full_surface = observation
+                latest_surface = observation
+            continue
+        if observation.tool_name in _CODE_PROMPT_ALGORITHM_TOOLS:
+            if not observation.is_error:
+                key = _algorithm_read_prompt_key(observation)
+                if key in algorithm_read_keys:
+                    for index, current in enumerate(algorithm_reads):
+                        if _algorithm_read_prompt_key(current) == key:
+                            algorithm_reads[index] = observation
+                            break
+                else:
+                    algorithm_read_keys.add(key)
+                    algorithm_reads.append(observation)
+                    if len(algorithm_reads) > _CODE_PROMPT_MAX_ALGORITHM_READS:
+                        dropped = algorithm_reads.pop(0)
+                        algorithm_read_keys.discard(
+                            _algorithm_read_prompt_key(dropped)
+                        )
             continue
         if observation.tool_name in _CODE_PROMPT_FEEDBACK_TOOLS:
             selected.append(observation)
@@ -322,9 +349,23 @@ def _code_prompt_observations(
             continue
         if observation.is_error:
             selected.append(observation)
-    if latest_full_surface is not None:
-        selected.append(latest_full_surface)
+    selected.extend(algorithm_reads)
+    if latest_surface is not None:
+        selected.append(latest_surface)
     return selected
+
+
+def _algorithm_read_prompt_key(
+    observation: ProposalObservation,
+) -> tuple[str, str, str]:
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return (observation.tool_name, "", "")
+    return (
+        observation.tool_name,
+        str(payload.get("file_path") or ""),
+        str(payload.get("symbol") or ""),
+    )
 
 
 def _code_prompt_observation_payload(
@@ -334,7 +375,58 @@ def _code_prompt_observation_payload(
     safe_payload = _sanitize_agentic_value(structured_payload)
     if tool_name == "context.read_surface" and isinstance(safe_payload, Mapping):
         return _compact_code_surface_payload(safe_payload)
+    if tool_name == "context.read_algorithm_file" and isinstance(
+        safe_payload,
+        Mapping,
+    ):
+        return _compact_code_algorithm_file_payload(safe_payload)
+    if tool_name == "context.read_algorithm_symbol" and isinstance(
+        safe_payload,
+        Mapping,
+    ):
+        return _compact_code_algorithm_symbol_payload(safe_payload)
     return _compact_code_prompt_value(safe_payload)
+
+
+def _compact_code_algorithm_file_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_mapping(
+        {
+            "surface": payload.get("surface"),
+            "file_path": payload.get("file_path"),
+            "readable": payload.get("readable"),
+            "source": payload.get("source"),
+            "truncated": payload.get("truncated"),
+            "size_chars": payload.get("size_chars"),
+            "max_chars": payload.get("max_chars"),
+            "content_preview": _limit_string(
+                payload.get("content_preview"),
+                _CODE_PROMPT_ALGORITHM_FILE_CHARS,
+            ),
+            "python_api_summary": _limit_string(
+                payload.get("python_api_summary"),
+                2400,
+            ),
+        }
+    )
+
+
+def _compact_code_algorithm_symbol_payload(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _drop_empty_mapping(
+        {
+            "surface": payload.get("surface"),
+            "file_path": payload.get("file_path"),
+            "symbol": payload.get("symbol"),
+            "readable": payload.get("readable"),
+            "source": payload.get("source"),
+            "truncated": payload.get("truncated"),
+            "content_preview": _limit_string(
+                payload.get("content_preview"),
+                _CODE_PROMPT_ALGORITHM_SYMBOL_CHARS,
+            ),
+        }
+    )
 
 
 def _compact_code_surface_payload(payload: Mapping[str, Any]) -> dict[str, Any]:

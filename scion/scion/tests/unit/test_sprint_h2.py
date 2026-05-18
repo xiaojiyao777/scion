@@ -143,6 +143,23 @@ class TestFailureRouterStateful:
         )
         assert action.action == "retry_infra"
 
+    def test_framework_control_timeout_fail_closed_not_infra_suspected(self):
+        """APS control timeouts fail closed instead of joining proposal/infra streaks."""
+        router = FailureRouter()
+        branch = _make_branch()
+        action = router.route(
+            FailureEvent(
+                category="framework_control",
+                detail="agentic_proposal:session_timeout: max_wall_time_sec=10",
+            ),
+            branch,
+            streak=10,
+        )
+        assert action.action == "fail_closed"
+        assert action.consumes_budget is False
+        assert action.writes_hypothesis_memory is False
+        assert action.max_retries_remaining == 0
+
     def test_backward_compat_no_streak_args(self):
         """Old call signature (no streak/total) still works."""
         router = FailureRouter()

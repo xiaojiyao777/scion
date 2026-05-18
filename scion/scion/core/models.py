@@ -45,6 +45,15 @@ class Decision(Enum):
 
 # --- Proposals (Tainted from LLM) ---
 
+MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
+
+
+@dataclass(frozen=True)
+class MechanismChange:
+    id: str
+    change_type: MechanismChangeType
+
+
 @dataclass
 class HypothesisProposal:
     hypothesis_text: str
@@ -65,6 +74,7 @@ class HypothesisProposal:
     runtime_budget_strategy: Optional[str] = None
     expected_telemetry: Dict[str, Any] = field(default_factory=dict)
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
+    mechanism_changes: Tuple[MechanismChange, ...] = ()
 
 @dataclass
 class PatchFileChange:
@@ -89,6 +99,7 @@ class PatchProposal:
     ] = "supported"
     premise_check_reason: str = ""
     repair_attribution: Tuple[Dict[str, Any], ...] = ()
+    mechanism_changes: Tuple[MechanismChange, ...] = ()
 
     def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
         return patch_file_changes(self)
@@ -119,6 +130,38 @@ def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
                 )
             )
     return tuple(changes)
+
+
+def mechanism_changes(
+    proposal: HypothesisProposal | PatchProposal | "HypothesisRecord",
+) -> Tuple[MechanismChange, ...]:
+    """Return normalized mechanism changes from a proposal-like object."""
+
+    changes: list[MechanismChange] = []
+    for change in getattr(proposal, "mechanism_changes", ()) or ():
+        if isinstance(change, MechanismChange):
+            changes.append(change)
+        elif isinstance(change, dict):
+            changes.append(MechanismChange(**change))
+        else:
+            changes.append(
+                MechanismChange(
+                    id=getattr(change, "id"),
+                    change_type=getattr(change, "change_type"),
+                )
+            )
+    return tuple(changes)
+
+
+def mechanism_change_dicts(
+    proposal: HypothesisProposal | PatchProposal | "HypothesisRecord",
+) -> Tuple[Dict[str, str], ...]:
+    """Return JSON-ready mechanism change dictionaries."""
+
+    return tuple(
+        {"id": change.id, "change_type": change.change_type}
+        for change in mechanism_changes(proposal)
+    )
 
 
 # --- Results & Stats ---
@@ -384,6 +427,7 @@ class HypothesisRecord:
     target_objectives: Tuple[str, ...] = ()
     protected_objectives: Tuple[str, ...] = ()
     novelty_signature: Dict[str, Any] = field(default_factory=dict)
+    mechanism_changes: Tuple[MechanismChange, ...] = ()
 
 # --- Solver Output ---
 

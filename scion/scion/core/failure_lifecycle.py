@@ -60,6 +60,7 @@ class FailureLifecycleService:
     get_champion: Callable[[], ChampionState | None]
     record_hard_abandon: Callable[[str, str], None]
     clock: Callable[[], datetime] = datetime.now
+    status_heartbeat: Callable[[str, Branch, FailureEvent | None], None] | None = None
 
     @classmethod
     def from_owner(cls, owner: Any) -> "FailureLifecycleService":
@@ -68,6 +69,23 @@ class FailureLifecycleService:
         Kept for backward-compatible tests that bind CampaignManager methods to a
         small stub instead of constructing a full manager.
         """
+        def _status_heartbeat(
+            event_kind: str,
+            _branch: Branch,
+            _failure: FailureEvent | None,
+        ) -> None:
+            write_status = getattr(owner, "_write_status", None)
+            if not callable(write_status):
+                return
+            try:
+                write_status()
+            except Exception:
+                logger.debug(
+                    "Status heartbeat after %s failed",
+                    event_kind,
+                    exc_info=True,
+                )
+
         return cls(
             failure_router=owner._failure_router,
             budget=owner._budget,
@@ -82,6 +100,7 @@ class FailureLifecycleService:
             campaign_id=getattr(owner, "_campaign_id", ""),
             get_champion=lambda: getattr(owner, "_champion", None),
             record_hard_abandon=owner._record_hard_abandon,
+            status_heartbeat=_status_heartbeat,
         )
 
     def handle_failure(
@@ -130,8 +149,11 @@ class FailureLifecycleService:
             self._infra_suspected(branch, fcode)
         elif action.action == "abandon_fast":
             self._abandon_fast(branch, fcode)
+        elif action.action == "fail_closed":
+            self._fail_closed(branch, fcode)
 
         self._persist_branch_state(bid)
+        self._emit_status_heartbeat("failure_handled", branch, failure)
 
     def tick_blocked_branches(self) -> None:
         """Advance blocked infra branches and auto-unblock after three rounds."""
@@ -155,6 +177,8 @@ class FailureLifecycleService:
                     )
                 branch.blocked_rounds = 0
                 branch.consecutive_llm_retries = 0
+                self._persist_branch_state(branch.branch_id)
+                self._emit_status_heartbeat("branch_unblocked", branch, None)
 
     def _write_hypothesis_memory(self, branch: Branch) -> None:
         hyp = self.branch_hypotheses.get(branch.branch_id)
@@ -174,6 +198,7 @@ class FailureLifecycleService:
             target_objectives=hyp.target_objectives,
             protected_objectives=hyp.protected_objectives,
             novelty_signature=dict(hyp.novelty_signature or {}),
+            mechanism_changes=tuple(hyp.mechanism_changes or ()),
         )
         self.hypothesis_store.save(record)
 
@@ -295,6 +320,44 @@ class FailureLifecycleService:
             self.record_hard_abandon(bid, "failure_action_abandon_fast")
         except StateTransitionError:
             pass
+
+    def _fail_closed(self, branch: Branch, failure_code: str) -> None:
+        bid = branch.branch_id
+        logger.warning(
+            "Branch %s: fail_closed for deterministic control failure '%s'",
+            bid,
+            failure_code,
+        )
+        branch.pending_retry = False
+        branch.consecutive_llm_retries = 0
+        self._record_failure_event(
+            branch_id=bid,
+            event_kind="framework_control_fail_closed",
+            failure_code=failure_code,
+            extra={"streak": self.failure_streak[failure_code]},
+        )
+        try:
+            self.branch_controller.apply_decision(bid, Decision.ABANDON)
+            self.record_hard_abandon(bid, f"{failure_code}_fail_closed")
+        except StateTransitionError:
+            pass
+
+    def _emit_status_heartbeat(
+        self,
+        event_kind: str,
+        branch: Branch,
+        failure: FailureEvent | None,
+    ) -> None:
+        if self.status_heartbeat is None:
+            return
+        try:
+            self.status_heartbeat(event_kind, branch, failure)
+        except Exception:
+            logger.debug(
+                "Status heartbeat after %s failed",
+                event_kind,
+                exc_info=True,
+            )
 
     def _record_failure_event(
         self,

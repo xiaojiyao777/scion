@@ -14,6 +14,7 @@ from scion.core.models import (
     CheckResult,
     EvalStats,
     ExperimentStage,
+    MechanismChange,
     PairwiseCaseFeedback,
     ProtocolResult,
     VerificationResult,
@@ -27,6 +28,7 @@ def _request(
     expand: bool = False,
     expand_round: int = 0,
     selected_surface: str | None = None,
+    mechanism_changes: tuple[object, ...] = (),
 ) -> EvaluationRequest:
     return EvaluationRequest(
         branch_id=str(uuid.uuid4()),
@@ -37,6 +39,7 @@ def _request(
         expand=expand,
         expand_round=expand_round,
         selected_surface=selected_surface,
+        mechanism_changes=mechanism_changes,
     )
 
 
@@ -205,6 +208,23 @@ def test_selected_surface_forwards_to_surface_aware_protocol() -> None:
             "selected_surface": "dispatch_policy",
         }
     ]
+
+
+def test_mechanism_changes_forward_to_protocol() -> None:
+    mechanism_changes = (MechanismChange(id="target_probe", change_type="modify"),)
+    protocol = SurfaceRecordingProtocol(_protocol_result())
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(
+        _request(
+            state=BranchState.EXPLORE,
+            selected_surface="dispatch_policy",
+            mechanism_changes=mechanism_changes,
+        )
+    )
+
+    assert outcome.canary_result.passed is True
+    assert protocol.experiment_calls[0]["mechanism_changes"] == mechanism_changes
 
 
 def test_verification_failure_generates_failed_features_and_detail() -> None:

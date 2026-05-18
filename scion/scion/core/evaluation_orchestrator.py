@@ -94,6 +94,7 @@ class EvaluationOrchestrator:
             expand_round=expand_round,
             selected_surface=hypothesis.change_locus,
             expected_telemetry=dict(getattr(hypothesis, "expected_telemetry", {}) or {}),
+            mechanism_changes=tuple(getattr(hypothesis, "mechanism_changes", ()) or ()),
             patch=self.branch_patches.get(bid),
             retry_count=branch.retry_count,
             screening_expand_count=branch.screening_expand_count,

@@ -33,6 +33,38 @@ def _stage_value(stage: Any) -> str:
     return str(getattr(stage, "value", stage) or "")
 
 
+def _agentic_grounding_block_from_step(step: StepRecord) -> str:
+    ref = step.proposal_session_ref
+    if not isinstance(ref, dict):
+        return ""
+    constraint = ref.get("rejection_constraint")
+    if not isinstance(constraint, dict):
+        return ""
+    premise_check = str(constraint.get("premise_check") or "").strip()
+    failure_code = str(constraint.get("failure_code") or "").strip()
+    agent_block = str(constraint.get("agent_block_reason") or "").strip()
+    if premise_check not in {"contradicted", "duplicate"} and not (
+        failure_code == "proposal_premise_contradicted"
+        or agent_block == "agent_quality_blocked"
+    ):
+        return ""
+    mechanism = str(constraint.get("mechanism") or "rejected_mechanism").strip()
+    reason = str(constraint.get("reason") or step.failure_detail or "").strip()
+    evidence = [
+        str(item).strip()
+        for item in list(constraint.get("evidence") or ())[:4]
+        if str(item).strip()
+    ]
+    line = (
+        f"- do not repeat {mechanism}: premise_check={premise_check or 'rejected'}"
+    )
+    if reason:
+        line += f"; reason={reason[:240]}"
+    if evidence:
+        line += "; active_solver_evidence=" + "; ".join(evidence)[:300]
+    return line
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -69,6 +101,7 @@ class CampaignSearchMemory:
     families: Dict[str, FamilyEntry] = field(default_factory=dict)
     coverage_counts: Dict[str, int] = field(default_factory=dict)  # locus/action → count
     recent_hypotheses: List[str] = field(default_factory=list)     # last N hypothesis texts for loop detection
+    agentic_grounding_blocks: List[str] = field(default_factory=list)
     family_taxonomy: Any = None
 
     # ---------------------------------------------------------------
@@ -80,6 +113,11 @@ class CampaignSearchMemory:
         hyp = step.hypothesis
         if hyp is None:
             return
+        agentic_block = _agentic_grounding_block_from_step(step)
+        if agentic_block:
+            self.agentic_grounding_blocks.append(agentic_block)
+            if len(self.agentic_grounding_blocks) > 12:
+                self.agentic_grounding_blocks = self.agentic_grounding_blocks[-12:]
 
         mechanism = _extract_mechanism_label(
             hyp.hypothesis_text or "",
@@ -258,6 +296,12 @@ class CampaignSearchMemory:
             sections.append(
                 "### Champion 演化\n" +
                 "\n".join(self.champion_evolution)
+            )
+
+        if self.agentic_grounding_blocks:
+            sections.append(
+                "### Agentic Grounding Blocks (DO NOT REPEAT)\n"
+                + "\n".join(self.agentic_grounding_blocks[-6:])
             )
 
         # Loop detection (before AVOID)

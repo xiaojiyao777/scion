@@ -19,6 +19,7 @@ from scion.core.models import (
     PatchProposal,
     StepRecord,
     VerificationResult,
+    mechanism_change_dicts,
 )
 from scion.config.problem import ProblemSpec
 from scion.core.forced_surface import (
@@ -106,7 +107,6 @@ class ContextManager:
             if forced_locus
             else None
         )
-        research_surfaces_block = _build_research_surfaces_block(research_surfaces)
         declared_problem_boundary_surfaces = _solver_design_surface_names(
             research_surfaces
         )
@@ -115,9 +115,31 @@ class ContextManager:
             if forced_request is not None
             else declared_problem_boundary_surfaces
         )
+        visible_research_surfaces = _hypothesis_visible_research_surfaces(
+            research_surfaces,
+            forced_surface=forced_request.surface if forced_request else None,
+            active_problem_boundary_surfaces=active_problem_boundary_surfaces,
+        )
+        research_surfaces_block = _build_research_surfaces_block(
+            visible_research_surfaces
+        )
+        legacy_surface_exclusion = _build_inactive_surface_exclusion_block(
+            research_surfaces,
+            visible_research_surfaces=visible_research_surfaces,
+            active_problem_boundary_surfaces=active_problem_boundary_surfaces,
+        )
+        if legacy_surface_exclusion:
+            research_surfaces_block = "\n".join(
+                block
+                for block in (research_surfaces_block, legacy_surface_exclusion)
+                if block
+            )
         champion_operators_code = _read_champion_research_code(
             champion,
-            research_surfaces=research_surfaces,
+            research_surfaces=visible_research_surfaces,
+            include_operator_files=_include_operator_files_for_research_code(
+                visible_research_surfaces
+            ),
         )
         family_taxonomy = (
             _get_family_taxonomy(problem_spec)
@@ -140,7 +162,10 @@ class ContextManager:
             _read_branch_code(
                 branch_workspace,
                 champion,
-                research_surfaces=research_surfaces,
+                research_surfaces=visible_research_surfaces,
+                include_operator_files=_include_operator_files_for_research_code(
+                    visible_research_surfaces
+                ),
             )
             if branch_workspace
             else None
@@ -553,6 +578,75 @@ def _find_research_surface(surfaces: list[Any], name: str) -> Any | None:
     return None
 
 
+def _hypothesis_visible_research_surfaces(
+    surfaces: list[Any],
+    *,
+    forced_surface: str | None,
+    active_problem_boundary_surfaces: list[str],
+) -> list[Any]:
+    forced = str(forced_surface or "").strip()
+    if forced:
+        constrained = [
+            surface
+            for surface in surfaces
+            if str(getattr(surface, "name", "") or "").strip() == forced
+        ]
+        return constrained or surfaces
+    active = {
+        str(surface or "").strip()
+        for surface in active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    }
+    if not active:
+        return surfaces
+    constrained = [
+        surface
+        for surface in surfaces
+        if str(getattr(surface, "name", "") or "").strip() in active
+    ]
+    return constrained or surfaces
+
+
+def _build_inactive_surface_exclusion_block(
+    surfaces: list[Any],
+    *,
+    visible_research_surfaces: list[Any],
+    active_problem_boundary_surfaces: list[str],
+) -> str:
+    if not active_problem_boundary_surfaces:
+        return ""
+    visible = {
+        str(getattr(surface, "name", "") or "").strip()
+        for surface in visible_research_surfaces
+    }
+    inactive = [
+        str(getattr(surface, "name", "") or "").strip()
+        for surface in surfaces
+        if str(getattr(surface, "name", "") or "").strip()
+        and str(getattr(surface, "name", "") or "").strip() not in visible
+    ]
+    if not inactive:
+        return ""
+    return (
+        "## Inactive/Legacy Surface Exclusion\n"
+        "Active problem-boundary control is in force. The surfaces below are "
+        "retained only for legacy compatibility, forced diagnostics, or "
+        "regression coverage; they are omitted from active hypothesis grounding "
+        "and must not replace the active solver-design research object:\n"
+        + "- inactive/legacy: "
+        + ", ".join(inactive)
+    )
+
+
+def _include_operator_files_for_research_code(surfaces: list[Any]) -> bool:
+    if not surfaces:
+        return True
+    return any(
+        str(getattr(surface, "kind", "") or "") == "operator"
+        for surface in surfaces
+    )
+
+
 def _build_research_surfaces_block(surfaces: list[Any]) -> str:
     if not surfaces:
         return ""
@@ -834,6 +928,16 @@ def _append_research_surface_metadata(
             lines.append(
                 f"{prefix}evidence.required_runtime_fields: "
                 f"{', '.join(runtime_fields)}"
+            )
+        mechanism_telemetry = getattr(evidence, "mechanism_telemetry", None)
+        if mechanism_telemetry:
+            lines.append(
+                f"{prefix}evidence.mechanism_telemetry: "
+                + json.dumps(
+                    _json_ready_mechanism_telemetry(mechanism_telemetry),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             )
 
     novelty = getattr(surface, "novelty", None)
@@ -1445,11 +1549,13 @@ def _read_champion_research_code(
     champion: ChampionState,
     *,
     research_surfaces: list[Any],
+    include_operator_files: bool = True,
 ) -> str:
     sections: list[str] = []
-    operator_code = _read_champion_operators(champion)
-    if operator_code:
-        sections.append(operator_code)
+    if include_operator_files:
+        operator_code = _read_champion_operators(champion)
+        if operator_code:
+            sections.append(operator_code)
 
     for file_rel in _list_champion_surface_files(
         champion,
@@ -3158,6 +3264,32 @@ def _summarise_siblings(siblings: List[Branch]) -> str:
     return "\n".join(lines)
 
 
+def _json_ready_mechanism_telemetry(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        try:
+            items = value.items()
+        except AttributeError:
+            return {}
+    else:
+        items = value.items()
+    payload: dict[str, Any] = {}
+    for raw_key, raw_spec in items:
+        key = str(raw_key or "").strip()
+        if not key:
+            continue
+        if isinstance(raw_spec, dict):
+            activation = raw_spec.get("activation_runtime_fields", [])
+            effect = raw_spec.get("effect_probe_runtime_fields", [])
+        else:
+            activation = getattr(raw_spec, "activation_runtime_fields", [])
+            effect = getattr(raw_spec, "effect_probe_runtime_fields", [])
+        payload[key] = {
+            "activation_runtime_fields": _coerce_text_list(activation),
+            "effect_probe_runtime_fields": _coerce_text_list(effect),
+        }
+    return payload
+
+
 def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
     """Format hypothesis fields for Round 2 prompt."""
     lines = [
@@ -3175,6 +3307,15 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
         lines.append(f"complexity_claim: {hypothesis.complexity_claim}")
     if hypothesis.runtime_budget_strategy:
         lines.append(f"runtime_budget_strategy: {hypothesis.runtime_budget_strategy}")
+    if getattr(hypothesis, "mechanism_changes", None):
+        lines.append(
+            "mechanism_changes: "
+            + json.dumps(
+                mechanism_change_dicts(hypothesis),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
     expected_telemetry = getattr(hypothesis, "expected_telemetry", None)
     if expected_telemetry:
         lines.append(
@@ -3534,17 +3675,22 @@ def _read_branch_code(
     champion: ChampionState,
     *,
     research_surfaces: Optional[list[Any]] = None,
+    include_operator_files: bool = True,
 ) -> Optional[str]:
     """Read branch research-surface files that differ from champion.
 
     Returns a formatted string showing modified files, or None if no
     differences are found or the workspace is unavailable.
     """
-    branch_ops_dir = os.path.join(branch_workspace, "operators")
-    champ_ops_dir = os.path.join(champion.code_snapshot_path, "operators")
-
     sections: List[str] = []
-    if os.path.isdir(branch_ops_dir):
+    if include_operator_files:
+        branch_ops_dir = os.path.join(branch_workspace, "operators")
+        champ_ops_dir = os.path.join(champion.code_snapshot_path, "operators")
+    else:
+        branch_ops_dir = ""
+        champ_ops_dir = ""
+
+    if include_operator_files and os.path.isdir(branch_ops_dir):
         try:
             filenames = sorted(
                 f for f in os.listdir(branch_ops_dir)

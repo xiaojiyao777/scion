@@ -23,7 +23,7 @@ class RetryConfig:
 @dataclass(frozen=True)
 class FailureAction:
     action: Literal["retry_llm", "retry_infra", "discard", "abandon",
-                    "infra_suspected", "abandon_fast"]
+                    "infra_suspected", "abandon_fast", "fail_closed"]
     consumes_budget: bool
     writes_hypothesis_memory: bool
     max_retries_remaining: int
@@ -34,6 +34,7 @@ class FailureAction:
 _LIGHT_CATS   = frozenset({"proposal", "contract", "verification_light"})
 _HEAVY_CATS   = frozenset({"verification_heavy", "evaluation"})
 _SEARCH_CATS  = frozenset({"search_guidance"})  # C10_novelty etc: retry_llm, never infra streak
+_CONTROL_CATS = frozenset({"framework_control", "agentic_budget_control", "session_timeout"})
 
 
 class FailureRouter:
@@ -46,6 +47,7 @@ class FailureRouter:
       verification_heavy   → discard (consumes budget, records hypothesis memory)
       infra                → retry_infra (no budget cost)
       evaluation           → discard (consumes budget, records hypothesis memory)
+      framework_control    → fail_closed (no proposal/infra retry streak)
 
     Streak-based escalation (stateful, requires caller to pass streak/total):
       light category streak >= light_streak_infra_suspected → infra_suspected
@@ -76,6 +78,19 @@ class FailureRouter:
                 writes_hypothesis_memory=False,
                 max_retries_remaining=self.retry_config.max_llm_retries,
                 escalation_level=0,
+            )
+
+        # ----------------------------------------------------------------
+        # Framework control failures are deterministic boundary/budget stops,
+        # not candidate proposal quality or environment instability.
+        # ----------------------------------------------------------------
+        if cat in _CONTROL_CATS:
+            return FailureAction(
+                action="fail_closed",
+                consumes_budget=False,
+                writes_hypothesis_memory=False,
+                max_retries_remaining=0,
+                escalation_level=2,
             )
 
         # ----------------------------------------------------------------

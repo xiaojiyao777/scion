@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-18*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -47,6 +47,25 @@ progress updates, and smoke payloads record resolved case paths/data-root
 provenance. `agentic_session.py` has also started its package-like split:
 budget, tool-selection, and feedback helpers now live in focused
 `agentic_session_*` modules while the session class remains the orchestrator.
+
+The 2026-05-18 P2 agentic-control repair closes the latest APS control-loop
+regressions under the v3 boundary model. `expected_telemetry` now teaches and
+enforces category keys (`activity`, `activation`, `effect`, `budget`) separately
+from runtime field paths. APS session wall-time timeouts are recorded as
+`session_timeout` / `agentic_budget_control` skip evidence rather than
+`runtime_exception/tool_error`, and code repair checks wall-time reserve before
+requesting another code LLM call. Core routing treats deterministic APS control
+timeouts as framework-control fail-closed and treats `algorithm_smoke_failure`
+as candidate-scoped `agent_quality_blocked`, not generic `PROPOSAL` or
+`infra_suspected`.
+
+The accepted follow-up Sonnet 3-round validation is
+[`v0.4-p2-agentic-control-validation-sonnet-3r-20260518.md`](../experiments/v0.4/v0.4-p2-agentic-control-validation-sonnet-3r-20260518.md).
+It produced one formal screening candidate and two healthy algorithm-smoke
+quality blocks. No session-timeout misclassification, terminal-preview skip,
+budget-control skip, `runtime_exception/tool_error`, or `infra_suspected`
+regression appeared. This is framework-control evidence only; it is not solver
+quality evidence and does not justify champion promotion.
 
 The current repair changes the active CVRP research object. `solver_design`
 now targets a branch-owned solver-design package: stable entrypoint

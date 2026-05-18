@@ -7,7 +7,13 @@ import sqlite3
 from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 
-from scion.core.models import Branch, BranchState, HypothesisRecord
+from scion.core.models import (
+    Branch,
+    BranchState,
+    HypothesisRecord,
+    MechanismChange,
+    mechanism_change_dicts,
+)
 
 if TYPE_CHECKING:
     from scion.lineage.registry import LineageRegistry
@@ -21,6 +27,27 @@ def _json_mapping(raw: object) -> dict:
     except (TypeError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _json_mechanism_changes(raw: object) -> tuple[MechanismChange, ...]:
+    if not raw:
+        return ()
+    try:
+        value = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return ()
+    if not isinstance(value, list):
+        return ()
+    changes: list[MechanismChange] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        mechanism_id = str(item.get("id") or "").strip()
+        change_type = str(item.get("change_type") or "").strip()
+        if not mechanism_id or not change_type:
+            continue
+        changes.append(MechanismChange(id=mechanism_id, change_type=change_type))
+    return tuple(changes)
 
 
 class BranchStore:
@@ -122,8 +149,9 @@ class HypothesisStore:
                  hypothesis_text, created_at, base_champion_version,
                  family_id, family_source, taxonomy_version,
                  predicted_direction, target_objectives_json,
-                 protected_objectives_json, novelty_signature_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 protected_objectives_json, novelty_signature_json,
+                 mechanism_changes_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     hyp.hypothesis_id,
@@ -144,6 +172,7 @@ class HypothesisStore:
                     json.dumps(list(hyp.target_objectives)),
                     json.dumps(list(hyp.protected_objectives)),
                     json.dumps(hyp.novelty_signature or {}, sort_keys=True),
+                    json.dumps(mechanism_change_dicts(hyp), sort_keys=True),
                 ),
             )
 
@@ -240,6 +269,9 @@ class HypothesisStore:
             target_objectives=tuple(json.loads(d.get("target_objectives_json") or "[]")),
             protected_objectives=tuple(json.loads(d.get("protected_objectives_json") or "[]")),
             novelty_signature=_json_mapping(d.get("novelty_signature_json")),
+            mechanism_changes=_json_mechanism_changes(
+                d.get("mechanism_changes_json")
+            ),
         )
 
     # ---------------------------------------------------------------

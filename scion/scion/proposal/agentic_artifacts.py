@@ -570,17 +570,69 @@ def resume_from_artifact(
         if isinstance(payload.get("failure_ledger"), Mapping)
         else {}
     )
+    raw_budget = (
+        payload.get("tool_budget_used", {})
+        if isinstance(payload.get("tool_budget_used"), Mapping)
+        else {}
+    )
+    compact_budget = {
+        key: raw_budget.get(key)
+        for key in ("tool_steps", "tool_calls", "observation_chars")
+        if raw_budget.get(key) is not None
+    }
+    preview_budget = {
+        key: raw_budget.get(key)
+        for key in ("preview_tool_steps", "preview_tool_calls")
+        if raw_budget.get(key)
+    }
+    if preview_budget:
+        compact_budget["preview_tool_calls"] = preview_budget.get(
+            "preview_tool_calls"
+        )
     context = {
         "schema_version": payload.get("schema_version"),
         "session_id": payload.get("session_id"),
         "request_id": payload.get("request_id"),
         "termination_reason": payload.get("termination_reason"),
         "transcript_digest": payload.get("transcript_digest"),
-        "tool_budget_used": payload.get("tool_budget_used", {}),
+        "tool_budget_used": compact_budget,
         "tool_steps": tool_steps,
     }
     if payload.get("failure_category"):
         context["failure_category"] = payload.get("failure_category")
+    structured_rejection = payload.get("structured_rejection")
+    if isinstance(structured_rejection, Mapping):
+        context["structured_rejection"] = {
+            key: value
+            for key, value in {
+                "source": structured_rejection.get("source"),
+                "gate_name": structured_rejection.get("gate_name"),
+                "mechanism": structured_rejection.get("mechanism"),
+                "premise_check": structured_rejection.get("premise_check"),
+                "failure_category": structured_rejection.get("failure_category"),
+                "legacy_failure_category": structured_rejection.get(
+                    "legacy_failure_category"
+                ),
+                "failure_code": structured_rejection.get("failure_code"),
+                "agent_block_reason": structured_rejection.get(
+                    "agent_block_reason"
+                ),
+                "reason": _sanitize_agentic_value(
+                    str(structured_rejection.get("reason") or "")[:1200]
+                ),
+                "evidence": _sanitize_agentic_value(
+                    list(structured_rejection.get("evidence") or ())[:8]
+                ),
+                "snapshot_digest": structured_rejection.get("snapshot_digest"),
+                "selected_surface": structured_rejection.get("selected_surface"),
+                "target_file": structured_rejection.get("target_file"),
+                "retry_constraint": (
+                    "Do not repeat this missing-premise or duplicate mechanism; "
+                    "choose a different mechanism family."
+                ),
+            }.items()
+            if value
+        }
     if int(failure_ledger.get("entry_count") or 0) > 0:
         context["failure_ledger"] = failure_ledger
     summary = json.dumps(context, sort_keys=True, default=str)
@@ -643,6 +695,8 @@ def _tool_budget_used_payload(state: AgenticProposalSessionState) -> dict[str, i
     return {
         "tool_steps": int(state.tool_step_count),
         "tool_calls": int(state.tool_call_count),
+        "preview_tool_steps": int(state.preview_tool_step_count),
+        "preview_tool_calls": int(state.preview_tool_call_count),
         "observation_chars": int(state.observation_chars_used),
     }
 

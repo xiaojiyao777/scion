@@ -348,13 +348,21 @@ def legacy_inactive_surface_exclusion() -> dict[str, Any]:
             "present or absent."
         ),
         "excluded_surfaces": [
+            "route_local",
+            "route_pair",
+            "ruin_recreate",
+            "search_policy",
+            "baseline_policy",
+            "construction_policy",
+            "neighborhood_portfolio",
             "algorithm_blueprint",
+            "main_search_strategy",
             "alns_vns_policy",
             "destroy_repair_policy",
-            "construction_policy",
+            "route_pair_candidate_policy",
+            "acceptance_restart_policy",
             "local_search_policy",
             "acceptance_policy",
-            "route_pair_candidate_policy",
         ],
         "excluded_files_or_hooks": [
             {

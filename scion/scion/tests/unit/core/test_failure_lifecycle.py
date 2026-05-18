@@ -4,6 +4,7 @@ from scion.core.branch import BranchController
 from scion.core.failure_lifecycle import FailureLifecycleService
 from scion.core.features import BudgetState
 from scion.core.models import (
+    BranchState,
     ChampionState,
     FailureEvent,
     HypothesisProposal,
@@ -52,6 +53,7 @@ def _service(
     budget: BudgetState | None = None,
     hypotheses: dict | None = None,
     hard_abandons: list[tuple[str, str]] | None = None,
+    status_heartbeats: list[tuple[str, str, str | None]] | None = None,
 ) -> tuple[FailureLifecycleService, BudgetState, FakeHypothesisStore, FakeBranchStore, FakeRegistry, dict[str, int], dict[str, int]]:
     budget = budget or BudgetState(total=100, used=0)
     hyp_store = FakeHypothesisStore()
@@ -74,6 +76,17 @@ def _service(
         campaign_id="campaign-1",
         get_champion=_champion,
         record_hard_abandon=lambda branch_id, reason: hard_abandons.append((branch_id, reason)),
+        status_heartbeat=(
+            None
+            if status_heartbeats is None
+            else lambda event_kind, branch, failure: status_heartbeats.append(
+                (
+                    event_kind,
+                    branch.branch_id,
+                    failure.category if failure is not None else None,
+                )
+            )
+        ),
     )
     return service, budget, hyp_store, branch_store, registry, failure_streak, total_failures
 
@@ -132,3 +145,35 @@ def test_repeated_infra_failure_records_hard_abandon() -> None:
     service.handle_failure(branch, FailureEvent(category="infra", detail="runner down"))
 
     assert hard_abandons == [(branch.branch_id, "infra_permanent")]
+
+
+def test_framework_control_timeout_fail_closed_without_budget_or_proposal_streak() -> None:
+    ctrl = BranchController()
+    branch = ctrl.create_branch(_champion())
+    hard_abandons: list[tuple[str, str]] = []
+    heartbeats: list[tuple[str, str, str | None]] = []
+    service, budget, _, branch_store, registry, streak, totals = _service(
+        ctrl,
+        hard_abandons=hard_abandons,
+        status_heartbeats=heartbeats,
+    )
+
+    service.handle_failure(
+        branch,
+        FailureEvent(
+            category="framework_control",
+            detail="agentic_proposal:session_timeout: max_wall_time_sec=10",
+        ),
+    )
+
+    assert branch.state == BranchState.ABANDONED
+    assert branch.pending_retry is False
+    assert branch.retry_count == 1
+    assert branch.failure_codes == ["FRAMEWORK_CONTROL"]
+    assert budget.used == 0
+    assert streak == {"framework_control": 1}
+    assert totals == {"framework_control": 1}
+    assert hard_abandons == [(branch.branch_id, "framework_control_fail_closed")]
+    assert branch_store.saved == [branch.branch_id]
+    assert registry.events[-1]["event_kind"] == "framework_control_fail_closed"
+    assert heartbeats == [("failure_handled", branch.branch_id, "framework_control")]

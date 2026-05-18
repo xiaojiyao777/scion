@@ -699,7 +699,7 @@ class TestK5ContractFailure:
             target_file=None,
             failure_reason="C2_change_locus: invalid",
         )
-        import sqlite3, json
+        import sqlite3
         conn = sqlite3.connect(db)
         conn.row_factory = sqlite3.Row
         row = conn.execute(

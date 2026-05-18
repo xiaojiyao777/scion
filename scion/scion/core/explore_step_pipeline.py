@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 _AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
 _PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
 _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
+_ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
+_AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
+_AGENTIC_SESSION_TIMEOUT = "agentic_session_timeout"
 
 
 def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
@@ -48,18 +51,43 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         _AGENT_QUALITY_BLOCKED in text
         or _PROPOSAL_PREMISE_CONTRADICTED in text
         or _AGENT_GROUNDING_FAILURE in text
+        or _ALGORITHM_SMOKE_FAILURE in text
+        or "algorithm smoke did not pass" in text.lower()
+        or "runtime_smoke.telemetry_guard" in text.lower()
+    )
+
+
+def _is_agentic_control_timeout_detail(detail: str | None) -> bool:
+    text = str(detail or "").lower()
+    return (
+        "agentic_budget_control" in text
+        or "agentic_proposal:session_timeout" in text
+        or ("max_wall_time_sec" in text and "agentic" in text)
+        or "contract preview skipped by agentic session_timeout/budget control" in text
+        or (
+            "session_timeout" in text
+            and ("agentic" in text or "budget control" in text)
+        )
+        or (
+            "insufficient wall-time reserve" in text
+            and "agentic" in text
+        )
     )
 
 
 def _proposal_failure_stage(detail: str | None, default: str) -> str:
     if _is_agent_quality_blocked_detail(detail):
         return _AGENT_QUALITY_BLOCKED
+    if _is_agentic_control_timeout_detail(detail):
+        return _AGENTIC_BUDGET_CONTROL
     return default
 
 
 def _proposal_failure_reason(detail: str | None, default: str) -> str:
     if _is_agent_quality_blocked_detail(detail):
         return _AGENT_QUALITY_BLOCKED
+    if _is_agentic_control_timeout_detail(detail):
+        return _AGENTIC_SESSION_TIMEOUT
     return default
 
 
@@ -223,6 +251,7 @@ class ExploreStepPipeline:
                     self.proposal_failure_detail_for(bid)
                     or "hypothesis generation failed"
                 )
+                control_timeout = _is_agentic_control_timeout_detail(failure_detail)
                 self._record_proposal_fail_event(bid, failure_detail)
                 self.record_step(
                     StepRecord(
@@ -249,6 +278,8 @@ class ExploreStepPipeline:
                         failure_detail,
                         "hypothesis generation failed",
                     ),
+                    stopped=control_timeout,
+                    counts_toward_max_rounds=not control_timeout,
                 )
             if h_record is None:
                 raise RuntimeError(
@@ -315,8 +346,14 @@ class ExploreStepPipeline:
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
+            control_timeout = _is_agentic_control_timeout_detail(detailed_failure)
             quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
-            if quality_blocked:
+            if control_timeout:
+                branch.pending_retry = False
+                branch.consecutive_llm_retries = 0
+                failure_detail = detailed_failure or _AGENTIC_SESSION_TIMEOUT
+                self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
+            elif quality_blocked:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
@@ -344,7 +381,7 @@ class ExploreStepPipeline:
                     branch_id=bid,
                     hypothesis=hypothesis,
                     patch=None,
-                    contract_passed=True,
+                    contract_passed=not quality_blocked,
                     verification_passed=False,
                     protocol_result=None,
                     decision=None,
@@ -368,7 +405,8 @@ class ExploreStepPipeline:
                     failure_detail,
                     "code generation failed",
                 ),
-                counts_toward_max_rounds=not retry_attempt,
+                stopped=control_timeout,
+                counts_toward_max_rounds=(not retry_attempt and not control_timeout),
             )
 
         p_result = self.contract_gate.validate_patch(

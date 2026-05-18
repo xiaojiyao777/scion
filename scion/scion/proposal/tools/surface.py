@@ -81,7 +81,7 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
         if surface is None:
             available_surfaces = [
                 str(_attr(candidate, "name") or _attr(candidate, "id") or "")
-                for candidate in _surfaces(context)
+                for candidate in _surface_list_for_context(context, _surfaces(context))
             ]
             return self._error(
                 context,
@@ -96,6 +96,29 @@ class ContextReadSurfaceTool(_BaseReadOnlyTool):
                     ],
                 },
                 repair_hint="Use context.list_surfaces and select a declared surface.",
+            )
+        boundary_violation = _surface_read_boundary_violation(context, args.surface)
+        if boundary_violation is not None:
+            return self._error(
+                context,
+                failure_code=ProposalToolFailureCode.PERMISSION_DENIED,
+                summary=boundary_violation,
+                structured_payload={
+                    "requested_surface": args.surface,
+                    "surface_state": "inactive_legacy",
+                    "active_problem_boundary_surfaces": (
+                        _allowed_surface_names_for_context(context)
+                    ),
+                    "rule": (
+                        "Read active solver_design for hypothesis grounding. "
+                        "Legacy/component surfaces are available only when "
+                        "explicitly forced for diagnostics."
+                    ),
+                },
+                repair_hint=(
+                    "Use context.read_surface with surface='solver_design' or "
+                    "the active forced surface."
+                ),
             )
         target_files = _surface_target_files(surface)
         target_file = args.target_file or _first_concrete_target(target_files)
@@ -241,6 +264,7 @@ def _surface_function_signatures(surface: Any | None) -> dict[str, list[str]]:
         normalized[name] = args
     return normalized
 
+
 def _surface_return_values(surface: Any | None) -> dict[str, Any]:
     if surface is None:
         return {}
@@ -249,6 +273,7 @@ def _surface_return_values(surface: Any | None) -> dict[str, Any]:
     if not isinstance(values, Mapping):
         return {}
     return _compact_mapping_payload(values)
+
 
 def _surface_for_patch_path(
     context: ProposalToolContext,
@@ -261,6 +286,34 @@ def _surface_for_patch_path(
         if _target_declared(normalized, _surface_target_files(surface)):
             return surface
     return None
+
+
+def _allowed_surface_names_for_context(context: ProposalToolContext) -> list[str]:
+    forced_surface = str(context.forced_surface or "").strip()
+    if forced_surface:
+        return [forced_surface]
+    return [
+        str(surface or "").strip()
+        for surface in context.active_problem_boundary_surfaces
+        if str(surface or "").strip()
+    ]
+
+
+def _surface_read_boundary_violation(
+    context: ProposalToolContext,
+    requested_surface: str,
+) -> str | None:
+    allowed = _allowed_surface_names_for_context(context)
+    if not allowed:
+        return None
+    requested = str(requested_surface or "").strip()
+    if requested in set(allowed):
+        return None
+    return (
+        "active_problem_boundary_constraint: context.read_surface may only "
+        f"read active surface(s) {allowed!r}; got {requested!r}."
+    )
+
 
 def _surface_for_hypothesis(
     context: ProposalToolContext,
@@ -555,6 +608,9 @@ def _compact_evidence_payload(surface: Any) -> dict[str, Any]:
             "stage_budget_runtime_fields": _coerce_compact_list(
                 _attr(evidence, "stage_budget_runtime_fields", [])
             ),
+            "mechanism_telemetry": _compact_mapping_payload(
+                _attr(evidence, "mechanism_telemetry", {})
+            ),
             "fail_closed_on_zero_activity": _attr(
                 evidence, "fail_closed_on_zero_activity", False
             ),
@@ -745,6 +801,11 @@ def _compact_surface_interface_summary(surface: Any, *, section: str = "all") ->
             lines,
             "evidence.required_runtime_fields",
             evidence.get("required_runtime_fields"),
+        )
+        _append_compact_summary_line(
+            lines,
+            "evidence.mechanism_telemetry",
+            evidence.get("mechanism_telemetry"),
         )
     novelty = compact.get("novelty")
     if isinstance(novelty, Mapping):

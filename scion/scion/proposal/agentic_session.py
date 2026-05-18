@@ -8,14 +8,12 @@ that downstream Contract/Workspace/Verification services already understand.
 from __future__ import annotations
 
 import json
-import re
 import signal
 import threading
 import time
 import uuid
 from dataclasses import replace
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -68,6 +66,48 @@ from scion.proposal.agentic_code_context import (
 from scion.proposal.agentic_diagnostics import (
     _research_diagnosis_from_observations,
 )
+from scion.proposal.agentic_failure_classification import (
+    _hypothesis_semantic_retry_rejection_payload,
+    _failure_ledger_payload,
+    _normalized_structured_rejection,
+    _patch_premise_rejection,
+    _patch_self_reported_unresolved_issue,
+    _preview_failure_category,
+    _record_failure_ledger_entry,
+    _rejection_termination_reason,
+    _structured_output_failure_category,
+    _terminal_failure_category,
+)
+from scion.proposal.agentic_grounding import (
+    _SOLVER_DESIGN_FILE_DISCOVERY_TOOLS,
+    _SOLVER_DESIGN_GROUNDING_TOOLS,
+    _SOLVER_DESIGN_SURFACE_NAMES,
+    _active_solver_mechanism_evidence_for_code_context,
+    _compact_active_solver_observation_for_budget,
+    _context_requires_solver_design_grounding,
+    _fallback_required_context_tool_names,
+    _has_active_solver_embedded_call_graph,
+    _has_successful_solver_call_graph_grounding,
+    _is_solver_design_hypothesis,
+    _missing_solver_design_grounding_error,
+    _required_context_tool_names,
+    _run_required_context_preface as _run_required_context_preface_tools,
+    _run_selected_surface_observation_tool as _run_selected_surface_context_tool,
+    _run_solver_design_grounding_tools as _run_solver_design_grounding_context_tools,
+    _solver_design_grounding_call_satisfied,
+    _solver_design_target_file_read_args,
+)
+from scion.proposal.agentic_planner_policy import (
+    _available_compact_feedback_tools as _planner_available_compact_feedback_tools,
+    _missing_planner_context_error as _planner_missing_context_error,
+    _missing_required_context_error as _policy_missing_required_context_error,
+    _planner_context_satisfied as _planner_policy_context_satisfied,
+    _planner_observation_requires_fallback as _policy_planner_observation_requires_fallback,
+    _pop_deferred_code_phase_tool_call,
+    _push_deferred_code_phase_tool_call,
+    _should_defer_diagnosis_tool_to_code_phase,
+    _solver_design_planner_algorithm_file_read_budget_exhausted,
+)
 from scion.proposal.mechanism_novelty import MechanismNoveltyGate
 from scion.proposal.agentic_preview import (
     AgenticSelfCheck,
@@ -78,6 +118,7 @@ from scion.proposal.agentic_preview import (
     _latest_preview_failure_detail,
     _minimal_self_check_preview_observation,
     _preview_observation_passed,
+    _preview_skip_is_agentic_budget_control,
     _self_check_failure_detail,
     _self_check_from_previews,
     _self_check_required,
@@ -151,24 +192,8 @@ from scion.proposal.tools import (
 
 _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC = 12.0
 _ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC = 36.0
-_SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\b(?:has|contains)\s+(?:a\s+)?syntax error\b"), "syntax_error"),
-    (re.compile(r"\binvalid syntax\b"), "syntax_error"),
-    (re.compile(r"\b(?:does not|will not|won't)\s+compile\b"), "does_not_compile"),
-    (re.compile(r"\bneeds\s+(?:fixing|to be fixed)\b"), "needs_fixing"),
-    (re.compile(r"\bmust\s+be\s+fixed\b"), "needs_fixing"),
-    (re.compile(r"\bstill\s+(?:broken|failing|fails)\b"), "still_failing"),
-    (re.compile(r"\b(?:not implemented|not yet implemented)\b"), "not_implemented"),
-    (re.compile(r"\b(?:incomplete|unfinished)\b"), "incomplete"),
-    (re.compile(r"\b(?:todo|fixme)\b"), "placeholder"),
-)
-_SELF_REPORTED_SYNTAX_NEGATIONS = (
-    "no syntax error",
-    "no syntax errors",
-    "without syntax error",
-    "without syntax errors",
-    "valid syntax",
-    "syntax-valid",
+_FINAL_PREVIEW_WALL_TIME_RESERVE_SEC = (
+    _CONTRACT_PREVIEW_TOOL_TIMEOUT_SEC + _ALGORITHM_SMOKE_TOOL_TIMEOUT_SEC + 5.0
 )
 _CODE_PROMPT_STRING_CHARS = 1600
 _CODE_PROMPT_LIST_ITEMS = 12
@@ -190,48 +215,19 @@ _AUTHORITATIVE_PREVIEW_TOOL_NAMES = frozenset(
     }
 )
 _AUTHORITATIVE_PREVIEW_SELECTION_SOURCES = frozenset({"fallback_selected"})
-_SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
 _HYPOTHESIS_PROMPT_COMPACT_REQUIREMENT_TOOLS = frozenset(
     {
         "feedback.query_screening",
         "feedback.query_runtime",
     }
 )
-_SOLVER_DESIGN_GROUNDING_TOOLS = (
-    "context.read_active_solver_design",
-    "context.read_solver_call_graph",
-)
-_SOLVER_DESIGN_FILE_DISCOVERY_TOOLS = ("context.list_algorithm_files",)
-_SOLVER_DESIGN_BROAD_TERMS = (
-    "hybrid",
-    "alns",
-    "vns",
-    "lns",
-    "destroy",
-    "repair",
-    "recombination",
-    "route-pool",
-    "route pool",
-    "population",
-    "portfolio",
-    "ensemble",
-    "multi-operator",
-    "multi operator",
-    "restart",
-    "perturb",
-)
 _PATCH_METADATA_FIELDS = frozenset(
     {"premise_check", "premise_check_reason", "repair_attribution"}
 )
-_FAILURE_LEDGER_SCHEMA_VERSION = "agentic-retry-error-ledger.v1"
 _MECHANISM_NOVELTY_GATE = MechanismNoveltyGate()
+_MAX_HYPOTHESIS_SEMANTIC_RETRIES = 1
+_APS_TARGET_ALGORITHM_FILE_READ_CHARS = 24000
 _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS = 24000
-_PREVIEW_OBSERVATION_BUDGET_EXHAUSTED_CODE = "observation_budget_exhausted"
-_PREVIEW_SESSION_TIMEOUT_CODE = "session_timeout"
-_AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
-_LEGACY_PREMISE_CONTRADICTED = AgenticFailureCategory.PREMISE_CONTRADICTED.value
-_PROPOSAL_PREMISE_CONTRADICTED_CODE = "proposal_premise_contradicted"
-_AGENT_QUALITY_BLOCKED_REASON = "agent_quality_blocked"
 
 
 class _ProposalToolTimeout(BaseException):
@@ -282,15 +278,6 @@ def _is_authoritative_self_check_preview_call(
         and name in _AUTHORITATIVE_PREVIEW_TOOL_NAMES
         and selection_source in _AUTHORITATIVE_PREVIEW_SELECTION_SOURCES
     )
-
-
-def _preview_limit_error_code(tool_name: str, stop_reason: str) -> str:
-    if stop_reason == "session_timeout":
-        return _PREVIEW_SESSION_TIMEOUT_CODE
-    if stop_reason == "observation_budget_exhausted":
-        return _PREVIEW_OBSERVATION_BUDGET_EXHAUSTED_CODE
-    suffix = str(tool_name or "preview").split(".")[-1]
-    return f"tool_loop_limit_before_{suffix}"
 
 
 def _can_use_signal_timeout() -> bool:
@@ -484,157 +471,29 @@ class AgenticProposalSession:
 
         hypothesis = request.approved_hypothesis
         if hypothesis is None:
-            if self._session_timeout_reached(state):
-                output = self._timeout_output(
-                    request,
-                    state,
-                    evidence_used=tuple(evidence),
-                )
-                state.status = output.status
-                return self._persist(output, state)
-            state.note(
-                AgenticProposalPhase.CHOOSE_SURFACE, "Delegating hypothesis generation."
-            )
-            state.note(
-                AgenticProposalPhase.DRAFT_HYPOTHESIS, "Generating hypothesis proposal."
-            )
-            try:
-                hypothesis_context = dict(
-                    _sanitize_agentic_value(request.hypothesis_context or {})
-                )
-                if request.resume_context is not None:
-                    hypothesis_context["agentic_resume_context"] = (
-                        _sanitize_agentic_value(request.resume_context)
-                    )
-                constraints = self._hypothesis_constraints(tool_context)
-                if constraints:
-                    hypothesis_context["agentic_hypothesis_constraints"] = (
-                        _sanitize_agentic_value(constraints)
-                    )
-                if observations:
-                    prompt_observations = _hypothesis_prompt_observations(
-                        observations,
-                        tool_context,
-                    )
-                    research_diagnosis = _research_diagnosis_from_observations(
-                        observations
-                    )
-                    if research_diagnosis:
-                        hypothesis_context["agentic_research_diagnosis"] = (
-                            research_diagnosis
-                        )
-                    hypothesis_context["agentic_tool_observations"] = [
-                        _observation_prompt_payload(observation)
-                        for observation in prompt_observations
-                    ]
-                else:
-                    prompt_observations = []
-                self._record_prompt_manifest(
-                    state,
-                    call_kind="hypothesis",
-                    prompt_context=hypothesis_context,
-                    observations=prompt_observations,
-                )
-                hypothesis = self._creative.generate_hypothesis(hypothesis_context)
-            except self._SESSION_ERROR_TYPES as exc:
-                failure_category = _structured_output_failure_category(exc)
-                _record_failure_ledger_entry(
-                    state,
-                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
-                    category=failure_category,
-                    detail=str(exc),
-                    source="hypothesis_generation_exception",
-                    attempt=1,
-                )
-                output = self._failed_output(
-                    request=request,
-                    session_id=session_id,
-                    status=AgenticProposalStatus.FAILED,
-                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
-                    detail=str(exc),
-                    evidence_used=tuple(evidence),
-                    failure_category=failure_category,
-                )
-                state.status = output.status
-                state.note(
-                    AgenticProposalPhase.FINALIZE,
-                    "Hypothesis generation failed.",
-                    metadata={"error": type(exc).__name__},
-                )
-                return self._persist(output, state)
-            if self._session_timeout_reached(state):
-                output = self._timeout_output(
-                    request,
-                    state,
-                    evidence_used=tuple(evidence),
-                )
-                state.status = output.status
-                return self._persist(output, state)
-
-            forced_violation = self._forced_hypothesis_violation(
-                tool_context,
-                hypothesis,
+            hypothesis, early_output = self._generate_hypothesis_with_semantic_retries(
                 request=request,
+                session_id=session_id,
+                state=state,
+                tool_context=tool_context,
+                observations=observations,
+                evidence=evidence,
             )
-            if forced_violation is not None:
+            if early_output is not None:
+                return early_output
+            if hypothesis is None:
                 output = self._failed_output(
                     request=request,
                     session_id=session_id,
                     status=AgenticProposalStatus.FAILED,
                     termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
-                    detail=forced_violation,
+                    detail="hypothesis generation failed",
                     evidence_used=tuple(evidence),
-                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                    failure_category=AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE,
                 )
                 state.status = output.status
-                state.note(
-                    AgenticProposalPhase.FINALIZE,
-                    "Hypothesis generation violated the forced research-surface constraint.",
-                    metadata={"detail": forced_violation},
-                )
                 return self._persist(output, state)
-
             if tool_context is not None:
-                if _is_solver_design_hypothesis(hypothesis):
-                    grounding_observations = self._run_solver_design_grounding_tools(
-                        tool_context,
-                        state,
-                        observations,
-                        selection_source="solver_design_grounding_required",
-                    )
-                    observations.extend(grounding_observations)
-                    evidence.extend(_evidence_from_observations(grounding_observations))
-                    grounding_error = _missing_solver_design_grounding_error(
-                        observations,
-                        hypothesis=hypothesis,
-                    )
-                    if grounding_error is not None:
-                        output = self._failed_output(
-                            request=request,
-                            session_id=session_id,
-                            status=AgenticProposalStatus.FAILED,
-                            termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
-                            detail=grounding_error,
-                            evidence_used=tuple(evidence),
-                            failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
-                        )
-                        state.status = output.status
-                        state.note(
-                            AgenticProposalPhase.FINALIZE,
-                            "Session failed closed before solver_design hypothesis approval because active solver grounding was missing.",
-                            metadata={"detail": grounding_error},
-                        )
-                        return self._persist(output, state)
-                    novelty_output = self._mechanism_novelty_failed_output(
-                        request=request,
-                        session_id=session_id,
-                        state=state,
-                        hypothesis=hypothesis,
-                        observations=observations,
-                        evidence_used=tuple(evidence),
-                    )
-                    if novelty_output is not None:
-                        return novelty_output
                 selected_surface_observations = (
                     self._run_selected_surface_observation_tool(
                         tool_context,
@@ -795,12 +654,14 @@ class AgenticProposalSession:
                     state,
                     observations,
                     selection_source="solver_design_grounding_required",
+                    hypothesis=hypothesis,
                 )
                 observations.extend(grounding_observations)
                 evidence.extend(_evidence_from_observations(grounding_observations))
                 grounding_error = _missing_solver_design_grounding_error(
                     observations,
                     hypothesis=hypothesis,
+                    context=tool_context,
                 )
                 if grounding_error is not None:
                     output = self._failed_output(
@@ -929,6 +790,35 @@ class AgenticProposalSession:
                 hypothesis,
                 timeout_retry=False,
             )
+            if tool_context is not None and self._code_phase_wall_time_reserved(state):
+                detail = (
+                    "insufficient wall-time reserve before code generation for "
+                    "mandatory contract preview and algorithm smoke"
+                )
+                output = self._partial_hypothesis_output(
+                    request=request,
+                    session_id=session_id,
+                    hypothesis=hypothesis,
+                    detail=detail,
+                    evidence_used=tuple(evidence),
+                    self_check=self._self_check_from_authoritative_previews(
+                        observations,
+                        state,
+                    ),
+                    failure_category=AgenticFailureCategory.AGENTIC_BUDGET_CONTROL,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Stopped before code generation to preserve mandatory preview wall-time reserve.",
+                    metadata={
+                        "detail": detail,
+                        "remaining_wall_time_sec": self._remaining_wall_time_sec(
+                            state
+                        ),
+                    },
+                )
+                return self._persist(output, state)
             state.note(AgenticProposalPhase.DRAFT_PATCH, "Generating patch proposal.")
             patch = self._generate_code_with_timeout_retry(
                 state=state,
@@ -1103,6 +993,31 @@ class AgenticProposalSession:
                         observation=patch_preview,
                         repair_attempt=code_repair_attempts_used,
                     )
+                    if self._code_phase_wall_time_reserved(state):
+                        state.note(
+                            AgenticProposalPhase.SELF_CHECK,
+                            "Stopped Contract-preview repair to preserve mandatory preview wall-time reserve.",
+                            metadata={
+                                "tool_name": patch_preview.tool_name,
+                                "skip_reason": "preview_repair_wall_time_reserved",
+                                "repair_attempts_used": code_repair_attempts_used,
+                                "remaining_wall_time_sec": self._remaining_wall_time_sec(
+                                    state
+                                ),
+                            },
+                        )
+                        break
+                    if _preview_skip_is_agentic_budget_control(patch_preview):
+                        state.note(
+                            AgenticProposalPhase.SELF_CHECK,
+                            "Skipped Contract preview repair because APS budget control reserved self-check execution.",
+                            metadata={
+                                "tool_name": patch_preview.tool_name,
+                                "skip_reason": "agentic_budget_control",
+                                "repair_attempts_used": code_repair_attempts_used,
+                            },
+                        )
+                        break
                     if (
                         code_repair_attempts_used
                         >= self._tool_loop_config.max_code_repair_attempts
@@ -1229,6 +1144,31 @@ class AgenticProposalSession:
                     observation=smoke_preview,
                     repair_attempt=code_repair_attempts_used,
                 )
+                if self._code_phase_wall_time_reserved(state):
+                    state.note(
+                        AgenticProposalPhase.SELF_CHECK,
+                        "Stopped algorithm-smoke repair to preserve mandatory preview wall-time reserve.",
+                        metadata={
+                            "tool_name": smoke_preview.tool_name,
+                            "skip_reason": "preview_repair_wall_time_reserved",
+                            "repair_attempts_used": code_repair_attempts_used,
+                            "remaining_wall_time_sec": self._remaining_wall_time_sec(
+                                state
+                            ),
+                        },
+                    )
+                    break
+                if _preview_skip_is_agentic_budget_control(smoke_preview):
+                    state.note(
+                        AgenticProposalPhase.SELF_CHECK,
+                        "Skipped algorithm-smoke repair because APS budget control reserved self-check execution.",
+                        metadata={
+                            "tool_name": smoke_preview.tool_name,
+                            "skip_reason": "agentic_budget_control",
+                            "repair_attempts_used": code_repair_attempts_used,
+                        },
+                    )
+                    break
                 if (
                     code_repair_attempts_used
                     >= self._tool_loop_config.max_code_repair_attempts
@@ -1728,6 +1668,267 @@ class AgenticProposalSession:
             evidence_used=evidence_used,
         )
 
+    def _generate_hypothesis_with_semantic_retries(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        state: AgenticProposalSessionState,
+        tool_context: ProposalToolContext | None,
+        observations: list[ProposalObservation],
+        evidence: list[AgenticEvidenceRef],
+    ) -> tuple[HypothesisProposal | None, AgenticProposalOutput | None]:
+        semantic_rejections: list[Mapping[str, Any]] = []
+        max_attempts = 1 + _MAX_HYPOTHESIS_SEMANTIC_RETRIES
+        for attempt in range(1, max_attempts + 1):
+            if self._session_timeout_reached(state):
+                output = self._timeout_output(
+                    request,
+                    state,
+                    evidence_used=tuple(evidence),
+                )
+                state.status = output.status
+                return None, self._persist(output, state)
+            state.note(
+                AgenticProposalPhase.CHOOSE_SURFACE,
+                "Delegating hypothesis generation.",
+                metadata={"attempt": attempt},
+            )
+            state.note(
+                AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                "Generating hypothesis proposal.",
+                metadata={"attempt": attempt},
+            )
+            try:
+                hypothesis_context, prompt_observations = (
+                    self._hypothesis_prompt_context(
+                        request=request,
+                        tool_context=tool_context,
+                        observations=observations,
+                        semantic_rejections=semantic_rejections,
+                        attempt=attempt,
+                    )
+                )
+                self._record_prompt_manifest(
+                    state,
+                    call_kind=(
+                        "hypothesis"
+                        if attempt == 1
+                        else "hypothesis_semantic_retry"
+                    ),
+                    prompt_context=hypothesis_context,
+                    observations=prompt_observations,
+                )
+                assert self._creative is not None
+                hypothesis = self._creative.generate_hypothesis(hypothesis_context)
+            except self._SESSION_ERROR_TYPES as exc:
+                failure_category = _structured_output_failure_category(exc)
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    category=failure_category,
+                    detail=str(exc),
+                    source="hypothesis_generation_exception",
+                    attempt=attempt,
+                )
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=str(exc),
+                    evidence_used=tuple(evidence),
+                    failure_category=failure_category,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Hypothesis generation failed.",
+                    metadata={"error": type(exc).__name__, "attempt": attempt},
+                )
+                return None, self._persist(output, state)
+
+            if self._session_timeout_reached(state):
+                output = self._timeout_output(
+                    request,
+                    state,
+                    evidence_used=tuple(evidence),
+                )
+                state.status = output.status
+                return None, self._persist(output, state)
+
+            forced_violation = self._forced_hypothesis_violation(
+                tool_context,
+                hypothesis,
+                request=request,
+            )
+            if forced_violation is not None:
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=forced_violation,
+                    evidence_used=tuple(evidence),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Hypothesis generation violated the forced research-surface constraint.",
+                    metadata={"detail": forced_violation, "attempt": attempt},
+                )
+                return None, self._persist(output, state)
+
+            novelty_output = self._solver_design_semantic_rejection_or_retry(
+                request=request,
+                session_id=session_id,
+                state=state,
+                tool_context=tool_context,
+                hypothesis=hypothesis,
+                observations=observations,
+                evidence=evidence,
+                semantic_rejections=semantic_rejections,
+                attempt=attempt,
+                max_attempts=max_attempts,
+            )
+            if novelty_output is not None:
+                return None, novelty_output
+            if len(semantic_rejections) >= attempt:
+                continue
+            return hypothesis, None
+        return None, None
+
+    def _hypothesis_prompt_context(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        tool_context: ProposalToolContext | None,
+        observations: list[ProposalObservation],
+        semantic_rejections: list[Mapping[str, Any]],
+        attempt: int,
+    ) -> tuple[dict[str, Any], list[ProposalObservation]]:
+        hypothesis_context = dict(
+            _sanitize_agentic_value(request.hypothesis_context or {})
+        )
+        if request.resume_context is not None:
+            hypothesis_context["agentic_resume_context"] = (
+                _sanitize_agentic_value(request.resume_context)
+            )
+        constraints = self._hypothesis_constraints(tool_context)
+        if constraints:
+            hypothesis_context["agentic_hypothesis_constraints"] = (
+                _sanitize_agentic_value(constraints)
+            )
+        if semantic_rejections:
+            hypothesis_context["agentic_hypothesis_semantic_rejections"] = [
+                _sanitize_agentic_value(rejection)
+                for rejection in semantic_rejections
+            ]
+            hypothesis_context["agentic_hypothesis_retry_rule"] = (
+                "A mechanism novelty gate rejected the previous hypothesis. "
+                "Choose a different mechanism family; do not relabel the same "
+                "premise, novelty text, or target mechanism."
+            )
+            hypothesis_context["agentic_hypothesis_retry_attempt"] = attempt
+        if observations:
+            prompt_observations = _hypothesis_prompt_observations(
+                observations,
+                tool_context,
+            )
+            research_diagnosis = _research_diagnosis_from_observations(observations)
+            if research_diagnosis:
+                hypothesis_context["agentic_research_diagnosis"] = (
+                    research_diagnosis
+                )
+            hypothesis_context["agentic_tool_observations"] = [
+                _observation_prompt_payload(observation)
+                for observation in prompt_observations
+            ]
+        else:
+            prompt_observations = []
+        return hypothesis_context, prompt_observations
+
+    def _solver_design_semantic_rejection_or_retry(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        state: AgenticProposalSessionState,
+        tool_context: ProposalToolContext | None,
+        hypothesis: HypothesisProposal,
+        observations: list[ProposalObservation],
+        evidence: list[AgenticEvidenceRef],
+        semantic_rejections: list[Mapping[str, Any]],
+        attempt: int,
+        max_attempts: int,
+    ) -> AgenticProposalOutput | None:
+        if tool_context is None or not _is_solver_design_hypothesis(hypothesis):
+            return None
+        grounding_observations = self._run_solver_design_grounding_tools(
+            tool_context,
+            state,
+            observations,
+            selection_source="solver_design_grounding_required",
+            hypothesis=hypothesis,
+        )
+        observations.extend(grounding_observations)
+        evidence.extend(_evidence_from_observations(grounding_observations))
+        grounding_error = _missing_solver_design_grounding_error(
+            observations,
+            hypothesis=hypothesis,
+            context=tool_context,
+        )
+        if grounding_error is not None:
+            output = self._failed_output(
+                request=request,
+                session_id=session_id,
+                status=AgenticProposalStatus.FAILED,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                detail=grounding_error,
+                evidence_used=tuple(evidence),
+                failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+            )
+            state.status = output.status
+            state.note(
+                AgenticProposalPhase.FINALIZE,
+                "Session failed closed before solver_design hypothesis approval because active solver grounding was missing.",
+                metadata={"detail": grounding_error, "attempt": attempt},
+            )
+            return self._persist(output, state)
+
+        result = _MECHANISM_NOVELTY_GATE.evaluate(
+            hypothesis,
+            observations=observations,
+        )
+        if result is None:
+            return None
+        if attempt < max_attempts:
+            rejection = result.to_rejection(hypothesis)
+            semantic_rejections.append(
+                _hypothesis_semantic_retry_rejection_payload(rejection, attempt)
+            )
+            state.note(
+                AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                "Mechanism novelty gate rejected hypothesis; retrying with structured semantic feedback.",
+                metadata={
+                    "attempt": attempt,
+                    "premise_check": result.premise_check,
+                    "failure_category": result.failure_category,
+                    "mechanism": result.mechanism,
+                    "source": "mechanism_novelty_gate",
+                },
+            )
+            return None
+        return self._mechanism_novelty_failed_output(
+            request=request,
+            session_id=session_id,
+            state=state,
+            hypothesis=hypothesis,
+            observations=observations,
+            evidence_used=tuple(evidence),
+        )
+
     def _mechanism_novelty_failed_output(
         self,
         *,
@@ -1898,6 +2099,13 @@ class AgenticProposalSession:
         )
         return observations
 
+    def _run_required_context_preface(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+    ) -> list[ProposalObservation]:
+        return _run_required_context_preface_tools(self, context, state)
+
     def _successful_tool_names(
         self,
         observations: list[ProposalObservation],
@@ -1915,8 +2123,19 @@ class AgenticProposalSession:
         context: ProposalToolContext,
         state: AgenticProposalSessionState,
     ) -> list[ProposalObservation]:
+        observations = (
+            self._run_required_context_preface(context, state)
+            if _context_requires_solver_design_grounding(context)
+            else []
+        )
+        if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+            return observations
         if self._supports_tool_selection():
-            observations = self._run_bounded_planner_tools(context, state)
+            observations = self._run_bounded_planner_tools(
+                context,
+                state,
+                observations,
+            )
             state.note(
                 AgenticProposalPhase.DIAGNOSE,
                 "Collected bounded planner proposal tool observations.",
@@ -1932,7 +2151,14 @@ class AgenticProposalSession:
             "Creative layer has no tool-selection interface; using fixed APS-0 tool plan.",
             metadata={"fallback": "fixed_tool_plan"},
         )
-        return self._run_hypothesis_observation_tools(context, state)
+        return observations + self._run_hypothesis_observation_tools(
+            context,
+            state,
+            skip_successful_required_tools=self._successful_tool_names(
+                observations,
+                context=context,
+            ),
+        )
 
     def _supports_tool_selection(self) -> bool:
         if self._creative is None:
@@ -1945,16 +2171,63 @@ class AgenticProposalSession:
         self,
         context: ProposalToolContext,
         state: AgenticProposalSessionState,
+        initial_observations: list[ProposalObservation] | None = None,
     ) -> list[ProposalObservation]:
-        observations: list[ProposalObservation] = []
+        observations: list[ProposalObservation] = list(initial_observations or [])
         selector = getattr(self._creative, "select_tool", None)
         if not callable(selector):
             selector = getattr(self._creative, "plan_tool_call", None)
         if not callable(selector):
-            return self._run_hypothesis_observation_tools(context, state)
+            return observations + self._run_hypothesis_observation_tools(
+                context,
+                state,
+                skip_successful_required_tools=self._successful_tool_names(
+                    observations,
+                    context=context,
+                ),
+            )
 
+        planner_decisions = 0
+        max_planner_decisions = max(
+            1,
+            (
+                int(self._tool_loop_config.max_steps)
+                + int(self._tool_loop_config.max_tool_calls)
+            )
+            * 2,
+        )
         while not self._tool_loop_limit_reached(state):
-            if self._planner_context_satisfied(context, observations):
+            planner_decisions += 1
+            if planner_decisions > max_planner_decisions:
+                missing = self._missing_planner_context_error(context, observations)
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Planner proposal tool loop exceeded the selection decision budget.",
+                    metadata={
+                        "status": "error" if missing else "skipped",
+                        "error_code": "planner_selection_limit",
+                        "fallback": "fixed_tool_plan" if missing else None,
+                        "detail": missing,
+                    },
+                )
+                if missing is not None:
+                    return self._fallback_after_planner_error(
+                        context,
+                        state,
+                        observations,
+                        error_code="planner_selection_limit",
+                        tool_name=None,
+                    )
+                self._record_loop_stop(
+                    state,
+                    "planner_selection_limit",
+                    error_code="planner_selection_limit",
+                )
+                break
+            if (
+                not _context_requires_solver_design_grounding(context)
+                and self._planner_context_satisfied(context, observations)
+            ):
                 self._record_loop_stop(state, "required_context_satisfied")
                 break
             if (
@@ -2158,6 +2431,26 @@ class AgenticProposalSession:
                 args,
                 forced_surface=context.forced_surface,
             ):
+                if (
+                    _context_requires_solver_design_grounding(context)
+                    and name in set(_fallback_required_context_tool_names(context))
+                ):
+                    state.note(
+                        AgenticProposalPhase.DIAGNOSE,
+                        (
+                            "Planner selected a required proposal tool already "
+                            "completed by the deterministic preface; continuing "
+                            "with remaining planner context."
+                        ),
+                        metadata={
+                            "status": "skipped",
+                            "tool_name": name,
+                            "error_code": "already_succeeded",
+                            "selection_source": "planner_selected",
+                            "skip_reason": "already_succeeded",
+                        },
+                    )
+                    continue
                 state.note(
                     AgenticProposalPhase.DIAGNOSE,
                     (
@@ -2180,6 +2473,20 @@ class AgenticProposalSession:
                     error_code="already_succeeded",
                     tool_name=name,
                 )
+            if _should_defer_diagnosis_tool_to_code_phase(context, name, args):
+                _push_deferred_code_phase_tool_call(state, name, args)
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Deferred planner-selected target surface read to code phase.",
+                    metadata={
+                        "status": "deferred",
+                        "tool_name": name,
+                        "selection_source": "planner_selected",
+                        "deferred_selection_source": "code_phase_planner",
+                        "skip_reason": "code_phase_target_read",
+                    },
+                )
+                continue
             if (
                 name in {"feedback.query_screening", "feedback.query_runtime"}
                 and self._diagnosis_feedback_budget_reserved(state)
@@ -2210,6 +2517,29 @@ class AgenticProposalSession:
                     tool_name=name,
                 )
                 break
+            if _solver_design_planner_algorithm_file_read_budget_exhausted(
+                context,
+                observations,
+                next_tool_name=name,
+            ):
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Stopped planner-selected solver_design file reads before full active-object exhaustion.",
+                    metadata={
+                        "status": "skipped",
+                        "tool_name": name,
+                        "error_code": "solver_design_algorithm_file_read_budget_reserved",
+                        "selection_source": "planner_selected",
+                        "skip_reason": "solver_design_algorithm_file_read_budget_reserved",
+                    },
+                )
+                return self._fallback_after_planner_error(
+                    context,
+                    state,
+                    observations,
+                    error_code="solver_design_algorithm_file_read_budget_reserved",
+                    tool_name=name,
+                )
             observation = self._call_tool(
                 context,
                 state,
@@ -2239,7 +2569,10 @@ class AgenticProposalSession:
                     error_code=str(_enum_value(observation.failure_code)),
                     tool_name=observation.tool_name,
                 )
-            if self._planner_context_satisfied(context, observations):
+            if (
+                not _context_requires_solver_design_grounding(context)
+                and self._planner_context_satisfied(context, observations)
+            ):
                 self._record_loop_stop(state, "required_context_satisfied")
                 break
 
@@ -2340,6 +2673,59 @@ class AgenticProposalSession:
                 "allowed_tools": allowed_tools,
             },
         )
+        while len(observations) < max_calls and allowed_tools:
+            deferred = _pop_deferred_code_phase_tool_call(state)
+            if deferred is None:
+                break
+            name, args = deferred
+            if name not in set(allowed_tools):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped deferred code-phase proposal tool outside allowed list.",
+                    metadata={
+                        "status": "skipped",
+                        "tool_name": name,
+                        "error_code": "code_invalid_tool_selection",
+                        "selection_source": "code_phase_planner",
+                        "skip_reason": "invalid_deferred_tool",
+                    },
+                )
+                continue
+            if self._tool_loop_limit_reached(state):
+                self._record_loop_stop(state, self._current_loop_stop_reason(state))
+                break
+            if _has_successful_code_phase_reusable_observation(
+                [*prior_observations, *observations],
+                name,
+                args,
+                hypothesis=hypothesis,
+            ):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped deferred code-phase proposal tool already completed successfully.",
+                    metadata={
+                        "status": "skipped",
+                        "tool_name": name,
+                        "selection_source": "code_phase_planner",
+                        "skip_reason": "already_succeeded",
+                    },
+                )
+                continue
+            observations.append(
+                self._call_tool(
+                    context,
+                    state,
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    name,
+                    args,
+                    selection_source="code_phase_planner",
+                    preserve_observation_chars=(
+                        self._minimum_budgeted_observation_chars()
+                    ),
+                )
+            )
+            if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+                break
         while (
             len(observations) < max_calls
             and allowed_tools
@@ -2557,15 +2943,34 @@ class AgenticProposalSession:
 
         combined = [*prior_observations, *observations]
         if not _has_code_phase_surface_read(combined, hypothesis):
-            observations.extend(
-                self._run_code_context_fixed_tools(
-                    context,
-                    state,
-                    hypothesis,
-                    combined,
-                    selection_source="code_phase_required",
+            if self._code_phase_budget_reserved(state):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped code-phase required fallback tools to preserve final preview reserve.",
+                    metadata={
+                        "status": "skipped",
+                        "selection_source": "code_phase_required",
+                        "skip_reason": "code_self_check_budget_reserved",
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                        "remaining_steps": self._remaining_tool_steps(state),
+                        "remaining_observation_chars": self._remaining_observation_chars(
+                            state
+                        ),
+                        "remaining_wall_time_sec": self._remaining_wall_time_sec(
+                            state
+                        ),
+                    },
                 )
-            )
+            else:
+                observations.extend(
+                    self._run_code_context_fixed_tools(
+                        context,
+                        state,
+                        hypothesis,
+                        combined,
+                        selection_source="code_phase_required",
+                    )
+                )
         state.note(
             AgenticProposalPhase.INSPECT_INTERFACE,
             "Collected code-phase proposal tool observations.",
@@ -2612,8 +3017,18 @@ class AgenticProposalSession:
         selection_source: str,
     ) -> list[ProposalObservation]:
         calls: list[tuple[str, Mapping[str, Any]]] = []
-        if not _has_successful_tool(prior_observations, "context.read_branch_state"):
-            calls.append(("context.read_branch_state", {}))
+        target_read_args = _solver_design_target_file_read_args(
+            hypothesis,
+            context=context,
+            observations=prior_observations,
+        )
+        if target_read_args is not None and not _has_successful_reusable_observation(
+            prior_observations,
+            "context.read_algorithm_file",
+            target_read_args,
+            forced_surface=hypothesis.change_locus,
+        ):
+            calls.append(("context.read_algorithm_file", target_read_args))
         if not _has_code_phase_surface_read(prior_observations, hypothesis):
             args: dict[str, Any] = {
                 "surface": hypothesis.change_locus,
@@ -2623,6 +3038,18 @@ class AgenticProposalSession:
             if hypothesis.target_file:
                 args["target_file"] = hypothesis.target_file
             calls.append(("context.read_surface", args))
+        if not _has_successful_tool(prior_observations, "context.read_branch_state"):
+            calls.append(("context.read_branch_state", {}))
+        if _is_solver_design_hypothesis(hypothesis) and not _has_successful_tool(
+            prior_observations,
+            "context.list_algorithm_files",
+        ):
+            calls.append(
+                (
+                    "context.list_algorithm_files",
+                    {"surface": "solver_design", "include_inactive": True},
+                )
+            )
 
         observations: list[ProposalObservation] = []
         for name, args in calls:
@@ -2630,10 +3057,33 @@ class AgenticProposalSession:
                 name == "context.read_surface"
                 and selection_source == "code_phase_required"
             )
+            mandatory_target_read = (
+                name == "context.read_algorithm_file"
+                and selection_source in {"code_phase_required", "code_phase_fallback"}
+            )
+            if (
+                self._remaining_tool_calls(state) <= 2
+                or self._remaining_tool_steps(state) <= 2
+            ):
+                state.note(
+                    AgenticProposalPhase.INSPECT_INTERFACE,
+                    "Skipped code-phase fallback tool to reserve final preview tool slots.",
+                    metadata={
+                        "tool_name": name,
+                        "status": "skipped",
+                        "selection_source": selection_source,
+                        "skip_reason": "code_self_check_tool_slot_reserved",
+                        "remaining_tool_calls": self._remaining_tool_calls(state),
+                        "remaining_steps": self._remaining_tool_steps(state),
+                    },
+                )
+                break
             call_args: Mapping[str, Any] = args
             call_selection_source = selection_source
             preserve_observation_chars = 0
-            if self._code_phase_budget_reserved(state) and not mandatory_surface_read:
+            if self._code_phase_budget_reserved(state) and not (
+                mandatory_surface_read or mandatory_target_read
+            ):
                 state.note(
                     AgenticProposalPhase.INSPECT_INTERFACE,
                     "Skipped code-phase fallback tool to reserve patch self-check budget.",
@@ -2645,13 +3095,13 @@ class AgenticProposalSession:
                     },
                 )
                 continue
-            if mandatory_surface_read:
+            if mandatory_surface_read or mandatory_target_read:
                 preserve_observation_chars = self._minimum_budgeted_observation_chars()
                 remaining_chars = self._remaining_observation_chars(state)
                 if remaining_chars <= preserve_observation_chars:
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
-                        "Skipped mandatory code-phase surface read to preserve patch self-check observation budget.",
+                        "Skipped mandatory code-phase context read to preserve patch self-check observation budget.",
                         metadata={
                             "tool_name": name,
                             "status": "skipped",
@@ -2662,7 +3112,28 @@ class AgenticProposalSession:
                         },
                     )
                     continue
-                if self._code_phase_budget_reserved(state):
+                target_read_available = (
+                    target_read_args is not None
+                    and _has_successful_reusable_observation(
+                        [*prior_observations, *observations],
+                        "context.read_algorithm_file",
+                        target_read_args,
+                        forced_surface=hypothesis.change_locus,
+                    )
+                )
+                surface_context_available = _has_successful_tool(
+                    [*prior_observations, *observations],
+                    "context.read_surface",
+                )
+                surface_context_budget_pressure = (
+                    surface_context_available
+                    and remaining_chars <= _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS
+                )
+                if mandatory_surface_read and (
+                    self._code_phase_budget_reserved(state)
+                    or target_read_available
+                    or surface_context_budget_pressure
+                ):
                     compact_chars = max(
                         0,
                         min(
@@ -2687,10 +3158,15 @@ class AgenticProposalSession:
                             "remaining_observation_chars": remaining_chars,
                             "preserved_observation_chars": preserve_observation_chars,
                             "max_code_chars": compact_chars,
+                            "target_read_available": target_read_available,
+                            "surface_context_available": surface_context_available,
+                            "surface_context_budget_pressure": (
+                                surface_context_budget_pressure
+                            ),
                         },
                     )
             if self._tool_loop_limit_reached(state) and not (
-                mandatory_surface_read
+                (mandatory_surface_read or mandatory_target_read)
                 and self._current_loop_stop_reason(state)
                 == "observation_budget_exhausted"
                 and self._remaining_tool_calls(state) > 0
@@ -2740,10 +3216,25 @@ class AgenticProposalSession:
         self,
         state: AgenticProposalSessionState,
     ) -> bool:
-        return _code_phase_budget_reserved_for_config(
+        return self._code_phase_wall_time_reserved(
+            state
+        ) or _code_phase_budget_reserved_for_config(
             self._tool_loop_config,
             state,
         )
+
+    def _code_phase_wall_time_reserved(
+        self,
+        state: AgenticProposalSessionState,
+    ) -> bool:
+        max_wall_time = max(0.0, float(self._tool_loop_config.max_wall_time_sec))
+        if max_wall_time <= 0:
+            return self._session_timeout_reached(state)
+        reserve = min(
+            _FINAL_PREVIEW_WALL_TIME_RESERVE_SEC,
+            max_wall_time / 4.0,
+        )
+        return self._remaining_wall_time_sec(state) <= reserve
 
     def _code_tool_arg_guidance(
         self,
@@ -2858,9 +3349,7 @@ class AgenticProposalSession:
                 "recommended_args": {
                     "surface": "solver_design",
                     "file_path": recommended_file_path,
-                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS
-                    if _is_solver_design_support_module_target(recommended_file_path)
-                    else _APS_CODE_SURFACE_READ_CODE_CHARS,
+                    "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
                 },
                 "purpose": "Read one allowlisted active solver file when full source is needed.",
             }
@@ -3057,56 +3546,28 @@ class AgenticProposalSession:
         context: ProposalToolContext,
         observations: list[ProposalObservation],
     ) -> bool:
-        return self._missing_planner_context_error(context, observations) is None
+        return _planner_policy_context_satisfied(
+            self.tool_registry,
+            context,
+            observations,
+        )
 
     def _missing_planner_context_error(
         self,
         context: ProposalToolContext,
         observations: list[ProposalObservation],
     ) -> str | None:
-        required_error = self._missing_required_context_error(
+        return _planner_missing_context_error(
+            self.tool_registry,
+            context,
             observations,
-            context=context,
         )
-        if required_error is not None:
-            return required_error
-        available_feedback = self._available_compact_feedback_tools(context)
-        if not available_feedback:
-            return None
-        observed_ok = {
-            observation.tool_name
-            for observation in observations
-            if _observation_satisfies_compact_requirement(context, observation)
-        }
-        missing_feedback = [
-            tool_name
-            for tool_name in available_feedback
-            if tool_name not in observed_ok
-        ]
-        if missing_feedback:
-            return "missing compact proposal feedback tools: " + ", ".join(
-                missing_feedback
-            )
-        return None
 
     def _available_compact_feedback_tools(
         self,
         context: ProposalToolContext,
     ) -> tuple[str, ...]:
-        if self.tool_registry is None:
-            return ()
-        allowed = set(self.tool_registry.allowed_tools(context))
-        available: list[str] = []
-        if "memory.query" in allowed and (
-            context.search_memory is not None or context.research_log is not None
-        ):
-            available.append("memory.query")
-        has_screening_steps = _has_feedback_screening_history(context)
-        if "feedback.query_screening" in allowed and has_screening_steps:
-            available.append("feedback.query_screening")
-        if "feedback.query_runtime" in allowed and has_screening_steps:
-            available.append("feedback.query_runtime")
-        return tuple(available)
+        return _planner_available_compact_feedback_tools(self.tool_registry, context)
 
     def _tool_arg_guidance(
         self,
@@ -3220,7 +3681,7 @@ class AgenticProposalSession:
                 "recommended_args": {
                     "surface": "solver_design",
                     "file_path": recommended_file_path,
-                    "max_chars": _APS_CODE_SURFACE_READ_CODE_CHARS,
+                    "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
                 },
                 "purpose": (
                     "Read one allowlisted active solver file only after "
@@ -3299,16 +3760,7 @@ class AgenticProposalSession:
         self,
         observation: ProposalObservation,
     ) -> bool:
-        if not observation.is_error:
-            return False
-        if observation.tool_name in {"context.list_surfaces", "context.read_problem"}:
-            return False
-        return observation.failure_code in {
-            ProposalToolFailureCode.SCHEMA_ERROR,
-            ProposalToolFailureCode.PERMISSION_DENIED,
-            ProposalToolFailureCode.NOT_FOUND,
-            ProposalToolFailureCode.UNSUPPORTED,
-        }
+        return _policy_planner_observation_requires_fallback(observation)
 
     def _run_hypothesis_preview_tools(
         self,
@@ -3330,11 +3782,8 @@ class AgenticProposalSession:
         )
         observations: list[ProposalObservation] = []
         for name, args in calls:
-            if self._tool_loop_limit_reached(
-                state,
-                ignore_observation_budget=True,
-            ):
-                self._record_loop_stop(state, self._current_loop_stop_reason(state))
+            if self._session_timeout_reached(state):
+                self._record_loop_stop(state, "session_timeout")
                 break
             observations.append(
                 self._call_tool(
@@ -3355,52 +3804,16 @@ class AgenticProposalSession:
         prior_observations: list[ProposalObservation],
         *,
         selection_source: str,
+        hypothesis: HypothesisProposal | None = None,
     ) -> list[ProposalObservation]:
-        observations: list[ProposalObservation] = []
-        for name in _SOLVER_DESIGN_GROUNDING_TOOLS:
-            if _has_successful_tool([*prior_observations, *observations], name):
-                state.note(
-                    AgenticProposalPhase.DIAGNOSE,
-                    "Skipped solver_design grounding tool already completed successfully.",
-                    metadata={
-                        "tool_name": name,
-                        "status": "skipped",
-                        "selection_source": selection_source,
-                        "skip_reason": "already_succeeded",
-                    },
-                )
-                continue
-            if (
-                name == "context.read_solver_call_graph"
-                and _has_active_solver_embedded_call_graph(
-                    [*prior_observations, *observations]
-                )
-            ):
-                state.note(
-                    AgenticProposalPhase.DIAGNOSE,
-                    "Skipped solver_design grounding tool already covered by active solver snapshot.",
-                    metadata={
-                        "tool_name": name,
-                        "status": "skipped",
-                        "selection_source": selection_source,
-                        "skip_reason": "active_solver_snapshot_includes_call_graph",
-                    },
-                )
-                continue
-            if self._tool_loop_limit_reached(state):
-                self._record_loop_stop(state, self._current_loop_stop_reason(state))
-                break
-            observations.append(
-                self._call_tool(
-                    context,
-                    state,
-                    AgenticProposalPhase.DIAGNOSE,
-                    name,
-                    {"surface": "solver_design"},
-                    selection_source=selection_source,
-                )
-            )
-        return observations
+        return _run_solver_design_grounding_context_tools(
+            self,
+            context,
+            state,
+            prior_observations,
+            selection_source=selection_source,
+            hypothesis=hypothesis,
+        )
 
     def _run_selected_surface_observation_tool(
         self,
@@ -3409,37 +3822,13 @@ class AgenticProposalSession:
         state: AgenticProposalSessionState,
         observations: list[ProposalObservation],
     ) -> list[ProposalObservation]:
-        if _has_successful_surface_read(observations, hypothesis.change_locus):
-            state.note(
-                AgenticProposalPhase.INSPECT_INTERFACE,
-                "Skipped selected-surface read already completed successfully.",
-                metadata={
-                    "tool_name": "context.read_surface",
-                    "status": "skipped",
-                    "selection_source": "selected_surface_required",
-                    "skip_reason": "already_succeeded",
-                },
-            )
-            return []
-        if self._tool_loop_limit_reached(state):
-            self._record_loop_stop(state, self._current_loop_stop_reason(state))
-            return []
-        args: dict[str, Any] = {
-            "surface": hypothesis.change_locus,
-            "detail": "compact",
-            "max_code_chars": _APS_SURFACE_READ_CODE_CHARS,
-        }
-        if hypothesis.target_file:
-            args["target_file"] = hypothesis.target_file
-        observation = self._call_tool(
+        return _run_selected_surface_context_tool(
+            self,
             context,
+            hypothesis,
             state,
-            AgenticProposalPhase.INSPECT_INTERFACE,
-            "context.read_surface",
-            args,
-            selection_source="selected_surface_required",
+            observations,
         )
-        return [observation]
 
     def _run_contract_preview_tool(
         self,
@@ -3448,31 +3837,6 @@ class AgenticProposalSession:
         patch: PatchProposal,
         state: AgenticProposalSessionState,
     ) -> ProposalObservation:
-        if self._tool_loop_limit_reached(
-            state,
-            ignore_observation_budget=True,
-        ):
-            stop_reason = self._current_loop_stop_reason(state)
-            self._record_loop_stop(
-                state,
-                stop_reason,
-                error_code=_preview_limit_error_code(
-                    "proposal.contract_preview",
-                    stop_reason,
-                ),
-                tool_name="proposal.contract_preview",
-            )
-            return self._skipped_self_check_preview_observation(
-                context,
-                state,
-                tool_name="proposal.contract_preview",
-                summary=(
-                    "Contract preview skipped because the session wall-time limit was reached."
-                    if stop_reason == "session_timeout"
-                    else "Contract preview skipped because the tool loop limit was reached."
-                ),
-                stop_reason=stop_reason,
-            )
         return self._call_tool(
             context,
             state,
@@ -3492,31 +3856,6 @@ class AgenticProposalSession:
         patch: PatchProposal,
         state: AgenticProposalSessionState,
     ) -> ProposalObservation:
-        if self._tool_loop_limit_reached(
-            state,
-            ignore_observation_budget=True,
-        ):
-            stop_reason = self._current_loop_stop_reason(state)
-            self._record_loop_stop(
-                state,
-                stop_reason,
-                error_code=_preview_limit_error_code(
-                    "proposal.algorithm_smoke",
-                    stop_reason,
-                ),
-                tool_name="proposal.algorithm_smoke",
-            )
-            return self._skipped_self_check_preview_observation(
-                context,
-                state,
-                tool_name="proposal.algorithm_smoke",
-                summary=(
-                    "Algorithm smoke skipped because the session wall-time limit was reached."
-                    if stop_reason == "session_timeout"
-                    else "Algorithm smoke skipped because the tool loop limit was reached."
-                ),
-                stop_reason=stop_reason,
-            )
         return self._call_tool(
             context,
             state,
@@ -3528,64 +3867,6 @@ class AgenticProposalSession:
             },
             selection_source="fallback_selected",
         )
-
-    def _skipped_self_check_preview_observation(
-        self,
-        context: ProposalToolContext,
-        state: AgenticProposalSessionState,
-        *,
-        tool_name: str,
-        summary: str,
-        stop_reason: str,
-    ) -> ProposalObservation:
-        error_code = _preview_limit_error_code(tool_name, stop_reason)
-        observation = ProposalObservation(
-            observation_id=str(uuid.uuid4()),
-            session_id=context.session_id,
-            tool_name=tool_name,
-            tool_call_id="",
-            observation_type="tool_skipped",
-            summary=summary,
-            structured_payload={
-                "skip_reason": stop_reason,
-                "budget_exhausted": (
-                    stop_reason
-                    in {
-                        "tool_loop_limit",
-                        "observation_budget_exhausted",
-                        "session_timeout",
-                    }
-                ),
-                "max_steps": self._tool_loop_config.max_steps,
-                "max_tool_calls": self._tool_loop_config.max_tool_calls,
-                "tool_steps": state.tool_step_count,
-                "tool_calls": state.tool_call_count,
-                "error_code": error_code,
-            },
-            is_error=True,
-            failure_code=error_code,
-            repair_hint="Start a new bounded proposal session with enough self-check budget.",
-        )
-        state.note(
-            AgenticProposalPhase.SELF_CHECK,
-            f"Proposal tool observation: {tool_name}",
-            metadata={
-                "tool_name": observation.tool_name,
-                "status": "error",
-                "taint": _enum_value(observation.taint),
-                "evidence_ref": observation.observation_id,
-                "result_summary": observation.summary,
-                "error_code": error_code,
-                "observation_id": observation.observation_id,
-                "observation_type": observation.observation_type,
-                "exposure_level": _enum_value(observation.exposure_level),
-                "is_error": True,
-                "failure_code": error_code,
-                "selection_source": "fallback_selected",
-                "skip_reason": stop_reason,
-            },
-        )
-        return observation
 
     def _call_tool(
         self,
@@ -3609,23 +3890,69 @@ class AgenticProposalSession:
             self._record_loop_stop(
                 state, "session_timeout", error_code="session_timeout"
             )
-            return ProposalObservation(
+            if authoritative_preview:
+                return self._session_timeout_preview_observation(
+                    context,
+                    state,
+                    phase,
+                    name=name,
+                    selection_source=selection_source,
+                )
+            observation = ProposalObservation(
                 observation_id=str(uuid.uuid4()),
                 session_id=context.session_id,
                 tool_name=name,
                 tool_call_id="",
-                observation_type="tool_error",
-                summary="Proposal tool call skipped because session wall-time limit was reached.",
+                observation_type="tool_skipped",
+                summary=(
+                    "Proposal tool call skipped because the agentic session "
+                    "wall-time budget was exhausted."
+                ),
                 structured_payload={
+                    "skip_reason": "session_timeout",
+                    "budget_exhausted": True,
+                    "agentic_budget_control": True,
+                    "framework_control": True,
+                    "skip_class": "agentic_budget_control",
                     "max_wall_time_sec": self._tool_loop_config.max_wall_time_sec,
                 },
                 is_error=True,
-                failure_code=ProposalToolFailureCode.RUNTIME_EXCEPTION,
+                failure_code="session_timeout",
                 repair_hint="Start a new bounded proposal session.",
             )
-        state.tool_step_count += 1
-        state.tool_call_count += 1
-        step_id = f"tool-{state.tool_step_count:04d}"
+            state.note(
+                phase,
+                f"Proposal tool observation: {name}",
+                metadata={
+                    "tool_name": observation.tool_name,
+                    "status": "error",
+                    "evidence_ref": observation.observation_id,
+                    "result_summary": observation.summary,
+                    "error_code": "session_timeout",
+                    "observation_id": observation.observation_id,
+                    "observation_type": observation.observation_type,
+                    "exposure_level": _enum_value(observation.exposure_level),
+                    "is_error": True,
+                    "failure_code": "session_timeout",
+                    "selection_source": selection_source,
+                    "skip_reason": "session_timeout",
+                    "skip_class": "agentic_budget_control",
+                    "agentic_budget_control": True,
+                },
+            )
+            return observation
+        state.tool_event_count = max(
+            int(state.tool_event_count),
+            int(state.tool_step_count) + int(state.preview_tool_step_count),
+        )
+        state.tool_event_count += 1
+        if authoritative_preview:
+            state.preview_tool_step_count += 1
+            state.preview_tool_call_count += 1
+        else:
+            state.tool_step_count += 1
+            state.tool_call_count += 1
+        step_id = f"tool-{state.tool_event_count:04d}"
         fingerprint = _tool_call_fingerprint(name, args)
         fuse_count = state.tool_call_fuse_counts.get(fingerprint, 0) + 1
         state.tool_call_fuse_counts[fingerprint] = fuse_count
@@ -3795,6 +4122,70 @@ class AgenticProposalSession:
         )
         return observation
 
+    def _session_timeout_preview_observation(
+        self,
+        context: ProposalToolContext,
+        state: AgenticProposalSessionState,
+        phase: AgenticProposalPhase,
+        *,
+        name: str,
+        selection_source: str,
+    ) -> ProposalObservation:
+        elapsed = time.monotonic() - state.wall_time_started_at
+        observation = ProposalObservation(
+            observation_id=str(uuid.uuid4()),
+            session_id=context.session_id,
+            tool_name=name,
+            tool_call_id="",
+            observation_type="tool_skipped",
+            summary=(
+                "Proposal preview skipped because the agentic session wall-time "
+                "budget was exhausted before the mandatory preview could start."
+            ),
+            structured_payload={
+                "skip_reason": "session_timeout",
+                "budget_exhausted": True,
+                "agentic_budget_control": True,
+                "framework_control": True,
+                "skip_class": "agentic_budget_control",
+                "max_wall_time_sec": self._tool_loop_config.max_wall_time_sec,
+                "elapsed_wall_time_sec": elapsed,
+                "tool_steps": state.tool_step_count,
+                "tool_calls": state.tool_call_count,
+                "preview_tool_steps": state.preview_tool_step_count,
+                "preview_tool_calls": state.preview_tool_call_count,
+                "error_code": "session_timeout",
+            },
+            is_error=True,
+            failure_code="session_timeout",
+            repair_hint=(
+                "Start a new bounded proposal session or stop code repair before "
+                "mandatory previews lose wall-time reserve."
+            ),
+        )
+        state.note(
+            phase,
+            f"Proposal tool observation: {name}",
+            metadata={
+                "tool_name": observation.tool_name,
+                "status": "error",
+                "taint": _enum_value(observation.taint),
+                "evidence_ref": observation.observation_id,
+                "result_summary": observation.summary,
+                "error_code": "session_timeout",
+                "observation_id": observation.observation_id,
+                "observation_type": observation.observation_type,
+                "exposure_level": _enum_value(observation.exposure_level),
+                "is_error": True,
+                "failure_code": "session_timeout",
+                "selection_source": selection_source,
+                "skip_reason": "session_timeout",
+                "skip_class": "agentic_budget_control",
+                "agentic_budget_control": True,
+            },
+        )
+        return observation
+
     def _registry_call_with_timeout(
         self,
         name: str,
@@ -3864,6 +4255,13 @@ class AgenticProposalSession:
 
     def _remaining_tool_steps(self, state: AgenticProposalSessionState) -> int:
         return _remaining_tool_steps_for_config(self._tool_loop_config, state)
+
+    def _remaining_wall_time_sec(self, state: AgenticProposalSessionState) -> float:
+        return max(
+            0.0,
+            float(self._tool_loop_config.max_wall_time_sec)
+            - (time.monotonic() - state.wall_time_started_at),
+        )
 
     def _self_check_tool_call_reserve(self) -> int:
         return _self_check_tool_call_reserve_for_config(self._tool_loop_config)
@@ -4228,19 +4626,10 @@ class AgenticProposalSession:
         *,
         context: ProposalToolContext | None = None,
     ) -> str | None:
-        observed_ok = {
-            observation.tool_name
-            for observation in observations
-            if not observation.is_error
-        }
-        missing = [
-            name
-            for name in _required_context_tool_names(context)
-            if name not in observed_ok
-        ]
-        if missing:
-            return f"missing required proposal context tools: {', '.join(missing)}"
-        return None
+        return _policy_missing_required_context_error(
+            observations,
+            context=context,
+        )
 
     def _persist(
         self,
@@ -4313,169 +4702,6 @@ def _evidence_from_observations(
         )
         for observation in observations
     ]
-
-
-def _record_failure_ledger_entry(
-    state: AgenticProposalSessionState,
-    *,
-    phase: AgenticProposalPhase,
-    category: AgenticFailureCategory | str,
-    detail: str | None = None,
-    source: str = "",
-    attempt: int | None = None,
-    repair_attempt: int | None = None,
-    tool_name: str | None = None,
-    observation: ProposalObservation | None = None,
-    failure_code: str | None = None,
-) -> None:
-    category_value = _failure_category_value(category)
-    if not category_value:
-        return
-    if category_value == _LEGACY_PREMISE_CONTRADICTED:
-        category_value = _AGENT_GROUNDING_FAILURE
-        failure_code = failure_code or _PROPOSAL_PREMISE_CONTRADICTED_CODE
-    observation_payload: dict[str, Any] = {}
-    if observation is not None:
-        observation_payload = {
-            "observation_id": observation.observation_id,
-            "tool_name": observation.tool_name,
-            "failure_code": _enum_value(observation.failure_code),
-        }
-    entry = _drop_empty_dict(
-        {
-            "entry_id": f"failure-{len(state.failure_ledger) + 1:04d}",
-            "phase": phase.value,
-            "category": category_value,
-            "root_cause": category_value,
-            "detail": _limit_string(str(detail or ""), 800),
-            "source": source,
-            "attempt": attempt,
-            "repair_attempt": repair_attempt,
-            "tool_name": tool_name or observation_payload.get("tool_name"),
-            "observation_id": observation_payload.get("observation_id"),
-            "failure_code": failure_code or observation_payload.get("failure_code"),
-        }
-    )
-    if _failure_ledger_latest_matches(state.failure_ledger, entry):
-        return
-    state.failure_ledger.append(entry)
-
-
-def _failure_ledger_latest_matches(
-    entries: list[Mapping[str, Any]],
-    candidate: Mapping[str, Any],
-) -> bool:
-    if not entries:
-        return False
-    latest = entries[-1]
-    return (
-        str(latest.get("phase") or "") == str(candidate.get("phase") or "")
-        and str(latest.get("category") or "") == str(candidate.get("category") or "")
-        and str(latest.get("detail") or "") == str(candidate.get("detail") or "")
-        and str(latest.get("source") or "") == str(candidate.get("source") or "")
-        and str(latest.get("tool_name") or "") == str(candidate.get("tool_name") or "")
-    )
-
-
-def _failure_ledger_payload(
-    entries: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]],
-) -> dict[str, Any]:
-    sanitized_entries = [
-        _sanitize_agentic_value(dict(entry)) for entry in entries if entry
-    ]
-    return {
-        "schema_version": _FAILURE_LEDGER_SCHEMA_VERSION,
-        "entries": sanitized_entries,
-        "entry_count": len(sanitized_entries),
-        "first_root_cause": (
-            sanitized_entries[0].get("root_cause") if sanitized_entries else None
-        ),
-        "first_failure_phase": (
-            sanitized_entries[0].get("phase") if sanitized_entries else None
-        ),
-        "latest_failure": (
-            sanitized_entries[-1].get("category") if sanitized_entries else None
-        ),
-        "latest_failure_phase": (
-            sanitized_entries[-1].get("phase") if sanitized_entries else None
-        ),
-    }
-
-
-def _failure_category_value(category: AgenticFailureCategory | str | None) -> str:
-    return str(_enum_value(category) or "")
-
-
-def _structured_output_failure_category(
-    exc: BaseException,
-) -> AgenticFailureCategory:
-    if isinstance(exc, LLMRetryExhaustedError):
-        return AgenticFailureCategory.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
-    return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
-
-
-def _normalized_structured_rejection(
-    rejection: Mapping[str, Any],
-) -> dict[str, Any]:
-    payload = dict(rejection)
-    if _structured_rejection_is_premise_contradicted(payload):
-        legacy_category = str(_enum_value(payload.get("failure_category")) or "")
-        if legacy_category and legacy_category != _AGENT_GROUNDING_FAILURE:
-            payload.setdefault("legacy_failure_category", legacy_category)
-        payload["failure_category"] = _AGENT_GROUNDING_FAILURE
-        payload.setdefault("failure_code", _PROPOSAL_PREMISE_CONTRADICTED_CODE)
-        payload.setdefault("agent_block_reason", _AGENT_QUALITY_BLOCKED_REASON)
-    return payload
-
-
-def _structured_rejection_is_premise_contradicted(
-    rejection: Mapping[str, Any],
-) -> bool:
-    failure_category = str(_enum_value(rejection.get("failure_category")) or "")
-    failure_code = str(rejection.get("failure_code") or "")
-    premise_check = str(rejection.get("premise_check") or "")
-    return (
-        failure_code == _PROPOSAL_PREMISE_CONTRADICTED_CODE
-        or premise_check == "contradicted"
-        or failure_category == _LEGACY_PREMISE_CONTRADICTED
-    )
-
-
-def _rejection_termination_reason(
-    rejection: Mapping[str, Any],
-) -> AgenticTerminationReason:
-    failure_category = str(_enum_value(rejection.get("failure_category")) or "")
-    if _structured_rejection_is_premise_contradicted(rejection) or (
-        failure_category == _AGENT_GROUNDING_FAILURE
-    ):
-        return AgenticTerminationReason.PREMISE_CONTRADICTED
-    if failure_category == AgenticFailureCategory.DUPLICATE_MECHANISM.value:
-        return AgenticTerminationReason.DUPLICATE_MECHANISM
-    if str(rejection.get("source") or "") == "mechanism_novelty_gate":
-        return AgenticTerminationReason.MECHANISM_NOVELTY_REJECTED
-    return AgenticTerminationReason.MECHANISM_NOVELTY_REJECTED
-
-
-def _terminal_failure_category(
-    output: AgenticProposalOutput,
-    state: AgenticProposalSessionState,
-) -> AgenticFailureCategory | str | None:
-    if output.status == AgenticProposalStatus.COMPLETED:
-        return None
-    if output.failure_category is not None:
-        return output.failure_category
-    if output.termination_reason in {
-        AgenticTerminationReason.TOOL_LOOP_LIMIT,
-        AgenticTerminationReason.SESSION_TIMEOUT,
-        AgenticTerminationReason.REPEATED_TOOL_CALL,
-    } or state.loop_stop_reason in {
-        "tool_loop_limit",
-        "observation_budget_exhausted",
-        "session_timeout",
-        "repeated_tool_call",
-    }:
-        return AgenticFailureCategory.TOOL_BUDGET_EXHAUSTED
-    return None
 
 
 def _hypothesis_prompt_observations(
@@ -4649,465 +4875,8 @@ def _observation_source_payload(value: Any) -> dict[str, Any]:
     return found
 
 
-def _required_context_tool_names(
-    context: ProposalToolContext | None,
-) -> tuple[str, ...]:
-    del context
-    return ("context.list_surfaces", "context.read_problem")
-
-
-def _fallback_required_context_tool_names(
-    context: ProposalToolContext | None,
-) -> tuple[str, ...]:
-    names = ["context.list_surfaces", "context.read_problem"]
-    if _context_requires_solver_design_grounding(context):
-        names.extend(_SOLVER_DESIGN_FILE_DISCOVERY_TOOLS)
-        names.extend(_SOLVER_DESIGN_GROUNDING_TOOLS)
-    return tuple(names)
-
-
-def _context_requires_solver_design_grounding(
-    context: ProposalToolContext | None,
-) -> bool:
-    if context is None:
-        return False
-    forced_surface = str(context.forced_surface or "").strip()
-    if forced_surface in _SOLVER_DESIGN_SURFACE_NAMES:
-        return True
-    boundary = {
-        str(surface or "").strip()
-        for surface in context.active_problem_boundary_surfaces
-        if str(surface or "").strip()
-    }
-    return bool(boundary) and boundary.issubset(_SOLVER_DESIGN_SURFACE_NAMES)
-
-
-def _is_solver_design_hypothesis(hypothesis: HypothesisProposal) -> bool:
-    return str(hypothesis.change_locus or "").strip() in _SOLVER_DESIGN_SURFACE_NAMES
-
-
-def _missing_solver_design_grounding_error(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-    *,
-    hypothesis: HypothesisProposal,
-) -> str | None:
-    if not _is_solver_design_hypothesis(hypothesis):
-        return None
-    observed_ok = {
-        observation.tool_name
-        for observation in observations
-        if not observation.is_error
-    }
-    if _has_active_solver_embedded_call_graph(observations):
-        observed_ok.add("context.read_solver_call_graph")
-    missing = [
-        tool_name
-        for tool_name in _SOLVER_DESIGN_GROUNDING_TOOLS
-        if tool_name not in observed_ok
-    ]
-    if not missing:
-        return None
-    return (
-        "missing required solver_design grounding tools before hypothesis approval: "
-        + ", ".join(missing)
-    )
-
-
-def _has_successful_solver_call_graph_grounding(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> bool:
-    return _has_successful_tool(
-        observations,
-        "context.read_solver_call_graph",
-    ) or _has_active_solver_embedded_call_graph(observations)
-
-
-def _has_active_solver_embedded_call_graph(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> bool:
-    for observation in reversed(tuple(observations)):
-        if observation.is_error:
-            continue
-        if observation.tool_name != "context.read_active_solver_design":
-            continue
-        payload = observation.structured_payload
-        if not isinstance(payload, Mapping):
-            continue
-        call_graph = payload.get("call_graph")
-        if not isinstance(call_graph, Mapping):
-            continue
-        if any(
-            key in call_graph
-            for key in (
-                "edges",
-                "edge_count",
-                "nodes",
-                "node_count",
-                "source_digest",
-                "provenance",
-            )
-        ):
-            return True
-    return False
-
-
 def _patch_payload_for_preview(patch: PatchProposal) -> dict[str, Any]:
     payload = _proposal_payload(patch)
     for field_name in _PATCH_METADATA_FIELDS:
         payload.pop(field_name, None)
     return payload
-
-
-def _patch_premise_rejection(
-    patch: PatchProposal,
-    hypothesis: HypothesisProposal,
-) -> dict[str, Any] | None:
-    premise_check = str(getattr(patch, "premise_check", "supported") or "supported")
-    if premise_check == "supported":
-        return None
-    if premise_check not in {"contradicted", "duplicate", "wrong_owner"}:
-        premise_check = "contradicted"
-    reason = str(getattr(patch, "premise_check_reason", "") or "").strip()
-    category = (
-        AgenticFailureCategory.DUPLICATE_MECHANISM.value
-        if premise_check == "duplicate"
-        else AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value
-        if premise_check == "wrong_owner"
-        else _AGENT_GROUNDING_FAILURE
-    )
-    rejection = {
-        "artifact_kind": "agentic_code_premise_rejection",
-        "premise_check": premise_check,
-        "failure_category": category,
-        "reason": reason,
-        "selected_surface": hypothesis.change_locus,
-        "target_file": hypothesis.target_file,
-        "patch_generated": False,
-        "screening_allowed": False,
-    }
-    if premise_check == "contradicted":
-        rejection["legacy_failure_category"] = _LEGACY_PREMISE_CONTRADICTED
-        rejection["failure_code"] = _PROPOSAL_PREMISE_CONTRADICTED_CODE
-        rejection["agent_block_reason"] = _AGENT_QUALITY_BLOCKED_REASON
-    return rejection
-
-
-def _preview_failure_category(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> AgenticFailureCategory:
-    for observation in reversed(observations):
-        if not observation.is_error and _preview_observation_passed(observation):
-            continue
-        if observation.tool_name == "proposal.schema_preview":
-            return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
-        if observation.tool_name == "proposal.algorithm_smoke":
-            return AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE
-        if observation.tool_name == "proposal.contract_preview":
-            if _contract_preview_indicates_patch_graph_failure(observation):
-                return AgenticFailureCategory.PATCH_GRAPH_FAILURE
-            return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
-        if observation.tool_name == "proposal.target_permission_preview":
-            return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
-    return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
-
-
-def _contract_preview_indicates_patch_graph_failure(
-    observation: ProposalObservation,
-) -> bool:
-    text_values = [
-        str(value).strip().lower()
-        for value in _preview_text_values(observation.structured_payload)
-        if str(value).strip()
-    ]
-    text_values.extend(
-        value
-        for value in (
-            str(observation.summary or "").strip().lower(),
-            str(_enum_value(observation.failure_code) or "").strip().lower(),
-        )
-        if value
-    )
-    joined = "\n".join(text_values)
-    if "import_graph" in joined or "import graph" in joined:
-        return True
-    return any(
-        value.startswith("c8")
-        or value.startswith("c9e")
-        or ": c8" in value
-        or ": c9e" in value
-        for value in text_values
-    )
-
-
-def _preview_text_values(value: Any) -> list[str]:
-    values: list[str] = []
-    if isinstance(value, Mapping):
-        for item in value.values():
-            values.extend(_preview_text_values(item))
-    elif isinstance(value, (list, tuple, set)):
-        for item in value:
-            values.extend(_preview_text_values(item))
-    elif value is not None:
-        values.append(str(value))
-    return values
-
-
-def _compact_active_solver_observation_for_budget(
-    observation: ProposalObservation,
-) -> ProposalObservation | None:
-    if observation.is_error or observation.tool_name not in {
-        "context.read_active_solver_design",
-        "context.read_solver_call_graph",
-        "context.list_algorithm_files",
-        "context.read_algorithm_file",
-        "context.read_algorithm_symbol",
-    }:
-        return None
-    payload = observation.structured_payload
-    if not isinstance(payload, Mapping):
-        return None
-    if observation.tool_name == "context.read_active_solver_design":
-        compact_payload = _compact_active_solver_design_payload(payload)
-    elif observation.tool_name == "context.read_solver_call_graph":
-        compact_payload = _compact_solver_call_graph_payload(payload)
-    elif observation.tool_name == "context.list_algorithm_files":
-        compact_payload = _compact_algorithm_file_list_payload(payload)
-    else:
-        compact_payload = _compact_algorithm_read_payload(payload)
-    return replace(
-        observation,
-        summary=_limit_string(observation.summary, 220)
-        or "Returned compact active solver evidence.",
-        structured_payload=compact_payload,
-        repair_hint=None,
-    )
-
-
-def _compact_active_solver_design_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    call_graph = payload.get("call_graph")
-    return _drop_empty_dict(
-        {
-            "surface": payload.get("surface"),
-            "active_surface": payload.get("active_surface"),
-            "provenance": payload.get("provenance"),
-            "source_digest": _compact_source_digest(payload.get("source_digest")),
-            "entrypoint": payload.get("entrypoint"),
-            "active_files": _compact_algorithm_files(payload.get("active_files")),
-            "inactive_files": _compact_algorithm_files(payload.get("inactive_files")),
-            "call_graph": (
-                _compact_solver_call_graph_payload(call_graph)
-                if isinstance(call_graph, Mapping)
-                else None
-            ),
-            "mechanism_summary": _compact_mechanism_summary(
-                payload.get("mechanism_summary")
-            ),
-            "mechanism_keys": sorted(
-                str(key) for key in (payload.get("mechanism_summary") or {}).keys()
-            )
-            if isinstance(payload.get("mechanism_summary"), Mapping)
-            else None,
-            "compacted_for_agentic_budget": True,
-        }
-    )
-
-
-def _compact_solver_call_graph_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    edges = payload.get("edges")
-    nodes = payload.get("nodes")
-    compact_edges: list[dict[str, Any]] = []
-    if isinstance(edges, list):
-        for edge in edges[:12]:
-            if not isinstance(edge, Mapping):
-                continue
-            compact_edges.append(
-                _drop_empty_dict(
-                    {
-                        "from": edge.get("from"),
-                        "to": edge.get("to"),
-                        "mechanism": _limit_string(edge.get("mechanism"), 260),
-                        "evidence": _compact_string_list(edge.get("evidence"), 8, 120),
-                    }
-                )
-            )
-    return _drop_empty_dict(
-        {
-            "surface": payload.get("surface"),
-            "provenance": payload.get("provenance"),
-            "source_digest": _compact_source_digest(payload.get("source_digest")),
-            "node_count": len(nodes) if isinstance(nodes, list) else None,
-            "edge_count": len(edges) if isinstance(edges, list) else None,
-            "edges": compact_edges,
-            "compacted_for_agentic_budget": True,
-        }
-    )
-
-
-def _compact_algorithm_file_list_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return _drop_empty_dict(
-        {
-            "surface": payload.get("surface"),
-            "allowlist_only": payload.get("allowlist_only"),
-            "file_count": payload.get("file_count"),
-            "files": _compact_algorithm_files(payload.get("files")),
-            "compacted_for_agentic_budget": True,
-        }
-    )
-
-
-def _compact_algorithm_read_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return _drop_empty_dict(
-        {
-            "file_path": payload.get("file_path"),
-            "symbol": payload.get("symbol"),
-            "readable": payload.get("readable"),
-            "reason": payload.get("reason"),
-            "source": payload.get("source"),
-            "active": payload.get("active"),
-            "role": payload.get("role"),
-            "module": payload.get("module"),
-            "line_start": payload.get("line_start"),
-            "line_end": payload.get("line_end"),
-            "sha256": payload.get("sha256"),
-            "digest": payload.get("digest"),
-            "truncated": payload.get("truncated"),
-            "provenance": payload.get("provenance"),
-            "content_preview": _limit_string(payload.get("content_preview"), 1600),
-            "compacted_for_agentic_budget": True,
-        }
-    )
-
-
-def _compact_algorithm_files(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    files: list[dict[str, Any]] = []
-    for item in value[:12]:
-        if not isinstance(item, Mapping):
-            continue
-        files.append(
-            _drop_empty_dict(
-                {
-                    "file_path": item.get("file_path"),
-                    "module": item.get("module"),
-                    "role": item.get("role"),
-                    "active": item.get("active"),
-                    "readable": item.get("readable"),
-                    "reason": item.get("reason"),
-                    "source": item.get("source"),
-                    "digest": item.get("digest"),
-                }
-            )
-        )
-    return files
-
-
-def _compact_source_digest(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    files = value.get("files")
-    compact_files = {}
-    if isinstance(files, Mapping):
-        compact_files = {
-            str(path): str(digest)[:16]
-            for path, digest in list(files.items())[:12]
-        }
-    return _drop_empty_dict(
-        {
-            "algorithm": value.get("algorithm"),
-            "snapshot_digest": value.get("snapshot_digest"),
-            "files": compact_files,
-        }
-    )
-
-
-def _compact_mechanism_summary(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        return {}
-    summary: dict[str, Any] = {}
-    for key, item in value.items():
-        if not isinstance(item, Mapping):
-            continue
-        summary[str(key)] = _drop_empty_dict(
-            {
-                "active": item.get("active"),
-                "summary": _limit_string(item.get("summary"), 600),
-                "evidence_symbols": _compact_string_list(
-                    item.get("evidence_symbols"),
-                    12,
-                    140,
-                ),
-            }
-        )
-    return _drop_empty_dict(summary)
-
-
-def _compact_string_list(value: Any, limit: int, max_chars: int) -> list[str]:
-    if not isinstance(value, (list, tuple, set)):
-        return []
-    result: list[str] = []
-    for item in list(value)[: max(0, limit)]:
-        text = _limit_string(item, max_chars)
-        if text:
-            result.append(text)
-    return result
-
-
-def _active_solver_mechanism_evidence_for_code_context(
-    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> dict[str, Any]:
-    for observation in reversed(tuple(observations)):
-        if observation.is_error:
-            continue
-        if observation.tool_name != "context.read_active_solver_design":
-            continue
-        payload = observation.structured_payload
-        if not isinstance(payload, Mapping):
-            continue
-        mechanisms = _compact_mechanism_summary(payload.get("mechanism_summary"))
-        if not mechanisms:
-            continue
-        source_digest = payload.get("source_digest")
-        snapshot_digest = (
-            source_digest.get("snapshot_digest")
-            if isinstance(source_digest, Mapping)
-            else None
-        )
-        return _drop_empty_dict(
-            {
-                "source": "context.read_active_solver_design",
-                "snapshot_digest": snapshot_digest,
-                "mechanism_summary": mechanisms,
-                "premise_check_rule": (
-                    "Before returning premise_check='supported', compare the "
-                    "hypothesis against these active mechanisms. For "
-                    "related/proximity destroy proposals, account for existing "
-                    "_shaw_removal: seed-based removal using distance, demand, "
-                    "and original-route relatedness."
-                ),
-            }
-        )
-    return {}
-
-
-def _patch_self_reported_unresolved_issue(patch: PatchProposal) -> str | None:
-    hint = str(patch.test_hint or "").strip()
-    if not hint:
-        return None
-    normalized = re.sub(r"\s+", " ", hint).strip()
-    lowered = normalized.lower()
-    for pattern, label in _SELF_REPORTED_CODE_FAILURE_PATTERNS:
-        if not pattern.search(lowered):
-            continue
-        if label == "syntax_error" and any(
-            phrase in lowered for phrase in _SELF_REPORTED_SYNTAX_NEGATIONS
-        ):
-            continue
-        excerpt = normalized
-        if len(excerpt) > 360:
-            excerpt = excerpt[:357].rstrip() + "..."
-        return (
-            "generated patch self-reported unresolved code issue "
-            f"({label}) in test_hint: {excerpt}"
-        )
-    return None

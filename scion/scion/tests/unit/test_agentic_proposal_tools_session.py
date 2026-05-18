@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import scion.proposal.tools.preview as preview_tools
 from scion.core.public_refs import contains_absolute_path
 from scion.proposal.agentic_artifacts import inspect_agentic_session_artifact
 from scion.proposal.agentic_session import AgenticProposalOutput, AgenticTranscriptEvent
@@ -149,6 +150,58 @@ class _BudgetAwareReadSurfaceTool:
         )
 
 
+def _algorithm_read_observation(
+    tool_name: str,
+    payload: dict,
+) -> ProposalObservation:
+    return ProposalObservation(
+        observation_id=f"{tool_name}-obs",
+        session_id="session-algorithm-read",
+        tool_name=tool_name,
+        tool_call_id="tool-0001",
+        observation_type=tool_name.rsplit(".", 1)[-1],
+        summary="Returned algorithm source.",
+        structured_payload=payload,
+        exposure_level=ProposalExposureLevel.CHAMPION_CODE,
+    )
+
+
+def _algorithm_file_payload(
+    file_path: str,
+    *,
+    max_chars: int,
+    preview_chars: int,
+    size_chars: int,
+    truncated: bool = False,
+) -> dict:
+    return {
+        "file_path": file_path,
+        "readable": True,
+        "source": "champion_snapshot",
+        "content_preview": "x" * preview_chars,
+        "truncated": truncated,
+        "size_chars": size_chars,
+        "max_chars": max_chars,
+    }
+
+
+def _algorithm_symbol_payload(
+    file_path: str,
+    symbol: str,
+    *,
+    preview_chars: int,
+    truncated: bool = False,
+) -> dict:
+    return {
+        "file_path": file_path,
+        "symbol": symbol,
+        "readable": True,
+        "source": "champion_snapshot",
+        "content_preview": "x" * preview_chars,
+        "truncated": truncated,
+    }
+
+
 class _HypothesisSchemaFailureCreative(FakeCreative):
     def generate_hypothesis(self, context):
         self.hypothesis_contexts.append(dict(context))
@@ -293,12 +346,520 @@ def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
     }
 
 
+def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() -> None:
+    path = "policies/solver_algorithm.py"
+    other_path = "policies/baseline_modules/local_search.py"
+    observation = _algorithm_read_observation(
+        "context.read_algorithm_file",
+        _algorithm_file_payload(
+            path,
+            max_chars=12000,
+            preview_chars=8000,
+            size_chars=8000,
+        ),
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=path,
+        )
+    )
+
+    same_request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "max_chars": 12000,
+    }
+    smaller_request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "max_chars": 6000,
+    }
+    larger_request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "max_chars": 16000,
+    }
+    other_file_request = {
+        "surface": "solver_design",
+        "file_path": other_path,
+        "max_chars": 12000,
+    }
+
+    assert agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        same_request,
+    )
+    assert agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        smaller_request,
+    )
+    assert agentic_session_module._has_successful_code_phase_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        same_request,
+        hypothesis=hypothesis,
+    )
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        larger_request,
+    )
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        other_file_request,
+    )
+    assert not agentic_session_module._has_successful_code_phase_reusable_observation(
+        [observation],
+        "context.read_algorithm_file",
+        other_file_request,
+        hypothesis=hypothesis,
+    )
+
+
+def test_algorithm_file_truncated_or_short_preview_is_not_reused() -> None:
+    path = "policies/solver_algorithm.py"
+    truncated = _algorithm_read_observation(
+        "context.read_algorithm_file",
+        _algorithm_file_payload(
+            path,
+            max_chars=12000,
+            preview_chars=12000,
+            size_chars=16000,
+            truncated=True,
+        ),
+    )
+    short_preview = _algorithm_read_observation(
+        "context.read_algorithm_file",
+        _algorithm_file_payload(
+            path,
+            max_chars=12000,
+            preview_chars=100,
+            size_chars=5000,
+        ),
+    )
+    request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "max_chars": 6000,
+    }
+
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [truncated],
+        "context.read_algorithm_file",
+        request,
+    )
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [short_preview],
+        "context.read_algorithm_file",
+        request,
+    )
+
+
+def test_algorithm_symbol_reusable_observations_are_scoped_by_file_and_symbol() -> None:
+    path = "policies/baseline_modules/local_search.py"
+    other_path = "policies/solver_algorithm.py"
+    symbol = "_inter_route_or_opt"
+    observation = _algorithm_read_observation(
+        "context.read_algorithm_symbol",
+        _algorithm_symbol_payload(
+            path,
+            symbol,
+            preview_chars=2000,
+        ),
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=path,
+        )
+    )
+
+    same_request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "symbol": symbol,
+        "max_chars": 6000,
+    }
+    other_symbol_request = {
+        "surface": "solver_design",
+        "file_path": path,
+        "symbol": "_two_opt",
+        "max_chars": 6000,
+    }
+    other_file_request = {
+        "surface": "solver_design",
+        "file_path": other_path,
+        "symbol": symbol,
+        "max_chars": 6000,
+    }
+
+    assert agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_symbol",
+        same_request,
+    )
+    assert agentic_session_module._has_successful_code_phase_reusable_observation(
+        [observation],
+        "context.read_algorithm_symbol",
+        same_request,
+        hypothesis=hypothesis,
+    )
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_symbol",
+        other_symbol_request,
+    )
+    assert not agentic_session_module._has_successful_reusable_observation(
+        [observation],
+        "context.read_algorithm_symbol",
+        other_file_request,
+    )
+    assert not agentic_session_module._has_successful_code_phase_reusable_observation(
+        [observation],
+        "context.read_algorithm_symbol",
+        other_symbol_request,
+        hypothesis=hypothesis,
+    )
+
+
+def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/solver_algorithm.py"
+    support_file = "policies/baseline_modules/local_search.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.list_algorithm_files",
+                "args": {"surface": "solver_design", "include_inactive": True},
+            },
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": target_file,
+                    "max_chars": 4000,
+                },
+            },
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": support_file,
+                    "max_chars": 4000,
+                },
+            },
+            {
+                "tool_name": "context.read_active_solver_design",
+                "args": {"surface": "solver_design"},
+            },
+            {
+                "tool_name": "context.read_solver_call_graph",
+                "args": {"surface": "solver_design"},
+            },
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+        ],
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path=target_file,
+            action="modify",
+            code_content=(
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return context.nearest_neighbor()\n"
+            ),
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=16, max_steps=20),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    file_read_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("step_id")
+        and event.metadata.get("tool_name") == "context.read_algorithm_file"
+    ]
+    step_events = [
+        event.metadata for event in output.transcript if event.metadata.get("step_id")
+    ]
+    already_succeeded_file_skips = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("tool_name") == "context.read_algorithm_file"
+        and event.metadata.get("skip_reason") == "already_succeeded"
+    ]
+    prompt_file_paths = {
+        observation["structured_payload"]["file_path"]
+        for observation in creative.hypothesis_contexts[0][
+            "agentic_tool_observations"
+        ]
+        if observation["tool_name"] == "context.read_algorithm_file"
+    }
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert [
+        (event["tool_name"], event["selection_source"])
+        for event in step_events[:5]
+    ] == [
+        ("context.list_surfaces", "required_context_preface"),
+        ("context.read_problem", "required_context_preface"),
+        ("context.list_algorithm_files", "required_context_preface"),
+        ("context.read_active_solver_design", "required_context_preface"),
+        ("context.read_solver_call_graph", "required_context_preface"),
+    ]
+    assert [event["status"] for event in file_read_events[:2]] == ["ok", "ok"]
+    assert [event["selection_source"] for event in file_read_events[:2]] == [
+        "planner_selected",
+        "planner_selected",
+    ]
+    assert prompt_file_paths >= {target_file, support_file}
+    assert not already_succeeded_file_skips
+
+
+def test_solver_design_planner_does_not_default_read_full_algorithm_object(
+    tmp_path: Path,
+) -> None:
+    files = [
+        "policies/solver_algorithm.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/destroy_repair.py",
+        "policies/baseline_modules/acceptance.py",
+    ]
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=files[0],
+    )
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=files[0],
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": file_path,
+                    "max_chars": 24000,
+                },
+            }
+            for file_path in files
+        ],
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path=files[0],
+            action="modify",
+            code_content=(
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return context.nearest_neighbor()\n"
+            ),
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=24, max_steps=30),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+    file_read_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("step_id")
+        and event.metadata.get("tool_name") == "context.read_algorithm_file"
+    ]
+    cap_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("skip_reason")
+        == "solver_design_algorithm_file_read_budget_reserved"
+    ]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert len(file_read_events) == 3
+    assert {event["status"] for event in file_read_events} == {"ok"}
+    assert cap_events
+
+
+def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/solver_algorithm.py"
+    support_file = "policies/baseline_modules/local_search.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+    )
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": target_file,
+                    "max_chars": 24000,
+                },
+            },
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": support_file,
+                    "max_chars": 24000,
+                },
+            },
+            {"stop": True},
+        ]
+    )
+    config = AgenticToolLoopConfig(
+        max_steps=12,
+        max_tool_calls=12,
+        max_observation_chars=96000,
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-preface-budget",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_loop_config=config.__dict__,
+    )
+
+    observations = session._run_initial_tool_loop(context, state)
+
+    assert session._missing_required_context_error(
+        observations,
+        context=context,
+    ) is None
+    assert [observation.tool_name for observation in observations[:5]] == [
+        "context.list_surfaces",
+        "context.read_problem",
+        "context.list_algorithm_files",
+        "context.read_active_solver_design",
+        "context.read_solver_call_graph",
+    ]
+    assert any(
+        observation.tool_name == "context.read_algorithm_file"
+        and observation.structured_payload.get("file_path") == target_file
+        for observation in observations
+    )
+    assert not any(
+        "missing required proposal context tools: context.list_surfaces"
+        in event.metadata.get("detail", "")
+        for event in state.transcript
+    )
+
+
+def test_generic_session_keeps_planner_owned_required_context(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
+        ]
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-generic-planner",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+    )
+
+    observations = session._run_initial_tool_loop(context, state)
+
+    assert [observation.tool_name for observation in observations[:2]] == [
+        "context.list_surfaces",
+        "context.read_problem",
+    ]
+    tool_events = [
+        event.metadata for event in state.transcript if event.metadata.get("step_id")
+    ]
+    assert [event["selection_source"] for event in tool_events[:2]] == [
+        "planner_selected",
+        "planner_selected",
+    ]
+    assert not any(
+        event.metadata.get("selection_source") == "required_context_preface"
+        for event in state.transcript
+    )
+
+
 def test_code_phase_required_surface_read_compacts_to_preserve_self_check_reserve(
     tmp_path: Path,
 ) -> None:
     context = _context(tmp_path, policy=_tool_enabled_policy())
     hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
-    config = AgenticToolLoopConfig(max_steps=8, max_tool_calls=8)
+    config = AgenticToolLoopConfig(
+        max_steps=8,
+        max_tool_calls=8,
+        max_observation_chars=48000,
+    )
     session = AgenticProposalSession(
         FakeCreative(),
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -308,8 +869,7 @@ def test_code_phase_required_surface_read_compacts_to_preserve_self_check_reserv
         session_id="session-budget",
         campaign_id=context.campaign_id,
         branch_id=context.branch_id or "branch-1",
-        tool_step_count=4,
-        tool_call_count=4,
+        observation_chars_used=40000,
         tool_loop_config=config.__dict__,
     )
 
@@ -337,6 +897,174 @@ def test_code_phase_required_surface_read_compacts_to_preserve_self_check_reserv
         and event.metadata.get("selection_source") == "code_phase_required_compact"
         for event in state.transcript
     )
+
+
+def test_code_phase_prioritizes_solver_design_target_read_before_final_preview_slots(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+        )
+    )
+    config = AgenticToolLoopConfig(max_steps=8, max_tool_calls=8)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-code-target",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_step_count=5,
+        tool_call_count=5,
+        tool_loop_config=config.__dict__,
+    )
+
+    observations = session._run_code_context_fixed_tools(
+        context,
+        state,
+        hypothesis,
+        [],
+        selection_source="code_phase_required",
+    )
+
+    assert [observation.tool_name for observation in observations] == [
+        "context.read_algorithm_file"
+    ]
+    assert observations[0].is_error is False
+    assert observations[0].structured_payload["file_path"] == hypothesis.target_file
+    assert observations[0].structured_payload["source"] in {
+        "branch_workspace",
+        "champion_snapshot",
+        "problem_spec_root",
+    }
+    assert any(
+        event.metadata.get("tool_name") == "context.read_surface"
+        and event.metadata.get("skip_reason")
+        == "code_self_check_tool_slot_reserved"
+        for event in state.transcript
+    )
+
+
+def test_solver_design_grounding_reads_file_list_and_target_file(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+        )
+    )
+    config = AgenticToolLoopConfig(max_steps=12, max_tool_calls=12)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-grounding",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_loop_config=config.__dict__,
+    )
+
+    observations = session._run_solver_design_grounding_tools(
+        context,
+        state,
+        [],
+        selection_source="solver_design_grounding_required",
+        hypothesis=hypothesis,
+    )
+
+    tool_names = [observation.tool_name for observation in observations]
+    assert "context.list_algorithm_files" in tool_names
+    assert "context.read_active_solver_design" in tool_names
+    assert "context.read_algorithm_file" in tool_names
+    assert any(
+        observation.structured_payload.get("file_path") == hypothesis.target_file
+        for observation in observations
+        if observation.tool_name == "context.read_algorithm_file"
+    )
+    assert (
+        agentic_session_module._missing_solver_design_grounding_error(
+            observations,
+            hypothesis=hypothesis,
+        )
+        is None
+    )
+
+
+def test_solver_design_grounding_allows_declared_new_module_without_file_read(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            action="create_new",
+            target_file="policies/baseline_modules/cross_route_lns.py",
+        )
+    )
+    config = AgenticToolLoopConfig(max_steps=12, max_tool_calls=12)
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-grounding-create",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+        tool_loop_config=config.__dict__,
+    )
+
+    observations = session._run_solver_design_grounding_tools(
+        context,
+        state,
+        [],
+        selection_source="solver_design_grounding_required",
+        hypothesis=hypothesis,
+    )
+
+    tool_names = [observation.tool_name for observation in observations]
+    assert "context.list_algorithm_files" in tool_names
+    assert "context.read_active_solver_design" in tool_names
+    assert agentic_session_module._has_successful_solver_call_graph_grounding(
+        observations
+    )
+    assert not any(
+        observation.tool_name == "context.read_algorithm_file"
+        and observation.structured_payload.get("file_path") == hypothesis.target_file
+        for observation in observations
+    )
+    assert (
+        agentic_session_module._missing_solver_design_grounding_error(
+            observations,
+            hypothesis=hypothesis,
+            context=context,
+        )
+        is None
+    )
+
+    off_boundary = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            action="create_new",
+            target_file="policies/not_solver/new_module.py",
+        )
+    )
+    error = agentic_session_module._missing_solver_design_grounding_error(
+        observations,
+        hypothesis=off_boundary,
+        context=context,
+    )
+    assert error is not None
+    assert "outside declared patch paths" in error
 
 
 def test_budget_denial_does_not_apply_to_mandatory_code_surface_read(
@@ -437,6 +1165,48 @@ def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
             "error_code",
         }.issubset(event.metadata)
         assert "structured_payload" not in event.metadata
+
+
+def test_agentic_session_invalid_expected_telemetry_fails_before_code(
+    tmp_path: Path,
+) -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            expected_telemetry={"attribution": ["policy_loaded"]},
+        )
+    )
+    creative = FakeCreative(hypothesis=hypothesis)
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert creative.code_contexts == []
+    assert output.self_check.schema_valid is False
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.failure_detail is not None
+    assert "C11_expected_telemetry" in output.failure_detail
+    assert "attribution" in output.failure_detail
 
 
 def test_creative_layer_renders_agentic_observations_and_research_diagnosis() -> None:
@@ -783,23 +1553,30 @@ def test_agentic_session_retry_error_ledger_records_algorithm_smoke_failure(
     assert output.failure_category == "algorithm_smoke_failure"
     assert output.failure_ledger["first_root_cause"] == "algorithm_smoke_failure"
     assert output.failure_ledger["latest_failure"] == "algorithm_smoke_failure"
-    assert output.failure_ledger["entries"][0]["tool_name"] == (
-        "proposal.algorithm_smoke"
-    )
 
 
-def test_agentic_session_fails_closed_when_algorithm_smoke_is_skipped_by_budget(
+def test_agentic_session_wall_time_reserve_stops_smoke_repair_before_code_llm(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     creative = FakeCreative()
     context = _context(tmp_path, policy=_tool_enabled_policy())
+    registry = ProposalToolRegistry.default_read_only()
+    registry._tools["proposal.algorithm_smoke"] = _FailingAlgorithmSmokeTool()
+
+    def reserve_after_initial_code(self, state):
+        del self, state
+        return len(creative.code_contexts) > 0
+
+    monkeypatch.setattr(
+        AgenticProposalSession,
+        "_code_phase_wall_time_reserved",
+        reserve_after_initial_code,
+    )
     session = AgenticProposalSession(
         creative,
-        tool_registry=ProposalToolRegistry.default_read_only(),
-        tool_loop_config=AgenticToolLoopConfig(
-            max_tool_calls=10,
-            max_code_repair_attempts=0,
-        ),
+        tool_registry=registry,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=2),
     )
 
     output = session.run(
@@ -819,42 +1596,149 @@ def test_agentic_session_fails_closed_when_algorithm_smoke_is_skipped_by_budget(
         )
     )
 
-    smoke_events = [
+    reserve_events = [
         event.metadata
         for event in output.transcript
-        if event.metadata.get("tool_name") == "proposal.algorithm_smoke"
+        if event.metadata.get("skip_reason") == "preview_repair_wall_time_reserved"
     ]
 
     assert output.status == AgenticProposalStatus.FAILED
-    assert output.is_completed is False
-    assert output.patch is None
     assert output.failure_category == "algorithm_smoke_failure"
     assert output.failure_detail is not None
-    assert "algorithm smoke did not run" in output.failure_detail
-    assert output.failure_ledger["first_root_cause"] == "algorithm_smoke_failure"
-    assert output.failure_ledger["latest_failure"] == "algorithm_smoke_failure"
-    assert smoke_events
-    assert smoke_events[-1]["status"] == "error"
-    assert smoke_events[-1]["observation_type"] == "tool_skipped"
-    assert smoke_events[-1]["selection_source"] == "fallback_selected"
-    assert smoke_events[-1]["skip_reason"] == "tool_loop_limit"
-    assert (
-        smoke_events[-1]["failure_code"]
-        == "tool_loop_limit_before_algorithm_smoke"
-    )
-    assert (
-        smoke_events[-1]["error_code"]
-        == "tool_loop_limit_before_algorithm_smoke"
-    )
-    assert output.failure_ledger["entries"][0]["observation_id"] == (
-        smoke_events[-1]["observation_id"]
-    )
-    assert output.failure_ledger["entries"][0]["failure_code"] == (
-        "tool_loop_limit_before_algorithm_smoke"
+    assert "algorithm smoke did not pass" in output.failure_detail
+    assert len(creative.code_contexts) == 1
+    assert reserve_events
+    assert reserve_events[-1]["tool_name"] == "proposal.algorithm_smoke"
+    assert output.failure_ledger["entries"][0]["tool_name"] == (
+        "proposal.algorithm_smoke"
     )
 
 
-def test_agentic_session_fails_closed_when_contract_preview_is_skipped_by_budget(
+def test_agentic_session_algorithm_smoke_repair_feedback_keeps_runtime_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_algorithm.py",
+        )
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
+        code_content=(
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    solution = context.make_solution(context.nearest_neighbor())\n"
+            "    context.record_iteration('seed', 1)\n"
+            "    context.record_move('seed', attempted=1, accepted=1)\n"
+            "    return solution\n"
+        ),
+    )
+    huge_stderr = "FULL_STDERR_BEGIN\n" + ("traceback line\n" * 9000) + (
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED missing_probe"
+    )
+
+    def fake_runtime_smoke(context, patch, selected_surface, hypothesis):
+        del context, patch, selected_surface, hypothesis
+        return {
+            "passed": False,
+            "runtime_smoke_run": True,
+            "workspace_materialized": True,
+            "selected_surface": "solver_design",
+            "case": "controlled/data/canary.vrp",
+            "case_count": 1,
+            "issues": [
+                "telemetry guard failed: "
+                "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+            ],
+            "run": {
+                "success": False,
+                "exit_code": 1,
+                "elapsed_ms": 99,
+                "error_category": "runtime_exception",
+                "detail": "solver run failed after telemetry guard",
+                "stderr": huge_stderr,
+            },
+            "runtime": {
+                "solver_algorithm_errors": 1,
+                "solver_algorithm_events": [
+                    {
+                        "message": (
+                            "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED "
+                            "missing_probe"
+                        )
+                    }
+                ]
+                * 1000,
+            },
+            "telemetry_guard": {
+                "passed": False,
+                "selected_surface": "solver_design",
+                "candidate_runs": 1,
+                "champion_runs": 1,
+                "expected_telemetry_present": True,
+                "declared_mechanisms": ["missing_probe"],
+                "failures": [
+                    {
+                        "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "severity": "fail",
+                        "mechanism": "missing_probe",
+                        "category": "activation",
+                        "field": "solver_algorithm_events",
+                        "candidate_positive": 0,
+                        "candidate_present": 1,
+                        "candidate_missing": 0,
+                        "champion_positive": 1,
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(
+        preview_tools,
+        "_runtime_algorithm_smoke_preview",
+        fake_runtime_smoke,
+    )
+    creative = SequentialPatchCreative([patch, patch], hypothesis=hypothesis)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.failure_category == "algorithm_smoke_failure"
+    assert len(creative.code_contexts) >= 2
+    repair_context = creative.code_contexts[1]
+    prior_failure = repair_context["prior_code_failure"]
+    preview_feedback = repair_context["agentic_preview_feedback"]
+    assert "result exceeded observation budget" not in prior_failure
+    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in prior_failure
+    assert "missing_probe" in prior_failure
+    assert preview_feedback["structured_payload"]["agent_summary"][
+        "primary_issue"
+    ].startswith("telemetry guard failed")
+
+
+def test_agentic_session_runs_algorithm_smoke_with_independent_preview_budget(
     tmp_path: Path,
 ) -> None:
     creative = FakeCreative()
@@ -885,37 +1769,77 @@ def test_agentic_session_fails_closed_when_contract_preview_is_skipped_by_budget
         )
     )
 
+    smoke_events = [
+        event.metadata
+        for event in output.transcript
+        if event.metadata.get("tool_name") == "proposal.algorithm_smoke"
+        and event.metadata.get("observation_type")
+    ]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.is_completed is True
+    assert output.failure_category is None
+    assert output.tool_budget_used["tool_calls"] <= 9
+    assert output.tool_budget_used["preview_tool_calls"] >= 4
+    assert smoke_events
+    assert smoke_events[-1]["status"] == "ok"
+    assert smoke_events[-1]["observation_type"] == "algorithm_smoke"
+    assert smoke_events[-1]["selection_source"] == "fallback_selected"
+    assert not any(
+        event.get("observation_type") == "tool_skipped" for event in smoke_events
+    )
+
+
+def test_agentic_session_runs_contract_preview_with_independent_preview_budget(
+    tmp_path: Path,
+) -> None:
+    creative = FakeCreative()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(
+            max_tool_calls=8,
+            max_code_repair_attempts=0,
+        ),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
     contract_events = [
         event.metadata
         for event in output.transcript
         if event.metadata.get("tool_name") == "proposal.contract_preview"
+        and event.metadata.get("observation_type")
     ]
 
-    assert output.status == AgenticProposalStatus.FAILED
-    assert output.is_completed is False
-    assert output.patch is None
-    assert output.failure_category == "contract_boundary_failure"
-    assert output.failure_detail is not None
-    assert "contract preview did not run" in output.failure_detail
-    assert output.self_check.contract_preview_passed is False
-    assert output.failure_ledger["first_root_cause"] == "contract_boundary_failure"
-    assert output.failure_ledger["latest_failure"] == "contract_boundary_failure"
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.is_completed is True
+    assert output.failure_category is None
+    assert output.self_check.contract_preview_passed is True
+    assert output.tool_budget_used["tool_calls"] <= 8
+    assert output.tool_budget_used["preview_tool_calls"] >= 4
     assert contract_events
-    assert contract_events[-1]["status"] == "error"
-    assert contract_events[-1]["observation_type"] == "tool_skipped"
+    assert contract_events[-1]["status"] == "ok"
+    assert contract_events[-1]["observation_type"] == "contract_preview"
     assert contract_events[-1]["selection_source"] == "fallback_selected"
-    assert contract_events[-1]["skip_reason"] == "tool_loop_limit"
-    assert contract_events[-1]["failure_code"] == (
-        "tool_loop_limit_before_contract_preview"
-    )
-    assert contract_events[-1]["error_code"] == (
-        "tool_loop_limit_before_contract_preview"
-    )
-    assert output.failure_ledger["entries"][0]["observation_id"] == (
-        contract_events[-1]["observation_id"]
-    )
-    assert output.failure_ledger["entries"][0]["failure_code"] == (
-        "tool_loop_limit_before_contract_preview"
+    assert not any(
+        event.get("observation_type") == "tool_skipped" for event in contract_events
     )
 
 
@@ -1082,7 +2006,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
         ],
         hypothesis=hypothesis,
     )
-    config = AgenticToolLoopConfig(max_observation_chars=48000)
+    config = AgenticToolLoopConfig(max_observation_chars=96000)
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -1156,19 +2080,23 @@ def test_agentic_session_tool_loop_limits_are_enforced(tmp_path: Path) -> None:
     tool_events = [
         event for event in output.transcript if event.metadata.get("tool_name")
     ]
-    stop_events = [
-        event
-        for event in output.transcript
-        if event.metadata.get("stop_reason") == "tool_loop_limit"
-    ]
-
-    assert output.status == AgenticProposalStatus.FAILED
-    assert output.failure_detail == "schema or target preview did not pass"
-    assert [event.metadata["tool_name"] for event in tool_events] == [
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.tool_budget_used["tool_calls"] <= 2
+    assert output.tool_budget_used["preview_tool_calls"] >= 4
+    assert [event.metadata["tool_name"] for event in tool_events[:2]] == [
         "context.list_surfaces",
         "context.read_problem",
     ]
-    assert stop_events
+    assert any(
+        event.metadata.get("tool_name") == "proposal.contract_preview"
+        and event.metadata.get("status") == "ok"
+        for event in tool_events
+    )
+    assert any(
+        event.metadata.get("tool_name") == "proposal.algorithm_smoke"
+        and event.metadata.get("status") == "ok"
+        for event in tool_events
+    )
 
 
 def test_agentic_session_observation_budget_bounds_large_tool_results(
@@ -2573,7 +3501,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     assert output.status == AgenticProposalStatus.COMPLETED
     assert len(read_surface_events) == 2
     assert read_surface_events[0]["selection_source"] == "planner_selected"
-    assert read_surface_events[1]["selection_source"] == "code_phase_required"
+    assert read_surface_events[1]["selection_source"] == "code_phase_required_compact"
     assert output.tool_budget_used["observation_chars"] <= (
         output.tool_loop_config["max_observation_chars"]
     )
@@ -2582,11 +3510,21 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         and event.metadata.get("tool_name") == "context.read_surface"
         for event in output.transcript
     )
+    code_observations = creative.code_contexts[0]["agentic_tool_observations"]
+    assert any(
+        observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"]
+        == "policies/solver_algorithm.py"
+        and observation["structured_payload"]["max_chars"] == 24000
+        and "def solve" in observation["structured_payload"]["content_preview"]
+        for observation in code_observations
+    )
     assert any(
         observation["tool_name"] == "context.read_surface"
-        and observation["structured_payload"]["detail"] == "full"
-        and observation["structured_payload"]["current_artifact"]["max_chars"] == 12000
-        for observation in creative.code_contexts[0]["agentic_tool_observations"]
+        and observation["structured_payload"]["detail"] == "compact"
+        and observation["structured_payload"]["target_file"]
+        == "policies/solver_algorithm.py"
+        for observation in code_observations
     )
 
 
@@ -2988,16 +3926,24 @@ def test_repeated_active_solver_tool_returns_already_read_ref(
 
 
 def test_preview_failure_category_uses_specific_taxonomy() -> None:
-    def observation(tool_name: str, payload: dict) -> ProposalObservation:
+    def observation(
+        tool_name: str,
+        payload: dict,
+        *,
+        is_error: bool = False,
+        observation_type: str | None = None,
+        failure_code: str | None = None,
+    ) -> ProposalObservation:
         return ProposalObservation(
             observation_id=f"{tool_name}-obs",
             session_id="session-taxonomy",
             tool_name=tool_name,
             tool_call_id="call-taxonomy",
-            observation_type=tool_name.rsplit(".", 1)[-1],
+            observation_type=observation_type or tool_name.rsplit(".", 1)[-1],
             summary="preview failed",
             structured_payload=payload,
-            is_error=False,
+            is_error=is_error,
+            failure_code=failure_code,
         )
 
     assert (
@@ -3060,6 +4006,92 @@ def test_preview_failure_category_uses_specific_taxonomy() -> None:
         )
         == agentic_session_module.AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE
     )
+    assert (
+        agentic_session_module._preview_failure_category(
+            [
+                observation(
+                    "proposal.contract_preview",
+                    {
+                        "skip_reason": "session_timeout",
+                        "agentic_budget_control": True,
+                    },
+                    is_error=True,
+                    observation_type="tool_skipped",
+                    failure_code="session_timeout",
+                )
+            ]
+        )
+        == agentic_session_module.AgenticFailureCategory.AGENTIC_BUDGET_CONTROL
+    )
+    detail = agentic_session_module._latest_preview_failure_detail(
+        [
+            observation(
+                "proposal.contract_preview",
+                {
+                    "skip_reason": "session_timeout",
+                    "agentic_budget_control": True,
+                },
+                is_error=True,
+                observation_type="tool_skipped",
+                failure_code="session_timeout",
+            )
+        ]
+    )
+    assert detail == "contract preview skipped by agentic session_timeout/budget control"
+    assert "runtime_exception" not in detail
+    assert "tool_error" not in detail
+
+
+def test_contract_preview_session_timeout_is_budget_skip_not_runtime_exception(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    config = AgenticToolLoopConfig(max_wall_time_sec=0.0)
+    state = AgenticProposalSessionState(
+        session_id=context.session_id,
+        campaign_id=context.campaign_id,
+        branch_id=context.branch.branch_id,
+        tool_loop_config=config.__dict__,
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=config,
+    )
+    hypothesis = HypothesisProposal(**_valid_hypothesis_payload())
+    patch = PatchProposal(**_valid_policy_patch_payload())
+
+    observation = session._run_contract_preview_tool(
+        context,
+        hypothesis,
+        patch,
+        state,
+    )
+    detail = agentic_session_module._latest_preview_failure_detail([observation])
+    self_check = agentic_session_module._self_check_from_previews([observation])
+    category = agentic_session_module._preview_failure_category([observation])
+    agentic_session_module._record_failure_ledger_entry(
+        state,
+        phase=AgenticProposalPhase.SELF_CHECK,
+        category=category,
+        detail=detail,
+        source="preview_failure",
+        observation=observation,
+    )
+
+    assert observation.is_error is True
+    assert observation.observation_type == "tool_skipped"
+    assert observation.failure_code == "session_timeout"
+    assert observation.structured_payload["agentic_budget_control"] is True
+    assert observation.structured_payload["skip_reason"] == "session_timeout"
+    assert detail == "contract preview skipped by agentic session_timeout/budget control"
+    assert "runtime_exception" not in detail
+    assert "tool_error" not in detail
+    assert self_check.contract_preview_passed is False
+    assert self_check.contract_preview_codes == ("session_timeout", "tool_skipped")
+    assert category == agentic_session_module.AgenticFailureCategory.AGENTIC_BUDGET_CONTROL
+    assert state.failure_ledger[-1]["category"] == "agentic_budget_control"
+    assert state.failure_ledger[-1]["failure_code"] == "session_timeout"
 
 
 def test_agentic_session_repairs_two_contract_preview_failures(

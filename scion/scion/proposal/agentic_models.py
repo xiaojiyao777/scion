@@ -50,6 +50,7 @@ class AgenticFailureCategory(str, Enum):
     PATCH_GRAPH_FAILURE = "patch_graph_failure"
     MODEL_REPAIR_FAILED = "model_repair_failed"
     TOOL_BUDGET_EXHAUSTED = "tool_budget_exhausted"
+    AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
     PREMISE_CONTRADICTED = "premise_contradicted"
     DUPLICATE_MECHANISM = "duplicate_mechanism"
     ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
@@ -72,12 +73,12 @@ class AgenticProposalPhase(str, Enum):
 class AgenticToolLoopConfig:
     """Deterministic limits for one proposal-session tool loop."""
 
-    max_steps: int = 22
-    max_tool_calls: int = 18
-    max_observation_chars: int = 96000
+    max_steps: int = 30
+    max_tool_calls: int = 24
+    max_observation_chars: int = 192000
     max_wall_time_sec: float = 240.0
     max_repeated_tool_calls: int = 2
-    max_code_tool_calls: int = 4
+    max_code_tool_calls: int = 6
     max_code_repair_attempts: int = 2
     max_code_generation_timeout_retries: int = 1
 
@@ -111,6 +112,9 @@ class AgenticProposalSessionState:
     failure_ledger: list[Mapping[str, Any]] = field(default_factory=list)
     tool_step_count: int = 0
     tool_call_count: int = 0
+    tool_event_count: int = 0
+    preview_tool_step_count: int = 0
+    preview_tool_call_count: int = 0
     observation_chars_used: int = 0
     loop_stop_reason: str | None = None
     tool_loop_config: Mapping[str, Any] = field(default_factory=dict)

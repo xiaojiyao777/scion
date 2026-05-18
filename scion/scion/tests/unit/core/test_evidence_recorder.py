@@ -196,6 +196,154 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
 
 
+def test_campaign_summary_marks_agent_quality_block_contract_not_run(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Rejected as proposal-only novelty duplicate."),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:premise_contradicted: "
+            "agent_quality_blocked:proposal_premise_contradicted:"
+            "agent_grounding_failure"
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    summary_step = summary["steps"][0]
+    assert summary_step["contract_passed"] is False
+    assert summary_step["contract_not_run_reason"] == (
+        "proposal_only_agent_quality_blocked"
+    )
+    assert summary_step["verification_passed"] is False
+
+
+def test_campaign_summary_separates_primary_contract_and_session_observation(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = StepRecord(
+        round_num=3,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Invalid telemetry with contradicted premise."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="hypothesis_contract",
+        failure_detail=(
+            "C11_expected_telemetry: expected_telemetry category "
+            "'attribution' is not supported"
+        ),
+        proposal_session_ref={
+            "schema_version": "agentic-proposal-session.v1",
+            "session_id": "session-3",
+            "termination_reason": "premise_contradicted",
+            "status": "partial_hypothesis_only",
+            "failure_category": "agent_grounding_failure",
+            "failure_code": "proposal_premise_contradicted",
+            "agent_block_reason": "agent_quality_blocked",
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=3,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    summary_step = summary["steps"][0]
+    assert summary_step["primary_failure"] == {
+        "stage": "agent_quality_blocked",
+        "reason": "proposal_premise_contradicted",
+        "category": "agent_grounding_failure",
+        "code": "proposal_premise_contradicted",
+    }
+    assert summary_step.get("secondary_observations", []) == []
+    assert (
+        summary_step["proposal_session_ref"]["failure_code"]
+        == "proposal_premise_contradicted"
+    )
+
+
+def test_campaign_summary_reports_provider_balance_stop_from_failure_detail(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = StepRecord(
+        round_num=2,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Proposal failed before a candidate was generated."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal",
+        failure_detail=(
+            "agentic_proposal:hypothesis_generation_failed: Tool call failed after "
+            "3 attempt(s). Last error: Transient provider error: Error code: 403 - "
+            "{'error': {'type': 'Aihubmix_api_error', 'message': "
+            "'Your account balance is insufficient. Please recharge your account.'}}"
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=2,
+        champion=_champion(),
+        stopped_reason="circuit_breaker",
+        circuit_breaker_tripped=True,
+    )
+
+    assert summary["stopped_reason"] == "api_balance_exhausted"
+    assert summary["balance_exhausted"] is True
+    assert summary["circuit_breaker_tripped"] is True
+    assert summary["stop_category"] == "provider_error"
+    assert summary["provider_error"]["category"] == "balance_exhausted"
+    assert summary["steps"][0]["contract_not_run_reason"] == (
+        "proposal_generation_failed"
+    )
+
+
+def test_status_reports_balance_stop_consistently(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "balance_exhausted": True,
+            "circuit_breaker_tripped": True,
+        },
+    )
+
+    status = recorder.write_status(stopped_reason="circuit_breaker")
+    on_disk = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+
+    assert status["stopped_reason"] == "api_balance_exhausted"
+    assert status["balance_exhausted"] is True
+    assert status["circuit_breaker_tripped"] is True
+    assert status["stop_category"] == "provider_error"
+    assert status["provider_error"]["category"] == "balance_exhausted"
+    assert on_disk["stopped_reason"] == "api_balance_exhausted"
+
+
 def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
     tmp_path: Path,
 ) -> None:

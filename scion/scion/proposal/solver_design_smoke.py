@@ -242,6 +242,7 @@ def _runtime_algorithm_smoke_preview(
                     problem_spec=_problem_spec_for_runtime_audit(context.problem_spec),
                     selected_surface=surface_name,
                     expected_telemetry=getattr(hypothesis, "expected_telemetry", None),
+                    declared_mechanisms=getattr(hypothesis, "mechanism_changes", ()),
                     implicit_activity_claim=_solver_design_patch_claims_search_effort(
                         patch,
                         hypothesis,

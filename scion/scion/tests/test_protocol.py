@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 from scion.core.models import (
     ExperimentStage, EvalStats, ProtocolResult, RunResult, SolverOutput, CanaryResult,
+    MechanismChange,
 )
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.protocol.evaluation import lexicographic_compare, compute_delta
@@ -704,6 +705,73 @@ def test_run_experiment_fails_closed_on_declared_zero_activity_probe(tmp_path):
     assert guard["passed"] is False
     assert guard["failures"][0]["field"] == "generic_solver_search_iterations"
     assert "telemetry_guard=" in result.exposed_summary
+
+
+def test_run_experiment_fails_closed_on_declared_zero_activation_probe(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "generic_solver_loaded": True,
+        "generic_solver_active": True,
+        "generic_solver_errors": 0,
+        "mechanism_activation": {"target_probe": 0, "other_probe": 1},
+        "mechanism_effect": {"target_probe": 3.0},
+    }
+    champion_runtime = {
+        "mechanism_activation": {"target_probe": 1},
+        "mechanism_effect": {"target_probe": 4.0},
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime=champion_runtime),
+        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=SimpleNamespace(
+            research_surfaces=[
+                SimpleNamespace(
+                    name="generic_solver",
+                    evidence=SimpleNamespace(
+                        required_runtime_fields=[
+                            "generic_solver_loaded",
+                            "generic_solver_active",
+                            "generic_solver_errors",
+                        ],
+                        activation_runtime_fields={
+                            "{mechanism}": ["mechanism_activation"]
+                        },
+                        effect_probe_runtime_fields={
+                            "{mechanism}": ["mechanism_effect"]
+                        },
+                    ),
+                )
+            ]
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="generic_solver",
+        mechanism_changes=(
+            MechanismChange(id="target_probe", change_type="modify"),
+        ),
+    )
+
+    assert result.gate_outcome == "fail"
+    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in result.reason_codes
+    guard = result.candidate_surface_runtime_summary["telemetry_guard"]
+    assert guard["passed"] is False
+    assert guard["failures"][0]["mechanism"] == "target_probe"
+    assert (
+        guard["mechanisms"]["target_probe"]["fields"]["mechanism_activation"][
+            "candidate_positive"
+        ]
+        == 0
+    )
 
 
 def test_run_experiment_normalizes_solver_algorithm_surface_alias(tmp_path):

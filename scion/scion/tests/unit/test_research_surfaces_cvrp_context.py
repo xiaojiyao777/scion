@@ -28,7 +28,7 @@ from scion.proposal.engine import (
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
-def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
+def test_cvrp_hypothesis_context_exposes_active_solver_design_without_legacy_noise(
     tmp_path: Path,
 ) -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(
@@ -78,63 +78,55 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "Move/design grammar:" in prompt_text
     assert "Runtime evidence for problem-level hypotheses:" in prompt_text
     assert "Component policies are implementation hooks" in prompt_text
-    assert "search_policy [policy]" in prompt_text
-    assert "construction_policy [construction]" in prompt_text
-    assert "neighborhood_portfolio [portfolio]" in prompt_text
-    assert "algorithm_blueprint [config]" in prompt_text
     assert "solver_design [solver_design]" in prompt_text
-    assert "policies/search_policy.py" in prompt_text
-    assert "policies/construction_policy.py" in prompt_text
-    assert "policies/neighborhood_portfolio.py" in prompt_text
-    assert "policies/algorithm_blueprint.py" in prompt_text
+    assert "Inactive/Legacy Surface Exclusion" in prompt_text
+    assert "inactive/legacy:" in prompt_text
+    assert "search_policy [policy]" not in prompt_text
+    assert "construction_policy [construction]" not in prompt_text
+    assert "neighborhood_portfolio [portfolio]" not in prompt_text
+    assert "algorithm_blueprint [config]" not in prompt_text
+    assert "route_local [operator]" not in prompt_text
+    assert "solver_design [solver_design]" in prompt_text
+    assert "policies/search_policy.py" not in ctx["research_surfaces"]
+    assert "policies/construction_policy.py" not in ctx["research_surfaces"]
+    assert "policies/neighborhood_portfolio.py" not in ctx["research_surfaces"]
+    assert "policies/algorithm_blueprint.py" not in ctx["research_surfaces"]
     assert "policies/solver_algorithm.py" in prompt_text
     assert "policies/baseline_modules/*.py" in prompt_text
-    assert "algorithm.role: post_baseline_search_scheduling" in prompt_text
+    assert "algorithm.role: post_baseline_search_scheduling" not in prompt_text
+    assert "targets.files: policies/search_policy.py" not in prompt_text
+    assert "baseline_time_fraction" not in ctx["champion_operators_code"]
+    assert ctx["operator_categories"] == "solver_design"
+    assert ctx["active_problem_boundary_surfaces"] == "solver_design"
+    assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
+    assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
+    assert "policies/search_policy.py" not in ctx["targetable_files"]
     assert (
-        "algorithm.invocation_point: "
-        "before_and_during_post_baseline_operator_search"
-    ) in prompt_text
-    assert "targets.files: policies/search_policy.py" in prompt_text
-    assert (
-        "action permissions: create_new=false, modify=true, remove=false"
+        "action permissions: create_new=true, modify=true, remove=true"
         in prompt_text
     )
-    assert "singleton: true" in prompt_text
-    assert (
-        "interface.required_functions: baseline_time_fraction, "
-        "max_operator_rounds, enable_post_baseline_operators"
-    ) in prompt_text
+    assert "singleton: false" in prompt_text
+    assert "interface.required_functions: solve" in prompt_text
     assert "interface.return_contract:" in prompt_text
     assert "bounds.allowed_components:" in prompt_text
-    assert "baseline_time_fraction" in prompt_text
-    assert "operator_round_limit" in prompt_text
-    assert "bounds.numeric_ranges:" in prompt_text
     assert (
-        "bounds.complexity_scale_terms: time_limit_sec, route_count, "
-        "customer_count"
+        "bounds.complexity_scale_terms: time_limit_sec, customer_count, "
+        "route_count"
     ) in prompt_text
     assert (
-        "evidence.required_runtime_fields: policy_loaded, policy_errors"
+        "evidence.required_runtime_fields: solver_algorithm_loaded, "
+        "solver_algorithm_active"
         in prompt_text
     )
     assert "novelty.strategy: semantic_signature" in prompt_text
-    assert "novelty.signature_fields: predicted_direction, target_objectives" in prompt_text
-    assert "construction_mode" in prompt_text
-    assert "construction_elapsed_ms" in prompt_text
-    assert "enabled_components" in prompt_text
-    assert "component_weights" in prompt_text
-    assert "candidate_limits" in prompt_text
-    assert "portfolio_stop_reason" in prompt_text
-    assert "algorithm_plan" in prompt_text
-    assert "algorithm_blueprint_errors" in prompt_text
+    assert "algorithm_family" in prompt_text
     assert "solver_algorithm_errors" in prompt_text
-    assert "algorithm_local_search_components" in prompt_text
     assert "prompt.hypothesis_guidance:" in prompt_text
     assert "prompt.implementation_guidance:" in prompt_text
     assert "prompt.anti_patterns:" in prompt_text
     assert "instance.customer_ids, instance.customer_count" in prompt_text
     assert "instance.demands[customer_id]" in prompt_text
-    assert "Never use instance.customers" in prompt_text
+    assert "instance.customers" in prompt_text
     assert ctx["available_actions"] == "create_new, modify"
     assert "remove" not in ctx["available_actions"]
     assert "Move/design grammar:" in ctx["problem_object"]
@@ -260,11 +252,20 @@ def test_context_exposes_search_policy_surface_and_modify_when_no_operator_pool(
     assert "context.objective_key" in solver_design_prompt_text
     assert "context.record_move" in solver_design_prompt_text
     assert "solver_algorithm_search_iterations=0" in solver_design_prompt_text
+    assert "exact mechanism id" in solver_design_prompt_text
+    assert "expected_telemetry" in solver_design_prompt_text
     assert "shallow wrapper" in solver_design_prompt_text
     assert "instance.depot" in solver_design_prompt_text
     assert "adapter/solver remains the authority" in solver_design_prompt_text
     assert "solver_design_api_manifest" in solver_design_code_ctx
     assert "Approved target_file" in solver_design_code_ctx["solver_design_api_manifest"]
+    solver_design_interface = CvrpAdapter(spec_v1).render_research_surface_interface(
+        "solver_design"
+    )
+    assert "stable lowercase snake_case mechanism id" in solver_design_interface
+    assert "solver_algorithm_context_records.{mechanism}_iterations" in (
+        solver_design_interface
+    )
 
 
 def test_solver_design_code_context_includes_module_api_manifest() -> None:
@@ -519,6 +520,10 @@ def test_solver_design_verification_failure_guides_retry_not_surface_fallback() 
     assert "Do not choose a component policy" in user_prompt
     assert "choose the target file by mechanism ownership" in user_prompt
     assert "target that concrete module" in user_prompt
+    assert "expected_telemetry" in user_prompt
+    assert "activity, activation, effect, and budget" in user_prompt
+    assert "best_delta" in prompt_text
+    assert "improvement_counts" in prompt_text
     assert "Choose a research surface from" not in user_prompt
 
 

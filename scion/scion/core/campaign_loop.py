@@ -59,6 +59,7 @@ class CampaignLoop:
                 self.write_status(stopped_reason="circuit_breaker")
                 break
 
+            self.write_status()
             result = self.run_one_step()
             if getattr(result, "counts_toward_max_rounds", True):
                 counted_rounds += 1

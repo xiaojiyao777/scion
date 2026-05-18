@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import hashlib
 import json
 import uuid
@@ -15,8 +16,10 @@ from scion.core.models import (
     ChampionState,
     ContractResult,
     HypothesisProposal,
+    MechanismChange,
     PatchFileChange,
     PatchProposal,
+    mechanism_changes,
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
@@ -58,10 +61,17 @@ from scion.proposal.tools.surface import (
 )
 from scion.proposal.tools.utils import (
     _attr,
+    _json_size,
     _limit_text,
     _model_payload,
     _normalize_rel_path,
     _strip_forbidden_value,
+)
+from scion.runtime.telemetry_guard import (
+    EXPECTED_TELEMETRY_CATEGORIES,
+    declared_mechanism_runtime_probes,
+    declared_surface_telemetry_fields,
+    normalize_expected_telemetry,
 )
 
 _COMPACT_FEEDBACK_LIST_ITEMS = 8
@@ -113,6 +123,11 @@ _PREVIEW_FAILURE_REASON_CHARS = 1200
 _PREVIEW_MAX_CHECKS = 12
 _PREVIEW_PROBLEM_ISSUE_CHARS = 500
 _PREVIEW_PROBLEM_MAX_CHECKS = 8
+_ALGORITHM_SMOKE_AGENT_SCHEMA = "scion.algorithm_smoke.agent_feedback.v1"
+_ALGORITHM_SMOKE_AGENT_TEXT_CHARS = 900
+_ALGORITHM_SMOKE_AGENT_TAIL_CHARS = 900
+_ALGORITHM_SMOKE_AGENT_LIST_ITEMS = 8
+_ALGORITHM_SMOKE_AGENT_COUNTER_ITEMS = 16
 _SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
 _NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
     {
@@ -725,10 +740,12 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             payload["patch"] = patch_preview
             payload["passed"] = payload["passed"] and bool(patch_preview["passed"])
 
-        payload = _drop_internal_preview_objects(payload)
-        issue_summary = _contract_preview_issue_summary(payload)
+        raw_payload = _drop_internal_preview_objects(payload)
+        issue_summary = _contract_preview_issue_summary(raw_payload)
         if issue_summary:
-            payload["issue_summary"] = issue_summary
+            raw_payload["issue_summary"] = issue_summary
+        payload = _algorithm_smoke_agent_payload(raw_payload)
+        primary_issue = str(payload.get("primary_issue") or issue_summary or "")
         return self._observation(
             context,
             observation_type="algorithm_smoke",
@@ -741,14 +758,911 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                 if payload["passed"]
                 else (
                     "Algorithm smoke found issues: "
-                    f"{issue_summary}"
-                    if issue_summary
+                    f"{primary_issue}"
+                    if primary_issue
                     else "Algorithm smoke found issues."
                 )
             ),
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
         )
+
+def compact_algorithm_smoke_observation_for_agent(
+    observation: ProposalObservation,
+) -> ProposalObservation | None:
+    """Return a registry-safe agent-facing smoke observation when possible."""
+    if observation.tool_name != "proposal.algorithm_smoke" or observation.is_error:
+        return None
+    if not isinstance(observation.structured_payload, Mapping):
+        return None
+    payload = _algorithm_smoke_agent_payload(observation.structured_payload)
+    return replace(
+        observation,
+        summary=(
+            "Algorithm smoke passed on compact tainted preview."
+            if payload.get("passed")
+            else "Algorithm smoke found issues in compact tainted preview."
+        ),
+        structured_payload=payload,
+        repair_hint=None,
+    )
+
+
+def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
+    runtime_smoke = _mapping_or_none(raw_payload.get("runtime_smoke"))
+    telemetry_guard = _compact_algorithm_smoke_telemetry_guard(
+        runtime_smoke.get("telemetry_guard") if runtime_smoke else None
+    )
+    runtime_counters = _compact_algorithm_smoke_runtime_counters(
+        runtime_smoke.get("runtime") if runtime_smoke else None
+    )
+    subprocess_tail = _compact_algorithm_smoke_subprocess(
+        runtime_smoke.get("run") if runtime_smoke else None
+    )
+    runtime_comparison = _compact_algorithm_smoke_runtime_comparison(runtime_smoke)
+    primary_issue = _algorithm_smoke_primary_issue(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+        subprocess_tail=subprocess_tail,
+    )
+    passed = bool(raw_payload.get("passed"))
+    status = "passed" if passed else "failed"
+    failure_class = _algorithm_smoke_failure_class(
+        passed=passed,
+        raw_payload=raw_payload,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+        primary_issue=primary_issue,
+        subprocess_tail=subprocess_tail,
+    )
+    repair_hints = _algorithm_smoke_repair_hints(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+    )
+    failed_checks = _algorithm_smoke_failed_checks(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        primary_issue=primary_issue,
+        failure_class=failure_class,
+    )
+    selected_surface = _algorithm_smoke_selected_surface(raw_payload, runtime_smoke)
+    case_count = _algorithm_smoke_case_count(runtime_smoke)
+    non_promotional = raw_payload.get("non_promotional", True)
+    tainted_debug = raw_payload.get("tainted_debug", True)
+    agent_summary = _drop_empty_items(
+        {
+            "passed": passed,
+            "status": status,
+            "failure_class": failure_class,
+            "primary_issue": primary_issue,
+            "selected_surface": selected_surface,
+            "case_count": case_count,
+            "non_promotional": non_promotional,
+            "tainted_debug": tainted_debug,
+            "repair_hints": repair_hints,
+            "failed_checks": failed_checks,
+        }
+    )
+    compact_payload: dict[str, Any] = _drop_empty_items(
+        {
+            "schema": _ALGORITHM_SMOKE_AGENT_SCHEMA,
+            "passed": passed,
+            "status": status,
+            "failure_class": failure_class,
+            "primary_issue": primary_issue,
+            "selected_surface": selected_surface,
+            "case_count": case_count,
+            "non_promotional": non_promotional,
+            "tainted_debug": tainted_debug,
+            "workspace_materialized": raw_payload.get("workspace_materialized"),
+            "verification_run": raw_payload.get("verification_run"),
+            "protocol_run": raw_payload.get("protocol_run"),
+            "decision_run": raw_payload.get("decision_run"),
+            "agent_summary": agent_summary,
+            "repair_hints": repair_hints,
+            "failed_checks": failed_checks,
+            "telemetry_guard": telemetry_guard,
+            "runtime_comparison": runtime_comparison,
+            "subprocess": subprocess_tail,
+            "static_preview": _algorithm_smoke_static_preview(raw_payload),
+            "hypothesis": _algorithm_smoke_preview_section(
+                raw_payload.get("hypothesis")
+            ),
+            "patch": _algorithm_smoke_preview_section(raw_payload.get("patch")),
+            "problem_preview": _algorithm_smoke_problem_preview(
+                raw_payload.get("problem_preview")
+            ),
+            "runtime_smoke": _algorithm_smoke_runtime_agent_section(
+                runtime_smoke,
+                telemetry_guard=telemetry_guard,
+                runtime_counters=runtime_counters,
+                subprocess_tail=subprocess_tail,
+                runtime_comparison=runtime_comparison,
+                repair_hints=repair_hints,
+            ),
+            "issue_summary": _limit_text(
+                str(raw_payload.get("issue_summary") or ""),
+                _ALGORITHM_SMOKE_AGENT_TEXT_CHARS,
+            ),
+            "audit": {
+                "agent_payload_schema": _ALGORITHM_SMOKE_AGENT_SCHEMA,
+                "raw_payload_digest": _algorithm_smoke_digest(raw_payload),
+                "raw_payload_chars": _json_size(raw_payload),
+                "full_runtime_payload_omitted": True,
+                "raw_payload_omitted_from_agent": True,
+            },
+        }
+    )
+    compact_payload["audit"]["agent_payload_digest"] = _algorithm_smoke_digest(
+        {
+            key: value
+            for key, value in compact_payload.items()
+            if key != "audit"
+        }
+    )
+    compact_payload["audit"]["summary_ref"] = (
+        "algorithm-smoke-summary:"
+        f"{_algorithm_smoke_digest(compact_payload.get('agent_summary'))}"
+    )
+    return compact_payload
+
+
+def _mapping_or_none(value: Any) -> Mapping[str, Any] | None:
+    return value if isinstance(value, Mapping) else None
+
+
+def _algorithm_smoke_digest(value: Any) -> str:
+    rendered = json.dumps(
+        _strip_forbidden_value(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
+
+
+def _algorithm_smoke_selected_surface(
+    raw_payload: Mapping[str, Any],
+    runtime_smoke: Mapping[str, Any] | None,
+) -> str | None:
+    if runtime_smoke is not None and runtime_smoke.get("selected_surface"):
+        return str(runtime_smoke.get("selected_surface"))
+    problem_preview = _mapping_or_none(raw_payload.get("problem_preview"))
+    if problem_preview is not None and problem_preview.get("surface"):
+        return str(problem_preview.get("surface"))
+    hypothesis = _mapping_or_none(raw_payload.get("hypothesis"))
+    hypothesis_summary = (
+        _mapping_or_none(hypothesis.get("hypothesis")) if hypothesis else None
+    )
+    if hypothesis_summary is not None and hypothesis_summary.get("change_locus"):
+        return str(hypothesis_summary.get("change_locus"))
+    return None
+
+
+def _algorithm_smoke_case_count(runtime_smoke: Mapping[str, Any] | None) -> int | None:
+    if runtime_smoke is None:
+        return None
+    value = runtime_smoke.get("case_count")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _algorithm_smoke_primary_issue(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any] | None,
+    subprocess_tail: Mapping[str, Any] | None,
+) -> str:
+    candidates: list[Any] = []
+    if runtime_smoke is not None:
+        issues = runtime_smoke.get("issues")
+        if isinstance(issues, (list, tuple)):
+            candidates.extend(issues)
+        elif issues:
+            candidates.append(issues)
+        audit = _mapping_or_none(runtime_smoke.get("runtime_audit_failure"))
+        if audit is not None:
+            candidates.extend(
+                [
+                    audit.get("detail"),
+                    _runtime_event_text(audit.get("solver_algorithm_events")),
+                    audit.get("error_category"),
+                ]
+            )
+        runtime = _mapping_or_none(runtime_smoke.get("runtime"))
+        if runtime is not None:
+            candidates.extend(
+                [
+                    _runtime_event_text(runtime.get("solver_algorithm_events")),
+                    (
+                        f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
+                        if runtime.get("solver_algorithm_errors") not in (None, "")
+                        else None
+                    ),
+                ]
+            )
+    telemetry_issue = _telemetry_guard_primary_issue(telemetry_guard)
+    if telemetry_issue:
+        candidates.append(telemetry_issue)
+    if subprocess_tail is not None:
+        candidates.extend(
+            [
+                subprocess_tail.get("detail"),
+                subprocess_tail.get("stderr_tail"),
+                subprocess_tail.get("stdout_tail"),
+            ]
+        )
+    candidates.extend(
+        [
+            raw_payload.get("issue_summary"),
+            raw_payload.get("errors"),
+        ]
+    )
+    for candidate in candidates:
+        text = _compact_agent_text(candidate)
+        if text:
+            return text
+    return ""
+
+
+def _algorithm_smoke_failure_class(
+    *,
+    passed: bool,
+    raw_payload: Mapping[str, Any],
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any] | None,
+    primary_issue: str,
+    subprocess_tail: Mapping[str, Any] | None,
+) -> str:
+    if passed:
+        return "passed"
+    if telemetry_guard is not None and telemetry_guard.get("triggered"):
+        return "telemetry_guard_failure"
+    if runtime_smoke is not None:
+        if runtime_smoke.get("runtime_audit_failure") not in (None, "", {}, []):
+            return "runtime_audit_failure"
+        run = _mapping_or_none(runtime_smoke.get("run"))
+        if run is not None and run.get("success") is False:
+            return "runtime_execution_failure"
+    if subprocess_tail is not None and subprocess_tail.get("error_category"):
+        return "runtime_execution_failure"
+    lowered = primary_issue.lower()
+    if "zero active search" in lowered:
+        return "zero_search_effort"
+    if "low active search" in lowered or "under-spent" in lowered:
+        return "low_search_effort"
+    if "micro-benchmark" in lowered or "objective regression" in lowered:
+        return "objective_regression"
+    if _algorithm_smoke_failed_checks(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        primary_issue="",
+        failure_class="static_contract_failure",
+    ):
+        return "static_contract_failure"
+    return "algorithm_smoke_failure"
+
+
+def _algorithm_smoke_repair_hints(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any] | None,
+) -> list[str]:
+    hints: list[str] = []
+    if runtime_smoke is not None:
+        hints.extend(_compact_agent_text_list(runtime_smoke.get("repair_guidance")))
+    for section_name in ("patch", "hypothesis", "problem_preview"):
+        section = _mapping_or_none(raw_payload.get(section_name))
+        if section is None:
+            continue
+        hints.extend(_compact_agent_text_list(section.get("repair_guidance")))
+        hints.extend(_compact_agent_text_list(section.get("repair_hints")))
+    if telemetry_guard is not None and telemetry_guard.get("triggered"):
+        first_failure = _first_mapping(telemetry_guard.get("failures"))
+        field = str(first_failure.get("field") or "").strip() if first_failure else ""
+        mechanism = (
+            str(first_failure.get("mechanism") or "").strip()
+            if first_failure
+            else ""
+        )
+        hint = "Ensure the candidate emits positive runtime evidence"
+        if mechanism:
+            hint += f" for declared mechanism {mechanism}"
+        if field:
+            hint += f" via {field}"
+        hints.append(hint + ".")
+    return list(dict.fromkeys(hints))[:_ALGORITHM_SMOKE_AGENT_LIST_ITEMS]
+
+
+def _algorithm_smoke_failed_checks(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    primary_issue: str,
+    failure_class: str,
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for section_name in ("hypothesis", "patch", "problem_preview"):
+        section = _mapping_or_none(raw_payload.get(section_name))
+        checks.extend(_failed_check_summaries(section, prefix=section_name))
+    if runtime_smoke is not None:
+        telemetry = _mapping_or_none(runtime_smoke.get("telemetry_guard"))
+        if telemetry is not None and telemetry.get("passed") is False:
+            first_failure = _first_mapping(telemetry.get("failures"))
+            checks.append(
+                _drop_empty_items(
+                    {
+                        "name": "runtime_smoke.telemetry_guard",
+                        "passed": False,
+                        "detail": _telemetry_guard_primary_issue(
+                            _compact_algorithm_smoke_telemetry_guard(telemetry)
+                        ),
+                        "code": first_failure.get("code") if first_failure else None,
+                    }
+                )
+            )
+    if not checks and primary_issue:
+        checks.append(
+            {
+                "name": failure_class or "algorithm_smoke",
+                "passed": False,
+                "detail": _limit_text(primary_issue, _ALGORITHM_SMOKE_AGENT_TEXT_CHARS),
+            }
+        )
+    return checks[:_ALGORITHM_SMOKE_AGENT_LIST_ITEMS]
+
+
+def _failed_check_summaries(
+    section: Mapping[str, Any] | None,
+    *,
+    prefix: str,
+) -> list[dict[str, Any]]:
+    if section is None:
+        return []
+    failed: list[dict[str, Any]] = []
+    checks = section.get("checks")
+    if isinstance(checks, (list, tuple)):
+        for item in checks:
+            if not isinstance(item, Mapping) or item.get("passed") is not False:
+                continue
+            failed.append(
+                _drop_empty_items(
+                    {
+                        "name": f"{prefix}.{item.get('name')}",
+                        "passed": False,
+                        "severity": item.get("severity"),
+                        "detail": _limit_text(
+                            str(item.get("detail") or ""),
+                            _ALGORITHM_SMOKE_AGENT_TEXT_CHARS,
+                        ),
+                    }
+                )
+            )
+    existing = section.get("failed_checks")
+    if isinstance(existing, (list, tuple)):
+        for item in existing:
+            text = _compact_agent_text(item)
+            if text:
+                failed.append({"name": f"{prefix}.{text}", "passed": False})
+    return failed
+
+
+def _algorithm_smoke_static_preview(
+    raw_payload: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    static_contract = _algorithm_smoke_contract_summary(
+        raw_payload.get("static_contract")
+    )
+    problem_preview = _algorithm_smoke_problem_preview(raw_payload.get("problem_preview"))
+    compact = _drop_empty_items(
+        {
+            "contract": static_contract,
+            "problem": problem_preview,
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_preview_section(value: Any) -> dict[str, Any] | None:
+    section = _mapping_or_none(value)
+    if section is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "passed": section.get("passed"),
+            "contract": _algorithm_smoke_contract_summary(section.get("contract")),
+            "failed_checks": _failed_check_summaries(section, prefix="section"),
+            "errors": _compact_agent_text_list(section.get("errors")),
+            "issues": _compact_agent_text_list(section.get("issues")),
+            "patch": _algorithm_smoke_patch_summary(section.get("patch")),
+            "hypothesis": _algorithm_smoke_hypothesis_summary(
+                section.get("hypothesis")
+            ),
+            "problem_preview": _algorithm_smoke_problem_preview(
+                section.get("problem_preview")
+            ),
+            "needs_hypothesis": section.get("needs_hypothesis"),
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_contract_summary(value: Any) -> dict[str, Any] | None:
+    contract = _mapping_or_none(value)
+    if contract is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "passed": contract.get("passed"),
+            "check_count": contract.get("check_count"),
+            "failed_checks": _compact_agent_text_list(
+                contract.get("failed_checks")
+            ),
+            "failure_reason": _compact_agent_text(contract.get("failure_reason")),
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_problem_preview(value: Any) -> dict[str, Any] | None:
+    preview = _mapping_or_none(value)
+    if preview is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "passed": preview.get("passed"),
+            "surface": preview.get("surface"),
+            "issues": _compact_agent_text_list(preview.get("issues")),
+            "failed_checks": _failed_check_summaries(preview, prefix="problem"),
+            "workspace_materialized": preview.get("workspace_materialized"),
+            "verification_run": preview.get("verification_run"),
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_patch_summary(value: Any) -> dict[str, Any] | None:
+    patch = _mapping_or_none(value)
+    if patch is None:
+        return None
+    compact_changes: list[dict[str, Any]] = []
+    changes = patch.get("additional_changes")
+    if isinstance(changes, (list, tuple)):
+        for item in changes[:_ALGORITHM_SMOKE_AGENT_LIST_ITEMS]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_changes.append(
+                _drop_empty_items(
+                    {
+                        "file_path": item.get("file_path"),
+                        "action": item.get("action"),
+                        "code_char_count": item.get("code_char_count"),
+                        "code_digest": item.get("code_digest"),
+                        "functions": _compact_agent_text_list(item.get("functions")),
+                        "classes": _compact_agent_text_list(item.get("classes")),
+                    }
+                )
+            )
+    compact = _drop_empty_items(
+        {
+            "file_path": patch.get("file_path"),
+            "action": patch.get("action"),
+            "code_char_count": patch.get("code_char_count"),
+            "code_digest": patch.get("code_digest"),
+            "functions": _compact_agent_text_list(patch.get("functions")),
+            "classes": _compact_agent_text_list(patch.get("classes")),
+            "additional_change_count": patch.get("additional_change_count"),
+            "additional_changes": compact_changes,
+            "mechanism_changes": _compact_preview_value(
+                patch.get("mechanism_changes")
+            ),
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_hypothesis_summary(value: Any) -> dict[str, Any] | None:
+    hypothesis = _mapping_or_none(value)
+    if hypothesis is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "change_locus": hypothesis.get("change_locus"),
+            "action": hypothesis.get("action"),
+            "target_file": hypothesis.get("target_file"),
+            "predicted_direction": hypothesis.get("predicted_direction"),
+            "target_runtime_effect": hypothesis.get("target_runtime_effect"),
+            "novelty_signature_keys": _compact_agent_text_list(
+                hypothesis.get("novelty_signature_keys")
+            ),
+            "expected_telemetry": _compact_preview_value(
+                hypothesis.get("expected_telemetry")
+            ),
+            "mechanism_changes": _compact_preview_value(
+                hypothesis.get("mechanism_changes")
+            ),
+        }
+    )
+    return compact or None
+
+
+def _algorithm_smoke_runtime_agent_section(
+    runtime_smoke: Mapping[str, Any] | None,
+    *,
+    telemetry_guard: Mapping[str, Any] | None,
+    runtime_counters: Mapping[str, Any] | None,
+    subprocess_tail: Mapping[str, Any] | None,
+    runtime_comparison: Mapping[str, Any] | None,
+    repair_hints: list[str],
+) -> dict[str, Any] | None:
+    if runtime_smoke is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "passed": runtime_smoke.get("passed"),
+            "runtime_smoke_run": runtime_smoke.get("runtime_smoke_run"),
+            "workspace_materialized": runtime_smoke.get("workspace_materialized"),
+            "selected_surface": runtime_smoke.get("selected_surface"),
+            "case": runtime_smoke.get("case"),
+            "case_path_ref": runtime_smoke.get("case_path_ref"),
+            "data_root_source": runtime_smoke.get("data_root_source"),
+            "data_root_status": runtime_smoke.get("data_root_status"),
+            "provenance": _compact_runtime_provenance(runtime_smoke.get("provenance")),
+            "seed": runtime_smoke.get("seed"),
+            "case_count": runtime_smoke.get("case_count"),
+            "issues": _compact_agent_text_list(runtime_smoke.get("issues")),
+            "repair_guidance": repair_hints,
+            "runtime_audit_failure": _compact_runtime_audit_failure_for_agent(
+                runtime_smoke.get("runtime_audit_failure")
+            ),
+            "telemetry_guard": telemetry_guard,
+            "runtime_counters": runtime_counters,
+            "subprocess": subprocess_tail,
+            "micro_benchmark": runtime_comparison,
+        }
+    )
+    return compact or None
+
+
+def _compact_runtime_provenance(value: Any) -> dict[str, Any] | None:
+    provenance = _mapping_or_none(value)
+    if provenance is None:
+        return None
+    return _drop_empty_items(
+        {
+            "source": provenance.get("source"),
+            "case_ref": provenance.get("case_ref"),
+            "data_root_source": provenance.get("data_root_source"),
+            "data_root_status": provenance.get("data_root_status"),
+            "absolute_paths_exposed": provenance.get("absolute_paths_exposed"),
+        }
+    )
+
+
+def _compact_runtime_audit_failure_for_agent(value: Any) -> dict[str, Any] | None:
+    audit = _mapping_or_none(value)
+    if audit is None:
+        text = _compact_agent_text(value)
+        return {"detail": text} if text else None
+    event_text = _runtime_event_text(audit.get("solver_algorithm_events"))
+    compact = _drop_empty_items(
+        {
+            "error_category": _compact_agent_text(
+                audit.get("error_category"),
+                max_chars=160,
+            ),
+            "detail": _compact_agent_text(audit.get("detail")),
+            "failed_runtime_fields": _compact_agent_text_list(
+                audit.get("failed_runtime_fields")
+            ),
+            "solver_algorithm_errors": audit.get("solver_algorithm_errors"),
+            "event_tail": event_text,
+        }
+    )
+    return compact or None
+
+
+def _compact_algorithm_smoke_runtime_counters(value: Any) -> dict[str, Any] | None:
+    runtime = _mapping_or_none(value)
+    if runtime is None:
+        return None
+    keys = (
+        "solver_algorithm_path",
+        "solver_algorithm_loaded",
+        "solver_algorithm_active",
+        "solver_algorithm_errors",
+        "solver_algorithm_elapsed_ms",
+        "solver_algorithm_solution_valid",
+        "solver_algorithm_total_distance",
+        "solver_algorithm_fleet_violation",
+        "solver_algorithm_baseline_calls",
+        "solver_algorithm_baseline_errors",
+        "solver_algorithm_search_iterations",
+        "solver_algorithm_move_attempts",
+        "solver_algorithm_accepted_moves",
+        "solver_algorithm_improving_moves",
+        "solver_algorithm_best_delta",
+        "solver_algorithm_phase_delta_sum",
+        "solver_algorithm_stop_reason",
+    )
+    compact: dict[str, Any] = {}
+    for key in keys:
+        if key not in runtime:
+            continue
+        if key == "solver_algorithm_path":
+            path = str(runtime.get(key) or "")
+            if path.startswith("/"):
+                continue
+            compact[key] = path
+            continue
+        compact[key] = runtime.get(key)
+        if len(compact) >= _ALGORITHM_SMOKE_AGENT_COUNTER_ITEMS:
+            break
+    return _drop_empty_items(compact) or None
+
+
+def _compact_algorithm_smoke_subprocess(value: Any) -> dict[str, Any] | None:
+    run = _mapping_or_none(value)
+    if run is None:
+        return None
+    compact = _drop_empty_items(
+        {
+            "success": run.get("success"),
+            "exit_code": run.get("exit_code"),
+            "elapsed_ms": run.get("elapsed_ms"),
+            "error_category": _compact_agent_text(
+                run.get("error_category"),
+                max_chars=160,
+            ),
+            "detail": _compact_agent_text(run.get("detail")),
+            "stderr_tail": _tail_text(run.get("stderr")),
+            "stdout_tail": _tail_text(run.get("stdout")),
+        }
+    )
+    return compact or None
+
+
+def _compact_algorithm_smoke_runtime_comparison(
+    runtime_smoke: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if runtime_smoke is None:
+        return None
+    benchmark = _mapping_or_none(runtime_smoke.get("micro_benchmark"))
+    if benchmark is None:
+        return None
+    representative = _representative_micro_result(
+        benchmark.get("results"),
+        runtime_smoke.get("runs"),
+    )
+    compact = _drop_empty_items(
+        {
+            "non_promotional": benchmark.get("non_promotional", True),
+            "tainted_debug": benchmark.get("tainted_debug", True),
+            "comparable_cases": benchmark.get("comparable_cases"),
+            "wins": benchmark.get("wins"),
+            "losses": benchmark.get("losses"),
+            "ties": benchmark.get("ties"),
+            "representative_case": representative,
+        }
+    )
+    return compact or None
+
+
+def _representative_micro_result(results: Any, runs: Any) -> dict[str, Any] | None:
+    selected: Mapping[str, Any] | None = None
+    if isinstance(results, (list, tuple)):
+        for item in results:
+            if isinstance(item, Mapping) and item.get("comparison") == "loss":
+                selected = item
+                break
+        if selected is None:
+            selected = next((item for item in results if isinstance(item, Mapping)), None)
+    raw_run_micro: Mapping[str, Any] | None = None
+    raw_objective: Mapping[str, Any] | None = None
+    if isinstance(runs, (list, tuple)):
+        for run in runs:
+            if not isinstance(run, Mapping):
+                continue
+            micro = _mapping_or_none(run.get("micro_benchmark"))
+            if selected is None and micro is not None:
+                selected = micro
+            if selected is not None and micro is not None:
+                raw_run_micro = micro
+                raw_objective = _mapping_or_none(run.get("objective"))
+                break
+    if selected is None:
+        return None
+    raw_run_micro = raw_run_micro or selected
+    compact = _drop_empty_items(
+        {
+            "label": selected.get("label"),
+            "case": selected.get("case"),
+            "seed": selected.get("seed"),
+            "comparison": selected.get("comparison"),
+            "delta": selected.get("delta"),
+            "decisive_metric": selected.get("decisive_metric"),
+            "runtime_delta_ms": selected.get("runtime_delta_ms"),
+            "candidate_objective": _compact_objective(
+                raw_run_micro.get("candidate_objective") or raw_objective
+            ),
+            "champion_objective": _compact_objective(
+                raw_run_micro.get("champion_objective")
+            ),
+        }
+    )
+    return compact or None
+
+
+def _compact_objective(value: Any) -> dict[str, Any] | None:
+    objective = _mapping_or_none(value)
+    if objective is None:
+        return None
+    return _drop_empty_items(
+        {
+            key: objective.get(key)
+            for key in ("fleet_violation", "total_distance")
+            if key in objective
+        }
+    ) or None
+
+
+def _compact_algorithm_smoke_telemetry_guard(value: Any) -> dict[str, Any] | None:
+    guard = _mapping_or_none(value)
+    if guard is None:
+        return None
+    failures = _compact_telemetry_issues(guard.get("failures"))
+    warnings = _compact_telemetry_issues(guard.get("warnings"), limit=3)
+    first_failure = failures[0] if failures else None
+    compact = _drop_empty_items(
+        {
+            "triggered": bool(failures),
+            "passed": guard.get("passed"),
+            "selected_surface": guard.get("selected_surface"),
+            "failure_code": first_failure.get("code") if first_failure else None,
+            "mechanism": first_failure.get("mechanism") if first_failure else None,
+            "category": first_failure.get("category") if first_failure else None,
+            "field": first_failure.get("field") if first_failure else None,
+            "counters": first_failure.get("counters") if first_failure else None,
+            "candidate_runs": guard.get("candidate_runs"),
+            "champion_runs": guard.get("champion_runs"),
+            "expected_telemetry_present": guard.get("expected_telemetry_present"),
+            "implicit_activity_claim": guard.get("implicit_activity_claim"),
+            "declared_mechanisms": _compact_agent_text_list(
+                guard.get("declared_mechanisms")
+            ),
+            "failures": failures,
+            "warnings": warnings,
+        }
+    )
+    return compact or None
+
+
+def _compact_telemetry_issues(value: Any, *, limit: int = 4) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    issues: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        counters = {
+            key: item.get(key)
+            for key in (
+                "candidate_positive",
+                "candidate_present",
+                "candidate_missing",
+                "champion_positive",
+            )
+            if key in item
+        }
+        issues.append(
+            _drop_empty_items(
+                {
+                    "code": item.get("code"),
+                    "severity": item.get("severity"),
+                    "mechanism": item.get("mechanism"),
+                    "category": item.get("category"),
+                    "field": item.get("field"),
+                    "counters": counters,
+                }
+            )
+        )
+    return issues
+
+
+def _telemetry_guard_primary_issue(value: Mapping[str, Any] | None) -> str | None:
+    if value is None:
+        return None
+    first = _first_mapping(value.get("failures"))
+    if not first:
+        return None
+    parts = ["telemetry guard failed"]
+    for label, key in (
+        ("code", "code"),
+        ("mechanism", "mechanism"),
+        ("category", "category"),
+        ("field", "field"),
+    ):
+        if first.get(key):
+            parts.append(f"{label}={first.get(key)}")
+    counters = _mapping_or_none(first.get("counters"))
+    if counters:
+        parts.extend(f"{key}={counters[key]}" for key in sorted(counters))
+    return _limit_text("; ".join(parts), _ALGORITHM_SMOKE_AGENT_TEXT_CHARS)
+
+
+def _first_mapping(value: Any) -> Mapping[str, Any] | None:
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, Mapping):
+                return item
+    return None
+
+
+def _runtime_event_text(value: Any) -> str:
+    if value in (None, "", [], {}):
+        return ""
+    return _limit_text(
+        json.dumps(_strip_forbidden_value(value), sort_keys=True, default=str),
+        _ALGORITHM_SMOKE_AGENT_TEXT_CHARS,
+    )
+
+
+def _compact_agent_text_list(
+    value: Any,
+    *,
+    limit: int = _ALGORITHM_SMOKE_AGENT_LIST_ITEMS,
+) -> list[str]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, Mapping):
+        values = [
+            json.dumps(_strip_forbidden_value(value), sort_keys=True, default=str)
+        ]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+    compact: list[str] = []
+    for item in values:
+        text = _compact_agent_text(item)
+        if text and text not in compact:
+            compact.append(text)
+        if len(compact) >= limit:
+            break
+    return compact
+
+
+def _compact_agent_text(
+    value: Any,
+    *,
+    max_chars: int = _ALGORITHM_SMOKE_AGENT_TEXT_CHARS,
+) -> str:
+    if value in (None, "", [], {}):
+        return ""
+    if isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(_strip_forbidden_value(value), sort_keys=True, default=str)
+    return _limit_text(text.strip(), max_chars)
+
+
+def _tail_text(value: Any, *, max_chars: int = _ALGORITHM_SMOKE_AGENT_TAIL_CHARS) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return "[tail]\n" + text[-max_chars:]
+
 
 def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal:
     return HypothesisProposal(
@@ -770,6 +1684,10 @@ def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal
         runtime_budget_strategy=value.runtime_budget_strategy,
         expected_telemetry=dict(value.expected_telemetry or {}),
         novelty_signature=dict(value.novelty_signature or {}),
+        mechanism_changes=tuple(
+            MechanismChange(id=change.id, change_type=change.change_type)
+            for change in value.mechanism_changes
+        ),
     )
 
 def _patch_from_input(value: PatchProposalInput) -> PatchProposal:
@@ -789,6 +1707,10 @@ def _patch_from_input(value: PatchProposalInput) -> PatchProposal:
         ),
         premise_check=value.premise_check,
         premise_check_reason=value.premise_check_reason,
+        mechanism_changes=tuple(
+            MechanismChange(id=change.id, change_type=change.change_type)
+            for change in value.mechanism_changes
+        ),
     )
 
 def _schema_preview_hypothesis_payload(
@@ -849,6 +1771,12 @@ def _hypothesis_preview_summary(
             ),
             "expected_telemetry": _compact_preview_value(
                 getattr(hypothesis, "expected_telemetry", {}) or {}
+            ),
+            "mechanism_changes": _compact_preview_value(
+                [
+                    {"id": change.id, "change_type": change.change_type}
+                    for change in getattr(hypothesis, "mechanism_changes", ()) or ()
+                ]
             ),
         }
     )
@@ -920,8 +1848,20 @@ def _hypothesis_schema_preview(
         [],
         current_champion_version=_champion_version(context.champion),
     )
-    schema_check_names = {"C1_schema", "C11_expected_telemetry"}
+    schema_check_names = {
+        "C1_schema",
+        "C11_expected_telemetry",
+        "C12_mechanism_binding",
+    }
     c1_checks = [check for check in result.checks if check.name in schema_check_names]
+    c11_check = next(
+        (check for check in result.checks if check.name == "C11_expected_telemetry"),
+        None,
+    )
+    c12_check = next(
+        (check for check in result.checks if check.name == "C12_mechanism_binding"),
+        None,
+    )
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
@@ -957,9 +1897,115 @@ def _hypothesis_schema_preview(
                 )
             )
         ),
+        "expected_telemetry_contract": _expected_telemetry_contract_preview(
+            context,
+            hypothesis,
+            c11_check,
+        ),
+        "mechanism_binding": _mechanism_binding_preview(hypothesis, c12_check),
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "novelty_signature_guidance": novelty_guidance,
     }
+
+
+def _expected_telemetry_contract_preview(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+    c11_check: Any | None,
+) -> dict[str, Any]:
+    expected = getattr(hypothesis, "expected_telemetry", {}) or {}
+    requested_categories: list[str] = []
+    invalid_categories: list[str] = []
+    if isinstance(expected, Mapping):
+        for raw_category in expected:
+            category = str(raw_category or "").strip().lower()
+            if not category:
+                continue
+            requested_categories.append(category)
+            if category not in EXPECTED_TELEMETRY_CATEGORIES and category not in {
+                "mechanism",
+                "mechanisms",
+                "declared_mechanism",
+                "declared_mechanisms",
+                "declared_mechanism_change",
+                "declared_mechanism_changes",
+                "mechanism_change",
+                "mechanism_changes",
+            }:
+                invalid_categories.append(category)
+
+    surface = _surface_for_hypothesis(context, hypothesis)
+    declared_fields = sorted(declared_surface_telemetry_fields(surface))
+    try:
+        problem_spec = _contract_problem_spec(context)
+    except Exception:
+        problem_spec = None
+    mechanism_fields = sorted(
+        {
+            probe.field
+            for probe in declared_mechanism_runtime_probes(
+                problem_spec=problem_spec,
+                surface=surface,
+                declared_mechanisms=mechanism_changes(hypothesis),
+            )
+        }
+    )
+    claims = normalize_expected_telemetry(expected)
+    requested_fields = {
+        category: list(fields)
+        for category, fields in sorted(claims.items())
+        if fields
+    }
+    passed = None if c11_check is None else bool(_attr(c11_check, "passed"))
+    detail = "" if c11_check is None or passed else str(_attr(c11_check, "detail", ""))
+    return _drop_empty_items(
+        {
+            "name": "C11_expected_telemetry",
+            "passed": passed,
+            "detail": _limit_text(detail, _PREVIEW_FAILURE_REASON_CHARS),
+            "requested_categories": requested_categories,
+            "invalid_categories": sorted(dict.fromkeys(invalid_categories)),
+            "allowed_categories": sorted(EXPECTED_TELEMETRY_CATEGORIES),
+            "requested_fields": requested_fields,
+            "declared_runtime_fields": declared_fields[:_PREVIEW_MAX_CHECKS * 4],
+            "declared_mechanism_runtime_fields": mechanism_fields[
+                : _PREVIEW_MAX_CHECKS * 4
+            ],
+            "repair_hint": (
+                "Use only allowed expected_telemetry categories and runtime keys "
+                "declared by the selected research surface evidence contract."
+                if not passed
+                else ""
+            ),
+        }
+    )
+
+
+def _mechanism_binding_preview(
+    hypothesis: HypothesisProposal,
+    c12_check: Any | None,
+) -> dict[str, Any]:
+    passed = None if c12_check is None else bool(_attr(c12_check, "passed"))
+    detail = "" if c12_check is None or passed else str(_attr(c12_check, "detail", ""))
+    return _drop_empty_items(
+        {
+            "name": "C12_mechanism_binding",
+            "passed": passed,
+            "detail": _limit_text(detail, _PREVIEW_FAILURE_REASON_CHARS),
+            "mechanism_changes": _compact_preview_value(
+                [
+                    {"id": change.id, "change_type": change.change_type}
+                    for change in mechanism_changes(hypothesis)
+                ]
+            ),
+            "repair_hint": (
+                "Declare mechanism_changes that match the selected surface "
+                "mechanism telemetry and echo them in the patch."
+                if not passed
+                else ""
+            ),
+        }
+    )
 
 def _semantic_signature_preview_guidance(
     context: ProposalToolContext,
@@ -1260,6 +2306,12 @@ def _patch_preview_summary(patch: PatchProposal) -> dict[str, Any]:
         "classes": _module_classes(code_content),
         "additional_change_count": len(additional),
         "additional_changes": additional,
+        "mechanism_changes": _compact_preview_value(
+            [
+                {"id": change.id, "change_type": change.change_type}
+                for change in getattr(patch, "mechanism_changes", ()) or ()
+            ]
+        ),
         "checks": [],
     }
 
@@ -1529,6 +2581,7 @@ __all__ = [
     "InterfacePreviewTool",
     "SchemaPreviewTool",
     "TargetPermissionPreviewTool",
+    "compact_algorithm_smoke_observation_for_agent",
     "_ALGORITHM_SMOKE_DEFAULT_SEED",
     "_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS",
     "_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS",

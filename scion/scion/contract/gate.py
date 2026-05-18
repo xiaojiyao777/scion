@@ -7,6 +7,7 @@ import json
 import re
 import time
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
@@ -20,6 +21,7 @@ from scion.core.models import (
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
+    mechanism_changes,
     patch_file_changes,
 )
 from scion.contract.checks.solver_design_integration import (
@@ -108,6 +110,10 @@ _SIGNATURE_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
 _PREDICTED_DIRECTIONS = frozenset({"improve", "tradeoff", "exploratory"})
 _MAX_OBJECTIVE_SIGNATURE_ITEMS = 16
+_MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MECHANISM_CHANGE_TYPES = frozenset(
+    {"add", "modify", "replace", "remove", "integrate"}
+)
 
 
 class ContractGate:
@@ -155,6 +161,7 @@ class ContractGate:
         checks.append(self._c2_change_locus(hypothesis))
         checks.append(self._c3_action_target(hypothesis))
         checks.append(self._c11_expected_telemetry(hypothesis))
+        checks.append(self._c12_hypothesis_mechanism_binding(hypothesis))
         checks.append(self._c10_novelty(
             hypothesis,
             active_hypotheses,
@@ -181,6 +188,13 @@ class ContractGate:
             self._selected_surface_name(contract_hypothesis) or selected_surface
         )
         patch_graph = PatchSetGraph.from_patch(patch)
+        checks.append(
+            self._c12_patch_mechanism_binding(
+                patch,
+                contract_hypothesis,
+                selected_surface=selected_surface_name,
+            )
+        )
         for index, change in enumerate(patch_file_changes(patch)):
             is_primary = index == 0
             change_patch = PatchProposal(
@@ -293,6 +307,11 @@ class ContractGate:
             if objective_error is not None:
                 passed = False
                 detail = objective_error
+            else:
+                mechanism_error = self._mechanism_changes_schema_error(h)
+                if mechanism_error is not None:
+                    passed = False
+                    detail = mechanism_error
 
         return _cr("C1_schema", passed, "heavy", detail, t0)
 
@@ -392,10 +411,15 @@ class ContractGate:
                 "expected_telemetry must be an object",
                 t0,
             )
+        try:
+            declared_mechanisms = mechanism_changes(h)
+        except (TypeError, AttributeError):
+            declared_mechanisms = ()
         errors = validate_expected_telemetry_contract(
             problem_spec=self._spec,
             selected_surface=h.change_locus,
             expected_telemetry=expected,
+            declared_mechanisms=declared_mechanisms,
         )
         if errors:
             return _cr(
@@ -410,6 +434,151 @@ class ContractGate:
             True,
             "light",
             "expected telemetry fields declared by selected surface",
+            t0,
+        )
+
+    # ------------------------------------------------------------------
+    # C12: mechanism telemetry bindings must be explicit and stable.
+    # ------------------------------------------------------------------
+
+    def _c12_hypothesis_mechanism_binding(
+        self,
+        h: HypothesisProposal,
+    ) -> CheckResult:
+        t0 = time.monotonic_ns()
+        schema_error = self._mechanism_changes_schema_error(h)
+        if schema_error is not None:
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                schema_error,
+                t0,
+            )
+
+        surface = self._surface_for_hypothesis(h)
+        declarations = self._surface_mechanism_telemetry_declarations(surface)
+        if not declarations:
+            return _cr(
+                "C12_mechanism_binding",
+                True,
+                "light",
+                "surface declares no mechanism telemetry",
+                t0,
+            )
+
+        changes = mechanism_changes(h)
+        if not changes:
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                f"research surface '{h.change_locus}' declares mechanism "
+                "telemetry; hypothesis must declare mechanism_changes",
+                t0,
+            )
+
+        unmatched = [
+            change.id
+            for change in changes
+            if not _mechanism_id_matches_declaration(change.id, declarations)
+        ]
+        if unmatched:
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                "mechanism_changes id(s) do not match declared mechanism "
+                f"telemetry exact/wildcard keys: {', '.join(unmatched)}",
+                t0,
+            )
+
+        return _cr(
+            "C12_mechanism_binding",
+            True,
+            "light",
+            "mechanism changes match selected surface telemetry declarations",
+            t0,
+        )
+
+    def _c12_patch_mechanism_binding(
+        self,
+        patch: PatchProposal,
+        approved_hypothesis: HypothesisProposal | HypothesisRecord | None,
+        *,
+        selected_surface: str | None,
+    ) -> CheckResult:
+        t0 = time.monotonic_ns()
+        schema_error = self._mechanism_changes_schema_error(patch)
+        if schema_error is not None:
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                schema_error,
+                t0,
+            )
+
+        surface = None
+        if selected_surface:
+            surface = self._surface_by_name(selected_surface)
+        if surface is None and approved_hypothesis is not None:
+            surface = self._surface_for_hypothesis(approved_hypothesis)
+        declarations = self._surface_mechanism_telemetry_declarations(surface)
+        if not declarations:
+            return _cr(
+                "C12_mechanism_binding",
+                True,
+                "light",
+                "surface declares no mechanism telemetry",
+                t0,
+            )
+        if approved_hypothesis is None:
+            return _cr(
+                "C12_mechanism_binding",
+                True,
+                "light",
+                "no approved hypothesis supplied; mechanism echo skipped",
+                t0,
+            )
+
+        approved_ids = {change.id for change in mechanism_changes(approved_hypothesis)}
+        if not approved_ids:
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                "approved hypothesis declares no mechanism_changes for a "
+                "mechanism-telemetry surface",
+                t0,
+            )
+        patch_ids = {change.id for change in mechanism_changes(patch)}
+        if patch_ids != approved_ids:
+            missing = sorted(approved_ids - patch_ids)
+            extra = sorted(patch_ids - approved_ids)
+            detail_parts: list[str] = []
+            if missing:
+                detail_parts.append(
+                    "missing approved mechanism id(s): " + ", ".join(missing)
+                )
+            if extra:
+                detail_parts.append(
+                    "unexpected mechanism id(s): " + ", ".join(extra)
+                )
+            return _cr(
+                "C12_mechanism_binding",
+                False,
+                "heavy",
+                "patch mechanism_changes must echo approved hypothesis "
+                "mechanism ids; " + "; ".join(detail_parts),
+                t0,
+            )
+
+        return _cr(
+            "C12_mechanism_binding",
+            True,
+            "light",
+            "patch echoes approved mechanism ids",
             t0,
         )
 
@@ -1420,6 +1589,39 @@ class ContractGate:
                 return f"{field} has too many distinct objective names"
         return None
 
+    def _mechanism_changes_schema_error(
+        self,
+        proposal: HypothesisProposal | PatchProposal | HypothesisRecord,
+    ) -> str | None:
+        try:
+            changes = mechanism_changes(proposal)
+        except (TypeError, AttributeError) as exc:
+            return f"mechanism_changes must be a list of {{id, change_type}}: {exc}"
+        ids: list[str] = []
+        for change in changes:
+            mechanism_id = str(change.id or "").strip()
+            if not _MECHANISM_ID_RE.fullmatch(mechanism_id):
+                return (
+                    "mechanism_changes id must match "
+                    "^[a-z][a-z0-9_]{0,63}$"
+                )
+            if str(change.change_type or "") not in _MECHANISM_CHANGE_TYPES:
+                allowed = ", ".join(sorted(_MECHANISM_CHANGE_TYPES))
+                return (
+                    f"mechanism_changes change_type '{change.change_type}' "
+                    f"is not supported; expected one of: {allowed}"
+                )
+            ids.append(mechanism_id)
+        duplicates = sorted(
+            {mechanism_id for mechanism_id in ids if ids.count(mechanism_id) > 1}
+        )
+        if duplicates:
+            return (
+                "mechanism_changes must not repeat id values: "
+                + ", ".join(duplicates)
+            )
+        return None
+
     def _objective_metric_names(self) -> frozenset[str]:
         specs = getattr(self._spec, "objectives", None)
         if specs is None:
@@ -1655,6 +1857,46 @@ class ContractGate:
             if value:
                 normalized.append(value)
         return normalized
+
+    @staticmethod
+    def _surface_mechanism_telemetry_declarations(
+        surface: Any | None,
+    ) -> tuple[str, ...]:
+        evidence = getattr(surface, "evidence", None) if surface is not None else None
+        declarations: list[str] = []
+        telemetry = (
+            getattr(evidence, "mechanism_telemetry", None)
+            if evidence is not None
+            else None
+        )
+        if isinstance(telemetry, Mapping):
+            for raw_key, raw_value in telemetry.items():
+                key = str(raw_key or "").strip()
+                if not key:
+                    continue
+                activation = getattr(raw_value, "activation_runtime_fields", None)
+                effect = getattr(raw_value, "effect_probe_runtime_fields", None)
+                if isinstance(raw_value, Mapping):
+                    activation = raw_value.get("activation_runtime_fields", activation)
+                    effect = raw_value.get("effect_probe_runtime_fields", effect)
+                if activation or effect:
+                    declarations.append(_mechanism_declaration_key(key))
+
+        for field_name in (
+            "mechanism_activation_runtime_fields",
+            "mechanism_effect_probe_runtime_fields",
+            "mechanism_effect_runtime_fields",
+        ):
+            raw_value = (
+                getattr(evidence, field_name, None)
+                if evidence is not None
+                else None
+            )
+            declarations.extend(_mechanism_declarations_from_probe_value(raw_value))
+
+        return tuple(
+            dict.fromkeys(declaration for declaration in declarations if declaration)
+        )
 
     def _complexity_scale_terms_for_patch(
         self,
@@ -2159,6 +2401,61 @@ def _hypothesis_action_for_patch_action(action: str) -> str | None:
         "create": "create_new",
         "delete": "remove",
     }.get(action)
+
+
+def _mechanism_id_matches_declaration(
+    mechanism_id: str,
+    declarations: tuple[str, ...],
+) -> bool:
+    for declaration in declarations:
+        if declaration == mechanism_id:
+            return True
+        if "*" in declaration and _mechanism_wildcard_match(mechanism_id, declaration):
+            return True
+    return False
+
+
+def _mechanism_wildcard_match(mechanism_id: str, declaration: str) -> bool:
+    if declaration == "*":
+        return True
+    if not _MECHANISM_ID_RE.fullmatch(mechanism_id):
+        return False
+    pattern = re.escape(declaration).replace(r"\*", "[a-z0-9_]*")
+    return re.fullmatch(pattern, mechanism_id) is not None
+
+
+def _mechanism_declarations_from_probe_value(value: Any) -> list[str]:
+    declarations: list[str] = []
+    if value in (None, "", [], (), {}):
+        return declarations
+    if isinstance(value, Mapping):
+        for raw_key, raw_value in value.items():
+            key = _mechanism_declaration_key(str(raw_key or "").strip())
+            if key:
+                declarations.append(key)
+            declarations.extend(_mechanism_declarations_from_probe_value(raw_value))
+        return declarations
+    if isinstance(value, str):
+        if "{mechanism}" in value:
+            declarations.append("*")
+        return declarations
+    try:
+        iterator = iter(value)
+    except TypeError:
+        return declarations
+    for item in iterator:
+        declarations.extend(_mechanism_declarations_from_probe_value(item))
+    return declarations
+
+
+def _mechanism_declaration_key(key: str) -> str:
+    if key in {"{mechanism}", "*", "default", "__default__", "all", "__all__"}:
+        return "*"
+    if _MECHANISM_ID_RE.fullmatch(key):
+        return key
+    if "*" in key:
+        return key
+    return ""
 
 
 def _in_whitelist(module_top: str, whitelist: set) -> bool:

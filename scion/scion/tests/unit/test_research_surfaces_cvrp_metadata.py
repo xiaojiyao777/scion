@@ -42,6 +42,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         for surface in spec.research_surfaces or []
         if surface.name == "search_policy"
     )
+    assert "Inactive/legacy" in search_policy.description
     assert search_policy.algorithm is not None
     assert search_policy.algorithm.role == "post_baseline_search_scheduling"
     assert search_policy.targets is not None
@@ -68,20 +69,11 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     no_accepted_guidance = spec.runtime_failure_guidance[0]
     assert no_accepted_guidance.failure_categories == ["no_accepted_moves"]
     assert no_accepted_guidance.applies_to_surface_kinds == ["operator"]
-    assert no_accepted_guidance.recommended_surfaces == [
-        "solver_design",
-        "algorithm_blueprint",
-        "baseline_policy",
-        "construction_policy",
-        "neighborhood_portfolio",
-        "alns_vns_policy",
-        "destroy_repair_policy",
-        "route_pair_candidate_policy",
-        "acceptance_restart_policy",
-        "search_policy",
-    ]
+    assert no_accepted_guidance.recommended_surfaces == ["solver_design"]
     assert "route_local" in no_accepted_guidance.discouraged_surfaces
-    assert "accepted move rate" in no_accepted_guidance.guidance
+    assert "componentized policy/operator surfaces remain legacy" in (
+        no_accepted_guidance.guidance
+    )
     assert legacy.runtime_failure_guidance[0].failure_categories == [
         "no_accepted_moves"
     ]
@@ -92,6 +84,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         if surface.name == "baseline_policy"
     )
     assert baseline_policy.kind == "policy"
+    assert "Inactive/legacy" in baseline_policy.description
     assert baseline_policy.algorithm is not None
     assert baseline_policy.algorithm.role == "repo_local_baseline_main_search"
     assert baseline_policy.targets is not None
@@ -131,6 +124,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         if surface.name == "construction_policy"
     )
     assert construction_policy.kind == "construction"
+    assert "Inactive/legacy" in construction_policy.description
     assert construction_policy.algorithm is not None
     assert construction_policy.algorithm.role == "initial_solution_construction"
     assert construction_policy.targets is not None
@@ -171,6 +165,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         if surface.name == "neighborhood_portfolio"
     )
     assert neighborhood_portfolio.kind == "portfolio"
+    assert "Inactive/legacy" in neighborhood_portfolio.description
     assert neighborhood_portfolio.algorithm is not None
     assert neighborhood_portfolio.algorithm.role == "post_baseline_neighborhood_portfolio"
     assert neighborhood_portfolio.targets is not None
@@ -224,6 +219,7 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
         if surface.name == "algorithm_blueprint"
     )
     assert algorithm_blueprint.kind == "config"
+    assert "Inactive/legacy" in algorithm_blueprint.description
     assert algorithm_blueprint.algorithm is not None
     assert algorithm_blueprint.algorithm.role == "top_level_algorithm_lifecycle"
     assert algorithm_blueprint.targets is not None
@@ -296,6 +292,16 @@ def test_cvrp_problem_v1_exposes_policy_surfaces() -> None:
     assert "solver_algorithm_phase_delta_sum" in (
         solver_design.evidence.required_runtime_fields
     )
+    assert solver_design.evidence.activation_runtime_fields == {
+        "{mechanism}": [
+            "solver_algorithm_context_records.{mechanism}_iterations",
+            "solver_algorithm_phase_runtime_ms.{mechanism}",
+        ]
+    }
+    assert solver_design.evidence.effect_probe_runtime_fields == [
+        "solver_algorithm_phase_improvement_counts.{mechanism}",
+        "solver_algorithm_phase_best_delta.{mechanism}",
+    ]
     main_search_strategy = next(
         surface
         for surface in spec.research_surfaces or []

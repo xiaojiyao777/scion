@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scion.contract.gate import ContractGate
-from scion.core.models import PatchProposal
+from scion.core.models import HypothesisProposal, PatchProposal
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
@@ -32,6 +32,37 @@ def _gate_with_cvrp_champion(
         champion_snapshot_path=str(champion),
     )
     return gate, codes
+
+
+def test_solver_design_accepts_declared_per_mechanism_telemetry() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    gate = ContractGate(legacy_problem_spec_from_v1(spec))
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Run bounded route repair using mechanism repair_probe and record "
+            "its activation and best-delta evidence."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_context_records.{mechanism}_iterations",
+                "solver_algorithm_phase_runtime_ms.{mechanism}",
+            ],
+            "effect": [
+                "solver_algorithm_phase_improvement_counts.{mechanism}",
+                "solver_algorithm_phase_best_delta.{mechanism}",
+            ],
+        },
+    )
+
+    result = gate.validate_hypothesis(hypothesis, [], [])
+
+    c11 = next(
+        check for check in result.checks if check.name == "C11_expected_telemetry"
+    )
+    assert c11.passed
 
 
 def test_contract_gate_allows_inherited_solver_module_identity_message(

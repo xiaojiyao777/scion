@@ -55,8 +55,11 @@ _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
     "context.read_problem",
     "context.read_branch_state",
     "memory.query",
-    *_ACTIVE_SOLVER_TOOL_ALLOWLIST,
+    "context.read_active_solver_design",
+    "context.read_solver_call_graph",
+    "context.list_algorithm_files",
 )
+_ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS = 12000
 _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
@@ -353,6 +356,10 @@ def _has_successful_reusable_observation(
                 continue
             return True
         return False
+    if tool_name == "context.read_algorithm_file":
+        return _has_successful_algorithm_file_read(observations, args)
+    if tool_name == "context.read_algorithm_symbol":
+        return _has_successful_algorithm_symbol_read(observations, args)
     if tool_name in _SINGLE_SUCCESS_OBSERVATION_TOOLS:
         return any(
             observation.tool_name == tool_name and not observation.is_error
@@ -402,7 +409,112 @@ def _has_successful_code_phase_reusable_observation(
             surface=requested_surface,
             target_file=requested_target or None,
         )
+    reusable = _has_successful_reusable_observation(
+        observations,
+        tool_name,
+        args,
+        forced_surface=hypothesis.change_locus,
+    )
+    if reusable or tool_name in _ACTIVE_SOLVER_FILE_READ_TOOLS:
+        return reusable
     return _has_successful_tool(observations, tool_name)
+
+
+def _has_successful_algorithm_file_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    args: Mapping[str, Any],
+) -> bool:
+    requested_path = _normalized_algorithm_read_path(args.get("file_path"))
+    if not requested_path:
+        return False
+    requested_max_chars = _requested_algorithm_read_max_chars(args)
+    for observation in observations:
+        if (
+            observation.is_error
+            or observation.tool_name != "context.read_algorithm_file"
+        ):
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        observed_path = _normalized_algorithm_read_path(payload.get("file_path"))
+        if observed_path != requested_path:
+            continue
+        if _algorithm_payload_satisfies_read_request(
+            payload,
+            requested_max_chars=requested_max_chars,
+        ):
+            return True
+    return False
+
+
+def _has_successful_algorithm_symbol_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    args: Mapping[str, Any],
+) -> bool:
+    requested_path = _normalized_algorithm_read_path(args.get("file_path"))
+    requested_symbol = str(args.get("symbol") or "").strip()
+    if not requested_path or not requested_symbol:
+        return False
+    requested_max_chars = _requested_algorithm_read_max_chars(args)
+    for observation in observations:
+        if (
+            observation.is_error
+            or observation.tool_name != "context.read_algorithm_symbol"
+        ):
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        observed_path = _normalized_algorithm_read_path(payload.get("file_path"))
+        observed_symbol = str(payload.get("symbol") or "").strip()
+        if observed_path != requested_path or observed_symbol != requested_symbol:
+            continue
+        if _algorithm_payload_satisfies_read_request(
+            payload,
+            requested_max_chars=requested_max_chars,
+        ):
+            return True
+    return False
+
+
+def _normalized_algorithm_read_path(value: Any) -> str:
+    return str(value or "").replace("\\", "/").lstrip("/").strip()
+
+
+def _requested_algorithm_read_max_chars(args: Mapping[str, Any]) -> int:
+    parsed = _coerce_nonnegative_int(args.get("max_chars"))
+    if parsed is None:
+        return _ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS
+    return parsed
+
+
+def _algorithm_payload_satisfies_read_request(
+    payload: Mapping[str, Any],
+    *,
+    requested_max_chars: int,
+) -> bool:
+    if payload.get("readable") is not True:
+        return False
+    if bool(payload.get("truncated")):
+        return False
+    observed_max_chars = _coerce_nonnegative_int(payload.get("max_chars"))
+    if observed_max_chars is not None and requested_max_chars > observed_max_chars:
+        return False
+    content_preview = payload.get("content_preview")
+    if content_preview is None:
+        return requested_max_chars <= 0
+    preview_chars = len(str(content_preview))
+    size_chars = _coerce_nonnegative_int(payload.get("size_chars"))
+    if size_chars is not None:
+        required_preview_chars = min(size_chars, requested_max_chars)
+        return preview_chars >= required_preview_chars
+    if observed_max_chars is not None:
+        required_preview_chars = min(observed_max_chars, requested_max_chars)
+        return preview_chars >= required_preview_chars
+    if not bool(payload.get("compacted_for_agentic_budget")):
+        return True
+    return preview_chars >= requested_max_chars
 
 
 def _has_code_phase_surface_read(
@@ -473,3 +585,11 @@ def _coerce_positive_int(value: Any, default: int) -> int:
     except Exception:
         return default
     return parsed if parsed > 0 else default
+
+
+def _coerce_nonnegative_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except Exception:
+        return None
+    return parsed if parsed >= 0 else None

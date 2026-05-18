@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import scion.proposal.tools.preview as preview_tools
 from scion.proposal.solver_design_smoke import _runtime_algorithm_smoke_preview
 
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
@@ -77,6 +78,9 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     assert "_or_opt_3" in rendered
     assert "vns_embedded" in rendered
     assert "legacy_inactive_surface_exclusion" in payload
+    assert "route_local" in rendered
+    assert "baseline_policy" in rendered
+    assert "main_search_strategy" in rendered
     assert "alns_vns_policy" in rendered
     assert "must not be used as active evidence" in rendered
     inactive_paths = {
@@ -604,11 +608,9 @@ def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     assert payload["problem_preview"]["passed"] is True
     assert payload["runtime_smoke"]["passed"] is True
     assert payload["runtime_smoke"]["runtime_smoke_run"] is True
-    assert payload["runtime_smoke"]["runtime"]["solver_algorithm_path"] == (
+    assert payload["runtime_smoke"]["runtime_counters"]["solver_algorithm_path"] == (
         "policies/baseline_algorithm.py"
     )
-    assert payload["runtime_smoke"]["resolved_case_path"]
-    assert payload["runtime_smoke"]["data_root"]
     assert payload["runtime_smoke"]["data_root_source"] in {
         "workspace",
         "base_workspace",
@@ -686,7 +688,7 @@ def test_algorithm_smoke_runs_solver_design_module_patch_through_entrypoint(
     assert payload["problem_preview"]["passed"] is True
     assert payload["runtime_smoke"]["passed"] is True
     assert payload["runtime_smoke"]["runtime_smoke_run"] is True
-    assert payload["runtime_smoke"]["runtime"]["solver_algorithm_path"] == (
+    assert payload["runtime_smoke"]["runtime_counters"]["solver_algorithm_path"] == (
         "policies/baseline_algorithm.py"
     )
     assert after == before
@@ -782,20 +784,12 @@ def test_algorithm_smoke_runs_multi_file_solver_design_patch(
     after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
     payload = observation.structured_payload
     patch_payload = payload["patch"]
-    contract_checks = {
-        check["name"]: check["passed"] for check in patch_payload["checks"]
-    }
 
     assert observation.is_error is False
     assert payload["passed"] is True
     assert patch_payload["patch"]["additional_change_count"] == 1
-    assert contract_checks["C4b_patch_action_target"] is True
-    assert (
-        contract_checks[
-            "additional_changes[0].C4b_patch_action_target"
-        ]
-        is True
-    )
+    assert patch_payload["contract"]["passed"] is True
+    assert patch_payload.get("failed_checks", []) == []
     assert payload["runtime_smoke"]["passed"] is True
     assert payload["runtime_smoke"]["runtime_smoke_run"] is True
     assert after == before
@@ -937,6 +931,210 @@ def test_algorithm_smoke_rejects_zero_search_solver_design_candidate(
     assert "zero active search effort" in rendered
     assert "solver_algorithm_search_iterations=0" in rendered
     assert "solver_algorithm_move_attempts=0" in rendered
+
+
+def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    mechanism = {"id": "missing_probe", "change_type": "modify"}
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+                mechanism_changes=[mechanism],
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    solution = context.make_solution(context.nearest_neighbor())\n"
+                    "    context.record_iteration('seed', 1)\n"
+                    "    context.record_move('seed', attempted=1, accepted=1)\n"
+                    "    return solution\n"
+                ),
+                "mechanism_changes": [mechanism],
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    guard = payload["runtime_smoke"]["telemetry_guard"]
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["runtime_smoke"]["passed"] is False
+    assert guard["passed"] is False
+    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in rendered
+    assert guard["failures"][0]["mechanism"] == "missing_probe"
+
+
+def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too_large(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    huge_stdout = "FULL_STDOUT_BEGIN\n" + ("stdout line\n" * 9000) + "FULL_STDOUT_END"
+    huge_stderr = "FULL_STDERR_BEGIN\n" + ("stderr line\n" * 9000) + "FULL_STDERR_END"
+    huge_events = [
+        {
+            "type": "error",
+            "message": "NameError: DESTROY_RATIO_LOW is not defined",
+            "payload": "x" * 200,
+        }
+        for _ in range(700)
+    ]
+
+    def fake_runtime_smoke(context, patch, selected_surface, hypothesis):
+        del context, patch, selected_surface, hypothesis
+        return {
+            "passed": False,
+            "runtime_smoke_run": True,
+            "workspace_materialized": True,
+            "selected_surface": "solver_design",
+            "case": "controlled/data/canary.vrp",
+            "case_count": 2,
+            "issues": ["NameError: DESTROY_RATIO_LOW is not defined"],
+            "run": {
+                "success": False,
+                "exit_code": 1,
+                "elapsed_ms": 1234,
+                "error_category": "runtime_exception",
+                "detail": "solver run failed",
+                "stdout": huge_stdout,
+                "stderr": huge_stderr,
+            },
+            "runtime": {
+                "solver_algorithm_path": "policies/baseline_algorithm.py",
+                "solver_algorithm_errors": 1,
+                "solver_algorithm_events": huge_events,
+                "solver_algorithm_search_iterations": 0,
+                "solver_algorithm_move_attempts": 0,
+            },
+            "runtime_audit_failure": {
+                "error_category": "solver_algorithm_errors",
+                "detail": "solver runtime audit reported solver_algorithm_errors=1",
+                "solver_algorithm_errors": 1,
+                "solver_algorithm_events": huge_events,
+            },
+            "telemetry_guard": {
+                "passed": False,
+                "selected_surface": "solver_design",
+                "candidate_runs": 2,
+                "champion_runs": 2,
+                "expected_telemetry_present": True,
+                "declared_mechanisms": ["missing_probe"],
+                "failures": [
+                    {
+                        "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "severity": "fail",
+                        "mechanism": "missing_probe",
+                        "category": "activation",
+                        "field": "solver_algorithm_events",
+                        "candidate_positive": 0,
+                        "candidate_present": 2,
+                        "candidate_missing": 0,
+                        "champion_positive": 1,
+                    }
+                ],
+                "fields": {"solver_algorithm_events": {"examples": huge_events}},
+            },
+            "runs": [
+                {
+                    "case": f"case-{idx}.vrp",
+                    "runtime": {"solver_algorithm_events": huge_events},
+                    "run": {"stdout": huge_stdout, "stderr": huge_stderr},
+                    "micro_benchmark": {
+                        "comparison": "loss",
+                        "delta": -3.0,
+                        "decisive_metric": "total_distance",
+                        "runtime_delta_ms": 47,
+                        "candidate_objective": {"total_distance": 103.0},
+                        "champion_objective": {"total_distance": 100.0},
+                    },
+                }
+                for idx in range(50)
+            ],
+            "micro_benchmark": {
+                "non_promotional": True,
+                "tainted_debug": True,
+                "comparable_cases": 2,
+                "wins": 0,
+                "losses": 1,
+                "ties": 1,
+                "results": [
+                    {
+                        "label": "canary",
+                        "case": "controlled/data/canary.vrp",
+                        "comparison": "loss",
+                        "delta": -3.0,
+                        "decisive_metric": "total_distance",
+                        "runtime_delta_ms": 47,
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(
+        preview_tools,
+        "_runtime_algorithm_smoke_preview",
+        fake_runtime_smoke,
+    )
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    solution = context.make_solution(context.nearest_neighbor())\n"
+                    "    context.record_iteration('seed', 1)\n"
+                    "    context.record_move('seed', attempted=1, accepted=1)\n"
+                    "    return solution\n"
+                ),
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    guard = payload["telemetry_guard"]
+
+    assert observation.is_error is False
+    assert observation.failure_code is None
+    assert _json_size(payload) < 60000
+    assert payload["agent_summary"]["primary_issue"] == (
+        "NameError: DESTROY_RATIO_LOW is not defined"
+    )
+    assert payload["failure_class"] == "telemetry_guard_failure"
+    assert "runs" not in payload["runtime_smoke"]
+    assert "run" not in payload["runtime_smoke"]
+    assert "runtime" not in payload["runtime_smoke"]
+    assert "runtime_smoke" not in payload["patch"]
+    assert "code_content" not in rendered
+    assert "FULL_STDOUT_BEGIN" not in rendered
+    assert "FULL_STDERR_BEGIN" not in rendered
+    assert len(payload["subprocess"]["stderr_tail"]) < 1000
+    assert guard["failure_code"] == "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    assert guard["mechanism"] == "missing_probe"
+    assert guard["category"] == "activation"
+    assert guard["field"] == "solver_algorithm_events"
+    assert guard["counters"]["candidate_positive"] == 0
+    assert payload["runtime_comparison"]["losses"] == 1
+    assert payload["runtime_comparison"]["representative_case"]["delta"] == -3.0
 
 
 def test_solver_design_low_effort_issue_rejects_search_bearing_under_spend() -> None:
@@ -1164,11 +1362,10 @@ def test_algorithm_smoke_uses_active_formal_split_over_workspace_tiny_split(
     assert observation.is_error is False
     assert payload["runtime_smoke"]["case_count"] == 5
     assert "controlled/data/synthetic_controlled_canary_5.vrp" in rendered
-    assert "controlled/data/synthetic_screening_micro_5.vrp" in rendered
-    assert "controlled/data/synthetic_validation_micro_5.vrp" in rendered
-    assert "controlled/data/synthetic_frozen_split_6.vrp" in rendered
-    assert "controlled/data/synthetic_final_split_6.vrp" in rendered
-    assert "audited_problem_data_manifest" in rendered
+    assert "controlled/data/synthetic_screening_micro_5.vrp" not in rendered
+    assert "controlled/data/synthetic_validation_micro_5.vrp" not in rendered
+    assert "controlled/data/synthetic_frozen_split_6.vrp" not in rendered
+    assert "controlled/data/synthetic_final_split_6.vrp" not in rendered
     assert "data/tiny_6.json" not in rendered
     assert '"seed": 101' in rendered
 

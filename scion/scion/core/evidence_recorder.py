@@ -29,7 +29,14 @@ from scion.core.public_refs import (
     public_case_ref,
     redact_public_refs,
 )
-from scion.core.status_reporter import StatusReporter
+from scion.core.status_reporter import (
+    API_BALANCE_EXHAUSTED_STOP_REASON,
+    PROVIDER_ERROR_CATEGORY_BALANCE_EXHAUSTED,
+    StatusReporter,
+    is_provider_balance_exhausted_detail,
+    normalize_status_payload,
+    normalize_stopped_reason,
+)
 from scion.evidence.final_evidence_refs import (
     FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
     FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
@@ -152,6 +159,134 @@ def _screening_rate_fields(
     }
 
 
+def _contract_not_run_reason(step: StepRecord) -> str | None:
+    if step.patch is not None:
+        return None
+    if step.failure_stage == "agent_quality_blocked":
+        return "proposal_only_agent_quality_blocked"
+    if step.failure_stage == "proposal":
+        return "proposal_generation_failed"
+    if step.failure_stage == "code_generation":
+        return "patch_not_generated"
+    return None
+
+
+def _primary_failure_attribution(step: StepRecord) -> dict[str, Any] | None:
+    ref = step.proposal_session_ref
+    if isinstance(ref, Mapping):
+        session_observation = _proposal_session_failure_observation(ref)
+        if (
+            session_observation
+            and str(session_observation.get("stage") or "")
+            == "agent_quality_blocked"
+        ):
+            return _drop_empty_summary_items(
+                {
+                    key: value
+                    for key, value in session_observation.items()
+                    if key != "source"
+                }
+            )
+    if not step.failure_stage and not step.failure_detail:
+        return None
+    stage = step.failure_stage or "unknown"
+    reason = step.failure_detail or stage
+    return _drop_empty_summary_items(
+        {
+            "stage": stage,
+            "reason": reason,
+            "category": _failure_category_for_stage(stage, reason),
+        }
+    )
+
+
+def _secondary_failure_observations(
+    step: StepRecord,
+    primary: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    observations: list[dict[str, Any]] = []
+    ref = step.proposal_session_ref
+    if isinstance(ref, Mapping):
+        session_observation = _proposal_session_failure_observation(ref)
+        if session_observation and not _same_failure_observation(
+            session_observation,
+            primary,
+        ):
+            observations.append(session_observation)
+    return observations
+
+
+def _proposal_session_failure_observation(
+    ref: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    primary = ref.get("primary_failure")
+    if isinstance(primary, Mapping):
+        observation = dict(primary)
+        observation.setdefault("source", "proposal_session")
+        return _drop_empty_summary_items(observation)
+
+    failure_code = str(ref.get("failure_code") or "").strip()
+    failure_category = str(ref.get("failure_category") or "").strip()
+    block_reason = str(ref.get("agent_block_reason") or "").strip()
+    if not (failure_code or failure_category or block_reason):
+        return None
+    return _drop_empty_summary_items(
+        {
+            "source": "proposal_session",
+            "stage": block_reason or str(ref.get("termination_reason") or ""),
+            "reason": failure_code or failure_category,
+            "category": failure_category,
+            "code": failure_code,
+        }
+    )
+
+
+def _same_failure_observation(
+    observation: Mapping[str, Any],
+    primary: Mapping[str, Any] | None,
+) -> bool:
+    if not primary:
+        return False
+    primary_stage = str(primary.get("stage") or "")
+    primary_reason = str(primary.get("reason") or "")
+    primary_category = str(primary.get("category") or "")
+    observation_stage = str(observation.get("stage") or "")
+    observation_reason = str(observation.get("reason") or "")
+    observation_category = str(observation.get("category") or "")
+    return bool(
+        primary_stage
+        and primary_stage == observation_stage
+        and (
+            (primary_reason and primary_reason == observation_reason)
+            or (primary_category and primary_category == observation_category)
+        )
+    )
+
+
+def _failure_category_for_stage(stage: str, reason: str) -> str:
+    if stage in {"hypothesis_contract", "patch_contract"}:
+        return "contract"
+    if stage == "agent_quality_blocked":
+        return "agent_grounding_failure"
+    if stage in {"proposal", "code_generation"}:
+        return "proposal"
+    if stage == "verification":
+        return "verification"
+    if stage == "workspace":
+        return "workspace"
+    if "contract" in reason:
+        return "contract"
+    return stage or "unknown"
+
+
+def _drop_empty_summary_items(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value
+        for key, value in payload.items()
+        if value not in (None, "", [], {})
+    }
+
+
 def _default_final_evidence_closure_refs(
     stopped_reason: str | None,
 ) -> dict[str, Any]:
@@ -233,9 +368,14 @@ class EvidenceRecorder:
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
         if stopped_reason is not None:
-            payload["stopped_reason"] = stopped_reason
+            payload["stopped_reason"] = normalize_stopped_reason(
+                stopped_reason,
+                balance_exhausted=bool(payload.get("balance_exhausted")),
+                circuit_breaker_tripped=bool(payload.get("circuit_breaker_tripped")),
+            )
         if self.current_status_progress is not None:
             payload["current_progress"] = self.current_status_progress
+        payload = normalize_status_payload(payload)
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:
             self.status_reporter.write(public_payload)
@@ -525,10 +665,15 @@ class EvidenceRecorder:
         budget_utilization = (
             round(budget_used / budget_total, 4) if budget_total > 0 else 0.0
         )
-        effective_stopped_reason = (
-            "api_balance_exhausted"
-            if balance_exhausted
-            else ("circuit_breaker" if circuit_breaker_tripped else stopped_reason)
+        inferred_balance_exhausted = balance_exhausted or any(
+            is_provider_balance_exhausted_detail(step.failure_detail)
+            or is_provider_balance_exhausted_detail(step.verification_detail)
+            for step in steps
+        )
+        effective_stopped_reason = normalize_stopped_reason(
+            stopped_reason,
+            balance_exhausted=inferred_balance_exhausted,
+            circuit_breaker_tripped=circuit_breaker_tripped,
         )
         summary: Dict[str, Any] = {
             "campaign_id": self.campaign_id,
@@ -536,6 +681,8 @@ class EvidenceRecorder:
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
+            "balance_exhausted": inferred_balance_exhausted,
+            "circuit_breaker_tripped": circuit_breaker_tripped,
             "cache_stats": {
                 "total_tokens": total_tokens,
                 "cache_read_tokens": cache_read_tokens,
@@ -558,6 +705,11 @@ class EvidenceRecorder:
             "diagnostics": diagnostics if diagnostics is not None else [],
             "steps": [],
         }
+        if effective_stopped_reason == API_BALANCE_EXHAUSTED_STOP_REASON:
+            summary["stop_category"] = "provider_error"
+            summary["provider_error"] = {
+                "category": PROVIDER_ERROR_CATEGORY_BALANCE_EXHAUSTED,
+            }
         if frozen_budget is not None:
             summary["frozen_budget"] = dict(frozen_budget)
         refs = dict(self.final_evidence_refs)
@@ -606,12 +758,18 @@ class EvidenceRecorder:
             base_dir=self.campaign_dir,
             kind="artifact",
         )
+        contract_not_run_reason = _contract_not_run_reason(step)
+        primary_failure = _primary_failure_attribution(step)
+        secondary_observations = _secondary_failure_observations(
+            step,
+            primary_failure,
+        )
         step_data: Dict[str, Any] = {
             "round": step.round_num,
             "branch_id": step.branch_id,
             "decision": step.decision.value if step.decision is not None else None,
             "decision_reason_codes": decision_reason_codes,
-            "contract_passed": step.contract_passed,
+            "contract_passed": False if contract_not_run_reason else step.contract_passed,
             "verification_passed": step.verification_passed,
             "failure_stage": step.failure_stage,
             "failure_detail": step.failure_detail,
@@ -625,6 +783,12 @@ class EvidenceRecorder:
                 "target_file": step.hypothesis.target_file,
             },
         }
+        if contract_not_run_reason:
+            step_data["contract_not_run_reason"] = contract_not_run_reason
+        if primary_failure:
+            step_data["primary_failure"] = primary_failure
+        if secondary_observations:
+            step_data["secondary_observations"] = secondary_observations
         if step.proposal_session_ref:
             allowed_ref_fields = {
                 "schema_version",
@@ -635,6 +799,12 @@ class EvidenceRecorder:
                 "transcript_digest",
                 "termination_reason",
                 "status",
+                "failure_category",
+                "failure_code",
+                "agent_block_reason",
+                "primary_failure",
+                "secondary_observations",
+                "rejection_constraint",
             }
             step_data["proposal_session_ref"] = {
                 key: value

@@ -19,10 +19,12 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.public_refs import contains_absolute_path, public_artifact_ref
+from scion.core.status_reporter import is_provider_balance_exhausted_detail
 from scion.proposal.agentic_session import (
     AgenticProposalOutput,
     AgenticProposalRequest,
     AgenticProposalSession,
+    AgenticFailureCategory,
     AgenticProposalStatus,
     AgenticSessionStore,
     AgenticTerminationReason,
@@ -51,6 +53,12 @@ _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _LEGACY_PREMISE_CONTRADICTED = "premise_contradicted"
 _PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
 _AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
+_AGENTIC_FAILURE_DETAIL_CHARS = 700
+_FRAMEWORK_CONTROL_FAILURE = "framework_control"
+_AGENTIC_BUDGET_CONTROL = AgenticFailureCategory.AGENTIC_BUDGET_CONTROL.value
+_TOOL_BUDGET_EXHAUSTED = AgenticFailureCategory.TOOL_BUDGET_EXHAUSTED.value
+_ALGORITHM_SMOKE_FAILURE = AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE.value
+_SESSION_TIMEOUT = AgenticTerminationReason.SESSION_TIMEOUT.value
 
 
 def _now_iso() -> str:
@@ -150,6 +158,18 @@ def _agentic_quality_block_classification(
     failure_category = _agentic_value(output.failure_category)
     failure_code = str(structured.get("failure_code") or "")
     premise_check = str(structured.get("premise_check") or "")
+    detail = str(output.failure_detail or "").lower()
+    if (
+        failure_category == _ALGORITHM_SMOKE_FAILURE
+        or failure_code == _ALGORITHM_SMOKE_FAILURE
+        or "algorithm smoke did not pass" in detail
+        or "runtime_smoke.telemetry_guard" in detail
+    ):
+        return {
+            "failure_class": _ALGORITHM_SMOKE_FAILURE,
+            "failure_code": _ALGORITHM_SMOKE_FAILURE,
+            "block_reason": _AGENT_QUALITY_BLOCKED,
+        }
     if (
         failure_code == _PROPOSAL_PREMISE_CONTRADICTED
         or failure_category in {
@@ -169,6 +189,151 @@ def _agentic_quality_block_classification(
 
 def _agentic_output_is_quality_blocked(output: AgenticProposalOutput) -> bool:
     return _agentic_quality_block_classification(output) is not None
+
+
+def _agentic_detail_is_framework_boundary(detail: str | None) -> bool:
+    text = str(detail or "").lower()
+    return (
+        "contractgate-approved hypothesis" in text
+        or "forced_surface_constraint" in text
+    )
+
+
+def _agentic_output_is_control_timeout(
+    output: AgenticProposalOutput | None,
+    detail: str | None = None,
+) -> bool:
+    reason = _agentic_value(getattr(output, "termination_reason", None))
+    category = _agentic_value(getattr(output, "failure_category", None))
+    combined_detail = " ".join(
+        part
+        for part in (
+            str(detail or ""),
+            str(getattr(output, "failure_detail", "") or ""),
+        )
+        if part
+    ).lower()
+    if reason == _SESSION_TIMEOUT:
+        return True
+    if category == _AGENTIC_BUDGET_CONTROL:
+        return True
+    if category == _TOOL_BUDGET_EXHAUSTED and reason == _SESSION_TIMEOUT:
+        return True
+    return (
+        "session_timeout" in combined_detail
+        and ("agentic" in combined_detail or "max_wall_time_sec" in combined_detail)
+    )
+
+
+def _bounded_agentic_failure_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if len(text) <= _AGENTIC_FAILURE_DETAIL_CHARS:
+        return text
+    return text[: _AGENTIC_FAILURE_DETAIL_CHARS - 3].rstrip() + "..."
+
+
+def _agentic_primary_secondary_failures(
+    output: AgenticProposalOutput,
+) -> tuple[dict[str, str], list[dict[str, str]]]:
+    reason = _agentic_value(output.termination_reason)
+    quality = _agentic_quality_block_classification(output)
+    secondary: list[dict[str, str]] = []
+    if (
+        output.status == AgenticProposalStatus.COMPLETED
+        and not output.failure_detail
+        and output.self_check.schema_valid is not False
+        and output.self_check.contract_preview_passed is not False
+        and quality is None
+    ):
+        return {}, secondary
+    if quality is not None:
+        primary = {
+            "stage": _AGENT_QUALITY_BLOCKED,
+            "reason": quality["failure_code"],
+            "category": quality["failure_class"],
+            "code": quality["failure_code"],
+        }
+        if output.failure_detail:
+            primary["detail"] = _bounded_agentic_failure_text(output.failure_detail)
+        return primary, secondary
+
+    if output.self_check.schema_valid is False:
+        primary = {
+            "stage": "self_check",
+            "reason": "schema_or_target_preview_failed",
+            "category": "contract_boundary_failure",
+        }
+        if output.self_check.schema_preview_codes:
+            primary["code"] = _bounded_agentic_failure_text(
+                output.self_check.schema_preview_codes[0]
+            )
+        if output.failure_detail:
+            primary["detail"] = _bounded_agentic_failure_text(output.failure_detail)
+        return primary, secondary
+
+    if output.self_check.contract_preview_passed is False:
+        primary = {
+            "stage": "self_check",
+            "reason": "contract_preview_failed",
+            "category": "contract_boundary_failure",
+        }
+        if output.self_check.contract_preview_codes:
+            primary["code"] = _bounded_agentic_failure_text(
+                output.self_check.contract_preview_codes[0]
+            )
+        if output.failure_detail:
+            primary["detail"] = _bounded_agentic_failure_text(output.failure_detail)
+        return primary, secondary
+
+    primary = {
+        "stage": reason or "agentic_proposal",
+        "reason": _bounded_agentic_failure_text(output.failure_detail or reason),
+    }
+    category = _agentic_value(output.failure_category)
+    if category:
+        primary["category"] = category
+    return primary, secondary
+
+
+def _agentic_rejection_constraint(
+    output: AgenticProposalOutput,
+) -> dict[str, Any] | None:
+    structured = (
+        output.structured_rejection
+        if isinstance(output.structured_rejection, Mapping)
+        else {}
+    )
+    if not structured:
+        return None
+    quality = _agentic_quality_block_classification(output)
+    if quality is None:
+        return None
+    return {
+        key: value
+        for key, value in {
+            "source": structured.get("source") or "mechanism_novelty_gate",
+            "gate_name": structured.get("gate_name"),
+            "mechanism": structured.get("mechanism"),
+            "premise_check": structured.get("premise_check"),
+            "failure_category": _agentic_value(output.failure_category),
+            "failure_code": quality["failure_code"],
+            "agent_block_reason": quality["block_reason"],
+            "reason": _bounded_agentic_failure_text(structured.get("reason")),
+            "evidence": [
+                _bounded_agentic_failure_text(item)
+                for item in list(structured.get("evidence") or ())[:8]
+            ],
+            "snapshot_digest": structured.get("snapshot_digest"),
+            "selected_surface": structured.get("selected_surface"),
+            "target_file": structured.get("target_file"),
+            "retry_constraint": (
+                "Do not repeat this missing-premise or duplicate mechanism. "
+                "Choose a different mechanism family supported by active-solver "
+                "evidence; changing names or novelty text is not enough."
+            ),
+        }.items()
+        if value
+    }
 
 
 class CreativeLayerLike(Protocol):
@@ -345,6 +510,16 @@ class ProposalPipeline:
             LLMTimeoutError,
             ProposalValidationError,
         ) as exc:
+            if is_provider_balance_exhausted_detail(exc):
+                logger.critical(
+                    "Branch %s: API balance exhausted - stopping campaign: %s",
+                    bid,
+                    exc,
+                )
+                self.hypothesis_failure_details[bid] = str(exc)
+                self.mark_balance_exhausted()
+                self.circuit_breaker.record_failure(str(exc))
+                return None, None
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
             self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
@@ -429,6 +604,16 @@ class ProposalPipeline:
             LLMTimeoutError,
             ProposalValidationError,
         ) as exc:
+            if is_provider_balance_exhausted_detail(exc):
+                logger.critical(
+                    "Branch %s: API balance exhausted - stopping campaign: %s",
+                    bid,
+                    exc,
+                )
+                self.hypothesis_failure_details[bid] = str(exc)
+                self.mark_balance_exhausted()
+                self.circuit_breaker.record_failure(str(exc))
+                return None
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
             self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
@@ -478,6 +663,15 @@ class ProposalPipeline:
             LLMTimeoutError,
             ProposalValidationError,
         ) as exc:
+            if is_provider_balance_exhausted_detail(exc):
+                logger.critical(
+                    "Branch %s: API balance exhausted during fix - stopping campaign: %s",
+                    branch.branch_id,
+                    exc,
+                )
+                self.mark_balance_exhausted()
+                self.circuit_breaker.record_failure(str(exc))
+                return None
             logger.warning("Branch %s: fix LLM error: %s", branch.branch_id, exc)
             return None
 
@@ -1052,7 +1246,17 @@ class ProposalPipeline:
         if output is not None:
             self.agentic_outputs[branch.branch_id] = output
         self.hypothesis_failure_details[branch.branch_id] = detail
+        if is_provider_balance_exhausted_detail(detail):
+            self.mark_balance_exhausted()
+            self.circuit_breaker.record_failure(detail)
+            return None, None
         self._record_agentic_failure_lifecycle(branch, detail, output)
+        if output is not None and _agentic_output_is_quality_blocked(output):
+            return None, None
+        if _agentic_detail_is_framework_boundary(detail):
+            return None, None
+        if _agentic_output_is_control_timeout(output, detail):
+            return None, None
         self.circuit_breaker.record_failure(detail)
         return None, None
 
@@ -1064,7 +1268,17 @@ class ProposalPipeline:
         output: AgenticProposalOutput | None,
     ) -> None:
         self.hypothesis_failure_details[branch.branch_id] = detail
+        if is_provider_balance_exhausted_detail(detail):
+            self.mark_balance_exhausted()
+            self.circuit_breaker.record_failure(detail)
+            return
         self._record_agentic_failure_lifecycle(branch, detail, output)
+        if output is not None and _agentic_output_is_quality_blocked(output):
+            return
+        if _agentic_detail_is_framework_boundary(detail):
+            return
+        if _agentic_output_is_control_timeout(output, detail):
+            return
         self.circuit_breaker.record_failure(detail)
 
     def _record_agentic_failure_lifecycle(
@@ -1078,6 +1292,17 @@ class ProposalPipeline:
                 "Branch %s: agentic quality block recorded outside infra/proposal streaks: %s",
                 branch.branch_id,
                 detail,
+            )
+            return
+        if _agentic_output_is_control_timeout(output, detail):
+            logger.info(
+                "Branch %s: agentic control timeout recorded outside proposal streaks: %s",
+                branch.branch_id,
+                detail,
+            )
+            self.handle_failure(
+                branch,
+                FailureEvent(category=_FRAMEWORK_CONTROL_FAILURE, detail=detail),
             )
             return
         self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
@@ -1190,6 +1415,9 @@ class ProposalPipeline:
             public_artifact_ref(ref) for ref in tainted_artifact_refs
         ]
         tainted_refs_internal_only = contains_absolute_path(tainted_artifact_refs)
+        primary_failure, secondary_observations = (
+            _agentic_primary_secondary_failures(output)
+        )
         payload = {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
@@ -1209,6 +1437,10 @@ class ProposalPipeline:
             "contract_preview_passed": output.self_check.contract_preview_passed,
             "contract_preview_codes": list(output.self_check.contract_preview_codes),
         }
+        if primary_failure:
+            payload["primary_failure"] = primary_failure
+        if secondary_observations:
+            payload["secondary_observations"] = secondary_observations
         event = {
             "campaign_id": output.campaign_id or self.campaign_id,
             "branch_id": output.branch_id,
@@ -1255,6 +1487,10 @@ class ProposalPipeline:
             else {}
         )
         quality = _agentic_quality_block_classification(output)
+        primary_failure, secondary_observations = (
+            _agentic_primary_secondary_failures(output)
+        )
+        rejection_constraint = _agentic_rejection_constraint(output)
         return {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
@@ -1273,6 +1509,9 @@ class ProposalPipeline:
             "agent_block_reason": (
                 quality["block_reason"] if quality is not None else ""
             ),
+            "primary_failure": primary_failure,
+            "secondary_observations": secondary_observations,
+            "rejection_constraint": rejection_constraint,
         }
 
     def _hypothesis_record(
@@ -1297,4 +1536,5 @@ class ProposalPipeline:
             target_objectives=hypothesis.target_objectives,
             protected_objectives=hypothesis.protected_objectives,
             novelty_signature=dict(hypothesis.novelty_signature or {}),
+            mechanism_changes=tuple(hypothesis.mechanism_changes or ()),
         )

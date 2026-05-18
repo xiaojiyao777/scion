@@ -63,28 +63,28 @@ runtime_failure_guidance:
     min_count: 2
     recommended_surfaces:
       - solver_design
-      - algorithm_blueprint
-      - baseline_policy
-      - construction_policy
-      - neighborhood_portfolio
-      - alns_vns_policy
-      - destroy_repair_policy
-      - route_pair_candidate_policy
-      - acceptance_restart_policy
-      - search_policy
     discouraged_surfaces:
       - route_local
       - route_pair
       - ruin_recreate
+      - search_policy
+      - baseline_policy
+      - construction_policy
+      - neighborhood_portfolio
+      - algorithm_blueprint
+      - main_search_strategy
+      - alns_vns_policy
+      - destroy_repair_policy
+      - route_pair_candidate_policy
+      - acceptance_restart_policy
     guidance: >-
       Recent operator-like attempts are spending post-baseline budget without
-      accepting moves. Prefer algorithm-level surfaces that change the top-level
-      lifecycle, initial construction, package-owned local search, component
-      scheduling, or baseline/operator budget policy.
-      Discourage adding another post-baseline route_local, route_pair, or
-      ruin_recreate polish operator unless the hypothesis directly explains how
-      it will raise accepted move rate through bounded candidate generation,
-      tighter prefilters, or a materially different acceptance opportunity.
+      accepting moves. The active CVRP v3 research object is solver_design:
+      retry a materially different branch-owned algorithm-body hypothesis
+      under policies/baseline_algorithm.py or policies/baseline_modules/*.py.
+      The componentized policy/operator surfaces remain legacy diagnostic
+      hooks and should not replace solver_design in the main hypothesis
+      context.
 
 canary_case_path: "data/tiny_canary.json"
 
@@ -102,7 +102,7 @@ operator_interface:
 research_surfaces:
   - name: route_local
     kind: operator
-    description: "Intra-route bounded improvement operators."
+    description: "Inactive/legacy post-baseline intra-route operator surface retained for regression compatibility."
     algorithm:
       role: intra_route_neighborhood_operator
       invocation_point: post_baseline_operator_search
@@ -158,7 +158,7 @@ research_surfaces:
     remove_allowed: true
   - name: route_pair
     kind: operator
-    description: "Inter-route bounded relocate, swap, 2-opt*, and exchange operators."
+    description: "Inactive/legacy post-baseline inter-route operator surface retained for regression compatibility."
     algorithm:
       role: inter_route_neighborhood_operator
       invocation_point: post_baseline_operator_search
@@ -215,7 +215,7 @@ research_surfaces:
     remove_allowed: true
   - name: ruin_recreate
     kind: operator
-    description: "Bounded destroy/repair operators with explicit customer and route caps."
+    description: "Inactive/legacy post-baseline destroy/repair operator surface retained for regression compatibility."
     algorithm:
       role: bounded_destroy_repair_operator
       invocation_point: post_baseline_operator_search
@@ -275,7 +275,7 @@ research_surfaces:
     remove_allowed: true
   - name: search_policy
     kind: policy
-    description: "Baseline/operator budget and scheduling policy."
+    description: "Inactive/legacy baseline/operator budget policy retained for forced diagnostics and regression compatibility."
     algorithm:
       role: post_baseline_search_scheduling
       invocation_point: before_and_during_post_baseline_operator_search
@@ -375,7 +375,7 @@ research_surfaces:
     remove_allowed: false
   - name: baseline_policy
     kind: policy
-    description: "Repo-local vrp/src ALNS+VNS baseline main-search policy."
+    description: "Inactive/legacy repo-local vrp/src ALNS+VNS policy retained for forced diagnostics and regression compatibility."
     algorithm:
       role: repo_local_baseline_main_search
       invocation_point: before_repo_local_vrp_baseline
@@ -486,7 +486,7 @@ research_surfaces:
     remove_allowed: false
   - name: construction_policy
     kind: construction
-    description: "Initial solution construction mode and bounded bias policy."
+    description: "Inactive/legacy construction policy retained for forced diagnostics and regression compatibility."
     algorithm:
       role: initial_solution_construction
       invocation_point: before_baseline_or_post_baseline_operator_search
@@ -584,7 +584,7 @@ research_surfaces:
     remove_allowed: false
   - name: neighborhood_portfolio
     kind: portfolio
-    description: "Post-baseline neighborhood component portfolio policy."
+    description: "Inactive/legacy post-baseline component portfolio policy retained for forced diagnostics and regression compatibility."
     algorithm:
       role: post_baseline_neighborhood_portfolio
       invocation_point: before_and_during_post_baseline_operator_search
@@ -716,7 +716,7 @@ research_surfaces:
     remove_allowed: false
   - name: algorithm_blueprint
     kind: config
-    description: "Top-level CVRP algorithm lifecycle blueprint."
+    description: "Inactive/legacy componentized lifecycle blueprint retained for forced diagnostics and regression compatibility."
     algorithm:
       role: top_level_algorithm_lifecycle
       invocation_point: construction_baseline_local_search_before_registry_operators
@@ -929,6 +929,13 @@ research_surfaces:
         - solver_algorithm_phase_best_delta
         - solver_algorithm_phase_improvement_counts
         - solver_algorithm_stop_reason
+      activation_runtime_fields:
+        "{mechanism}":
+          - solver_algorithm_context_records.{mechanism}_iterations
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+      effect_probe_runtime_fields:
+        - solver_algorithm_phase_improvement_counts.{mechanism}
+        - solver_algorithm_phase_best_delta.{mechanism}
     novelty:
       strategy: semantic_signature
       signature_fields:
@@ -986,6 +993,15 @@ research_surfaces:
         use it directly as a candidate solution. context.make_solution accepts
         route iterables and is idempotent for an existing CvrpSolution or
         equivalent object.
+        Declare one stable lowercase snake_case mechanism id for the
+        hypothesis and use that exact id as the phase/mechanism name passed to
+        context.record_iteration, context.record_move, and context.record_phase.
+        That binds activation evidence to
+        solver_algorithm_context_records.{mechanism}_iterations and
+        solver_algorithm_phase_runtime_ms.{mechanism}, and effect evidence to
+        solver_algorithm_phase_improvement_counts.{mechanism} and
+        solver_algorithm_phase_best_delta.{mechanism}. Do not use different
+        aliases for the same declared mechanism.
         Runtime is part of the
         algorithm objective: use finite max_rounds/max_passes/top_k caps and
         poll context.remaining_time() in seconds or context.remaining_time_ms()

@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-18*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -465,6 +465,12 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
 - Keep framework core problem-agnostic. CVRP, warehouse, and future problem
   semantics belong in problem packages/adapters unless a generic design
   contract changes.
+- Treat `design/scion-architecture-v3.md` as the foundational Scion framework
+  blueprint. Do not confuse it with historical v0.3 implementation docs or
+  v0.3 experiment reports. v0.4 work may change implementation details, but it
+  must preserve the v3 separation: tainted Creative Layer proposes,
+  deterministic Contract/Verification/Protocol/Safe Feature Extractor/Decision
+  layers control evidence and promotion.
 - Do not read raw experiment artifacts in the main session by default. Use
   bounded experiment docs or delegate raw-artifact analysis when needed.
 - After every real-cost experiment, do not stop at summary metrics. Inspect or
@@ -473,6 +479,16 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   and Decision evidence. Classify failures as framework boundary/control,
   prompt/API/object-model, repair-loop, provider/infra, or genuine
   algorithm-quality abandonment before starting the next repair.
+- For v0.4 APS experiments, trace review is mandatory before claiming a short
+  experiment is healthy. For every round, audit both agent stages separately:
+  hypothesis-stage context and every proposal-tool call/result, then code-stage
+  context and every proposal-tool call/result. The review must answer whether
+  the agent saw enough of the declared problem object, whether tool use was
+  relevant and non-looping, whether output followed the active boundary, and
+  whether Scion's framework behavior matched v3 control semantics. A 3-round
+  validation is acceptable only when this trace-level review finds no framework
+  control regression; aggregate `campaign_summary.json` metrics alone are not
+  sufficient.
 - Do not read source code by default for design or experiment interpretation.
   Use engineering maps first, then inspect only relevant paths for code tasks.
 - Use the project Python:
