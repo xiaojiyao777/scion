@@ -141,7 +141,7 @@ def _agent_quality_failure_summary(step: StepRecord) -> str:
         return ""
     label = code or reason or category or stage or "agent_quality_blocked"
     target = step.hypothesis.target_file or "(no target_file)"
-    detail = _first_line(detail)[:500]
+    detail = _first_line(detail)[:900]
     line = (
         f"- round {step.round_num}: {label}; "
         f"target={target}; action={step.hypothesis.action}; "
@@ -197,8 +197,10 @@ def _build_experiment_history(
             if s.failure_stage == "verification" and s.verification_detail:
                 detail_str = s.verification_detail[:200]
                 line += f" — {detail_str}"
-            elif s.failure_detail:
-                line += f" — {s.failure_detail[:120]}"
+            else:
+                detail_str = _pre_protocol_failure_detail_for_history(s)
+                if detail_str:
+                    line += f" — {detail_str}"
         if (
             s.protocol_result is not None
             and s.protocol_result.stage == ExperimentStage.SCREENING
@@ -224,6 +226,23 @@ def _build_experiment_history(
         lines.append(diagnosis)
 
     return "\n".join(lines)
+
+
+def _pre_protocol_failure_detail_for_history(step: StepRecord) -> str:
+    ref = step.proposal_session_ref if isinstance(step.proposal_session_ref, Mapping) else {}
+    primary = ref.get("primary_failure") if isinstance(ref, Mapping) else None
+    if not isinstance(primary, Mapping):
+        primary = {}
+    parts = [
+        str(primary.get("stage") or step.failure_stage or "").strip(),
+        str(primary.get("reason") or "").strip(),
+        str(primary.get("category") or "").strip(),
+        str(primary.get("code") or "").strip(),
+        str(primary.get("detail") or step.failure_detail or "").strip(),
+    ]
+    compact = " ".join(part for part in parts if part)
+    compact = _first_line(compact)
+    return compact[:700]
 
 
 def _render_pattern_summary(pattern) -> str:

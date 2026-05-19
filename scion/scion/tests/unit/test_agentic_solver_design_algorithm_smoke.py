@@ -401,13 +401,13 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
     )
 
     payload = observation.structured_payload
-    guard = payload["runtime_smoke"]["telemetry_guard"]
     rendered = json.dumps(payload, sort_keys=True)
     assert observation.is_error is False
-    assert payload["runtime_smoke"]["passed"] is False
-    assert guard["passed"] is False
-    assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in rendered
-    assert guard["failures"][0]["mechanism"] == "missing_probe"
+    assert payload["passed"] is False
+    assert "runtime_smoke" not in payload
+    assert "telemetry_static_preview" in payload
+    assert "missing_probe" in rendered
+    assert "requires context.record_iteration" in rendered
 
 
 def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too_large(

@@ -1,6 +1,7 @@
 """Focused tests split from test_agentic_proposal_tools_schema.py."""
 
 from .agentic_schema_test_support import *  # noqa: F401,F403
+from scion.proposal.schemas import HypothesisProposalInput
 
 def test_old_style_patch_json_is_accepted_without_transport_premise_check() -> None:
     raw = {
@@ -14,6 +15,16 @@ def test_old_style_patch_json_is_accepted_without_transport_premise_check() -> N
     assert "premise_check" not in PATCH_PROPOSAL_SCHEMA.get("required", [])
     assert parsed.premise_check == "supported"
     assert parsed.file_path == raw["file_path"]
+
+
+def test_hypothesis_normalizes_overlong_novelty_signature_scalar() -> None:
+    payload = _valid_hypothesis_payload(
+        novelty_signature={"improvement_strategy": "x" * 180}
+    )
+
+    parsed = HypothesisProposalInput.model_validate(payload)
+
+    assert len(parsed.novelty_signature["improvement_strategy"]) == 120
 
 
 def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
@@ -247,6 +258,7 @@ def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
         assert bad_category in description
         assert bad_category in tool_description
     assert "top-level categories" in description
+    assert "not put explanatory prose" in description
     assert "top-level expected_telemetry keys" in tool_description.lower()
 
 

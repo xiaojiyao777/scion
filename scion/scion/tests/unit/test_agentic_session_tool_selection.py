@@ -489,6 +489,8 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
 ) -> None:
     files = [
         "policies/baseline_algorithm.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/construction.py",
         "policies/baseline_modules/local_search.py",
         "policies/baseline_modules/destroy_repair.py",
         "policies/baseline_modules/acceptance.py",
@@ -565,7 +567,7 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
     ]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert len(file_read_events) == 3
+    assert len(file_read_events) == 5
     assert {event["status"] for event in file_read_events} == {"ok"}
     assert cap_events
 
@@ -640,5 +642,4 @@ def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
         in event.metadata.get("detail", "")
         for event in state.transcript
     )
-
 

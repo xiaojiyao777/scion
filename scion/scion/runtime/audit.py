@@ -105,6 +105,11 @@ def runtime_audit_failure_from_runtime(
         and operator_errors <= 0
         and operator_invalid_outputs <= 0
     ):
+        solver_algorithm_telemetry_issue = (
+            _solver_algorithm_telemetry_consistency_failure(runtime)
+        )
+        if solver_algorithm_telemetry_issue is not None:
+            return solver_algorithm_telemetry_issue
         surface_issue = _surface_runtime_contract_failure(
             runtime,
             problem_spec=problem_spec,
@@ -238,6 +243,35 @@ def runtime_audit_failure_from_runtime(
     }
 
 
+def _solver_algorithm_telemetry_consistency_failure(
+    runtime: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    elapsed_ms = _as_int(runtime.get("solver_algorithm_elapsed_ms"))
+    if elapsed_ms <= 0:
+        return None
+    phase_runtime = runtime.get("solver_algorithm_phase_runtime_ms")
+    if not isinstance(phase_runtime, Mapping):
+        return None
+    max_allowed = max(elapsed_ms * 20, elapsed_ms + 60000)
+    for phase, value in phase_runtime.items():
+        phase_ms = _as_int(value)
+        if phase_ms <= max_allowed:
+            continue
+        return {
+            "error_category": "solver_algorithm_runtime_telemetry_error",
+            "solver_algorithm_elapsed_ms": elapsed_ms,
+            "solver_algorithm_phase": str(phase),
+            "solver_algorithm_phase_runtime_ms": phase_ms,
+            "detail": (
+                "solver runtime audit reported inconsistent phase runtime: "
+                f"solver_algorithm_phase_runtime_ms.{phase}={phase_ms} exceeds "
+                f"solver_algorithm_elapsed_ms={elapsed_ms}; record_phase expects "
+                "per-phase elapsed delta, not cumulative context.elapsed_ms()"
+            ),
+        }
+    return None
+
+
 def declared_surface_required_runtime_fields(
     problem_spec: Any | None,
     selected_surface: str | None,
@@ -276,6 +310,16 @@ def format_runtime_audit_failure(issue: Mapping[str, Any]) -> str:
             event_detail = first_policy.get("detail")
             if event_detail:
                 return f"{detail}: first_policy_event detail={event_detail}"
+    solver_algorithm_events = issue.get("solver_algorithm_events")
+    if isinstance(solver_algorithm_events, list) and solver_algorithm_events:
+        first_solver_algorithm = solver_algorithm_events[0]
+        if isinstance(first_solver_algorithm, Mapping):
+            event_detail = first_solver_algorithm.get("detail")
+            if event_detail:
+                return (
+                    f"{detail}: first_solver_algorithm_event "
+                    f"detail={event_detail}"
+                )
     events = issue.get("operator_events")
     if isinstance(events, list) and events:
         first = events[0]

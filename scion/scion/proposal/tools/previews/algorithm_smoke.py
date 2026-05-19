@@ -193,6 +193,7 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                         problem_preview.get("passed")
                     )
                     telemetry_static_preview = _mechanism_telemetry_static_preview(
+                        context,
                         hypothesis_object,
                         patch_preview["patch_object"],
                     )

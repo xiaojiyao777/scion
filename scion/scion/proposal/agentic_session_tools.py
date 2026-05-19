@@ -259,6 +259,20 @@ def _algorithm_file_path_guidance(
             "policies/baseline_modules/*.py."
         ),
     )
+    guidance.setdefault(
+        "mechanism_owner_file_rule",
+        (
+            "Before drafting a solver_design hypothesis, read the active file "
+            "that owns the mechanism you plan to change: scheduler.py for "
+            "ALNS phases, restarts, acceptance wiring, route-cap checks, and "
+            "adaptive operator scheduling; local_search.py for VNS, swaps, "
+            "relocate, Or-opt, two-opt-star, tail/suffix exchange, and "
+            "cross-route moves; destroy_repair.py for destroy, repair, Shaw, "
+            "route removal, and regret insertion; acceptance.py for simulated "
+            "annealing and _AdaptiveWeights; construction.py for sweep, "
+            "Clarke-Wright, nearest-neighbor, and initial solution seeding."
+        ),
+    )
     return guidance
 
 

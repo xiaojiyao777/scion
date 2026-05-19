@@ -128,7 +128,17 @@ class CvrpSolverDesignProvider:
                 "For `solver_design` expected_telemetry, use the selected surface "
                 "evidence contract categories only: activity, activation, effect, "
                 "and budget. Runtime field names from the adapter belong inside "
-                "those categories, never as top-level expected_telemetry keys."
+                "those categories, never as top-level expected_telemetry keys. "
+                "Values must be exact runtime field strings, not explanations."
+            ),
+            (
+                "When declaring mechanism id `m`, use these concrete telemetry "
+                "templates with `m` substituted: activation includes "
+                "`solver_algorithm_context_records.m_iterations` and "
+                "`solver_algorithm_phase_runtime_ms.m`; effect includes "
+                "`solver_algorithm_phase_improvement_counts.m` and "
+                "`solver_algorithm_phase_best_delta.m`; budget may include "
+                "`solver_algorithm_phase_runtime_ms.m`."
             ),
             (
                 "Use `policies/baseline_modules/scheduler.py` mainly for "
@@ -172,6 +182,13 @@ class CvrpSolverDesignProvider:
                 "complete contents of that branch-owned algorithm module and "
                 "integrate with the existing entrypoint; do not add a top-level "
                 "`solve` unless the target module already owns one."
+            ),
+            (
+                "The internal `_Solution` and `_Route` classes use `__slots__`; "
+                "do not attach temporary attributes such as `solution._cache` or "
+                "`route._memo`. Keep caches in local variables, pass them through "
+                "helper arguments, or make an explicit approved state-model "
+                "change."
             ),
             (
                 "Default to a compact replacement file: one coherent construction "
@@ -219,7 +236,9 @@ class CvrpSolverDesignProvider:
                 "If the target is `policies/baseline_modules/local_search.py`, "
                 "integrate new move operators through the existing "
                 "`_default_vns_operators()` and `_vns(...)` path. Do not invent "
-                "a detached scheduler `_run`/`run` entrypoint to call them."
+                "a detached scheduler `_run`/`run` entrypoint to call them, and "
+                "do not store temporary search state on `_Solution` with "
+                "private dynamic attributes."
             ),
             (
                 "If the target is `policies/baseline_modules/destroy_repair.py`, "
@@ -394,6 +413,12 @@ class CvrpSolverDesignProvider:
                 "to objects from baseline_modules/state.py."
             ),
             (
+                "`_Solution` and `_Route` use `__slots__`; do not add dynamic "
+                "private attributes like `solution._nn_lists`. Keep temporary "
+                "candidate lists, route caches, and telemetry state in local "
+                "variables or pass them as helper parameters."
+            ),
+            (
                 "`_Solution` has no `from_routes`, `from_public`, "
                 "`from_cvrp_solution`, or `to_public`. Do not add these bridge "
                 "methods to state.py. Use construction.py helpers that already "
@@ -422,11 +447,27 @@ class CvrpSolverDesignProvider:
                 "move attempts on every smoke case will fail algorithm smoke."
             ),
             (
+                "`context.record_phase(name, elapsed_ms)` expects a duration "
+                "delta for that phase. Do not pass cumulative "
+                "`context.elapsed_ms()` directly inside repeated helper calls; "
+                "use `phase_start = context.elapsed_ms()` and record "
+                "`context.elapsed_ms() - phase_start`."
+            ),
+            (
+                "Use the exact telemetry helper signatures: "
+                "`context.record_phase(name, elapsed_ms)`, "
+                "`context.record_iteration(phase='search', count=1)`, and "
+                "`context.record_move(phase='search', attempted=1, accepted=0, "
+                "delta=None, best_improved=0)`. Do not pass arbitrary keyword "
+                "arguments such as `extra=...`."
+            ),
+            (
                 "If the approved hypothesis declares mechanism telemetry, all "
                 "activation/effect records must use the exact declared mechanism "
                 "id. A telemetry-guard repair should add the missing record on "
-                "the active path; it should not change the mechanism id or "
-                "weaken the expected telemetry contract."
+                "the active path while preserving records that already passed; "
+                "it should not change the mechanism id, replace activation with "
+                "effect evidence, or weaken the expected telemetry contract."
             ),
         ]
         if mode:
@@ -439,6 +480,8 @@ class CvrpSolverDesignProvider:
                 "portfolio."
             )
         scope = context.get("agentic_code_scope_control") if isinstance(context, Mapping) else None
+        if isinstance(scope, Mapping) and scope.get("telemetry_obligation_rule"):
+            lines.append(str(scope["telemetry_obligation_rule"]))
         if isinstance(scope, Mapping) and scope.get("failure_detail"):
             lines.append(
                 "Previous code generation timed out. Treat that as an instruction "
@@ -511,6 +554,18 @@ class CvrpSolverDesignProvider:
                 "`CvrpSolution`; do not pass `rng` and do not call `.copy()` on "
                 "that public solution. The internal `_Solution` type is separate "
                 "and lives under `policies/baseline_modules/state.py`."
+            ),
+            (
+                "`_Solution` and `_Route` are slotted state objects. Do not "
+                "write private dynamic attributes such as `solution._cache`, "
+                "`solution._nn_lists`, or `route._memo`; use function parameters "
+                "or local variables for temporary search state."
+            ),
+            (
+                "`context.record_phase(name, elapsed_ms)` records a per-phase "
+                "duration delta. Never pass raw cumulative `context.elapsed_ms()` "
+                "as the second argument in a loop or helper; compute a delta "
+                "from a local phase_start."
             ),
             (
                 "Do not edit `policies/baseline_modules/state.py` as an "
@@ -709,6 +764,7 @@ class CvrpSolverDesignProvider:
         guidance = [
             "Failure occurred inside the candidate solver_design solve path during tainted algorithm smoke; repair the candidate algorithm code, not protocol or adapter files.",
             "Use the current CVRP object model: _Solution has .instance, .routes, .total_cost, .copy(), .rebuild_index(), .remove_empty_routes(), .is_feasible(), and .routes_as_tuples(); it does not expose ._instance.",
+            "_Solution and _Route use __slots__; do not attach temporary private attributes such as solution._cache, solution._nn_lists, or route._memo. Keep temporary search state in local variables or helper arguments.",
             "_Solution.routes contains _Route objects. A _Route has .customers, .load, .cost, .insert(), .remove(), .can_insert(), .cost_of_insert(), .cost_of_remove(), and .recalculate(); do not treat routes as plain customer lists unless you explicitly use route.customers.",
             "CvrpInstance.distance(i, j), demand(i), route_load(route), and route_distance(route) use integer node/customer ids; keep depot/customer ids explicit and rebuild solution indexes after direct route edits.",
         ]
@@ -721,6 +777,11 @@ class CvrpSolverDesignProvider:
             guidance.insert(
                 1,
                 "Specific fix: do not call .distance on an int, route, or customer id; call instance.distance(prev_id, next_id).",
+            )
+        if "has no attribute '_nn_lists'" in text or "object has no attribute '_cache'" in text:
+            guidance.insert(
+                1,
+                "Specific fix: remove the dynamic state attribute write; pass nearest-neighbor lists or caches as helper arguments because _Solution uses __slots__.",
             )
         if runtime in (None, {}, ""):
             guidance.append(

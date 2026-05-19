@@ -118,6 +118,24 @@ def test_telemetry_guard_treats_protected_objective_effect_as_no_regression_prob
     ] == 0
 
 
+def test_effect_objective_outcome_field_accepts_zero_when_present() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{"solver_algorithm_fleet_violation": 0}],
+        problem_spec=_problem_spec(),
+        selected_surface="solver",
+        expected_telemetry={"effect": ["solver_algorithm_fleet_violation"]},
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    assert summary["fields"]["solver_algorithm_fleet_violation"][
+        "candidate_present"
+    ] == 1
+    assert summary["fields"]["solver_algorithm_fleet_violation"][
+        "candidate_positive"
+    ] == 0
+
+
 def test_telemetry_guard_requires_protected_objective_probe_presence() -> None:
     summary = build_telemetry_guard_summary(
         candidate_runtimes=[{"solver_algorithm_best_delta": 2.0}],
@@ -140,6 +158,62 @@ def test_expected_telemetry_invalid_category_fails_even_without_fields() -> None
 
     assert errors
     assert "category 'attribution' is not supported" in errors[0]
+
+
+def test_expected_telemetry_activation_rejects_objective_outcome_fields() -> None:
+    errors = validate_expected_telemetry_contract(
+        problem_spec=SimpleNamespace(
+            research_surfaces=[
+                SimpleNamespace(
+                    name="solver",
+                    evidence=SimpleNamespace(
+                        required_runtime_fields=[
+                            "solver_algorithm_fleet_violation",
+                            "solver_algorithm_context_records",
+                        ],
+                    ),
+                )
+            ]
+        ),
+        selected_surface="solver",
+        expected_telemetry={
+            "activation": ["solver_algorithm_fleet_violation"],
+            "effect": ["solver_algorithm_fleet_violation"],
+        },
+    )
+
+    assert errors == (
+        "expected_telemetry.activation references outcome/objective field "
+        "solver_algorithm_fleet_violation; activation must use "
+        "mechanism-specific activity evidence such as adapter-declared "
+        "context_records or phase_runtime fields, while objective fields "
+        "belong under effect or protected-objective checks.",
+    )
+
+
+def test_expected_telemetry_rejects_prose_field_values() -> None:
+    errors = validate_expected_telemetry_contract(
+        problem_spec=SimpleNamespace(
+            research_surfaces=[
+                SimpleNamespace(
+                    name="solver",
+                    evidence=SimpleNamespace(
+                        required_runtime_fields=["solver_algorithm_phase_runtime_ms"],
+                    ),
+                )
+            ]
+        ),
+        selected_surface="solver",
+        expected_telemetry={
+            "activation": {
+                "solver_algorithm_phase_runtime_ms": (
+                    "merge phase entry recorded via context.record_phase"
+                )
+            }
+        },
+    )
+
+    assert any("contains prose instead of an exact runtime field key" in e for e in errors)
 
 
 def test_expected_telemetry_missing_declared_fields_fails_closed() -> None:
@@ -278,6 +352,8 @@ def test_telemetry_guard_scopes_map_paths_to_current_mechanism() -> None:
     assert summary["passed"] is False
     assert [failure["code"] for failure in summary["failures"]] == [
         "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+    ]
+    assert [warning["code"] for warning in summary["warnings"]] == [
         "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
     ]
     assert (
@@ -286,6 +362,82 @@ def test_telemetry_guard_scopes_map_paths_to_current_mechanism() -> None:
         ]
         == 0
     )
+
+
+def test_auto_declared_mechanism_effect_probe_warns_when_activation_present() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": ["mechanism_activation"]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_effect"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": 1},
+                "mechanism_effect": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    assert [warning["code"] for warning in summary["warnings"]] == [
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+    ]
+
+
+def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": ["mechanism_activation"]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_effect"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": 1},
+                "mechanism_effect": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        expected_telemetry={"effect": {"target_probe": ["mechanism_effect"]}},
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is False
+    assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in [
+        failure["code"] for failure in summary["failures"]
+    ]
 
 
 def test_runtime_path_parser_handles_dotted_brackets_and_indices() -> None:

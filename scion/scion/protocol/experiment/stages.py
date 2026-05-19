@@ -239,6 +239,68 @@ def run_experiment(
             ):
                 candidate_first_runtime_failure = runtime_observation["first_failure"]
 
+            if not champ_r.success:
+                failed_pairs += 1
+                champion_failed_pairs += 1
+                side = "both" if not cand_r.success else "champion"
+                failure_record = {
+                    "case": case,
+                    "seed": seed,
+                    "side": side,
+                    "comparison": "invalid",
+                    "error_category": (
+                        "shared_process_failure"
+                        if side == "both"
+                        else champ_r.error_category or "unknown"
+                    ),
+                    "champion_error_category": champ_r.error_category or "unknown",
+                    "candidate_error_category": (
+                        cand_r.error_category or "unknown" if side == "both" else None
+                    ),
+                    "exit_code": champ_r.exit_code,
+                    "champion_exit_code": champ_r.exit_code,
+                    "candidate_exit_code": cand_r.exit_code if side == "both" else None,
+                    "elapsed_ms": champ_r.elapsed_ms,
+                    **runtime_fields,
+                    "stderr_tail": (champ_r.stderr or "")[-1000:],
+                    "candidate_stderr_tail": (
+                        (cand_r.stderr or "")[-1000:] if side == "both" else ""
+                    ),
+                }
+                raw_failures.append(failure_record)
+                raw_pairs.append({
+                    "case": case,
+                    "seed": seed,
+                    "comparison": "invalid",
+                    "delta": None,
+                    "decisive_metric": (
+                        "shared_process_failure"
+                        if side == "both"
+                        else "champion_runtime_failure"
+                    ),
+                    "metric_deltas": {},
+                    **runtime_fields,
+                    "failure": failure_record,
+                })
+                logger.info(
+                    "Pair %s seed=%d: %s solver failed category=%s elapsed_ms=%d → invalid",
+                    os.path.basename(case), seed,
+                    side,
+                    champ_r.error_category or "unknown",
+                    champ_r.elapsed_ms,
+                )
+                _write_metrics_snapshot(complete=False)
+                protocol._emit_progress(
+                    stage=stage.value,
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=valid_pairs,
+                    total_pairs=total_pairs,
+                    raw_metrics_ref=raw_ref,
+                )
+                continue
+
             if not cand_r.success:
                 category = _candidate_process_failure_category(cand_r)
                 _increment_category(candidate_runtime_categories, category)
@@ -290,49 +352,6 @@ def run_experiment(
                     os.path.basename(case), seed,
                     cand_r.error_category or "unknown",
                     cand_r.elapsed_ms,
-                )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
-                continue
-
-            if not champ_r.success:
-                failed_pairs += 1
-                champion_failed_pairs += 1
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": "champion",
-                    "comparison": "invalid",
-                    "error_category": champ_r.error_category or "unknown",
-                    "exit_code": champ_r.exit_code,
-                    "elapsed_ms": champ_r.elapsed_ms,
-                    **runtime_fields,
-                    "stderr_tail": (champ_r.stderr or "")[-1000:],
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append({
-                    "case": case,
-                    "seed": seed,
-                    "comparison": "invalid",
-                    "delta": None,
-                    "decisive_metric": "champion_runtime_failure",
-                    "metric_deltas": {},
-                    **runtime_fields,
-                    "failure": failure_record,
-                })
-                logger.info(
-                    "Pair %s seed=%d: champion solver failed category=%s elapsed_ms=%d → invalid",
-                    os.path.basename(case), seed,
-                    champ_r.error_category or "unknown",
-                    champ_r.elapsed_ms,
                 )
                 _write_metrics_snapshot(complete=False)
                 protocol._emit_progress(

@@ -442,6 +442,12 @@ def test_agentic_session_repairs_two_contract_preview_failures(
     assert len(creative.code_contexts) == 3
     assert "agentic_preview_feedback" in creative.code_contexts[1]
     assert "agentic_preview_feedback" in creative.code_contexts[2]
+    assert creative.code_contexts[1]["previous_patch"]["code_content"] == (
+        missing_function.code_content.rstrip()
+    )
+    assert creative.code_contexts[2]["previous_patch"]["code_content"] == (
+        bad_import.code_content.rstrip()
+    )
 
 
 def test_agentic_session_repairs_self_reported_unresolved_patch_issue(
@@ -486,6 +492,9 @@ def test_agentic_session_repairs_self_reported_unresolved_patch_issue(
     repair_context = creative.code_contexts[1]
     assert "agentic_code_self_check_feedback" in repair_context
     assert "syntax_error" in repair_context["prior_code_failure"]
+    assert repair_context["previous_patch"]["code_content"] == bad_payload[
+        "code_content"
+    ].rstrip()
 
 
 def test_agentic_session_rejects_self_reported_unresolved_patch_after_repair(
@@ -569,5 +578,3 @@ def test_agentic_session_contract_preview_timeout_returns_tool_error(
     assert "timed out" in observation.summary
     assert observation.structured_payload["tool_name"] == "proposal.contract_preview"
     assert state.transcript[-1].metadata["status"] == "error"
-
-

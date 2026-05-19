@@ -67,8 +67,38 @@ def _bounded_runtime_failure(
         "code": _bounded_text(code, 120),
         "surface": _bounded_text(surface, 120),
         "component": _bounded_text(component, 160),
-        "detail_summary": _bounded_text(detail_summary, 240),
+        "detail_summary": _bounded_text(_compact_failure_detail(detail_summary), 240),
     }
+
+
+def _compact_failure_detail(detail: str) -> str:
+    text = str(detail or "").strip()
+    if not text:
+        return ""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return text
+    tail = lines[-1]
+    head = lines[0]
+    if tail == head:
+        return tail
+    if _looks_like_terminal_exception(tail):
+        return f"{tail} | {head}"
+    return head
+
+
+def _looks_like_terminal_exception(line: str) -> bool:
+    return any(
+        marker in line
+        for marker in (
+            "Error:",
+            "Exception:",
+            "Traceback",
+            "FileNotFoundError",
+            "ModuleNotFoundError",
+            "ImportError",
+        )
+    )
 
 
 def _format_runtime_failure_categories(categories: dict[str, int]) -> str:

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from scion.tests.cvrp_solver_runtime_support import *
+from scion.runtime.audit import (
+    format_runtime_audit_failure,
+    runtime_audit_failure_from_runtime,
+)
 
 
 def test_solver_design_surface_declares_active_algorithm_runtime_fields(
@@ -83,6 +87,27 @@ def test_solver_design_baseline_algorithm_exception_fails_selected_surface(
     assert issue is not None
     assert issue["error_category"] == "solver_algorithm_runtime_error"
     assert issue["solver_algorithm_errors"] == 1
+    assert "baseline body failed" in format_runtime_audit_failure(issue)
+
+
+def test_solver_design_runtime_audit_rejects_inconsistent_phase_runtime() -> None:
+    issue = runtime_audit_failure_from_runtime(
+        {
+            "solver_algorithm_errors": 0,
+            "solver_algorithm_elapsed_ms": 1000,
+            "solver_algorithm_phase_runtime_ms": {
+                "search": 500,
+                "bad_phase": 100000,
+            },
+        },
+    )
+
+    assert issue is not None
+    assert issue["error_category"] == "solver_algorithm_runtime_telemetry_error"
+    assert issue["solver_algorithm_phase"] == "bad_phase"
+    assert "record_phase expects per-phase elapsed delta" in (
+        format_runtime_audit_failure(issue)
+    )
 
 
 def test_active_baseline_algorithm_ignores_deleted_legacy_policy_hooks(

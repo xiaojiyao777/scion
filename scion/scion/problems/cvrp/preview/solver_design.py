@@ -151,6 +151,51 @@ def _preview_solver_design_context_api(
     if not passed:
         issues.append(detail)
 
+    dynamic_attrs = _dynamic_state_private_attribute_writes(code)
+    dynamic_attrs_passed = not dynamic_attrs
+    dynamic_attrs_detail = (
+        "solver_design code does not attach private dynamic attributes to state objects"
+        if dynamic_attrs_passed
+        else (
+            f"{path} writes private dynamic state attributes at lines "
+            f"{dynamic_attrs[:8]}; `_Solution` and `_Route` use `__slots__`, "
+            "so pass temporary caches through local variables/helper arguments "
+            "or add an explicit approved state-model change."
+        )
+    )
+    checks.append(
+        {
+            "name": "solver_design_no_dynamic_state_private_attrs",
+            "passed": dynamic_attrs_passed,
+            "detail": dynamic_attrs_detail,
+        }
+    )
+    if not dynamic_attrs_passed:
+        issues.append(dynamic_attrs_detail)
+
+    cumulative_phase_lines = _record_phase_cumulative_elapsed_calls(code)
+    cumulative_phase_passed = not cumulative_phase_lines
+    cumulative_phase_detail = (
+        "solver_design record_phase calls use elapsed-duration values"
+        if cumulative_phase_passed
+        else (
+            f"{path} passes cumulative context.elapsed_ms() directly to "
+            f"context.record_phase at lines {cumulative_phase_lines[:8]}; "
+            "record_phase expects a phase-duration delta, e.g. "
+            "phase_start = context.elapsed_ms(); ...; "
+            "context.record_phase(name, context.elapsed_ms() - phase_start)."
+        )
+    )
+    checks.append(
+        {
+            "name": "solver_design_record_phase_uses_elapsed_delta",
+            "passed": cumulative_phase_passed,
+            "detail": cumulative_phase_detail,
+        }
+    )
+    if not cumulative_phase_passed:
+        issues.append(cumulative_phase_detail)
+
 def _context_nearest_neighbor_argument_calls(code: str) -> list[int]:
     try:
         tree = ast.parse(code)
@@ -171,6 +216,77 @@ def _context_nearest_neighbor_argument_calls(code: str) -> list[int]:
         if node.args or node.keywords:
             lines.append(int(getattr(node, "lineno", 0) or 0))
     return lines
+
+def _dynamic_state_private_attribute_writes(code: str) -> list[int]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    state_names = {
+        "solution",
+        "candidate",
+        "current",
+        "best",
+        "trial",
+        "route",
+        "src",
+        "dst",
+        "left",
+        "right",
+    }
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets.extend(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            targets.append(node.target)
+        elif isinstance(node, ast.AugAssign):
+            targets.append(node.target)
+        for target in targets:
+            if not isinstance(target, ast.Attribute):
+                continue
+            if not target.attr.startswith("_"):
+                continue
+            if isinstance(target.value, ast.Name) and target.value.id in state_names:
+                lines.append(int(getattr(target, "lineno", 0) or 0))
+    return sorted(set(lines))
+
+def _record_phase_cumulative_elapsed_calls(code: str) -> list[int]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "record_phase"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "context"
+        ):
+            continue
+        elapsed_arg: ast.AST | None = None
+        if len(node.args) >= 2:
+            elapsed_arg = node.args[1]
+        for keyword in node.keywords:
+            if keyword.arg == "elapsed_ms":
+                elapsed_arg = keyword.value
+        if _is_context_elapsed_ms_call(elapsed_arg):
+            lines.append(int(getattr(node, "lineno", 0) or 0))
+    return sorted(set(lines))
+
+def _is_context_elapsed_ms_call(expr: ast.AST | None) -> bool:
+    return (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Attribute)
+        and expr.func.attr == "elapsed_ms"
+        and isinstance(expr.func.value, ast.Name)
+        and expr.func.value.id == "context"
+    )
 
 def _context_baseline_call_count(code: str) -> int:
     try:

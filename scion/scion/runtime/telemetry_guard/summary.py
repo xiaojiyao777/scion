@@ -89,14 +89,19 @@ def build_telemetry_guard_summary(
                         summary=summary,
                     )
                 )
-            elif category == "effect" and _matches_protected_objective_field(
-                field,
-                protected_tokens,
-            ):
+            elif category == "effect" and _is_objective_outcome_effect_field(field):
                 if summary["candidate_present"] == 0:
+                    code = (
+                        "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED"
+                        if _matches_protected_objective_field(
+                            field,
+                            protected_tokens,
+                        )
+                        else "TELEMETRY_EFFECT_NOT_OBSERVED"
+                    )
                     failures.append(
                         _guard_issue(
-                            "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED",
+                            code,
                             category=category,
                             field=field,
                             severity="fail",
@@ -118,10 +123,18 @@ def build_telemetry_guard_summary(
         mechanism: {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES}
         for mechanism in mechanisms
     }
+    explicit_mechanism_fields: dict[str, dict[str, set[str]]] = {
+        mechanism: {category: set() for category in EXPECTED_TELEMETRY_CATEGORIES}
+        for mechanism in mechanisms
+    }
     for mechanism, category_claims in mechanism_claims.items():
         categories_for_mechanism = mechanism_probe_categories.setdefault(
             mechanism,
             {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES},
+        )
+        explicit_fields_for_mechanism = explicit_mechanism_fields.setdefault(
+            mechanism,
+            {category: set() for category in EXPECTED_TELEMETRY_CATEGORIES},
         )
         mechanism_summaries.setdefault(
             mechanism,
@@ -129,9 +142,11 @@ def build_telemetry_guard_summary(
         )
         for category, fields in category_claims.items():
             categories_for_mechanism.setdefault(category, [])
+            explicit_fields_for_mechanism.setdefault(category, set())
             for field in fields:
                 if field not in categories_for_mechanism[category]:
                     categories_for_mechanism[category].append(field)
+                explicit_fields_for_mechanism[category].add(field)
 
     for probe in declared_mechanism_runtime_probes(
         problem_spec=problem_spec,
@@ -186,11 +201,19 @@ def build_telemetry_guard_summary(
                 if category == "budget"
                 else f"TELEMETRY_MECHANISM_{category.upper()}_NOT_OBSERVED"
             )
+            severity = "fail"
+            if category == "effect" and not _has_explicit_mechanism_field(
+                explicit_mechanism_fields,
+                mechanism=mechanism,
+                category=category,
+                fields=fields,
+            ):
+                severity = "warn"
             issue = _guard_issue(
                 code,
                 category=category,
                 field=",".join(fields),
-                severity="fail",
+                severity=severity,
                 summary={
                     "candidate_positive": category_positive,
                     "candidate_present": category_present,
@@ -199,8 +222,11 @@ def build_telemetry_guard_summary(
                 },
                 mechanism=mechanism,
             )
-            failures.append(issue)
-            mechanism_summary["passed"] = False
+            if severity == "fail":
+                failures.append(issue)
+                mechanism_summary["passed"] = False
+            else:
+                warnings.append(issue)
 
     if not expected_present:
         activity_fields = declared_activity_runtime_fields(surface)
@@ -286,3 +312,28 @@ def build_telemetry_guard_summary(
         "warnings": warnings,
         "failures": failures,
     }
+
+
+_OBJECTIVE_OUTCOME_EFFECT_FIELDS = frozenset(
+    {
+        "solver_algorithm_fleet_violation",
+        "solver_algorithm_total_distance",
+        "solver_algorithm_objective",
+        "solver_algorithm_solution_routes",
+    }
+)
+
+
+def _is_objective_outcome_effect_field(field: str) -> bool:
+    return str(field or "").strip() in _OBJECTIVE_OUTCOME_EFFECT_FIELDS
+
+
+def _has_explicit_mechanism_field(
+    explicit_fields: Mapping[str, Mapping[str, set[str]]],
+    *,
+    mechanism: str,
+    category: str,
+    fields: Sequence[str],
+) -> bool:
+    category_fields = explicit_fields.get(mechanism, {}).get(category, set())
+    return any(field in category_fields for field in fields)

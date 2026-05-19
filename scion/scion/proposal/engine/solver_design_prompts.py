@@ -190,6 +190,9 @@ def _solver_design_scope_control_section(
                 "Previous code generation timed out. Shrink implementation "
                 "breadth before adding algorithmic detail."
             )
+    telemetry_obligation = str(scope.get("telemetry_obligation_rule") or "").strip()
+    if telemetry_obligation:
+        lines.append(telemetry_obligation)
     return "\n" + _format_bulleted_section(
         "Compact Solver-Design Implementation Scope",
         lines,

@@ -184,9 +184,9 @@ class AgenticSessionPatchFlowMixin:
                 request=request,
                 state=state,
                 hypothesis=hypothesis,
+                patch=patch,
                 code_context=code_context,
                 observations=observations,
-                patch=patch,
                 issue_detail=self_reported_issue,
                 repair_attempt=code_repair_attempts_used + 1,
             )
@@ -383,6 +383,7 @@ class AgenticSessionPatchFlowMixin:
                 request=request,
                 state=state,
                 hypothesis=hypothesis,
+                patch=patch,
                 code_context=code_context,
                 observations=observations,
                 failed_preview=failed_preview,

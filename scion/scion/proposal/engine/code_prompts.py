@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict
 
 from .prompt_common import (
     _CACHE_5M,
     _DefaultDict,
     _agentic_research_context_block,
+    _bounded_json,
     _limit_code_phase_text,
 )
 from .solver_design_prompts import (
@@ -197,12 +199,14 @@ def _split_code_context(
         prior_failure_section = _prior_failure_prompt_section(
             str(D["prior_code_failure"])
         )
+    previous_patch_section = _previous_patch_prompt_section(D["previous_patch"])
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     if agentic_context:
         prior_failure_section += f"{agentic_context}\n\n"
 
     user_prompt = (
         f"{prior_failure_section}"
+        f"{previous_patch_section}"
         f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{solver_design_api_manifest_section}"
         f"## Approved Target File Full Current Content\n{D['target_file_code']}\n\n"
@@ -242,6 +246,74 @@ def _is_timeout_failure(text: str) -> bool:
     return "timed out" in lowered or "timeout" in lowered
 
 
+def _previous_patch_prompt_section(value: Any) -> str:
+    if value in (None, "", {}, []):
+        return ""
+    telemetry_summary = _previous_patch_telemetry_summary(value)
+    telemetry_section = (
+        "Telemetry records detected in the previous patch. Preserve these "
+        "mechanism-specific calls while repairing unrelated runtime or API "
+        "issues:\n"
+        f"{telemetry_summary}\n\n"
+        if telemetry_summary
+        else ""
+    )
+    return (
+        "## Previous Patch Attempt\n"
+        "This is the immediately previous generated patch attempt. Repair it "
+        "instead of starting from scratch. Preserve any helper calls, imports, "
+        "mechanism ids, and telemetry records that already addressed earlier "
+        "feedback, unless the current failure explicitly says they are wrong.\n\n"
+        f"{telemetry_section}"
+        f"{_bounded_json(value, 32000)}\n\n"
+    )
+
+
+def _previous_patch_telemetry_summary(value: Any) -> str:
+    calls = _extract_previous_patch_telemetry_calls(value)
+    if not calls:
+        return ""
+    return "\n".join(f"- `{call}`" for call in calls[:18])
+
+
+def _extract_previous_patch_telemetry_calls(value: Any) -> list[str]:
+    text = _previous_patch_text(value)
+    if not text:
+        return []
+    pattern = re.compile(
+        r"context\.(record_phase|record_iteration|record_move)\("
+        r"\s*(['\"])([a-z][a-z0-9_]{0,63})\2",
+    )
+    calls: list[str] = []
+    for match in pattern.finditer(text):
+        call = f"context.{match.group(1)}('{match.group(3)}', ...)"
+        if call not in calls:
+            calls.append(call)
+    return calls
+
+
+def _previous_patch_text(value: Any) -> str:
+    if value in (None, "", {}, []):
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        chunks: list[str] = []
+        for key in ("code_content", "file_path", "action"):
+            item = value.get(key)
+            if item:
+                chunks.append(str(item))
+        for item in value.get("additional_changes") or []:
+            if isinstance(item, dict):
+                code = item.get("code_content")
+                if code:
+                    chunks.append(str(code))
+        return "\n".join(chunks)
+    if isinstance(value, list):
+        return "\n".join(_previous_patch_text(item) for item in value)
+    return str(value)
+
+
 def _prior_failure_prompt_section(prior_failure: str) -> str:
     prior_failure = str(prior_failure or "").strip()
     if not prior_failure:
@@ -273,6 +345,24 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "one bounded improvement loop, and avoid large helper forests "
             "unless absolutely necessary.\n\n"
         )
+    if _is_algorithm_smoke_or_telemetry_failure(lowered):
+        return (
+            "## Previous Attempt Failed\n"
+            "The previous code generation failed algorithm smoke or runtime "
+            "telemetry verification with:\n"
+            f"{prior_failure}\n"
+            "Repair the exact runtime/API issue while preserving any telemetry "
+            "records from the previous patch that already satisfied earlier "
+            "activation/effect/budget feedback. Use the selected surface runtime "
+            "telemetry helpers on the active code path; do not rename the "
+            "mechanism, remove expected_telemetry, or change problem "
+            "objectives/constraints to silence the guard. If the feedback "
+            "contains telemetry_static_preview.required_calls, the corrected "
+            "code must include those mechanism-specific helper calls on the "
+            "path where the mechanism actually runs. Preserve any previously "
+            "passing record_phase, record_iteration, or record_move calls "
+            "while adding the missing category.\n\n"
+        )
     if "code_generation_failed" in lowered:
         if "telemetry" in lowered or "algorithm_smoke" in lowered:
             return (
@@ -284,7 +374,12 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
                 "declared mechanism id. Use the selected surface runtime "
                 "telemetry helpers on the active code path; do not rename the "
                 "mechanism, remove expected_telemetry, or change problem "
-                "objectives/constraints to silence the guard.\n\n"
+                "objectives/constraints to silence the guard. If the feedback "
+                "contains telemetry_static_preview.required_calls, the corrected "
+                "code must include those mechanism-specific helper calls on the "
+                "path where the mechanism actually runs. Preserve any previously "
+                "passing record_phase, record_iteration, or record_move calls "
+                "while adding the missing category.\n\n"
             )
         return (
             "## Previous Attempt Failed\n"
@@ -297,4 +392,13 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
         "The previous code generation failed with:\n"
         f"{prior_failure}\n"
         "Avoid the same mistake.\n\n"
+    )
+
+
+def _is_algorithm_smoke_or_telemetry_failure(lowered: str) -> bool:
+    return (
+        "algorithm_smoke" in lowered
+        or "algorithm smoke" in lowered
+        or "telemetry" in lowered
+        or "runtime audit" in lowered
     )

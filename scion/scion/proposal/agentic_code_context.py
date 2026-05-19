@@ -174,6 +174,7 @@ def _solver_design_code_scope_control(
     failure_detail: str | None,
 ) -> dict[str, Any]:
     broad_terms = _solver_design_broad_terms(hypothesis)
+    mechanism_ids = _solver_design_mechanism_ids(hypothesis)
     return _drop_empty_mapping(
         {
             "mode": (
@@ -258,12 +259,50 @@ def _solver_design_code_scope_control(
                 "solver-design patches must record real iterations or move "
                 "attempts; zero effort on every smoke case fails preview."
             ),
+            "telemetry_repair_rule": (
+                "When repairing telemetry preview or smoke failures, preserve "
+                "mechanism-specific records that already satisfied an earlier "
+                "category. Add the missing activation/effect/budget evidence "
+                "instead of replacing record_phase/record_iteration with "
+                "record_move or vice versa. Supported helper signatures are "
+                "context.record_phase(name, elapsed_ms), "
+                "context.record_iteration(phase='search', count=1), and "
+                "context.record_move(phase='search', attempted=1, accepted=0, "
+                "delta=None, best_improved=0); do not pass extra=... or other "
+                "arbitrary keywords."
+            ),
+            "telemetry_obligation_rule": _solver_design_telemetry_obligation_rule(
+                mechanism_ids
+            ),
             "local_search_rule": (
                 "For local_search targets, integrate new move operators through "
                 "the existing _default_vns_operators()/_vns(...) path; do not "
                 "invent detached scheduler _run or run entrypoints."
             ),
         }
+    )
+
+
+def _solver_design_mechanism_ids(hypothesis: HypothesisProposal) -> list[str]:
+    ids: list[str] = []
+    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+        mechanism_id = str(getattr(change, "id", "") or "").strip()
+        if mechanism_id and mechanism_id not in ids:
+            ids.append(mechanism_id)
+    return ids
+
+
+def _solver_design_telemetry_obligation_rule(mechanism_ids: list[str]) -> str:
+    if not mechanism_ids:
+        return ""
+    ids = ", ".join(f"`{mechanism_id}`" for mechanism_id in mechanism_ids)
+    return (
+        "Declared mechanism telemetry obligations: every mechanism_changes id "
+        f"({ids}) must have active-path evidence using that exact id. Include "
+        "context.record_iteration(id, ...), context.record_phase(id, ...), and "
+        "context.record_move(id, ...) for each declared id unless premise_check "
+        "is duplicate/contradicted/wrong_owner. Do not only record a parent "
+        "mechanism while leaving a helper mechanism id unrecorded."
     )
 
 

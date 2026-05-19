@@ -43,6 +43,85 @@ def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
     assert all(p["champion_elapsed_ms"] == 100 for p in raw["pairs"])
 
 
+def test_shared_process_failure_is_not_recorded_as_candidate_algorithm_failure(tmp_path):
+    runner = MagicMock()
+    stderr = """Traceback (most recent call last):
+  File "solver.py", line 84, in _main
+    instance = adapter.load_instance(instance_path)
+FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
+"""
+    champion_failure = RunResult(
+        success=False,
+        exit_code=1,
+        stdout="",
+        stderr=stderr,
+        elapsed_ms=100,
+        output=None,
+        output_path=None,
+        error_category="crash",
+    )
+    candidate_failure = RunResult(
+        success=False,
+        exit_code=1,
+        stdout="",
+        stderr=stderr,
+        elapsed_ms=120,
+        output=None,
+        output_path=None,
+        error_category="crash",
+    )
+    runner.run_solver.side_effect = [champion_failure, candidate_failure] * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.failed_pairs == 4
+    assert result.stats.champion_failed_pairs == 4
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_runtime_failure_categories == {}
+    assert result.candidate_first_runtime_failure is None
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_failed_pairs"] == 0
+    assert raw["champion_failed_pairs"] == 4
+    assert raw["failures"][0]["side"] == "both"
+    assert raw["failures"][0]["error_category"] == "shared_process_failure"
+    assert raw["pairs"][0]["decisive_metric"] == "shared_process_failure"
+
+
+def test_candidate_failure_summary_preserves_traceback_terminal_exception(tmp_path):
+    runner = MagicMock()
+    stderr = """Traceback (most recent call last):
+  File "solver.py", line 84, in _main
+    instance = adapter.load_instance(instance_path)
+FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
+"""
+    runner.run_solver.side_effect = [
+        _make_run_result(1, 900),
+        RunResult(
+            success=False,
+            exit_code=1,
+            stdout="",
+            stderr=stderr,
+            elapsed_ms=120,
+            output=None,
+            output_path=None,
+            error_category="crash",
+        ),
+    ] * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.candidate_first_runtime_failure is not None
+    summary = result.candidate_first_runtime_failure["detail_summary"]
+    assert "FileNotFoundError" in summary
+    assert "cvrplib/A/A-n32-k5.vrp" in summary
+
+
 def test_candidate_operator_runtime_error_counts_as_screening_failure(tmp_path):
     runner = MagicMock()
     runtime = {

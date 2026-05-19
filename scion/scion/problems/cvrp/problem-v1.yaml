@@ -182,21 +182,30 @@ research_surfaces:
         Treat the CVRP solver as the research object. State the complete
         algorithm idea and target the module that owns the mechanism. Do not
         propose legacy component-policy files, registry operators, or
-        lifecycle-config tables.
+        lifecycle-config tables. target_objectives and protected_objectives may
+        contain only declared objectives: fleet_violation and total_distance.
+        Capacity feasibility is a hard constraint and belongs in risk/no-op
+        text, not objective arrays.
       implementation_guidance: >-
         Preserve policies/baseline_algorithm.py as the stable solve(...)
         entrypoint unless the entrypoint itself is the approved target. Use
         policies/baseline_modules/ for concrete algorithm behavior. You may use
         instance.depot, instance.customer_ids, instance.customer_count,
-        instance.demands[customer_id], instance.capacity, instance.distance(i,
-        j), instance.route_load(route), and instance.route_distance(route).
+        instance.demands[customer_id], instance.capacity,
+        instance.allowed_routes, instance.bks_routes, instance.distance(i, j),
+        instance.route_load(route), and instance.route_distance(route).
+        fleet_violation is max(0, len(routes) - route_limit), where
+        route_limit is allowed_routes or bks_routes. Capacity overload is a
+        hard infeasibility, not a fleet_violation state.
         Context helpers are context.make_solution(routes),
         context.nearest_neighbor(), context.objective(solution),
         context.objective_key(solution), context.is_better(candidate,
         incumbent), context.is_valid(solution), context.remaining_time(),
         context.remaining_time_ms(), context.elapsed_ms(),
-        context.record_phase(...), context.record_iteration(...),
-        context.record_move(...), and context.set_stop_reason(...).
+        context.record_phase(name, elapsed_ms),
+        context.record_iteration(phase='search', count=1),
+        context.record_move(phase='search', attempted=1, accepted=0,
+        delta=None, best_improved=0), and context.set_stop_reason(reason).
       anti_patterns: >-
         Do not edit objective, feasibility, parser, protocol, split, seed,
         Decision, benchmark data, adapter.py, models.py, cvrplib.py, or
@@ -230,8 +239,11 @@ objectives:
 llm_hints:
   problem_summary: >-
     Build ordered capacity-feasible routes from the depot. Every customer must
-    appear exactly once. The first objective is fleet_violation; total distance
-    matters only after route-count comparability is protected.
+    appear exactly once. The first objective is fleet_violation =
+    max(0, len(routes) - route_limit), where route_limit is allowed_routes or
+    bks_routes; total distance matters only after route-count comparability is
+    protected. Capacity overload is infeasible and is not a soft
+    fleet_violation state.
   operator_interface: >-
     There is no active operator surface. The active research target is
     solver_design: policies/baseline_algorithm.py plus

@@ -18,7 +18,7 @@ from scion.proposal.tools import (
     ProposalToolFailureCode,
 )
 
-_SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT = 3
+_SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT = 5
 
 
 def _missing_required_context_error(

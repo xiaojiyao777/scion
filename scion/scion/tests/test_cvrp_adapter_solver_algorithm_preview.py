@@ -96,6 +96,67 @@ def test_cvrp_solver_algorithm_preview_rejects_no_search_telemetry(
     assert "active search telemetry" in rendered
 
 
+def test_cvrp_solver_design_preview_rejects_dynamic_private_state_attrs(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content=(
+            "def _vns(solution, operators, max_no_improve, context, reserve):\n"
+            "    solution._nn_lists = {}\n"
+            "    context.record_iteration('probe', 1)\n"
+            "    context.record_move('probe', attempted=1, accepted=0)\n"
+            "    return False\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    rendered = json.dumps(preview["issues"])
+    assert "__slots__" in rendered
+    assert "solution._nn_lists" not in rendered
+    assert any(
+        check["name"] == "solver_design_no_dynamic_state_private_attrs"
+        and check["passed"] is False
+        for check in preview["checks"]
+    )
+
+
+def test_cvrp_solver_design_preview_rejects_cumulative_record_phase_elapsed(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_repair.py",
+        action="modify",
+        code_content=(
+            "def _probe(solution, context):\n"
+            "    context.record_phase('probe', context.elapsed_ms())\n"
+            "    context.record_iteration('probe', 1)\n"
+            "    context.record_move('probe', attempted=1, accepted=0)\n"
+            "    return solution\n"
+        ),
+    )
+
+    preview = cvrp_adapter.preview_research_surface_patch(
+        patch=patch,
+        surface=SimpleNamespace(name="solver_design"),
+    )
+
+    assert preview["passed"] is False
+    rendered = json.dumps(preview["issues"])
+    assert "record_phase expects a phase-duration delta" in rendered
+    assert any(
+        check["name"] == "solver_design_record_phase_uses_elapsed_delta"
+        and check["passed"] is False
+        for check in preview["checks"]
+    )
+
+
 def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

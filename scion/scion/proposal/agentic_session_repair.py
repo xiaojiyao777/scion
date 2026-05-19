@@ -11,6 +11,7 @@ class AgenticSessionRepairMixin:
             request: AgenticProposalRequest,
             state: AgenticProposalSessionState,
             hypothesis: HypothesisProposal,
+            patch: PatchProposal,
             code_context: Mapping[str, Any],
             observations: list[ProposalObservation],
             failed_preview: ProposalObservation,
@@ -31,6 +32,7 @@ class AgenticSessionRepairMixin:
                     f"{failed_preview.summary}"
                 )
                 feedback_kind = "Contract-preview"
+            repair_context["previous_patch"] = _proposal_payload(patch)
             repair_context["agentic_preview_feedback"] = _observation_prompt_payload(
                 failed_preview
             )
@@ -81,6 +83,7 @@ class AgenticSessionRepairMixin:
             del request
             repair_context = dict(code_context)
             repair_context["prior_code_failure"] = issue_detail
+            repair_context["previous_patch"] = _proposal_payload(patch)
             repair_context["agentic_code_self_check_feedback"] = {
                 "passed": False,
                 "issue": issue_detail,

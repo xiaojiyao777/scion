@@ -67,6 +67,22 @@ FALSE_PREMISES = (
         ),
         "shaw_related_removal",
     ),
+    (
+        "missing_cross_route_tail_exchange",
+        (
+            "The active solver lacks cross-route tail swap / suffix exchange, "
+            "so add that neighborhood to local search."
+        ),
+        "cross_route_tail_exchange",
+    ),
+    (
+        "unreachable_feasibility_crossing",
+        (
+            "Reset adaptive weights on the first infeasible-to-feasible "
+            "feasibility crossing in the current search state."
+        ),
+        "feasibility_crossing",
+    ),
 )
 
 

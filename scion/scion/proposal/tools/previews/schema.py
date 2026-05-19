@@ -516,8 +516,11 @@ def _expected_telemetry_contract_preview(
                 : _PREVIEW_MAX_CHECKS * 4
             ],
             "repair_hint": (
-                "Use only allowed expected_telemetry categories and runtime keys "
-                "declared by the selected research surface evidence contract."
+                "Use only allowed expected_telemetry categories and exact runtime "
+                "keys declared by the selected research surface evidence contract. "
+                "Do not put explanatory prose in expected_telemetry values; if "
+                "mechanism fields are declared, substitute the concrete mechanism "
+                "id into those field templates."
                 if not passed
                 else ""
             ),

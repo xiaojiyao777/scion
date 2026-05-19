@@ -19,9 +19,12 @@ def test_cvrp_adapter_renders_problem_object_for_solver_level_research(
     assert "Objective policy:" in rendered
     assert "Runtime evidence for problem-level hypotheses:" in rendered
     assert "`instance.customer_ids`" in rendered
+    assert "`instance.allowed_routes`" in rendered
+    assert "`instance.bks_routes`" in rendered
     assert "`instance.route_distance(route)`" in rendered
     assert "`CvrpSolution(routes=...)`" in rendered
     assert "fleet_violation first, then total_distance" in rendered
+    assert "Capacity overload" in rendered
     assert "policies/baseline_algorithm.py" in rendered
     assert "policies/baseline_modules/*.py" in rendered
     assert "Legacy operator/component-policy" in rendered
@@ -57,7 +60,12 @@ def test_cvrp_solver_design_surface_interface_renders_safe_instance_api(
     assert "`instance.customer_count`" in rendered
     assert "`instance.demands[customer_id]`" in rendered
     assert "`instance.capacity`" in rendered
+    assert "`instance.allowed_routes`" in rendered
+    assert "`instance.bks_routes`" in rendered
     assert "`instance.distance(i, j)`" in rendered
+    assert "fleet_violation = max(0, len(routes) - route_limit)" in rendered
+    assert "context.record_phase(name, elapsed_ms)" in rendered
+    assert "context.record_iteration(phase='search', count=1)" in rendered
     assert "Never use `instance.customers`" in rendered
     assert "context.record_move" in rendered
     assert "policies/baseline_modules/*.py" in rendered

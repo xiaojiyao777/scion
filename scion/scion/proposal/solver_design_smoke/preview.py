@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
 from scion.core.models import HypothesisProposal, PatchProposal, patch_file_changes
+from scion.runtime.audit import format_runtime_audit_failure
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     format_telemetry_guard_issue,
@@ -196,7 +197,7 @@ def _runtime_algorithm_smoke_preview(
                     "run": run_payload,
                 }
                 if audit_failure is not None:
-                    issue = str(audit_failure.get("detail") or "runtime audit failed")
+                    issue = format_runtime_audit_failure(audit_failure)
                     repair_guidance = _solver_design_smoke_repair_guidance(
                         audit_failure,
                         runtime=runtime,

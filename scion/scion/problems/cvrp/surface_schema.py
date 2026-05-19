@@ -8,6 +8,7 @@ _POLICY_INSTANCE_API_TEXT = (
     "Safe CvrpInstance API for solver-design code: use `instance.depot`, "
     "`instance.customer_ids`, `instance.customer_count`, "
     "`instance.demands[customer_id]`, `instance.capacity`, "
+    "`instance.allowed_routes`, `instance.bks_routes`, "
     "`instance.distance(i, j)`, `instance.route_load(route)`, and "
     "`instance.route_distance(route)`. `instance.demand(customer_id)` remains "
     "available for direct demand lookup. Never use `instance.customers`; that "

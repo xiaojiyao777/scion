@@ -154,6 +154,72 @@ def test_code_prompt_contains_prior_failure():
     assert "Avoid the same mistake" in user_prompt
 
 
+def test_code_prompt_includes_previous_patch_for_repair():
+    ctx = _base_context(
+        prior_code_failure="agentic_proposal:code_generation_failed: algorithm smoke",
+        previous_patch={
+            "file_path": "policies/search_policy.py",
+            "action": "modify",
+            "code_content": (
+                "def baseline_time_fraction(instance, time_limit_sec):\n"
+                "    context.record_iteration('mechanism_x', 1)\n"
+                "    return 0.35\n"
+            ),
+        },
+    )
+
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "Previous Patch Attempt" in user_prompt
+    assert "record_iteration" in user_prompt
+    assert "Repair it instead of starting from scratch" in user_prompt
+
+
+def test_code_prompt_summarizes_previous_patch_telemetry_records():
+    ctx = _base_context(
+        prior_code_failure="algorithm smoke did not pass: solver runtime audit reported errors",
+        previous_patch={
+            "file_path": "policies/search_policy.py",
+            "action": "modify",
+            "code_content": (
+                "def apply(context):\n"
+                "    context.record_iteration('mechanism_x', 1)\n"
+                "    context.record_phase('mechanism_x', 2.0)\n"
+                "    context.record_move('mechanism_x', attempted=1, accepted=1)\n"
+            ),
+        },
+    )
+
+    _system_blocks, user_prompt = _split_code_context(ctx)
+
+    assert "Telemetry records detected in the previous patch" in user_prompt
+    assert "context.record_phase('mechanism_x', ...)" in user_prompt
+    assert "context.record_iteration('mechanism_x', ...)" in user_prompt
+    assert "context.record_move('mechanism_x', ...)" in user_prompt
+    assert "preserving any telemetry records from the previous patch" in user_prompt
+
+
+def test_code_prompt_includes_solver_design_mechanism_telemetry_obligation():
+    ctx = _base_context(
+        research_surface_name="solver_design",
+        research_surface_kind="solver_design",
+        target_file="policies/baseline_modules/local_search.py",
+        agentic_code_scope_control={
+            "telemetry_obligation_rule": (
+                "Declared mechanism telemetry obligations: every "
+                "mechanism_changes id (`route_pair_proximity_index`) must have "
+                "active-path evidence using that exact id."
+            )
+        },
+    )
+
+    system_blocks, user_prompt = _split_code_context(ctx)
+    all_text = " ".join(block["text"] for block in system_blocks) + user_prompt
+
+    assert "Declared mechanism telemetry obligations" in all_text
+    assert "route_pair_proximity_index" in all_text
+
+
 def test_code_prompt_classifies_hypothesis_generation_prior_failure():
     ctx = _base_context(
         prior_code_failure=(

@@ -9,17 +9,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 _MECHANISM_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _MECHANISM_CHANGE_TYPES = ("add", "modify", "replace", "remove", "integrate")
+_NOVELTY_SIGNATURE_SCALAR_MAX_CHARS = 120
 _EXPECTED_TELEMETRY_CATEGORIES = ("activity", "activation", "effect", "budget")
 _EXPECTED_TELEMETRY_CATEGORY_TEXT = ", ".join(_EXPECTED_TELEMETRY_CATEGORIES)
 _EXPECTED_TELEMETRY_DESCRIPTION = (
     "Structured runtime telemetry probes expected to show candidate activity, "
     "activation, effect, or budget allocation. Top-level keys must be telemetry "
     f"categories only: {_EXPECTED_TELEMETRY_CATEGORY_TEXT}. Values must be "
-    "runtime telemetry field names declared by the selected research surface "
-    "evidence contract. Do not use runtime field names, suffixes, or metrics "
-    "such as best_delta, improvement_counts, phase_runtime, or runtime_ms as "
-    "top-level categories; put those declared runtime fields under the matching "
-    "category instead."
+    "exact runtime telemetry field strings declared by the selected research "
+    "surface evidence contract; do not put explanatory prose in these values. "
+    "Use JSON arrays of field strings, or mechanism-keyed maps whose values "
+    "are still field strings/arrays. Do not use runtime field names, suffixes, "
+    "or metrics such as best_delta, improvement_counts, phase_runtime, or "
+    "runtime_ms as top-level categories; put those declared runtime fields "
+    "under the matching category instead. Activation must be mechanism "
+    "activity evidence, not objective/outcome fields such as "
+    "solver_algorithm_fleet_violation or solver_algorithm_total_distance."
 )
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
 
@@ -116,6 +121,11 @@ class HypothesisProposalInput(BaseModel):
     @classmethod
     def normalize_empty_mechanism_changes(cls, value: Any) -> Any:
         return _empty_mechanism_changes_to_list(value)
+
+    @field_validator("novelty_signature", mode="before")
+    @classmethod
+    def normalize_novelty_signature(cls, value: Any) -> Any:
+        return _normalize_novelty_signature(value)
 
     @field_validator("hypothesis_text", "change_locus")
     @classmethod
@@ -241,6 +251,39 @@ def normalize_patch_output_with_repair_attribution(
         if removed_empty or removed_duplicates:
             normalized["additional_changes"] = compacted
     return normalized, tuple(repairs)
+
+
+def _normalize_novelty_signature(value: Any) -> Any:
+    if value in (None, "", [], (), {}):
+        return {}
+    if isinstance(value, Mapping):
+        return {
+            str(key): _normalize_novelty_signature_item(item)
+            for key, item in value.items()
+            if str(key).strip()
+        }
+    return value
+
+
+def _normalize_novelty_signature_item(value: Any) -> Any:
+    if isinstance(value, str):
+        return _compact_novelty_scalar(value)
+    if isinstance(value, Mapping):
+        return {
+            str(key): _normalize_novelty_signature_item(item)
+            for key, item in value.items()
+            if str(key).strip()
+        }
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_normalize_novelty_signature_item(item) for item in value]
+    return value
+
+
+def _compact_novelty_scalar(value: str) -> str:
+    text = " ".join(str(value or "").strip().split())
+    if len(text) <= _NOVELTY_SIGNATURE_SCALAR_MAX_CHARS:
+        return text
+    return text[:_NOVELTY_SIGNATURE_SCALAR_MAX_CHARS].rstrip()
 
 
 class PatchProposalInput(BaseModel):
@@ -371,12 +414,22 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "target_objectives": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Objective component(s) this hypothesis is expected to improve.",
+            "description": (
+                "Declared objective name(s) this hypothesis is expected to "
+                "improve. Use only objective ids from the problem spec; hard "
+                "constraints or feasibility conditions belong in risk/no-op "
+                "text, not this array."
+            ),
         },
         "protected_objectives": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Higher-priority or critical objectives this hypothesis must preserve.",
+            "description": (
+                "Declared higher-priority or critical objective name(s) this "
+                "hypothesis must preserve. Use only objective ids from the "
+                "problem spec; hard constraints or feasibility conditions "
+                "belong in risk/no-op text, not this array."
+            ),
         },
         "objective_tradeoff_policy": {
             "type": "string",
@@ -504,9 +557,10 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- Target a specific, named weakness in the current pool (not vague 'improvements').\n"
         "- The mechanism of improvement must be concrete and testable.\n"
         "- State target objective(s), protected objective(s), tradeoff policy, and no-op condition.\n"
+        "- `target_objectives` and `protected_objectives` must contain only declared problem objective ids; hard constraints or feasibility conditions go in risk/no-op text.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
         "- When the selected surface declares mechanism telemetry, include mechanism_changes with the specific mechanism id(s) and generic change_type values: add, modify, replace, remove, or integrate.\n"
-        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract. Top-level expected_telemetry keys must be only activity, activation, effect, or budget; do not use runtime metric names or suffixes such as best_delta, improvement_counts, phase_runtime, or runtime_ms as categories.\n"
+        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract. Top-level expected_telemetry keys must be only activity, activation, effect, or budget; do not use runtime metric names or suffixes such as best_delta, improvement_counts, phase_runtime, or runtime_ms as categories. Activation must be mechanism activity evidence, not objective/outcome fields.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"

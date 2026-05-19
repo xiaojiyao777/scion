@@ -10,6 +10,10 @@ from typing import Optional
 import typer
 
 from scion.cli.commands.common import validate_cli_forced_surface
+from scion.cli.commands.data_roots import (
+    activate_declared_problem_data_root,
+    validate_declared_problem_data_cases,
+)
 
 
 def register_init_run_commands(app: typer.Typer) -> None:
@@ -247,6 +251,25 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 if split_path.exists()
                 else SplitManifest(screening=[], validation=[], frozen=[])
             )
+
+        try:
+            data_root_activation = activate_declared_problem_data_root(
+                problem_yaml=problem_yaml,
+                protocol_path=Path(protocol) if protocol else None,
+            )
+            validate_declared_problem_data_cases(
+                activation=data_root_activation,
+                problem_yaml=problem_yaml,
+                split_manifest=split_manifest,
+            )
+            if data_root_activation is not None and data_root_activation.activated:
+                typer.echo(
+                    "INFO: activated problem data root "
+                    f"{data_root_activation.env_name}={data_root_activation.data_root}"
+                )
+        except ValueError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
 
         if seeds:
             seed_ledger = SeedLedgerConfig.from_yaml(seeds)

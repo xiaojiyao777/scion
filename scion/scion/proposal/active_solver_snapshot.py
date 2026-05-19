@@ -432,10 +432,13 @@ def _mechanism_summary(
         "alns_loop": {
             "active": "while self._within_budget" in scheduler,
             "summary": (
-                "The main ALNS loop records iterations, samples destroy/repair "
-                "operators through adaptive weights, applies destroy/repair, "
-                "optionally embeds VNS, checks feasibility/route caps, scores "
-                "best/better/accepted moves, and updates weights per segment."
+                "The main ALNS loop starts from a feasible construction, "
+                "records iterations, samples destroy/repair operators through "
+                "adaptive weights, applies destroy/repair, optionally embeds "
+                "VNS, rejects infeasible or route-cap-violating candidates, "
+                "scores best/better/accepted moves, and updates weights per "
+                "segment. Capacity infeasibility is not a normal accepted "
+                "search state."
             ),
             "evidence_symbols": [
                 "record_iteration('alns')",
@@ -476,7 +479,8 @@ def _mechanism_summary(
             "summary": (
                 "VNS uses _two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
                 "and _two_opt_star. _or_opt skips same-route destinations, so "
-                "length-2 and length-3 cross-route Or-opt already exist."
+                "length-2 and length-3 cross-route Or-opt already exist. "
+                "_two_opt_star exchanges cross-route suffix/tail segments."
             ),
             "evidence_symbols": [
                 "_vns",
