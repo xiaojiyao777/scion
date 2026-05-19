@@ -400,6 +400,7 @@ def build_telemetry_guard_summary(
     selected_surface: str | None,
     expected_telemetry: Any = None,
     declared_mechanisms: Any = None,
+    protected_objectives: Sequence[str] = (),
     implicit_activity_claim: bool = False,
 ) -> dict[str, Any]:
     """Build an aggregate, deterministic sanity summary for runtime telemetry."""
@@ -412,6 +413,7 @@ def build_telemetry_guard_summary(
         declared_mechanisms,
         expected_telemetry=expected_telemetry,
     )
+    protected_tokens = _protected_objective_tokens(protected_objectives)
     if not mechanisms and mechanism_claims:
         mechanisms = tuple(mechanism_claims)
     expected_present = any(claims.values()) or bool(mechanisms)
@@ -447,6 +449,20 @@ def build_telemetry_guard_summary(
                         summary=summary,
                     )
                 )
+            elif category == "effect" and _matches_protected_objective_field(
+                field,
+                protected_tokens,
+            ):
+                if summary["candidate_present"] == 0:
+                    failures.append(
+                        _guard_issue(
+                            "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED",
+                            category=category,
+                            field=field,
+                            severity="fail",
+                            summary=summary,
+                        )
+                    )
             elif summary["candidate_positive"] == 0:
                 failures.append(
                     _guard_issue(
@@ -613,6 +629,7 @@ def build_telemetry_guard_summary(
         "expected_telemetry_present": expected_present,
         "implicit_activity_claim": bool(implicit_activity_claim),
         "declared_mechanisms": list(mechanisms),
+        "protected_objectives": list(protected_tokens),
         "candidate_runs": len(candidate_runtimes),
         "champion_runs": len(champion_runtimes),
         "categories": {
@@ -627,6 +644,32 @@ def build_telemetry_guard_summary(
         "warnings": warnings,
         "failures": failures,
     }
+
+
+def _protected_objective_tokens(protected_objectives: Sequence[str]) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for objective in protected_objectives:
+        token = str(objective or "").strip().lower()
+        if token:
+            tokens.append(token)
+    return tuple(dict.fromkeys(tokens))
+
+
+def _matches_protected_objective_field(
+    field: str,
+    protected_tokens: Sequence[str],
+) -> bool:
+    if not protected_tokens:
+        return False
+    normalized_field = re.sub(r"[^a-z0-9]+", "_", str(field or "").lower()).strip("_")
+    if not normalized_field:
+        return False
+    padded = f"_{normalized_field}_"
+    for token in protected_tokens:
+        normalized_token = re.sub(r"[^a-z0-9]+", "_", token).strip("_")
+        if normalized_token and f"_{normalized_token}_" in padded:
+            return True
+    return False
 
 
 def format_telemetry_guard_issue(summary: Mapping[str, Any]) -> str | None:
@@ -666,6 +709,11 @@ def format_telemetry_guard_issue(summary: Mapping[str, Any]) -> str | None:
         return (
             "telemetry guard observed stage budget starvation: "
             f"{field} had no positive candidate runtime evidence"
+        )
+    if code == "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED":
+        return (
+            "telemetry guard observed no protected-objective no-regression "
+            f"runtime field presence for {field}"
         )
     if code == "TELEMETRY_ACTIVATION_NOT_OBSERVED":
         return (

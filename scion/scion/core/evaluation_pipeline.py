@@ -31,6 +31,7 @@ class EvaluationRequest:
     selected_surface: str | None = None
     expected_telemetry: Mapping[str, Any] | None = None
     mechanism_changes: tuple[Any, ...] = ()
+    protected_objectives: tuple[str, ...] = ()
     patch: Optional[PatchProposal] = None
     retry_count: int = 0
     screening_expand_count: int = 0
@@ -70,6 +71,7 @@ class ExperimentProtocolLike(Protocol):
         selected_surface: str | None = None,
         expected_telemetry: Mapping[str, Any] | None = None,
         mechanism_changes: tuple[Any, ...] = (),
+        protected_objectives: tuple[str, ...] = (),
     ) -> ProtocolResult:
         ...
 
@@ -141,6 +143,7 @@ class EvaluationPipeline:
                         selected_surface=request.selected_surface,
                         expected_telemetry=request.expected_telemetry,
                         mechanism_changes=request.mechanism_changes,
+                        protected_objectives=request.protected_objectives,
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
@@ -255,6 +258,7 @@ def _run_protocol_experiment(
     selected_surface = kwargs.pop("selected_surface", None)
     expected_telemetry = kwargs.pop("expected_telemetry", None)
     mechanism_changes = kwargs.pop("mechanism_changes", None)
+    protected_objectives = kwargs.pop("protected_objectives", None)
     if _should_forward_selected_surface(
         protocol,
         "run_experiment",
@@ -273,6 +277,12 @@ def _run_protocol_experiment(
         "mechanism_changes",
     ):
         kwargs["mechanism_changes"] = mechanism_changes
+    if protected_objectives and _method_accepts_keyword(
+        protocol,
+        "run_experiment",
+        "protected_objectives",
+    ):
+        kwargs["protected_objectives"] = protected_objectives
     return protocol.run_experiment(**kwargs)
 
 

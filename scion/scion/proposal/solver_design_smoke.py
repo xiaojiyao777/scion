@@ -243,6 +243,11 @@ def _runtime_algorithm_smoke_preview(
                     selected_surface=surface_name,
                     expected_telemetry=getattr(hypothesis, "expected_telemetry", None),
                     declared_mechanisms=getattr(hypothesis, "mechanism_changes", ()),
+                    protected_objectives=getattr(
+                        hypothesis,
+                        "protected_objectives",
+                        (),
+                    ),
                     implicit_activity_claim=_solver_design_patch_claims_search_effort(
                         patch,
                         hypothesis,

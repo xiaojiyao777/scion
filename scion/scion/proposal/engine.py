@@ -1194,6 +1194,21 @@ def _agentic_research_context_block(
     code_phase: bool = False,
 ) -> str:
     parts: list[str] = []
+    semantic_rejections = context.get("agentic_hypothesis_semantic_rejections")
+    if semantic_rejections:
+        retry_payload = {
+            "retry_attempt": context.get("agentic_hypothesis_retry_attempt"),
+            "retry_rule": context.get("agentic_hypothesis_retry_rule"),
+            "semantic_rejections": semantic_rejections,
+        }
+        parts.append(
+            "## Hypothesis Semantic Retry Feedback\n"
+            "The previous hypothesis was rejected by an audited semantic gate. "
+            "Use this feedback as a hard constraint: choose a different "
+            "mechanism family or repair the contradicted premise before "
+            "drafting the next hypothesis.\n\n"
+            f"{_bounded_json(retry_payload, 6000)}"
+        )
     diagnosis = context.get("agentic_research_diagnosis")
     if diagnosis:
         heading = (

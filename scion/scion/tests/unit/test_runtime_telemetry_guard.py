@@ -51,6 +51,54 @@ def test_telemetry_guard_flags_stage_budget_starvation() -> None:
     assert summary["fields"]["solver_phase_runtime_ms"]["champion_positive"] == 1
 
 
+def test_telemetry_guard_treats_protected_objective_effect_as_no_regression_probe() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "solver_algorithm_fleet_violation": 0,
+                "solver_algorithm_best_delta": 2.0,
+            }
+        ],
+        champion_runtimes=[
+            {
+                "solver_algorithm_fleet_violation": 0,
+                "solver_algorithm_best_delta": 1.0,
+            }
+        ],
+        problem_spec=_problem_spec(),
+        selected_surface="solver",
+        expected_telemetry={
+            "effect": [
+                "solver_algorithm_fleet_violation",
+                "solver_algorithm_best_delta",
+            ]
+        },
+        protected_objectives=("fleet_violation",),
+    )
+
+    assert summary["passed"] is True
+    assert summary["protected_objectives"] == ["fleet_violation"]
+    assert summary["fields"]["solver_algorithm_fleet_violation"][
+        "candidate_present"
+    ] == 1
+    assert summary["fields"]["solver_algorithm_fleet_violation"][
+        "candidate_positive"
+    ] == 0
+
+
+def test_telemetry_guard_requires_protected_objective_probe_presence() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{"solver_algorithm_best_delta": 2.0}],
+        problem_spec=_problem_spec(),
+        selected_surface="solver",
+        expected_telemetry={"effect": ["solver_algorithm_fleet_violation"]},
+        protected_objectives=("fleet_violation",),
+    )
+
+    assert summary["passed"] is False
+    assert summary["failures"][0]["code"] == "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED"
+
+
 def test_expected_telemetry_invalid_category_fails_even_without_fields() -> None:
     errors = validate_expected_telemetry_contract(
         problem_spec=_problem_spec(),

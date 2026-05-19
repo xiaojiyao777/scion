@@ -304,6 +304,8 @@ def _claims_weights_non_adaptive(text: str) -> bool:
 def _claims_missing_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
         return False
+    if _claims_unsystematic_cross_route_segment_relocation_gap(text):
+        return True
     if _describes_existing_or_opt_improvement(text):
         return False
     patterns = (
@@ -355,6 +357,8 @@ def _duplicates_or_opt_2_3(text: str) -> bool:
 def _claims_missing_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
         return False
+    if _targets_segment_chain_unit_not_related_removal(text):
+        return False
     if _scopes_change_to_existing_shaw_related_removal(text):
         return False
     patterns = (
@@ -373,6 +377,8 @@ def _claims_missing_shaw_related_removal(text: str) -> bool:
 
 def _duplicates_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
+        return False
+    if _targets_segment_chain_unit_not_related_removal(text):
         return False
     if _describes_existing_shaw_related_improvement(text):
         return False
@@ -527,15 +533,17 @@ def _mentions_or_opt_family(text: str) -> bool:
 def _mentions_segment_relocation(text: str) -> bool:
     return bool(
         re.search(
-            r"\b(?:segment|chain|length\s*[23]|two customer|three customer|"
-            r"2 customer|3 customer|k customer|multi customer)\b.{0,35}"
-            r"\b(?:relocat(?:e|ion)|move)\b",
+            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+            r"three customer|2 customer|3 customer|2\s+3 customer|"
+            r"k customer|multi customer)\b.{0,50}"
+            r"\b(?:relocat(?:e|ion)|mov(?:e|ing)|exchang(?:e|ing))\b",
             text,
         )
         or re.search(
-            r"\b(?:relocat(?:e|ion)|move)\b.{0,35}"
-            r"\b(?:segment|chain|length\s*[23]|two customer|three customer|"
-            r"2 customer|3 customer|k customer|multi customer)\b",
+            r"\b(?:relocat(?:e|ion)|mov(?:e|ing)|exchang(?:e|ing))\b.{0,50}"
+            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+            r"three customer|2 customer|3 customer|2\s+3 customer|"
+            r"k customer|multi customer)\b",
             text,
         )
     )
@@ -562,6 +570,8 @@ def _describes_existing_or_opt_improvement(text: str) -> bool:
         or _mentions_or_opt_family(text)
     )
     if not mentions_or_opt:
+        return False
+    if _claims_unsystematic_cross_route_segment_relocation_gap(text):
         return False
     if _targets_existing_or_opt_filter_gap(text):
         return True
@@ -687,6 +697,69 @@ def _has_or_opt_improvement_terms(text: str) -> bool:
             "early exit",
         ),
     )
+
+
+def _claims_unsystematic_cross_route_segment_relocation_gap(text: str) -> bool:
+    if not _mentions_cross_route_or_opt_segment_relocation(text):
+        return False
+    if _targets_existing_or_opt_filter_gap(text) or _adds_or_opt_improvement_control(text):
+        return False
+    gap_terms = (
+        "not systematically",
+        "not systematic",
+        "does not systematically",
+        "doesn't systematically",
+        "no systematic",
+        "not explicitly",
+        "does not explicitly",
+        "doesn't explicitly",
+    )
+    if _has_any(text, gap_terms):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:missing|lacks?|without|no)\b.{0,90}"
+            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+            r"three customer|2 customer|3 customer|2\s+3 customer|"
+            r"k customer|multi customer)\b"
+            r".{0,90}\b(?:across routes|cross route|inter route|between route|"
+            r"different route)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:across routes|cross route|inter route|between route|"
+            r"different route)\b.{0,90}"
+            r"\b(?:missing|lacks?|without|no)\b.{0,90}"
+            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+            r"three customer|2 customer|3 customer|2\s+3 customer|"
+            r"k customer|multi customer)\b",
+            text,
+        )
+    )
+
+
+def _targets_segment_chain_unit_not_related_removal(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "segment chain",
+            "segment-chain",
+            "contiguous segment",
+            "ordered segment",
+            "chain as a unit",
+            "segment as a unit",
+            "contiguous customer",
+        ),
+    ):
+        return False
+    if re.search(
+        r"\b(?:add|introduce|implement|create|build)\b.{0,70}"
+        r"\b(?:shaw|relatedness|related removal|related destroy|"
+        r"proximity cluster|cluster removal)\b",
+        text,
+    ):
+        return False
+    return True
 
 
 def _has_or_opt_token(text: str, length: str) -> bool:

@@ -36,12 +36,26 @@ the former 4.8k-line `tests/test_cvrp_solver_operator_runtime.py` aggregate is
 now a placeholder, shared fixtures live in `cvrp_solver_runtime_support.py`,
 and focused `test_cvrp_*_runtime.py` files pass (`72 passed`). Remaining P0/P1
 blockers include `problems/cvrp/solver.py`, `problems/cvrp/adapter.py`,
-`proposal/context_manager.py`, and `contract/gate.py`. The first production
+`proposal/context_manager.py`, and
+`contract/checks/solver_design_integration.py`. The first production
 solver slice has started: low-coupling policy-module loading,
 solution/objective helpers, and timing helpers now live under the CVRP-owned
 `problems/cvrp/solver_runtime/` package while `solver.py` remains the public
 facade. This is verified but not sufficient; `solver.py` is still above 9000
 lines and remains the main P0 production blocker.
+
+The 2026-05-19 design-first modularization repair is now complete for two
+framework hot spots. `proposal/tools/preview.py` is a small compatibility
+facade backed by focused `proposal/tools/previews/*` modules for schema,
+permission, contract, algorithm-smoke, telemetry-static, and smoke-feedback
+payloads. `contract/gate.py` is back below the preferred threshold and now
+orchestrates C1-C12 while target/path, security, static-risk, novelty,
+telemetry, surface-access, patch-path, and result-payload logic live in focused
+contract modules. This is responsibility split work, not just helper
+extraction. It does not close all contract/provider debt:
+`contract/checks/solver_design_integration.py` still embeds solver-design/CVRP
+assumptions in generic contract code and must move behind a problem-owned
+integration-check hook before being split further.
 
 The latest audit-driven repair moved candidate-flow CVRP semantics back behind
 problem-owned hooks. `proposal.mechanism_novelty` is now a generic dispatch and
@@ -58,6 +72,14 @@ provider migration remains open for `proposal/engine.py`,
 `proposal/context_manager.py`, `proposal/solver_design_smoke.py`,
 `contract/checks/solver_design_integration.py`, and protocol/runtime telemetry
 dispatch.
+
+The first context-manager slice is also in progress. Generic research-surface
+and adapter context construction now lives under
+`proposal/context_builders/`, but `proposal/context_manager.py` remains over
+3000 lines and is still active architecture debt. The next slices should move
+history/feedback rendering, active-solver/code-read context, and
+problem-specific solver-design guidance behind focused builder/provider
+modules without mixing CVRP terms into Scion framework code.
 
 The broader test-side architecture cleanup is now complete. All previously
 oversized aggregate test files have been converted to placeholders plus

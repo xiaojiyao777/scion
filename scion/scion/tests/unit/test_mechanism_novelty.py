@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from scion.proposal.active_solver_snapshot import build_active_solver_snapshot
+from scion.proposal.engine import _split_hypothesis_context
 from scion.proposal.agentic_models import (
     AgenticProposalRequest,
     AgenticProposalStatus,
@@ -16,6 +18,7 @@ from scion.proposal.mechanism_novelty import MechanismNoveltyGate
 from scion.proposal.tools import ProposalToolRegistry
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     FakeCreative,
+    FileAgenticSessionArtifactStore,
     HypothesisProposal,
     PatchProposal,
     _cvrp_context_with_champion,
@@ -167,6 +170,26 @@ def test_mechanism_novelty_gate_allows_shaw_related_improvements(
     )
 
 
+def test_mechanism_novelty_gate_allows_segment_chain_repair_not_shaw_duplicate(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "Existing Shaw-related destroy operators remove individual customers, "
+        "but the active solver lacks contiguous segment-chain repair as a unit."
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            _solver_design_hypothesis(text),
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     "text",
     (
@@ -208,6 +231,48 @@ def test_mechanism_novelty_gate_blocks_explicit_duplicate_or_opt_addition(
     assert result is not None
     assert result.failure_category == "duplicate_mechanism"
     assert result.premise_check == "duplicate"
+    assert result.mechanism == "cross_route_or_opt_2_3"
+
+
+def test_mechanism_novelty_gate_blocks_unsystematic_cross_route_segment_claim(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "The existing VNS has Or-opt moves, but it does not systematically "
+        "evaluate moving ordered segments of 2 or 3 customers across routes."
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(text),
+        context=context,
+        active_solver_snapshot=snapshot,
+    )
+
+    assert result is not None
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "cross_route_or_opt_2_3"
+
+
+def test_mechanism_novelty_gate_blocks_cross_route_oropt_duplicate_from_smoke_round(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "The VNS already has an existing Or-Opt-3 pass, but it lacks "
+        "cross-route segment exchange / Or-Opt for chains of 2-3 customers "
+        "between routes; add cross_route_oropt after the existing pass."
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(text),
+        context=context,
+        active_solver_snapshot=snapshot,
+    )
+
+    assert result is not None
     assert result.mechanism == "cross_route_or_opt_2_3"
 
 
@@ -407,6 +472,95 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
         entry.get("source") == "mechanism_novelty_gate"
         for entry in output.failure_ledger["entries"]
     )
+
+
+def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> None:
+    semantic_feedback = [
+        {
+            "source": "mechanism_novelty_gate",
+            "premise_check": "contradicted",
+            "mechanism": "cross_route_or_opt_2_3",
+            "reason": "Existing _or_opt_2/_or_opt_3 already relocate segments.",
+        }
+    ]
+
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "problem",
+            "research_surfaces": "solver_design",
+            "champion_operators_code": "code",
+            "champion_stats": "stats",
+            "agentic_hypothesis_semantic_rejections": semantic_feedback,
+            "agentic_hypothesis_retry_rule": "Choose a different mechanism family.",
+            "agentic_hypothesis_retry_attempt": 2,
+        }
+    )
+    rendered = json.dumps(
+        {"system_blocks": system_blocks, "user_prompt": user_prompt},
+        sort_keys=True,
+    )
+
+    assert "Hypothesis Semantic Retry Feedback" in rendered
+    assert "mechanism_novelty_gate" in rendered
+    assert "_or_opt_2" in rendered
+    assert "different mechanism family" in rendered
+
+
+def test_hypothesis_semantic_retry_manifest_records_feedback_section(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    rejected = _solver_design_hypothesis(
+        "The active solver lacks inter-route Or-opt segment relocation; "
+        "add an NN-filtered cross-route segment relocation neighborhood."
+    )
+    accepted = _solver_design_hypothesis(
+        "Improve existing cross-route Or-opt candidate ordering and delta scoring."
+    )
+    creative = SequentialHypothesisCreative([rejected, accepted])
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-mechanism",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "semantic-retry-manifest"},
+            build_code_context=lambda _hypothesis: {
+                "research_surface_name": "solver_design",
+                "research_surface_kind": "solver_design",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in ref
+    ]
+    retry_manifests = [
+        manifest
+        for manifest in manifests
+        if manifest.get("call_kind") == "hypothesis_semantic_retry"
+    ]
+
+    assert retry_manifests
+    retry_manifest = retry_manifests[0]
+    assert "agentic_hypothesis_semantic_rejections" in retry_manifest[
+        "section_names"
+    ]
+    assert retry_manifest["section_statuses"][
+        "agentic_hypothesis_semantic_rejections"
+    ]["status"] == "included"
 
 
 def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(

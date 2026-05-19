@@ -18,7 +18,7 @@ from scion.proposal.tools.models import (
     ProposalToolFailureCode,
     ProposalToolPermission,
 )
-from scion.proposal.tools.preview import (
+from scion.proposal.tools.previews.permissions import (
     _active_problem_boundary_constraint_payload,
     _forced_surface_constraint_payload,
 )

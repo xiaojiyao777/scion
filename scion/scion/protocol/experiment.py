@@ -417,6 +417,7 @@ class ExperimentProtocol:
         selected_surface: str | None = None,
         expected_telemetry: Mapping[str, Any] | None = None,
         mechanism_changes: Sequence[Any] | None = None,
+        protected_objectives: Sequence[str] = (),
     ) -> ProtocolResult:
         """Execute paired A/B evaluation for the given stage.
 
@@ -964,6 +965,7 @@ class ExperimentProtocol:
             selected_surface=normalized_selected_surface,
             expected_telemetry=expected_telemetry,
             declared_mechanisms=mechanism_changes,
+            protected_objectives=protected_objectives,
         )
         telemetry_guard_failures = candidate_telemetry_guard_summary.get("failures")
         if isinstance(telemetry_guard_failures, list) and telemetry_guard_failures:
