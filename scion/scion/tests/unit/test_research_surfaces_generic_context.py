@@ -20,8 +20,8 @@ from scion.core.models import (
 from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
 from scion.proposal import context_manager as context_manager_module
-from scion.proposal.context_builders.problem_adapter import _build_problem_summary
-from scion.proposal.context_builders.research_surfaces import (
+from scion.proposal.context.problem_adapter import _build_problem_summary
+from scion.proposal.context.surfaces import (
     _build_research_surfaces_block,
 )
 from scion.proposal.context_manager import ContextManager
@@ -29,7 +29,7 @@ from scion.proposal.engine import _split_hypothesis_context
 from scion.tests.unit.research_surface_helpers import _problem_payload
 
 
-def test_context_manager_facade_reexports_extracted_context_builders() -> None:
+def test_context_manager_facade_reexports_extracted_context_helpers() -> None:
     assert (
         context_manager_module._build_research_surfaces_block
         is _build_research_surfaces_block

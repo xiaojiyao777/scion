@@ -26,7 +26,7 @@ from scion.core.forced_surface import (
     surface_target_files,
     validate_forced_surface_request,
 )
-from scion.proposal.context_builders.feedback_memory import (
+from scion.proposal.context.feedback import (
     _build_agent_quality_feedback,
     _build_champion_baselines,
     _build_consecutive_failure_diagnosis,
@@ -37,14 +37,14 @@ from scion.proposal.context_builders.feedback_memory import (
     _is_safe_pre_protocol_failure_step,
     _render_case_feedback,
 )
-from scion.proposal.context_builders.problem_adapter import (
+from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
     _build_problem_summary,
     _build_solver_mechanics,
     _get_adapter_problem_spec,
 )
-from scion.proposal.context_builders.research_surfaces import (
+from scion.proposal.context.surfaces import (
     _build_forced_surface_constraint,
     _build_forced_surface_novelty_guidance,
     _build_inactive_surface_exclusion_block,

@@ -113,29 +113,29 @@ class TestMechanismLabel:
     def test_generic(self):
         assert _extract_mechanism_label("random perturbation") == "generic"
 
-    def test_route_native_taxonomy_matches_hyphenated_labels(self):
+    def test_cvrp_taxonomy_matches_only_solver_design_aliases(self):
         taxonomy = CVRP_FAMILY_TAXONOMY
 
         assert (
             _extract_mechanism_label(
-                "Try a bounded route-pair 2-opt* exchange.",
+                "Try a baseline algorithm local search improvement.",
                 taxonomy=taxonomy,
             )
-            == "route_pair"
+            == "solver_design"
         )
         assert (
             _extract_mechanism_label(
                 "Apply an intra-route Or-opt cleanup.",
                 taxonomy=taxonomy,
             )
-            == "route_local"
+            == "NEW_FAMILY"
         )
         assert (
             _extract_mechanism_label(
                 "Use a bounded ruin and recreate repair.",
                 taxonomy=taxonomy,
             )
-            == "ruin_recreate"
+            == "NEW_FAMILY"
         )
 
 
@@ -227,7 +227,7 @@ class TestSearchMemoryUpdate:
         assert sm.families[key].is_exhausted is False
         assert sm.families[key].best_wr == 0.40
 
-    def test_route_native_taxonomy_does_not_fall_back_to_order_swap(self):
+    def test_cvrp_taxonomy_does_not_fall_back_to_order_swap(self):
         sm = CampaignSearchMemory(
             family_taxonomy=CVRP_FAMILY_TAXONOMY
         )
@@ -238,7 +238,7 @@ class TestSearchMemoryUpdate:
             win_rate=0.2,
         ))
 
-        key = _make_family_key("route_pair", "create_new", "route_pair")
+        key = _make_family_key("NEW_FAMILY", "create_new", "route_pair")
         assert key in sm.families
         assert "order_swap/create_new/route_pair" not in sm.families
 

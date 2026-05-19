@@ -311,12 +311,14 @@ def test_algorithm_smoke_rejects_solver_design_runtime_error(
             "patch": {
                 "file_path": "policies/baseline_algorithm.py",
                 "action": "modify",
-                "code_content": (
-                    "def solve(instance, rng, time_limit_sec, context):\n"
-                    "    solution = context.nearest_neighbor()\n"
-                    "    if time_limit_sec < 4:\n"
-                    "        raise RuntimeError('runtime smoke only')\n"
-                    "    return solution\n"
+                    "code_content": (
+                        "def solve(instance, rng, time_limit_sec, context):\n"
+                        "    solution = context.nearest_neighbor()\n"
+                        "    context.record_iteration('runtime_error_probe', 1)\n"
+                        "    context.record_move('runtime_error_probe', attempted=1, accepted=0)\n"
+                        "    if time_limit_sec < 4:\n"
+                        "        raise RuntimeError('runtime smoke only')\n"
+                        "    return solution\n"
                 ),
             },
         },
@@ -363,10 +365,8 @@ def test_algorithm_smoke_rejects_zero_search_solver_design_candidate(
     rendered = json.dumps(payload, sort_keys=True)
     assert observation.is_error is False
     assert payload["passed"] is False
-    assert payload["runtime_smoke"]["passed"] is False
-    assert "zero active search effort" in rendered
-    assert "solver_algorithm_search_iterations=0" in rendered
-    assert "solver_algorithm_move_attempts=0" in rendered
+    assert "runtime_smoke" not in payload
+    assert "active search telemetry" in rendered
 
 
 def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(

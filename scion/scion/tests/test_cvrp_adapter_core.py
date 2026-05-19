@@ -17,15 +17,14 @@ def test_cvrp_adapter_renders_problem_object_for_solver_level_research(
     assert "Instance model:" in rendered
     assert "Solution model:" in rendered
     assert "Objective policy:" in rendered
-    assert "Solver lifecycle:" in rendered
-    assert "Move/design grammar:" in rendered
     assert "Runtime evidence for problem-level hypotheses:" in rendered
     assert "`instance.customer_ids`" in rendered
     assert "`instance.route_distance(route)`" in rendered
     assert "`CvrpSolution(routes=...)`" in rendered
     assert "fleet_violation first, then total_distance" in rendered
-    assert "Component policies are implementation hooks" in rendered
-    assert "Do not claim success from active flags" in rendered
+    assert "policies/baseline_algorithm.py" in rendered
+    assert "policies/baseline_modules/*.py" in rendered
+    assert "Legacy operator/component-policy" in rendered
 
 
 def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None:
@@ -49,6 +48,21 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
         getattr(inst, "customers")
 
 
+def test_cvrp_solver_design_surface_interface_renders_safe_instance_api(
+    cvrp_adapter: ProblemAdapter,
+) -> None:
+    rendered = cvrp_adapter.render_research_surface_interface("solver_design")
+
+    assert "`instance.customer_ids`" in rendered
+    assert "`instance.customer_count`" in rendered
+    assert "`instance.demands[customer_id]`" in rendered
+    assert "`instance.capacity`" in rendered
+    assert "`instance.distance(i, j)`" in rendered
+    assert "Never use `instance.customers`" in rendered
+    assert "context.record_move" in rendered
+    assert "policies/baseline_modules/*.py" in rendered
+
+
 @pytest.mark.parametrize(
     "surface_name",
     [
@@ -57,45 +71,18 @@ def test_cvrp_instance_exposes_safe_policy_api_without_customers_alias() -> None
         "baseline_policy",
         "neighborhood_portfolio",
         "algorithm_blueprint",
-        "solver_design",
         "alns_vns_policy",
         "destroy_repair_policy",
         "route_pair_candidate_policy",
         "acceptance_restart_policy",
     ],
 )
-def test_cvrp_policy_surface_interfaces_render_safe_instance_api(
+def test_cvrp_legacy_policy_surface_interfaces_are_removed(
     cvrp_adapter: ProblemAdapter,
     surface_name: str,
 ) -> None:
     rendered = cvrp_adapter.render_research_surface_interface(surface_name)
 
-    assert "`instance.customer_ids`" in rendered
-    assert "`instance.customer_count`" in rendered
-    assert "`instance.demands[customer_id]`" in rendered
-    assert "`instance.capacity`" in rendered
-    assert "`instance.distance(i, j)`" in rendered
-    assert "Never use `instance.customers`" in rendered
-
-
-def test_cvrp_destroy_repair_policy_interface_lists_disjoint_selector_enums(
-    cvrp_adapter: ProblemAdapter,
-) -> None:
-    rendered = cvrp_adapter.render_research_surface_interface("destroy_repair_policy")
-
-    assert (
-        "destroy_selectors: non-empty sequence containing only 'worst_removal', "
-        "'route_diverse_worst'"
-    ) in rendered
-    assert (
-        "repair_selectors: non-empty sequence containing only 'regret_2', "
-        "'cheapest'"
-    ) in rendered
-    assert (
-        "subset_strategy: one of 'prefix_shifted_route_diverse', 'single_worst', "
-        "'route_diverse'"
-    ) in rendered
-    assert (
-        "Do not put subset strategies such as 'single_worst' or 'route_diverse' "
-        "in destroy_selectors"
-    ) in rendered
+    assert "not an active CVRP research surface" in rendered
+    assert "Use solver_design" in rendered
+    assert "policies/baseline_algorithm.py" in rendered

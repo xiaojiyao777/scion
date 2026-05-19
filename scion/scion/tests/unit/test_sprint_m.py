@@ -79,7 +79,7 @@ def _make_solver_design_problem_spec(root_dir: str) -> ProblemSpec:
                 kind="solver_design",
                 algorithm=SimpleNamespace(role="problem_object_solver_algorithm"),
                 targets=SimpleNamespace(
-                    files=["policies/solver_algorithm.py"],
+                    files=["policies/baseline_algorithm.py"],
                     create_new_allowed=False,
                     modify_allowed=True,
                     remove_allowed=False,
@@ -149,7 +149,7 @@ def _solver_design_campaign(
         "hypothesis_text": "Try a different solver-design lifecycle.",
         "change_locus": "solver_design",
         "action": "modify",
-        "target_file": "policies/solver_algorithm.py",
+        "target_file": "policies/baseline_algorithm.py",
         "predicted_direction": "improve",
         "target_weakness": "candidate lifecycle",
         "expected_effect": "better total_distance",
@@ -157,7 +157,7 @@ def _solver_design_campaign(
         "protected_objectives": ["fleet_violation"],
     }
     patch = {
-        "file_path": "policies/solver_algorithm.py",
+        "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "code_content": (
             "def solve(instance, rng, time_limit_sec, context):\n"

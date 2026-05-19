@@ -111,3 +111,21 @@ def test_cvrp_adapter_exposes_problem_owned_contract_provider(tmp_path: Path) ->
     assert not result.passed
     assert "new solver_design helper functions are not integrated" in result.detail
     assert "_unused_cvrp_contract_probe" in result.detail
+
+
+def test_cvrp_provider_entrypoint_delegates_to_focused_modules() -> None:
+    from scion.problems.cvrp.contract_checks import solver_design_integration
+
+    source = Path(solver_design_integration.__file__).read_text(encoding="utf-8")
+
+    delegated_helpers = (
+        "_solver_design_import_export_error",
+        "_additional_wiring_edit_error",
+        "_state_model_bridge_api_error",
+        "ReachabilityState",
+    )
+    for helper in delegated_helpers:
+        assert f"import {helper}" in source or helper in source
+    assert "def _solver_design_import_export_error" not in source
+    assert "def _state_model_bridge_api_error" not in source
+    assert "def _module_call_references" not in source

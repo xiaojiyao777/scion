@@ -64,7 +64,6 @@ _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
 _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT = 3
-_COMPATIBILITY_SOLVER_ALGORITHM_PATH = "policies/solver_algorithm.py"
 _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH = "policies/baseline_algorithm.py"
 
 
@@ -228,18 +227,10 @@ def _algorithm_file_path_guidance(
     observed_allowed_paths = _algorithm_file_paths_from_observations(observations)
     if observed_allowed_paths:
         active_paths = _active_solver_design_paths_first(observed_allowed_paths)
-        compatibility_paths = [
-            path
-            for path in observed_allowed_paths
-            if path == _COMPATIBILITY_SOLVER_ALGORITHM_PATH
-        ]
-        guidance["allowed_file_paths"] = active_paths + [
-            path for path in compatibility_paths if path not in set(active_paths)
-        ]
+        guidance["allowed_file_paths"] = active_paths
         guidance["allowed_file_count"] = len(observed_allowed_paths)
         guidance["allowed_paths_source"] = "existing_tool_observation"
         guidance["preferred_active_file_paths"] = active_paths
-        guidance["compatibility_file_paths"] = compatibility_paths
         guidance["primary_entrypoint_file_path"] = (
             _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH
             if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH in observed_allowed_paths
@@ -263,10 +254,9 @@ def _algorithm_file_path_guidance(
     guidance.setdefault(
         "path_selection_rule",
         (
-            "Prefer active solver files, especially policies/baseline_algorithm.py "
-            "and policies/baseline_modules/*.py. policies/solver_algorithm.py is "
-            "a compatibility hook and should not be used as the active algorithm "
-            "entrypoint unless the hypothesis explicitly targets compatibility."
+            "Use active solver files only for solver_design optimization: "
+            "policies/baseline_algorithm.py and "
+            "policies/baseline_modules/*.py."
         ),
     )
     return guidance
@@ -287,11 +277,7 @@ def _recommended_algorithm_file_path(
         if str(path or "").strip()
     ]
     preferred_path = str(preferred or "").replace("\\", "/").strip()
-    if (
-        preferred_path
-        and preferred_path in set(allowed_paths)
-        and preferred_path != _COMPATIBILITY_SOLVER_ALGORITHM_PATH
-    ):
+    if preferred_path and preferred_path in set(allowed_paths):
         return preferred_path
     primary = str(guidance.get("primary_entrypoint_file_path") or "").strip()
     if primary and primary in set(allowed_paths):
@@ -351,9 +337,7 @@ def _algorithm_file_paths_from_observations(
 
 
 def _active_solver_design_paths_first(paths: list[str]) -> list[str]:
-    active_paths = [
-        path for path in paths if path != _COMPATIBILITY_SOLVER_ALGORITHM_PATH
-    ]
+    active_paths = list(paths)
     if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH not in active_paths:
         return active_paths
     return [
@@ -678,10 +662,9 @@ def _is_solver_design_support_module_target(target_file: Any) -> bool:
 
 def _is_solver_design_algorithm_target(target_file: Any) -> bool:
     normalized = str(target_file or "").replace("\\", "/").lstrip("/")
-    return normalized in {
-        "policies/baseline_algorithm.py",
-        "policies/solver_algorithm.py",
-    } or _is_solver_design_support_module_target(normalized)
+    return normalized == "policies/baseline_algorithm.py" or (
+        _is_solver_design_support_module_target(normalized)
+    )
 
 
 def _coerce_positive_int(value: Any, default: int) -> int:

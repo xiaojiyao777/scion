@@ -64,7 +64,6 @@ _SOLVER_DESIGN_SUPPORT_PRIORITY = (
     "policies/baseline_modules/destroy_repair.py",
     "policies/baseline_modules/acceptance.py",
     "policies/baseline_modules/config.py",
-    "policies/solver_algorithm.py",
 )
 
 class ContextReadSurfaceTool(_BaseReadOnlyTool):
@@ -926,7 +925,7 @@ def _read_solver_design_support_artifacts(
     root = Path(source_root).expanduser().resolve()
     primary = _normalize_rel_path(primary_target) or ""
     per_file_limit = min(primary_code_char_limit, _COMPACT_SURFACE_CODE_CHARS)
-    if primary in {"policies/baseline_algorithm.py", "policies/solver_algorithm.py"}:
+    if primary == "policies/baseline_algorithm.py":
         total_limit = 6500 if detail == "full" else 7000
     else:
         total_limit = 11000 if detail == "full" else 9000
@@ -968,7 +967,7 @@ def _solver_design_support_candidate_paths(
         except ValueError:
             continue
         if not (
-            pattern in {"policies/baseline_algorithm.py", "policies/solver_algorithm.py"}
+            pattern == "policies/baseline_algorithm.py"
             or pattern.startswith("policies/baseline_modules/")
         ):
             continue

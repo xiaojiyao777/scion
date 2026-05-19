@@ -255,7 +255,7 @@ def test_agentic_forced_surface_rejects_off_surface_hypothesis_before_code() -> 
         forced_locus=None,
         persistent_forced_locus="solver_design",
         forced_surface_action="modify",
-        forced_surface_target_file="policies/solver_algorithm.py",
+        forced_surface_target_file="policies/baseline_algorithm.py",
         forced_surface_diagnostic=True,
     )
 

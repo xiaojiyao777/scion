@@ -23,7 +23,6 @@ _ALGORITHM_FILE_ROLES: tuple[tuple[str, str, bool], ...] = (
     ("policies/baseline_modules/acceptance.py", "active_acceptance_weights", True),
     ("policies/baseline_modules/config.py", "active_runtime_config", True),
     ("policies/baseline_modules/state.py", "active_solution_state", True),
-    ("policies/solver_algorithm.py", "compatibility_hook_not_primary", False),
 )
 
 _ALLOWED_ALGORITHM_FILES = frozenset(path for path, _, _ in _ALGORITHM_FILE_ROLES)
@@ -75,7 +74,7 @@ def build_active_solver_snapshot(
                 "as active solver evidence for solver_design."
             ),
             "legacy_exclusion_rule": (
-                "Do not cite compact component surfaces or compatibility hooks as "
+                "Do not cite compact component surfaces or deleted hooks as "
                 "proof that an active solver mechanism is absent."
             ),
         },
@@ -342,36 +341,17 @@ def active_solver_source_root(
 def legacy_inactive_surface_exclusion() -> dict[str, Any]:
     return {
         "rule": (
-            "The active solver_design evidence is the branch/champion algorithm "
-            "code listed in active_files. Legacy or component surfaces may guide "
-            "naming but must not be used as active evidence that a mechanism is "
-            "present or absent."
+            "The active solver_design object is policies/baseline_algorithm.py "
+            "plus policies/baseline_modules/*.py as listed in active_files. "
+            "Deleted legacy component surfaces are not part of the active "
+            "research object and must not be used as optimization directions "
+            "or as active evidence that a mechanism is present or absent."
         ),
-        "excluded_surfaces": [
-            "route_local",
-            "route_pair",
-            "ruin_recreate",
-            "search_policy",
-            "baseline_policy",
-            "construction_policy",
-            "neighborhood_portfolio",
-            "algorithm_blueprint",
-            "main_search_strategy",
-            "alns_vns_policy",
-            "destroy_repair_policy",
-            "route_pair_candidate_policy",
-            "acceptance_restart_policy",
-            "local_search_policy",
-            "acceptance_policy",
-        ],
+        "excluded_surface_policy": (
+            "All deleted legacy component surfaces are omitted from active "
+            "solver_design context instead of being exposed by name."
+        ),
         "excluded_files_or_hooks": [
-            {
-                "path": "policies/solver_algorithm.py",
-                "reason": (
-                    "compatibility hook; not primary entrypoint when "
-                    "baseline_algorithm.py is present"
-                ),
-            },
             {
                 "path": "vrp/",
                 "reason": (

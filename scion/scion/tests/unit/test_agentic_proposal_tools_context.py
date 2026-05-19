@@ -65,10 +65,7 @@ def test_list_surfaces_returns_compact_payload_for_large_surface_specs(
 
     assert observation.is_error is False
     assert observation.structured_payload["detail"] == "compact"
-    assert "algorithm_blueprint" in surfaces
-    assert surfaces["algorithm_blueprint"]["algorithm"]["role"] == (
-        "top_level_algorithm_lifecycle"
-    )
+    assert set(surfaces) == {"solver_design"}
     assert "solver_design" in surfaces
     assert surfaces["solver_design"]["kind"] == "solver_design"
     assert surfaces["solver_design"]["algorithm"]["role"] == (
@@ -196,7 +193,7 @@ def test_read_surface_prefers_branch_workspace_code_when_available(
     assert "CHAMPION_SCHEDULER_SENTINEL" not in artifact["content_preview"]
 
 
-def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
+def test_read_solver_design_compact_payload_stays_below_session_budget(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
@@ -205,7 +202,7 @@ def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
     listed = registry.call("context.list_surfaces", {}, context)
     read = registry.call(
         "context.read_surface",
-        {"surface": "algorithm_blueprint"},
+        {"surface": "solver_design"},
         context,
     )
     rendered = json.dumps(
@@ -217,7 +214,7 @@ def test_read_algorithm_blueprint_compact_payload_stays_below_session_budget(
     assert listed.is_error is False
     assert read.is_error is False
     assert read.structured_payload["detail"] == "compact"
-    assert read.structured_payload["surface"]["name"] == "algorithm_blueprint"
+    assert read.structured_payload["surface"]["name"] == "solver_design"
     assert read.structured_payload["current_artifact"]["readable"] is True
     assert len(rendered) < AgenticToolLoopConfig().max_observation_chars
 

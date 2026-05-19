@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.runtime.audit import runtime_audit_failure_from_raw
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
@@ -120,8 +119,10 @@ def test_local_subprocess_runner_solves_synthetic_vrp(tmp_path: Path) -> None:
     }
     assert raw["runtime"]["time_limit_s"] == 1
     assert raw["runtime"]["elapsed_s"] >= 0
-    assert raw["runtime"]["baseline_required"] is False
-    assert raw["runtime"]["baseline_mode"] == "scion_nearest_neighbor"
+    assert raw["runtime"]["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert raw["runtime"]["solver_algorithm_loaded"] is True
+    assert raw["runtime"]["solver_algorithm_active"] is True
+    assert raw["runtime"]["solver_algorithm_errors"] == 0
 
 
 def test_vrp_solver_output_passes_adapter_checks_and_recomputation(
@@ -157,7 +158,7 @@ def test_json_tiny_fixture_runner_behavior_still_succeeds() -> None:
     assert adapter.recompute_objective(artifact, instance) == raw["objective"]
 
 
-def test_data_root_relative_vrp_requires_external_baseline_and_fails_closed(
+def test_data_root_relative_vrp_runs_active_algorithm_package(
     tmp_path: Path,
 ) -> None:
     data_root = tmp_path / "data_root"
@@ -178,11 +179,8 @@ def test_data_root_relative_vrp_requires_external_baseline_and_fails_closed(
         "total_distance": 40.0,
         "routes": 1,
     }
-    assert raw["runtime"]["baseline_required"] is True
-    assert raw["runtime"]["baseline_mode"] == "scion_nearest_neighbor_fallback"
-    assert "baseline not available" in raw["runtime"]["baseline_error"]
-    issue = runtime_audit_failure_from_raw(raw)
-    assert issue is not None
-    assert issue["error_category"] == "baseline_runtime_error"
+    assert raw["runtime"]["solver_algorithm_loaded"] is True
+    assert raw["runtime"]["solver_algorithm_active"] is True
+    assert raw["runtime"]["solver_algorithm_errors"] == 0
     assert adapter.check_solution_consistency(artifact, instance).passed is True
     assert adapter.check_feasibility(artifact, instance).passed is True

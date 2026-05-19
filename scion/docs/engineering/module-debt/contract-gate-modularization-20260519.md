@@ -301,3 +301,26 @@ The next CVRP-owned split can safely separate:
 - static call graph and inert-helper reachability;
 - CVRP scheduler/baseline API compatibility rules;
 - CVRP state-bridge and route/state guidance.
+
+### Phase 5 CVRP Provider Internal Split
+
+The CVRP-owned provider is now split by internal responsibility while keeping
+the same problem-owned hook boundary:
+
+| CVRP provider responsibility | Owner after Phase 5 |
+| --- | --- |
+| Provider entrypoint and check orchestration | `problems/cvrp/contract_checks/solver_design_integration.py` |
+| Result payload shared by provider modules | `problems/cvrp/contract_checks/result.py` |
+| Solver-design surface/path classification | `problems/cvrp/contract_checks/paths.py` |
+| AST module/class/function discovery primitives | `problems/cvrp/contract_checks/ast_discovery.py` |
+| Inert helper call-graph reachability | `problems/cvrp/contract_checks/reachability.py` |
+| Same-patch import/export resolution | `problems/cvrp/contract_checks/imports.py` |
+| Baseline/scheduler API compatibility | `problems/cvrp/contract_checks/api_contracts.py` |
+| CVRP state-bridge API rejection | `problems/cvrp/contract_checks/state_bridge.py` |
+
+The generic dispatcher remains unchanged. CVRP terms such as `_ALNSVNSSolver`,
+baseline module paths, `_Solution`, and route/state guidance stay entirely
+under `scion.problems.cvrp.contract_checks`. The largest provider module after
+this split is the scheduler/baseline API contract module; future changes in
+that area should split constructor/signature checks from solve-loop structure
+checks before adding more policy.

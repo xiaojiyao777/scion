@@ -12,7 +12,7 @@ def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
         )
     )
     creative = PlanningCreative(
@@ -128,7 +128,7 @@ def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
 
 
 def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() -> None:
-    path = "policies/solver_algorithm.py"
+    path = "policies/baseline_algorithm.py"
     other_path = "policies/baseline_modules/local_search.py"
     observation = _algorithm_read_observation(
         "context.read_algorithm_file",
@@ -202,7 +202,7 @@ def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() ->
 
 
 def test_algorithm_file_truncated_or_short_preview_is_not_reused() -> None:
-    path = "policies/solver_algorithm.py"
+    path = "policies/baseline_algorithm.py"
     truncated = _algorithm_read_observation(
         "context.read_algorithm_file",
         _algorithm_file_payload(
@@ -291,7 +291,7 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
 
 def test_algorithm_symbol_reusable_observations_are_scoped_by_file_and_symbol() -> None:
     path = "policies/baseline_modules/local_search.py"
-    other_path = "policies/solver_algorithm.py"
+    other_path = "policies/baseline_algorithm.py"
     symbol = "_inter_route_or_opt"
     observation = _algorithm_read_observation(
         "context.read_algorithm_symbol",
@@ -359,7 +359,7 @@ def test_algorithm_symbol_reusable_observations_are_scoped_by_file_and_symbol() 
 def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
     tmp_path: Path,
 ) -> None:
-    target_file = "policies/solver_algorithm.py"
+    target_file = "policies/baseline_algorithm.py"
     support_file = "policies/baseline_modules/local_search.py"
     context = replace(
         _cvrp_context_with_champion(tmp_path),
@@ -414,7 +414,8 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
             action="modify",
             code_content=(
                 "def solve(instance, rng, time_limit_sec, context):\n"
-                "    return context.nearest_neighbor()\n"
+                "    context.record_iteration('search', 1)\n"
+                    "    return context.nearest_neighbor()\n"
             ),
         ),
     )
@@ -487,7 +488,7 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
     tmp_path: Path,
 ) -> None:
     files = [
-        "policies/solver_algorithm.py",
+        "policies/baseline_algorithm.py",
         "policies/baseline_modules/local_search.py",
         "policies/baseline_modules/destroy_repair.py",
         "policies/baseline_modules/acceptance.py",
@@ -523,7 +524,8 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
             action="modify",
             code_content=(
                 "def solve(instance, rng, time_limit_sec, context):\n"
-                "    return context.nearest_neighbor()\n"
+                "    context.record_iteration('search', 1)\n"
+                    "    return context.nearest_neighbor()\n"
             ),
         ),
     )
@@ -571,7 +573,7 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
 def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
     tmp_path: Path,
 ) -> None:
-    target_file = "policies/solver_algorithm.py"
+    target_file = "policies/baseline_algorithm.py"
     support_file = "policies/baseline_modules/local_search.py"
     context = replace(
         _cvrp_context_with_champion(tmp_path),

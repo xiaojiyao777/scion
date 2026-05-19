@@ -22,6 +22,7 @@ from scion.core.models import (
 )
 from scion.core.paths import normalize_relative_patch_path
 from scion.problem.bridge import legacy_problem_spec_from_v1
+from scion.problem.providers import resolve_solver_design_smoke_provider
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     format_telemetry_guard_issue,
@@ -71,10 +72,16 @@ def _runtime_algorithm_smoke_preview(
     surface_name = _normalize_solver_design_surface(selected_surface)
     if surface_name != "solver_design":
         return None
+    provider = _solver_design_smoke_provider(context)
+    if provider is None:
+        return None
     patch_paths = [
         _normalize_rel_path(change.file_path) for change in patch_file_changes(patch)
     ]
-    if not any(_is_solver_design_runtime_patch_path(path) for path in patch_paths):
+    if not any(
+        _is_solver_design_runtime_patch_path(path, provider=provider)
+        for path in patch_paths
+    ):
         return None
 
     base_workspace = _runtime_smoke_base_workspace(context)
@@ -202,6 +209,7 @@ def _runtime_algorithm_smoke_preview(
                         audit_failure,
                         runtime=runtime,
                         run_payload=run_payload,
+                        provider=provider,
                     )
                     run_result["runtime_audit_failure"] = (
                         _compact_runtime_audit_failure(audit_failure)
@@ -251,6 +259,7 @@ def _runtime_algorithm_smoke_preview(
                     implicit_activity_claim=_solver_design_patch_claims_search_effort(
                         patch,
                         hypothesis,
+                        provider=provider,
                     ),
                 )
                 issue = format_telemetry_guard_issue(telemetry_guard_summary)
@@ -259,6 +268,7 @@ def _runtime_algorithm_smoke_preview(
                     patch=patch,
                     hypothesis=hypothesis,
                     runs=runs,
+                    provider=provider,
                 )
             if issue is None:
                 issue = _solver_design_low_effort_issue(
@@ -266,6 +276,7 @@ def _runtime_algorithm_smoke_preview(
                     hypothesis=hypothesis,
                     runs=runs,
                     micro_results=micro_results,
+                    provider=provider,
                 )
             if issue is None:
                 issue = _solver_design_micro_benchmark_issue(micro_results)
@@ -330,6 +341,7 @@ def _runtime_algorithm_smoke_preview(
             audit_failure,
             runtime=representative.get("runtime"),
             run_payload=representative.get("run"),
+            provider=provider,
         )
         if repair_guidance:
             payload["repair_guidance"] = repair_guidance
@@ -350,15 +362,22 @@ def _runtime_smoke_base_workspace(context: ProposalToolContext) -> Path | None:
     return None
 
 
-def _is_solver_design_runtime_patch_path(path: str | None) -> bool:
-    normalized = str(path or "").replace("\\", "/").lstrip("/")
-    return normalized in {
-        "policies/baseline_algorithm.py",
-        "policies/solver_algorithm.py",
-    } or (
-        normalized.startswith("policies/baseline_modules/")
-        and normalized.endswith(".py")
+def _solver_design_smoke_provider(context: ProposalToolContext) -> Any | None:
+    return resolve_solver_design_smoke_provider(
+        problem_spec=getattr(context, "problem_spec", None),
+        adapter=getattr(context, "adapter", None),
     )
+
+
+def _is_solver_design_runtime_patch_path(
+    path: str | None,
+    *,
+    provider: Any | None = None,
+) -> bool:
+    checker = getattr(provider, "is_runtime_patch_path", None)
+    if callable(checker):
+        return bool(checker(path))
+    return False
 
 
 def _apply_patch_to_runtime_smoke_workspace(
@@ -1142,38 +1161,12 @@ def _solver_design_zero_effort_issue(
     patch: PatchProposal,
     hypothesis: HypothesisProposal | None,
     runs: list[dict[str, Any]],
+    provider: Any | None = None,
 ) -> str | None:
-    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
-        return None
-    successful = [
-        run
-        for run in runs
-        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
-    ]
-    if not successful:
-        return None
-    zero_effort = []
-    for run in successful:
-        runtime = run.get("runtime")
-        if not isinstance(runtime, Mapping):
-            continue
-        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
-        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
-        if iterations == 0 and attempts == 0:
-            zero_effort.append(run)
-    if len(zero_effort) != len(successful):
-        return None
-    targets = ", ".join(_solver_design_patch_paths(patch))
-    return (
-        "solver_design smoke observed zero active search effort on all "
-        f"{len(successful)} successful smoke case(s): "
-        "solver_algorithm_search_iterations=0 and "
-        "solver_algorithm_move_attempts=0. This candidate touches or claims "
-        f"search-bearing solver code ({targets}) but behaves like a construction/"
-        "wrapper-only path. Wire the changed mechanism into the active ALNS/VNS/"
-        "search loop, record real iterations or moves, or retarget the hypothesis "
-        "as a bounded construction-only algorithm with explicit telemetry."
-    )
+    checker = getattr(provider, "zero_effort_issue", None)
+    if callable(checker):
+        return checker(patch=patch, hypothesis=hypothesis, runs=runs)
+    return None
 
 
 def _solver_design_low_effort_issue(
@@ -1182,153 +1175,29 @@ def _solver_design_low_effort_issue(
     hypothesis: HypothesisProposal | None,
     runs: list[dict[str, Any]],
     micro_results: list[dict[str, Any]],
+    provider: Any | None = None,
 ) -> str | None:
-    if not _solver_design_patch_claims_search_effort(patch, hypothesis):
-        return None
-    successful = [
-        run
-        for run in runs
-        if run.get("passed") is True and isinstance(run.get("runtime"), Mapping)
-    ]
-    if len(successful) < _ALGORITHM_SMOKE_LOW_EFFORT_MIN_CASES:
-        return None
-    if any(result.get("comparison") == "win" for result in micro_results):
-        return None
-
-    micro_by_case_seed = {
-        (str(result.get("case") or ""), _nonnegative_int(result.get("seed"))): result
-        for result in micro_results
-    }
-    low_effort: list[dict[str, Any]] = []
-    for run in successful:
-        runtime = run.get("runtime")
-        if not isinstance(runtime, Mapping):
-            continue
-        iterations = _nonnegative_int(runtime.get("solver_algorithm_search_iterations"))
-        attempts = _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
-        stop_reason = _runtime_stop_reason(
-            runtime.get("solver_algorithm_stop_reason")
+    checker = getattr(provider, "low_effort_issue", None)
+    if callable(checker):
+        return checker(
+            patch=patch,
+            hypothesis=hypothesis,
+            runs=runs,
+            micro_results=micro_results,
         )
-        if iterations > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS:
-            continue
-        if attempts > _ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS:
-            continue
-        if stop_reason not in _ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS:
-            continue
-        if not _solver_design_smoke_runtime_underspent(
-            run,
-            micro_by_case_seed=micro_by_case_seed,
-        ):
-            continue
-        low_effort.append(
-            {
-                "case": run.get("case"),
-                "seed": run.get("seed"),
-                "iterations": iterations,
-                "attempts": attempts,
-                "stop_reason": stop_reason,
-            }
-        )
-
-    if len(low_effort) != len(successful):
-        return None
-    targets = ", ".join(_solver_design_patch_paths(patch))
-    return (
-        "solver_design smoke observed low active search effort on all "
-        f"{len(successful)} successful smoke case(s): each run stopped with "
-        f"{sorted(_ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS)} after at most "
-        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ITERATIONS} search iteration(s) and "
-        f"{_ALGORITHM_SMOKE_LOW_EFFORT_MAX_ATTEMPTS} move attempt(s), while "
-        "using only a small fraction of the smoke/champion runtime and producing "
-        "no smoke micro-benchmark win. This candidate touches or claims "
-        f"search-bearing solver code ({targets}) but appears to truncate the "
-        "active ALNS/VNS/search loop. Keep real search budget and telemetry, or "
-        "retarget the hypothesis as a bounded construction/runtime-speed change "
-        "that does not claim search improvement."
-    )
-
-
-def _solver_design_smoke_runtime_underspent(
-    run: Mapping[str, Any],
-    *,
-    micro_by_case_seed: Mapping[tuple[str, int], Mapping[str, Any]],
-) -> bool:
-    elapsed = _nonnegative_int((run.get("run") or {}).get("elapsed_ms"))
-    runtime = run.get("runtime")
-    solver_elapsed = 0
-    if isinstance(runtime, Mapping):
-        solver_elapsed = _nonnegative_int(runtime.get("solver_algorithm_elapsed_ms"))
-    candidate_elapsed = elapsed or solver_elapsed
-    if candidate_elapsed <= 0:
-        return False
-
-    key = (str(run.get("case") or ""), _nonnegative_int(run.get("seed")))
-    micro = micro_by_case_seed.get(key)
-    if isinstance(micro, Mapping):
-        champion_elapsed = _nonnegative_int(micro.get("champion_elapsed_ms"))
-        if champion_elapsed > 0:
-            return (
-                candidate_elapsed / champion_elapsed
-                <= _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
-            )
-    return (
-        candidate_elapsed
-        <= int(
-            _ALGORITHM_SMOKE_TIME_LIMIT_SEC
-            * 1000
-            * _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
-        )
-    )
-
-
-def _runtime_stop_reason(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    return text or "unknown"
+    return None
 
 
 def _solver_design_patch_claims_search_effort(
     patch: PatchProposal,
     hypothesis: HypothesisProposal | None,
+    *,
+    provider: Any | None = None,
 ) -> bool:
-    paths = set(_solver_design_patch_paths(patch))
-    if paths & {
-        "policies/baseline_algorithm.py",
-        "policies/solver_algorithm.py",
-        "policies/baseline_modules/scheduler.py",
-        "policies/baseline_modules/local_search.py",
-        "policies/baseline_modules/destroy_repair.py",
-        "policies/baseline_modules/acceptance.py",
-    }:
-        return True
-    text_parts = []
-    if hypothesis is not None:
-        for name in (
-            "hypothesis_text",
-            "target_weakness",
-            "expected_effect",
-            "runtime_budget_strategy",
-            "target_runtime_effect",
-        ):
-            value = getattr(hypothesis, name, None)
-            if value:
-                text_parts.append(str(value))
-    text = " ".join(text_parts).lower()
-    if not text:
-        return False
-    search_terms = (
-        "alns",
-        "vns",
-        "search",
-        "local",
-        "move",
-        "operator",
-        "destroy",
-        "repair",
-        "acceptance",
-        "anneal",
-        "scheduler",
-    )
-    return any(term in text for term in search_terms)
+    checker = getattr(provider, "patch_claims_search_effort", None)
+    if callable(checker):
+        return bool(checker(patch, hypothesis))
+    return False
 
 
 def _solver_design_patch_paths(patch: PatchProposal) -> list[str]:
@@ -1341,6 +1210,39 @@ def _solver_design_patch_paths(patch: PatchProposal) -> list[str]:
         if path:
             paths.append(path)
     return paths
+
+
+def _solver_design_smoke_runtime_underspent(
+    run: Mapping[str, Any],
+    *,
+    micro_by_case_seed: Mapping[tuple[str, int], Mapping[str, Any]],
+) -> bool:
+    elapsed = _nonnegative_int((run.get("run") or {}).get("elapsed_ms"))
+    if elapsed <= 0:
+        return False
+
+    key = (str(run.get("case") or ""), _nonnegative_int(run.get("seed")))
+    micro = micro_by_case_seed.get(key)
+    if isinstance(micro, Mapping):
+        champion_elapsed = _nonnegative_int(micro.get("champion_elapsed_ms"))
+        if champion_elapsed > 0:
+            return (
+                elapsed / champion_elapsed
+                <= _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+            )
+    return (
+        elapsed
+        <= int(
+            _ALGORITHM_SMOKE_TIME_LIMIT_SEC
+            * 1000
+            * _ALGORITHM_SMOKE_LOW_EFFORT_MAX_RUNTIME_RATIO
+        )
+    )
+
+
+def _runtime_stop_reason(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text or "unknown"
 
 
 def _nonnegative_int(value: Any) -> int:
@@ -1401,41 +1303,18 @@ def _solver_design_smoke_repair_guidance(
     *,
     runtime: Any,
     run_payload: Any,
+    provider: Any | None = None,
 ) -> list[str]:
-    if audit_failure.get("error_category") != "solver_algorithm_runtime_error":
-        return []
-    events = audit_failure.get("solver_algorithm_events")
-    text = " ".join(
-        str(part)
-        for part in (
-            audit_failure.get("detail"),
-            audit_failure.get("error_category"),
-            events,
-            run_payload.get("detail") if isinstance(run_payload, Mapping) else None,
+    renderer = getattr(provider, "runtime_smoke_repair_guidance", None)
+    if callable(renderer):
+        return list(
+            renderer(audit_failure, runtime=runtime, run_payload=run_payload)
         )
-        if part not in (None, "", [], {})
-    )
-    guidance = [
-        "Failure occurred inside the candidate solver_design solve path during tainted algorithm smoke; repair the candidate algorithm code, not protocol or adapter files.",
-        "Use the current CVRP object model: _Solution has .instance, .routes, .total_cost, .copy(), .rebuild_index(), .remove_empty_routes(), .is_feasible(), and .routes_as_tuples(); it does not expose ._instance.",
-        "_Solution.routes contains _Route objects. A _Route has .customers, .load, .cost, .insert(), .remove(), .can_insert(), .cost_of_insert(), .cost_of_remove(), and .recalculate(); do not treat routes as plain customer lists unless you explicitly use route.customers.",
-        "CvrpInstance.distance(i, j), demand(i), route_load(route), and route_distance(route) use integer node/customer ids; keep depot/customer ids explicit and rebuild solution indexes after direct route edits.",
-    ]
-    if "_Solution' object has no attribute '_instance'" in text:
-        guidance.insert(
-            1,
-            "Specific fix: replace solution._instance with solution.instance; only _Route carries the private _instance slot.",
-        )
-    if "int' object has no attribute 'distance'" in text or '".distance"' in text:
-        guidance.insert(
-            1,
-            "Specific fix: do not call .distance on an int, route, or customer id; call instance.distance(prev_id, next_id).",
-        )
-    if runtime in (None, {}, ""):
-        guidance.append(
-            "Runtime payload was missing or empty; first make solve(...) return a valid _Solution and context telemetry before adding new search breadth."
-        )
-    return guidance[:6]
+    if audit_failure.get("error_category") == "solver_algorithm_runtime_error":
+        return [
+            "Failure occurred inside the candidate solver_design solve path during tainted algorithm smoke; repair the candidate algorithm code, not protocol or adapter files."
+        ]
+    return []
 
 
 def _attr(value: Any, name: str, default: Any = None) -> Any:

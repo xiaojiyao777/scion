@@ -173,7 +173,9 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
             "operator_categories": "solver_design",
             "active_problem_boundary_surfaces": "solver_design",
             "available_actions": "modify",
-            "targetable_files": "policies/solver_algorithm.py",
+            "targetable_files": (
+                "policies/baseline_algorithm.py, policies/baseline_modules/*.py"
+            ),
             "agentic_hypothesis_constraints": {
                 "active_problem_boundary_surfaces": ("solver_design",),
                 "novelty_signature_requirements": {
@@ -198,7 +200,7 @@ def test_creative_layer_renders_active_boundary_novelty_requirements() -> None:
     assert "algorithm_family" in rendered
     assert "runtime_budget_strategy" in rendered
     assert "choose the target file by mechanism ownership" in rendered
-    assert "target that concrete module" in rendered
+    assert "policies/baseline_algorithm.py" in rendered
 
 
 def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
@@ -210,7 +212,7 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
         ),
         change_locus="solver_design",
         action="modify",
-        target_file="policies/solver_algorithm.py",
+        target_file="policies/baseline_algorithm.py",
         target_weakness="The current hook is inactive.",
         expected_effect="Produce movement under solver_algorithm telemetry.",
         novelty_signature={
@@ -222,11 +224,12 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
         },
     )
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
-            "    return context.nearest_neighbor()\n"
+            "    context.record_iteration('search', 1)\n"
+                    "    return context.nearest_neighbor()\n"
         ),
     )
     creative = TimeoutThenPatchCreative(hypothesis=hypothesis, patch=patch)
@@ -247,7 +250,7 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
             build_code_context=lambda _hypothesis: {
                 "research_surface_name": "solver_design",
                 "research_surface_kind": "solver_design",
-                "target_file": "policies/solver_algorithm.py",
+                "target_file": "policies/baseline_algorithm.py",
             },
             approve_hypothesis=lambda _hypothesis: SimpleNamespace(
                 passed=True,
@@ -454,5 +457,4 @@ def test_agentic_session_retry_error_ledger_records_algorithm_smoke_failure(
     assert output.failure_category == "algorithm_smoke_failure"
     assert output.failure_ledger["first_root_cause"] == "algorithm_smoke_failure"
     assert output.failure_ledger["latest_failure"] == "algorithm_smoke_failure"
-
 

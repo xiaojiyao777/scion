@@ -163,7 +163,6 @@ def _is_solver_design_code_context(
         surface in _SOLVER_DESIGN_SURFACE_NAMES
         or kind in _SOLVER_DESIGN_SURFACE_NAMES
         or target_file.endswith("policies/baseline_algorithm.py")
-        or target_file.endswith("policies/solver_algorithm.py")
         or target_file.startswith("policies/baseline_modules/")
     )
 

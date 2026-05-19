@@ -80,68 +80,19 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
 
     assert legacy.name == "cvrp"
     assert legacy.root_dir == str(cvrp_dir.resolve())
-    assert legacy.operator_categories == [
-        "route_local",
-        "route_pair",
-        "ruin_recreate",
-        "search_policy",
-        "baseline_policy",
-        "construction_policy",
-        "neighborhood_portfolio",
-        "algorithm_blueprint",
-        "solver_design",
-        "main_search_strategy",
-        "alns_vns_policy",
-        "destroy_repair_policy",
-        "route_pair_candidate_policy",
-        "acceptance_restart_policy",
-    ]
-    assert [surface.name for surface in legacy.research_surfaces] == [
-        "route_local",
-        "route_pair",
-        "ruin_recreate",
-        "search_policy",
-        "baseline_policy",
-        "construction_policy",
-        "neighborhood_portfolio",
-        "algorithm_blueprint",
-        "solver_design",
-        "main_search_strategy",
-        "alns_vns_policy",
-        "destroy_repair_policy",
-        "route_pair_candidate_policy",
-        "acceptance_restart_policy",
-    ]
-    assert legacy.family_taxonomy.families == [
-        "route_local",
-        "route_pair",
-        "ruin_recreate",
-        "search_policy",
-        "baseline_policy",
-        "construction_policy",
-        "neighborhood_portfolio",
-        "algorithm_blueprint",
-        "solver_design",
-        "alns_vns_policy",
-        "destroy_repair_policy",
-        "route_pair_candidate_policy",
-        "acceptance_restart_policy",
-    ]
-    assert "intra-route" in legacy.family_taxonomy.aliases["route_local"]
-    assert "route-pair" in legacy.family_taxonomy.aliases["route_pair"]
-    assert "ruin" in legacy.family_taxonomy.aliases["ruin_recreate"]
-    assert "alns/vns policy" in legacy.family_taxonomy.aliases["alns_vns_policy"]
+    assert legacy.operator_categories == ["solver_design"]
+    assert [surface.name for surface in legacy.research_surfaces] == ["solver_design"]
+    assert legacy.family_taxonomy.families == ["solver_design"]
     assert legacy.search_space.frozen == [
         "adapter.py",
         "cvrplib.py",
         "models.py",
         "solver.py",
-        "operators/base.py",
-        "operators/__init__.py",
+        "solver_runtime/*.py",
         "policies/__init__.py",
         "policies/baseline_modules/__init__.py",
     ]
-    assert "policies/*.py" in legacy.search_space.editable
+    assert "policies/baseline_algorithm.py" in legacy.search_space.editable
     assert "policies/baseline_modules/*.py" in legacy.search_space.editable
     assert "baseline_modules" in legacy.search_space.import_whitelist
     assert "dataclasses" in legacy.search_space.import_whitelist

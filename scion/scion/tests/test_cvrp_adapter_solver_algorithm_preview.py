@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+from scion.problems.cvrp.preview import synthetic as cvrp_preview_synthetic
 from scion.tests.cvrp_adapter_test_support import *
 
 def test_cvrp_solver_algorithm_preview_accepts_valid_solution(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
             "    solution = context.nearest_neighbor()\n"
             "    context.record_phase('construct', 1)\n"
+            "    context.record_iteration('construct_probe', 1)\n"
+            "    context.record_move('construct_probe', attempted=1, accepted=0)\n"
             "    return solution\n"
         ),
     )
@@ -33,19 +36,17 @@ def test_cvrp_solver_algorithm_preview_accepts_valid_solution(
     assert "routes=" in check["detail"]
 
 
-def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_helpers(
+def test_cvrp_solver_algorithm_preview_accepts_objective_helpers(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
             "    seed = context.nearest_neighbor()\n"
-            "    baseline = context.baseline(seed, time_limit_sec=0.1)\n"
             "    seed_obj = context.objective(seed)\n"
-            "    baseline_obj = context.objective(baseline)\n"
-            "    best = baseline if baseline_obj <= seed_obj else seed\n"
+            "    best = seed\n"
             "    best_key = context.objective_key(best)\n"
             "    for route_index, route in enumerate(best.routes):\n"
             "        route = list(route)\n"
@@ -73,18 +74,15 @@ def test_cvrp_solver_algorithm_preview_accepts_baseline_alias_and_objective_help
     assert preview["issues"] == []
 
 
-def test_cvrp_solver_algorithm_preview_rejects_baseline_noop_on_micro_eval(
+def test_cvrp_solver_algorithm_preview_rejects_no_search_telemetry(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
-            "    baseline = context.baseline(time_limit_sec=0.1)\n"
-            "    context.record_iteration('cosmetic_loop', 1)\n"
-            "    context.record_move('cosmetic_loop', attempted=1, accepted=0)\n"
-            "    return baseline\n"
+            "    return context.nearest_neighbor()\n"
         ),
     )
 
@@ -95,15 +93,14 @@ def test_cvrp_solver_algorithm_preview_rejects_baseline_noop_on_micro_eval(
 
     assert preview["passed"] is False
     rendered = json.dumps(preview["issues"])
-    assert "synthetic_preview_improvement_trap" in rendered
-    assert "micro-eval no-op" in rendered
+    assert "active search telemetry" in rendered
 
 
 def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
@@ -111,6 +108,8 @@ def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(
             "        raise IndexError('split-only solver bug')\n"
             "    solution = context.nearest_neighbor()\n"
             "    context.record_phase('construct', 1)\n"
+            "    context.record_iteration('construct_probe', 1)\n"
+            "    context.record_move('construct_probe', attempted=1, accepted=0)\n"
             "    return solution\n"
         ),
     )
@@ -131,11 +130,11 @@ def test_cvrp_solver_algorithm_preview_runs_canary_shaped_instance(
     )
 
 
-def test_cvrp_solver_algorithm_preview_rejects_shallow_baseline_wrapper(
+def test_cvrp_solver_algorithm_preview_rejects_deleted_baseline_context_hook(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
@@ -149,14 +148,14 @@ def test_cvrp_solver_algorithm_preview_rejects_shallow_baseline_wrapper(
     )
 
     assert preview["passed"] is False
-    assert "shallow baseline wrapper" in json.dumps(preview["issues"])
+    assert "must not call context.baseline" in json.dumps(preview["issues"])
 
 
 def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
@@ -164,7 +163,9 @@ def test_cvrp_solver_algorithm_preview_bounds_remaining_time_guarded_loop(
             "    iterations = 0\n"
             "    while context.remaining_time() > 0.5:\n"
             "        iterations += 1\n"
+            "        context.record_iteration('guarded_loop', 1)\n"
             "    context.record_phase('guarded_loop', iterations)\n"
+            "    context.record_move('guarded_loop', attempted=1, accepted=0)\n"
             "    return solution\n"
         ),
     )
@@ -215,13 +216,15 @@ def test_cvrp_solver_algorithm_preview_exposes_remaining_time_ms_helper(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
             "    solution = context.nearest_neighbor()\n"
             "    if context.remaining_time_ms() <= 0:\n"
             "        context.set_stop_reason('time_limit')\n"
+            "    context.record_iteration('budget_probe', 1)\n"
+            "    context.record_move('budget_probe', attempted=1, accepted=0)\n"
             "    return solution\n"
         ),
     )
@@ -239,10 +242,10 @@ def test_cvrp_solver_algorithm_preview_times_out_unbounded_solve(
     cvrp_adapter: ProblemAdapter,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert not issubclass(cvrp_adapter_module._PolicyPreviewTimeout, Exception)
+    assert not issubclass(cvrp_preview_synthetic._PolicyPreviewTimeout, Exception)
     monkeypatch.setattr(cvrp_adapter_module, "_POLICY_PREVIEW_EXEC_TIMEOUT_SEC", 0.05)
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
@@ -265,7 +268,7 @@ def test_cvrp_solver_algorithm_preview_rejects_infeasible_solution(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"

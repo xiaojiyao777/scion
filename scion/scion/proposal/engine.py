@@ -32,6 +32,7 @@ from scion.proposal.schemas import (
     ToolSelectionInput,
     normalize_patch_output_with_repair_attribution,
 )
+from scion.problem.providers import resolve_solver_design_prompt_provider
 
 
 class ProposalValidationError(Exception):
@@ -459,14 +460,6 @@ _SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS = 2600
 _SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS = 12000
 _SOLVER_DESIGN_BROAD_SCOPE_TERMS = (
     "hybrid",
-    "alns",
-    "vns",
-    "lns",
-    "destroy",
-    "repair",
-    "recombination",
-    "route-pool",
-    "route pool",
     "population",
     "portfolio",
     "ensemble",
@@ -726,39 +719,7 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                 f"from the active boundary files: {targetable_files}."
             )
         if "solver_design" in active_boundary:
-            lines.extend(
-                [
-                    "For `solver_design`, choose the target file by mechanism ownership, not by convenience.",
-                    (
-                        "For `solver_design` expected_telemetry, use the selected "
-                        "surface evidence contract categories only: activity, "
-                        "activation, effect, and budget. Runtime field names "
-                        "from the adapter belong inside those categories, never "
-                        "as top-level expected_telemetry keys."
-                    ),
-                    (
-                        "Use `policies/baseline_modules/scheduler.py` mainly "
-                        "for orchestration or wiring. If the new mechanism is "
-                        "construction, destroy/repair, local improvement, or "
-                        "acceptance, target that concrete module and put any "
-                        "needed scheduler/entrypoint integration in "
-                        "`additional_changes`."
-                    ),
-                    (
-                        "`policies/baseline_algorithm.py` is the active "
-                        "solver_design entrypoint. "
-                        "`policies/solver_algorithm.py` is a compatibility "
-                        "hook; do not choose it as target_file unless the "
-                        "hypothesis explicitly repairs that compatibility hook."
-                    ),
-                    (
-                        "After win-rate-zero scheduler variants, prefer a "
-                        "non-scheduler mechanism module or a stable-entrypoint "
-                        "algorithm-body change over another phase-order or "
-                        "weight tweak."
-                    ),
-                ]
-            )
+            lines.extend(_solver_design_hypothesis_guidance(context))
         lines.extend(_novelty_signature_task_lines(novelty_requirements))
         return "\n".join(lines) + "\n"
     operator_categories = str(context.get("operator_categories") or "")
@@ -799,12 +760,8 @@ def _novelty_signature_task_lines(
         if str(surface_name) == "solver_design":
             lines.append(
                 "For `solver_design`, make `novelty_signature` compact identity "
-                "tokens, not prose. Example: "
-                '{"algorithm_family":"alns_vns","construction_strategy":"cw_seed",'
-                '"improvement_strategy":"bounded_oropt",'
-                '"acceptance_strategy":"sa_threshold",'
-                '"runtime_budget_strategy":"time_checked_caps"}. Put rationale '
-                "and expected mechanism detail in `hypothesis_text`."
+                "tokens, not prose. Put rationale and expected mechanism detail "
+                "in `hypothesis_text`."
             )
         sequence_fields = requirement.get("nonempty_sequence_fields")
         if isinstance(sequence_fields, (list, tuple)) and sequence_fields:
@@ -818,6 +775,27 @@ def _novelty_signature_task_lines(
                     "empty strings, or empty arrays."
                 )
     return lines
+
+
+def _solver_design_hypothesis_guidance(context: Mapping[str, Any]) -> list[str]:
+    provider = _solver_design_prompt_provider(context)
+    lines = _provider_prompt_lines(
+        provider,
+        "solver_design_hypothesis_guidance",
+        context,
+    )
+    if lines:
+        return lines
+    return [
+        (
+            "For `solver_design`, choose the target file by mechanism ownership, "
+            "not by convenience."
+        ),
+        (
+            "For `solver_design` expected_telemetry, use selected-surface "
+            "evidence categories, not ad hoc top-level runtime field names."
+        ),
+    ]
 
 
 def _split_code_context(
@@ -915,171 +893,17 @@ def _split_code_context(
     surface_label = (
         f"{surface_name} [{surface_kind}]" if surface_name else f"[{surface_kind}]"
     )
-    solver_design_code_rules = (
-        "\n## Full Solver-Algorithm Rules\n"
-        "- For entrypoint targets (`policies/baseline_algorithm.py` or the "
-        "legacy `policies/solver_algorithm.py`), implement a complete "
-        "`solve(instance, rng, time_limit_sec, context)` algorithm body. Do "
-        "not return a lifecycle/config dictionary.\n"
-        "- For targets under `policies/baseline_modules/`, implement the "
-        "complete contents of that branch-owned algorithm module and integrate "
-        "with the existing entrypoint; do not add a top-level `solve` unless "
-        "the target module already owns one.\n"
-        "- Default to a compact replacement file: one coherent construction or "
-        "seeding path, one bounded improvement/search loop, no more than two "
-        "move families, and only the helper functions needed for that path.\n"
-        "- Do not preserve the inactive template merely to edit a few constants, "
-        "and do not grow a helper forest for ALNS/VNS, route-pool, destroy/repair, "
-        "and perturbation all at once. Select one vertical algorithm slice that "
-        "can run and screen now; later rounds can add breadth after it proves "
-        "movement.\n"
-        "- When the approved target is `policies/baseline_algorithm.py`, "
-        "change the controlled algorithm body directly and do not call "
-        "`context.baseline` there. When the approved target is under "
-        "`policies/baseline_modules/`, keep that module as the primary "
-        "research object and use scheduler/entrypoint edits only as minimal "
-        "wiring into the branch-owned solver. The older "
-        "`policies/solver_algorithm.py` compatibility hook may use "
-        "`context.baseline` only when paired with a bounded algorithmic "
-        "search loop and telemetry via `context.record_move` or "
-        "`context.record_iteration`.\n"
-        "- Do not submit a shallow wrapper that changes baseline budget/params "
-        "or adds a tiny post-baseline polish.\n"
-        "- If the target is `policies/baseline_modules/scheduler.py`, treat "
-        "scheduler as orchestration. A scheduler-only patch must change an "
-        "actual bounded search trajectory, not only operator weights, phase "
-        "order, or runtime allocation. When the hypothesis needs new "
-        "construction, destroy/repair, local-search, or acceptance behavior, "
-        "put the concrete mechanism module in `additional_changes` and use "
-        "scheduler only to call it.\n"
-        "- If the target is `policies/baseline_modules/local_search.py`, "
-        "integrate new move operators through the existing `_default_vns_operators()` "
-        "and `_vns(...)` path. Do not invent a detached scheduler `_run`/`run` "
-        "entrypoint to call them.\n"
-        "- If the target is `policies/baseline_modules/destroy_repair.py`, "
-        "make this file own the destroy/repair mechanism. Use scheduler.py "
-        "only as a minimal operator-pool wiring edit: import exact new symbols "
-        "from `.destroy_repair` and add them to `destroy_ops` or `repair_ops`. "
-        "Do not add construction.py imports in scheduler.py for a "
-        "destroy_repair target unless the same patch also modifies "
-        "construction.py and defines that exact symbol.\n"
-        "- If `additional_changes` touches `policies/baseline_algorithm.py`, "
-        "keep the stable entrypoint shape: import `_ALNSVNSSolver` from "
-        "`.baseline_modules.scheduler`, instantiate it, and call "
-        "`solver.solve(instance, rng)` with no extra seed/context/initial_solution "
-        "arguments. The constructor must use the current explicit keyword API: "
-        "`time_limit`, `destroy_ratio`, `segment_length`, `reaction_factor`, "
-        "`vns_max_no_improve`, `use_vns`, `cw_threshold`, `vns_threshold`, "
-        "`alns_threshold`, `max_destroy_customers`, `max_routes`, and `context`. "
-        "Do not import `solve`, `run`, or `main` from scheduler. If a new seed "
-        "or construction hook is needed, integrate it inside "
-        "`baseline_modules/scheduler.py` while keeping this entrypoint call "
-        "shape.\n"
-        "- If `additional_changes` touches `policies/baseline_modules/scheduler.py` "
-        "or `policies/baseline_algorithm.py` while another file is the approved "
-        "target, preserve the stable runtime contract: `baseline_algorithm.py` "
-        "must keep `_ALNSVNSSolver(...).solve(instance, rng)`, and "
-        "`scheduler.py` must keep the class-based `_ALNSVNSSolver.__init__(self, "
-        "*, time_limit, destroy_ratio, segment_length, reaction_factor, "
-        "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
-        "alns_threshold, max_destroy_customers, max_routes, context)` and "
-        "`_ALNSVNSSolver.solve(self, instance, rng)` path without adding "
-        "top-level `solve`, `run`, or `main` entrypoints. "
-        "Multi-module algorithm integration is allowed when it stays inside "
-        "that auditable call chain.\n"
-        "- A solver-design patch that claims or touches search-bearing code "
-        "must record real algorithm effort on smoke cases. If every successful "
-        "case reports `solver_algorithm_search_iterations=0` and "
-        "`solver_algorithm_move_attempts=0`, algorithm smoke will reject it as "
-        "a wrapper/constructor-only path. If every successful smoke case "
-        "stops almost immediately with only a handful of iterations/move "
-        "attempts, no smoke micro-benchmark win, and a `no_improvement`-style "
-        "stop reason, algorithm smoke will reject it as low active search "
-        "effort rather than treating the under-spend as a valid speedup.\n"
-        "- If the approved hypothesis declares `mechanism_changes` or "
-        "`expected_telemetry`, use that exact mechanism id in the active "
-        "runtime telemetry helpers. For activation, record a positive iteration "
-        "or phase runtime for that mechanism on paths that execute it. For "
-        "effect, record move/improvement evidence for that same mechanism when "
-        "it improves the objective. Do not rename the mechanism or edit the "
-        "hypothesis telemetry contract to silence algorithm smoke.\n"
-        "- The active package state model uses `_Solution.routes` as `_Route` "
-        "objects, not `list[list[int]]`. A `_Route` exposes `.customers`, "
-        "`.load`, `.cost`, `.can_insert(customer)`, `.cost_of_insert(...)`, "
-        "`.cost_of_remove(...)`, `.insert(...)`, `.remove(...)`, and "
-        "`.recalculate()`. A `_Solution` exposes `.copy()`, "
-        "`.rebuild_index()`, `.remove_empty_routes()`, `.is_feasible()`, and "
-        "`.routes_as_tuples()`. Do not slice, concatenate, or overwrite "
-        "`solution.routes` as customer lists; edit `route.customers` or use "
-        "route methods, then rebuild indexes when route membership changes.\n"
-        "- `_Solution` does not expose `from_routes`, `from_public`, "
-        "`from_cvrp_solution`, or `to_public`. Do not add those bridge "
-        "methods to `state.py` to compensate for API confusion. Existing "
-        "construction helpers in `construction.py` already return internal "
-        "`_Solution` objects. If you truly need to turn public route tuples "
-        "into an internal solution, import `_Route` and `_Solution` from "
-        "`.state` and construct `_Solution(instance, [_Route(instance, route) "
-        "for route in routes])`; return public output with "
-        "`context.make_solution(solution.routes_as_tuples())`.\n"
-        "- You may change algorithm strategy and runtime scheduling, but not "
-        "problem objective semantics, feasibility constraints, parsing, seeds, "
-        "protocol splits, Decision rules, or adapter/runtime files.\n"
-        if is_solver_design_surface
-        else ""
+    solver_design_code_rules = _solver_design_code_rules_section(
+        D,
+        is_solver_design_surface=is_solver_design_surface,
     )
     solver_design_scope_control = _solver_design_scope_control_section(
         D,
         is_solver_design_surface=is_solver_design_surface,
     )
-    solver_design_user_constraints = (
-        "- For solver-design surfaces, return the complete contents of the "
-        "target algorithm module. Prefer focused modules under "
-        "`policies/baseline_modules/` for construction, destroy/repair, local "
-        "search, acceptance, scheduler/runtime allocation, and telemetry. Keep "
-        "`policies/baseline_algorithm.py::solve(...)` as the stable entrypoint "
-        "unless the entrypoint itself must change.\n"
-        "- When the code-phase tool observations include support artifacts, "
-        "use their `python_api_summary` and `content_preview` as the object "
-        "model for sibling modules. In particular, read "
-        "`policies/baseline_modules/state.py` before changing scheduler or "
-        "local-search route edits.\n"
-        "- Use the `Solver-Design Module API Manifest` below as the exact "
-        "branch-owned object model for sibling imports. If a name is not in "
-        "that manifest and not defined by the same patch, do not import it.\n"
-        "- If the approved solver-design change requires more than one file "
-        "to be executable, set the top-level `file_path` exactly to the "
-        "approved `target_file` below and put scheduler/entrypoint/module "
-        "integration edits in `additional_changes`. Do not make "
-        "`policies/baseline_algorithm.py` the primary patch unless it is the "
-        "approved target. Base each `additional_changes` file on the "
-        "branch-current integration content provided below, and change only "
-        "the minimal lines needed to call the approved mechanism. Do not leave "
-        "a newly created helper or module inert.\n"
-        "- When adding class methods or helper functions, wire them into the "
-        "active solver call path in the same patch. Static preview treats "
-        "unreached methods and functions as inert, including methods added to "
-        "helper classes such as acceptance schedules.\n"
-        "- `additional_changes` must be a JSON array of objects, never a string "
-        "containing JSON text.\n"
-        "- Do not add new `instance.name`, `getattr(instance, 'name')`, or "
-        "`hasattr(instance, 'name')` uses in solver-design code, even inside "
-        "error messages. Use generic errors; case identity is outside the "
-        "research surface boundary.\n"
-        "- Inside the `policies` package, use relative imports such as "
-        "`from .baseline_modules.local_search import _vns` or "
-        "`from .state import _Solution`. Do not import "
-        "`policies.baseline_modules.*`; that path is outside the whitelist.\n"
-        "- `context.nearest_neighbor()` takes no arguments and returns a "
-        "`CvrpSolution`; do not pass `rng` and do not call `.copy()` on that "
-        "public solution. The internal `_Solution` type is separate and lives "
-        "under `policies/baseline_modules/state.py`.\n"
-        "- Do not edit `policies/baseline_modules/state.py` as an "
-        "`additional_changes` bridge unless it is the approved target; it is "
-        "the branch object model, not an adapter escape hatch. Prefer using "
-        "the construction/local_search/destroy_repair/scheduler APIs already "
-        "declared by the support artifacts.\n"
-        if is_solver_design_surface
-        else ""
+    solver_design_user_constraints = _solver_design_user_constraints(
+        D,
+        is_solver_design_surface=is_solver_design_surface,
     )
 
     # Block 1: Static role + quality rules + problem + interface (never changes)
@@ -1188,6 +1012,68 @@ def _split_code_context(
     return system_blocks, user_prompt
 
 
+def _solver_design_code_rules_section(
+    context: Mapping[str, Any],
+    *,
+    is_solver_design_surface: bool,
+) -> str:
+    if not is_solver_design_surface:
+        return ""
+    provider = _solver_design_prompt_provider(context)
+    lines = _provider_prompt_lines(provider, "solver_design_code_rules", context)
+    if not lines:
+        lines = [
+            (
+                "Implement a complete solver-design algorithm body for the "
+                "approved target rather than a lifecycle/config dictionary."
+            ),
+            (
+                "Keep the patch to one executable algorithm slice with explicit "
+                "bounds and the minimal helper functions needed for that path."
+            ),
+            (
+                "Do not change problem objective semantics, feasibility "
+                "constraints, parsing, seeds, protocol splits, Decision rules, "
+                "or adapter/runtime files."
+            ),
+        ]
+    return "\n" + _format_bulleted_section("Full Solver-Algorithm Rules", lines)
+
+
+def _solver_design_user_constraints(
+    context: Mapping[str, Any],
+    *,
+    is_solver_design_surface: bool,
+) -> str:
+    if not is_solver_design_surface:
+        return ""
+    provider = _solver_design_prompt_provider(context)
+    lines = _provider_prompt_lines(
+        provider,
+        "solver_design_user_constraints",
+        context,
+    )
+    if not lines:
+        lines = [
+            (
+                "For solver-design surfaces, return the complete contents of the "
+                "approved target algorithm module."
+            ),
+            (
+                "If the approved solver-design change requires more than one file "
+                "to be executable, set the top-level `file_path` exactly to the "
+                "approved `target_file` and put minimal integration edits in "
+                "`additional_changes`."
+            ),
+            (
+                "Use the supplied interface specification, API manifest, and "
+                "branch-current integration files as the source of truth for "
+                "imports and object-model details."
+            ),
+        ]
+    return _format_bullets(lines)
+
+
 def _agentic_research_context_block(
     context: Dict[str, Any],
     *,
@@ -1278,42 +1164,51 @@ def _solver_design_scope_control_section(
             for term in scope.get("detected_broad_terms", ())
             if str(term).strip()
         ]
-
-    lines = [
-        "",
-        "## Compact Solver-Design Implementation Scope",
-        "- Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
-        "- Implement one primary mechanism now. Prefer a direct seed/construction plus one bounded relocate/swap/2-opt-style improvement loop over a broad hybrid portfolio.",
-        "- The target file should own the mechanism. If the target is scheduler.py after win-rate-zero scheduler attempts, keep scheduler as the active `_ALNSVNSSolver.solve` orchestration path and place the concrete construction/destroy-repair/local-search/acceptance mechanism in the matching module via `additional_changes`.",
-        "- Hard size target: keep the replacement file around 180 lines or less and around six helper functions or fewer unless correctness clearly requires slightly more.",
-        "- Do not implement more than two move/neighborhood families in one patch; choose the smallest complete algorithm slice that can change screening evidence.",
-        "- For local-search targets, wire new move operators into the existing `_default_vns_operators()` list or existing `_vns(...)` call path; do not create detached `_run`/`run` scheduler entrypoints.",
-        "- If baseline_algorithm.py is only an integration edit, keep the stable scheduler class API: import `_ALNSVNSSolver`, instantiate it with the current explicit keywords (`time_limit`, `destroy_ratio`, `segment_length`, `reaction_factor`, `vns_max_no_improve`, `use_vns`, `cw_threshold`, `vns_threshold`, `alns_threshold`, `max_destroy_customers`, `max_routes`, `context`), and call `solver.solve(instance, rng)` with no extra arguments; do not import scheduler `solve`, `run`, or `main`.",
-        "- If scheduler.py or baseline_algorithm.py is only an integration edit, preserve the stable runtime contract: baseline_algorithm.py calls `_ALNSVNSSolver(...).solve(instance, rng)`, and scheduler.py keeps the class-based `_ALNSVNSSolver.__init__(self, *, time_limit, destroy_ratio, segment_length, reaction_factor, vns_max_no_improve, use_vns, cw_threshold, vns_threshold, alns_threshold, max_destroy_customers, max_routes, context)` plus `_ALNSVNSSolver.solve(self, instance, rng)` path without top-level `solve`, `run`, or `main` entrypoints. Multi-module changes are allowed when they remain inside this auditable call chain; put new construction seeds or initial-state hooks inside scheduler methods instead of changing the entrypoint call protocol.",
-        "- `context.nearest_neighbor()` takes no arguments and returns a public CvrpSolution; internal `_Solution.copy()` applies only to objects from baseline_modules/state.py.",
-        "- `_Solution` has no `from_routes`, `from_public`, `from_cvrp_solution`, or `to_public`. Do not add these bridge methods to state.py. Use construction.py helpers that already return internal `_Solution`, or construct `_Solution(instance, [_Route(instance, route) for route in routes])` and return via `context.make_solution(solution.routes_as_tuples())`.",
-        "- Do not use state.py as an additional-change adapter bridge unless it is the approved target; keep object-model edits explicit and auditable.",
-        "- Every search loop must have an explicit iteration/customer/route cap and should check `context.remaining_time()` (seconds), `context.remaining_time_ms()` (milliseconds), or `time_limit_sec` through the provided context. Do not compare `remaining_time()` directly to variables named or computed in milliseconds.",
-        "- Record movement evidence with `context.record_iteration`, `context.record_move`, phase timing, and `context.set_stop_reason` where the interface supports it. Search-bearing patches that produce zero iterations and zero move attempts on every smoke case will fail algorithm smoke.",
-        "- If the approved hypothesis declares mechanism telemetry, all activation/effect records must use the exact declared mechanism id. A telemetry-guard repair should add the missing record on the active path; it should not change the mechanism id or weaken the expected telemetry contract.",
-    ]
-    if mode:
-        lines.append(f"- Current code-generation mode: `{mode}`.")
-    if broad_terms:
-        lines.append(
-            "- The approved hypothesis mentions broad mechanisms "
-            f"({', '.join(dict.fromkeys(broad_terms))}). Reduce them to one "
-            "executable path for this patch; do not implement a full portfolio."
-        )
-    if scope.get("failure_detail"):
-        lines.append(
-            "- Previous code generation timed out. Treat that as an instruction "
-            "to shrink implementation breadth before adding algorithmic detail."
-        )
-    return "\n".join(lines) + "\n"
+    provider = _solver_design_prompt_provider(context)
+    lines = _provider_prompt_lines(
+        provider,
+        "solver_design_scope_guidance",
+        context,
+        mode=mode,
+        broad_terms=broad_terms,
+    )
+    if not lines:
+        lines = [
+            "Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
+            "Implement one primary mechanism now and keep the replacement file compact.",
+            "If the approved solver-design change needs more than one file, keep the top-level `file_path` on the approved target and put minimal executable wiring in `additional_changes`.",
+            "Every search loop must have explicit finite bounds and should use the provided context time-budget helpers where available.",
+            "Record movement evidence through the selected surface telemetry helpers where the interface supports them.",
+        ]
+        if mode:
+            lines.append(f"Current code-generation mode: `{mode}`.")
+        if broad_terms:
+            lines.append(
+                "The approved hypothesis mentions broad mechanisms "
+                f"({', '.join(dict.fromkeys(broad_terms))}). Reduce them to one "
+                "executable path for this patch."
+            )
+        if scope.get("failure_detail"):
+            lines.append(
+                "Previous code generation timed out. Shrink implementation "
+                "breadth before adding algorithmic detail."
+            )
+    return "\n" + _format_bulleted_section(
+        "Compact Solver-Design Implementation Scope",
+        lines,
+    )
 
 
 def _solver_design_broad_terms(context: Mapping[str, Any]) -> list[str]:
+    provider_terms: tuple[str, ...] = ()
+    provider = _solver_design_prompt_provider(context)
+    terms_method = getattr(provider, "solver_design_broad_scope_terms", None)
+    if callable(terms_method):
+        provider_terms = tuple(
+            str(term).lower()
+            for term in terms_method()
+            if str(term).strip()
+        )
     text = "\n".join(
         str(context.get(key) or "")
         for key in (
@@ -1324,7 +1219,49 @@ def _solver_design_broad_terms(context: Mapping[str, Any]) -> list[str]:
             "runtime_budget_strategy",
         )
     ).lower()
-    return [term for term in _SOLVER_DESIGN_BROAD_SCOPE_TERMS if term in text]
+    terms = (*_SOLVER_DESIGN_BROAD_SCOPE_TERMS, *provider_terms)
+    return [term for term in dict.fromkeys(terms) if term in text]
+
+
+def _solver_design_prompt_provider(context: Mapping[str, Any]) -> Any | None:
+    for key in (
+        "solver_design_prompt_provider",
+        "problem_prompt_provider",
+        "prompt_provider",
+    ):
+        provider = context.get(key)
+        if provider is not None:
+            return provider
+    return resolve_solver_design_prompt_provider(
+        problem_spec=context.get("problem_spec"),
+        adapter=context.get("adapter"),
+    )
+
+
+def _provider_prompt_lines(
+    provider: Any | None,
+    method_name: str,
+    context: Mapping[str, Any],
+    **kwargs: Any,
+) -> list[str]:
+    method = getattr(provider, method_name, None)
+    if not callable(method):
+        return []
+    try:
+        rendered = method(context, **kwargs)
+    except TypeError:
+        rendered = method(context)
+    if isinstance(rendered, str):
+        rendered = rendered.splitlines()
+    return [str(line).strip() for line in rendered or () if str(line).strip()]
+
+
+def _format_bulleted_section(title: str, lines: list[str]) -> str:
+    return f"## {title}\n{_format_bullets(lines)}"
+
+
+def _format_bullets(lines: list[str]) -> str:
+    return "".join(f"- {line}\n" for line in lines)
 
 
 def _limit_code_phase_text(text: str, max_chars: int, *, label: str) -> str:
@@ -1383,8 +1320,8 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "returning a patch. Keep the implementation compact and "
             "bounded. Implement one coherent solver body with at most "
             "a small set of helpers, prefer one construction path plus "
-            "one bounded improvement loop, and avoid large ALNS helper "
-            "forests unless absolutely necessary.\n\n"
+            "one bounded improvement loop, and avoid large helper forests "
+            "unless absolutely necessary.\n\n"
         )
     if "code_generation_failed" in lowered:
         if "telemetry" in lowered or "algorithm_smoke" in lowered:

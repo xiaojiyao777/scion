@@ -1,88 +1,139 @@
 # CVRP Solver Modularization 2026-05-19
 
-## Purpose
+## Current Decision
 
-`scion/scion/problems/cvrp/solver.py` remains the public executable and import
-facade for CVRP runtime compatibility, but it should no longer be the owner of
-every CVRP solving concern. The modularization target is a set of CVRP-owned
-runtime modules with stable responsibility boundaries:
+`scion/scion/problems/cvrp/solver.py` is no longer the CVRP research object. It
+is a public facade and runtime shell: load an instance, load the active
+algorithm package, validate the returned solution through the adapter, write
+runtime audit fields, and emit a structurally valid fallback only when the
+active package fails.
 
-- `solver.py`: public `solve`, CLI, top-level baseline/search orchestration, and
-  compatibility re-exports for existing private imports during migration.
-- `solver_runtime/policy_modules.py`: dynamic loading and eviction for
-  branch/workspace policy modules.
-- `solver_runtime/solution_ops.py`: solution coercion, feasibility/objective
-  recomputation, and lexicographic objective helpers.
-- `solver_runtime/timing.py`: bounded time-budget and exit-reserve helpers.
-- `solver_runtime/neighborhood_portfolio.py`: neighborhood portfolio policy
-  schema/loading plus portfolio scheduling counters and limits.
-- `solver_runtime/operator_registry.py`: registry YAML parsing, workspace path
-  isolation, generated operator instantiation, operator metadata, and operator
-  audit events.
+The active research object is:
 
-This keeps CVRP-specific behavior under `scion/problems/cvrp/` and avoids
-moving route/capacity/ALNS/VNS semantics into generic Scion framework modules.
+```text
+scion/scion/problems/cvrp/policies/baseline_algorithm.py
+scion/scion/problems/cvrp/policies/baseline_modules/
+```
 
-## First Slice Completed
+All selectable/targetable CVRP research exposure now converges to
+`solver_design`. The legacy component-policy and operator surfaces are not
+long-term runtime objects and should not receive new algorithm work.
 
-This slice moved a cohesive post-baseline operator boundary out of `solver.py`:
+## Why `solver.py` Grew
 
-- Neighborhood portfolio constants, defaults, policy loader, validation, event
-  recording, component scheduling, attempt limits, and component runtime
-  counters moved to `solver_runtime/neighborhood_portfolio.py`.
-- Registry operator metadata, registry loading, operator path validation,
-  generated class instantiation, weight coercion, component classification, and
-  operator audit event recording moved to `solver_runtime/operator_registry.py`.
-- `solver.py` imports these names explicitly and continues to expose the old
-  private helper names, so existing tests and downstream imports through
-  `scion.problems.cvrp.solver` remain valid.
-- No contract, proposal, context, preview, adapter, or generic framework files
-  were changed.
+`solver.py` became a monolith because it was the only executable CVRP boundary
+while Scion was hardening protocol, adapter, preview, runtime audit, and
+solver-design smoke behavior. Each compatibility or smoke fix landed where the
+runner already executed, so unrelated responsibilities accumulated:
 
-The split is intentionally behavior-preserving: runtime payload keys, default
-values, scheduling order, clamping behavior, workspace path rejection, and
-operator event shapes are unchanged.
+- CLI and JSON/CVRPLIB instance resolution.
+- Construction fallback and solution/objective validation.
+- Registry operators and route-local/route-pair/ruin-recreate surfaces.
+- Component policy loaders for construction, baseline, search, main-search,
+  ALNS/VNS, destroy/repair, route-pair candidates, and acceptance/restart.
+- Main-search telemetry, route-pool/BDR/local-search runtime hooks, and legacy
+  audit payloads.
+- Full solver-design loading/context support for the active algorithm package.
+
+That shape obscured the real research boundary. The cleanup direction is not to
+keep every old surface alive in better-named helper files; it is to make the
+active algorithm package complete and delete surfaces that are no longer part
+of the research path.
+
+## Active Package Boundary
+
+The active package now owns the complete ALNS+VNS algorithm stack:
+
+- `baseline_algorithm.py`: stable `solve(instance, rng, time_limit_sec,
+  context)` entrypoint.
+- `baseline_modules/config.py`: controlled parameters and thresholds.
+- `baseline_modules/state.py`: internal `_Route` and `_Solution` bridge from
+  the public `CvrpInstance`/`CvrpSolution` model.
+- `baseline_modules/construction.py`: Clarke-Wright, nearest-neighbor, sweep,
+  and capacity-balanced construction.
+- `baseline_modules/scheduler.py`: ALNS+VNS lifecycle, runtime-budget checks,
+  adaptive operator selection, phase timing, stop reasons, and telemetry calls.
+- `baseline_modules/destroy_repair.py`: random, worst, Shaw, and route removal
+  with greedy/regret repair.
+- `baseline_modules/local_search.py`: VNS loop with 2-opt, relocate, Or-opt,
+  swap, and 2-opt* neighborhoods.
+- `baseline_modules/acceptance.py`: adaptive weights and simulated annealing.
+
+`solver_runtime/algorithm_runtime.py` owns the shell-side loader and bounded
+`SolverAlgorithmContext`: make/validate solutions, objective helpers,
+remaining-time helpers, and `solver_algorithm_*` telemetry. These are runtime
+services, not algorithm ownership.
+
+## Removed Legacy Research Surfaces
+
+The following files/surfaces were removed from the active package and from
+CVRP-owned runtime/preview tests:
+
+- `policies/acceptance_restart_policy.py`
+- `policies/algorithm_blueprint.py`
+- `policies/alns_vns_policy.py`
+- `policies/baseline_policy.py`
+- `policies/construction_policy.py`
+- `policies/destroy_repair_policy.py`
+- `policies/main_search_strategy.py`
+- `policies/neighborhood_portfolio.py`
+- `policies/route_pair_candidate_policy.py`
+- `policies/search_policy.py`
+- `policies/solver_algorithm.py`
+- `operators/__init__.py`
+- `operators/base.py`
+- `registry.yaml`
+- legacy runtime modules for neighborhood portfolio/operator registry and the
+  route-pair/BDR/route-pool family created during earlier quarantine slices
+- legacy preview modules for component policies and main-search/deep-policy
+  checks
+
+`problem-v1.yaml` now declares one active research surface:
+
+```text
+solver_design
+```
+
+Its editable targets are only:
+
+```text
+policies/baseline_algorithm.py
+policies/baseline_modules/*.py
+```
+
+## Current `solver.py` Shape
+
+`solver.py` is now a small runtime shell:
+
+- Public `solve(...)` remains as a deterministic construction fallback for
+  invalid active-branch output.
+- CLI loads `policies/baseline_algorithm.py` through
+  `solver_runtime/algorithm_runtime.py`.
+- Returned solutions are adapter-normalized and adapter-objective recomputed.
+- `--registry` is accepted for runner compatibility but ignored and audited as
+  `registry_path_ignored`.
+- Deleted legacy hooks are not loaded, selected, or audited as active behavior.
+
+Line-count status after cleanup:
+
+- `solver.py`: 191 lines.
+- Largest active/runtime CVRP module in this slice:
+  `solver_runtime/algorithm_runtime.py`, 510 lines.
+- Largest active algorithm module:
+  `policies/baseline_modules/local_search.py`, 275 lines.
 
 ## Remaining Debt
 
-`solver.py` is still oversized and still owns several unrelated responsibilities:
+The main CVRP P0 solver monolith is closed as a line-count blocker. Follow-up
+debt is now limited to keeping runtime shell services small:
 
-- CLI and instance/root resolution.
-- Construction policy loading and construction heuristics.
-- Baseline policy schema, normalization, and repo-local baseline integration.
-- Algorithm blueprint and legacy component-policy loading.
-- Main-search strategy schema, planning, execution, recovery, and telemetry.
-- Neighborhood implementations for 2-opt, relocate, route-pair swap, bounded
-  destroy/repair, route-pool recombination, and route order polishing.
-- `solver_algorithm` / `solver_design` runtime loading, bounded context API,
-  timing, objective comparison, and telemetry.
+- `solver_runtime/algorithm_runtime.py` should stay small. If more shell
+  services are needed, split by responsibility: loader, context telemetry,
+  objective/solution bridge, and fallback construction.
+- Proposal/context tooling no longer exposes `policies/solver_algorithm.py` as
+  an inactive compatibility hook. Active solver-design file tools return only
+  `policies/baseline_algorithm.py` and `policies/baseline_modules/*.py`.
 
-The current facade shape is temporary. New behavior should land in the owning
-submodule, not back into `solver.py`, unless it is only public orchestration or
-compatibility wiring.
-
-## Next Phase Order
-
-1. Move construction/search/baseline policy schema and loading into focused
-   `solver_runtime/*_policy.py` modules while preserving existing private
-   re-exports from `solver.py`.
-2. Move solver-design algorithm runtime into `solver_runtime/algorithm_runtime.py`:
-   `_load_solver_algorithm*`, `_ObjectiveValue`, `_SolverAlgorithmContext`, and
-   solver-algorithm audit helpers.
-3. Split main-search into planning, execution, and telemetry modules before
-   touching algorithm behavior.
-4. Split neighborhood families into route-local, route-pair, bounded
-   destroy/repair, and route-pool modules. These should depend on solution and
-   timing helpers, not on `solver.py`.
-5. Leave CLI and top-level `solve_baseline`/`improve_with_*` orchestration in
-   the facade until the deeper runtime modules are stable, then shrink the
-   facade further.
-
-## Verification Expectations
-
-Each slice should run at minimum:
-
-- `python -m compileall -q scion/scion/problems/cvrp scion/scion/tests`
-- `python -m pytest scion/scion/tests/test_cvrp_*_runtime.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q`
-- adapter smoke coverage such as `python -m pytest scion/scion/tests/test_cvrp_adapter*.py -q`
-- `git diff --check`
+Do not add new research behavior to `solver.py`. New CVRP algorithm work belongs
+in the active package under `policies/baseline_algorithm.py` and
+`policies/baseline_modules/`.

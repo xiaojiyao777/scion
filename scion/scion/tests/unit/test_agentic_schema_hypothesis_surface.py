@@ -28,7 +28,7 @@ def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
     listed = registry.call("context.list_surfaces", {}, context)
     payload = listed.structured_payload
     assert [surface["name"] for surface in payload["surfaces"]] == ["solver_design"]
-    assert payload["total_declared_surface_count"] > payload["surface_count"]
+    assert payload["total_declared_surface_count"] == payload["surface_count"] == 1
     assert payload["active_problem_boundary_constraint"]["surfaces"] == [
         "solver_design"
     ]
@@ -52,7 +52,7 @@ def test_cvrp_active_solver_design_boundary_filters_and_rejects_components(
         {
             "change_locus": "solver_design",
             "action": "modify",
-            "target_file": "policies/solver_algorithm.py",
+            "target_file": "policies/baseline_algorithm.py",
         },
         context,
     )
@@ -141,12 +141,10 @@ def test_context_read_surface_rejects_legacy_surface_under_active_boundary(
     )
 
     assert observation.is_error is True
-    assert observation.failure_code == ProposalToolFailureCode.PERMISSION_DENIED
-    assert observation.structured_payload["surface_state"] == "inactive_legacy"
-    assert observation.structured_payload["active_problem_boundary_surfaces"] == [
-        "solver_design"
-    ]
-    assert "active_problem_boundary_constraint" in observation.summary
+    assert observation.failure_code == ProposalToolFailureCode.NOT_FOUND
+    assert observation.structured_payload["requested_surface"] == "baseline_policy"
+    assert observation.structured_payload["available_surfaces"] == ["solver_design"]
+    assert "Research surface not found" in observation.summary
 
 
 def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
@@ -159,7 +157,7 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
     )
     hypothesis = _valid_hypothesis_payload(
         change_locus="solver_design",
-        target_file="policies/solver_algorithm.py",
+        target_file="policies/baseline_algorithm.py",
     )
     hypothesis["novelty_signature"]["algorithm_family"] = []
 
@@ -186,7 +184,7 @@ def test_cvrp_solver_design_schema_preview_rejects_false_deep_identity(
     )
     hypothesis = _valid_hypothesis_payload(
         change_locus="solver_design",
-        target_file="policies/solver_algorithm.py",
+        target_file="policies/baseline_algorithm.py",
     )
     hypothesis["novelty_signature"]["algorithm_family"] = False
 

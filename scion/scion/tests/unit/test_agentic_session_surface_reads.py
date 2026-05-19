@@ -9,7 +9,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         _cvrp_context_with_champion(tmp_path),
         forced_surface="solver_design",
         forced_action="modify",
-        forced_target_file="policies/solver_algorithm.py",
+        forced_target_file="policies/baseline_algorithm.py",
     )
     listed = ProposalToolRegistry.default_read_only().call(
         "context.list_surfaces",
@@ -20,7 +20,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
             target_objectives=["total_distance"],
         )
     )
@@ -34,11 +34,12 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         ],
         hypothesis=hypothesis,
         patch=PatchProposal(
-            file_path="policies/solver_algorithm.py",
+            file_path="policies/baseline_algorithm.py",
             action="modify",
             code_content=(
                 "def solve(instance, rng, time_limit_sec, context):\n"
-                "    return context.nearest_neighbor()\n"
+                "    context.record_iteration('search', 1)\n"
+                    "    return context.nearest_neighbor()\n"
             ),
         ),
     )
@@ -72,7 +73,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
 
     assert listed.is_error is False
     assert listed.structured_payload["surface_count"] == 1
-    assert listed.structured_payload["total_declared_surface_count"] > 1
+    assert listed.structured_payload["total_declared_surface_count"] == 1
     assert listed.structured_payload["surfaces"][0]["name"] == "solver_design"
     assert len(rendered_list) < 12000
     assert output.status == AgenticProposalStatus.COMPLETED
@@ -91,7 +92,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
     assert any(
         observation["tool_name"] == "context.read_algorithm_file"
         and observation["structured_payload"]["file_path"]
-        == "policies/solver_algorithm.py"
+        == "policies/baseline_algorithm.py"
         and observation["structured_payload"]["max_chars"] == 24000
         and "def solve" in observation["structured_payload"]["content_preview"]
         for observation in code_observations
@@ -100,7 +101,7 @@ def test_forced_surface_session_uses_bounded_list_and_does_not_reread_surface(
         observation["tool_name"] == "context.read_surface"
         and observation["structured_payload"]["detail"] == "compact"
         and observation["structured_payload"]["target_file"]
-        == "policies/solver_algorithm.py"
+        == "policies/baseline_algorithm.py"
         for observation in code_observations
     )
 
@@ -287,5 +288,4 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     assert "SECRET_VALIDATION" not in rendered_artifact
     assert "SECRET_FROZEN" not in rendered
     assert "SECRET_FROZEN" not in rendered_artifact
-
 

@@ -128,30 +128,21 @@ def test_cvrp_protocol_screening_runs_complete_with_metric_specs(tmp_path: Path)
     )
 
 
-def test_cvrp_protocol_algorithm_blueprint_metrics_preserve_required_runtime_fields(
+def test_cvrp_protocol_solver_design_metrics_preserve_required_runtime_fields(
     tmp_path: Path,
 ) -> None:
     candidate_ws = tmp_path / "cvrp_candidate"
     shutil.copytree(CVRP_DIR, candidate_ws)
-    (candidate_ws / "policies" / "algorithm_blueprint.py").write_text(
+    (candidate_ws / "policies" / "baseline_algorithm.py").write_text(
         "\n".join(
             [
-                "def algorithm_plan(instance, time_limit_sec):",
-                "    return {",
-                "        'enabled': True,",
-                "        'construction_methods': ['nearest_neighbor', 'demand_descending'],",
-                "        'construction_keep_top_k': 2,",
-                "        'construction_bias': 0.0,",
-                "        'baseline_time_fraction': 0.75,",
-                "        'operator_round_limit': 0,",
-                "        'post_baseline_operators_enabled': False,",
-                "        'local_search': {",
-                "            'enabled_components': ['intra_route_2opt'],",
-                "            'rounds': 1,",
-                "            'top_k': 16,",
-                "        },",
-                "        'restart': {'enabled': False, 'stagnation_rounds': 0},",
-                "    }",
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    solution = context.nearest_neighbor()",
+                "    context.record_phase('candidate_construct', 1)",
+                "    context.record_iteration('candidate_probe', 1)",
+                "    context.record_move('candidate_probe', attempted=1, accepted=0)",
+                "    context.set_stop_reason('candidate_completed')",
+                "    return solution",
                 "",
             ]
         ),
@@ -164,55 +155,45 @@ def test_cvrp_protocol_algorithm_blueprint_metrics_preserve_required_runtime_fie
         candidate_ws=str(candidate_ws),
         champion_ws=str(CVRP_DIR),
         hypothesis_action="modify",
-        selected_surface="algorithm_blueprint",
+        selected_surface="solver_design",
     )
 
-    assert result.selected_surface == "algorithm_blueprint"
+    assert result.selected_surface == "solver_design"
     surface_summary = result.candidate_surface_runtime_summary
-    assert surface_summary["selected_surface"] == "algorithm_blueprint"
+    assert surface_summary["selected_surface"] == "solver_design"
     assert surface_summary["candidate_pairs"] == 4
-    assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
-    assert surface_summary["fields"]["algorithm_phases_executed"]["present"] == 4
-    assert surface_summary["fields"]["algorithm_blueprint_errors"]["failed"] == 0
+    assert surface_summary["fields"]["solver_algorithm_loaded"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_active"]["failed"] == 0
+    assert surface_summary["fields"]["solver_algorithm_errors"]["failed"] == 0
+    assert surface_summary["fields"]["solver_algorithm_search_iterations"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_move_attempts"]["present"] == 4
 
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
     assert raw_metrics["candidate_surface_runtime_summary"] == surface_summary
     pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
-    assert pair_runtime["algorithm_blueprint_active"] is True
-    assert pair_runtime["algorithm_plan"]["enabled"] is True
-    assert pair_runtime["algorithm_baseline_time_fraction"] == 0.75
-    assert pair_runtime["algorithm_phases_executed"]
-    assert pair_runtime["algorithm_local_search_components"] == ["intra_route_2opt"]
+    assert pair_runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert pair_runtime["solver_algorithm_active"] is True
+    assert pair_runtime["solver_algorithm_stop_reason"] == "candidate_completed"
+    assert pair_runtime["solver_algorithm_search_iterations"] == 1
+    assert pair_runtime["solver_algorithm_move_attempts"] == 1
+    assert "candidate_construct" in pair_runtime["solver_algorithm_phase_runtime_ms"]
 
 
-def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
+def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(
     tmp_path: Path,
 ) -> None:
     candidate_ws = tmp_path / "cvrp_candidate"
     shutil.copytree(CVRP_DIR, candidate_ws)
-    (candidate_ws / "policies" / "main_search_strategy.py").write_text(
+    (candidate_ws / "policies" / "baseline_algorithm.py").write_text(
         "\n".join(
             [
-                "def main_search_plan(instance, time_limit_sec):",
-                "    return {",
-                "        'enabled': True,",
-                "        'problem_adaptation': {",
-                "            'strategy_family': 'baseline_intensification',",
-                "            'instance_profile': {'customer_count': instance.customer_count},",
-                "            'phase_objective': 'phase_best_distance',",
-                "            'component_roles': {'route_pool_recombination': 'primary'},",
-                "            'fallback_order': ['route_pool_recombination'],",
-                "            'evidence_targets': ['main_search_route_pool_sample_count', 'main_search_route_pool_size', 'main_search_route_pool_branch_calls', 'main_search_route_pool_recombined_routes'],",
-                "        },",
-                "        'construction': {'methods': ['nearest_neighbor'], 'keep_top_k': 1, 'bias': 0.0},",
-                "        'baseline': {'time_fraction': 0.2, 'params': {}},",
-                "        'improvement': {'enabled_components': ['route_pool_recombination'], 'rounds': 1, 'top_k': 16},",
-                "        'acceptance': {'min_distance_improvement': 0.0},",
-                "        'restart': {'enabled': False, 'stagnation_rounds': 0, 'max_restarts': 0},",
-                "        'perturbation': {'enabled': False, 'strength': 1, 'max_perturbations': 0},",
-                "        'post_baseline_operators_enabled': False,",
-                "        'operator_round_limit': 0,",
-                "    }",
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    solution = context.nearest_neighbor()",
+                "    context.record_phase('construction', 1)",
+                "    context.record_iteration('route_pool_recombination', 2)",
+                "    context.record_move('route_pool_recombination', attempted=3, accepted=1, delta=0.0)",
+                "    context.set_stop_reason('phase_probe_completed')",
+                "    return solution",
                 "",
             ]
         ),
@@ -225,34 +206,21 @@ def test_cvrp_protocol_solver_design_metrics_preserve_route_pool_runtime_fields(
         candidate_ws=str(candidate_ws),
         champion_ws=str(CVRP_DIR),
         hypothesis_action="modify",
-        selected_surface="main_search_strategy",
+        selected_surface="solver_design",
     )
 
     surface_summary = result.candidate_surface_runtime_summary
-    assert surface_summary["selected_surface"] == "main_search_strategy"
-    assert (
-        surface_summary["fields"]["main_search_route_pool_sample_count"]["present"]
-        == 4
-    )
-    assert surface_summary["fields"]["main_search_route_pool_size"]["present"] == 4
-    assert (
-        surface_summary["fields"]["main_search_route_pool_branch_calls"]["present"]
-        == 4
-    )
-    assert (
-        surface_summary["fields"]["main_search_route_pool_recombined_routes"][
-            "present"
-        ]
-        == 4
-    )
+    assert surface_summary["selected_surface"] == "solver_design"
+    assert surface_summary["fields"]["solver_algorithm_phase_runtime_ms"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_accepted_moves"]["present"] == 4
 
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
     pair_runtime = raw_metrics["pairs"][0]["candidate_runtime"]
-    assert pair_runtime["main_search_components"] == ["route_pool_recombination"]
-    assert "main_search_route_pool_sample_count" in pair_runtime
-    assert "main_search_route_pool_size" in pair_runtime
-    assert "main_search_route_pool_branch_calls" in pair_runtime
-    assert "main_search_route_pool_recombined_routes" in pair_runtime
+    assert pair_runtime["solver_algorithm_stop_reason"] == "phase_probe_completed"
+    assert pair_runtime["solver_algorithm_accepted_moves"] == 1
+    assert pair_runtime["solver_algorithm_neutral_accepted_moves"] == 1
+    assert pair_runtime["solver_algorithm_search_iterations"] == 2
+    assert pair_runtime["solver_algorithm_move_attempts"] == 3
 
 
 def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Path) -> None:
@@ -270,10 +238,10 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
     )
     llm = MockLLMClient(
         hypothesis_response={
-            "hypothesis_text": "Add a bounded no-op route-local operator for smoke validation.",
-            "change_locus": "route_local",
-            "action": "create_new",
-            "target_file": None,
+            "hypothesis_text": "Add a bounded solver-design no-op for smoke validation.",
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_algorithm.py",
             "predicted_direction": "exploratory",
             "target_weakness": "campaign wiring",
             "expected_effect": "No behavioral change; validates CVRP campaign plumbing.",
@@ -283,14 +251,26 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
             "objective_tradeoff_policy": "preserve fleet_violation before distance",
             "no_op_condition": "always returns the original solution",
             "risk_to_higher_priority": "none for no-op",
+            "target_runtime_effect": "preserve",
+            "complexity_claim": "O(n) nearest-neighbor construction plus constant smoke probes.",
+            "runtime_budget_strategy": "Use bounded context telemetry calls only.",
+            "novelty_signature": {
+                "algorithm_family": "solver_design_smoke",
+                "construction_strategy": "nearest_neighbor",
+                "improvement_strategy": "bounded_noop_probe",
+                "acceptance_strategy": "none",
+                "runtime_budget_strategy": "constant_probe",
+            },
         },
         patch_response={
-            "file_path": "operators/noop_smoke.py",
-            "action": "create",
+            "file_path": "policies/baseline_algorithm.py",
+            "action": "modify",
             "code_content": (
-                "class NoOpSmoke:\n"
-                "    def execute(self, solution, instance, rng):\n"
-                "        return solution\n"
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    solution = context.nearest_neighbor()\n"
+                "    context.record_iteration('smoke_probe', 1)\n"
+                "    context.record_move('smoke_probe', attempted=1, accepted=0)\n"
+                "    return solution\n"
             ),
             "test_hint": None,
         },
@@ -317,15 +297,22 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
         termination_config=TerminationConfig(max_experiments=5, stagnation_limit=5),
-        force_surface="route_local",
+        force_surface="solver_design",
     )
 
     result = campaign.run_one_step()
+    if result.action == "create_branch":
+        result = campaign.run_one_step()
 
-    assert result.action == "create_branch"
-    assert campaign._n_experiments == 1
-    assert len(campaign._step_history) == 1
-    step = campaign._step_history[0]
+    assert result.action in {"validate", "promote", "abandon", "noop"}
+    assert campaign._n_experiments >= 1
+    assert campaign._step_history
+    step = next(
+        item
+        for item in campaign._step_history
+        if item.protocol_result is not None
+        and item.protocol_result.stage == ExperimentStage.SCREENING
+    )
     assert step.protocol_result is not None
     assert step.protocol_result.stage == ExperimentStage.SCREENING
     assert step.protocol_result.stats.n_cases == 2

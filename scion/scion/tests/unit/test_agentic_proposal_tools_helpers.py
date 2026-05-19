@@ -31,6 +31,7 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
 from scion.proposal import agentic_session as agentic_session_module
 from scion.proposal.agentic_session import (
     AGENTIC_SESSION_SCHEMA_VERSION,
@@ -72,7 +73,6 @@ from scion.proposal.tools import (
     ProposalToolRegistry,
     _resolve_smoke_instance_path,
     _solver_run_failure_detail,
-    _solver_design_low_effort_issue,
 )
 
 _COMPACT_FEEDBACK_TOOL_NAMES = {
@@ -82,6 +82,10 @@ _COMPACT_FEEDBACK_TOOL_NAMES = {
 }
 _SCION_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 _CVRP_ROOT = _SCION_PACKAGE_ROOT / "problems" / "cvrp"
+
+
+def _solver_design_low_effort_issue(**kwargs):
+    return CvrpSolverDesignProvider().low_effort_issue(**kwargs)
 
 
 class FakeCreative:
@@ -666,16 +670,12 @@ def _cvrp_context_with_champion(tmp_path: Path) -> ProposalToolContext:
     context = _cvrp_context(tmp_path)
     champion_root = tmp_path / "cvrp_champion"
     (champion_root / "policies").mkdir(parents=True)
-    for name in (
-        "algorithm_blueprint.py",
-        "baseline_algorithm.py",
-        "main_search_strategy.py",
-        "solver_algorithm.py",
-    ):
-        (champion_root / "policies" / name).write_text(
-            (_CVRP_ROOT / "policies" / name).read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
+    (champion_root / "policies" / "baseline_algorithm.py").write_text(
+        (_CVRP_ROOT / "policies" / "baseline_algorithm.py").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
     shutil.copytree(
         _CVRP_ROOT / "policies" / "baseline_modules",
         champion_root / "policies" / "baseline_modules",

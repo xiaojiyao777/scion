@@ -203,16 +203,16 @@ class TestClassifier:
         assert r.family_id == "NEW_FAMILY"
         assert r.taxonomy_version == "cvrp-route-v1"
 
-    def test_classifier_custom_route_taxonomy_maps_route_words_only(self) -> None:
+    def test_classifier_custom_cvrp_taxonomy_maps_only_solver_design_aliases(self) -> None:
         c = HypothesisFamilyClassifier(
             llm_client=None,
             taxonomy=cvrp_family_taxonomy(),
             taxonomy_version="cvrp-route-v1",
         )
 
-        assert c.classify("Apply intra-route 2-opt cleanup").family_id == "route_local"
-        assert c.classify("Try a route-pair 2-opt* exchange").family_id == "route_pair"
-        assert c.classify("Use bounded ruin and recreate repair").family_id == "ruin_recreate"
+        assert c.classify("Apply baseline algorithm local search cleanup").family_id == "solver_design"
+        assert c.classify("Try a route-pair 2-opt* exchange").family_id == "NEW_FAMILY"
+        assert c.classify("Use bounded ruin and recreate repair").family_id == "NEW_FAMILY"
 
     def test_classifier_invalid_response_falls_back_to_default_neutral(self) -> None:
         class MockClient:

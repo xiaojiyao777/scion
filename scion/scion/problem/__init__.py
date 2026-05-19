@@ -9,6 +9,13 @@ from scion.problem.contracts import (
     SolverArtifact,
 )
 from scion.problem.loader import ProblemAdapterLoadError, load_problem_adapter
+from scion.problem.providers import (
+    ProblemProviderError,
+    SolverDesignPromptProvider,
+    SolverDesignSmokeProvider,
+    resolve_solver_design_prompt_provider,
+    resolve_solver_design_smoke_provider,
+)
 from scion.problem.bridge import (
     ProblemSpecBridge,
     bridge_problem_spec_v1,
@@ -44,6 +51,7 @@ __all__ = [
     "ProblemAdapter",
     "ProblemAdapterLoadError",
     "ProblemAdapterRef",
+    "ProblemProviderError",
     "ProblemSpecBridge",
     "ProblemSpecV1",
     "ResearchSurfaceAlgorithmSpec",
@@ -57,10 +65,14 @@ __all__ = [
     "ResearchSurfaceSpec",
     "ResearchSurfaceTargetsSpec",
     "SUPPORTED_RESEARCH_SURFACE_KINDS",
+    "SolverDesignPromptProvider",
+    "SolverDesignSmokeProvider",
     "ObjectiveMetricSpec",
     "SolverArtifact",
     "compare_lexicographic",
     "bridge_problem_spec_v1",
     "legacy_problem_spec_from_v1",
     "load_problem_adapter",
+    "resolve_solver_design_prompt_provider",
+    "resolve_solver_design_smoke_provider",
 ]

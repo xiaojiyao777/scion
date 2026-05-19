@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
 from scion.tests.unit.agentic_solver_design_test_support import *
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
@@ -12,6 +13,7 @@ def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> N
             "research_surface_name": "solver_design",
             "research_surface_kind": "solver_design",
             "change_locus": "solver_design",
+            "problem_prompt_provider": CvrpSolverDesignProvider(),
             "hypothesis_detail": "Implement a direct solver body.",
             "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
             "import_whitelist": "math, random, time",
@@ -48,6 +50,7 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
             "research_surface_name": "solver_design",
             "research_surface_kind": "solver_design",
             "change_locus": "solver_design",
+            "problem_prompt_provider": CvrpSolverDesignProvider(),
             "code_generation_mode": "compact_timeout_retry",
             "hypothesis_detail": (
                 "Implement a hybrid ALNS/VNS route-pool destroy-repair "
@@ -127,6 +130,14 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "_default_vns_operators()" in rendered_system
     assert "detached `_run`/`run`" in rendered_system
     assert "do not implement a full portfolio" in rendered_system
+    assert "Active solver-design work belongs in" in rendered_system
+    assert "policies/baseline_algorithm.py" in rendered_system
+    assert "policies/baseline_modules/*.py" in rendered_system
+    assert "policies/solver_algorithm.py" not in rendered_system
+    assert "legacy compatibility plumbing" not in rendered_system
+    assert "Deleted hooks" in rendered_system
+    assert "not optimization directions" in rendered_system
+    assert "explicitly repairs that compatibility hook" not in rendered_system
     assert "_Solution.routes" in rendered_system
     assert "not `list[list[int]]`" in rendered_system
     assert "from_public" in rendered_system
@@ -137,6 +148,36 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "Solver-Design Module API Manifest" in rendered_prompt
     assert "_clarke_wright_savings" in rendered_prompt
     assert "may only import exact new symbols from .destroy_repair" in rendered_prompt
+
+
+def test_solver_design_code_prompt_default_stays_problem_agnostic() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+
+    creative.generate_code(
+        {
+            "problem_summary": "Generic routing-like problem.",
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "change_locus": "solver_design",
+            "hypothesis_detail": "Implement a direct solver body.",
+            "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+            "import_whitelist": "math, random, time",
+            "champion_operators_code": "",
+            "target_file_code": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+            "reference_operators": "",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "solver.py, adapter.py",
+        }
+    )
+
+    rendered_system = "\n".join(
+        block["text"] for blocks in client.system_blocks for block in blocks
+    )
+
+    assert "_ALNSVNSSolver" not in rendered_system
+    assert "_Solution" not in rendered_system
+    assert "CVRP" not in rendered_system
 
 
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:

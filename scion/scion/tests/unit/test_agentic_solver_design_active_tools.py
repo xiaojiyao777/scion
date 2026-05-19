@@ -34,17 +34,11 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     assert "_or_opt_3" in rendered
     assert "vns_embedded" in rendered
     assert "legacy_inactive_surface_exclusion" in payload
-    assert "route_local" in rendered
-    assert "baseline_policy" in rendered
-    assert "main_search_strategy" in rendered
-    assert "alns_vns_policy" in rendered
-    assert "must not be used as active evidence" in rendered
-    inactive_paths = {
-        item["file_path"]
-        for item in payload["inactive_files"]
-        if item["role"] == "compatibility_hook_not_primary"
-    }
-    assert inactive_paths == {"policies/solver_algorithm.py"}
+    assert "excluded_surface_policy" in rendered
+    assert "as active evidence" in rendered
+    assert "must not be used as optimization directions" in rendered
+    assert payload["inactive_files"] == []
+    assert "policies/solver_algorithm.py" not in rendered
 
 
 def test_solver_call_graph_marks_initial_solution_alns_vns_and_acceptance(
@@ -105,13 +99,14 @@ def test_active_solver_algorithm_file_tools_are_allowlisted_with_provenance(
     guidance = algorithm_file_path_guidance(context)
     assert listed.is_error is False
     assert files[0]["file_path"] == "policies/baseline_algorithm.py"
-    assert files[-1]["file_path"] == "policies/solver_algorithm.py"
+    assert all(item["active"] is True for item in files)
+    assert "policies/solver_algorithm.py" not in by_path
     assert guidance["example_file_path"] == "policies/baseline_algorithm.py"
     assert guidance["primary_entrypoint_file_path"] == "policies/baseline_algorithm.py"
-    assert "policies/solver_algorithm.py" in guidance["compatibility_file_paths"]
-    assert "compatibility hook" in guidance["path_selection_rule"]
+    assert "compatibility_file_paths" not in guidance
+    assert "policies/solver_algorithm.py" not in guidance["path_selection_rule"]
+    assert "explicitly repairs" not in guidance["path_selection_rule"]
     assert by_path["policies/baseline_algorithm.py"]["active"] is True
-    assert by_path["policies/solver_algorithm.py"]["active"] is False
     assert by_path["policies/baseline_modules/scheduler.py"]["source"] == (
         "champion_snapshot"
     )

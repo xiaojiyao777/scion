@@ -17,8 +17,8 @@ Detailed review in this document focuses on the current files over 1000 lines. T
 
 | Priority | File | Lines | Ownership | Current Responsibility / Why It Grew | Split Plan |
 | --- | ---: | ---: | --- | --- | --- |
-| P0 | `scion/scion/problems/cvrp/solver.py` | 8606 | CVRP problem-specific | Public `solve`, CLI, policy normalization, baseline integration, main search, local neighborhoods, bounded destroy/repair, route-pool recombination, runtime audit, and `solver_algorithm` context are still mostly in one module. Initial slices moved policy-module loading, solution/objective helpers, timing, operator-registry runtime, and neighborhood-portfolio runtime into `solver_runtime/`. | Keep a thin compatibility `solver.py`; next slices should move policy schema/loading remnants, neighborhoods, route-pool/BDR, main-search runtime/telemetry, and CLI-facing code into focused CVRP-owned modules. |
-| P0 | `scion/scion/problems/cvrp/adapter.py` | 3381 | CVRP problem-specific | Adapter API, surface prose, static policy preview, AST checks, synthetic preview context, solver-algorithm preview, contract-check provider registration, and solution checks are coupled. It grew because problem boundary rules were added near the adapter entrypoint instead of into problem-owned submodules. | Keep `CvrpAdapter` as facade. Move prose to `surface_rendering.py`, constants/schema to `policy_schema.py`, solution validation to `solution_checks.py`, provider registration to small provider modules, and preview logic to `preview/{dispatch,construction,baseline,solver_algorithm,main_search,deep_policies}.py`. |
+| P0 / closed | `scion/scion/problems/cvrp/solver.py` | 191 | CVRP problem-specific | Public facade/runtime shell only. It loads the active `policies/baseline_algorithm.py` package through `solver_runtime/algorithm_runtime.py`, validates output through the adapter, writes `solver_algorithm_*` telemetry, and keeps a deterministic fallback constructor for invalid active-branch output. Legacy component-policy/operator/main-search surfaces were removed from the active spec/runtime path. | Keep as facade. New CVRP algorithm work belongs in `policies/baseline_algorithm.py` and `policies/baseline_modules/*`; do not add behavior back to `solver.py`. |
+| P0 / phase complete | `scion/scion/problems/cvrp/adapter.py` | 235 | CVRP problem-specific | `CvrpAdapter` is now a compatibility facade. Surface prose lives in `surface_rendering.py`, schema constants in `surface_schema.py`, solution validation in `solution_checks.py`, solver-design prompt/smoke guidance in a CVRP provider, and active solver-design preview behavior in focused `preview/*` modules. Active research exposure is explicitly contracted to `solver_design`; deleted legacy component/policy surfaces are no longer selectable research targets. | Keep `CvrpAdapter` as facade; do not add new behavior here. Future provider work should add a typed provider-set method or focused provider modules, not grow the facade. |
 | P0 / closed | `scion/scion/proposal/agentic_session.py` | 17 | Scion framework | Compatibility facade only after the Bacon post-review split. | Keep as facade; do not add new behavior here. |
 | P1 | `scion/scion/proposal/context_manager.py` | 2733 | Scion framework with CVRP leakage | Hypothesis/code/fix context, active-solver/code-read context, budget/compaction, strategy guidance, and solver-design guidance are still combined. Two slices moved generic research-surface/adapter context and feedback/history/memory rendering into `proposal/context_builders/`. | Continue the split into active-solver/code-read context, budget/compaction, and strategy guidance modules. Move CVRP-specific solver-design guidance into a problem provider. |
 | P1 / phase complete | `scion/scion/contract/gate.py` | 830 | Scion framework | `ContractGate` is now an orchestration facade for C1-C12, public API, stateful dependencies, syntax/surface dispatch, and problem-integration hook dispatch. Target/path, security, randomness, complexity, identity, novelty, telemetry, surface access, patch-path, result-payload, and C9e provider dispatch live in focused modules. | Do not add new checks to `gate.py`. Future solver-design integration changes should land in problem-owned providers or generic hook dispatch, not the facade. |
@@ -174,6 +174,92 @@ This is still not enough to resume long validation. `solver.py` remains the
 largest production file by a wide margin, and future slices should move real
 algorithm families rather than adding more facade-level compatibility imports.
 
+## CVRP Solver Runtime Third Slice Update
+
+The third behavior-preserving production extraction is complete:
+
+- Added `solver_runtime/local_search.py` for route-local 2-opt and inter-route
+  relocate neighborhoods.
+- Added `solver_runtime/route_pair.py` for route-pair swap ranking, pruning,
+  position ranking, and route-pair policy counters.
+- Added `solver_runtime/bounded_destroy_repair.py` for bounded destroy/repair
+  removal ranking, subset scheduling, repair insertion, and telemetry decisions.
+- Added `solver_runtime/neighborhood_common.py` for the shared route-removal
+  saving primitive used by route-pair and bounded destroy/repair neighborhoods.
+- `solver.py` explicitly re-exports the old private helper names for backward
+  compatibility.
+- `solver.py` is now 7485 lines, down from 8606 at the start of the solver
+  modularization continuation and 9153 at the original audit baseline. The
+  largest new module in this slice is 546 lines.
+
+This closes the old in-file neighborhood-family cluster, but it does not close
+the P0 solver debt. Direction update: these moved neighborhoods are temporary
+legacy quarantine. The active research object is `policies/baseline_algorithm.py`
+plus `policies/baseline_modules/*`; the next high-value cut is the
+solver-design algorithm runtime/context, followed by active runtime-shell
+services. Legacy policy/main-search surfaces should be removed from active
+specs/context before receiving further modularization work.
+
+## CVRP Research-Object Cleanup Update
+
+The CVRP solver P0 line-count blocker is now closed:
+
+- `scion/scion/problems/cvrp/solver.py` is 191 lines and acts as the public
+  runtime shell/facade.
+- The active research object is only `policies/baseline_algorithm.py` plus
+  `policies/baseline_modules/*.py`.
+- `problem-v1.yaml` exposes only the `solver_design` research surface, with
+  editable targets limited to that active package.
+- Legacy component-policy files, registry/operator files, and old
+  main-search/route-pool/BDR compatibility tests were removed instead of being
+  further modularized.
+- `solver_runtime/algorithm_runtime.py` owns active algorithm loading and the
+  bounded solver-design context; its current size is 510 lines.
+- Original `vrp/` algorithm coverage was checked read-only and mapped to the
+  active package in
+  `scion/docs/engineering/module-debt/cvrp-algorithm-package-vs-original-vrp-20260519.md`.
+
+Remaining CVRP debt is not in `solver.py`: generic proposal/context tooling
+still contains some historical `policies/solver_algorithm.py` compatibility
+guidance and should be cleaned by the proposal/context owner through generic
+surface/tooling changes.
+
+## CVRP Adapter Modularization Update
+
+The CVRP adapter P0 split is phase-complete for the public facade:
+
+- `scion/scion/problems/cvrp/adapter.py` is now a 235-line compatibility
+  facade, down from 3381 lines.
+- Surface prose moved to `scion/scion/problems/cvrp/surface_rendering.py`.
+- Preview/schema constants moved to `scion/scion/problems/cvrp/surface_schema.py`.
+- Solver output normalization, solution consistency, feasibility, and
+  objective recomputation moved to
+  `scion/scion/problems/cvrp/solution_checks.py`.
+- Static policy preview, solver-design AST checks, synthetic preview context,
+  solver-algorithm preview, main-search preview, and deep policy preview moved
+  into focused modules under `scion/scion/problems/cvrp/preview/`.
+- Kierkegaard's CVRP-owned `solver_design_prompt_provider()` and
+  `solver_design_smoke_provider()` registrations remain on the facade and
+  delegate to the problem provider.
+- Active research exposure is now declared by
+  `scion/scion/problems/cvrp/surface_policy.py`: only `solver_design` is
+  active, while route/operator/component/policy surfaces and the
+  `solver_algorithm` compatibility name are legacy/test-only.
+- Legacy preview payloads are marked `preview_scope=legacy_compatibility` so
+  old preview code can remain for regression coverage without becoming the
+  active hypothesis-selection path.
+- Transitional private helper imports remain available from
+  `scion.problems.cvrp.adapter` where existing tests depended on them.
+
+The largest new adapter-owned module is `surface_rendering.py` at 612 lines;
+the largest preview module is `preview/main_search.py` at 535 lines.
+
+Verification run: `python -m compileall -q scion/scion/problems/cvrp
+scion/scion/tests`; focused active-surface exposure tests passed with 8 tests;
+focused CVRP adapter/provider tests passed with 122 tests; the broader
+CVRP/problem/provider focused run passed with 227 tests; `git diff --check`
+passed.
+
 ## Proposal Preview Modularization Update
 
 The proposal preview P1 module split is complete:
@@ -248,6 +334,10 @@ Phase 0: close APS session split and protect active work.
 Phase 1: unblock CVRP P0 without touching Bacon's split.
 
 - Split `problems/cvrp/solver.py` into behavior-preserving modules with a thin compatibility facade.
+- Do not continue treating route-pair/BDR/main-search-policy legacy surfaces as
+  future research objects. Active solver-design work belongs in
+  `policies/baseline_algorithm.py` and `policies/baseline_modules/*`; legacy
+  surfaces should be frozen, quarantined, and removed after specs/tests migrate.
 - The former `tests/test_cvrp_solver_operator_runtime.py` aggregate has been split. Keep new runtime tests focused and below the threshold while `solver.py` itself is modularized.
 - Split `problems/cvrp/adapter.py` into adapter facade, surface rendering, solution checks, policy schema, and preview modules.
 - The former `tests/test_cvrp_adapter.py` aggregate has been split to mirror adapter responsibilities.

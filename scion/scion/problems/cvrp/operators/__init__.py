@@ -1,2 +1,0 @@
-"""CVRP operator interfaces."""
-

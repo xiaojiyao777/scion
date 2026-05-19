@@ -20,7 +20,7 @@ def test_agentic_session_compacts_feedback_observations_for_internal_budget() ->
                     "branch_id": "branch-1",
                     "surface": "solver_design",
                     "action": "modify",
-                    "target_file": "policies/solver_algorithm.py",
+                    "target_file": "policies/baseline_algorithm.py",
                     "gate_outcome": "abandoned",
                     "reason_codes": ["SCREENING_FAIL_WIN_RATE"],
                     "stats": {

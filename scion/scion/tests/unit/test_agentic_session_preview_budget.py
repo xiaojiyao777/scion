@@ -437,7 +437,7 @@ def test_agentic_session_reads_cvrp_main_search_strategy_under_expanded_budget(
     hypothesis = HypothesisProposal(
         **_valid_hypothesis_payload(
             change_locus="solver_design",
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
             target_objectives=["total_distance"],
         )
     )

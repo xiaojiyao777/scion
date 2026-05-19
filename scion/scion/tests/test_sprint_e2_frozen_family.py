@@ -115,7 +115,7 @@ def test_context_family_extraction_route_taxonomy_blocks_warehouse_labels():
     family_ids = {f.family_id for f in families}
 
     assert "NEW_FAMILY/create_new/route_pair" in family_ids
-    assert "route_pair/modify/route_pair" in family_ids
+    assert "NEW_FAMILY/modify/route_pair" in family_ids
     assert all("subcategory_consolidation" not in fid for fid in family_ids)
     assert all("cost_reduction" not in fid for fid in family_ids)
 
@@ -159,13 +159,13 @@ def test_context_family_extraction_handles_prior_failed_family_mentions():
     ]
 
     families = _extract_families_from_steps(steps, taxonomy=CVRP_FAMILY_TAXONOMY)
-    counts = {fam.mechanism_label: fam.evidence_count for fam in families}
+    family_ids = {fam.family_id for fam in families}
 
-    assert counts == {
-        "route_local": 1,
-        "route_pair": 2,
-        "ruin_recreate": 1,
-    }
+    assert "solver_design/create_new/route_local" in family_ids
+    assert "NEW_FAMILY/create_new/route_pair" in family_ids
+    assert "NEW_FAMILY/create_new/ruin_recreate" in family_ids
+    assert "route_local/create_new/route_local" not in family_ids
+    assert "route_pair/create_new/route_pair" not in family_ids
 
 
 def test_family_id_includes_action_and_locus():

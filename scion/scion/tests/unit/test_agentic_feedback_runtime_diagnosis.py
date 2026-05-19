@@ -13,7 +13,7 @@ def test_runtime_diagnosis_tags_zero_phase_and_recovery_only_patterns(
             hypothesis_text="Accepted moves do not refresh phase best.",
             change_locus="solver_design",
             action="modify",
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
         ),
         protocol_result=ProtocolResult(
             stage=ExperimentStage.SCREENING,
@@ -211,7 +211,7 @@ def test_runtime_feedback_exposes_compact_surface_attribution(
     assert protocol is not None
     main_search_hypothesis = replace(
         _hyp("solver_design"),
-        target_file="policies/solver_algorithm.py",
+        target_file="policies/baseline_algorithm.py",
     )
     attributed_step = replace(
         context.step_history[0],
@@ -362,7 +362,7 @@ def test_runtime_feedback_prioritizes_phase_attribution_over_modal_fields(
         context.step_history[0],
         hypothesis=replace(
             _hyp("solver_design"),
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
         ),
         protocol_result=replace(
             protocol,
@@ -460,7 +460,7 @@ def test_runtime_feedback_surfaces_solver_algorithm_noop_motion(
         context.step_history[0],
         hypothesis=replace(
             _hyp("solver_design"),
-            target_file="policies/solver_algorithm.py",
+            target_file="policies/baseline_algorithm.py",
         ),
         protocol_result=replace(
             protocol,

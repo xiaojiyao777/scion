@@ -79,7 +79,7 @@ def test_cvrp_solver_algorithm_complexity_allows_bounded_algorithm_while_pattern
     legacy = legacy_problem_spec_from_v1(spec_v1)
     gate = ContractGate(legacy)
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"
@@ -180,7 +180,7 @@ def test_cvrp_solver_algorithm_complexity_rejects_unbounded_improvement_flag_loo
     legacy = legacy_problem_spec_from_v1(spec_v1)
     gate = ContractGate(legacy)
     patch = PatchProposal(
-        file_path="policies/solver_algorithm.py",
+        file_path="policies/baseline_algorithm.py",
         action="modify",
         code_content=(
             "def solve(instance, rng, time_limit_sec, context):\n"

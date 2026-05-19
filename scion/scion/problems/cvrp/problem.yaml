@@ -4,7 +4,7 @@ description: >-
   readiness. ProblemSpecV1 remains the authoritative adapter/objective schema;
   this legacy file exists for the current CLI entrypoint.
 
-operators_dir: operators
+operators_dir: ""
 data_dir: data
 oracle_path: ""
 solver_path: solver.py
@@ -13,19 +13,19 @@ unit_test_path: ""
 regression_test_path: ""
 
 operator_categories:
-  - route_local
-  - route_pair
-  - ruin_recreate
+  - solver_design
 
 search_space:
   editable:
-    - "operators/*.py"
+    - "policies/baseline_algorithm.py"
+    - "policies/baseline_modules/*.py"
   frozen:
     - "adapter.py"
     - "models.py"
     - "solver.py"
     - "solver_runtime/*.py"
-    - "operators/base.py"
+    - "policies/__init__.py"
+    - "policies/baseline_modules/__init__.py"
   import_whitelist:
     - __future__
     - copy
