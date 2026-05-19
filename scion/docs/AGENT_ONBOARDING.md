@@ -102,8 +102,10 @@ first completed repair is `agentic_session`: the historical public module is
 now a small facade, with session orchestration, planner loop, code tools,
 preview/repair, budget/runtime, observations, outputs, and persistence split
 into focused `agentic_session_*` modules; the matching 4k+ session test file
-was split into focused tests. Continue this pattern for CVRP solver/adapter,
-Contract, context, preview, protocol, and their tests.
+was split into focused tests. The former 4.8k-line CVRP solver runtime test
+aggregate is also split into focused `test_cvrp_*_runtime.py` files. Continue
+this pattern for the CVRP solver/adapter production modules, Contract,
+context, preview, protocol, and remaining oversized tests.
 
 Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is no longer incremental

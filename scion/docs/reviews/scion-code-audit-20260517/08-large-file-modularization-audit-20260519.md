@@ -111,6 +111,18 @@ Post-review repair status:
 
 This closes Bacon's P0 line-count blocker for APS session orchestration and tests. It does not close the broader architecture-debt freeze: `problems/cvrp/solver.py`, `tests/test_cvrp_solver_operator_runtime.py`, `problems/cvrp/adapter.py`, `proposal/context_manager.py`, and `contract/gate.py` remain large active-debt files and should be handled before more validation experiments normalize this structure.
 
+## CVRP Solver Runtime Test Split Update
+
+The first CVRP-side P0 cleanup is complete for the oversized solver runtime test file:
+
+- `scion/scion/tests/test_cvrp_solver_operator_runtime.py` is now a 6-line compatibility placeholder.
+- Shared fixtures/helpers moved to `scion/scion/tests/cvrp_solver_runtime_support.py`.
+- Runtime tests are split by behavior area into focused `test_cvrp_*_runtime.py` files: registry, policy defaults, solver-design algorithm runtime, main-search runtime, main-search gating/phase/recovery, route-pool runtime/scope/phase, mechanism-policy runtime, policy-surface runtime, and operator-safety runtime.
+- The largest resulting file is `test_cvrp_mechanism_policy_runtime.py` at 707 lines.
+- Verification run: `python -m pytest scion/scion/tests/test_cvrp_*_runtime.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q` passed with 72 tests.
+
+This closes the P0 line-count blocker for that test file only. The production runtime module `scion/scion/problems/cvrp/solver.py` remains the main CVRP P0 blocker and still needs behavior-preserving modularization.
+
 ## Recommended Execution Order
 
 Phase 0: close APS session split and protect active work.
@@ -122,7 +134,7 @@ Phase 0: close APS session split and protect active work.
 Phase 1: unblock CVRP P0 without touching Bacon's split.
 
 - Split `problems/cvrp/solver.py` into behavior-preserving modules with a thin compatibility facade.
-- Split `tests/test_cvrp_solver_operator_runtime.py` at the same time so each new runtime module has a focused test file.
+- The former `tests/test_cvrp_solver_operator_runtime.py` aggregate has been split. Keep new runtime tests focused and below the threshold while `solver.py` itself is modularized.
 - Split `problems/cvrp/adapter.py` into adapter facade, surface rendering, solution checks, policy schema, and preview modules.
 - Split `tests/test_cvrp_adapter.py` to mirror the adapter modules.
 

@@ -31,10 +31,12 @@ modules. The former 4k-line `test_agentic_proposal_tools_session.py` file is
 split into focused `test_agentic_session_*.py` files. Focused APS session tests
 pass, and the broader APS/tool focused regression passes (`143 passed`). This
 closes the APS P0 blocker, but it does not lift the
-broader experiment freeze: `problems/cvrp/solver.py`,
-`tests/test_cvrp_solver_operator_runtime.py`, `problems/cvrp/adapter.py`,
-`proposal/context_manager.py`, and `contract/gate.py` remain active large-file
-architecture debt.
+broader experiment freeze. The first CVRP test-side cleanup is also complete:
+the former 4.8k-line `tests/test_cvrp_solver_operator_runtime.py` aggregate is
+now a placeholder, shared fixtures live in `cvrp_solver_runtime_support.py`,
+and focused `test_cvrp_*_runtime.py` files pass (`72 passed`). Remaining P0/P1
+blockers include `problems/cvrp/solver.py`, `problems/cvrp/adapter.py`,
+`proposal/context_manager.py`, and `contract/gate.py`.
 
 Before this P0 shift, the framework governance path was largely behaving, but
 the previous CVRP optimization path was still too componentized: Scion could
