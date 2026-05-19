@@ -43,6 +43,22 @@ solution/objective helpers, and timing helpers now live under the CVRP-owned
 facade. This is verified but not sufficient; `solver.py` is still above 9000
 lines and remains the main P0 production blocker.
 
+The latest audit-driven repair moved candidate-flow CVRP semantics back behind
+problem-owned hooks. `proposal.mechanism_novelty` is now a generic dispatch and
+rejection-shape module; the CVRP checks for construction seed strategy,
+adaptive weights, cross-route Or-opt, and Shaw related removal live under
+`problems/cvrp/mechanism_novelty.py` and are exposed through
+`CvrpAdapter.mechanism_novelty_provider()`. Campaign stagnation no longer
+hard-codes CVRP object-model strings in `core/stagnation.py`; problem adapters
+may provide `stagnation_object_model_markers()`. The CVRP solver runtime split
+also now has a shared `solver_runtime/constants.py`, and `solver_runtime/*.py`
+is explicitly frozen in both CVRP problem specs. This closes the highest-risk
+candidate-flow leakage found in the post-split code audit, but the broader
+provider migration remains open for `proposal/engine.py`,
+`proposal/context_manager.py`, `proposal/solver_design_smoke.py`,
+`contract/checks/solver_design_integration.py`, and protocol/runtime telemetry
+dispatch.
+
 The broader test-side architecture cleanup is now complete. All previously
 oversized aggregate test files have been converted to placeholders plus
 focused sibling modules with shared `*_test_support.py` helpers. The largest

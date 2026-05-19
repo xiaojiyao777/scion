@@ -53,6 +53,16 @@ from scion.proposal.search_memory import CampaignSearchMemory
 from scion.runtime.workspace import WorkspaceMaterializer
 
 
+def _stagnation_object_model_markers(adapter: Any | None) -> tuple[str, ...]:
+    method = getattr(adapter, "stagnation_object_model_markers", None)
+    if not callable(method):
+        return ()
+    markers = method()
+    if not isinstance(markers, (list, tuple)):
+        return ()
+    return tuple(str(marker) for marker in markers if str(marker or "").strip())
+
+
 def compose_campaign_services(
     owner: Any,
     *,
@@ -217,6 +227,7 @@ def compose_campaign_services(
     owner._stagnation_detector = StagnationDetector(
         window_size=5,
         taxonomy=family_taxonomy,
+        object_model_loop_markers=_stagnation_object_model_markers(adapter),
     )
     owner._stagnation_signals = []
     owner._diagnostics = []

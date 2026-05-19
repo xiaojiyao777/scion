@@ -323,6 +323,7 @@ class AgenticSessionHypothesisMixin:
 
             result = _MECHANISM_NOVELTY_GATE.evaluate(
                 hypothesis,
+                context=tool_context,
                 observations=observations,
             )
             if result is None:
@@ -349,6 +350,7 @@ class AgenticSessionHypothesisMixin:
                 session_id=session_id,
                 state=state,
                 hypothesis=hypothesis,
+                tool_context=tool_context,
                 observations=observations,
                 evidence_used=tuple(evidence),
             )
@@ -361,10 +363,12 @@ class AgenticSessionHypothesisMixin:
             state: AgenticProposalSessionState,
             hypothesis: HypothesisProposal,
             observations: list[ProposalObservation],
+            tool_context: ProposalToolContext | None = None,
             evidence_used: tuple[AgenticEvidenceRef, ...] = (),
         ) -> AgenticProposalOutput | None:
             result = _MECHANISM_NOVELTY_GATE.evaluate(
                 hypothesis,
+                context=tool_context,
                 observations=observations,
             )
             if result is None:

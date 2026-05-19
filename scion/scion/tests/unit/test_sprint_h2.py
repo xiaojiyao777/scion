@@ -251,7 +251,14 @@ class TestStagnationDetectorInfraLoop:
 
     def test_object_model_loop_overrides_generic_infra_loop(self):
         """Repeated code API misuse should not be classified as environment."""
-        detector = StagnationDetector(window_size=5)
+        detector = StagnationDetector(
+            window_size=5,
+            object_model_loop_markers=(
+                "_solution",
+                "from_public",
+                "solver_algorithm_errors=",
+            ),
+        )
         detail = (
             "agentic_proposal:code_generation_failed: _Solution.from_public "
             "missing; solver_algorithm_errors=1"

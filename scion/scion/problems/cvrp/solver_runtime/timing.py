@@ -4,9 +4,11 @@ from __future__ import annotations
 import time
 
 
-_MAIN_SEARCH_EXIT_RESERVE_SEC = 0.75
-_ROUTE_POOL_EXIT_RESERVE_SEC = 2.50
-_MAX_EXIT_RESERVE_FRACTION = 0.15
+from scion.problems.cvrp.solver_runtime.constants import (
+    _MAIN_SEARCH_EXIT_RESERVE_SEC,
+    _MAX_EXIT_RESERVE_FRACTION,
+    _ROUTE_POOL_EXIT_RESERVE_SEC,
+)
 
 
 def _time_exhausted(start_time: float, time_limit_sec: float) -> bool:

@@ -421,6 +421,7 @@ class AgenticSessionOrchestrationMixin:
             session_id=session_id,
             state=state,
             hypothesis=hypothesis,
+            tool_context=tool_context,
             observations=observations,
             evidence_used=tuple(evidence),
         )

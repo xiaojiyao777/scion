@@ -24,6 +24,7 @@ search_space:
     - "adapter.py"
     - "models.py"
     - "solver.py"
+    - "solver_runtime/*.py"
     - "operators/base.py"
   import_whitelist:
     - __future__

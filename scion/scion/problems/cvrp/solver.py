@@ -20,6 +20,12 @@ from typing import Any, Mapping
 
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.solver_runtime.constants import (
+    _MAIN_SEARCH_EXIT_RESERVE_SEC,
+    _MAX_EXIT_RESERVE_FRACTION,
+    _OBJECTIVE_TOLERANCE,
+    _ROUTE_POOL_EXIT_RESERVE_SEC,
+)
 from scion.problems.cvrp.solver_runtime.policy_modules import (
     _call_policy_function,
     _evict_module_tree,
@@ -44,7 +50,6 @@ from scion.problems.cvrp.solver_runtime.timing import (
 
 
 _MAX_OPERATOR_ROUNDS = 20
-_OBJECTIVE_TOLERANCE = 1e-9
 _BASELINE_TIME_FRACTION = 0.8
 _MIN_BASELINE_TIME_FRACTION = 0.2
 _MAX_BASELINE_TIME_FRACTION = 0.95
@@ -243,9 +248,6 @@ _MAX_MAIN_SEARCH_BDR_ACCEPT_LIMIT = 3
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FLOOR = 16
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_CEILING = 96
 _MAIN_SEARCH_BASELINE_MAX_DESTROY_CUSTOMERS_FRACTION = 0.12
-_MAIN_SEARCH_EXIT_RESERVE_SEC = 0.75
-_ROUTE_POOL_EXIT_RESERVE_SEC = 2.50
-_MAX_EXIT_RESERVE_FRACTION = 0.15
 _ROUTE_POOL_MIN_SAMPLE_BUDGET_SEC = 0.20
 _ROUTE_POOL_MAX_SAMPLE_BUDGET_SEC = 2.50
 _ALGORITHM_BLUEPRINT_REQUIRED_KEYS = frozenset(

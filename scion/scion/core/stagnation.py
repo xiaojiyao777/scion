@@ -2,23 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from scion.core.models import Decision, StepRecord
 
-# Threshold for infra_loop detection (same failure_code streak)
 _INFRA_LOOP_THRESHOLD = 5
-_OBJECT_MODEL_LOOP_MARKERS = (
-    "_solution",
-    "_route",
-    "from_public",
-    "from_cvrp_solution",
-    "from_routes",
-    "to_public",
-    "cannot be coerced to cvrpsolution",
-    "solver_algorithm_errors=",
-    "object model",
-)
 
 
 @dataclass
@@ -42,9 +30,20 @@ class CampaignDiagnosis:
 class StagnationDetector:
     """Detect multi-dimensional stagnation patterns in the campaign history."""
 
-    def __init__(self, window_size: int = 5, *, taxonomy: Optional[List[str]] = None) -> None:
+    def __init__(
+        self,
+        window_size: int = 5,
+        *,
+        taxonomy: Optional[List[str]] = None,
+        object_model_loop_markers: Sequence[str] = (),
+    ) -> None:
         self._window = window_size
         self._taxonomy = taxonomy
+        self._object_model_loop_markers = tuple(
+            str(marker).lower()
+            for marker in object_model_loop_markers
+            if str(marker or "").strip()
+        )
 
     def check(
         self,
@@ -107,6 +106,8 @@ class StagnationDetector:
         steps: List[StepRecord],
         failure_streak: Dict[str, int],
     ) -> Optional[StagnationSignal]:
+        if not self._object_model_loop_markers:
+            return None
         if not any(streak >= _INFRA_LOOP_THRESHOLD for streak in failure_streak.values()):
             return None
         recent_failures = [
@@ -118,7 +119,7 @@ class StagnationDetector:
         marker_hits: list[str] = []
         for step in recent_failures:
             detail = str(step.failure_detail or "").lower()
-            if not any(marker in detail for marker in _OBJECT_MODEL_LOOP_MARKERS):
+            if not any(marker in detail for marker in self._object_model_loop_markers):
                 continue
             marker_hits.append(str(step.failure_detail or "")[:180])
         if len(marker_hits) < 2:

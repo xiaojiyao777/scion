@@ -165,6 +165,23 @@ class TestC5FrozenFiles:
         assert not c5.passed
         assert not result.passed
 
+    def test_solver_runtime_helpers_can_be_frozen(self):
+        gate = ContractGate(
+            make_spec(
+                editable=("operators/*.py", "solver_runtime/*.py"),
+                frozen=("solver.py", "solver_runtime/*.py"),
+            )
+        )
+        patch = PatchProposal(
+            file_path="solver_runtime/timing.py",
+            action="modify",
+            code_content="x = 1",
+        )
+        result = gate.validate_patch(patch)
+        c5 = next(c for c in result.checks if c.name == "C5_frozen_files")
+        assert not c5.passed
+        assert not result.passed
+
     def test_oracle_py_is_frozen(self, gate: ContractGate):
         patch = PatchProposal(
             file_path="oracle.py",

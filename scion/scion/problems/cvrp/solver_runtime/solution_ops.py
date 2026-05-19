@@ -5,9 +5,7 @@ from typing import Any, Mapping
 
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
-
-
-_OBJECTIVE_TOLERANCE = 1e-9
+from scion.problems.cvrp.solver_runtime.constants import _OBJECTIVE_TOLERANCE
 
 
 def _coerce_solution(candidate: Any) -> CvrpSolution | None:

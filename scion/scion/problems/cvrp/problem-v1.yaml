@@ -17,6 +17,7 @@ search_space:
     - "cvrplib.py"
     - "models.py"
     - "solver.py"
+    - "solver_runtime/*.py"
     - "operators/base.py"
     - "operators/__init__.py"
     - "policies/__init__.py"

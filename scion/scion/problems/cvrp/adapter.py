@@ -336,6 +336,26 @@ class CvrpAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
+    def mechanism_novelty_provider(self) -> Any:
+        from scion.problems.cvrp.mechanism_novelty import (
+            CvrpMechanismNoveltyProvider,
+        )
+
+        return CvrpMechanismNoveltyProvider()
+
+    def stagnation_object_model_markers(self) -> tuple[str, ...]:
+        return (
+            "_solution",
+            "_route",
+            "from_public",
+            "from_cvrp_solution",
+            "from_routes",
+            "to_public",
+            "cannot be coerced to cvrpsolution",
+            "solver_algorithm_errors=",
+            "object model",
+        )
+
     def render_problem_summary(self) -> str:
         return (
             "Capacitated Vehicle Routing Problem: build ordered vehicle routes "

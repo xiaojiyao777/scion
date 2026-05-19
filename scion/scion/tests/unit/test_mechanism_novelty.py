@@ -104,6 +104,7 @@ def test_mechanism_novelty_gate_blocks_known_false_premises(
 
     result = MechanismNoveltyGate().evaluate(
         _solver_design_hypothesis(text),
+        context=context,
         active_solver_snapshot=snapshot,
     )
 
@@ -133,7 +134,8 @@ def test_mechanism_novelty_gate_allows_adaptive_update_formula_improvement(
     assert (
         MechanismNoveltyGate().evaluate(
             hypothesis,
-            active_solver_snapshot=snapshot,
+            context=context,
+        active_solver_snapshot=snapshot,
         )
         is None
     )
@@ -158,7 +160,8 @@ def test_mechanism_novelty_gate_allows_shaw_related_improvements(
     assert (
         MechanismNoveltyGate().evaluate(
             _solver_design_hypothesis(text),
-            active_solver_snapshot=snapshot,
+            context=context,
+        active_solver_snapshot=snapshot,
         )
         is None
     )
@@ -198,6 +201,7 @@ def test_mechanism_novelty_gate_blocks_explicit_duplicate_or_opt_addition(
 
     result = MechanismNoveltyGate().evaluate(
         hypothesis,
+        context=context,
         active_solver_snapshot=snapshot,
     )
 
@@ -233,7 +237,8 @@ def test_mechanism_novelty_gate_allows_existing_or_opt_improvements(
     assert (
         MechanismNoveltyGate().evaluate(
             _solver_design_hypothesis(text),
-            active_solver_snapshot=snapshot,
+            context=context,
+        active_solver_snapshot=snapshot,
         )
         is None
     )
@@ -251,6 +256,7 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
 
     result = MechanismNoveltyGate().evaluate(
         _solver_design_hypothesis(text),
+        context=context,
         active_solver_snapshot=snapshot,
     )
 
