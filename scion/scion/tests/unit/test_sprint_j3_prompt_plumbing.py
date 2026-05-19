@@ -146,6 +146,8 @@ class TestHypothesisGroundingRequirements:
         assert "solver_algorithm_improving_moves" in text
         assert "solver_algorithm_best_improving_moves" in text
         assert "show effect or activity, not activation" in text
+        assert "existing phase names" in text
+        assert ".vns" in text
 
 
 class TestForcedSurfaceTaskPrompt:

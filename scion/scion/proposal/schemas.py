@@ -30,7 +30,9 @@ _EXPECTED_TELEMETRY_DESCRIPTION = (
     "solver_algorithm_total_distance. Aggregate outcome/activity fields such "
     "as solver_algorithm_improving_moves or "
     "solver_algorithm_best_improving_moves show effect or activity, not "
-    "activation."
+    "activation. Do not use existing phase names such as .vns as activation "
+    "for a newly declared mechanism unless that exact mechanism id is declared "
+    "in mechanism_changes."
 )
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
 
@@ -579,7 +581,9 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "solver_algorithm_best_improving_moves show effect or activity, not "
         "activation. For mapping telemetry, use a mechanism-specific path such "
         "as some_runtime_map.<mechanism_id>; the whole map field alone is not "
-        "activation evidence.\n"
+        "activation evidence. Do not use existing phase names such as .vns as "
+        "activation for a newly declared mechanism unless that exact mechanism "
+        "id is declared in mechanism_changes.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
@@ -709,7 +713,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate.
-- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific records such as `solver_algorithm_context_records.<mechanism_id>_iterations` or `solver_algorithm_phase_runtime_ms.<mechanism_id>`, not outcome/objective fields, aggregate effect/activity fields like `solver_algorithm_improving_moves`, or an aggregate runtime map without the mechanism id.
+- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific records such as `solver_algorithm_context_records.<mechanism_id>_iterations` or `solver_algorithm_phase_runtime_ms.<mechanism_id>`, not outcome/objective fields, aggregate effect/activity fields like `solver_algorithm_improving_moves`, an existing phase name like `.vns` for a newly declared mechanism, or an aggregate runtime map without the mechanism id.
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{

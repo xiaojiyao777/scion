@@ -216,20 +216,6 @@ class AgenticSessionOrchestrationMixin:
         observations: list[ProposalObservation],
         evidence: list[AgenticEvidenceRef],
     ) -> AgenticProposalOutput | None:
-        if tool_context is not None:
-            output = self._run_hypothesis_preview_gate(
-                request=request,
-                session_id=session_id,
-                state=state,
-                tool_context=tool_context,
-                hypothesis=hypothesis,
-                observations=observations,
-                evidence=evidence,
-                finalize_message="Hypothesis self-check failed closed before approval.",
-            )
-            if output is not None:
-                return output
-
         if request.approve_hypothesis is None:
             output = self._partial_hypothesis_output(
                 request=request,

@@ -520,7 +520,9 @@ def _expected_telemetry_contract_preview(
                 "keys declared by the selected research surface evidence contract. "
                 "Do not put explanatory prose in expected_telemetry values; if "
                 "mechanism fields are declared, substitute the concrete mechanism "
-                "id into those field templates."
+                "id into those field templates. Do not use existing phase names "
+                "such as .vns as activation for a newly declared mechanism unless "
+                "that exact mechanism id is declared in mechanism_changes."
                 if not passed
                 else ""
             ),

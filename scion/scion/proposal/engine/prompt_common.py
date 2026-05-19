@@ -41,6 +41,21 @@ def _agentic_research_context_block(
             "drafting the next hypothesis.\n\n"
             f"{_bounded_json(retry_payload, 6000)}"
         )
+    preview_rejections = context.get("agentic_hypothesis_preview_rejections")
+    if preview_rejections:
+        retry_payload = {
+            "retry_attempt": context.get("agentic_hypothesis_retry_attempt"),
+            "retry_rule": context.get("agentic_hypothesis_preview_retry_rule"),
+            "preview_rejections": preview_rejections,
+        }
+        parts.append(
+            "## Hypothesis Schema/Telemetry Retry Feedback\n"
+            "The previous hypothesis was rejected by an audited schema/target "
+            "preview. Use this feedback as a hard structured-output constraint: "
+            "repair the named field exactly, keep the research premise grounded, "
+            "and do not reuse invalid telemetry paths.\n\n"
+            f"{_bounded_json(retry_payload, 6000)}"
+        )
     diagnosis = context.get("agentic_research_diagnosis")
     if diagnosis:
         heading = (

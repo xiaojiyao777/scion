@@ -267,11 +267,13 @@ def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
     assert "solver_algorithm_improving_moves" in description
     assert "solver_algorithm_best_improving_moves" in description
     assert "effect or activity, not activation" in description
+    assert ".vns" in description
     assert (
         "solver_algorithm_context_records.<mechanism_id>_iterations"
         in tool_description
     )
     assert "solver_algorithm_phase_runtime_ms.<mechanism_id>" in tool_description
+    assert ".vns" in tool_description
 
 
 def test_draft_hypothesis_accepts_structured_fields_and_rejects_invalid_values(

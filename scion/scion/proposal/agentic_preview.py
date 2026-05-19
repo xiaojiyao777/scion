@@ -52,9 +52,9 @@ class AgenticSelfCheck:
 def _self_check_from_previews(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
 ) -> AgenticSelfCheck:
-    schema_valid = True
     schema_preview_evaluated = False
-    schema_preview_codes: list[str] = []
+    schema_preview_codes_by_source: dict[str, tuple[str, ...]] = {}
+    schema_passed_by_source: dict[str, bool] = {}
     contract_preview_passed: bool | None = None
     contract_preview_codes: tuple[str, ...] = ()
     for observation in observations:
@@ -63,9 +63,9 @@ def _self_check_from_previews(
                 "proposal.schema_preview",
                 "proposal.target_permission_preview",
             }:
-                schema_valid = False
                 schema_preview_evaluated = True
-                schema_preview_codes.extend(
+                schema_passed_by_source[observation.tool_name] = False
+                schema_preview_codes_by_source[observation.tool_name] = tuple(
                     code
                     for code in (
                         _enum_value(observation.failure_code),
@@ -96,19 +96,37 @@ def _self_check_from_previews(
         }:
             schema_preview_evaluated = True
             preview_passed = bool(payload.get("passed"))
-            schema_valid = schema_valid and preview_passed
+            schema_passed_by_source[observation.tool_name] = preview_passed
             if not preview_passed:
-                schema_preview_codes.extend(_preview_codes(payload))
+                schema_preview_codes_by_source[observation.tool_name] = (
+                    _preview_codes(payload)
+                )
+            else:
+                schema_preview_codes_by_source.pop(observation.tool_name, None)
         if observation.tool_name == "proposal.contract_preview":
             contract_preview_passed = bool(payload.get("passed"))
             contract_preview_codes = _preview_codes(payload)
             hypothesis_codes = _hypothesis_contract_self_check_codes(payload)
             if hypothesis_codes:
                 schema_preview_evaluated = True
-                schema_valid = False
-                schema_preview_codes.extend(hypothesis_codes)
+                schema_passed_by_source["proposal.contract_preview.hypothesis"] = False
+                schema_preview_codes_by_source[
+                    "proposal.contract_preview.hypothesis"
+                ] = hypothesis_codes
+            elif contract_preview_passed:
+                schema_passed_by_source["proposal.contract_preview.hypothesis"] = True
+                schema_preview_codes_by_source.pop(
+                    "proposal.contract_preview.hypothesis",
+                    None,
+                )
+    schema_valid = (
+        all(schema_passed_by_source.values()) if schema_preview_evaluated else False
+    )
+    schema_preview_codes: list[str] = []
+    for codes in schema_preview_codes_by_source.values():
+        schema_preview_codes.extend(codes)
     return AgenticSelfCheck(
-        schema_valid=schema_valid if schema_preview_evaluated else False,
+        schema_valid=schema_valid,
         schema_preview_codes=tuple(dict.fromkeys(schema_preview_codes)),
         contract_preview_passed=contract_preview_passed,
         contract_preview_codes=contract_preview_codes,
