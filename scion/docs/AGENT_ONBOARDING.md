@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-18*
+*Last updated: 2026-05-19*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -62,9 +62,48 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
 - Frozen/holdout detail is exposure-controlled. Proposal agents should receive
   bounded aggregate feedback, not raw validation or benchmark records.
 
+## Architecture Governance
+
+The current P0 priority is architecture debt cleanup before more validation
+experiments. Scion must remain an elegant v3 framework, not a pile of local
+experiment patches.
+
+- v3 is the design baseline: the framework controls boundaries, protocol,
+  lineage, audit, and deterministic decisions; problem packages provide
+  domain semantics through declared adapters/providers/hooks.
+- Do not add CVRP, ALNS/VNS, route/capacity/demand, or `_ALNSVNSSolver`
+  semantics directly to generic `core`, `proposal`, `contract`, `protocol`, or
+  `runtime` modules. Put problem-specific behavior under
+  `scion/problems/cvrp/` or behind a problem-owned provider hook.
+- Treat roughly 800 lines as a design warning, not a mechanical hard number.
+  A source or test file above that size needs a clear ownership reason and a
+  split plan. Files above 1000 lines are active architecture debt; files above
+  3000 lines require stop-the-line attention or an assigned migration owner.
+- Test files are part of the architecture. A 4000-line test file is the same
+  maintainability failure as a 4000-line runtime module.
+- "Extracted helpers" is not sufficient modularization if the original file
+  keeps the same broad responsibilities. Modules should be split by stable
+  responsibility boundaries and public compatibility facades where needed.
+- Do not run 6-round validation experiments while core architecture debt is
+  the active blocker. First make the framework boundary enforceable, run
+  focused/full regressions, then resume 3-round validation before longer runs.
+
+Current large-file audit:
+[`08-large-file-modularization-audit-20260519.md`](reviews/scion-code-audit-20260517/08-large-file-modularization-audit-20260519.md).
+
 ## Current Version
 
 Active version: v0.4 on `v0.4-dev`.
+
+Current P0 operating mode: architecture cleanup and large-file modularization
+come before more solver-quality experiments. The 2026-05-19 audit identified
+oversized production and test files plus CVRP/framework boundary leakage. The
+first completed repair is `agentic_session`: the historical public module is
+now a small facade, with session orchestration, planner loop, code tools,
+preview/repair, budget/runtime, observations, outputs, and persistence split
+into focused `agentic_session_*` modules; the matching 4k+ session test file
+was split into focused tests. Continue this pattern for CVRP solver/adapter,
+Contract, context, preview, protocol, and their tests.
 
 Current work centers on CVRP as the second real problem class after the
 warehouse/surrogate path. The current direction is no longer incremental
@@ -414,11 +453,16 @@ Important current interpretation:
   Agentic proposal tool tests are split by topic under
   `test_agentic_proposal_tools_*.py`; avoid adding new large test blocks back
   into the legacy aggregate file.
-- APS itself is also being decomposed. Shared models, artifact storage,
-  diagnostics, code-context shaping, preview/self-check helpers, and utilities
-  now live in focused `scion/proposal/agentic_*.py` modules. Keep
-  `agentic_session.py` as the session orchestrator; do not add new large helper
-  blocks back into it.
+- APS itself is decomposed. Shared models, artifact storage, diagnostics,
+  code-context shaping, preview/self-check helpers, utilities, and session
+  phase logic live in focused `scion/proposal/agentic_*.py` and
+  `scion/proposal/agentic_session_*.py` modules. `agentic_session.py` is only
+  a compatibility facade. Do not add new behavior to that facade, and do not
+  grow `agentic_session_common.py` into a new hidden monolith.
+- Agentic session tests are split by behavior phase under
+  `test_agentic_session_*.py` with shared support in
+  `agentic_session_test_support.py`. Do not append new APS scenarios back into
+  the legacy aggregate `test_agentic_proposal_tools_session.py` placeholder.
 - Repeated branch object-model API mistakes are framework-relevant. The
   `_Solution` object in `baseline_modules/state.py` does not expose
   `from_public`, `from_routes`, `from_cvrp_solution`, or `to_public`, and
@@ -471,6 +515,11 @@ Read [current-state.md](status/current-state.md) for the exact latest status.
   must preserve the v3 separation: tainted Creative Layer proposes,
   deterministic Contract/Verification/Protocol/Safe Feature Extractor/Decision
   layers control evidence and promotion.
+- Treat architecture debt as a control risk, not style cleanup. Before starting
+  another validation experiment, check the large-file audit. Files over 3000
+  lines require an active migration owner; files over 1000 lines should not
+  receive major new behavior without a split plan; test files follow the same
+  rule as production files.
 - Do not read raw experiment artifacts in the main session by default. Use
   bounded experiment docs or delegate raw-artifact analysis when needed.
 - After every real-cost experiment, do not stop at summary metrics. Inspect or

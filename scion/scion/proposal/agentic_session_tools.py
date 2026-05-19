@@ -63,6 +63,9 @@ _ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS = 12000
 _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
+_CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT = 3
+_COMPATIBILITY_SOLVER_ALGORITHM_PATH = "policies/solver_algorithm.py"
+_PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH = "policies/baseline_algorithm.py"
 
 
 def _filter_model_facing_tool_names(
@@ -224,10 +227,28 @@ def _algorithm_file_path_guidance(
     guidance = dict(algorithm_file_path_guidance(context))
     observed_allowed_paths = _algorithm_file_paths_from_observations(observations)
     if observed_allowed_paths:
-        guidance["allowed_file_paths"] = observed_allowed_paths
+        active_paths = _active_solver_design_paths_first(observed_allowed_paths)
+        compatibility_paths = [
+            path
+            for path in observed_allowed_paths
+            if path == _COMPATIBILITY_SOLVER_ALGORITHM_PATH
+        ]
+        guidance["allowed_file_paths"] = active_paths + [
+            path for path in compatibility_paths if path not in set(active_paths)
+        ]
         guidance["allowed_file_count"] = len(observed_allowed_paths)
         guidance["allowed_paths_source"] = "existing_tool_observation"
-        guidance["example_file_path"] = observed_allowed_paths[0]
+        guidance["preferred_active_file_paths"] = active_paths
+        guidance["compatibility_file_paths"] = compatibility_paths
+        guidance["primary_entrypoint_file_path"] = (
+            _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH
+            if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH in observed_allowed_paths
+            else guidance.get("primary_entrypoint_file_path", "")
+        )
+        if active_paths:
+            guidance["example_file_path"] = active_paths[0]
+        else:
+            guidance["example_file_path"] = observed_allowed_paths[0]
     guidance.setdefault(
         "sequence_rule",
         (
@@ -238,6 +259,15 @@ def _algorithm_file_path_guidance(
     guidance.setdefault(
         "surface_id_rule",
         "solver_design is a research surface id; it is not a valid file_path.",
+    )
+    guidance.setdefault(
+        "path_selection_rule",
+        (
+            "Prefer active solver files, especially policies/baseline_algorithm.py "
+            "and policies/baseline_modules/*.py. policies/solver_algorithm.py is "
+            "a compatibility hook and should not be used as the active algorithm "
+            "entrypoint unless the hypothesis explicitly targets compatibility."
+        ),
     )
     return guidance
 
@@ -251,12 +281,55 @@ def _recommended_algorithm_file_path(
         for path in guidance.get("allowed_file_paths", ())
         if str(path or "").strip()
     ]
+    active_paths = [
+        str(path)
+        for path in guidance.get("preferred_active_file_paths", ())
+        if str(path or "").strip()
+    ]
     preferred_path = str(preferred or "").replace("\\", "/").strip()
-    if preferred_path and preferred_path in set(allowed_paths):
+    if (
+        preferred_path
+        and preferred_path in set(allowed_paths)
+        and preferred_path != _COMPATIBILITY_SOLVER_ALGORITHM_PATH
+    ):
         return preferred_path
+    primary = str(guidance.get("primary_entrypoint_file_path") or "").strip()
+    if primary and primary in set(allowed_paths):
+        return primary
+    if active_paths:
+        return active_paths[0]
     if allowed_paths:
         return allowed_paths[0]
     return "<file_path returned by context.list_algorithm_files>"
+
+
+def _solver_design_code_algorithm_file_read_budget_exhausted(
+    context: ProposalToolContext,
+    observations: list[ProposalObservation],
+    *,
+    hypothesis: HypothesisProposal,
+    next_args: Mapping[str, Any],
+) -> bool:
+    from scion.proposal.agentic_grounding import _context_requires_solver_design_grounding
+
+    is_solver_design_hypothesis = str(
+        hypothesis.change_locus or ""
+    ).strip() in {"solver_design", "solver_algorithm"}
+    if (
+        not is_solver_design_hypothesis
+        and not _context_requires_solver_design_grounding(context)
+    ):
+        return False
+    requested_path = _normalized_algorithm_read_path(next_args.get("file_path"))
+    if not requested_path:
+        return False
+    target_path = _normalized_algorithm_read_path(hypothesis.target_file)
+    if target_path and requested_path == target_path:
+        return False
+    current_paths = _successful_algorithm_file_read_paths(observations)
+    if requested_path in set(current_paths):
+        return False
+    return len(current_paths) >= _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT
 
 
 def _algorithm_file_paths_from_observations(
@@ -275,6 +348,38 @@ def _algorithm_file_paths_from_observations(
             if paths:
                 return paths
     return []
+
+
+def _active_solver_design_paths_first(paths: list[str]) -> list[str]:
+    active_paths = [
+        path for path in paths if path != _COMPATIBILITY_SOLVER_ALGORITHM_PATH
+    ]
+    if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH not in active_paths:
+        return active_paths
+    return [
+        _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH,
+        *[
+            path
+            for path in active_paths
+            if path != _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH
+        ],
+    ]
+
+
+def _successful_algorithm_file_read_paths(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[str]:
+    paths: list[str] = []
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_algorithm_file":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        path = _normalized_algorithm_read_path(payload.get("file_path"))
+        if path and path not in paths:
+            paths.append(path)
+    return paths
 
 
 def _file_paths_from_list_algorithm_files_payload(

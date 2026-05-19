@@ -7,7 +7,7 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from scion.core.models import (
     Branch,
@@ -306,6 +306,10 @@ class ContextManager:
             adapter_spec=adapter_spec,
             forced_surface=forced_surface_name,
         )
+        agent_quality_feedback = _build_agent_quality_feedback(
+            safe_hypothesis_steps,
+            branch.branch_id,
+        )
 
         # W10: Weight optimization feedback (coarse-grained operator signals)
         weight_opt_block = ""
@@ -355,6 +359,7 @@ class ContextManager:
             "search_control_guidance": search_control_guidance,
             "runtime_feedback": runtime_feedback,
             "runtime_failure_guidance": runtime_failure_guidance,
+            "agent_quality_feedback": agent_quality_feedback,
             "search_memory": search_memory_block,
             "saturation_signal": saturation_block,
             "weight_opt_feedback": weight_opt_block,
@@ -1593,6 +1598,7 @@ def _build_champion_stats(champion: ChampionState) -> str:
 
 
 _SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
+    "agent_quality_blocked",
     "proposal",
     "hypothesis_contract",
     "code_generation",
@@ -1658,6 +1664,78 @@ def _history_step_status(step: StepRecord) -> str:
     if _is_safe_pre_protocol_failure_step(step):
         return f"FAILED_{str(step.failure_stage).upper()}"
     return "HIDDEN"
+
+
+def _build_agent_quality_feedback(
+    step_history: List[StepRecord],
+    branch_id: str,
+) -> str:
+    """Render recent proposal-only quality blocks for the next hypothesis.
+
+    This is tainted proposal context, not Decision input. It keeps exact smoke
+    diagnostics visible enough for the next LLM step to avoid repeating a patch
+    that failed before protocol, while validation/frozen data remain excluded.
+    """
+
+    branch_steps = [
+        step
+        for step in _filter_hypothesis_prompt_steps(step_history)
+        if step.branch_id == branch_id
+    ]
+    lines: list[str] = []
+    for step in reversed(branch_steps):
+        summary = _agent_quality_failure_summary(step)
+        if not summary:
+            continue
+        lines.append(summary)
+        if len(lines) >= 4:
+            break
+    if not lines:
+        return ""
+    return "\n".join(
+        [
+            "Recent proposal-only quality blocks before screening:",
+            *reversed(lines),
+            (
+                "Use these as repair signals for the next hypothesis/code path; "
+                "they do not retire the solver_design boundary or affect "
+                "DecisionFeatures."
+            ),
+        ]
+    )
+
+
+def _agent_quality_failure_summary(step: StepRecord) -> str:
+    ref = step.proposal_session_ref if isinstance(step.proposal_session_ref, Mapping) else {}
+    primary = ref.get("primary_failure") if isinstance(ref, Mapping) else None
+    if not isinstance(primary, Mapping):
+        primary = {}
+    stage = str(primary.get("stage") or step.failure_stage or "").strip()
+    reason = str(primary.get("reason") or "").strip()
+    category = str(primary.get("category") or "").strip()
+    code = str(primary.get("code") or "").strip()
+    detail = str(primary.get("detail") or step.failure_detail or "").strip()
+    combined = " ".join((stage, reason, category, code, detail)).lower()
+    if (
+        stage != "agent_quality_blocked"
+        and step.failure_stage != "agent_quality_blocked"
+        and "algorithm_smoke_failure" not in combined
+        and "proposal_premise_contradicted" not in combined
+    ):
+        return ""
+    label = code or reason or category or stage or "agent_quality_blocked"
+    target = step.hypothesis.target_file or "(no target_file)"
+    detail = _first_line(detail)[:500]
+    line = (
+        f"- round {step.round_num}: {label}; "
+        f"target={target}; action={step.hypothesis.action}; "
+        f"locus={step.hypothesis.change_locus}"
+    )
+    if category and category != label:
+        line += f"; category={category}"
+    if detail:
+        line += f"; detail={detail}"
+    return line
 
 
 def _build_experiment_history(

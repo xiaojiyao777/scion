@@ -271,11 +271,9 @@ class ContextReadAlgorithmSymbolTool(_BaseReadOnlyTool):
 def _allowed_algorithm_file_paths(context: ProposalToolContext) -> tuple[str, ...]:
     files = list_algorithm_files_payload(context, include_inactive=True)
     return tuple(
-        sorted(
-            str(item.get("file_path") or "")
-            for item in files
-            if item.get("file_path")
-        )
+        str(item.get("file_path") or "")
+        for item in files
+        if item.get("file_path")
     )
 
 
@@ -329,6 +327,16 @@ def _algorithm_file_path_guidance_payload(
     tool_name: str | None = None,
 ) -> dict[str, Any]:
     allowed_file_paths = list(allowed_files)
+    active_file_paths = [
+        path
+        for path in allowed_file_paths
+        if path != "policies/solver_algorithm.py"
+    ]
+    compatibility_file_paths = [
+        path
+        for path in allowed_file_paths
+        if path == "policies/solver_algorithm.py"
+    ]
     payload: dict[str, Any] = {
         "surface": "solver_design",
         "file_path_source_tool": _ALGORITHM_FILE_LIST_TOOL,
@@ -339,15 +347,30 @@ def _algorithm_file_path_guidance_payload(
         ],
         "allowed_file_count": len(allowed_file_paths),
         "allowed_file_paths": allowed_file_paths,
+        "preferred_active_file_paths": active_file_paths,
+        "compatibility_file_paths": compatibility_file_paths,
+        "primary_entrypoint_file_path": (
+            "policies/baseline_algorithm.py"
+            if "policies/baseline_algorithm.py" in allowed_file_paths
+            else ""
+        ),
         "allowed_paths_summary": (
             f"{len(allowed_file_paths)} allowlisted solver_design file_path "
             "values are available from context.list_algorithm_files."
+        ),
+        "path_selection_rule": (
+            "Use preferred_active_file_paths for solver_design research. "
+            "policies/solver_algorithm.py is a compatibility hook, not the "
+            "primary algorithm entrypoint; read or target it only when the "
+            "hypothesis explicitly repairs that compatibility hook."
         ),
         "surface_id_rule": (
             "solver_design is a research surface id; it is not a valid file_path."
         ),
     }
-    if allowed_file_paths:
+    if active_file_paths:
+        payload["example_file_path"] = active_file_paths[0]
+    elif allowed_file_paths:
         payload["example_file_path"] = allowed_file_paths[0]
     return payload
 

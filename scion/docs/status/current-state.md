@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-18*
+*Last updated: 2026-05-19*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -9,11 +9,38 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
-v0.4 is not ready for long CVRP solver-quality validation. The framework
-governance path is largely behaving, but the previous CVRP optimization path
-was still too componentized: Scion could select `solver_design`, yet generated
-candidates mostly filled a `main_search_plan` lifecycle table and optimized
-exposed knobs rather than studying the algorithm itself.
+v0.4 is not ready for long CVRP solver-quality validation. Current priority is
+P0 architecture-debt cleanup before more experiments. Scion must remain the v3
+framework: generic layers own boundary control, protocol, lineage, audit, and
+deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
+through the problem package and adapter/provider hooks, not by hard-coding
+domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-19 large-file audit is
+[`08-large-file-modularization-audit-20260519.md`](../reviews/scion-code-audit-20260517/08-large-file-modularization-audit-20260519.md).
+Roughly 800 lines is a design warning, not a mechanical hard limit: files above
+it need ownership and a split plan; files above 1000 lines are active
+architecture debt; files above 3000 lines require stop-the-line attention or an
+assigned migration owner. Test files follow the same rule.
+
+The first P0 modularization repair is complete for APS. `agentic_session.py`
+is now a 17-line compatibility facade; session orchestration, hypothesis and
+planner phases, code tools, preview/repair, tool calls, budget/runtime,
+observations, outputs, and persistence are in focused `agentic_session_*`
+modules. The former 4k-line `test_agentic_proposal_tools_session.py` file is
+split into focused `test_agentic_session_*.py` files. Focused APS session tests
+pass, and the broader APS/tool focused regression passes (`143 passed`). This
+closes the APS P0 blocker, but it does not lift the
+broader experiment freeze: `problems/cvrp/solver.py`,
+`tests/test_cvrp_solver_operator_runtime.py`, `problems/cvrp/adapter.py`,
+`proposal/context_manager.py`, and `contract/gate.py` remain active large-file
+architecture debt.
+
+Before this P0 shift, the framework governance path was largely behaving, but
+the previous CVRP optimization path was still too componentized: Scion could
+select `solver_design`, yet generated candidates mostly filled a
+`main_search_plan` lifecycle table and optimized exposed knobs rather than
+studying the algorithm itself.
 
 The 2026-05-17 v3-aligned design repair keeps that interpretation explicit:
 Scion is the boundary/protocol/audit framework, while the proposal agent must
@@ -44,9 +71,9 @@ normalized to `solver_design` for runtime audit, protocol execution, and
 algorithm smoke. Generic protocol runtime summaries now include
 `solver_algorithm_*` telemetry, champion-side process/audit failures emit
 progress updates, and smoke payloads record resolved case paths/data-root
-provenance. `agentic_session.py` has also started its package-like split:
-budget, tool-selection, and feedback helpers now live in focused
-`agentic_session_*` modules while the session class remains the orchestrator.
+provenance. The old intermediate APS split, where the session class remained a
+large orchestrator with a few helper modules, is superseded by the 2026-05-19
+facade/module split described above.
 
 The 2026-05-18 P2 agentic-control repair closes the latest APS control-loop
 regressions under the v3 boundary model. `expected_telemetry` now teaches and

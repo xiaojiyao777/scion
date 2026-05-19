@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.core.models import PairwiseCaseFeedback
+from scion.proposal.context_manager import _build_agent_quality_feedback
 
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     Branch,
@@ -107,6 +108,37 @@ def test_feedback_query_runtime_includes_problem_declared_failure_guidance(
     assert "declared budget surface" in payload["runtime_failure_guidance"]
     assert "raw_metrics_ref" not in rendered
     assert "SECRET_RAW_REF" not in rendered
+
+
+def test_agent_quality_feedback_surfaces_algorithm_smoke_failure_detail(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    blocked = replace(
+        context.step_history[0],
+        protocol_result=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:patch_generation_failed: "
+            "agent_quality_blocked:algorithm_smoke_failure: "
+            "runtime_smoke.telemetry_guard: zero move attempts"
+        ),
+        proposal_session_ref={
+            "primary_failure": {
+                "stage": "agent_quality_blocked",
+                "reason": "algorithm_smoke_failure",
+                "category": "algorithm_smoke_failure",
+                "code": "algorithm_smoke_failure",
+                "detail": "runtime_smoke.telemetry_guard: zero move attempts",
+            }
+        },
+    )
+
+    rendered = _build_agent_quality_feedback([blocked], blocked.branch_id)
+
+    assert "algorithm_smoke_failure" in rendered
+    assert "runtime_smoke.telemetry_guard" in rendered
+    assert "DecisionFeatures" in rendered
 
 
 def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import scion.proposal.tools.preview as preview_tools
 from scion.proposal.solver_design_smoke import _runtime_algorithm_smoke_preview
+from scion.proposal.tools.active_solver import algorithm_file_path_guidance
 
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     AgenticProposalRequest,
@@ -146,7 +147,14 @@ def test_active_solver_algorithm_file_tools_are_allowlisted_with_provenance(
 
     files = listed.structured_payload["files"]
     by_path = {item["file_path"]: item for item in files}
+    guidance = algorithm_file_path_guidance(context)
     assert listed.is_error is False
+    assert files[0]["file_path"] == "policies/baseline_algorithm.py"
+    assert files[-1]["file_path"] == "policies/solver_algorithm.py"
+    assert guidance["example_file_path"] == "policies/baseline_algorithm.py"
+    assert guidance["primary_entrypoint_file_path"] == "policies/baseline_algorithm.py"
+    assert "policies/solver_algorithm.py" in guidance["compatibility_file_paths"]
+    assert "compatibility hook" in guidance["path_selection_rule"]
     assert by_path["policies/baseline_algorithm.py"]["active"] is True
     assert by_path["policies/solver_algorithm.py"]["active"] is False
     assert by_path["policies/baseline_modules/scheduler.py"]["source"] == (

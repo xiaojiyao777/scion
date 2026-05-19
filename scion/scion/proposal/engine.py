@@ -591,6 +591,10 @@ def _split_hypothesis_context(
         branch_context_parts.append(
             f"## Runtime Failure Guidance\n{D['runtime_failure_guidance']}"
         )
+    if D["agent_quality_feedback"]:
+        branch_context_parts.append(
+            f"## Agent Quality Feedback\n{D['agent_quality_feedback']}"
+        )
     agentic_context = _agentic_research_context_block(D)
     if agentic_context:
         branch_context_parts.append(agentic_context)
@@ -739,6 +743,13 @@ def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:
                         "acceptance, target that concrete module and put any "
                         "needed scheduler/entrypoint integration in "
                         "`additional_changes`."
+                    ),
+                    (
+                        "`policies/baseline_algorithm.py` is the active "
+                        "solver_design entrypoint. "
+                        "`policies/solver_algorithm.py` is a compatibility "
+                        "hook; do not choose it as target_file unless the "
+                        "hypothesis explicitly repairs that compatibility hook."
                     ),
                     (
                         "After win-rate-zero scheduler variants, prefer a "
