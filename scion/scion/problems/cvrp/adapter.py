@@ -343,6 +343,11 @@ class CvrpAdapter:
 
         return CvrpMechanismNoveltyProvider()
 
+    def contract_check_provider(self) -> Any:
+        from scion.problems.cvrp.contract_checks import CvrpContractCheckProvider
+
+        return CvrpContractCheckProvider()
+
     def stagnation_object_model_markers(self) -> tuple[str, ...]:
         return (
             "_solution",

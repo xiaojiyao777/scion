@@ -36,13 +36,13 @@ the former 4.8k-line `tests/test_cvrp_solver_operator_runtime.py` aggregate is
 now a placeholder, shared fixtures live in `cvrp_solver_runtime_support.py`,
 and focused `test_cvrp_*_runtime.py` files pass (`72 passed`). Remaining P0/P1
 blockers include `problems/cvrp/solver.py`, `problems/cvrp/adapter.py`,
-`proposal/context_manager.py`, and
-`contract/checks/solver_design_integration.py`. The first production
-solver slice has started: low-coupling policy-module loading,
-solution/objective helpers, and timing helpers now live under the CVRP-owned
-`problems/cvrp/solver_runtime/` package while `solver.py` remains the public
-facade. This is verified but not sufficient; `solver.py` is still above 9000
-lines and remains the main P0 production blocker.
+`proposal/context_manager.py`, and the CVRP-owned solver-design integration
+provider. The first production solver slices have started:
+low-coupling policy-module loading, solution/objective helpers, timing helpers,
+operator-registry runtime, and neighborhood-portfolio runtime now live under
+the CVRP-owned `problems/cvrp/solver_runtime/` package while `solver.py`
+remains the public facade. This is verified but not sufficient; `solver.py` is
+still above 8000 lines and remains the main P0 production blocker.
 
 The 2026-05-19 design-first modularization repair is now complete for two
 framework hot spots. `proposal/tools/preview.py` is a small compatibility
@@ -53,9 +53,9 @@ orchestrates C1-C12 while target/path, security, static-risk, novelty,
 telemetry, surface-access, patch-path, and result-payload logic live in focused
 contract modules. This is responsibility split work, not just helper
 extraction. It does not close all contract/provider debt:
-`contract/checks/solver_design_integration.py` still embeds solver-design/CVRP
-assumptions in generic contract code and must move behind a problem-owned
-integration-check hook before being split further.
+the generic `contract/checks/solver_design_integration.py` is now a thin hook
+dispatcher, but the migrated CVRP-owned provider remains large and needs
+problem-package modularization.
 
 The latest audit-driven repair moved candidate-flow CVRP semantics back behind
 problem-owned hooks. `proposal.mechanism_novelty` is now a generic dispatch and
@@ -69,15 +69,16 @@ also now has a shared `solver_runtime/constants.py`, and `solver_runtime/*.py`
 is explicitly frozen in both CVRP problem specs. This closes the highest-risk
 candidate-flow leakage found in the post-split code audit, but the broader
 provider migration remains open for `proposal/engine.py`,
-`proposal/context_manager.py`, `proposal/solver_design_smoke.py`,
-`contract/checks/solver_design_integration.py`, and protocol/runtime telemetry
+`proposal/context_manager.py`, `proposal/solver_design_smoke.py`, the
+CVRP-owned solver-design integration provider, and protocol/runtime telemetry
 dispatch.
 
-The first context-manager slice is also in progress. Generic research-surface
-and adapter context construction now lives under
-`proposal/context_builders/`, but `proposal/context_manager.py` remains over
-3000 lines and is still active architecture debt. The next slices should move
-history/feedback rendering, active-solver/code-read context, and
+The context-manager split has completed two behavior-preserving slices. Generic
+research-surface and adapter context construction lives under
+`proposal/context_builders/`, and feedback/history/memory rendering lives in
+`proposal/context_builders/feedback_memory.py`. `proposal/context_manager.py`
+is still above 2700 lines and remains active architecture debt. The next slices
+should move active-solver/code-read context, budget/compaction, and
 problem-specific solver-design guidance behind focused builder/provider
 modules without mixing CVRP terms into Scion framework code.
 

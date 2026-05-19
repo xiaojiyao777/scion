@@ -1,6 +1,124 @@
 from __future__ import annotations
 
+from scion.problems.cvrp.solver_runtime import neighborhood_portfolio
+from scion.problems.cvrp.solver_runtime import operator_registry
 from scion.tests.cvrp_solver_runtime_support import *
+
+
+def test_solver_facade_reexports_registry_and_portfolio_helpers() -> None:
+    assert cvrp_solver._LoadedOperator is operator_registry._LoadedOperator
+    assert cvrp_solver._load_registry_operators is operator_registry._load_registry_operators
+    assert (
+        cvrp_solver._load_neighborhood_portfolio
+        is neighborhood_portfolio._load_neighborhood_portfolio
+    )
+    assert (
+        cvrp_solver._portfolio_audit_defaults
+        is neighborhood_portfolio._portfolio_audit_defaults
+    )
+
+
+def test_registry_loader_keeps_component_metadata_in_runtime_module(
+    tmp_path: Path,
+) -> None:
+    operators_dir = tmp_path / "operators"
+    operators_dir.mkdir()
+    (operators_dir / "metadata.py").write_text(
+        "\n".join(
+            [
+                "class RoutePairOperator:",
+                "    category = 'route_pair'",
+                "    def execute(self, solution, instance, rng):",
+                "        return solution",
+                "",
+                "class UnknownCategoryOperator:",
+                "    category = 'unknown'",
+                "    def execute(self, solution, instance, rng):",
+                "        return solution",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        "\n".join(
+            [
+                "operators:",
+                "  - name: route_pair",
+                "    file_path: operators/metadata.py",
+                "    class_name: RoutePairOperator",
+                "    weight: 1.0",
+                "  - name: fallback",
+                "    file_path: operators/metadata.py",
+                "    class_name: UnknownCategoryOperator",
+                "    weight: 0.5",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    audit = {
+        "operator_loaded": 0,
+        "operator_skipped": 0,
+        "operator_errors": 0,
+        "operator_events": [],
+    }
+
+    loaded = operator_registry._load_registry_operators(
+        registry_path=str(registry),
+        workspace_root=tmp_path,
+        audit=audit,
+    )
+
+    assert [(operator.name, operator.component) for operator in loaded] == [
+        ("route_pair", "route_pair"),
+        ("fallback", "registry_operator"),
+    ]
+    assert audit["operator_loaded"] == 2
+    assert audit["operator_errors"] == 0
+
+
+def test_neighborhood_portfolio_scheduler_stays_in_runtime_module() -> None:
+    route_pair = operator_registry._LoadedOperator(
+        name="route_pair",
+        weight=1.0,
+        instance=object(),
+        order=0,
+        component="route_pair",
+    )
+    registry_operator = operator_registry._LoadedOperator(
+        name="registry",
+        weight=10.0,
+        instance=object(),
+        order=1,
+        component="registry_operator",
+    )
+    audit = neighborhood_portfolio._portfolio_audit_defaults(
+        {
+            "enabled_components": ["route_pair"],
+            "component_weights": {"route_pair": 1.0},
+            "candidate_limits": {
+                "max_rounds": 3,
+                "top_k": 1,
+                "total_attempts": 4,
+                "per_component_attempts": 4,
+            },
+        }
+    )
+    audit["operator_loaded"] = 2
+
+    scheduled = neighborhood_portfolio._apply_neighborhood_portfolio(
+        (registry_operator, route_pair),
+        audit=audit,
+        max_operator_rounds=20,
+    )
+
+    assert scheduled == (route_pair,)
+    assert audit["operator_loaded"] == 1
+    assert audit["portfolio_effective_round_limit"] == 3
+    assert audit["component_attempts"]["route_pair"] == 0
+
 
 def test_empty_registry_keeps_json_nearest_neighbor_behavior(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
@@ -328,5 +446,4 @@ def test_neighborhood_portfolio_surface_runtime_fields_match_solver_output(
         problem_spec=legacy_spec,
         selected_surface="neighborhood_portfolio",
     ) is None
-
 

@@ -17,17 +17,17 @@ Detailed review in this document focuses on the current files over 1000 lines. T
 
 | Priority | File | Lines | Ownership | Current Responsibility / Why It Grew | Split Plan |
 | --- | ---: | ---: | --- | --- | --- |
-| P0 | `scion/scion/problems/cvrp/solver.py` | 9153 | CVRP problem-specific | Public `solve`, CLI, registry operators, policy loading, policy normalization, baseline integration, main search, local neighborhoods, bounded destroy/repair, route-pool recombination, runtime audit, and `solver_algorithm` context are all in one module. Behavior fixes repeatedly landed here because it is the active runtime path. | Keep a thin compatibility `solver.py`; split into `solver/api.py`, `solver/cli.py`, `solver/policy_loading.py`, `solver/policy_schema.py`, `solver/main_search/{planning,runtime,telemetry}.py`, `solver/neighborhoods/{local,route_pair,bdr,route_pool}.py`, and `solver/algorithm_runtime.py`. |
-| P0 | `scion/scion/problems/cvrp/adapter.py` | 3376 | CVRP problem-specific | Adapter API, surface prose, static policy preview, AST checks, synthetic preview context, solver-algorithm preview, and solution checks are coupled. It grew because problem boundary rules were added near the adapter entrypoint instead of into problem-owned submodules. | Keep `CvrpAdapter` as facade. Move prose to `surface_rendering.py`, constants/schema to `policy_schema.py`, solution validation to `solution_checks.py`, and preview logic to `preview/{dispatch,construction,baseline,solver_algorithm,main_search,deep_policies}.py`. |
+| P0 | `scion/scion/problems/cvrp/solver.py` | 8606 | CVRP problem-specific | Public `solve`, CLI, policy normalization, baseline integration, main search, local neighborhoods, bounded destroy/repair, route-pool recombination, runtime audit, and `solver_algorithm` context are still mostly in one module. Initial slices moved policy-module loading, solution/objective helpers, timing, operator-registry runtime, and neighborhood-portfolio runtime into `solver_runtime/`. | Keep a thin compatibility `solver.py`; next slices should move policy schema/loading remnants, neighborhoods, route-pool/BDR, main-search runtime/telemetry, and CLI-facing code into focused CVRP-owned modules. |
+| P0 | `scion/scion/problems/cvrp/adapter.py` | 3381 | CVRP problem-specific | Adapter API, surface prose, static policy preview, AST checks, synthetic preview context, solver-algorithm preview, contract-check provider registration, and solution checks are coupled. It grew because problem boundary rules were added near the adapter entrypoint instead of into problem-owned submodules. | Keep `CvrpAdapter` as facade. Move prose to `surface_rendering.py`, constants/schema to `policy_schema.py`, solution validation to `solution_checks.py`, provider registration to small provider modules, and preview logic to `preview/{dispatch,construction,baseline,solver_algorithm,main_search,deep_policies}.py`. |
 | P0 / closed | `scion/scion/proposal/agentic_session.py` | 17 | Scion framework | Compatibility facade only after the Bacon post-review split. | Keep as facade; do not add new behavior here. |
-| P1 | `scion/scion/proposal/context_manager.py` | 3210 | Scion framework with CVRP leakage | Hypothesis/code/fix context, surface metadata, history rendering, runtime feedback, strategy guidance, solver-design guidance, and code reads are still combined. The first slice moved generic research-surface and adapter context construction into `proposal/context_builders/`. | Continue the split into history/feedback rendering, active-solver/code-read context, budget/compaction, and strategy guidance modules. Move CVRP-specific solver-design guidance into a problem provider. |
-| P1 / phase complete | `scion/scion/contract/gate.py` | 859 | Scion framework | `ContractGate` is now an orchestration facade for C1-C12, public API, stateful dependencies, syntax/surface dispatch, and solver-design integration callback wiring. Target/path, security, randomness, complexity, identity, novelty, telemetry, surface access, patch-path, and result-payload logic moved to focused modules. | Do not add new checks to `gate.py`. Remaining contract debt is `contract/checks/solver_design_integration.py`, which must move behind a problem-owned hook before further split. |
+| P1 | `scion/scion/proposal/context_manager.py` | 2733 | Scion framework with CVRP leakage | Hypothesis/code/fix context, active-solver/code-read context, budget/compaction, strategy guidance, and solver-design guidance are still combined. Two slices moved generic research-surface/adapter context and feedback/history/memory rendering into `proposal/context_builders/`. | Continue the split into active-solver/code-read context, budget/compaction, and strategy guidance modules. Move CVRP-specific solver-design guidance into a problem provider. |
+| P1 / phase complete | `scion/scion/contract/gate.py` | 830 | Scion framework | `ContractGate` is now an orchestration facade for C1-C12, public API, stateful dependencies, syntax/surface dispatch, and problem-integration hook dispatch. Target/path, security, randomness, complexity, identity, novelty, telemetry, surface access, patch-path, result-payload, and C9e provider dispatch live in focused modules. | Do not add new checks to `gate.py`. Future solver-design integration changes should land in problem-owned providers or generic hook dispatch, not the facade. |
 | P1 / phase complete | `scion/scion/proposal/tools/preview.py` | 141 | Scion framework | Compatibility facade only. Preview behavior is split into focused `proposal/tools/previews/*` modules for schema, permission, contract, algorithm smoke, telemetry-static, and feedback payloads. | Keep this as facade and add future preview behavior in the owning `previews/*` module. |
 | P1 | `scion/scion/protocol/experiment.py` | 1985 | Scion framework | Split/seed managers, canary, main experiment loop, runtime audit observation, surface runtime aggregation, case feedback aggregation, and pattern summaries are combined. `run_experiment` alone is too large. | Split into `experiment_runner.py`, `canary.py`, `runtime_observation.py`, `surface_runtime_summary.py`, and `case_feedback.py`. |
 | P1 | `scion/scion/core/proposal_pipeline.py` | 1540 | Scion core/framework | Proposal pipeline, agentic session adapter, failure routing, resume context, lineage, and session refs are combined. | Split `core/proposal_pipeline/{pipeline,agentic_adapter,failure_routing,resume,lineage}.py`; keep public `ProposalPipeline` import stable. |
 | P1 | `scion/scion/proposal/solver_design_smoke.py` | 1468 | CVRP semantics in proposal layer | Runtime smoke uses CVRP case manifest assumptions, CVRP solver_algorithm telemetry, and CVRP object-model repair guidance. This is problem behavior in framework location. | Move to `problems/cvrp/smoke/solver_design.py`. Proposal tools should call a problem adapter/provider hook. |
 | P1 | `scion/scion/proposal/engine.py` | 1465 | Scion framework with CVRP leakage | Creative layer and prompt splitting are mixed with hard-coded CVRP solver-design prompt guidance, ALNS/VNS terms, `_ALNSVNSSolver`, and `_Solution` details. | Split generic prompt builders from problem prompt providers. CVRP prompt details should come from adapter/surface metadata. |
-| P1 | `scion/scion/contract/checks/solver_design_integration.py` | 1265 | CVRP semantics in contract layer | The check is named generically but hard-codes `_ALNSVNSSolver`, scheduler APIs, CVRP state bridge methods, and solver-design file paths. Hubble's contract split intentionally left it intact to avoid spreading problem semantics into more generic modules. | Move to `problems/cvrp/contract_checks/solver_design_integration.py` and register through problem/adapter metadata. Framework contract code should only dispatch. |
+| P1 | `scion/scion/problems/cvrp/contract_checks/solver_design_integration.py` | 1310 | CVRP problem-specific | The C9e solver-design integration implementation now lives under the CVRP package and is registered through the adapter. It still combines import/export analysis, AST discovery, solver class reachability, scheduler/baseline API checks, and state bridge rules. | Split inside the CVRP package by import graph, AST discovery, reachability, scheduler/baseline API, and state bridge. Generic `contract/checks/solver_design_integration.py` should remain a thin dispatcher. |
 | P2 | `scion/scion/proposal/tools/feedback.py` | 1483 | Scion framework with some CVRP prioritization | Memory, screening, holdout, runtime feedback, diagnosis, and surface-priority logic are combined. Some CVRP solver-design priority rules live here. | Split `tools/feedback/{memory,screening,holdout,runtime,diagnosis}.py`; move CVRP priority rules to problem provider. |
 | P2 | `scion/scion/cli/main.py` | 1286 | Scion framework | `init`, `run`, inspect commands, reports, postmortem, and weight optimization all live in one CLI file. | Split `cli/{init,run,inspect,report,postmortem,optimize}.py`; retain top-level command registration. |
 | P2 | `scion/scion/runtime/telemetry_guard.py` | 1226 | Scion framework | Telemetry schema normalization, declared probes, runtime path resolution, summary building, and formatting are combined. | Split `runtime/telemetry/{schema,summary,path_resolution,formatting}.py`. |
@@ -70,7 +70,7 @@ Current boundary leaks:
 - `scion/scion/proposal/engine.py` embeds CVRP solver-design prompt rules: ALNS/VNS, route-pool, destroy/repair, `_ALNSVNSSolver`, `CvrpSolution`, `_Solution`, `_Route`, and CVRP distance/demand guidance. These should be adapter-provided prompt sections.
 - `scion/scion/proposal/context_manager.py` includes solver-design API guidance that names CVRP construction helpers and `_ALNSVNSSolver` integration details. This should move to a CVRP problem provider.
 - `scion/scion/proposal/solver_design_smoke.py` is mostly CVRP smoke behavior in a proposal package. It knows CVRP manifest schema, solver_algorithm counters, and CVRP object-model repair guidance. It should live under the CVRP problem package and be called through a generic smoke hook.
-- `scion/scion/contract/checks/solver_design_integration.py` hard-codes CVRP scheduler, state bridge, and solver-design runtime rules in a generic contract namespace. It should be a registered CVRP contract check.
+- The C9e solver-design integration rules have moved out of generic Contract into a CVRP-registered provider. The provider itself still needs CVRP-package modularization.
 - Contract complexity checking still depends on legacy problem-scale names such as route/vehicle terms resolved by the facade. The framework should ask the problem spec/adapter for scale vocabulary instead.
 - `scion/scion/protocol/experiment.py` has explicit `solver_algorithm_*` runtime counters. This is acceptable only as a declared surface telemetry convention; the next step should make these fields surface-schema driven rather than hard-coded in the generic experiment loop.
 
@@ -78,6 +78,7 @@ Closed boundary leak in this slice:
 
 - `scion/scion/proposal/mechanism_novelty.py` no longer hard-codes CVRP construction, Or-opt, Shaw removal, or adaptive-weight semantics. It is now a generic dispatch/rejection-shape module. CVRP mechanism checks live in `scion/scion/problems/cvrp/mechanism_novelty.py` behind `CvrpAdapter.mechanism_novelty_provider()`.
 - `scion/scion/core/stagnation.py` no longer embeds CVRP object-model marker strings. Campaign composition injects optional problem-owned markers through `adapter.stagnation_object_model_markers()`.
+- `scion/scion/contract/checks/solver_design_integration.py` is now a thin generic hook dispatcher. CVRP-specific C9e implementation moved to `scion/scion/problems/cvrp/contract_checks/solver_design_integration.py` and is exposed through `CvrpAdapter.contract_check_provider()`.
 
 Boundary target:
 
@@ -147,7 +148,31 @@ The first behavior-preserving production extraction is complete:
 - `scion/scion/problems/cvrp/solver.py` remains the public executable/import facade and re-exports the old private helper names by importing them explicitly.
 - Verification run: `python -m compileall -q scion/scion/problems/cvrp scion/scion/tests` and `python -m pytest scion/scion/tests/test_cvrp_*_runtime.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q` passed with 72 tests.
 
-This is intentionally a small first slice. `solver.py` is still over 9000 lines and remains the main P0 production blocker. Next production slices should move policy loaders/schemas, then neighborhoods, then main-search runtime/telemetry, preserving facade compatibility after each step.
+This was intentionally a small first slice. `solver.py` is still over 8000
+lines and remains the main P0 production blocker. Next production slices should
+move policy loaders/schemas, then neighborhoods, then main-search
+runtime/telemetry, preserving facade compatibility after each step.
+
+## CVRP Solver Runtime Second Slice Update
+
+The second behavior-preserving production extraction is complete:
+
+- Added `solver_runtime/operator_registry.py` for registry YAML parsing, path
+  isolation, operator instantiation, and registry audit metadata.
+- Added `solver_runtime/neighborhood_portfolio.py` for neighborhood portfolio
+  policy schema/loading, scheduler selection, attempt counters, and runtime
+  portfolio audit.
+- `solver.py` explicitly re-exports the old private helper names for backward
+  compatibility.
+- `solver.py` is now 8606 lines, down from 9153 before this slice. The largest
+  new solver runtime module is 448 lines.
+- Verification run: compileall passed; CVRP runtime tests passed with 75 tests;
+  CVRP adapter tests passed with 62 tests; protocol/smoke solver-design tests
+  passed with 29 tests; policy-runtime surface tests passed with 13 tests.
+
+This is still not enough to resume long validation. `solver.py` remains the
+largest production file by a wide margin, and future slices should move real
+algorithm families rather than adding more facade-level compatibility imports.
 
 ## Proposal Preview Modularization Update
 
@@ -170,30 +195,32 @@ modularization validation (`153 passed`, then `366 passed`).
 
 The contract gate P1 split is complete for the generic Contract facade:
 
-- `scion/scion/contract/gate.py` is now 859 lines, down from 3553.
+- `scion/scion/contract/gate.py` is now 830 lines, down from 3553.
 - `ContractGate` keeps public API and C1-C12 ordering, but target/path,
   security, randomness, complexity, identity, novelty, telemetry,
   surface-access, patch-path, and result-payload logic are now in focused
   modules.
 - `contract/checks/static_risk.py` is now a compatibility re-export facade.
-- `contract/checks/solver_design_integration.py` remains 1265 lines by design:
-  it contains existing solver-design/CVRP assumptions and should move behind a
-  problem-owned integration-check hook before any further split.
+- `contract/checks/solver_design_integration.py` is now an 81-line generic hook
+  dispatcher. CVRP-specific C9e implementation lives under
+  `problems/cvrp/contract_checks/`.
 
-Verification run: Hubble's contract-specific run passed (`164 passed`), and the
-main follow-up regression passed (`153 passed`, then `366 passed`) with
+Verification run: Hubble's contract-specific run passed (`167 passed`), and the
+main follow-up regression passed (`240 passed`, then `244 passed`) with
 `git diff --check`.
 
-## Context Manager First Slice Update
+## Context Manager Split Update
 
 The context manager P1 split has started but is not closed:
 
 - Generic research-surface and problem-adapter context construction moved under
   `scion/scion/proposal/context_builders/`.
-- `scion/scion/proposal/context_manager.py` is still 3210 lines and remains
+- Feedback/history/memory rendering moved to
+  `scion/scion/proposal/context_builders/feedback_memory.py`.
+- `scion/scion/proposal/context_manager.py` is still 2733 lines and remains
   active architecture debt.
-- Next slices should split history/feedback rendering, active-solver/code-read
-  context, budget/compaction, and strategy guidance while moving
+- Next slices should split active-solver/code-read context, budget/compaction,
+  and strategy guidance while moving
   solver-design/CVRP-specific wording behind problem-owned providers.
 
 This is a partial improvement only. It should not be treated as sufficient for
@@ -228,7 +255,7 @@ Phase 1: unblock CVRP P0 without touching Bacon's split.
 Phase 2: move CVRP semantics out of framework.
 
 - Move `proposal/solver_design_smoke.py` implementation to `problems/cvrp/smoke/solver_design.py`.
-- Move `contract/checks/solver_design_integration.py` to a CVRP registered contract check.
+- The generic C9e integration check now dispatches to a CVRP registered provider; continue splitting that provider inside `problems/cvrp/contract_checks/`.
 - Replace CVRP prompt text in `proposal/engine.py` and `proposal/context_manager.py` with problem-provider prompt sections.
 
 Phase 3: split framework P1 files.

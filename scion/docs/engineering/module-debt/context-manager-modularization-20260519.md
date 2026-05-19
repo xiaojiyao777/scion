@@ -221,7 +221,7 @@ call the builder modules, and return the same context dictionaries.
 
 ## Phase Plan
 
-Phase 1, implemented with this design:
+Phase 1, implemented in commit `a2929b0`:
 
 - add the `context_builders` package
 - move pure research-surface rendering and generic adapter-hook helpers
@@ -229,12 +229,30 @@ Phase 1, implemented with this design:
 - avoid behavioral changes and avoid edits to proposal preview or contract gate
   files
 
-Phase 2:
+Phase 2, implemented after `a2929b0`:
 
-- move screening feedback and memory exposure into `feedback_memory.py`
-- add focused tests proving validation/frozen per-case feedback remains absent
-- make `ContextManager.build_hypothesis_context` read like an orchestration
-  sequence instead of a monolithic builder
+- move screening/proposal feedback rendering into
+  `context_builders/feedback_memory.py`
+- keep `ContextManager` as the compatibility facade for historical helper
+  imports
+- keep the extraction limited to behavior-preserving rendering of safe
+  prompt-visible facts:
+  screening-only step filtering, branch experiment history, pattern/case
+  feedback, proposal-only agent-quality blocks, what-worked summaries,
+  verification-failure diagnosis text, and champion baseline hints
+- leave runtime feedback, search-control guidance, objective steering, and
+  active solver-design code context in `context_manager.py` for later phases
+
+Phase 2 is intentionally not a generic helper bucket. The new module owns one
+stable responsibility: proposal-visible feedback/memory exposure. It may read
+framework `StepRecord`/`ProtocolResult` structures and normalized
+screening-stage feedback, but it may not interpret problem objects or infer
+solver semantics. Case-feature labels are rendered from already-supplied
+metadata keys and capped; their meaning remains problem-owned.
+
+Phase 2 does not implement a problem-owned provider for solver-design prompt
+guidance. That debt remains because the risky strings and path maps sit in the
+active-solver/code-read context, not in the history/feedback renderer.
 
 Phase 3:
 
@@ -270,3 +288,46 @@ Recommended additional smoke coverage:
 - `scion/scion/tests/unit/test_agentic_proposal_tools_context.py`
 - `scion/scion/tests/unit/test_agentic_proposal_tools_feedback.py`
 - `scion/scion/tests/unit/test_agentic_proposal_tools_solver_design.py`
+
+## Phase-2 Safety Checks
+
+Phase 2 should pass focused tests that exercise the compatibility facade and the
+renderers moved into `feedback_memory.py`:
+
+- `scion/scion/tests/unit/test_context_manager_modularization.py`
+- `scion/scion/tests/test_sprint4_context.py`
+- `scion/scion/tests/test_sprint_e2_guidance_history.py`
+- `scion/scion/tests/test_sprint_e3_observability_feedback.py`
+- `scion/scion/tests/test_sprint_e3_champion_baselines.py`
+- `scion/scion/tests/unit/test_agentic_feedback_exposure.py`
+
+The broader context smoke should still pass:
+
+- `scion/scion/tests/unit/test_research_surfaces_cvrp_context.py`
+- `scion/scion/tests/unit/test_research_surfaces_generic_context.py`
+
+## Remaining Debt After Phase 2
+
+- Active solver/code-read context still contains hardcoded solver-design file
+  lists and target-specific implementation guidance. This must move behind a
+  problem-owned provider hook before it is extracted into `active_solver.py`.
+  Concrete debt in `context_manager.py` includes
+  `_SOLVER_DESIGN_API_MODULES`, `_SOLVER_DESIGN_INTEGRATION_FULL_FILES`,
+  `_SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES`, and
+  `_solver_design_target_api_guidance()`.
+- The intended provider shape for that migration is problem-owned, for example:
+  `adapter.active_solver_context_provider()` returning a provider that can list
+  algorithm files, select integration-context files, render target-specific
+  guidance, and summarize branch-current API manifests. The generic builder
+  should only enforce exposure/path constraints and call that provider; it
+  should not know package-owned filenames or algorithm families.
+- Runtime feedback rendering remains in `context_manager.py`. It is mostly
+  generic normalized feedback, but it is larger and more entangled with
+  selected-surface runtime summary fields, so it needs a separate exposure
+  review.
+- Objective steering and search-control guidance remain in `context_manager.py`.
+  They are generic today, but should be split only after confirming the adapter
+  objective-policy boundary is sufficient.
+- Historical direct imports from `scion.proposal.context_manager` remain as a
+  compatibility surface. Later phases should either formalize these as facade
+  exports or migrate call sites to explicit builder modules.

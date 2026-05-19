@@ -180,7 +180,7 @@ public `ContractGate` behavior or C-check ordering.
 | C9c high-risk enumeration/loop shape | `contract/checks/complexity.py` | `gate -> complexity`, after the facade resolves surface-declared scale names |
 | C9d instance-identity leakage | `contract/checks/identity.py` | `gate -> identity`, with `SurfaceAccess`, champion snapshot reader, and a generic surface-policy predicate |
 | Static-risk import compatibility | `contract/checks/static_risk.py` | facade re-exports only |
-| C9e solver-design integration | `contract/checks/solver_design_integration.py` | unchanged compatibility module; see residual debt |
+| C9e solver-design integration | `contract/checks/solver_design_integration.py` | unchanged compatibility module in Phase 3; see Phase 4 |
 
 `ContractGate` now retains:
 
@@ -201,18 +201,16 @@ public `ContractGate` behavior or C-check ordering.
 
 ### C9e Decision
 
-`contract/checks/solver_design_integration.py` remains a 1265-line
-compatibility module after Phase 3. Splitting it further inside generic
-`contract` would spread current branch assumptions into more modules:
-`_ALNSVNSSolver`, `baseline_algorithm.py`, `scheduler.py`,
-`policies/baseline_modules/*`, `_Solution` bridge APIs, stable constructor
-keyword names such as `max_routes`, and CVRP route/state guidance in failure
-details. These are existing debt, not new Phase 3 semantics.
+Phase 4 executed the safer path described after Phase 3. Generic Contract now
+defines a problem-integration request/dispatch shape, and CVRP owns the
+solver-design policy implementation under
+`problems/cvrp/contract_checks/solver_design_integration.py`.
+`contract/checks/solver_design_integration.py` remains only as a thin
+compatibility dispatcher and result normalizer.
 
-The safer next phase is not a line-level split. It should first define a
-problem-owned integration-check hook, then migrate those solver-design policies
-out of generic Contract. Only after that migration should reusable static
-pieces be extracted as generic helpers:
+The remaining C9e work is problem-package modularization, not generic Contract
+splitting. Reusable static pieces should only move back into generic helpers if
+they are demonstrably problem-neutral:
 
 - same-patch import/export resolution;
 - AST module/class/function discovery;
@@ -229,11 +227,13 @@ pieces be extracted as generic helpers:
   by required surface/problem metadata so generic Contract no longer carries
   any problem vocabulary. The Phase 3 complexity module receives scale terms as
   input instead of owning that fallback.
-- `contract/checks/solver_design_integration.py` remains generic-package code
-  with problem-specific implementation assumptions called out by the audit. It
-  needs a problem-owned registered check, not a larger generic helper. Phase 3
-  intentionally did not split it into more generic modules because doing so
-  would make the v3 boundary less clear.
+- `contract/checks/solver_design_integration.py` is now a thin generic
+  dispatch facade. It still carries the historical C9e check name for public
+  compatibility, but no longer owns CVRP solver internals.
+- `problems/cvrp/contract_checks/solver_design_integration.py` is still above
+  the 1000-line design warning threshold. That debt is now problem-owned and
+  should be split by CVRP integration subresponsibility before more policy is
+  added there.
 - `surface_interface.py` and `surface_access.py` now share some surface metadata
   concepts. A later cleanup should converge them without expanding either into a
   new monolith.
@@ -241,16 +241,63 @@ pieces be extracted as generic helpers:
   It remains under the 800-line target, but later slices can split import graph
   helpers from sensitive API/reflection checks if behavior is added.
 
-## Remaining Phases
+## Remaining Phases After Phase 4
 
 1. Move C9c scale-term resolution out of `ContractGate` while
    replacing legacy problem-scale fallback with adapter/surface-declared scale
    metadata.
-2. Move problem-specific solver-design integration out of generic
-   `contract/checks/solver_design_integration.py` behind a problem-owned
-   registered check.
-3. After the problem-owned hook exists, split reusable C9e pieces into generic
-   import/export resolution, module graph, inert-helper reachability, and hook
-   result helpers.
+2. Split the CVRP-owned C9e provider into import/export resolution, AST
+   discovery, reachability, scheduler/baseline API compatibility, and
+   state-bridge checks.
+3. If another problem needs static integration checks, promote only the
+   reusable AST/import/reachability primitives into generic helpers that know
+   nothing about CVRP, routes, or scheduler classes.
 4. Converge `surface_interface.py` and `surface_access.py` around one metadata
    reader API without coupling interface validation back to `ContractGate`.
+
+## Phase 4 Slice
+
+The fourth slice moves C9e problem semantics out of generic Contract. Generic
+Contract now owns only dispatch:
+
+| v3 Contract responsibility | Owner after Phase 4 | Dependency direction |
+| --- | --- | --- |
+| Problem integration hook request shape | `contract/checks/problem_integration.py` | `gate -> generic request`, no problem package imports |
+| Problem provider resolution | `contract/checks/problem_integration.py` | Direct `problem_spec.contract_check_provider()` first, then adapter import path |
+| C9e result normalization and fail-closed dispatch | `contract/checks/solver_design_integration.py` | `gate -> dispatch -> problem provider` |
+| CVRP solver-design integration policy | `problems/cvrp/contract_checks/solver_design_integration.py` | CVRP adapter/provider owns `_ALNSVNSSolver`, scheduler, baseline module, `_Solution`, and route/state guidance |
+| CVRP provider registration | `problems/cvrp/adapter.py` | `CvrpAdapter.contract_check_provider()` returns `CvrpContractCheckProvider` |
+
+Minimal hook shape:
+
+```python
+@dataclass(frozen=True)
+class ProblemIntegrationCheckRequest:
+    problem_spec: Any
+    patch: PatchProposal
+    selected_surface: str | None
+    champion_file_content: Callable[[str], str | None]
+```
+
+A problem-owned provider may implement
+`check_solver_design_integration(request) -> object` where the returned object
+exposes at least `passed` and `detail`. Generic Contract converts that to the
+existing `C9e_solver_design_integration` `CheckResult` in `ContractGate`. If a
+patch is declared as a solver-design patch by selected surface or surface target
+metadata and no provider is available, generic Contract fails closed.
+
+Generic Contract does not import `scion.problems.cvrp` directly. It imports an
+adapter only through the existing `adapter_import_path` string, constrained to
+`scion.problems.*`, or uses an explicit `contract_check_provider()` attached to
+the problem spec in tests/legacy integrations.
+
+Phase 4 intentionally keeps the CVRP check body behavior intact while moving
+ownership. The migrated CVRP-owned module is still above the 1000-line design
+warning threshold; that is now problem-package debt rather than framework debt.
+The next CVRP-owned split can safely separate:
+
+- same-patch import/export resolution;
+- AST module/class/function discovery;
+- static call graph and inert-helper reachability;
+- CVRP scheduler/baseline API compatibility rules;
+- CVRP state-bridge and route/state guidance.

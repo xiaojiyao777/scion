@@ -691,9 +691,8 @@ class ContractGate:
         t0 = time.monotonic_ns()
         result = check_solver_design_integration(
             patch,
+            problem_spec=self._spec,
             selected_surface=selected_surface,
-            selected_surface_is_solver_design=self._selected_surface_is_solver_design,
-            is_solver_design_patch_path=self._is_solver_design_patch_path,
             champion_file_content=self._champion_file_content,
         )
         return _cr(
@@ -786,34 +785,6 @@ class ContractGate:
             return None
         name = str(getattr(hypothesis, "change_locus", "") or "").strip()
         return name or None
-
-    def _selected_surface_is_solver_design(
-        self,
-        selected_surface: str | None,
-        patch: PatchProposal,
-    ) -> bool:
-        selected = str(selected_surface or "").strip()
-        if selected in {"solver_design", "solver_algorithm"}:
-            return True
-        if selected:
-            surface = self._surface_access.surface_by_name(selected)
-            if surface is not None:
-                kind = str(getattr(surface, "kind", "") or "").strip()
-                role = str(
-                    getattr(getattr(surface, "algorithm", None), "role", "") or ""
-                )
-                if kind in {"solver_design", "solver_algorithm"}:
-                    return True
-                if role in {"solver_design", "solver_algorithm"}:
-                    return True
-        for change in patch_file_changes(patch):
-            try:
-                file_rel = normalize_relative_patch_path(change.file_path)
-            except ValueError:
-                continue
-            if self._is_solver_design_patch_path(file_rel):
-                return True
-        return False
 
     def _is_solver_design_patch_path(self, file_rel: str) -> bool:
         normalized = str(file_rel or "").replace("\\", "/").lstrip("/")
