@@ -1,7 +1,7 @@
 # Large File Modularization Audit
 
 *Date: 2026-05-19*
-*Status: P0/P1 package-facade slices completed; remaining P2 CLI debt queued*
+*Status: P0/P1/P2 package-facade and command-package slices completed*
 *Required reading: `scion/docs/AGENT_ONBOARDING.md` and
 `scion/design/scion-architecture-v3.md`*
 
@@ -89,7 +89,7 @@ P1 has been implemented as package/facade migrations:
   attribution, diagnosis, surface metadata, code reads, support artifacts, and
   payload compaction live in focused modules.
 
-The current tracked Python files above 1000 lines are now:
+After the P1 slices, the remaining tracked Python file above 1000 lines was:
 
 | Lines | File | Priority | Direction |
 |---:|---|---|---|
@@ -97,9 +97,32 @@ The current tracked Python files above 1000 lines are now:
 
 ## P2 Queue
 
-`cli/main.py` should become Typer app wiring with command groups under
-`cli/commands/*`: run/init, inspect, reports, weights, postmortem, and
-validation helpers.
+P2 has been implemented as a command-package migration:
+
+- `scion/scion/cli/main.py` is now a small executable compatibility facade for
+  `python -m scion.cli.main` and `from scion.cli.main import app`.
+- `scion/scion/cli/app.py` owns Typer app/sub-app wiring.
+- `scion/scion/cli/commands/` owns command registration by responsibility:
+  run/init, inspect, reports, weights, postmortem, and shared validation
+  helpers.
+- CLI source-level regression tests that intentionally inspect implementation
+  details now target the owning command module instead of the facade.
+
+Current CLI line counts:
+
+| Lines | File |
+|---:|---|
+| 393 | `scion/scion/cli/commands/init_run.py` |
+| 336 | `scion/scion/cli/commands/postmortem.py` |
+| 319 | `scion/scion/cli/commands/reports.py` |
+| 292 | `scion/scion/cli/commands/inspect.py` |
+| 263 | `scion/scion/cli/commands/weights.py` |
+| 44 | `scion/scion/cli/commands/common.py` |
+| 39 | `scion/scion/cli/app.py` |
+| 31 | `scion/scion/cli/main.py` |
+
+There are currently no tracked Python files above 1000 lines under
+`scion/scion`.
 
 ## Migration Rules
 

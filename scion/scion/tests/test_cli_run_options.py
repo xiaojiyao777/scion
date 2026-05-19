@@ -382,7 +382,7 @@ def test_run_problem_v1_missing_dependency_stops_before_campaign(
 
 
 def test_run_threads_problem_v1_objective_policy_into_protocol() -> None:
-    source = Path(__file__).resolve().parents[1] / "cli" / "main.py"
+    source = Path(__file__).resolve().parents[1] / "cli" / "commands" / "init_run.py"
     text = source.read_text(encoding="utf-8")
 
     assert "objective_policy = bridge.objective_policy" in text
