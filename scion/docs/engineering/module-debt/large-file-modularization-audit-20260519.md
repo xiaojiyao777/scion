@@ -1,14 +1,14 @@
 # Large File Modularization Audit
 
 *Date: 2026-05-19*
-*Status: Context-manager P0 slice completed; remaining architecture debt queued*
+*Status: P0 package/facade slices completed; remaining P1/P2 architecture debt queued*
 *Required reading: `scion/docs/AGENT_ONBOARDING.md` and
 `scion/design/scion-architecture-v3.md`*
 
 ## Baseline
 
 After the `context_manager` package split, tracked Python files above 1000
-lines are:
+lines were:
 
 | Lines | File | Priority | Direction |
 |---:|---|---|---|
@@ -38,19 +38,33 @@ guideline:
 
 ## P0 Queue
 
-`protocol/experiment.py` is closest to v3 protocol reliability and
-Decision-input boundaries. Keep `ExperimentProtocol` as the public facade and
-split stage orchestration, split/seed selection, runtime observation, surface
-runtime summary, failure taxonomy, and pair/case feedback aggregation.
+P0 has been implemented as package/facade migrations:
 
-`core/proposal_pipeline.py` sits on the tainted creative to deterministic
-contract/protocol path. Keep `ProposalPipeline` as facade and split agentic
-request assembly, output validation/sanitization, failure lifecycle,
-lineage/session references, and repair orchestration.
+- `scion/scion/protocol/experiment.py` was replaced by
+  `scion/scion/protocol/experiment/`. `ExperimentProtocol`, `SplitManager`,
+  and `SeedLedger` remain import-compatible while stage orchestration,
+  split/seed selection, runtime observation, selected-surface runtime summaries,
+  failure taxonomy, and pair/case feedback aggregation live in focused modules.
+- `scion/scion/core/proposal_pipeline.py` was replaced by
+  `scion/scion/core/proposal_pipeline/`. `ProposalPipeline` remains
+  import-compatible while agentic request assembly, output validation,
+  failure lifecycle, lineage/session references, boundary checks, and
+  classification live in focused modules.
+- `scion/scion/runtime/telemetry_guard.py` was replaced by
+  `scion/scion/runtime/telemetry_guard/`. Public guard APIs remain
+  import-compatible while expected telemetry schemas, declarations, runtime
+  paths, observations, evidence checks, issue formatting, and summary building
+  live in focused modules.
 
-`runtime/telemetry_guard.py` is a fail-closed evidence boundary. Keep the guard
-facade and split expected schema normalization, declaration extraction, runtime
-path parsing, observation collection, value checks, and issue formatting.
+The current tracked Python files above 1000 lines are now:
+
+| Lines | File | Priority | Direction |
+|---:|---|---|---|
+| 1483 | `scion/scion/proposal/tools/feedback.py` | P1 | package/facade |
+| 1417 | `scion/scion/proposal/engine.py` | P1 | package/facade |
+| 1352 | `scion/scion/proposal/solver_design_smoke.py` | P1 | package/facade |
+| 1286 | `scion/scion/cli/main.py` | P2 | command package |
+| 1171 | `scion/scion/proposal/tools/surface.py` | P1 | package/facade |
 
 ## P1 Queue
 

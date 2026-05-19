@@ -6,8 +6,16 @@ from scion.core.models import MechanismChange
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     declared_surface_telemetry_fields,
+    format_telemetry_guard_issue,
+    normalize_expected_telemetry,
     validate_expected_telemetry_contract,
 )
+from scion.runtime.telemetry_guard.evidence import (
+    _bounded_value,
+    _empty_value,
+    _positive_evidence,
+)
+from scion.runtime.telemetry_guard.runtime_paths import _parse_runtime_path
 
 
 def _problem_spec() -> SimpleNamespace:
@@ -49,6 +57,30 @@ def test_telemetry_guard_flags_stage_budget_starvation() -> None:
     assert summary["passed"] is False
     assert summary["failures"][0]["code"] == "TELEMETRY_BUDGET_STARVED"
     assert summary["fields"]["solver_phase_runtime_ms"]["champion_positive"] == 1
+    assert (
+        format_telemetry_guard_issue(summary)
+        == "telemetry guard observed stage budget starvation: "
+        "solver_phase_runtime_ms had no positive candidate runtime evidence"
+    )
+
+
+def test_expected_telemetry_normalization_preserves_categories() -> None:
+    normalized = normalize_expected_telemetry(
+        {
+            "activity": "solver_search_iterations",
+            "activation": ["mechanisms.seed.active"],
+            "effect": {"seed": ["mechanisms.seed.delta"]},
+            "budget": ("solver_phase_runtime_ms",),
+            "mechanism": "seed",
+        }
+    )
+
+    assert normalized == {
+        "activation": ("mechanisms.seed.active",),
+        "activity": ("solver_search_iterations",),
+        "budget": ("solver_phase_runtime_ms",),
+        "effect": ("mechanisms.seed.delta",),
+    }
 
 
 def test_telemetry_guard_treats_protected_objective_effect_as_no_regression_probe() -> None:
@@ -108,6 +140,25 @@ def test_expected_telemetry_invalid_category_fails_even_without_fields() -> None
 
     assert errors
     assert "category 'attribution' is not supported" in errors[0]
+
+
+def test_expected_telemetry_missing_declared_fields_fails_closed() -> None:
+    problem_spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(name="solver", evidence=SimpleNamespace())
+        ]
+    )
+
+    errors = validate_expected_telemetry_contract(
+        problem_spec=problem_spec,
+        selected_surface="solver",
+        expected_telemetry={"effect": ["solver_best_delta"]},
+    )
+
+    assert errors == (
+        "research surface 'solver' does not declare telemetry fields in "
+        "surface.evidence",
+    )
 
 
 def test_mechanism_telemetry_fields_are_declared_and_guarded() -> None:
@@ -235,3 +286,27 @@ def test_telemetry_guard_scopes_map_paths_to_current_mechanism() -> None:
         ]
         == 0
     )
+
+
+def test_runtime_path_parser_handles_dotted_brackets_and_indices() -> None:
+    assert _parse_runtime_path("mechanisms['target_probe'].events[0].delta") == (
+        "mechanisms",
+        "target_probe",
+        "events",
+        "0",
+        "delta",
+    )
+
+
+def test_evidence_value_checks_are_positive_empty_and_bounded() -> None:
+    assert _positive_evidence({"zero": 0, "active": "yes"})
+    assert not _positive_evidence(["0", "false", 0])
+    assert _empty_value("")
+    assert _empty_value([])
+    assert not _empty_value(0)
+
+    bounded = _bounded_value({"k" * 120: ["x" * 200 for _ in range(10)]})
+    [(key, values)] = bounded.items()
+    assert len(key) == 80
+    assert len(values) == 8
+    assert all(len(value) == 160 for value in values)

@@ -1,0 +1,288 @@
+"""Telemetry guard summary construction."""
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from scion.runtime.audit import normalize_surface_name
+from scion.runtime.telemetry_guard.declarations import (
+    declared_activity_runtime_fields,
+    declared_stage_budget_runtime_fields,
+    find_research_surface,
+)
+from scion.runtime.telemetry_guard.evidence import _as_bool
+from scion.runtime.telemetry_guard.expected_schema import (
+    EXPECTED_TELEMETRY_CATEGORIES,
+    normalize_declared_mechanisms,
+    normalize_expected_telemetry,
+    normalize_expected_telemetry_by_mechanism,
+)
+from scion.runtime.telemetry_guard.issues import _guard_issue
+from scion.runtime.telemetry_guard.mechanism_probes import (
+    declared_mechanism_runtime_probes,
+)
+from scion.runtime.telemetry_guard.observations import (
+    _matches_protected_objective_field,
+    _protected_objective_tokens,
+    _runtime_field_summary,
+)
+from scion.runtime.telemetry_guard.runtime_paths import (
+    _mechanism_field_summary_key,
+)
+from scion.runtime.telemetry_guard.utils import _field
+
+
+def build_telemetry_guard_summary(
+    *,
+    candidate_runtimes: Sequence[Mapping[str, Any]],
+    champion_runtimes: Sequence[Mapping[str, Any]] = (),
+    problem_spec: Any | None,
+    selected_surface: str | None,
+    expected_telemetry: Any = None,
+    declared_mechanisms: Any = None,
+    protected_objectives: Sequence[str] = (),
+    implicit_activity_claim: bool = False,
+) -> dict[str, Any]:
+    """Build an aggregate, deterministic sanity summary for runtime telemetry."""
+
+    surface_name = normalize_surface_name(selected_surface)
+    surface = find_research_surface(problem_spec, surface_name)
+    claims = normalize_expected_telemetry(expected_telemetry)
+    mechanism_claims = normalize_expected_telemetry_by_mechanism(expected_telemetry)
+    mechanisms = normalize_declared_mechanisms(
+        declared_mechanisms,
+        expected_telemetry=expected_telemetry,
+    )
+    protected_tokens = _protected_objective_tokens(protected_objectives)
+    if not mechanisms and mechanism_claims:
+        mechanisms = tuple(mechanism_claims)
+    expected_present = any(claims.values()) or bool(mechanisms)
+    evidence = _field(surface, "evidence")
+
+    categories: dict[str, tuple[str, ...]] = {
+        category: tuple(fields) for category, fields in claims.items() if fields
+    }
+
+    failures: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    field_summaries: dict[str, dict[str, Any]] = {}
+    mechanism_summaries: dict[str, dict[str, Any]] = {
+        mechanism: {"categories": {}, "fields": {}, "passed": True}
+        for mechanism in mechanisms
+    }
+
+    for category, fields in sorted(categories.items()):
+        for field in fields:
+            summary = _runtime_field_summary(
+                field,
+                candidate_runtimes=candidate_runtimes,
+                champion_runtimes=champion_runtimes,
+            )
+            field_summaries[field] = summary
+            if category == "budget" and summary["candidate_positive"] == 0:
+                failures.append(
+                    _guard_issue(
+                        "TELEMETRY_BUDGET_STARVED",
+                        category=category,
+                        field=field,
+                        severity="fail",
+                        summary=summary,
+                    )
+                )
+            elif category == "effect" and _matches_protected_objective_field(
+                field,
+                protected_tokens,
+            ):
+                if summary["candidate_present"] == 0:
+                    failures.append(
+                        _guard_issue(
+                            "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED",
+                            category=category,
+                            field=field,
+                            severity="fail",
+                            summary=summary,
+                        )
+                    )
+            elif summary["candidate_positive"] == 0:
+                failures.append(
+                    _guard_issue(
+                        f"TELEMETRY_{category.upper()}_NOT_OBSERVED",
+                        category=category,
+                        field=field,
+                        severity="fail",
+                        summary=summary,
+                    )
+                )
+
+    mechanism_probe_categories: dict[str, dict[str, list[str]]] = {
+        mechanism: {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES}
+        for mechanism in mechanisms
+    }
+    for mechanism, category_claims in mechanism_claims.items():
+        categories_for_mechanism = mechanism_probe_categories.setdefault(
+            mechanism,
+            {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES},
+        )
+        mechanism_summaries.setdefault(
+            mechanism,
+            {"categories": {}, "fields": {}, "passed": True},
+        )
+        for category, fields in category_claims.items():
+            categories_for_mechanism.setdefault(category, [])
+            for field in fields:
+                if field not in categories_for_mechanism[category]:
+                    categories_for_mechanism[category].append(field)
+
+    for probe in declared_mechanism_runtime_probes(
+        problem_spec=problem_spec,
+        surface=surface,
+        declared_mechanisms=mechanisms,
+    ):
+        categories_for_mechanism = mechanism_probe_categories.setdefault(
+            probe.mechanism,
+            {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES},
+        )
+        mechanism_summaries.setdefault(
+            probe.mechanism,
+            {"categories": {}, "fields": {}, "passed": True},
+        )
+        fields = categories_for_mechanism.setdefault(probe.category, [])
+        if probe.field not in fields:
+            fields.append(probe.field)
+
+    for mechanism, category_fields in sorted(mechanism_probe_categories.items()):
+        mechanism_summary = mechanism_summaries.setdefault(
+            mechanism,
+            {"categories": {}, "fields": {}, "passed": True},
+        )
+        for category, fields in sorted(category_fields.items()):
+            fields = [field for field in fields if field]
+            if not fields or category not in ("activation", "effect", "budget"):
+                continue
+            mechanism_summary["categories"][category] = list(fields)
+            category_positive = 0
+            category_present = 0
+            category_missing = 0
+            category_champion_positive = 0
+            for field in fields:
+                summary = _runtime_field_summary(
+                    field,
+                    candidate_runtimes=candidate_runtimes,
+                    champion_runtimes=champion_runtimes,
+                    mechanism=mechanism,
+                )
+                mechanism_summary["fields"][field] = summary
+                field_summaries[_mechanism_field_summary_key(mechanism, field)] = (
+                    summary
+                )
+                category_positive += int(summary["candidate_positive"])
+                category_present += int(summary["candidate_present"])
+                category_missing += int(summary["candidate_missing"])
+                category_champion_positive += int(summary["champion_positive"])
+            if category_positive > 0:
+                continue
+            code = (
+                "TELEMETRY_MECHANISM_BUDGET_STARVED"
+                if category == "budget"
+                else f"TELEMETRY_MECHANISM_{category.upper()}_NOT_OBSERVED"
+            )
+            issue = _guard_issue(
+                code,
+                category=category,
+                field=",".join(fields),
+                severity="fail",
+                summary={
+                    "candidate_positive": category_positive,
+                    "candidate_present": category_present,
+                    "candidate_missing": category_missing,
+                    "champion_positive": category_champion_positive,
+                },
+                mechanism=mechanism,
+            )
+            failures.append(issue)
+            mechanism_summary["passed"] = False
+
+    if not expected_present:
+        activity_fields = declared_activity_runtime_fields(surface)
+        if activity_fields:
+            activity_positive = 0
+            for field in activity_fields:
+                summary = field_summaries.get(field)
+                if summary is None:
+                    summary = _runtime_field_summary(
+                        field,
+                        candidate_runtimes=candidate_runtimes,
+                        champion_runtimes=champion_runtimes,
+                    )
+                    field_summaries[field] = summary
+                activity_positive += int(summary["candidate_positive"])
+            if candidate_runtimes and activity_positive == 0:
+                issue = _guard_issue(
+                    "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                    category="activity",
+                    field=",".join(activity_fields),
+                    severity=(
+                        "fail"
+                        if implicit_activity_claim
+                        or _as_bool(_field(evidence, "fail_closed_on_zero_activity"))
+                        else "warn"
+                    ),
+                    summary={
+                        "candidate_runs": len(candidate_runtimes),
+                        "candidate_positive": 0,
+                    },
+                )
+                (failures if issue["severity"] == "fail" else warnings).append(issue)
+
+        budget_fields = declared_stage_budget_runtime_fields(surface)
+        for field in budget_fields:
+            if field in field_summaries:
+                continue
+            summary = _runtime_field_summary(
+                field,
+                candidate_runtimes=candidate_runtimes,
+                champion_runtimes=champion_runtimes,
+            )
+            field_summaries[field] = summary
+            if (
+                candidate_runtimes
+                and summary["candidate_positive"] == 0
+                and summary["champion_positive"] > 0
+            ):
+                issue = _guard_issue(
+                    "TELEMETRY_BUDGET_STARVED",
+                    category="budget",
+                    field=field,
+                    severity=(
+                        "fail"
+                        if _as_bool(
+                            _field(evidence, "fail_closed_on_stage_budget_starvation")
+                        )
+                        else "warn"
+                    ),
+                    summary=summary,
+                )
+                (failures if issue["severity"] == "fail" else warnings).append(issue)
+
+    return {
+        "schema": "scion.telemetry_guard.v1",
+        "selected_surface": surface_name or None,
+        "passed": not failures,
+        "expected_telemetry_present": expected_present,
+        "implicit_activity_claim": bool(implicit_activity_claim),
+        "declared_mechanisms": list(mechanisms),
+        "protected_objectives": list(protected_tokens),
+        "candidate_runs": len(candidate_runtimes),
+        "champion_runs": len(champion_runtimes),
+        "categories": {
+            category: list(fields) for category, fields in sorted(categories.items())
+        },
+        "mechanisms": {
+            mechanism: mechanism_summary
+            for mechanism, mechanism_summary in sorted(mechanism_summaries.items())
+            if mechanism_summary.get("categories") or mechanism_summary.get("fields")
+        },
+        "fields": field_summaries,
+        "warnings": warnings,
+        "failures": failures,
+    }
