@@ -57,11 +57,12 @@ def validate_expected_telemetry_contract(
         )
 
     allowed = set(declared_surface_telemetry_fields(surface))
-    for probe in declared_mechanism_runtime_probes(
+    mechanism_probes = declared_mechanism_runtime_probes(
         problem_spec=problem_spec,
         surface=surface,
         declared_mechanisms=mechanisms,
-    ):
+    )
+    for probe in mechanism_probes:
         allowed.add(probe.field)
     if not allowed:
         return tuple(
@@ -76,7 +77,16 @@ def validate_expected_telemetry_contract(
     for category, fields in claims.items():
         if category not in EXPECTED_TELEMETRY_CATEGORIES:
             continue
-        errors.extend(_category_field_semantic_errors(category, fields))
+        mechanism_fields = tuple(
+            probe.field for probe in mechanism_probes if probe.category == category
+        )
+        errors.extend(
+            _category_field_semantic_errors(
+                category,
+                fields,
+                mechanism_fields=mechanism_fields,
+            )
+        )
         unknown = [field for field in fields if field not in allowed]
         if unknown:
             errors.append(
@@ -99,6 +109,8 @@ _OBJECTIVE_OUTCOME_TELEMETRY_FIELDS = frozenset(
 def _category_field_semantic_errors(
     category: str,
     fields: tuple[str, ...],
+    *,
+    mechanism_fields: tuple[str, ...] = (),
 ) -> list[str]:
     errors: list[str] = []
     for field in fields:
@@ -121,7 +133,31 @@ def _category_field_semantic_errors(
                 "phase_runtime fields, while objective fields belong under effect "
                 "or protected-objective checks."
             )
+        specific_field = _mechanism_specific_field_for_aggregate(
+            field_text,
+            mechanism_fields,
+        )
+        if specific_field:
+            errors.append(
+                "expected_telemetry.activation references aggregate runtime field "
+                f"{field_text}; activation must use the mechanism-specific field "
+                f"{specific_field} rather than the whole telemetry map."
+            )
     return errors
+
+
+def _mechanism_specific_field_for_aggregate(
+    field: str,
+    mechanism_fields: tuple[str, ...],
+) -> str:
+    field_text = str(field or "").strip()
+    if not field_text:
+        return ""
+    prefix = f"{field_text}."
+    for mechanism_field in mechanism_fields:
+        if str(mechanism_field or "").startswith(prefix):
+            return str(mechanism_field)
+    return ""
 
 
 def _looks_like_prose_field(value: str) -> bool:

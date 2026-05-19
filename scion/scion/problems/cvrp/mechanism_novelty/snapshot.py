@@ -24,12 +24,14 @@ class _ActiveMechanismFacts:
     has_cross_route_tail_exchange: bool = False
     has_shaw_related_removal: bool = False
     starts_feasible_rejects_infeasible: bool = False
+    guards_route_limit_search_state: bool = False
     construction_evidence: tuple[str, ...] = ()
     adaptive_weight_evidence: tuple[str, ...] = ()
     or_opt_evidence: tuple[str, ...] = ()
     tail_exchange_evidence: tuple[str, ...] = ()
     shaw_related_evidence: tuple[str, ...] = ()
     feasible_search_evidence: tuple[str, ...] = ()
+    route_limit_evidence: tuple[str, ...] = ()
     snapshot_digest: str | None = None
 
 
@@ -135,6 +137,27 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 ),
             )
         ),
+        guards_route_limit_search_state=(
+            _has_any(
+                construction_combined,
+                (
+                    "capacity balanced",
+                    "capacity-balanced",
+                    "route cap is exceeded",
+                    "route cap",
+                    "max routes",
+                ),
+            )
+            and _has_any(
+                alns_combined,
+                (
+                    "route cap violating",
+                    "route-cap-violating",
+                    "route cap",
+                    "max routes",
+                ),
+            )
+        ),
         construction_evidence=_evidence(
             mechanism_summary.get("construction"),
             fallback=(
@@ -183,6 +206,26 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "starts from feasible construction",
                 "rejects infeasible or route-cap-violating candidates",
             ),
+        ),
+        route_limit_evidence=tuple(
+            dict.fromkeys(
+                [
+                    *_evidence(
+                        mechanism_summary.get("construction"),
+                        fallback=(
+                            "_capacity_balanced_construction when route cap is exceeded",
+                            "_initial_solution rejects route-limit excess",
+                        ),
+                    ),
+                    *_evidence(
+                        mechanism_summary.get("alns_loop"),
+                        fallback=(
+                            "rejects route-cap-violating candidates",
+                            "route-count excess is not accepted as current state",
+                        ),
+                    ),
+                ]
+            )
         ),
         snapshot_digest=_snapshot_digest(snapshot),
     )

@@ -141,6 +141,17 @@ class CvrpSolverDesignProvider:
                 "`solver_algorithm_phase_runtime_ms.m`."
             ),
             (
+                "Active solver invariant: initial construction is route-limit "
+                "guarded (`_capacity_balanced_construction` is used when the "
+                "route cap is exceeded, and `_initial_solution` fails closed if "
+                "routes still exceed `max_routes`). The ALNS loop also rejects "
+                "route-cap-violating candidates before they become current "
+                "search state. Do not target construction/ALNS fleet_violation "
+                "repair or route-limit excess as the default bottleneck unless "
+                "prior screening/runtime feedback explicitly shows positive "
+                "fleet_violation or route-limit excess."
+            ),
+            (
                 "Use `policies/baseline_modules/scheduler.py` mainly for "
                 "orchestration or wiring. If the new mechanism is construction, "
                 "destroy/repair, local improvement, or acceptance, target that "

@@ -25,6 +25,10 @@ from scion.problems.cvrp.mechanism_novelty.local_search import (
     _duplicates_cross_route_tail_exchange,
     _duplicates_or_opt_2_3,
 )
+from scion.problems.cvrp.mechanism_novelty.route_limit import (
+    _claims_unproven_route_limit_or_fleet_repair,
+    _has_explicit_route_limit_runtime_evidence,
+)
 from scion.problems.cvrp.mechanism_novelty.search_state import (
     _claims_unreachable_feasibility_crossing,
 )
@@ -43,6 +47,7 @@ class CvrpMechanismNoveltyProvider:
         *,
         active_solver_snapshot: Mapping[str, Any] | None = None,
         observations: Sequence[ProposalObservation] = (),
+        context: Any | None = None,
     ) -> MechanismNoveltyResult | None:
         if str(hypothesis.change_locus or "").strip() != "solver_design":
             return None
@@ -174,6 +179,31 @@ class CvrpMechanismNoveltyProvider:
                     "route relatedness criteria."
                 ),
                 evidence=facts.shaw_related_evidence,
+                snapshot_digest=facts.snapshot_digest,
+            )
+
+        if (
+            facts.guards_route_limit_search_state
+            and _claims_unproven_route_limit_or_fleet_repair(text)
+            and not _has_explicit_route_limit_runtime_evidence(
+                observations,
+                context=context,
+            )
+        ):
+            return MechanismNoveltyResult(
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="route_limit_fleet_repair",
+                reason=(
+                    "Hypothesis treats route-limit excess or positive "
+                    "fleet_violation as the default construction/ALNS state, "
+                    "but the active solver snapshot shows route-limit guarded "
+                    "construction and rejection of route-cap-violating search "
+                    "candidates. Target this mechanism only when prior "
+                    "screening/runtime feedback explicitly shows positive "
+                    "fleet_violation or route-limit excess."
+                ),
+                evidence=facts.route_limit_evidence,
                 snapshot_digest=facts.snapshot_digest,
             )
 

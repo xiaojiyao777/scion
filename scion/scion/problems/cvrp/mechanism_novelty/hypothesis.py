@@ -21,4 +21,6 @@ def _hypothesis_text(hypothesis: HypothesisProposal) -> str:
         hypothesis.runtime_budget_strategy or "",
     ]
     parts.extend(_flatten_leaf_strings(hypothesis.novelty_signature))
+    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+        parts.append(str(getattr(change, "id", "") or ""))
     return _normalize_text(" ".join(part for part in parts if part))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from inspect import signature
 from typing import Any, Mapping, Protocol, Sequence
 
 from scion.core.models import HypothesisProposal
@@ -43,6 +44,7 @@ class _MechanismNoveltyProvider(Protocol):
         *,
         active_solver_snapshot: Mapping[str, Any] | None = None,
         observations: Sequence[ProposalObservation] = (),
+        context: ProposalToolContext | None = None,
     ) -> MechanismNoveltyResult | None:
         ...
 
@@ -68,11 +70,23 @@ class MechanismNoveltyGate:
         snapshot = active_solver_snapshot or _active_solver_snapshot_from_observations(
             observations
         )
-        return provider.evaluate_mechanism_novelty(
-            hypothesis,
-            active_solver_snapshot=snapshot,
-            observations=observations,
-        )
+        kwargs: dict[str, Any] = {
+            "active_solver_snapshot": snapshot,
+            "observations": observations,
+        }
+        if _method_accepts_keyword(provider.evaluate_mechanism_novelty, "context"):
+            kwargs["context"] = context
+        return provider.evaluate_mechanism_novelty(hypothesis, **kwargs)
+
+
+def _method_accepts_keyword(method: Any, keyword: str) -> bool:
+    try:
+        params = signature(method).parameters
+    except (TypeError, ValueError):
+        return False
+    return keyword in params or any(
+        param.kind == param.VAR_KEYWORD for param in params.values()
+    )
 
 
 def _provider_from_context(

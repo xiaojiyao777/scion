@@ -137,6 +137,8 @@ class TestHypothesisGroundingRequirements:
         assert "mechanism novelty evidence" in text
         assert "likely to affect the bottleneck" in text
         assert "no-op/failure conditions" in text
+        assert "mechanism-specific path" in text
+        assert "whole map field alone is not activation evidence" in text
 
 
 class TestForcedSurfaceTaskPrompt:

@@ -560,7 +560,15 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "- `target_objectives` and `protected_objectives` must contain only declared problem objective ids; hard constraints or feasibility conditions go in risk/no-op text.\n"
         "- State expected runtime effect, complexity/candidate bounds, and runtime budget strategy.\n"
         "- When the selected surface declares mechanism telemetry, include mechanism_changes with the specific mechanism id(s) and generic change_type values: add, modify, replace, remove, or integrate.\n"
-        "- Declare expected_telemetry probes using runtime keys exposed by the selected surface evidence contract. Top-level expected_telemetry keys must be only activity, activation, effect, or budget; do not use runtime metric names or suffixes such as best_delta, improvement_counts, phase_runtime, or runtime_ms as categories. Activation must be mechanism activity evidence, not objective/outcome fields.\n"
+        "- Declare expected_telemetry probes using runtime keys exposed by the "
+        "selected surface evidence contract. Top-level expected_telemetry keys "
+        "must be only activity, activation, effect, or budget; do not use "
+        "runtime metric names or suffixes such as best_delta, "
+        "improvement_counts, phase_runtime, or runtime_ms as categories. "
+        "Activation must be mechanism activity evidence, not objective/outcome "
+        "fields. For mapping telemetry, use a mechanism-specific path such as "
+        "some_runtime_map.<mechanism_id>; the whole map field alone is not "
+        "activation evidence.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
         "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
@@ -690,7 +698,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate.
-- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis
+- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific records, not outcome/objective fields or an aggregate runtime map without the mechanism id.
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{

@@ -79,6 +79,8 @@ def test_cvrp_prompt_provider_demotes_legacy_surfaces() -> None:
     assert "policies/solver_algorithm.py" not in rendered
     assert "deleted" in rendered
     assert "not optimization directions" in rendered
+    assert "initial construction is route-limit guarded" in rendered
+    assert "positive fleet_violation or route-limit excess" in rendered
     assert "explicitly repairs that compatibility hook" not in rendered
 
 

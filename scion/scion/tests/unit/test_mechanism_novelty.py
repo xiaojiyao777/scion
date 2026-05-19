@@ -83,6 +83,15 @@ FALSE_PREMISES = (
         ),
         "feasibility_crossing",
     ),
+    (
+        "unproven_construction_route_merge",
+        (
+            "The current construction can produce more routes than route_limit, "
+            "leaving ALNS with fleet_violation to repair. Add "
+            "construction_route_merge while len(routes) > route_limit."
+        ),
+        "route_limit_fleet_repair",
+    ),
 )
 
 
