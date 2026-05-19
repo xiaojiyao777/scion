@@ -163,6 +163,57 @@ def test_campaign_summary_separates_primary_contract_and_session_observation(
     )
 
 
+def test_campaign_summary_uses_transient_api_session_failure_as_primary(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = StepRecord(
+        round_num=3,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Repair failed on external gateway error."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="code_generation",
+        failure_detail=(
+            "agentic_proposal:code_generation_failed: Tool call failed after "
+            "2 transient API attempt(s). Last error: Transient provider error: "
+            "HTTP 502 Bad Gateway"
+        ),
+        proposal_session_ref={
+            "session_id": "transient-session",
+            "termination_reason": "code_generation_failed",
+            "status": "partial_hypothesis_only",
+            "failure_category": "llm_transient_api_error",
+            "primary_failure": {
+                "stage": "code_generation_failed",
+                "reason": (
+                    "Tool call failed after 2 transient API attempt(s). "
+                    "Last error: Transient provider error: HTTP 502 Bad Gateway"
+                ),
+                "category": "llm_transient_api_error",
+            },
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=3,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    summary_step = summary["steps"][0]
+    assert summary_step["primary_failure"]["category"] == "llm_transient_api_error"
+    assert summary_step["primary_failure"]["stage"] == "code_generation_failed"
+    assert "502 Bad Gateway" in summary_step["primary_failure"]["reason"]
+    assert summary_step["proposal_session_ref"]["failure_category"] == (
+        "llm_transient_api_error"
+    )
+
+
 def test_campaign_summary_reports_provider_balance_stop_from_failure_detail(
     tmp_path: Path,
 ) -> None:

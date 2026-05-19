@@ -265,6 +265,9 @@ def _compact_algorithm_smoke_telemetry_guard(value: Any) -> dict[str, Any] | Non
             "declared_mechanisms": _compact_agent_text_list(
                 guard.get("declared_mechanisms")
             ),
+            "mechanism_diagnostics": _compact_mechanism_diagnostics(
+                guard.get("mechanism_diagnostics")
+            ),
             "failures": failures,
             "warnings": warnings,
         }
@@ -284,6 +287,7 @@ def _compact_telemetry_issues(value: Any, *, limit: int = 4) -> list[dict[str, A
             for key in (
                 "candidate_positive",
                 "candidate_present",
+                "candidate_zero",
                 "candidate_missing",
                 "champion_positive",
             )
@@ -302,6 +306,60 @@ def _compact_telemetry_issues(value: Any, *, limit: int = 4) -> list[dict[str, A
             )
         )
     return issues
+
+
+def _compact_mechanism_diagnostics(value: Any, *, limit: int = 6) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    diagnostics: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        diagnostics.append(
+            _drop_empty_items(
+                {
+                    "mechanism": item.get("mechanism"),
+                    "activation_status": item.get("activation_status"),
+                    "runtime_status": item.get("runtime_status"),
+                    "effect_status": item.get("effect_status"),
+                    "activation_observed": item.get("activation_observed"),
+                    "runtime_observed": item.get("runtime_observed"),
+                    "effect_observed": item.get("effect_observed"),
+                    "activation": _compact_status_block(item.get("activation")),
+                    "runtime": _compact_status_block(item.get("runtime")),
+                    "effect": _compact_status_block(item.get("effect")),
+                    "repair_guidance": _compact_agent_text_list(
+                        item.get("repair_guidance"),
+                        limit=3,
+                    ),
+                }
+            )
+        )
+    return diagnostics
+
+
+def _compact_status_block(value: Any) -> dict[str, Any] | None:
+    block = _mapping_or_none(value)
+    if block is None:
+        return None
+    counters = {
+        key: block.get(key)
+        for key in (
+            "candidate_positive",
+            "candidate_present",
+            "candidate_zero",
+            "candidate_missing",
+        )
+        if key in block
+    }
+    compact = _drop_empty_items(
+        {
+            "status": block.get("status"),
+            "fields": _compact_agent_text_list(block.get("fields"), limit=3),
+            "counters": counters,
+        }
+    )
+    return compact or None
 
 
 def _telemetry_guard_primary_issue(value: Mapping[str, Any] | None) -> str | None:

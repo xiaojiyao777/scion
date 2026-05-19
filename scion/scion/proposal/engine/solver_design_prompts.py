@@ -52,6 +52,11 @@ def _solver_design_hypothesis_guidance(context: Mapping[str, Any]) -> list[str]:
             "not by convenience."
         ),
         (
+            "Ground `solver_design` hypotheses in active solver facts and prior "
+            "screening/runtime feedback; name the bottleneck the algorithm-body "
+            "change is expected to move."
+        ),
+        (
             "For `solver_design` expected_telemetry, use selected-surface "
             "evidence categories, not ad hoc top-level runtime field names."
         ),

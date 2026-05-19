@@ -115,6 +115,47 @@ def test_agentic_algorithm_smoke_failure_is_quality_block_not_proposal_streak() 
     assert session_ref["primary_failure"]["category"] == "algorithm_smoke_failure"
 
 
+def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="transient-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_detail=(
+            "Tool call failed after 2 transient API attempt(s). Last error: "
+            "Transient provider error: HTTP 502 Bad Gateway <html>"
+        ),
+        failure_category=AgenticFailureCategory.LLM_TRANSIENT_API_ERROR,
+        self_check=AgenticSelfCheck(schema_valid=True),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert len(failures) == 1
+    assert failures[0][1].category == "infra"
+    assert detail is not None
+    assert "502 Bad Gateway" in detail
+    assert circuit.failures == []
+    assert session_ref is not None
+    assert session_ref["failure_category"] == "llm_transient_api_error"
+    assert session_ref["primary_failure"]["category"] == "llm_transient_api_error"
+    assert session_ref["primary_failure"]["stage"] == "code_generation_failed"
+
+
 def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -> None:
     creative = FakeCreative()
     search_memory = CampaignSearchMemory()

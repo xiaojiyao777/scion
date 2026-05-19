@@ -44,6 +44,7 @@ class AgenticTerminationReason(str, Enum):
 class AgenticFailureCategory(str, Enum):
     """Coarse failure category for retry and audit attribution."""
 
+    LLM_TRANSIENT_API_ERROR = "llm_transient_api_error"
     SCHEMA_OUTPUT_FAILURE = "schema_output_failure"
     STRUCTURED_OUTPUT_RETRY_EXHAUSTED = "structured_output_retry_exhausted"
     CONTRACT_BOUNDARY_FAILURE = "contract_boundary_failure"

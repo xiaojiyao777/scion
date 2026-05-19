@@ -15,6 +15,7 @@ from .constants import (
     AGENTIC_FAILURE_DETAIL_CHARS,
     ALGORITHM_SMOKE_FAILURE,
     LEGACY_PREMISE_CONTRADICTED,
+    LLM_TRANSIENT_API_ERROR,
     PROPOSAL_PREMISE_CONTRADICTED,
     SESSION_TIMEOUT,
     TOOL_BUDGET_EXHAUSTED,
@@ -129,6 +130,31 @@ def _agentic_output_is_control_timeout(
     return (
         "session_timeout" in combined_detail
         and ("agentic" in combined_detail or "max_wall_time_sec" in combined_detail)
+    )
+
+
+def _agentic_output_is_llm_transient_api_error(
+    output: AgenticProposalOutput | None,
+    detail: str | None = None,
+) -> bool:
+    category = _agentic_value(getattr(output, "failure_category", None))
+    if category == LLM_TRANSIENT_API_ERROR:
+        return True
+    combined_detail = " ".join(
+        part
+        for part in (
+            str(detail or ""),
+            str(getattr(output, "failure_detail", "") or ""),
+        )
+        if part
+    ).lower()
+    return (
+        "llm_transient_api_error" in combined_detail
+        or "transient api" in combined_detail
+        or "transient provider error" in combined_detail
+        or "bad gateway" in combined_detail
+        or "gateway timeout" in combined_detail
+        or "service unavailable" in combined_detail
     )
 
 

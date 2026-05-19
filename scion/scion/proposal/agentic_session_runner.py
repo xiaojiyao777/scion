@@ -42,6 +42,8 @@ class AgenticProposalSession(
         LLMRetryExhaustedError,
         LLMFormatError,
         LLMTimeoutError,
+        LLMTransientProviderError,
+        LLMRateLimitError,
         ProposalValidationError,
     )
 

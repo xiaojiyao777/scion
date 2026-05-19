@@ -308,6 +308,7 @@ def build_telemetry_guard_summary(
             for mechanism, mechanism_summary in sorted(mechanism_summaries.items())
             if mechanism_summary.get("categories") or mechanism_summary.get("fields")
         },
+        "mechanism_diagnostics": _mechanism_diagnostics(mechanism_summaries),
         "fields": field_summaries,
         "warnings": warnings,
         "failures": failures,
@@ -337,3 +338,146 @@ def _has_explicit_mechanism_field(
 ) -> bool:
     category_fields = explicit_fields.get(mechanism, {}).get(category, set())
     return any(field in category_fields for field in fields)
+
+
+def _mechanism_diagnostics(
+    mechanism_summaries: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for mechanism, summary in sorted(mechanism_summaries.items()):
+        categories = summary.get("categories")
+        fields = summary.get("fields")
+        if not isinstance(categories, Mapping) or not isinstance(fields, Mapping):
+            continue
+        activation_fields = _category_fields(categories, "activation")
+        effect_fields = _category_fields(categories, "effect")
+        runtime_fields = _runtime_probe_fields(categories)
+        activation = _observation_status(
+            fields,
+            activation_fields,
+            positive_label="observed",
+        )
+        runtime = _observation_status(
+            fields,
+            runtime_fields,
+            positive_label="observed",
+        )
+        effect = _observation_status(
+            fields,
+            effect_fields,
+            positive_label="positive",
+        )
+        diagnostics.append(
+            {
+                "mechanism": mechanism,
+                "activation_status": activation["status"],
+                "runtime_status": runtime["status"],
+                "effect_status": effect["status"],
+                "activation_observed": activation["status"] == "observed",
+                "runtime_observed": runtime["status"] == "observed",
+                "effect_observed": effect["status"] == "positive",
+                "activation": activation,
+                "runtime": runtime,
+                "effect": effect,
+                "repair_guidance": _mechanism_repair_guidance(
+                    mechanism=mechanism,
+                    activation_status=activation["status"],
+                    runtime_status=runtime["status"],
+                    effect_status=effect["status"],
+                ),
+            }
+        )
+    return diagnostics
+
+
+def _category_fields(categories: Mapping[str, Any], category: str) -> list[str]:
+    value = categories.get(category)
+    if not isinstance(value, Sequence) or isinstance(value, (bytes, bytearray, str)):
+        return []
+    return list(dict.fromkeys(str(field) for field in value if str(field or "")))
+
+
+def _runtime_probe_fields(categories: Mapping[str, Any]) -> list[str]:
+    fields: list[str] = []
+    for category in ("budget", "activation", "effect"):
+        for field in _category_fields(categories, category):
+            if _looks_like_runtime_field(field):
+                fields.append(field)
+    return list(dict.fromkeys(fields))
+
+
+def _looks_like_runtime_field(field: str) -> bool:
+    normalized = str(field or "").strip().lower()
+    return any(
+        token in normalized
+        for token in (
+            "phase_runtime",
+            "runtime_ms",
+            "elapsed_ms",
+            "budget",
+            "duration",
+            "wall_time",
+        )
+    )
+
+
+def _observation_status(
+    field_summaries: Mapping[str, Any],
+    fields: Sequence[str],
+    *,
+    positive_label: str,
+) -> dict[str, Any]:
+    totals = {
+        "candidate_positive": 0,
+        "candidate_present": 0,
+        "candidate_zero": 0,
+        "candidate_missing": 0,
+        "champion_positive": 0,
+    }
+    if not fields:
+        return {"status": "not_declared", "fields": []} | totals
+    for field in fields:
+        summary = field_summaries.get(field)
+        if not isinstance(summary, Mapping):
+            continue
+        for key in totals:
+            totals[key] += int(summary.get(key, 0) or 0)
+    if totals["candidate_positive"] > 0:
+        status = positive_label
+    elif totals["candidate_present"] > 0:
+        status = "zero"
+    else:
+        status = "missing"
+    return {"status": status, "fields": list(fields)} | totals
+
+
+def _mechanism_repair_guidance(
+    *,
+    mechanism: str,
+    activation_status: str,
+    runtime_status: str,
+    effect_status: str,
+) -> list[str]:
+    guidance: list[str] = []
+    if activation_status in {"missing", "zero"}:
+        guidance.append(
+            "Add direct activation telemetry for declared mechanism "
+            f"{mechanism}: context.record_iteration('{mechanism}', positive_count) "
+            f"or context.record_phase('{mechanism}', positive_elapsed_ms)."
+        )
+    if runtime_status in {"missing", "zero"}:
+        detail = "missing" if runtime_status == "missing" else "zero-valued"
+        guidance.append(
+            "Add positive phase/runtime telemetry for declared mechanism "
+            f"{mechanism}; current runtime evidence is {detail}. Use "
+            f"context.record_phase('{mechanism}', elapsed_ms_delta) on the "
+            "mechanism path."
+        )
+    if effect_status == "missing":
+        guidance.append(
+            "Add effect telemetry for declared mechanism "
+            f"{mechanism}: context.record_move('{mechanism}', attempted=1, "
+            "accepted=accepted_flag, delta=objective_delta, "
+            "best_improved=best_improved_flag)."
+        )
+    return guidance

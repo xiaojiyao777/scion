@@ -24,7 +24,10 @@ from scion.proposal.agentic_utils import (
     _limit_string,
     _sanitize_agentic_value,
 )
-from scion.proposal.llm_client import LLMRetryExhaustedError
+from scion.proposal.llm_client import (
+    LLMRetryExhaustedError,
+    is_llm_transient_api_error,
+)
 from scion.proposal.tools import ProposalObservation
 
 _SELF_REPORTED_CODE_FAILURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -147,6 +150,8 @@ def _failure_category_value(category: AgenticFailureCategory | str | None) -> st
 def _structured_output_failure_category(
     exc: BaseException,
 ) -> AgenticFailureCategory:
+    if is_llm_transient_api_error(exc):
+        return AgenticFailureCategory.LLM_TRANSIENT_API_ERROR
     if isinstance(exc, LLMRetryExhaustedError):
         return AgenticFailureCategory.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
     return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE

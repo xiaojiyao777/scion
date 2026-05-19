@@ -423,6 +423,61 @@ def test_agentic_session_retry_error_ledger_preserves_first_patch_graph_failure(
     assert validate_agentic_session_artifact(artifact).ok is True
 
 
+def test_agentic_session_smoke_repair_502_is_transient_api_failure(
+    tmp_path: Path,
+) -> None:
+    initial_patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = _PatchThenTransientApiErrorCreative(initial_patch)
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    registry = ProposalToolRegistry.default_read_only()
+    registry._tools["proposal.algorithm_smoke"] = _FailingAlgorithmSmokeTool()
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=registry,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.failure_category == "llm_transient_api_error"
+    assert len(creative.code_contexts) == 2
+    assert "prior_code_failure" in creative.code_contexts[1]
+    assert "algorithm smoke did not pass" in creative.code_contexts[1][
+        "prior_code_failure"
+    ]
+    assert output.failure_ledger["first_root_cause"] == "algorithm_smoke_failure"
+    assert output.failure_ledger["latest_failure"] == "llm_transient_api_error"
+    assert [
+        entry["category"] for entry in output.failure_ledger["entries"]
+    ] == ["algorithm_smoke_failure", "llm_transient_api_error"]
+    assert artifact["failure_category"] == "llm_transient_api_error"
+    assert artifact["failure_ledger"] == output.failure_ledger
+    assert validate_agentic_session_artifact(artifact).ok is True
+
+
 def test_agentic_session_retry_error_ledger_records_algorithm_smoke_failure(
     tmp_path: Path,
 ) -> None:
@@ -457,4 +512,3 @@ def test_agentic_session_retry_error_ledger_records_algorithm_smoke_failure(
     assert output.failure_category == "algorithm_smoke_failure"
     assert output.failure_ledger["first_root_cause"] == "algorithm_smoke_failure"
     assert output.failure_ledger["latest_failure"] == "algorithm_smoke_failure"
-

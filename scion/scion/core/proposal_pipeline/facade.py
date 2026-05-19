@@ -21,8 +21,11 @@ from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import (
     LLMBalanceError,
     LLMFormatError,
+    LLMRateLimitError,
     LLMRetryExhaustedError,
     LLMTimeoutError,
+    LLMTransientProviderError,
+    is_llm_transient_api_error,
 )
 
 from .agentic_lifecycle import AgenticLifecycleMixin
@@ -176,6 +179,8 @@ class ProposalPipeline(
             LLMRetryExhaustedError,
             LLMFormatError,
             LLMTimeoutError,
+            LLMTransientProviderError,
+            LLMRateLimitError,
             ProposalValidationError,
         ) as exc:
             if is_provider_balance_exhausted_detail(exc):
@@ -190,8 +195,13 @@ class ProposalPipeline(
                 return None, None
             logger.warning("Branch %s: hypothesis LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
-            self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
-            self.circuit_breaker.record_failure(str(exc))
+            category = "infra" if is_llm_transient_api_error(exc) else "proposal"
+            self.handle_failure(
+                branch,
+                FailureEvent(category=category, detail=str(exc)),
+            )
+            if category != "infra":
+                self.circuit_breaker.record_failure(str(exc))
             return None, None
 
         forced_detail = self._forced_hypothesis_violation(
@@ -270,6 +280,8 @@ class ProposalPipeline(
             LLMRetryExhaustedError,
             LLMFormatError,
             LLMTimeoutError,
+            LLMTransientProviderError,
+            LLMRateLimitError,
             ProposalValidationError,
         ) as exc:
             if is_provider_balance_exhausted_detail(exc):
@@ -284,8 +296,13 @@ class ProposalPipeline(
                 return None
             logger.warning("Branch %s: code LLM error: %s", bid, exc)
             self.hypothesis_failure_details[bid] = str(exc)
-            self.handle_failure(branch, FailureEvent(category="proposal", detail=str(exc)))
-            self.circuit_breaker.record_failure(str(exc))
+            category = "infra" if is_llm_transient_api_error(exc) else "proposal"
+            self.handle_failure(
+                branch,
+                FailureEvent(category=category, detail=str(exc)),
+            )
+            if category != "infra":
+                self.circuit_breaker.record_failure(str(exc))
             return None
 
     def attempt_fix(
@@ -329,6 +346,8 @@ class ProposalPipeline(
             LLMRetryExhaustedError,
             LLMFormatError,
             LLMTimeoutError,
+            LLMTransientProviderError,
+            LLMRateLimitError,
             ProposalValidationError,
         ) as exc:
             if is_provider_balance_exhausted_detail(exc):

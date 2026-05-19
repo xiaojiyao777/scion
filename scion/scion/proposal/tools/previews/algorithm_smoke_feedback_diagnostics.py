@@ -173,6 +173,18 @@ def _algorithm_smoke_repair_hints(
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
     if telemetry_static is not None and telemetry_static.get("passed") is False:
         hints.extend(_compact_agent_text_list(telemetry_static.get("repair_hints")))
+    if telemetry_guard is not None:
+        diagnostics = telemetry_guard.get("mechanism_diagnostics")
+        if isinstance(diagnostics, (list, tuple)):
+            for diagnostic in diagnostics:
+                if not isinstance(diagnostic, Mapping):
+                    continue
+                hints.extend(
+                    _compact_agent_text_list(
+                        diagnostic.get("repair_guidance"),
+                        limit=3,
+                    )
+                )
     if telemetry_guard is not None and telemetry_guard.get("triggered"):
         first_failure = _first_mapping(telemetry_guard.get("failures"))
         code = str(first_failure.get("code") or "").strip() if first_failure else ""

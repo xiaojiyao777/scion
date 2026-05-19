@@ -21,13 +21,17 @@ from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import (
     LLMBalanceError,
     LLMFormatError,
+    LLMRateLimitError,
     LLMRetryExhaustedError,
     LLMTimeoutError,
+    LLMTransientProviderError,
+    is_llm_transient_api_error,
 )
 
 from .boundaries import _active_problem_boundary_surfaces_for_runtime
 from .classification import (
     _agentic_detail_is_framework_boundary,
+    _agentic_output_is_llm_transient_api_error,
     _agentic_output_is_control_timeout,
     _agentic_output_is_quality_blocked,
 )
@@ -68,6 +72,8 @@ class AgenticLifecycleMixin:
             LLMRetryExhaustedError,
             LLMFormatError,
             LLMTimeoutError,
+            LLMTransientProviderError,
+            LLMRateLimitError,
             ProposalValidationError,
             PermissionError,
         ) as exc:
@@ -190,16 +196,20 @@ class AgenticLifecycleMixin:
                 LLMRetryExhaustedError,
                 LLMFormatError,
                 LLMTimeoutError,
+                LLMTransientProviderError,
+                LLMRateLimitError,
                 ProposalValidationError,
                 PermissionError,
             ) as exc:
                 logger.warning("Branch %s: agentic code session error: %s", bid, exc)
                 self.hypothesis_failure_details[bid] = str(exc)
+                category = "infra" if is_llm_transient_api_error(exc) else "proposal"
                 self.handle_failure(
                     branch,
-                    FailureEvent(category="proposal", detail=str(exc)),
+                    FailureEvent(category=category, detail=str(exc)),
                 )
-                self.circuit_breaker.record_failure(str(exc))
+                if category != "infra":
+                    self.circuit_breaker.record_failure(str(exc))
                 return None
 
         output = self._validate_and_sanitize_agentic_output(
@@ -270,6 +280,8 @@ class AgenticLifecycleMixin:
             return None, None
         if _agentic_output_is_control_timeout(output, detail):
             return None, None
+        if _agentic_output_is_llm_transient_api_error(output, detail):
+            return None, None
         self.circuit_breaker.record_failure(detail)
         return None, None
 
@@ -291,6 +303,8 @@ class AgenticLifecycleMixin:
         if _agentic_detail_is_framework_boundary(detail):
             return
         if _agentic_output_is_control_timeout(output, detail):
+            return
+        if _agentic_output_is_llm_transient_api_error(output, detail):
             return
         self.circuit_breaker.record_failure(detail)
 
@@ -317,5 +331,13 @@ class AgenticLifecycleMixin:
                 branch,
                 FailureEvent(category=FRAMEWORK_CONTROL_FAILURE, detail=detail),
             )
+            return
+        if _agentic_output_is_llm_transient_api_error(output, detail):
+            logger.info(
+                "Branch %s: agentic transient LLM API failure routed as infra: %s",
+                branch.branch_id,
+                detail,
+            )
+            self.handle_failure(branch, FailureEvent(category="infra", detail=detail))
             return
         self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))

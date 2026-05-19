@@ -402,6 +402,103 @@ def test_auto_declared_mechanism_effect_probe_warns_when_activation_present() ->
     ]
 
 
+def test_mechanism_diagnostics_separate_activation_runtime_and_zero_effect() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_iterations.{mechanism}",
+                            "mechanism_phase_runtime_ms.{mechanism}",
+                        ]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_improvement_counts.{mechanism}",
+                            "mechanism_best_delta.{mechanism}",
+                        ]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_iterations": {"target_probe": 3},
+                "mechanism_phase_runtime_ms": {"target_probe": 0},
+                "mechanism_improvement_counts": {"target_probe": 0},
+                "mechanism_best_delta": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is True
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["activation_status"] == "observed"
+    assert diagnostic["runtime_status"] == "zero"
+    assert diagnostic["effect_status"] == "zero"
+    assert diagnostic["activation"]["candidate_positive"] == 1
+    assert diagnostic["runtime"]["candidate_zero"] == 1
+    assert diagnostic["effect"]["candidate_zero"] == 2
+
+
+def test_mechanism_diagnostics_report_move_only_as_activation_missing() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_iterations.{mechanism}",
+                            "mechanism_phase_runtime_ms.{mechanism}",
+                        ]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_improvement_counts.{mechanism}",
+                            "mechanism_best_delta.{mechanism}",
+                        ]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_improvement_counts": {"target_probe": 0},
+                "mechanism_best_delta": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is False
+    assert summary["failures"][0]["code"] == (
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    )
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["activation_status"] == "missing"
+    assert diagnostic["runtime_status"] == "missing"
+    assert diagnostic["effect_status"] == "zero"
+    assert "direct activation telemetry" in diagnostic["repair_guidance"][0]
+
+
 def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None:
     spec = SimpleNamespace(
         research_surfaces=[

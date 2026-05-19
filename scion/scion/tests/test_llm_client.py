@@ -7,11 +7,14 @@ import pytest
 
 from scion.proposal.llm_client import (
     LLMClient,
+    LLM_TRANSIENT_API_ERROR_CATEGORY,
     LLMFormatError,
     LLMRateLimitError,
     LLMRetryExhaustedError,
     LLMTimeoutError,
+    LLMTransientProviderError,
     _parse_retry_after,
+    is_llm_transient_api_error,
 )
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.mock_client import MockLLMClient
@@ -383,6 +386,35 @@ def test_code_tool_retries_transient_provider_error_once(monkeypatch):
     assert result["file_path"] == "policies/baseline_algorithm.py"
     assert fake_anthropic_client.messages.create.call_count == 2
     mock_sleep.assert_called_once_with(5.0)
+
+
+def test_code_tool_exhausted_502_html_is_transient_api_failure(monkeypatch):
+    monkeypatch.delenv("SCION_LLM_CODE_MAX_RETRIES", raising=False)
+    monkeypatch.setenv("SCION_LLM_TRANSIENT_PROVIDER_MAX_RETRIES", "1")
+
+    client = LLMClient(timeout_sec=60, max_retries=2)
+    tool = {
+        "name": "generate_patch",
+        "input_schema": {"required": ["file_path", "action", "code_content"]},
+    }
+    gateway_error = Exception(
+        "HTTP 502 Bad Gateway\n<html><title>502 Bad Gateway</title>"
+        "<body>nginx upstream temporarily unavailable</body></html>"
+    )
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.side_effect = [gateway_error, gateway_error]
+
+    with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
+        with patch("scion.proposal.llm_client.time.sleep") as mock_sleep:
+            with pytest.raises(LLMRetryExhaustedError) as exc_info:
+                client.call_with_tool("prompt", tool)
+
+    exc = exc_info.value
+    assert fake_anthropic_client.messages.create.call_count == 2
+    mock_sleep.assert_called_once_with(5.0)
+    assert exc.failure_category == LLM_TRANSIENT_API_ERROR_CATEGORY
+    assert isinstance(exc.last_error, LLMTransientProviderError)
+    assert is_llm_transient_api_error(exc)
 
 
 def test_creative_trace_records_llm_request_policy(tmp_path):

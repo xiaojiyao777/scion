@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from scion.proposal.tools.previews.algorithm_smoke_feedback import (
+    _algorithm_smoke_agent_payload,
+)
 from scion.tests.unit.agentic_solver_design_test_support import *
+
 
 def test_algorithm_smoke_runs_tainted_synthetic_preview_without_promotion(
     tmp_path: Path,
@@ -374,7 +378,7 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = _cvrp_context(tmp_path)
-    mechanism = {"id": "missing_probe", "change_type": "modify"}
+    mechanism = {"id": "vns_local_search", "change_type": "modify"}
 
     observation = registry.call(
         "proposal.algorithm_smoke",
@@ -392,6 +396,7 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
                     "    solution = context.make_solution(context.nearest_neighbor())\n"
                     "    context.record_iteration('seed', 1)\n"
                     "    context.record_move('seed', attempted=1, accepted=1)\n"
+                    "    context.record_move('vns_local_search', attempted=1, accepted=0)\n"
                     "    return solution\n"
                 ),
                 "mechanism_changes": [mechanism],
@@ -406,8 +411,9 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
     assert payload["passed"] is False
     assert "runtime_smoke" not in payload
     assert "telemetry_static_preview" in payload
-    assert "missing_probe" in rendered
-    assert "requires context.record_iteration" in rendered
+    assert "vns_local_search" in rendered
+    assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in rendered
+    assert "record_move alone" in rendered
 
 
 def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too_large(
@@ -571,3 +577,125 @@ def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too
     assert guard["counters"]["candidate_positive"] == 0
     assert payload["runtime_comparison"]["losses"] == 1
     assert payload["runtime_comparison"]["representative_case"]["delta"] == -3.0
+
+
+def test_algorithm_smoke_feedback_separates_mechanism_telemetry_statuses() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "issues": [
+                    "telemetry guard observed no activation evidence for declared "
+                    "mechanism vns_local_search"
+                ],
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "champion_runs": 2,
+                    "expected_telemetry_present": True,
+                    "declared_mechanisms": ["vns_local_search"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "vns_local_search",
+                            "activation_status": "missing",
+                            "runtime_status": "missing",
+                            "effect_status": "zero",
+                            "activation_observed": False,
+                            "runtime_observed": False,
+                            "effect_observed": False,
+                            "activation": {
+                                "status": "missing",
+                                "fields": [
+                                    "solver_algorithm_context_records."
+                                    "vns_local_search_iterations",
+                                    "solver_algorithm_phase_runtime_ms."
+                                    "vns_local_search",
+                                ],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_zero": 0,
+                                "candidate_missing": 4,
+                            },
+                            "runtime": {
+                                "status": "missing",
+                                "fields": [
+                                    "solver_algorithm_phase_runtime_ms."
+                                    "vns_local_search"
+                                ],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_zero": 0,
+                                "candidate_missing": 2,
+                            },
+                            "effect": {
+                                "status": "zero",
+                                "fields": [
+                                    "solver_algorithm_phase_improvement_counts."
+                                    "vns_local_search",
+                                    "solver_algorithm_phase_best_delta."
+                                    "vns_local_search",
+                                ],
+                                "candidate_positive": 0,
+                                "candidate_present": 4,
+                                "candidate_zero": 4,
+                                "candidate_missing": 0,
+                            },
+                            "repair_guidance": [
+                                "Add direct activation telemetry for declared "
+                                "mechanism vns_local_search."
+                            ],
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "vns_local_search",
+                            "category": "activation",
+                            "field": (
+                                "solver_algorithm_context_records."
+                                "vns_local_search_iterations,"
+                                "solver_algorithm_phase_runtime_ms.vns_local_search"
+                            ),
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_zero": 0,
+                            "candidate_missing": 4,
+                            "champion_positive": 0,
+                        }
+                    ],
+                    "warnings": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                            "severity": "warn",
+                            "mechanism": "vns_local_search",
+                            "category": "effect",
+                            "field": (
+                                "solver_algorithm_phase_improvement_counts."
+                                "vns_local_search,"
+                                "solver_algorithm_phase_best_delta.vns_local_search"
+                            ),
+                            "candidate_positive": 0,
+                            "candidate_present": 4,
+                            "candidate_zero": 4,
+                            "candidate_missing": 0,
+                            "champion_positive": 0,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    diagnostic = payload["telemetry_guard"]["mechanism_diagnostics"][0]
+    assert diagnostic["mechanism"] == "vns_local_search"
+    assert diagnostic["activation_status"] == "missing"
+    assert diagnostic["runtime_status"] == "missing"
+    assert diagnostic["effect_status"] == "zero"
+    assert diagnostic["effect"]["counters"]["candidate_zero"] == 4
+    assert "Add direct activation telemetry" in payload["repair_hints"][0]

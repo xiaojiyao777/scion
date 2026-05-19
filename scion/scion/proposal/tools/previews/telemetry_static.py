@@ -5,7 +5,12 @@ from __future__ import annotations
 import ast
 from typing import Any, Mapping
 
-from scion.core.models import HypothesisProposal, PatchProposal, mechanism_changes, patch_file_changes
+from scion.core.models import (
+    HypothesisProposal,
+    PatchProposal,
+    mechanism_changes,
+    patch_file_changes,
+)
 from scion.proposal.tools.models import ProposalToolContext
 from scion.proposal.tools.previews.common import _contract_problem_spec
 from scion.proposal.tools.surface import _drop_empty_items
@@ -23,6 +28,16 @@ _CONTEXT_HELPER_ALLOWED_KEYWORDS: dict[str, frozenset[str]] = {
         {"phase", "attempted", "accepted", "delta", "best_improved"}
     ),
 }
+_ACTIVATION_HELPERS = frozenset({"record_iteration", "record_phase"})
+_ACTIVATION_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "record_phase": ("name",),
+    "record_iteration": ("phase",),
+    "record_move": ("phase",),
+}
+_ISSUE_MISSING_ACTIVATION = "DECLARED_MECHANISM_ACTIVATION_MISSING"
+_ISSUE_ZERO_PHASE_RUNTIME = "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO"
+_ISSUE_MISSING_RUNTIME = "DECLARED_MECHANISM_RUNTIME_MISSING"
+_ISSUE_MISSING_EFFECT = "DECLARED_MECHANISM_EFFECT_MISSING"
 
 
 def _mechanism_telemetry_static_preview(
@@ -58,8 +73,13 @@ def _mechanism_telemetry_static_preview(
     warnings: list[str] = []
     checked_fields: list[str] = []
     required_calls: dict[str, list[str]] = {}
+    issue_codes: list[str] = []
     for mechanism in mechanisms:
         code_text = code_by_mechanism.get(mechanism, "")
+        calls = _mechanism_call_evidence(code_text, mechanism)
+        mechanism_activation_fields: list[str] = []
+        mechanism_budget_fields: list[str] = []
+        mechanism_effect_fields: list[str] = []
         for category, fields in sorted(explicit_fields.items()):
             for field in fields:
                 field_text = str(field or "").strip()
@@ -67,75 +87,95 @@ def _mechanism_telemetry_static_preview(
                     continue
                 checked_fields.append(field_text)
                 lower_field = field_text.lower()
-                if category == "activation" and "phase_runtime" in lower_field:
-                    if not _patch_records_mechanism_call(
-                        code_text,
-                        "record_phase",
-                        mechanism,
-                    ):
-                        issues.append(
-                            f"{field_text} requires context.record_phase('{mechanism}', positive_elapsed) on the active path."
-                        )
-                        _add_required_call(
-                            required_calls,
-                            mechanism,
-                            f"context.record_phase('{mechanism}', positive_elapsed_ms)",
-                        )
-                if category == "activation" and "_iterations" in lower_field:
-                    if not _patch_records_mechanism_call(
-                        code_text,
-                        "record_iteration",
-                        mechanism,
-                    ):
-                        issues.append(
-                            f"{field_text} requires context.record_iteration('{mechanism}', positive_count) on the active path."
-                        )
-                        _add_required_call(
-                            required_calls,
-                            mechanism,
-                            f"context.record_iteration('{mechanism}', positive_count)",
-                        )
-                if category == "budget" and "phase_runtime" in lower_field:
-                    if not _patch_records_mechanism_call(
-                        code_text,
-                        "record_phase",
-                        mechanism,
-                    ):
-                        issues.append(
-                            f"{field_text} requires context.record_phase('{mechanism}', positive_elapsed) as budget/runtime evidence."
-                        )
-                        _add_required_call(
-                            required_calls,
-                            mechanism,
-                            f"context.record_phase('{mechanism}', positive_elapsed_ms)",
-                        )
+                if category == "activation" and (
+                    "_iterations" in lower_field
+                    or "phase_runtime" in lower_field
+                    or "activation" in lower_field
+                ):
+                    mechanism_activation_fields.append(field_text)
+                if category == "budget" and (
+                    "phase_runtime" in lower_field
+                    or "runtime" in lower_field
+                    or "elapsed" in lower_field
+                    or "budget" in lower_field
+                ):
+                    mechanism_budget_fields.append(field_text)
                 if category == "effect" and (
                     "improvement_counts" in lower_field
                     or "best_delta" in lower_field
                     or "delta" in lower_field
                 ):
-                    if not _patch_records_mechanism_call(
-                        code_text,
-                        "record_move",
-                        mechanism,
-                    ):
-                        issues.append(
-                            f"{field_text} requires context.record_move('{mechanism}', ..., delta=..., best_improved=...) evidence."
-                        )
-                        _add_required_call(
-                            required_calls,
-                            mechanism,
-                            (
-                                f"context.record_move('{mechanism}', attempted=1, "
-                                "accepted=accepted_flag, delta=objective_delta, "
-                                "best_improved=best_improved_flag)"
-                            ),
-                        )
+                    mechanism_effect_fields.append(field_text)
+        if mechanism_activation_fields and not any(
+            calls.get(name) for name in _ACTIVATION_HELPERS
+        ):
+            issue_codes.append(_ISSUE_MISSING_ACTIVATION)
+            issues.append(
+                "Declared mechanism "
+                f"{mechanism!r} requires direct activation instrumentation via "
+                f"context.record_iteration('{mechanism}', positive_count) or "
+                f"context.record_phase('{mechanism}', positive_elapsed_ms); "
+                "context.record_move alone is effect telemetry, not activation."
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                f"context.record_iteration('{mechanism}', positive_count)",
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+            )
+        if calls.get("record_phase_zero_literal") and not calls.get(
+            "record_phase_runtime_evidence"
+        ):
+            issue_codes.append(_ISSUE_ZERO_PHASE_RUNTIME)
+            issues.append(
+                "Declared mechanism "
+                f"{mechanism!r} records context.record_phase with a literal "
+                "zero/non-positive elapsed_ms value; phase/runtime evidence must "
+                "use the measured positive duration of the mechanism path."
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+            )
+        if mechanism_budget_fields and not calls.get("record_phase_runtime_evidence"):
+            issue_codes.append(_ISSUE_MISSING_RUNTIME)
+            issues.append(
+                "Declared mechanism "
+                f"{mechanism!r} requires context.record_phase('{mechanism}', "
+                "positive_elapsed_ms) as budget/runtime evidence."
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                f"context.record_phase('{mechanism}', positive_elapsed_ms)",
+            )
+        if mechanism_effect_fields and not calls.get("record_move"):
+            issue_codes.append(_ISSUE_MISSING_EFFECT)
+            issues.append(
+                "Declared mechanism "
+                f"{mechanism!r} requires context.record_move('{mechanism}', ..., "
+                "delta=..., best_improved=...) for effect telemetry."
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                (
+                    f"context.record_move('{mechanism}', attempted=1, "
+                    "accepted=accepted_flag, delta=objective_delta, "
+                    "best_improved=best_improved_flag)"
+                ),
+            )
     if not checked_fields and not issues:
         return None
     return _drop_empty_items(
         {
             "passed": not issues,
+            "issue_codes": list(dict.fromkeys(issue_codes)),
             "declared_mechanisms": mechanisms,
             "checked_fields": list(dict.fromkeys(checked_fields)),
             "required_calls": {
@@ -266,14 +306,95 @@ def _patch_records_mechanism_call(
     method_name: str,
     mechanism: str,
 ) -> bool:
-    needle = f".{method_name}("
-    if needle not in code_text and f"{method_name}(" not in code_text:
+    return bool(_mechanism_call_evidence(code_text, mechanism).get(method_name))
+
+
+def _mechanism_call_evidence(code_text: str, mechanism: str) -> dict[str, bool]:
+    evidence = {
+        "record_phase": False,
+        "record_phase_runtime_evidence": False,
+        "record_phase_zero_literal": False,
+        "record_iteration": False,
+        "record_move": False,
+    }
+    if not str(code_text or "").strip():
+        return evidence
+    try:
+        tree = ast.parse(code_text)
+    except SyntaxError:
+        return evidence
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        helper_name = _context_helper_call_name(node)
+        if helper_name is None:
+            continue
+        if not _call_uses_declared_mechanism(node, helper_name, mechanism):
+            continue
+        evidence[helper_name] = True
+        if helper_name == "record_phase":
+            elapsed = _record_phase_elapsed_argument(node)
+            literal = _literal_number(elapsed)
+            if literal is not None and literal <= 0.0:
+                evidence["record_phase_zero_literal"] = True
+            elif elapsed is not None:
+                evidence["record_phase_runtime_evidence"] = True
+        elif helper_name == "record_iteration":
+            evidence["record_iteration"] = True
+        elif helper_name == "record_move":
+            evidence["record_move"] = True
+    return evidence
+
+
+def _call_uses_declared_mechanism(
+    node: ast.Call,
+    helper_name: str,
+    mechanism: str,
+) -> bool:
+    mechanism_text = str(mechanism or "").strip()
+    if not mechanism_text:
         return False
-    call_targets = (
-        f'"{mechanism}"',
-        f"'{mechanism}'",
-    )
-    return any(target in code_text for target in call_targets)
+    if node.args and _literal_string(node.args[0]) == mechanism_text:
+        return True
+    for keyword in node.keywords:
+        if keyword.arg in _ACTIVATION_KEYWORDS.get(helper_name, ()):
+            if _literal_string(keyword.value) == mechanism_text:
+                return True
+    return False
+
+
+def _record_phase_elapsed_argument(node: ast.Call) -> ast.AST | None:
+    if len(node.args) >= 2:
+        return node.args[1]
+    for keyword in node.keywords:
+        if keyword.arg == "elapsed_ms":
+            return keyword.value
+    return None
+
+
+def _literal_string(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _literal_number(node: ast.AST | None) -> float | None:
+    if node is None:
+        return None
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        if isinstance(node.value, bool):
+            return None
+        return float(node.value)
+    if (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, (ast.USub, ast.UAdd))
+        and isinstance(node.operand, ast.Constant)
+        and isinstance(node.operand.value, (int, float))
+        and not isinstance(node.operand.value, bool)
+    ):
+        value = float(node.operand.value)
+        return -value if isinstance(node.op, ast.USub) else value
+    return None
 
 
 __all__ = [

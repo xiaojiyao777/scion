@@ -160,7 +160,13 @@ from scion.proposal.agentic_utils import (
     _limit_string,
     _sanitize_agentic_value,
 )
-from scion.proposal.llm_client import LLMFormatError, LLMRetryExhaustedError, LLMTimeoutError
+from scion.proposal.llm_client import (
+    LLMFormatError,
+    LLMRateLimitError,
+    LLMRetryExhaustedError,
+    LLMTimeoutError,
+    LLMTransientProviderError,
+)
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest, stable_digest
 from scion.proposal.tools import (
     ProposalExposureLevel,
@@ -219,8 +225,10 @@ __all__ = (
     "FileAgenticSessionArtifactStore",
     "HypothesisProposal",
     "LLMFormatError",
+    "LLMRateLimitError",
     "LLMRetryExhaustedError",
     "LLMTimeoutError",
+    "LLMTransientProviderError",
     "Mapping",
     "MechanismNoveltyGate",
     "PatchProposal",

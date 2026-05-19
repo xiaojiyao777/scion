@@ -30,6 +30,7 @@ _DEFAULT_MAX_TOKENS = 16384
 _DEFAULT_CODE_TIMEOUT_SEC = 180.0
 _DEFAULT_CODE_MAX_RETRIES = 0
 _DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES = 1
+LLM_TRANSIENT_API_ERROR_CATEGORY = "llm_transient_api_error"
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _CODE_REQUEST_KINDS = {"code", "fix"}
@@ -79,15 +80,45 @@ def _is_transient_provider_error(err_str: str) -> bool:
         "aihubmix_api_error",
         "new request failed",
         "bad gateway",
+        "502 bad gateway",
         "service unavailable",
+        "503 service unavailable",
         "gateway timeout",
+        "504 gateway timeout",
         "error code: 500",
         "error code: 502",
         "error code: 503",
         "error code: 504",
+        "status code: 500",
+        "status code: 502",
+        "status code: 503",
+        "status code: 504",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
         "internal server error",
+        "temporarily unavailable",
+        "upstream connect error",
+        "<html",
+        "<title>502",
+        "connection reset",
+        "connection aborted",
+        "connection error",
+        "remote end closed connection",
+        "server disconnected",
+        "network is unreachable",
+        "temporary failure in name resolution",
     )
     return any(marker in err_str for marker in transient_markers)
+
+
+def _is_timeout_error_text(err_str: str) -> bool:
+    return (
+        "timeout" in err_str
+        or "timed out" in err_str
+        or "read timed out" in err_str
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +152,64 @@ class LLMRateLimitError(LLMError):
 class LLMRetryExhaustedError(LLMError):
     """All retry attempts exhausted."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        last_error: Exception | None = None,
+        failure_category: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.last_error = last_error
+        self.failure_category = failure_category
+
 
 class LLMBalanceError(LLMError):
     """API balance/credits exhausted (HTTP 403 with insufficient-balance message)."""
+
+
+def is_llm_transient_api_error(exc: BaseException | None) -> bool:
+    """Return true when an LLM error is transport/provider transient."""
+    if exc is None:
+        return False
+    if isinstance(exc, (LLMTimeoutError, LLMTransientProviderError, LLMRateLimitError)):
+        return True
+    if isinstance(exc, LLMRetryExhaustedError):
+        if exc.failure_category == LLM_TRANSIENT_API_ERROR_CATEGORY:
+            return True
+        if is_llm_transient_api_error(exc.last_error):
+            return True
+    err_str = str(exc).lower()
+    return (
+        _is_timeout_error_text(err_str)
+        or _is_transient_provider_error(err_str)
+        or "rate_limit" in err_str
+        or "ratelimit" in err_str
+        or "http 429" in err_str
+        or "error code: 429" in err_str
+    )
+
+
+def _retry_exhausted_failure_category(
+    last_error: Exception | None,
+) -> str | None:
+    if is_llm_transient_api_error(last_error):
+        return LLM_TRANSIENT_API_ERROR_CATEGORY
+    return None
+
+
+def _transient_retry_exhausted_error(
+    *,
+    request_label: str,
+    total_attempts: int,
+    last_error: Exception,
+) -> LLMRetryExhaustedError:
+    return LLMRetryExhaustedError(
+        f"{request_label} failed after {total_attempts} transient API attempt(s). "
+        f"Last error: {last_error}",
+        last_error=last_error,
+        failure_category=LLM_TRANSIENT_API_ERROR_CATEGORY,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +327,10 @@ class LLMClient:
         current_prompt = prompt
         last_error: Exception | None = None
         attempt = 0
+        transient_max_retries = self.resolve_request_policy(
+            request_kind="llm_call"
+        )["transient_max_retries"]
+        transient_attempt = 0
 
         while attempt <= self.max_retries:
             try:
@@ -284,9 +374,33 @@ class LLMClient:
                     time.sleep(delay)
                 attempt += 1
 
+            except LLMTransientProviderError as exc:
+                last_error = exc
+                if transient_attempt < transient_max_retries:
+                    delay = _BACKOFF_DELAYS[
+                        min(transient_attempt, len(_BACKOFF_DELAYS) - 1)
+                    ]
+                    logger.warning(
+                        "LLM transient API error (attempt %d/%d); retrying in %.1fs: %s",
+                        transient_attempt + 1,
+                        transient_max_retries,
+                        delay,
+                        exc,
+                    )
+                    transient_attempt += 1
+                    time.sleep(delay)
+                    continue
+                raise _transient_retry_exhausted_error(
+                    request_label="LLM call",
+                    total_attempts=transient_attempt + 1,
+                    last_error=exc,
+                ) from exc
+
         raise LLMRetryExhaustedError(
             f"LLM call failed after {self.max_retries + 1} attempt(s). "
-            f"Last error: {last_error}"
+            f"Last error: {last_error}",
+            last_error=last_error,
+            failure_category=_retry_exhausted_failure_category(last_error),
         ) from last_error
 
     # ------------------------------------------------------------------
@@ -390,7 +504,11 @@ class LLMClient:
                     transient_attempt += 1
                     time.sleep(delay)
                     continue
-                attempt += 1
+                raise _transient_retry_exhausted_error(
+                    request_label="Tool call",
+                    total_attempts=transient_attempt + 1,
+                    last_error=exc,
+                ) from exc
 
             except (LLMBalanceError, LLMRetryExhaustedError):
                 raise
@@ -420,6 +538,11 @@ class LLMClient:
                         transient_attempt += 1
                         time.sleep(delay)
                         continue
+                    raise _transient_retry_exhausted_error(
+                        request_label="Tool call",
+                        total_attempts=transient_attempt + 1,
+                        last_error=tpe,
+                    ) from tpe
                 except LLMBalanceError:
                     raise
                 except LLMError as le:
@@ -431,7 +554,9 @@ class LLMClient:
 
         raise LLMRetryExhaustedError(
             f"Tool call failed after {max_retries + 1} attempt(s). "
-            f"Last error: {last_error}"
+            f"Last error: {last_error}",
+            last_error=last_error,
+            failure_category=_retry_exhausted_failure_category(last_error),
         ) from last_error
 
     def resolve_request_policy(
@@ -703,7 +828,7 @@ class LLMClient:
     def _raise_classified(exc: Exception) -> None:
         """Classify a raw SDK exception and re-raise as the appropriate LLM* type."""
         err_str = str(exc).lower()
-        if "timeout" in err_str or "timed out" in err_str or "read timed out" in err_str:
+        if _is_timeout_error_text(err_str):
             raise LLMTimeoutError(f"Request timed out: {exc}") from exc
         if _is_transient_provider_error(err_str):
             raise LLMTransientProviderError(f"Transient provider error: {exc}") from exc
@@ -734,7 +859,7 @@ class LLMClient:
         effective_model = model or self.model
         try:
             return self._call_once(prompt, effective_model)
-        except (LLMTimeoutError, LLMRateLimitError):
+        except (LLMTimeoutError, LLMRateLimitError, LLMTransientProviderError):
             raise
         except Exception as exc:
             raise LLMError(f"call_text failed: {exc}") from exc

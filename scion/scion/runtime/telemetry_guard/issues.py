@@ -78,18 +78,32 @@ def format_telemetry_guard_issue(summary: Mapping[str, Any]) -> str | None:
             f"mechanism telemetry field {field}"
         )
     if code == "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED":
+        qualifier = _zero_or_missing_observation(first)
         return (
-            "telemetry guard observed no activation evidence for declared "
+            f"telemetry guard observed {qualifier} activation evidence for declared "
             f"mechanism {mechanism or 'unknown'} via runtime path(s) {field}"
         )
     if code == "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED":
+        qualifier = _zero_or_missing_observation(first)
         return (
-            "telemetry guard observed no effect evidence for declared "
+            f"telemetry guard observed {qualifier} effect evidence for declared "
             f"mechanism {mechanism or 'unknown'} via runtime path(s) {field}"
         )
     if code == "TELEMETRY_MECHANISM_BUDGET_STARVED":
+        qualifier = _zero_or_missing_observation(first)
         return (
-            "telemetry guard observed budget starvation for declared "
+            f"telemetry guard observed {qualifier} budget/runtime evidence for declared "
             f"mechanism {mechanism or 'unknown'} via runtime path(s) {field}"
         )
     return f"telemetry guard failed for {category} field {field}: {code}"
+
+
+def _zero_or_missing_observation(issue: Mapping[str, Any]) -> str:
+    try:
+        present = int(issue.get("candidate_present", 0) or 0)
+        positive = int(issue.get("candidate_positive", 0) or 0)
+    except (TypeError, ValueError):
+        return "no"
+    if present > 0 and positive == 0:
+        return "zero-valued"
+    return "no"

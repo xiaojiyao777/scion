@@ -117,6 +117,28 @@ class TestLocusConstraintInPrompt:
         assert "MANDATORY SEARCH CONSTRAINT" in text
 
 
+class TestHypothesisGroundingRequirements:
+    def test_hypothesis_prompt_requires_feedback_and_solver_fact_grounding(self):
+        ctx = _make_context(
+            runtime_feedback=(
+                "Recent screening primary_reason=SCREENING_FAIL_WIN_RATE"
+            ),
+            objective_opportunity_profile=(
+                "## Objective Opportunity Profile\n"
+                "- objective_a: stable/tie-dominated; avoid unless new evidence"
+            ),
+        )
+        text = _user_text(ctx)
+
+        assert "active bottleneck from screening/runtime feedback" in text
+        assert "primary decision reason from auxiliary telemetry" in text
+        assert "active solver fact" in text
+        assert "stable/protected objectives to preserve" in text
+        assert "mechanism novelty evidence" in text
+        assert "likely to affect the bottleneck" in text
+        assert "no-op/failure conditions" in text
+
+
 class TestForcedSurfaceTaskPrompt:
     def test_forced_context_narrows_final_task(self):
         ctx = _make_context(

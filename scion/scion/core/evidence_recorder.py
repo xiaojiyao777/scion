@@ -177,8 +177,12 @@ def _primary_failure_attribution(step: StepRecord) -> dict[str, Any] | None:
         session_observation = _proposal_session_failure_observation(ref)
         if (
             session_observation
-            and str(session_observation.get("stage") or "")
-            == "agent_quality_blocked"
+            and (
+                str(session_observation.get("stage") or "")
+                == "agent_quality_blocked"
+                or str(session_observation.get("category") or "")
+                == "llm_transient_api_error"
+            )
         ):
             return _drop_empty_summary_items(
                 {

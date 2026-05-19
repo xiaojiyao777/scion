@@ -11,6 +11,11 @@ from collections import Counter, defaultdict
 from typing import Any, List, Mapping, Optional
 
 from scion.core.models import ExperimentStage, StepRecord
+from scion.proposal.context.feedback_grounding import (
+    _auxiliary_screening_reasons,
+    _build_feedback_grounding_summary,
+    _primary_screening_reason,
+)
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
 _SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
@@ -184,6 +189,10 @@ def _build_experiment_history(
     if what_worked:
         lines.append(what_worked)
 
+    grounding = _build_feedback_grounding_summary(branch_steps, taxonomy=taxonomy)
+    if grounding:
+        lines.append(grounding)
+
     for idx, s in enumerate(recent):
         is_detailed = idx >= max(0, n_recent - 3)
         status = _history_step_status(s)
@@ -207,12 +216,21 @@ def _build_experiment_history(
         ):
             pr = s.protocol_result
             st = pr.stats
+            primary_reason = _primary_screening_reason(s)
+            auxiliary_reasons = _auxiliary_screening_reasons(s, primary_reason)
             line += (
                 f"\n    screening: case_win_rate={st.win_rate:.2f}"
                 f"  gate_win_rate={st.win_rate:.2f}"
                 f"  median_delta={st.median_delta:.4f}"
                 f"  outcome={pr.gate_outcome}"
             )
+            if primary_reason:
+                line += f"\n    decision_primary_reason: {primary_reason}"
+            if auxiliary_reasons:
+                line += (
+                    "\n    protocol_auxiliary_warnings: "
+                    + ", ".join(auxiliary_reasons[:4])
+                )
             if is_detailed and pr.pattern_summary:
                 line += "\n" + _render_pattern_summary(pr.pattern_summary)
             if is_detailed and pr.case_feedback:

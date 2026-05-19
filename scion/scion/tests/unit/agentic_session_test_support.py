@@ -7,7 +7,11 @@ from scion.core.public_refs import contains_absolute_path
 from scion.proposal.agentic_artifacts import inspect_agentic_session_artifact
 from scion.proposal.agentic_session import AgenticProposalOutput, AgenticTranscriptEvent
 from scion.proposal.engine import ProposalValidationError
-from scion.proposal.llm_client import LLMRetryExhaustedError
+from scion.proposal.llm_client import (
+    LLM_TRANSIENT_API_ERROR_CATEGORY,
+    LLMRetryExhaustedError,
+    LLMTransientProviderError,
+)
 from scion.proposal.tools import ProposalToolPermission
 from scion.proposal.tools.models import ReadSurfaceInput
 from scion.proposal.tools.preview import AlgorithmSmokeInput, ContractPreviewInput
@@ -223,9 +227,30 @@ class _PatchThenRetryExhaustedCreative(FakeCreative):
         raise LLMRetryExhaustedError("structured patch output retry exhausted")
 
 
+class _PatchThenTransientApiErrorCreative(FakeCreative):
+    def __init__(self, patch: PatchProposal) -> None:
+        super().__init__(patch=patch)
+        self._returned_initial_patch = False
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        if not self._returned_initial_patch:
+            self._returned_initial_patch = True
+            return self.patch
+        provider_error = LLMTransientProviderError(
+            "Transient provider error: HTTP 502 Bad Gateway "
+            "<html><title>502 Bad Gateway</title></html>"
+        )
+        raise LLMRetryExhaustedError(
+            "Tool call failed after 2 transient API attempt(s). "
+            f"Last error: {provider_error}",
+            last_error=provider_error,
+            failure_category=LLM_TRANSIENT_API_ERROR_CATEGORY,
+        )
+
+
 __all__ = [
     name
     for name in globals()
     if not (name.startswith("__") and name.endswith("__"))
 ]
-
