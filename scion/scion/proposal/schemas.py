@@ -22,9 +22,15 @@ _EXPECTED_TELEMETRY_DESCRIPTION = (
     "are still field strings/arrays. Do not use runtime field names, suffixes, "
     "or metrics such as best_delta, improvement_counts, phase_runtime, or "
     "runtime_ms as top-level categories; put those declared runtime fields "
-    "under the matching category instead. Activation must be mechanism "
-    "activity evidence, not objective/outcome fields such as "
-    "solver_algorithm_fleet_violation or solver_algorithm_total_distance."
+    "under the matching category instead. Activation must be mechanism-specific "
+    "activity evidence such as "
+    "solver_algorithm_context_records.<mechanism_id>_iterations or "
+    "solver_algorithm_phase_runtime_ms.<mechanism_id>, not objective/outcome "
+    "fields such as solver_algorithm_fleet_violation or "
+    "solver_algorithm_total_distance. Aggregate outcome/activity fields such "
+    "as solver_algorithm_improving_moves or "
+    "solver_algorithm_best_improving_moves show effect or activity, not "
+    "activation."
 )
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]
 
@@ -565,9 +571,14 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "must be only activity, activation, effect, or budget; do not use "
         "runtime metric names or suffixes such as best_delta, "
         "improvement_counts, phase_runtime, or runtime_ms as categories. "
-        "Activation must be mechanism activity evidence, not objective/outcome "
-        "fields. For mapping telemetry, use a mechanism-specific path such as "
-        "some_runtime_map.<mechanism_id>; the whole map field alone is not "
+        "Activation must be mechanism-specific activity evidence such as "
+        "solver_algorithm_context_records.<mechanism_id>_iterations or "
+        "solver_algorithm_phase_runtime_ms.<mechanism_id>, not "
+        "objective/outcome fields. Aggregate outcome/activity fields such as "
+        "solver_algorithm_improving_moves or "
+        "solver_algorithm_best_improving_moves show effect or activity, not "
+        "activation. For mapping telemetry, use a mechanism-specific path such "
+        "as some_runtime_map.<mechanism_id>; the whole map field alone is not "
         "activation evidence.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
@@ -698,7 +709,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate.
-- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific records, not outcome/objective fields or an aggregate runtime map without the mechanism id.
+- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific records such as `solver_algorithm_context_records.<mechanism_id>_iterations` or `solver_algorithm_phase_runtime_ms.<mechanism_id>`, not outcome/objective fields, aggregate effect/activity fields like `solver_algorithm_improving_moves`, or an aggregate runtime map without the mechanism id.
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{

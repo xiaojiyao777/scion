@@ -169,6 +169,55 @@ def test_mechanism_novelty_gate_allows_adaptive_update_formula_improvement(
     )
 
 
+def test_mechanism_novelty_gate_allows_vns_local_adaptive_neighborhood_ordering(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+            hypothesis_text=(
+                "VNS local search applies a fixed sequence of neighborhoods. "
+                "Add a segment-based success counter and adaptive probability "
+                "inside the VNS loop, analogous to ALNS adaptive weights but "
+                "scoped only to VNS neighborhood ordering."
+            ),
+            target_weakness=(
+                "The local-search phase uses fixed VNS neighborhood scheduling "
+                "rather than adapting VNS neighborhood order from recent success."
+            ),
+            expected_effect=(
+                "Improve total_distance by spending VNS effort on productive "
+                "neighborhoods."
+            ),
+            mechanism_changes=[
+                {
+                    "id": "adaptive_vns_operator_weights",
+                    "change_type": "add",
+                },
+                {"id": "vns_local_search", "change_type": "modify"},
+            ],
+            novelty_signature={
+                "algorithm_family": "adaptive_vns",
+                "improvement_strategy": (
+                    "adaptive_weighted_vns_operator_selection_with_decay"
+                ),
+            },
+        )
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            hypothesis,
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     "text",
     (

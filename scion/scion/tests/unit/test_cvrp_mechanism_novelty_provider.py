@@ -189,3 +189,62 @@ def test_cvrp_mechanism_novelty_provider_allows_route_limit_repair_with_runtime_
     )
 
     assert result is None
+
+
+def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "ALNS destroy/repair operator weights remain uniform and "
+            "non-adaptive throughout the run; make them learn from accepted "
+            "moves."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "adaptive_operator_weights"
+
+
+def test_cvrp_provider_allows_vns_adaptive_neighborhood_ordering() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "VNS local search applies a fixed sequence of neighborhoods. Add a "
+            "segment-based success counter and adaptive probability inside the "
+            "VNS loop, analogous to ALNS adaptive weights but scoped only to "
+            "VNS neighborhood ordering."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "The local-search phase uses fixed VNS neighborhood scheduling "
+            "rather than adapting VNS neighborhood order from recent success."
+        ),
+        expected_effect=(
+            "Improve total_distance by spending VNS effort on productive "
+            "neighborhoods."
+        ),
+        no_op_condition=(
+            "Fall back to the existing fixed VNS order when no neighborhood "
+            "has success evidence."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="adaptive_vns_operator_weights", change_type="add"),
+            MechanismChange(id="vns_local_search", change_type="modify"),
+        ),
+        novelty_signature={
+            "algorithm_family": "adaptive_vns",
+            "improvement_strategy": (
+                "adaptive_weighted_vns_operator_selection_with_decay"
+            ),
+        },
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None

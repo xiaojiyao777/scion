@@ -139,6 +139,13 @@ class TestHypothesisGroundingRequirements:
         assert "no-op/failure conditions" in text
         assert "mechanism-specific path" in text
         assert "whole map field alone is not activation evidence" in text
+        assert (
+            "solver_algorithm_context_records.<mechanism_id>_iterations" in text
+        )
+        assert "solver_algorithm_phase_runtime_ms.<mechanism_id>" in text
+        assert "solver_algorithm_improving_moves" in text
+        assert "solver_algorithm_best_improving_moves" in text
+        assert "show effect or activity, not activation" in text
 
 
 class TestForcedSurfaceTaskPrompt:

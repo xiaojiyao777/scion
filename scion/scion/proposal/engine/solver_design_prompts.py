@@ -58,7 +58,8 @@ def _solver_design_hypothesis_guidance(context: Mapping[str, Any]) -> list[str]:
         ),
         (
             "For `solver_design` expected_telemetry, use selected-surface "
-            "evidence categories, not ad hoc top-level runtime field names."
+            "evidence categories and mechanism-specific activation paths, not "
+            "ad hoc top-level runtime field names or aggregate outcome fields."
         ),
     ]
 

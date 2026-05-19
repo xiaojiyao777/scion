@@ -104,6 +104,12 @@ _OBJECTIVE_OUTCOME_TELEMETRY_FIELDS = frozenset(
         "solver_algorithm_solution_routes",
     }
 )
+_AGGREGATE_EFFECT_ACTIVITY_TELEMETRY_FIELDS = frozenset(
+    {
+        "solver_algorithm_improving_moves",
+        "solver_algorithm_best_improving_moves",
+    }
+)
 
 
 def _category_field_semantic_errors(
@@ -132,6 +138,14 @@ def _category_field_semantic_errors(
                 "evidence such as adapter-declared context_records or "
                 "phase_runtime fields, while objective fields belong under effect "
                 "or protected-objective checks."
+            )
+        if field_text in _AGGREGATE_EFFECT_ACTIVITY_TELEMETRY_FIELDS:
+            errors.append(
+                "expected_telemetry.activation references aggregate effect/activity "
+                f"field {field_text}; activation must use mechanism-specific "
+                "activity evidence such as adapter-declared context_records or "
+                "phase_runtime fields, while aggregate effect/activity fields "
+                "belong under activity or effect checks."
             )
         specific_field = _mechanism_specific_field_for_aggregate(
             field_text,
