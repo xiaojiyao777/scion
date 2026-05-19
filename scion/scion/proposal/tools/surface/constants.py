@@ -1,0 +1,42 @@
+"""Constants for bounded research-surface proposal-tool payloads."""
+
+from __future__ import annotations
+
+
+
+
+_COMPACT_SURFACE_CODE_CHARS = 1200
+_FULL_SURFACE_CODE_CHARS = 12000
+_COMPACT_SURFACE_TEXT_CHARS = 600
+_COMPACT_SURFACE_HINT_CHARS = 240
+_COMPACT_SURFACE_INTERFACE_CHARS = 2400
+_COMPACT_SURFACE_LIST_ITEMS = 32
+_COMPACT_SURFACE_MAP_ITEMS = 32
+_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS = 120
+_NONEMPTY_SEQUENCE_NOVELTY_FIELDS = frozenset(
+    {
+        "selected_components",
+        "deep_components_selected",
+    }
+)
+_COMPACT_SURFACE_SECTIONS = (
+    "summary",
+    "interface",
+    "bounds",
+    "evidence",
+    "novelty",
+    "target_preview",
+)
+
+__all__ = [
+    "_COMPACT_SURFACE_CODE_CHARS",
+    "_FULL_SURFACE_CODE_CHARS",
+    "_COMPACT_SURFACE_TEXT_CHARS",
+    "_COMPACT_SURFACE_HINT_CHARS",
+    "_COMPACT_SURFACE_INTERFACE_CHARS",
+    "_COMPACT_SURFACE_LIST_ITEMS",
+    "_COMPACT_SURFACE_MAP_ITEMS",
+    "_SEMANTIC_SIGNATURE_SCALAR_STRING_CHARS",
+    "_NONEMPTY_SEQUENCE_NOVELTY_FIELDS",
+    "_COMPACT_SURFACE_SECTIONS",
+]

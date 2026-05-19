@@ -1,7 +1,7 @@
 # Large File Modularization Audit
 
 *Date: 2026-05-19*
-*Status: P0 package/facade slices completed; remaining P1/P2 architecture debt queued*
+*Status: P0/P1 package-facade slices completed; remaining P2 CLI debt queued*
 *Required reading: `scion/docs/AGENT_ONBOARDING.md` and
 `scion/design/scion-architecture-v3.md`*
 
@@ -56,7 +56,7 @@ P0 has been implemented as package/facade migrations:
   paths, observations, evidence checks, issue formatting, and summary building
   live in focused modules.
 
-The current tracked Python files above 1000 lines are now:
+After the P0 slices, tracked Python files above 1000 lines were:
 
 | Lines | File | Priority | Direction |
 |---:|---|---|---|
@@ -68,20 +68,32 @@ The current tracked Python files above 1000 lines are now:
 
 ## P1 Queue
 
-`proposal/engine.py` should keep `CreativeLayer` as facade while prompt
-builders, provider glue, response parsing/bounds, trace writing, and fix-context
-rendering move into focused modules.
+P1 has been implemented as package/facade migrations:
 
-`proposal/solver_design_smoke.py` should split by smoke lifecycle: workspace
-materialization, patch application, smoke case selection, solver-run adapter,
-telemetry audit, micro-benchmark comparison, and repair guidance. It may call
-problem-owned providers, but generic smoke logic must not absorb problem
-semantics.
+- `scion/scion/proposal/engine.py` was replaced by
+  `scion/scion/proposal/engine/`. `CreativeLayer`,
+  `ProposalValidationError`, parsing helpers, and context split helpers remain
+  import-compatible while prompt rendering, solver-design provider glue,
+  response parsing/bounds, trace writing, and fix-context rendering live in
+  focused modules.
+- `scion/scion/proposal/solver_design_smoke.py` was replaced by
+  `scion/scion/proposal/solver_design_smoke/`. Historical helper imports used
+  by preview tools remain compatible while workspace materialization, patch
+  path safety, smoke case selection, solver-run subprocess adaptation, runtime
+  audit, micro-benchmark comparison, effort checks, and repair guidance live in
+  focused modules.
+- `scion/scion/proposal/tools/feedback.py` and
+  `scion/scion/proposal/tools/surface.py` were replaced by same-name packages.
+  Registry tool names and public imports remain compatible while feedback
+  memory/screening/holdout/runtime queries, provenance/scope guards, runtime
+  attribution, diagnosis, surface metadata, code reads, support artifacts, and
+  payload compaction live in focused modules.
 
-`proposal/tools/feedback.py` and `proposal/tools/surface.py` should become
-tool packages after the context-manager split is stable. Preserve registry tool
-names while separating payload compaction, provenance/scope guards, runtime
-attribution, surface metadata, code-file reading, and path-permission checks.
+The current tracked Python files above 1000 lines are now:
+
+| Lines | File | Priority | Direction |
+|---:|---|---|---|
+| 1286 | `scion/scion/cli/main.py` | P2 | command package |
 
 ## P2 Queue
 

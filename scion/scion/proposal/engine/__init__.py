@@ -1,0 +1,172 @@
+"""CreativeLayer — LLM-backed proposal generation (Round 1 and Round 2)."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Mapping
+
+from pydantic import ValidationError
+
+from scion.core.models import (
+    HypothesisProposal,
+    MechanismChange,
+    PatchFileChange,
+    PatchProposal,
+)
+from scion.problem.providers import resolve_solver_design_prompt_provider
+from scion.proposal.schemas import (
+    CODE_PROMPT_TEMPLATE,
+    FIX_PROMPT_TEMPLATE,
+    FIX_TOOL,
+    HYPOTHESIS_PROMPT_TEMPLATE,
+    HYPOTHESIS_PROPOSAL_SCHEMA,
+    HYPOTHESIS_TOOL,
+    PATCH_PROPOSAL_SCHEMA,
+    PATCH_TOOL,
+    TOOL_SELECTION_TOOL,
+    HypothesisProposalInput,
+    PatchProposalInput,
+    ToolSelectionInput,
+    normalize_patch_output_with_repair_attribution,
+)
+
+from .code_prompts import (
+    _is_timeout_failure,
+    _prior_failure_prompt_section,
+    _split_code_context,
+)
+from .exceptions import ProposalValidationError
+from .facade import CreativeLayer
+from .fix_context import _split_fix_context
+from .hypothesis_prompts import (
+    _hypothesis_task_prompt,
+    _novelty_signature_task_lines,
+    _split_hypothesis_context,
+)
+from .parsing import _parse_hypothesis, _parse_patch, _to_float_or_none
+from .prompt_common import (
+    _CACHE_5M,
+    _AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS,
+    _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS,
+    _AGENTIC_RESEARCH_DIAGNOSIS_CHARS,
+    _AGENTIC_TOOL_OBSERVATIONS_CHARS,
+    _DefaultDict,
+    _agentic_observation_chars,
+    _agentic_research_context_block,
+    _agentic_research_diagnosis_chars,
+    _bounded_json,
+    _format_bulleted_section,
+    _format_bullets,
+    _limit_code_phase_text,
+)
+from .solver_design_prompts import (
+    _SOLVER_DESIGN_BROAD_SCOPE_TERMS,
+    _SOLVER_DESIGN_CODE_API_MANIFEST_CHARS,
+    _SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS,
+    _SOLVER_DESIGN_CODE_INTEGRATION_FILES_CHARS,
+    _SOLVER_DESIGN_CODE_INTERFACE_CHARS,
+    _SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS,
+    _SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS,
+    _SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS,
+    _code_hypothesis_detail,
+    _provider_prompt_lines,
+    _solver_design_broad_terms,
+    _solver_design_code_rules_section,
+    _solver_design_hypothesis_guidance,
+    _solver_design_prompt_provider,
+    _solver_design_scope_control_section,
+    _solver_design_user_constraints,
+)
+from .tool_selection import (
+    _build_tool_selection_prompt,
+    _parse_tool_selection,
+    _sanitize_tool_selection_context,
+)
+from .trace import (
+    _TraceWriter,
+    _client_request_policy,
+    _prompt_hash,
+    _write_json,
+)
+
+__all__ = [
+    "Any",
+    "CODE_PROMPT_TEMPLATE",
+    "CreativeLayer",
+    "Dict",
+    "FIX_PROMPT_TEMPLATE",
+    "FIX_TOOL",
+    "HYPOTHESIS_PROMPT_TEMPLATE",
+    "HYPOTHESIS_PROPOSAL_SCHEMA",
+    "HYPOTHESIS_TOOL",
+    "HypothesisProposal",
+    "HypothesisProposalInput",
+    "Mapping",
+    "MechanismChange",
+    "PATCH_PROPOSAL_SCHEMA",
+    "PATCH_TOOL",
+    "PatchFileChange",
+    "PatchProposal",
+    "PatchProposalInput",
+    "ProposalValidationError",
+    "TOOL_SELECTION_TOOL",
+    "ToolSelectionInput",
+    "ValidationError",
+    "_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS",
+    "_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS",
+    "_AGENTIC_RESEARCH_DIAGNOSIS_CHARS",
+    "_AGENTIC_TOOL_OBSERVATIONS_CHARS",
+    "_CACHE_5M",
+    "_DefaultDict",
+    "_SOLVER_DESIGN_BROAD_SCOPE_TERMS",
+    "_SOLVER_DESIGN_CODE_API_MANIFEST_CHARS",
+    "_SOLVER_DESIGN_CODE_HYPOTHESIS_CHARS",
+    "_SOLVER_DESIGN_CODE_INTEGRATION_FILES_CHARS",
+    "_SOLVER_DESIGN_CODE_INTERFACE_CHARS",
+    "_SOLVER_DESIGN_CODE_PROBLEM_OBJECT_CHARS",
+    "_SOLVER_DESIGN_CODE_SOLVER_MECHANICS_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_PROBLEM_OBJECT_CHARS",
+    "_SOLVER_DESIGN_COMPACT_RETRY_SOLVER_MECHANICS_CHARS",
+    "_TraceWriter",
+    "_agentic_observation_chars",
+    "_agentic_research_context_block",
+    "_agentic_research_diagnosis_chars",
+    "_bounded_json",
+    "_build_tool_selection_prompt",
+    "_client_request_policy",
+    "_code_hypothesis_detail",
+    "_format_bulleted_section",
+    "_format_bullets",
+    "_hypothesis_task_prompt",
+    "_is_timeout_failure",
+    "_limit_code_phase_text",
+    "_novelty_signature_task_lines",
+    "_parse_hypothesis",
+    "_parse_patch",
+    "_parse_tool_selection",
+    "_prior_failure_prompt_section",
+    "_prompt_hash",
+    "_provider_prompt_lines",
+    "_sanitize_tool_selection_context",
+    "_solver_design_broad_terms",
+    "_solver_design_code_rules_section",
+    "_solver_design_hypothesis_guidance",
+    "_solver_design_prompt_provider",
+    "_solver_design_scope_control_section",
+    "_solver_design_user_constraints",
+    "_split_code_context",
+    "_split_fix_context",
+    "_split_hypothesis_context",
+    "_to_float_or_none",
+    "_write_json",
+    "normalize_patch_output_with_repair_attribution",
+    "resolve_solver_design_prompt_provider",
+]
