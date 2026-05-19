@@ -38,6 +38,18 @@ class SolverDesignPromptProvider(Protocol):
     def solver_design_broad_scope_terms(self) -> Sequence[str]:
         """Return problem-specific terms that imply a broad implementation."""
 
+    def solver_design_api_manifest_files(self) -> Sequence[str]:
+        """Return problem-owned files to summarize for code-stage imports."""
+
+    def solver_design_integration_full_files(self) -> Sequence[str]:
+        """Return problem-owned files to include fully for code-stage wiring."""
+
+    def solver_design_integration_summary_files(self) -> Sequence[str]:
+        """Return problem-owned sibling files to summarize for code-stage wiring."""
+
+    def solver_design_target_api_guidance(self, target_file: str) -> str:
+        """Return problem-owned target-specific code-stage API guidance."""
+
 
 class SolverDesignSmokeProvider(Protocol):
     """Optional problem-owned solver-design smoke interpretation."""

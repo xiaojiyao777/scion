@@ -1,9 +1,9 @@
 # Context Manager Modularization Design
 
 *Date: 2026-05-19*
-*Status: Design plus staged package migration*
-*Scope: `scion/scion/proposal/context_manager.py`, `scion/scion/proposal/context/`,
-and compatibility context builders*
+*Status: Package facade implemented; provider-owned solver-design context migrated*
+*Scope: `scion/scion/proposal/context_manager/`,
+`scion/scion/proposal/context/`, and compatibility context builders*
 *Required reading: `scion/docs/AGENT_ONBOARDING.md`,
 `scion/design/scion-architecture-v3.md`, and
 `scion/docs/status/current-state.md`*
@@ -38,9 +38,9 @@ Safe Feature Extractor is still the only path into deterministic Decision.
 - `build_code_context(...) -> dict[str, Any]`
 - `build_fix_context(...) -> dict[str, Any]`
 
-The module also exposes historical helper functions used by tests, tools, and
+The package facade also exposes historical helper functions used by tests, tools, and
 campaign services. These are not ideal public API, but they are currently
-imported directly and must remain available through `context_manager.py` during
+imported directly and must remain available through `context_manager` during
 the split:
 
 - family/coverage helpers: `assign_family_id`, `build_exploration_coverage`,
@@ -56,8 +56,8 @@ the split:
   `_build_consecutive_failure_diagnosis`, `_build_branch_direction_prompt`,
   `_build_failure_pattern_warning`, `_build_champion_baselines`
 
-Phase 1 preserves these imports by re-exporting moved helpers from
-`context_manager.py`.
+The package root preserves these imports by re-exporting moved helpers from
+`scion.proposal.context_manager`.
 
 The intended facade contract during modularization is:
 
@@ -66,35 +66,41 @@ The intended facade contract during modularization is:
   `build_code_context`, and `build_fix_context`
 - historical helper imports from `scion.proposal.context_manager` remain
   compatibility re-exports until call sites migrate
-- implementation modules live under `scion.proposal.context`
+- `ContextManager` orchestration now lives in
+  `scion.proposal.context_manager.manager`; supporting code-context, guidance,
+  history, I/O, rendering, and runtime helpers live in the same package
+- lower-level generic research-surface and feedback builders remain under
+  `scion.proposal.context`
   and are internal unless a helper is explicitly promoted to a documented API
 - `scion.proposal.context_builders` remains a temporary compatibility package
   that re-exports the new modules for tests/tools not yet migrated
 
 ## Current Responsibilities
 
-`context_manager.py` currently mixes five responsibilities:
+The old single `context_manager.py` mixed five responsibilities that now live
+behind package modules:
 
-- active solver context: active problem-boundary selection, solver-design
+- `context_manager/code_context.py`: active solver context, solver-design
   manifest rendering, branch-current integration file summaries, and active
   target expansion
-- research surface rendering: surface list filtering, metadata rendering,
+- `context/surfaces.py`: surface list filtering, metadata rendering,
   forced-surface prompt constraints, novelty signature summaries, target/action
   permission text, and inactive legacy-surface warnings
-- feedback and memory exposure: screening-only experiment history, case
+- `context/feedback.py` and `context_manager/history.py`: screening-only
+  experiment history, case
   feedback, pattern summaries, champion baseline hints, runtime feedback,
   proposal-only quality blocks, search memory, research log, saturation, and
   weight feedback
-- budget and compaction context: APS observation budgets, compact tool payload
+- proposal/session tools: APS observation budgets, compact tool payload
   expectations, terminal preview reserves, and text-size controls currently
   spread across proposal tools and session modules
-- problem adapter hooks: problem summary, problem object, solver mechanics,
+- `context/problem_adapter.py`: problem summary, problem object, solver mechanics,
   operator/research-surface interface rendering, objective policy rendering,
   and adapter/spec selection
 
-This makes the file hard to review for exposure safety: problem-independent
+The package split makes exposure review more localized: problem-independent
 context protocol code, problem-owned metadata rendering, proposal feedback
-policy, and active solver diagnostics all live in one namespace.
+policy, and active solver diagnostics no longer live in one file.
 
 ## v3 Boundary Rule
 
@@ -114,10 +120,10 @@ evidence", "screening", or "active problem boundary". It must not introduce
 domain nouns such as customer, vehicle, depot, route, order, warehouse, or any
 specific algorithm family unless that text originated from the problem package.
 
-Known debt remains in solver-design context rendering where framework code still
-contains CVRP package file paths and target-specific guidance. That should move
-behind adapter/problem-package hooks in a later phase; phase 1 does not change
-behavior.
+Solver-design context rendering must use problem-owned provider hooks for
+algorithm file maps and target-specific guidance. The generic context manager
+may read the requested files and enforce exposure/path constraints, but it must
+not know package-owned filenames or algorithm families.
 
 ## Dependency Direction
 
@@ -149,8 +155,8 @@ Builder import rules:
 - `research_surfaces.py` may read declared research-surface metadata and generic
   `core.forced_surface` helpers. It must not infer domain behavior from surface
   names beyond generic kinds/roles such as `solver_design`.
-- future `active_solver.py` may render active algorithm context only from
-  declared surfaces, branch/champion inputs, and adapter/provider hooks. Any
+- code-context helpers may render active algorithm context only from declared
+  surfaces, branch/champion inputs, and adapter/provider hooks. Any
   problem-specific file map or target guidance must be provider-owned.
 - future `feedback_memory.py` may read framework `StepRecord` and
   screening-stage normalized feedback. It must not expose validation/frozen
@@ -159,10 +165,10 @@ Builder import rules:
   compaction policies. It must not make problem-quality decisions.
 
 Proposal tools may temporarily import compatibility helpers from
-`context_manager.py`, but new shared context logic should live in
-`scion.proposal.context` and flow through the facade or explicit internal
-imports. Existing `context_builders` imports should be treated as compatibility
-imports only.
+`scion.proposal.context_manager`, but new shared context logic should live in
+the responsible context package and flow through the facade or explicit
+internal imports. Existing `context_builders` imports should be treated as
+compatibility imports only.
 
 ## Forbidden Framework Semantics
 
@@ -191,11 +197,15 @@ proposal context.
 
 ## Target Module Layout
 
-The context implementation package is `scion.proposal.context`. It is separate
-from `context_manager.py` because Python cannot safely keep both
-`context_manager.py` and a same-name `context_manager/` package. The file
-`context_manager.py` therefore remains the public compatibility facade until
-all external imports can be migrated.
+The context-manager implementation package is
+`scion.proposal.context_manager`. The old single
+`scion/proposal/context_manager.py` file has been replaced by a same-name
+package with a compatibility root. Historical imports such as
+`from scion.proposal.context_manager import ContextManager` still work.
+
+The lower-level `scion.proposal.context` package remains responsible for
+generic research-surface and feedback helpers that predated the same-name
+package migration.
 
 The context package should be split by ownership:
 
@@ -227,8 +237,9 @@ The context package should be split by ownership:
   helpers, and budget denial summaries. This module should share policy with
   APS session/tool code instead of duplicating limits.
 
-`context_manager.py` should become a small orchestration facade: collect inputs,
-call the builder modules, and return the same context dictionaries.
+`context_manager/manager.py` is the orchestration facade: collect inputs, call
+the builder modules, and return the same context dictionaries. The package
+root re-exports compatibility helper names.
 
 `context_builders/*` should be reduced to thin re-export modules and deleted in
 a later cleanup after direct imports have moved.
@@ -239,7 +250,7 @@ Phase 1, implemented in commit `a2929b0`:
 
 - add the `context_builders` package
 - move pure research-surface rendering and generic adapter-hook helpers
-- keep all helper names available from `context_manager.py`
+- keep all helper names available from `scion.proposal.context_manager`
 - avoid behavioral changes and avoid edits to proposal preview or contract gate
   files
 
@@ -255,7 +266,8 @@ Phase 2, implemented after `a2929b0`:
   feedback, proposal-only agent-quality blocks, what-worked summaries,
   verification-failure diagnosis text, and champion baseline hints
 - leave runtime feedback, search-control guidance, objective steering, and
-  active solver-design code context in `context_manager.py` for later phases
+  active solver-design code context in the compatibility module for later
+  phases
 
 Phase 2 is intentionally not a generic helper bucket. The new module owns one
 stable responsibility: proposal-visible feedback/memory exposure. It may read
@@ -268,7 +280,7 @@ Phase 2 does not implement a problem-owned provider for solver-design prompt
 guidance. That debt remains because the risky strings and path maps sit in the
 active-solver/code-read context, not in the history/feedback renderer.
 
-Phase 3, current package migration slice:
+Phase 3, implemented package-boundary slice:
 
 - introduce `scion.proposal.context` as the implementation package
 - move the existing research-surface, adapter-hook, and feedback modules into
@@ -276,20 +288,25 @@ Phase 3, current package migration slice:
 - leave `scion.proposal.context_manager` as the public facade for
   `ContextManager` and historical helper imports
 - leave `scion.proposal.context_builders` as compatibility re-export modules
-- do not move active solver/code-read context yet, because it still requires
+- initially did not move active solver/code-read context, because it required
   problem-owned provider design before extraction
 
-This is a package-boundary slice, not a line-count exercise. It proves the
-future import direction while avoiding the high-risk `context_manager.py` ->
-`context_manager/` same-name replacement.
+This was a package-boundary slice, not a line-count exercise. The follow-up
+same-name package migration replaced `context_manager.py` with
+`context_manager/` once the compatibility facade was ready.
 
 Phase 4:
 
-- move active solver-design context into `active_solver.py`
-- replace framework-owned CVRP file maps and target-specific strings with
-  adapter/problem-package hooks
-- add generic tests using a non-CVRP problem spec to prove no domain nouns are
-  emitted unless the adapter provides them
+- implemented in the same-name package migration: active solver-design code
+  context now lives in `scion.proposal.context_manager.code_context`
+- framework-owned CVRP file maps and target-specific strings have moved behind
+  `SolverDesignPromptProvider` hooks:
+  `solver_design_api_manifest_files()`,
+  `solver_design_integration_full_files()`,
+  `solver_design_integration_summary_files()`, and
+  `solver_design_target_api_guidance(target_file)`
+- `scion.proposal.context_manager` was checked for CVRP/ALNS/VNS/domain terms;
+  problem-owned terms now belong in `scion.problems.*`
 
 Phase 5:
 
@@ -302,7 +319,8 @@ Phase 6:
 - evaluate direct imports of private helpers from other modules
 - either formalize a small compatibility API or migrate call sites to the
   builder modules
-- reduce `context_manager.py` to `ContextManager` plus intentional re-exports
+- keep `context_manager/__init__.py` as `ContextManager` plus intentional
+  compatibility re-exports, then migrate private helper imports over time
 
 ## Phase-1 Safety Checks
 
@@ -352,28 +370,18 @@ for Phase 2:
 - `scion/scion/tests/unit/test_agentic_feedback_exposure.py`
 - `scion/scion/tests/unit/test_agentic_session_tool_selection.py`
 
-## Remaining Debt After Phase 2
+## Remaining Debt After Package Migration
 
-- Active solver/code-read context still contains hardcoded solver-design file
-  lists and target-specific implementation guidance. This must move behind a
-  problem-owned provider hook before it is extracted into `active_solver.py`.
-  Concrete debt in `context_manager.py` includes
-  `_SOLVER_DESIGN_API_MODULES`, `_SOLVER_DESIGN_INTEGRATION_FULL_FILES`,
-  `_SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES`, and
-  `_solver_design_target_api_guidance()`.
-- The intended provider shape for that migration is problem-owned, for example:
-  `adapter.active_solver_context_provider()` returning a provider that can list
-  algorithm files, select integration-context files, render target-specific
-  guidance, and summarize branch-current API manifests. The generic builder
-  should only enforce exposure/path constraints and call that provider; it
-  should not know package-owned filenames or algorithm families.
-- Runtime feedback rendering remains in `context_manager.py`. It is mostly
-  generic normalized feedback, but it is larger and more entangled with
-  selected-surface runtime summary fields, so it needs a separate exposure
-  review.
-- Objective steering and search-control guidance remain in `context_manager.py`.
-  They are generic today, but should be split only after confirming the adapter
-  objective-policy boundary is sufficient.
+- Runtime feedback rendering now lives in
+  `context_manager/runtime.py`. It is generic normalized feedback, but it
+  remains large enough to deserve a separate exposure review if it grows.
+- Objective steering and search-control guidance now live in
+  `context_manager/guidance.py`. They are generic today, but should be split
+  further only after confirming the adapter objective-policy boundary is
+  sufficient.
 - Historical direct imports from `scion.proposal.context_manager` remain as a
   compatibility surface. Later phases should either formalize these as facade
   exports or migrate call sites to explicit `scion.proposal.context` modules.
+- Remaining large-file cleanup should move next to the P0 modules identified in
+  the large-file modularization audit: protocol experiment orchestration,
+  proposal pipeline, and telemetry guard.

@@ -44,12 +44,81 @@ _ACTIVE_SOLVER_DESIGN_PACKAGE = (
     "`policies/baseline_algorithm.py` and `policies/baseline_modules/*.py`"
 )
 
+_SOLVER_DESIGN_API_MANIFEST_FILES = (
+    "policies/baseline_algorithm.py",
+    "policies/baseline_modules/scheduler.py",
+    "policies/baseline_modules/construction.py",
+    "policies/baseline_modules/destroy_repair.py",
+    "policies/baseline_modules/local_search.py",
+    "policies/baseline_modules/acceptance.py",
+    "policies/baseline_modules/state.py",
+    "policies/baseline_modules/config.py",
+)
+
+_SOLVER_DESIGN_INTEGRATION_FULL_FILES = (
+    "policies/baseline_algorithm.py",
+    "policies/baseline_modules/scheduler.py",
+    "policies/baseline_modules/state.py",
+)
+
+_SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES = (
+    "policies/baseline_modules/construction.py",
+    "policies/baseline_modules/destroy_repair.py",
+    "policies/baseline_modules/local_search.py",
+    "policies/baseline_modules/acceptance.py",
+    "policies/baseline_modules/config.py",
+)
+
 
 class CvrpSolverDesignProvider:
     """Problem-owned guidance for CVRP solver-design proposal tooling."""
 
     def solver_design_broad_scope_terms(self) -> Sequence[str]:
         return _BROAD_SCOPE_TERMS
+
+    def solver_design_api_manifest_files(self) -> Sequence[str]:
+        return _SOLVER_DESIGN_API_MANIFEST_FILES
+
+    def solver_design_integration_full_files(self) -> Sequence[str]:
+        return _SOLVER_DESIGN_INTEGRATION_FULL_FILES
+
+    def solver_design_integration_summary_files(self) -> Sequence[str]:
+        return _SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES
+
+    def solver_design_target_api_guidance(self, target_file: str) -> str:
+        normalized = str(target_file or "").replace("\\", "/").lstrip("/")
+        if normalized == "policies/baseline_modules/destroy_repair.py":
+            return (
+                "Target-specific rule for destroy_repair.py: make destroy/repair "
+                "operators the primary mechanism in this file. A scheduler.py "
+                "additional_change may only import newly defined destroy/repair "
+                "symbols from .destroy_repair and add them to destroy_ops or "
+                "repair_ops. Do not add scheduler imports from construction.py "
+                "while destroy_repair.py is the approved target, unless the same "
+                "patch also changes construction.py and defines that exact symbol. "
+                "Existing construction exports are _clarke_wright_savings, "
+                "_nearest_neighbor, _sweep_construction, and "
+                "_capacity_balanced_construction; names like _clarke_wright, "
+                "_clarke_wright_solution, _nearest_neighbor_solution, "
+                "_nearest_neighbor_construction, _savings_solution, and "
+                "_savings_construction do not exist. Prefer bounded for-loops or "
+                "while loops with a visibly incremented counter cap."
+            )
+        if normalized == "policies/baseline_modules/construction.py":
+            return (
+                "Target-specific rule for construction.py: construction helpers "
+                "must return internal _Solution objects. Wire new seed helpers "
+                "through scheduler.py only by importing the exact new symbol from "
+                ".construction and calling it inside _ALNSVNSSolver methods."
+            )
+        if normalized == "policies/baseline_modules/local_search.py":
+            return (
+                "Target-specific rule for local_search.py: integrate new moves "
+                "through _default_vns_operators() or the existing _vns(...) call "
+                "path. Scheduler.py should keep calling _vns(candidate, "
+                "_default_vns_operators(), ...)."
+            )
+        return ""
 
     def solver_design_hypothesis_guidance(self, context: Any) -> Sequence[str]:
         return (
