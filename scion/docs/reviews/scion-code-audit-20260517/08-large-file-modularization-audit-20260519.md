@@ -17,7 +17,7 @@ Detailed review in this document focuses on the current files over 1000 lines. T
 
 | Priority | File | Lines | Ownership | Current Responsibility / Why It Grew | Split Plan |
 | --- | ---: | ---: | --- | --- | --- |
-| P0 | `scion/scion/problems/cvrp/solver.py` | 9340 | CVRP problem-specific | Public `solve`, CLI, registry operators, policy loading, policy normalization, baseline integration, main search, local neighborhoods, bounded destroy/repair, route-pool recombination, runtime audit, and `solver_algorithm` context are all in one module. Behavior fixes repeatedly landed here because it is the active runtime path. | Keep a thin compatibility `solver.py`; split into `solver/api.py`, `solver/cli.py`, `solver/policy_loading.py`, `solver/policy_schema.py`, `solver/main_search/{planning,runtime,telemetry}.py`, `solver/neighborhoods/{local,route_pair,bdr,route_pool}.py`, and `solver/algorithm_runtime.py`. |
+| P0 | `scion/scion/problems/cvrp/solver.py` | 9151 | CVRP problem-specific | Public `solve`, CLI, registry operators, policy loading, policy normalization, baseline integration, main search, local neighborhoods, bounded destroy/repair, route-pool recombination, runtime audit, and `solver_algorithm` context are all in one module. Behavior fixes repeatedly landed here because it is the active runtime path. | Keep a thin compatibility `solver.py`; split into `solver/api.py`, `solver/cli.py`, `solver/policy_loading.py`, `solver/policy_schema.py`, `solver/main_search/{planning,runtime,telemetry}.py`, `solver/neighborhoods/{local,route_pair,bdr,route_pool}.py`, and `solver/algorithm_runtime.py`. |
 | P0 | `scion/scion/problems/cvrp/adapter.py` | 3356 | CVRP problem-specific | Adapter API, surface prose, static policy preview, AST checks, synthetic preview context, solver-algorithm preview, and solution checks are coupled. It grew because problem boundary rules were added near the adapter entrypoint instead of into problem-owned submodules. | Keep `CvrpAdapter` as facade. Move prose to `surface_rendering.py`, constants/schema to `policy_schema.py`, solution validation to `solution_checks.py`, and preview logic to `preview/{dispatch,construction,baseline,solver_algorithm,main_search,deep_policies}.py`. |
 | P0 / Bacon | `scion/scion/proposal/agentic_session.py` | 4931 | Scion framework | One class owns session orchestration, planner loops, code loops, tool calls, budgets, timeouts, preview repair, outputs, persistence, and artifact handling. | Bacon owns this split. Do not start a parallel split in this phase. Expected modules: `orchestration`, `planner_loop`, `code_tools`, `tool_call`, `budget_runtime`, `timeouts`, `outputs`, `repair`, `observations`, and `persistence`. |
 | P1 | `scion/scion/proposal/context_manager.py` | 3863 | Scion framework with CVRP leakage | Hypothesis/code/fix context, surface metadata, history rendering, runtime feedback, strategy guidance, solver-design guidance, and code reads are combined. Some solver-design guidance hard-codes CVRP implementation details. | Split into `context/{builder,surfaces,history,runtime_feedback,strategy_guidance,solver_design_guidance,code_reads}.py`. Move CVRP-specific guidance into a CVRP problem provider. |
@@ -34,6 +34,12 @@ Detailed review in this document focuses on the current files over 1000 lines. T
 | P2 | `scion/scion/proposal/tools/surface.py` | 1172 | Scion framework | Surface listing, payload compaction, interface summaries, code reads, solver-design support artifact reads, and path safety live together. | Split `tools/surface/{read_tool,payloads,compact,code_reader,support_artifacts}.py`. |
 
 ## Test File Findings
+
+Status update: the active test-side line-count blocker is closed as of the
+2026-05-19 cleanup. Every file listed below has been split into focused test
+modules with a shared support module where needed, and the largest remaining
+test file is 728 lines. The table is kept as the audit baseline that drove the
+split, not as an open task list.
 
 | Priority | File | Lines | Ownership | Current Responsibility / Why It Grew | Split Plan |
 | --- | ---: | ---: | --- | --- | --- |
@@ -123,6 +129,30 @@ The first CVRP-side P0 cleanup is complete for the oversized solver runtime test
 
 This closes the P0 line-count blocker for that test file only. The production runtime module `scion/scion/problems/cvrp/solver.py` remains the main CVRP P0 blocker and still needs behavior-preserving modularization.
 
+## CVRP Solver Runtime Production Split Update
+
+The first behavior-preserving production extraction is complete:
+
+- Added `scion/scion/problems/cvrp/solver_runtime/` as the CVRP-owned runtime implementation package.
+- Moved dynamic policy-module loading helpers into `solver_runtime/policy_modules.py`.
+- Moved solution coercion, feasibility/objective helper calls, lexicographic comparison, and objective delta helpers into `solver_runtime/solution_ops.py`.
+- Moved time-budget and exit-reserve helpers into `solver_runtime/timing.py`.
+- `scion/scion/problems/cvrp/solver.py` remains the public executable/import facade and re-exports the old private helper names by importing them explicitly.
+- Verification run: `python -m compileall -q scion/scion/problems/cvrp scion/scion/tests` and `python -m pytest scion/scion/tests/test_cvrp_*_runtime.py scion/scion/tests/test_cvrp_solver_operator_runtime.py -q` passed with 72 tests.
+
+This is intentionally a small first slice. `solver.py` is still over 9000 lines and remains the main P0 production blocker. Next production slices should move policy loaders/schemas, then neighborhoods, then main-search runtime/telemetry, preserving facade compatibility after each step.
+
+## Broad Test Modularization Update
+
+The broad test-side cleanup requested after the CVRP runtime split is complete:
+
+- Former aggregate placeholders now remain for `test_verification.py`, `test_contract.py`, `test_campaign.py`, `test_protocol.py`, `test_cli.py`, `test_decision.py`, `test_sprint_e2.py`, `test_sprint_e3.py`, `unit/core/test_proposal_pipeline.py`, `unit/core/test_campaign_control_boundaries.py`, `unit/core/test_evidence_recorder.py`, `unit/test_research_surfaces_solver_design_integration.py`, `unit/test_agentic_proposal_tools_schema.py`, `unit/test_agentic_proposal_tools_solver_design.py`, `unit/test_agentic_proposal_tools_feedback.py`, and `unit/test_sprint_k.py`.
+- Each old aggregate now has a sibling `*_test_support.py` fixture/helper module and focused test modules named after the behavior area under test.
+- `find scion/scion/tests -name '*.py' ...` now reports a largest test file of 728 lines, below the preferred 800-line threshold.
+- Verification runs: focused split regression passed with 643 tests; CVRP runtime/adapter/agentic-tool split regression passed with 192 tests.
+
+This closes the active test-side architecture blocker. New tests should be added to the focused owner file for the behavior being exercised, not to the placeholder aggregate.
+
 ## Recommended Execution Order
 
 Phase 0: close APS session split and protect active work.
@@ -136,7 +166,7 @@ Phase 1: unblock CVRP P0 without touching Bacon's split.
 - Split `problems/cvrp/solver.py` into behavior-preserving modules with a thin compatibility facade.
 - The former `tests/test_cvrp_solver_operator_runtime.py` aggregate has been split. Keep new runtime tests focused and below the threshold while `solver.py` itself is modularized.
 - Split `problems/cvrp/adapter.py` into adapter facade, surface rendering, solution checks, policy schema, and preview modules.
-- Split `tests/test_cvrp_adapter.py` to mirror the adapter modules.
+- The former `tests/test_cvrp_adapter.py` aggregate has been split to mirror adapter responsibilities.
 
 Phase 2: move CVRP semantics out of framework.
 
@@ -174,17 +204,12 @@ Validation experiments are useful after the architecture boundary is enforceable
 
 Production files already above the new threshold but below 1000 lines:
 
-- `scion/scion/proposal/agentic_artifacts.py` - 967 lines.
 - `scion/scion/core/evidence_recorder.py` - 952 lines.
-- `scion/scion/proposal/agentic_preview.py` - 951 lines.
 - `scion/scion/core/explore_step_pipeline.py` - 947 lines.
 - `scion/scion/proposal/llm_client.py` - 876 lines.
 
-Test files already above the new threshold but below 1000 lines:
-
-- `scion/scion/tests/unit/core/test_campaign_control_boundaries.py` - 971 lines.
-- `scion/scion/tests/test_cli.py` - 954 lines.
-- `scion/scion/tests/unit/core/test_evidence_recorder.py` - 911 lines.
-- `scion/scion/tests/test_decision.py` - 803 lines.
+Test files already above the new threshold but below 1000 lines: none as of the
+2026-05-19 split. The largest remaining test file is
+`scion/scion/tests/unit/test_agentic_session_model_planner.py` at 728 lines.
 
 These files should not receive broad new behavior until they have either a short written reason to remain above 800 lines or a concrete split plan.

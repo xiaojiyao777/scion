@@ -36,7 +36,21 @@ the former 4.8k-line `tests/test_cvrp_solver_operator_runtime.py` aggregate is
 now a placeholder, shared fixtures live in `cvrp_solver_runtime_support.py`,
 and focused `test_cvrp_*_runtime.py` files pass (`72 passed`). Remaining P0/P1
 blockers include `problems/cvrp/solver.py`, `problems/cvrp/adapter.py`,
-`proposal/context_manager.py`, and `contract/gate.py`.
+`proposal/context_manager.py`, and `contract/gate.py`. The first production
+solver slice has started: low-coupling policy-module loading,
+solution/objective helpers, and timing helpers now live under the CVRP-owned
+`problems/cvrp/solver_runtime/` package while `solver.py` remains the public
+facade. This is verified but not sufficient; `solver.py` is still above 9000
+lines and remains the main P0 production blocker.
+
+The broader test-side architecture cleanup is now complete. All previously
+oversized aggregate test files have been converted to placeholders plus
+focused sibling modules with shared `*_test_support.py` helpers. The largest
+remaining test file is 728 lines, below the preferred 800-line threshold.
+Focused split regressions passed (`643 passed`), and the CVRP
+runtime/adapter/agentic-tool split regression passed (`192 passed`). Future
+regressions should land in the focused owner file rather than recreating an
+aggregate sprint/test bucket.
 
 Before this P0 shift, the framework governance path was largely behaving, but
 the previous CVRP optimization path was still too componentized: Scion could

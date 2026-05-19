@@ -20,6 +20,27 @@ from typing import Any, Mapping
 
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.solver_runtime.policy_modules import (
+    _call_policy_function,
+    _evict_module_tree,
+    _load_policy_module,
+    _policy_module_name,
+    _policy_workspace_root,
+)
+from scion.problems.cvrp.solver_runtime.solution_ops import (
+    _coerce_solution,
+    _lexicographic_improves,
+    _objective_distance_delta,
+    _objective_for_solution,
+    _solution_is_valid,
+)
+from scion.problems.cvrp.solver_runtime.timing import (
+    _bounded_exit_reserve_sec,
+    _main_search_time_exhausted,
+    _remaining_time_sec,
+    _route_pool_time_exhausted,
+    _time_exhausted,
+)
 
 
 _MAX_OPERATOR_ROUNDS = 20
@@ -6962,19 +6983,6 @@ def _set_algorithm_phase_runtime(
     )
 
 
-def _objective_distance_delta(
-    before: Mapping[str, int | float],
-    after: Mapping[str, int | float],
-) -> float:
-    if float(after.get("fleet_violation", 0)) != float(before.get("fleet_violation", 0)):
-        return float(before.get("fleet_violation", 0)) - float(
-            after.get("fleet_violation", 0)
-        )
-    return float(before.get("total_distance", 0.0)) - float(
-        after.get("total_distance", 0.0)
-    )
-
-
 def _record_mechanism_event(
     audit: dict[str, Any],
     *,
@@ -8258,61 +8266,6 @@ def _search_policy_defaults() -> dict[str, Any]:
     }
 
 
-def _load_policy_module(path: Path) -> Any:
-    module_name = _policy_module_name(path)
-    workspace_root = _policy_workspace_root(path)
-    if module_name is None:
-        module_name = f"_scion_cvrp_search_policy_{abs(hash(str(path)))}_{time.time_ns()}"
-    else:
-        _evict_module_tree(module_name.split(".", 1)[0])
-    if workspace_root is not None:
-        sys.path.insert(0, str(workspace_root))
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise ValueError(f"could not load module spec for {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        if workspace_root is not None:
-            try:
-                sys.path.remove(str(workspace_root))
-            except ValueError:
-                pass
-    return module
-
-
-def _policy_module_name(path: Path) -> str | None:
-    parts = path.resolve().parts
-    if "policies" not in parts:
-        return None
-    index = len(parts) - 1 - list(reversed(parts)).index("policies")
-    module_parts = list(parts[index:])
-    if not module_parts[-1].endswith(".py"):
-        return None
-    module_parts[-1] = module_parts[-1][:-3]
-    if any(not part.isidentifier() for part in module_parts):
-        return None
-    return ".".join(module_parts)
-
-
-def _policy_workspace_root(path: Path) -> Path | None:
-    parts = path.resolve().parts
-    if "policies" not in parts:
-        return None
-    index = len(parts) - 1 - list(reversed(parts)).index("policies")
-    if index == 0:
-        return None
-    return Path(*parts[:index])
-
-
-def _evict_module_tree(root_name: str) -> None:
-    for name in list(sys.modules):
-        if name == root_name or name.startswith(f"{root_name}."):
-            sys.modules.pop(name, None)
-
-
 def _policy_float(
     *,
     module: Any,
@@ -8418,18 +8371,6 @@ def _policy_bool(
         )
         return default
     return value
-
-
-def _call_policy_function(
-    module: Any,
-    function_name: str,
-    instance: CvrpInstance,
-    time_limit_sec: float,
-) -> Any:
-    func = getattr(module, function_name, None)
-    if not callable(func):
-        raise ValueError(f"missing callable {function_name}")
-    return func(instance, time_limit_sec)
 
 
 def _load_solver_algorithm(
@@ -9189,136 +9130,6 @@ def _coerce_weight(value: Any) -> float:
         return float(str(value))
     except (TypeError, ValueError):
         return 0.0
-
-
-def _coerce_solution(candidate: Any) -> CvrpSolution | None:
-    """Accept canonical or structurally equivalent CvrpSolution objects.
-
-    Generated operators commonly import ``CvrpSolution`` from workspace-local
-    ``models.py`` while the solver imports the package model. Those are distinct
-    class objects in Python, but the solution contract is structural: a routes
-    tuple of customer-id sequences. Coercing here preserves the adapter boundary
-    while still rejecting genuinely invalid outputs fail-closed.
-    """
-
-    if isinstance(candidate, CvrpSolution):
-        return candidate
-    if isinstance(candidate, Mapping):
-        routes = candidate.get("routes")
-        if routes is None:
-            return None
-        try:
-            return CvrpSolution(
-                routes=tuple(tuple(int(customer) for customer in route) for route in routes)
-            )
-        except (TypeError, ValueError):
-            return None
-    routes = getattr(candidate, "routes", None)
-    if routes is None:
-        return None
-    try:
-        normalized = tuple(
-            tuple(int(customer) for customer in route)
-            for route in routes
-        )
-    except (TypeError, ValueError):
-        return None
-    return CvrpSolution(routes=normalized)
-
-
-def _solution_is_valid(
-    adapter: CvrpAdapter,
-    instance: CvrpInstance,
-    solution: CvrpSolution,
-) -> tuple[bool, str]:
-    raw = {"routes": [list(route) for route in solution.routes], "feasible": True}
-    try:
-        artifact = adapter.deserialize_solver_output(raw, instance)
-        raw["objective"] = dict(adapter.recompute_objective(artifact, instance))
-        artifact = adapter.deserialize_solver_output(raw, instance)
-        consistency = adapter.check_solution_consistency(artifact, instance)
-        if not consistency.passed:
-            return False, "; ".join(consistency.reasons[:3])
-        feasibility = adapter.check_feasibility(artifact, instance)
-        if not feasibility.passed:
-            return False, "; ".join(feasibility.reasons[:3])
-    except Exception as exc:
-        return False, str(exc)
-    return True, ""
-
-
-def _objective_for_solution(
-    adapter: CvrpAdapter,
-    instance: CvrpInstance,
-    solution: CvrpSolution,
-) -> dict[str, int | float]:
-    raw = {"routes": [list(route) for route in solution.routes], "feasible": True}
-    artifact = adapter.deserialize_solver_output(raw, instance)
-    return dict(adapter.recompute_objective(artifact, instance))
-
-
-def _lexicographic_improves(
-    candidate: Mapping[str, int | float],
-    current: Mapping[str, int | float],
-) -> bool:
-    candidate_fleet = float(candidate.get("fleet_violation", 0))
-    current_fleet = float(current.get("fleet_violation", 0))
-    if candidate_fleet < current_fleet:
-        return True
-    if candidate_fleet > current_fleet:
-        return False
-    candidate_distance = float(candidate.get("total_distance", 0.0))
-    current_distance = float(current.get("total_distance", 0.0))
-    return candidate_distance < current_distance - _OBJECTIVE_TOLERANCE
-
-
-def _time_exhausted(start_time: float, time_limit_sec: float) -> bool:
-    if time_limit_sec <= 0:
-        return False
-    return time.perf_counter() - start_time >= time_limit_sec
-
-
-def _remaining_time_sec(
-    start_time: float | None,
-    time_limit_sec: float | None,
-) -> float:
-    if start_time is None or time_limit_sec is None or time_limit_sec <= 0:
-        return 0.0
-    return max(0.0, float(time_limit_sec) - (time.perf_counter() - start_time))
-
-
-def _bounded_exit_reserve_sec(
-    time_limit_sec: float | None,
-    requested_reserve_sec: float,
-) -> float:
-    requested = max(0.0, float(requested_reserve_sec))
-    if time_limit_sec is None or time_limit_sec <= 0:
-        return requested
-    scaled_cap = max(0.05, float(time_limit_sec) * _MAX_EXIT_RESERVE_FRACTION)
-    return min(requested, scaled_cap)
-
-
-def _main_search_time_exhausted(start_time: float, time_limit_sec: float) -> bool:
-    if time_limit_sec <= 0:
-        return False
-    return _remaining_time_sec(
-        start_time,
-        time_limit_sec,
-    ) <= _bounded_exit_reserve_sec(time_limit_sec, _MAIN_SEARCH_EXIT_RESERVE_SEC)
-
-
-def _route_pool_time_exhausted(
-    start_time: float | None,
-    time_limit_sec: float | None,
-    *,
-    exit_reserve_sec: float = _ROUTE_POOL_EXIT_RESERVE_SEC,
-) -> bool:
-    if start_time is None or time_limit_sec is None or time_limit_sec <= 0:
-        return False
-    return _remaining_time_sec(start_time, time_limit_sec) <= max(
-        0.0,
-        _bounded_exit_reserve_sec(time_limit_sec, exit_reserve_sec),
-    )
 
 
 def _record_event(
