@@ -55,6 +55,34 @@ def _vns_hypothesis(expected_telemetry: dict) -> HypothesisProposal:
     )
 
 
+def _duplicate_or_opt_hypothesis() -> HypothesisProposal:
+    return HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+            hypothesis_text=(
+                "The active solver lacks inter-route Or-opt segment relocation; "
+                "add an NN-filtered cross-route segment relocation neighborhood."
+            ),
+            target_weakness=(
+                "The active solver lacks inter-route Or-opt segment relocation."
+            ),
+            expected_effect="Improve total_distance with a new cross-route Or-opt move.",
+            mechanism_changes=[
+                {"id": "cross_route_oropt", "change_type": "add"},
+            ],
+            novelty_signature={
+                "algorithm_family": "vns_local_search",
+                "construction_strategy": "preserve_existing_construction",
+                "improvement_strategy": "new_cross_route_oropt",
+                "acceptance_strategy": "preserve_existing_acceptance",
+                "runtime_budget_strategy": "bounded_neighbor_pairs",
+            },
+            expected_telemetry=_good_vns_mechanism_telemetry(),
+        )
+    )
+
+
 def _bad_vns_phase_telemetry() -> dict:
     return {
         "activity": ["solver_algorithm_search_iterations"],
@@ -133,6 +161,71 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     )
 
 
+def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
+    tmp_path: Path,
+) -> None:
+    duplicate = _duplicate_or_opt_hypothesis()
+    bad = _vns_hypothesis(_bad_vns_phase_telemetry())
+    good = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    creative = SequentialHypothesisCreative([duplicate, bad, good])
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-semantic-then-c11-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "semantic-then-preview"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert (
+        output.termination_reason
+        == AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+    )
+    assert output.hypothesis == good
+    assert output.self_check.schema_valid is True
+    assert len(creative.hypothesis_contexts) == 3
+    assert (
+        creative.hypothesis_contexts[1]["agentic_hypothesis_semantic_rejections"][0][
+            "mechanism"
+        ]
+        == "cross_route_or_opt_2_3"
+    )
+    preview_feedback = creative.hypothesis_contexts[2][
+        "agentic_hypothesis_preview_rejections"
+    ][0]
+    assert preview_feedback["failure_code"] == "C11_expected_telemetry"
+    assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(preview_feedback)
+
+    transcript = output.transcript
+    assert any(
+        "Mechanism novelty gate rejected hypothesis" in event.message
+        for event in transcript
+    )
+    assert any(
+        event.metadata.get("tool_name") == "proposal.schema_preview"
+        and "solver_algorithm_phase_runtime_ms.vns"
+        in event.metadata.get("result_summary", "")
+        for event in transcript
+    )
+    assert any(
+        "Hypothesis preview gate rejected hypothesis" in event.message
+        and event.metadata.get("failure_code") == "C11_expected_telemetry"
+        for event in transcript
+    )
+
+
 def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
     tmp_path: Path,
 ) -> None:
@@ -175,3 +268,45 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
         output.failure_ledger["entries"][-1]["failure_code"]
         == "C11_expected_telemetry"
     )
+
+
+def test_non_repairable_target_preview_failure_fails_closed(
+    tmp_path: Path,
+) -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            target_file="policies/not_declared.py",
+        )
+    )
+    creative = SequentialHypothesisCreative([hypothesis])
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-target-fail-closed",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "target-fail-closed"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert creative.code_contexts == []
+    assert len(creative.hypothesis_contexts) == 1
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.failure_detail is not None
+    assert "schema or target preview did not pass" in output.failure_detail
+    assert "C11_expected_telemetry" not in output.failure_detail

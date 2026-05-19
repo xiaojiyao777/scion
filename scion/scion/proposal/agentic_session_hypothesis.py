@@ -104,7 +104,11 @@ class AgenticSessionHypothesisMixin:
         ) -> tuple[HypothesisProposal | None, AgenticProposalOutput | None]:
             semantic_rejections: list[Mapping[str, Any]] = []
             preview_rejections: list[Mapping[str, Any]] = []
-            max_attempts = 1 + _MAX_HYPOTHESIS_SEMANTIC_RETRIES
+            max_attempts = (
+                1
+                + _MAX_HYPOTHESIS_SEMANTIC_RETRIES
+                + _MAX_HYPOTHESIS_PREVIEW_RETRIES
+            )
             for attempt in range(1, max_attempts + 1):
                 if self._session_timeout_reached(state):
                     output = self._timeout_output(
@@ -137,12 +141,10 @@ class AgenticSessionHypothesisMixin:
                     )
                     self._record_prompt_manifest(
                         state,
-                        call_kind=(
-                            "hypothesis"
-                            if attempt == 1
-                            else "hypothesis_semantic_retry"
-                            if semantic_rejections
-                            else "hypothesis_preview_retry"
+                        call_kind=_hypothesis_prompt_call_kind(
+                            attempt=attempt,
+                            semantic_rejections=semantic_rejections,
+                            preview_rejections=preview_rejections,
                         ),
                         prompt_context=hypothesis_context,
                         observations=prompt_observations,
@@ -208,6 +210,7 @@ class AgenticSessionHypothesisMixin:
                     )
                     return None, self._persist(output, state)
 
+                semantic_feedback_count = len(semantic_rejections)
                 novelty_output = self._solver_design_semantic_rejection_or_retry(
                     request=request,
                     session_id=session_id,
@@ -218,11 +221,10 @@ class AgenticSessionHypothesisMixin:
                     evidence=evidence,
                     semantic_rejections=semantic_rejections,
                     attempt=attempt,
-                    max_attempts=max_attempts,
                 )
                 if novelty_output is not None:
                     return None, novelty_output
-                if len(semantic_rejections) >= attempt:
+                if len(semantic_rejections) > semantic_feedback_count:
                     continue
 
                 preview_feedback_count = len(preview_rejections)
@@ -236,7 +238,6 @@ class AgenticSessionHypothesisMixin:
                     evidence=evidence,
                     preview_rejections=preview_rejections,
                     attempt=attempt,
-                    max_attempts=max_attempts,
                 )
                 if preview_output is not None:
                     return None, preview_output
@@ -319,7 +320,6 @@ class AgenticSessionHypothesisMixin:
             evidence: list[AgenticEvidenceRef],
             preview_rejections: list[Mapping[str, Any]],
             attempt: int,
-            max_attempts: int,
         ) -> AgenticProposalOutput | None:
             if tool_context is None:
                 return None
@@ -354,7 +354,10 @@ class AgenticSessionHypothesisMixin:
                 detail=self_check_detail,
                 attempt=attempt,
             )
-            if retry_feedback is not None and attempt < max_attempts:
+            if (
+                retry_feedback is not None
+                and len(preview_rejections) < _MAX_HYPOTHESIS_PREVIEW_RETRIES
+            ):
                 preview_rejections.append(retry_feedback)
                 state.note(
                     AgenticProposalPhase.DRAFT_HYPOTHESIS,
@@ -410,7 +413,6 @@ class AgenticSessionHypothesisMixin:
             evidence: list[AgenticEvidenceRef],
             semantic_rejections: list[Mapping[str, Any]],
             attempt: int,
-            max_attempts: int,
         ) -> AgenticProposalOutput | None:
             if tool_context is None or not _is_solver_design_hypothesis(hypothesis):
                 return None
@@ -453,7 +455,7 @@ class AgenticSessionHypothesisMixin:
             )
             if result is None:
                 return None
-            if attempt < max_attempts:
+            if len(semantic_rejections) < _MAX_HYPOTHESIS_SEMANTIC_RETRIES:
                 rejection = result.to_rejection(hypothesis)
                 semantic_rejections.append(
                     _hypothesis_semantic_retry_rejection_payload(rejection, attempt)
@@ -595,6 +597,30 @@ def _hypothesis_preview_retry_feedback(
             ),
         }
     )
+
+
+def _hypothesis_prompt_call_kind(
+    *,
+    attempt: int,
+    semantic_rejections: list[Mapping[str, Any]],
+    preview_rejections: list[Mapping[str, Any]],
+) -> str:
+    if attempt <= 1:
+        return "hypothesis"
+    previous_attempt = attempt - 1
+    if preview_rejections and int(preview_rejections[-1].get("attempt") or 0) == (
+        previous_attempt
+    ):
+        return "hypothesis_preview_retry"
+    if semantic_rejections and int(semantic_rejections[-1].get("attempt") or 0) == (
+        previous_attempt
+    ):
+        return "hypothesis_semantic_retry"
+    if preview_rejections:
+        return "hypothesis_preview_retry"
+    if semantic_rejections:
+        return "hypothesis_semantic_retry"
+    return "hypothesis_retry"
 
 
 def _latest_tool_observation(
