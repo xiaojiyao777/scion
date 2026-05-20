@@ -201,6 +201,9 @@ def _recent_repeated_mechanism_result(
 
         step_family = _mechanism_family(step_hypothesis, context=context)
         step_target = str(getattr(step_hypothesis, "target_file", "") or "").strip()
+        step_ids = _mechanism_ids(step_hypothesis)
+        if candidate_ids or step_ids:
+            continue
         if (
             candidate_target
             and candidate_target == step_target
@@ -263,10 +266,20 @@ def _mechanism_family(
 ) -> str:
     signature = getattr(hypothesis, "novelty_signature", None)
     if isinstance(signature, Mapping):
-        for key in ("algorithm_family", "improvement_strategy"):
+        for key in ("mechanism_id", "improvement_strategy"):
             value = str(signature.get(key) or "").strip()
             if value and not value.startswith("preserve_existing"):
                 return _normalize_token(value)
+        family = _normalize_token(signature.get("algorithm_family"))
+        if family and family not in {
+            "alns",
+            "vns",
+            "alns_vns",
+            "solver_design",
+            "local_search",
+            "destroy_repair",
+        }:
+            return family
     taxonomy = getattr(getattr(context, "search_memory", None), "family_taxonomy", None)
     return extract_mechanism_label(
         hypothesis.hypothesis_text or "",

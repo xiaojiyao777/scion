@@ -42,6 +42,21 @@ and regret repair, and fixes failure lifecycle routing so proposal/contract
 quality failures do not escalate to infra and failure streaks are branch-local.
 The full unit regression for this follow-up repair passes (`902 passed`).
 
+The next 3-round validation attempt was stopped before code generation after
+three proposal attempts. Trace analysis is
+[`v0.4-grounding-routing-repair-sonnet-3r-stopped-analysis-20260520.md`](../experiments/v0.4/v0.4-grounding-routing-repair-sonnet-3r-stopped-analysis-20260520.md).
+It showed the new active-facts anchor was present, but the CVRP fact packet
+still missed `_two_opt_intra`; the CVRP Or-opt premise rule misclassified an
+intra-2opt contrast as an Or-opt contradiction; generic repeated-history
+matching used broad `ALNS+VNS` identity; and agent-quality-block feedback was
+not hard enough as a branch-local next-hypothesis constraint. The current
+repair keeps the fix split along v3 boundaries: generic proposal pipeline
+persists quality blocks into the next hypothesis context, generic repeated
+identity no longer blocks distinct concrete mechanism ids via broad families,
+and CVRP-owned adapter/provider facts now expose `_two_opt_intra`, relocate,
+swap, and the full VNS registry with corresponding duplicate/premise checks.
+The full unit regression for this repair passes (`907 passed`).
+
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
 `core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,

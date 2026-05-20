@@ -10,6 +10,8 @@ from scion.problems.cvrp.mechanism_novelty.text import _has_any
 def _claims_missing_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
         return False
+    if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
+        return False
     if _claims_unsystematic_cross_route_segment_relocation_gap(text):
         return True
     if _describes_existing_or_opt_improvement(text):
@@ -31,6 +33,8 @@ def _claims_missing_or_opt_2_3(text: str) -> bool:
 
 def _duplicates_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
+        return False
+    if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return False
     if _describes_existing_or_opt_improvement(text):
         return False
@@ -107,6 +111,114 @@ def _duplicates_or_opt_1(text: str) -> bool:
     if _describes_existing_or_opt_improvement(text):
         return False
     return False
+
+
+def _claims_missing_intra_two_opt(text: str) -> bool:
+    if not _mentions_intra_two_opt(text):
+        return False
+    return _has_missing_gap_near(
+        text,
+        (
+            "intra route 2 opt",
+            "intra-route 2-opt",
+            "intra route two opt",
+            "within route 2 opt",
+            "within-route 2-opt",
+            "two opt intra",
+            "_two_opt_intra",
+            "route internal 2 opt",
+            "route-internal 2-opt",
+            "segment reversal",
+            "arc reversal",
+        ),
+    )
+
+
+def _duplicates_intra_two_opt(text: str) -> bool:
+    if not _mentions_intra_two_opt(text):
+        return False
+    if _describes_existing_intra_two_opt_improvement(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,120}\b(?:intra route|intra-route|within route|within-route|"
+            r"route internal|route-internal|_two_opt_intra|two opt intra)"
+            r"\b.{0,120}\b(?:2 opt|2-opt|two opt|reversal|operator|neighborhood)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:intra route|intra-route|within route|within-route|route internal|"
+            r"route-internal|_two_opt_intra|two opt intra)\b.{0,120}"
+            r"\b(?:2 opt|2-opt|two opt|reversal|operator|neighborhood)\b.{0,80}"
+            r"\b(?:new|novel|first|additional|missing|absent|lacks?)\b",
+            text,
+        )
+    )
+
+
+def _mentions_intra_two_opt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:_two_opt_intra|two opt intra|intra route 2 opt|"
+            r"intra-route 2-opt|intra route two opt|within route 2 opt|"
+            r"within-route 2-opt|route internal 2 opt|route-internal 2-opt)\b",
+            text,
+        )
+        or (
+            _has_any(text, ("intra route", "intra-route", "within route", "within-route"))
+            and _has_any(text, ("2 opt", "2-opt", "two opt", "segment reversal"))
+        )
+    )
+
+
+def _describes_existing_intra_two_opt_improvement(text: str) -> bool:
+    if not _mentions_intra_two_opt(text):
+        return False
+    if not _has_any(text, ("existing", "current", "already", "_two_opt_intra")):
+        return False
+    return _has_any(
+        text,
+        (
+            "improve",
+            "refine",
+            "tune",
+            "adjust",
+            "filter",
+            "candidate",
+            "budget",
+            "score",
+            "scoring",
+            "delta",
+        ),
+    )
+
+
+def _acknowledges_existing_or_opt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:existing|current|already|present|contains?|covers?|has|built in|"
+            r"built-in)\b.{0,80}\b(?:or opt|oropt|_or_opt_[123])\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:or opt|oropt|_or_opt_[123])\b.{0,80}\b(?:existing|current|"
+            r"already|present|contains?|covers?|built in|built-in)\b",
+            text,
+        )
+    )
+
+
+def _has_missing_gap_near(text: str, terms: tuple[str, ...]) -> bool:
+    missing = (
+        r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+        r"doesn't have|doesn't include)\b"
+    )
+    term_pattern = r"\b(?:" + "|".join(re.escape(term) for term in terms) + r")\b"
+    return bool(
+        re.search(missing + r".{0,120}" + term_pattern, text)
+        or re.search(term_pattern + r".{0,120}" + missing, text)
+    )
 
 
 def _claims_missing_cross_route_tail_exchange(text: str) -> bool:

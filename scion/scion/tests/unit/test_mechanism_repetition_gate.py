@@ -144,3 +144,31 @@ def test_shared_acceptance_strategy_does_not_define_repeated_mechanism() -> None
     )
 
     assert result is None
+
+
+def test_shared_broad_algorithm_family_does_not_block_distinct_mechanism_ids() -> None:
+    previous = _hypothesis(
+        "intra_two_opt",
+        text="Add intra-route 2-opt reversal.",
+    )
+    candidate = _hypothesis(
+        "intra_swap",
+        text="Add intra-route swap neighborhood.",
+    )
+    previous.novelty_signature = {
+        "algorithm_family": "ALNS+VNS",
+        "improvement_strategy": "intra_two_opt",
+        "runtime_budget_strategy": "bounded",
+    }
+    candidate.novelty_signature = {
+        "algorithm_family": "ALNS+VNS",
+        "improvement_strategy": "intra_swap",
+        "runtime_budget_strategy": "bounded",
+    }
+
+    result = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous)),
+    )
+
+    assert result is None

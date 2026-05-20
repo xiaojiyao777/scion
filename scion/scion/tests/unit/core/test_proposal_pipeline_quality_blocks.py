@@ -73,6 +73,82 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     ]
 
 
+def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+        session_id="premise-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.PREMISE_CONTRADICTED,
+        failure_detail="active solver already contains the claimed missing move",
+        failure_category="agent_grounding_failure",
+        structured_rejection={
+            "source": "mechanism_novelty_gate",
+            "gate_name": "MechanismNoveltyGate",
+            "mechanism": "cross_route_or_opt_2_3",
+            "premise_check": "contradicted",
+            "failure_category": "agent_grounding_failure",
+            "failure_code": "proposal_premise_contradicted",
+            "agent_block_reason": "agent_quality_blocked",
+            "reason": "active solver already has the claimed mechanism",
+            "retry_constraint": "do not repeat cross_route_or_opt_2_3",
+            "fact_ids": ["cvrp.local_search.or_opt_cross_route"],
+            "fact_packet_digest": "facts-123",
+        },
+    )
+    captured: list[AgenticProposalRequest] = []
+
+    class CapturingSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            captured.append(request)
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                session_id="next-session",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=creative.hypothesis,
+                termination_reason=AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL,
+            )
+
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    assert patch is None
+    assert failures == []
+    assert circuit.failures == []
+    stored = pipeline.agentic_quality_feedback[branch.branch_id]
+    assert stored[0]["failure_code"] == "proposal_premise_contradicted"
+    assert stored[0]["mechanism"] == "cross_route_or_opt_2_3"
+
+    pipeline.agentic_session = CapturingSession()
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis == creative.hypothesis
+    assert record is not None
+    context = captured[0].hypothesis_context
+    assert context is not None
+    rendered = json.dumps(context, sort_keys=True)
+    assert "agentic_prior_quality_blocks" in context
+    assert "proposal_premise_contradicted" in rendered
+    assert "cross_route_or_opt_2_3" in rendered
+    assert "facts-123" in rendered
+    assert "do not repeat the same premise" in context[
+        "agentic_prior_quality_block_rule"
+    ]
+    assert branch.branch_id not in pipeline.agentic_quality_feedback
+
+
 def test_agentic_algorithm_smoke_failure_is_quality_block_not_proposal_streak() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(

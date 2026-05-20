@@ -68,6 +68,14 @@ FALSE_PREMISES = (
         "cross_route_or_opt_2_3",
     ),
     (
+        "missing_intra_two_opt",
+        (
+            "The current VNS has cross-route Or-opt, but it lacks intra-route "
+            "2-opt segment reversal; add intra_two_opt."
+        ),
+        "intra_two_opt_reversal",
+    ),
+    (
         "missing_shaw_related_removal",
         (
             "The active solver has no proximity-cluster destroy removal, so add "
@@ -123,6 +131,7 @@ MECHANISM_FACT_IDS = {
     "adaptive_operator_weights": ("cvrp.acceptance.adaptive_operator_weights",),
     "cross_route_or_opt_2_3": ("cvrp.local_search.cross_route_or_opt_2_3",),
     "or_opt_1_relocation": ("cvrp.local_search.or_opt_1_relocation",),
+    "intra_two_opt_reversal": ("cvrp.local_search.intra_two_opt_reversal",),
     "shaw_related_removal": ("cvrp.destroy_repair.shaw_related_removal",),
     "route_removal": ("cvrp.destroy_repair.route_removal",),
     "regret_insertion_repair": (
@@ -468,6 +477,11 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
 @pytest.mark.parametrize(
     "text,mechanism,fact_id",
     (
+        (
+            "Introduce a new intra-route 2-opt segment reversal neighborhood.",
+            "intra_two_opt_reversal",
+            "cvrp.local_search.intra_two_opt_reversal",
+        ),
         (
             "Add Or-opt-1 single customer relocation as a new local-search neighborhood.",
             "or_opt_1_relocation",

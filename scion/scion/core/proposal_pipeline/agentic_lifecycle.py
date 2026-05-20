@@ -36,6 +36,7 @@ from .classification import (
     _agentic_output_is_quality_blocked,
 )
 from .constants import FRAMEWORK_CONTROL_FAILURE
+from .utils import _agentic_value, _now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ class AgenticLifecycleMixin:
             )
 
         self.circuit_breaker.record_success()
+        self._clear_agentic_quality_feedback(bid)
         return output.hypothesis, self._hypothesis_record(branch, output.hypothesis)
 
     def _generate_agentic_code(
@@ -275,6 +277,7 @@ class AgenticLifecycleMixin:
             return None, None
         self._record_agentic_failure_lifecycle(branch, detail, output)
         if output is not None and _agentic_output_is_quality_blocked(output):
+            self._remember_agentic_quality_block(branch, detail, output)
             return None, None
         if _agentic_detail_is_framework_boundary(detail):
             return None, None
@@ -299,6 +302,7 @@ class AgenticLifecycleMixin:
             return
         self._record_agentic_failure_lifecycle(branch, detail, output)
         if output is not None and _agentic_output_is_quality_blocked(output):
+            self._remember_agentic_quality_block(branch, detail, output)
             return
         if _agentic_detail_is_framework_boundary(detail):
             return
@@ -341,3 +345,59 @@ class AgenticLifecycleMixin:
             self.handle_failure(branch, FailureEvent(category="infra", detail=detail))
             return
         self.handle_failure(branch, FailureEvent(category="proposal", detail=detail))
+
+    def _remember_agentic_quality_block(
+        self,
+        branch: Branch,
+        detail: str,
+        output: AgenticProposalOutput,
+    ) -> None:
+        rejection = (
+            dict(output.structured_rejection)
+            if isinstance(output.structured_rejection, dict)
+            else {}
+        )
+        entry: dict[str, Any] = {
+            "source": "agentic_quality_block",
+            "recorded_at": _now_iso(),
+            "session_id": output.session_id,
+            "status": _agentic_value(output.status),
+            "termination_reason": _agentic_value(output.termination_reason),
+            "failure_category": _agentic_value(output.failure_category),
+            "failure_code": str(
+                rejection.get("failure_code")
+                or rejection.get("code")
+                or output.failure_category
+                or ""
+            ),
+            "agent_block_reason": str(
+                rejection.get("agent_block_reason") or "agent_quality_blocked"
+            ),
+            "detail": str(detail or "")[:1600],
+        }
+        for key in (
+            "gate_name",
+            "mechanism",
+            "premise_check",
+            "reason",
+            "retry_constraint",
+            "fact_ids",
+            "fact_packet_digest",
+            "source_fact_digest",
+            "provenance",
+        ):
+            value = rejection.get(key)
+            if value not in (None, "", [], {}):
+                entry[key] = value
+        bucket = self.agentic_quality_feedback.setdefault(branch.branch_id, [])
+        bucket.append(entry)
+        del bucket[:-3]
+
+    def _agentic_quality_feedback_for_context(
+        self,
+        branch_id: str,
+    ) -> list[Mapping[str, Any]]:
+        return list(self.agentic_quality_feedback.get(branch_id, ()))
+
+    def _clear_agentic_quality_feedback(self, branch_id: str) -> None:
+        self.agentic_quality_feedback.pop(branch_id, None)

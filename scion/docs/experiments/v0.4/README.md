@@ -65,6 +65,7 @@ referenced, not copied into development prompts.
 - [Branch lifecycle and portfolio Sonnet 4R post-run analysis, 2026-05-20](v0.4-branch-lifecycle-portfolio-sonnet-4r-analysis-20260520.md)
 - [Active algorithm facts and activation diagnostic repair, 2026-05-20](v0.4-active-algorithm-facts-control-repair-20260520.md)
 - [Active facts control Sonnet 3R stopped analysis, 2026-05-20](v0.4-active-facts-control-sonnet-3r-stopped-analysis-20260520.md)
+- [Grounding/routing repair Sonnet 3R stopped analysis, 2026-05-20](v0.4-grounding-routing-repair-sonnet-3r-stopped-analysis-20260520.md)
 
 ## Related
 

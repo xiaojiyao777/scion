@@ -27,9 +27,11 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
 from scion.problems.cvrp.mechanism_novelty.local_search import (
     _claims_missing_cross_route_tail_exchange,
+    _claims_missing_intra_two_opt,
     _claims_missing_or_opt_1,
     _claims_missing_or_opt_2_3,
     _duplicates_cross_route_tail_exchange,
+    _duplicates_intra_two_opt,
     _duplicates_or_opt_1,
     _duplicates_or_opt_2_3,
 )
@@ -49,6 +51,7 @@ _CONSTRUCTION_FACT = "cvrp.construction.diverse_feasible_seed"
 _ADAPTIVE_WEIGHTS_FACT = "cvrp.acceptance.adaptive_operator_weights"
 _OR_OPT_FACT = "cvrp.local_search.cross_route_or_opt_2_3"
 _OR_OPT_1_FACT = "cvrp.local_search.or_opt_1_relocation"
+_INTRA_TWO_OPT_FACT = "cvrp.local_search.intra_two_opt_reversal"
 _TAIL_EXCHANGE_FACT = "cvrp.local_search.cross_route_tail_exchange"
 _SHAW_RELATED_FACT = "cvrp.destroy_repair.shaw_related_removal"
 _ROUTE_REMOVAL_FACT = "cvrp.destroy_repair.route_removal"
@@ -110,6 +113,36 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.adaptive_weight_evidence,
                 fact_ids=(_ADAPTIVE_WEIGHTS_FACT,),
+            )
+
+        if facts.has_intra_two_opt_reversal and _claims_missing_intra_two_opt(text):
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="intra_two_opt_reversal",
+                reason=(
+                    "Hypothesis claims intra-route 2-opt / within-route segment "
+                    "reversal is missing, but the active solver snapshot shows "
+                    "_two_opt_intra registered in _default_vns_operators."
+                ),
+                evidence=facts.intra_two_opt_evidence,
+                fact_ids=(_INTRA_TWO_OPT_FACT,),
+            )
+
+        if facts.has_intra_two_opt_reversal and _duplicates_intra_two_opt(text):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="intra_two_opt_reversal",
+                reason=(
+                    "Hypothesis proposes adding intra-route 2-opt / within-route "
+                    "segment reversal as a new mechanism, but the active solver "
+                    "already contains _two_opt_intra in local search."
+                ),
+                evidence=facts.intra_two_opt_evidence,
+                fact_ids=(_INTRA_TWO_OPT_FACT,),
             )
 
         if facts.has_cross_route_or_opt_2_3 and _claims_missing_or_opt_2_3(text):

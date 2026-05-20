@@ -101,6 +101,11 @@ experiment patches.
   ordinary solver-quality screening loss. Keep it distinct from formal
   validation telemetry gates and feed the diagnosis back into branch lifecycle
   and repair context.
+- Agent-quality blocks such as contradicted premises, duplicate mechanisms, or
+  activation diagnostics are not infrastructure failures, but they are also not
+  disposable. They must be preserved as branch-local research feedback and
+  rendered into the next hypothesis context so the agent can change direction
+  instead of restarting from a blank prompt.
 - Proposal/contract schema or candidate-quality failures are not infrastructure
   failures. They may trigger LLM repair or candidate discard; only real
   verification/runtime infrastructure evidence, including branch-local repeated

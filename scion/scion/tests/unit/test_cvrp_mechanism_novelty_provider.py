@@ -51,6 +51,30 @@ def _active_capability_snapshot() -> dict[str, object]:
                     ],
                 ),
                 _fact(
+                    "cvrp.local_search.intra_two_opt_reversal",
+                    "Intra-route 2-opt reversal already exists.",
+                    ["_two_opt_intra registered by _default_vns_operators"],
+                ),
+                _fact(
+                    "cvrp.local_search.relocate_and_swap",
+                    "Relocate and swap already exist.",
+                    ["_relocate", "_swap"],
+                ),
+                _fact(
+                    "cvrp.local_search.vns_operator_registry",
+                    "VNS operator registry contains the full local-search portfolio.",
+                    [
+                        "_default_vns_operators",
+                        "_two_opt_intra",
+                        "_relocate",
+                        "_or_opt_1",
+                        "_or_opt_2",
+                        "_or_opt_3",
+                        "_swap",
+                        "_two_opt_star",
+                    ],
+                ),
+                _fact(
                     "cvrp.local_search.cross_route_or_opt_2_3",
                     "Cross-route Or-opt length 2 and 3 already exist.",
                     [
@@ -113,6 +137,8 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "_or_opt_2",
                 "_or_opt_3",
                 "_or_opt skips same-route destinations for cross-route moves",
+                "_two_opt_intra registered by _default_vns_operators",
+                "_default_vns_operators",
                 "_two_opt_star cross-route suffix tail exchange",
             ],
             "destroy_repair": [

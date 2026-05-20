@@ -243,9 +243,12 @@ class CvrpActiveSolverDesignProvider:
                 "evidence_symbols": [
                     "_vns",
                     "_default_vns_operators",
+                    "_two_opt_intra",
+                    "_relocate",
                     "_or_opt_1",
                     "_or_opt_2",
                     "_or_opt_3",
+                    "_swap",
                     "_two_opt_star",
                 ],
             },
@@ -392,6 +395,51 @@ class CvrpActiveSolverDesignProvider:
                     "policies/baseline_modules/destroy_repair.py::_regret2_insertion",
                     "policies/baseline_modules/destroy_repair.py::_regret3_insertion",
                     "policies/baseline_modules/scheduler.py::repair_ops",
+                ],
+            ),
+            _fact(
+                "cvrp.local_search.intra_two_opt_reversal",
+                (
+                    "Local search already includes _two_opt_intra, an intra-route "
+                    "2-opt segment reversal neighborhood registered in the VNS "
+                    "operator list."
+                ),
+                mechanism_summary.get("local_search"),
+                [
+                    "policies/baseline_modules/local_search.py::_two_opt_intra",
+                    "policies/baseline_modules/local_search.py::_default_vns_operators",
+                ],
+            ),
+            _fact(
+                "cvrp.local_search.relocate_and_swap",
+                (
+                    "Local search already includes _relocate and _swap in the VNS "
+                    "operator list."
+                ),
+                mechanism_summary.get("local_search"),
+                [
+                    "policies/baseline_modules/local_search.py::_relocate",
+                    "policies/baseline_modules/local_search.py::_swap",
+                    "policies/baseline_modules/local_search.py::_default_vns_operators",
+                ],
+            ),
+            _fact(
+                "cvrp.local_search.vns_operator_registry",
+                (
+                    "_default_vns_operators registers the active VNS neighborhood "
+                    "portfolio: _two_opt_intra, _relocate, _or_opt_1/_2/_3, "
+                    "_swap, and _two_opt_star."
+                ),
+                mechanism_summary.get("local_search"),
+                [
+                    "policies/baseline_modules/local_search.py::_default_vns_operators",
+                    "policies/baseline_modules/local_search.py::_two_opt_intra",
+                    "policies/baseline_modules/local_search.py::_relocate",
+                    "policies/baseline_modules/local_search.py::_or_opt_1",
+                    "policies/baseline_modules/local_search.py::_or_opt_2",
+                    "policies/baseline_modules/local_search.py::_or_opt_3",
+                    "policies/baseline_modules/local_search.py::_swap",
+                    "policies/baseline_modules/local_search.py::_two_opt_star",
                 ],
             ),
             _fact(

@@ -23,6 +23,9 @@ class _ActiveMechanismFacts:
     has_adaptive_weights: bool = False
     has_cross_route_or_opt_2_3: bool = False
     has_or_opt_1_relocation: bool = False
+    has_intra_two_opt_reversal: bool = False
+    has_relocate_and_swap: bool = False
+    has_vns_operator_registry: bool = False
     has_cross_route_tail_exchange: bool = False
     has_shaw_related_removal: bool = False
     has_route_removal: bool = False
@@ -34,6 +37,9 @@ class _ActiveMechanismFacts:
     adaptive_weight_evidence: tuple[str, ...] = ()
     or_opt_evidence: tuple[str, ...] = ()
     or_opt_1_evidence: tuple[str, ...] = ()
+    intra_two_opt_evidence: tuple[str, ...] = ()
+    relocate_swap_evidence: tuple[str, ...] = ()
+    vns_registry_evidence: tuple[str, ...] = ()
     tail_exchange_evidence: tuple[str, ...] = ()
     shaw_related_evidence: tuple[str, ...] = ()
     route_removal_evidence: tuple[str, ...] = ()
@@ -117,6 +123,14 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
             )
         ),
         has_or_opt_1_relocation=_has_or_opt_token(local_search_combined, "1"),
+        has_intra_two_opt_reversal=_has_any(
+            local_search_combined,
+            ("_two_opt_intra", "intra route 2 opt", "intra-route 2-opt"),
+        ),
+        has_relocate_and_swap=(
+            "_relocate" in local_search_combined and "_swap" in local_search_combined
+        ),
+        has_vns_operator_registry="_default_vns_operators" in local_search_combined,
         has_cross_route_tail_exchange=(
             "two opt star" in local_search_combined
             and _has_any(
@@ -222,6 +236,34 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "single-customer Or-opt relocation",
             ),
         ),
+        intra_two_opt_evidence=_evidence(
+            mechanism_summary.get("local_search"),
+            fallback=(
+                "_two_opt_intra",
+                "intra-route 2-opt segment reversal",
+            ),
+        ),
+        relocate_swap_evidence=_evidence(
+            mechanism_summary.get("local_search"),
+            fallback=(
+                "_relocate",
+                "_swap",
+                "relocate and swap VNS neighborhoods",
+            ),
+        ),
+        vns_registry_evidence=_evidence(
+            mechanism_summary.get("local_search"),
+            fallback=(
+                "_default_vns_operators",
+                "_two_opt_intra",
+                "_relocate",
+                "_or_opt_1",
+                "_or_opt_2",
+                "_or_opt_3",
+                "_swap",
+                "_two_opt_star",
+            ),
+        ),
         tail_exchange_evidence=_evidence(
             mechanism_summary.get("local_search"),
             fallback=(
@@ -309,6 +351,18 @@ def _facts_from_fact_packet(
             by_id,
             "cvrp.local_search.or_opt_1_relocation",
         ),
+        has_intra_two_opt_reversal=_has_fact(
+            by_id,
+            "cvrp.local_search.intra_two_opt_reversal",
+        ),
+        has_relocate_and_swap=_has_fact(
+            by_id,
+            "cvrp.local_search.relocate_and_swap",
+        ),
+        has_vns_operator_registry=_has_fact(
+            by_id,
+            "cvrp.local_search.vns_operator_registry",
+        ),
         has_cross_route_tail_exchange=_has_fact(
             by_id,
             "cvrp.local_search.cross_route_tail_exchange",
@@ -373,6 +427,37 @@ def _facts_from_fact_packet(
             fallback=(
                 "_or_opt_1",
                 "single-customer Or-opt relocation",
+            ),
+        ),
+        intra_two_opt_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.intra_two_opt_reversal",
+            fallback=(
+                "_two_opt_intra",
+                "intra-route 2-opt segment reversal",
+            ),
+        ),
+        relocate_swap_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.relocate_and_swap",
+            fallback=(
+                "_relocate",
+                "_swap",
+                "relocate and swap VNS neighborhoods",
+            ),
+        ),
+        vns_registry_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.vns_operator_registry",
+            fallback=(
+                "_default_vns_operators",
+                "_two_opt_intra",
+                "_relocate",
+                "_or_opt_1",
+                "_or_opt_2",
+                "_or_opt_3",
+                "_swap",
+                "_two_opt_star",
             ),
         ),
         tail_exchange_evidence=_fact_evidence(

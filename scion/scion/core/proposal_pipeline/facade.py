@@ -110,6 +110,9 @@ class ProposalPipeline(
     agentic_recovery_reports: MutableMapping[str, Mapping[str, Any]] = field(
         default_factory=dict
     )
+    agentic_quality_feedback: MutableMapping[str, list[Mapping[str, Any]]] = field(
+        default_factory=dict
+    )
 
     def generate_hypothesis(
         self,
@@ -157,6 +160,17 @@ class ProposalPipeline(
             weight_opt_result=self.get_latest_weight_opt_result(),
             research_log=self.research_log,
         )
+        quality_feedback = self._agentic_quality_feedback_for_context(bid)
+        if quality_feedback:
+            context["agentic_prior_quality_blocks"] = quality_feedback
+            context["agentic_prior_quality_block_rule"] = (
+                "Previous agentic proposal attempts on this branch were blocked "
+                "before code because the candidate was ungrounded, duplicate, "
+                "or diagnostically inactive. Treat these as hard research "
+                "constraints: do not repeat the same premise, mechanism, or "
+                "target; use the cited source/gate/failure_code/reason as the "
+                "starting point for a different hypothesis."
+            )
         if self._agentic_enabled:
             return self._generate_agentic_hypothesis(
                 branch=branch,
@@ -236,6 +250,7 @@ class ProposalPipeline(
             return None, None
 
         self.circuit_breaker.record_success()
+        self._clear_agentic_quality_feedback(bid)
         return hypothesis, self._hypothesis_record(branch, hypothesis)
 
     def pop_hypothesis_failure_detail(self, branch_id: str) -> str | None:
