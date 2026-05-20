@@ -109,6 +109,14 @@ allowed variants rather than premise contradictions. Related regressions pass
 feedback, and branch-continuation behavior before considering a longer 6-round
 run.
 
+A 4-round validation launch after this repair stopped before any counted
+screening because the upstream LLM provider returned 403 insufficient-balance
+errors. That run is documented in
+[`v0.4-provider-quality-classification-sonnet-4r-balance-stopped-20260520.md`](../experiments/v0.4/v0.4-provider-quality-classification-sonnet-4r-balance-stopped-20260520.md).
+It confirms run-level provider/balance classification did not pollute
+StepRecord or branch failure codes, but it does not validate the P0 repair.
+After recharge, rerun the same 4-round validation before moving to 6 rounds.
+
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
 `core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,

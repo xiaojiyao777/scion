@@ -68,6 +68,7 @@ referenced, not copied into development prompts.
 - [Grounding/routing repair Sonnet 3R stopped analysis, 2026-05-20](v0.4-grounding-routing-repair-sonnet-3r-stopped-analysis-20260520.md)
 - [Quality feedback and VNS facts Sonnet 3R analysis, 2026-05-20](v0.4-quality-feedback-vns-facts-sonnet-3r-analysis-20260520.md)
 - [Provenance and quality feedback Sonnet 3R analysis, 2026-05-20](v0.4-provenance-quality-feedback-sonnet-3r-analysis-20260520.md)
+- [Provider-quality classification Sonnet 4R balance-stopped analysis, 2026-05-20](v0.4-provider-quality-classification-sonnet-4r-balance-stopped-20260520.md)
 
 ## Related
 
