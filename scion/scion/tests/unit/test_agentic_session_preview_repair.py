@@ -332,6 +332,103 @@ def test_preview_failure_category_uses_specific_taxonomy() -> None:
     assert "tool_error" not in detail
 
 
+def test_algorithm_smoke_non_activation_failure_keeps_algorithm_smoke_category() -> None:
+    observation = ProposalObservation(
+        observation_id="smoke-runtime",
+        session_id="session-runtime",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-runtime",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found runtime issues.",
+        structured_payload={
+            "passed": False,
+            "failure_class": "runtime_execution_failure",
+            "primary_issue": "candidate runtime raised ValueError",
+            "subprocess": {
+                "error_category": "runtime_exception",
+                "detail": "ValueError: bad candidate patch",
+            },
+        },
+        is_error=False,
+    )
+
+    category = agentic_session_module._preview_failure_category([observation])
+    detail = agentic_session_module._latest_preview_failure_detail([observation])
+
+    assert (
+        category
+        == agentic_session_module.AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE
+    )
+    assert detail is not None
+    assert "candidate runtime raised ValueError" in detail
+    assert "proposal_activation_diagnostic" not in detail
+
+
+def test_algorithm_smoke_activation_diagnostic_reaches_failure_ledger() -> None:
+    payload = {
+        "passed": False,
+        "failure_class": "proposal_activation_diagnostic",
+        "primary_issue": "telemetry guard failed",
+        "activation_diagnostic": {
+            "category": "proposal_activation_diagnostic",
+            "code": "proposal_activation_diagnostic",
+            "activation_diagnostic_kind": "instrumentation_missing",
+            "source": "runtime_smoke.telemetry_guard",
+            "telemetry_failure_code": (
+                "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+            ),
+            "telemetry_failure_mechanism": "late_probe",
+            "telemetry_failure_category": "activation",
+            "telemetry_failure_field": (
+                "solver_algorithm_context_records.late_probe_iterations"
+            ),
+            "repair_guidance": [
+                "Add context.record_iteration('late_probe', positive_count)."
+            ],
+        },
+        "repair_hints": [
+            "Add context.record_iteration('late_probe', positive_count)."
+        ],
+    }
+    observation = ProposalObservation(
+        observation_id="smoke-diagnostic",
+        session_id="session-diagnostic",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-diagnostic",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload=payload,
+        is_error=False,
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-diagnostic",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+    )
+
+    category = agentic_session_module._preview_failure_category([observation])
+    detail = agentic_session_module._latest_preview_failure_detail([observation])
+    agentic_session_module._record_failure_ledger_entry(
+        state,
+        phase=AgenticProposalPhase.SELF_CHECK,
+        category=category,
+        detail=detail,
+        source="preview_failure",
+        observation=observation,
+    )
+
+    assert category == "proposal_activation_diagnostic"
+    assert detail is not None
+    assert "proposal_activation_diagnostic" in detail
+    assert "activation_diagnostic_kind=instrumentation_missing" in detail
+    assert state.failure_ledger[-1]["category"] == (
+        "proposal_activation_diagnostic"
+    )
+    assert state.failure_ledger[-1]["failure_code"] == (
+        "proposal_activation_diagnostic"
+    )
+
+
 def test_contract_preview_session_timeout_is_budget_skip_not_runtime_exception(
     tmp_path: Path,
 ) -> None:

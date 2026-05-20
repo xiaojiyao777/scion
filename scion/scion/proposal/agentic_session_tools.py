@@ -64,7 +64,6 @@ _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
 _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT = 3
-_PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH = "policies/baseline_algorithm.py"
 
 
 def _filter_model_facing_tool_names(
@@ -226,16 +225,17 @@ def _algorithm_file_path_guidance(
     guidance = dict(algorithm_file_path_guidance(context))
     observed_allowed_paths = _algorithm_file_paths_from_observations(observations)
     if observed_allowed_paths:
-        active_paths = _active_solver_design_paths_first(observed_allowed_paths)
+        primary_path = str(guidance.get("primary_entrypoint_file_path") or "").strip()
+        active_paths = _active_solver_design_paths_first(
+            observed_allowed_paths,
+            primary_path,
+        )
         guidance["allowed_file_paths"] = active_paths
         guidance["allowed_file_count"] = len(observed_allowed_paths)
         guidance["allowed_paths_source"] = "existing_tool_observation"
         guidance["preferred_active_file_paths"] = active_paths
-        guidance["primary_entrypoint_file_path"] = (
-            _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH
-            if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH in observed_allowed_paths
-            else guidance.get("primary_entrypoint_file_path", "")
-        )
+        if primary_path in observed_allowed_paths:
+            guidance["primary_entrypoint_file_path"] = primary_path
         if active_paths:
             guidance["example_file_path"] = active_paths[0]
         else:
@@ -254,23 +254,17 @@ def _algorithm_file_path_guidance(
     guidance.setdefault(
         "path_selection_rule",
         (
-            "Use active solver files only for solver_design optimization: "
-            "policies/baseline_algorithm.py and "
-            "policies/baseline_modules/*.py."
+            "Use only provider-declared active solver files for solver_design "
+            "optimization."
         ),
     )
     guidance.setdefault(
         "mechanism_owner_file_rule",
         (
             "Before drafting a solver_design hypothesis, read the active file "
-            "that owns the mechanism you plan to change: scheduler.py for "
-            "ALNS phases, restarts, acceptance wiring, route-cap checks, and "
-            "adaptive operator scheduling; local_search.py for VNS, swaps, "
-            "relocate, Or-opt, two-opt-star, tail/suffix exchange, and "
-            "cross-route moves; destroy_repair.py for destroy, repair, Shaw, "
-            "route removal, and regret insertion; acceptance.py for simulated "
-            "annealing and _AdaptiveWeights; construction.py for sweep, "
-            "Clarke-Wright, nearest-neighbor, and initial solution seeding."
+            "that owns the mechanism you plan to change. Use active_algorithm_facts "
+            "source_paths_or_symbols to choose the owner file when the fact packet "
+            "already identifies one."
         ),
     )
     return guidance
@@ -350,16 +344,19 @@ def _algorithm_file_paths_from_observations(
     return []
 
 
-def _active_solver_design_paths_first(paths: list[str]) -> list[str]:
+def _active_solver_design_paths_first(
+    paths: list[str],
+    primary_entrypoint_path: str = "",
+) -> list[str]:
     active_paths = list(paths)
-    if _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH not in active_paths:
+    if not primary_entrypoint_path or primary_entrypoint_path not in active_paths:
         return active_paths
     return [
-        _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH,
+        primary_entrypoint_path,
         *[
             path
             for path in active_paths
-            if path != _PRIMARY_SOLVER_DESIGN_ENTRYPOINT_PATH
+            if path != primary_entrypoint_path
         ],
     ]
 

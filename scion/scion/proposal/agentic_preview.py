@@ -345,6 +345,9 @@ def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:
     if not isinstance(value, Mapping):
         return None
     candidates: list[Any] = []
+    diagnostic = value.get("activation_diagnostic")
+    if isinstance(diagnostic, Mapping):
+        candidates.append(_algorithm_smoke_activation_diagnostic_text(diagnostic))
     agent_summary = value.get("agent_summary")
     if isinstance(agent_summary, Mapping):
         candidates.extend(
@@ -390,6 +393,30 @@ def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:
     if guidance:
         return _limit_string(f"repair guidance: {guidance}", 1200)
     return None
+
+
+def _algorithm_smoke_activation_diagnostic_text(
+    value: Mapping[str, Any],
+) -> str | None:
+    code = _limit_string(value.get("code"), 120)
+    kind = _limit_string(value.get("activation_diagnostic_kind"), 120)
+    telemetry_code = _limit_string(value.get("telemetry_failure_code"), 160)
+    mechanism = _limit_string(value.get("telemetry_failure_mechanism"), 120)
+    category = _limit_string(value.get("telemetry_failure_category"), 120)
+    field = _limit_string(value.get("telemetry_failure_field"), 240)
+    parts = [f"code={code}" if code else ""]
+    if kind:
+        parts.append(f"activation_diagnostic_kind={kind}")
+    if telemetry_code:
+        parts.append(f"telemetry_failure_code={telemetry_code}")
+    if mechanism:
+        parts.append(f"mechanism={mechanism}")
+    if category:
+        parts.append(f"category={category}")
+    if field:
+        parts.append(f"field={field}")
+    text = "; ".join(part for part in parts if part)
+    return f"proposal activation diagnostic: {text}" if text else None
 
 
 def _algorithm_smoke_telemetry_failure_text(value: Mapping[str, Any]) -> str | None:

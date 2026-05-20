@@ -120,6 +120,15 @@ def _code_timeout_retry_context(
         research_diagnosis = _research_diagnosis_from_observations(observations)
         if research_diagnosis:
             retry_context["agentic_research_diagnosis"] = research_diagnosis
+        from scion.proposal.agentic_grounding import (
+            _active_algorithm_facts_for_prompt_context,
+        )
+
+        active_algorithm_facts = _active_algorithm_facts_for_prompt_context(
+            observations
+        )
+        if active_algorithm_facts:
+            retry_context["agentic_active_algorithm_facts"] = active_algorithm_facts
         retry_context["agentic_tool_observations"] = [
             _code_observation_prompt_payload(observation)
             for observation in _code_prompt_observations(observations)

@@ -62,6 +62,8 @@ referenced, not copied into development prompts.
 - [v3 control-closure Sonnet 6R postrun analysis, 2026-05-17](v0.4-v3-control-closure-sonnet-6r-postrun-20260517.md)
 - [P2 agentic control validation Sonnet 3R, 2026-05-18](v0.4-p2-agentic-control-validation-sonnet-3r-20260518.md)
 - [Branch lifecycle and portfolio repair, 2026-05-20](v0.4-branch-lifecycle-portfolio-repair-20260520.md)
+- [Branch lifecycle and portfolio Sonnet 4R post-run analysis, 2026-05-20](v0.4-branch-lifecycle-portfolio-sonnet-4r-analysis-20260520.md)
+- [Active algorithm facts and activation diagnostic repair, 2026-05-20](v0.4-active-algorithm-facts-control-repair-20260520.md)
 
 ## Related
 

@@ -302,8 +302,14 @@ def algorithm_file_path_guidance(
 ) -> dict[str, Any]:
     """Return model-facing file_path guidance derived from the current context."""
 
+    files = list_algorithm_files_payload(context, include_inactive=True)
     return _algorithm_file_path_guidance_payload(
-        _allowed_algorithm_file_paths(context)
+        tuple(
+            str(item.get("file_path") or "")
+            for item in files
+            if item.get("file_path")
+        ),
+        file_rows=files,
     )
 
 
@@ -315,8 +321,14 @@ def algorithm_file_path_guidance_for_tool(
 
     if tool_name not in _ALGORITHM_FILE_READ_TOOLS:
         return None
+    files = list_algorithm_files_payload(context, include_inactive=True)
     return _algorithm_file_path_guidance_payload(
-        _allowed_algorithm_file_paths(context),
+        tuple(
+            str(item.get("file_path") or "")
+            for item in files
+            if item.get("file_path")
+        ),
+        file_rows=files,
         tool_name=tool_name,
     )
 
@@ -324,10 +336,15 @@ def algorithm_file_path_guidance_for_tool(
 def _algorithm_file_path_guidance_payload(
     allowed_files: tuple[str, ...],
     *,
+    file_rows: list[dict[str, Any]] | None = None,
     tool_name: str | None = None,
 ) -> dict[str, Any]:
     allowed_file_paths = list(allowed_files)
     active_file_paths = list(allowed_file_paths)
+    primary_entrypoint = _primary_entrypoint_file_path(
+        allowed_file_paths,
+        file_rows or [],
+    )
     payload: dict[str, Any] = {
         "surface": "solver_design",
         "file_path_source_tool": _ALGORITHM_FILE_LIST_TOOL,
@@ -339,22 +356,22 @@ def _algorithm_file_path_guidance_payload(
         "allowed_file_count": len(allowed_file_paths),
         "allowed_file_paths": allowed_file_paths,
         "preferred_active_file_paths": active_file_paths,
-        "primary_entrypoint_file_path": (
-            "policies/baseline_algorithm.py"
-            if "policies/baseline_algorithm.py" in allowed_file_paths
-            else ""
-        ),
+        "primary_entrypoint_file_path": primary_entrypoint,
         "allowed_paths_summary": (
             f"{len(allowed_file_paths)} allowlisted solver_design file_path "
             "values are available from context.list_algorithm_files."
         ),
         "path_selection_rule": (
-            "Use preferred_active_file_paths for solver_design research: "
-            "policies/baseline_algorithm.py and "
-            "policies/baseline_modules/*.py."
+            "Use preferred_active_file_paths for solver_design research; these "
+            "paths come from the active problem adapter."
         ),
         "surface_id_rule": (
             "solver_design is a research surface id; it is not a valid file_path."
+        ),
+        "fact_packet_rule": (
+            "Use context.read_active_solver_design active_algorithm_facts for "
+            "compact mechanism claims, then read specific files or symbols for "
+            "implementation details."
         ),
     }
     if active_file_paths:
@@ -362,6 +379,16 @@ def _algorithm_file_path_guidance_payload(
     elif allowed_file_paths:
         payload["example_file_path"] = allowed_file_paths[0]
     return payload
+
+
+def _primary_entrypoint_file_path(
+    allowed_file_paths: list[str],
+    file_rows: list[dict[str, Any]],
+) -> str:
+    for item in file_rows:
+        if "entrypoint" in str(item.get("role") or ""):
+            return str(item.get("file_path") or "")
+    return allowed_file_paths[0] if allowed_file_paths else ""
 
 
 def _path_rejected_observation(

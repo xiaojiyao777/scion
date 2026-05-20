@@ -81,6 +81,22 @@ experiment patches.
   semantics directly to generic `core`, `proposal`, `contract`, `protocol`, or
   `runtime` modules. Put problem-specific behavior under
   `scion/problems/cvrp/` or behind a problem-owned provider hook.
+- Active algorithm facts are adapter-owned. Generic Scion code may request an
+  active-solver design snapshot through a provider hook and may carry the
+  returned schema/digest/provenance, but it must not synthesize hidden
+  domain-specific facts.
+- The proposal agent and semantic gates must share the same active-algorithm
+  fact packet. If a novelty or premise gate rejects a proposal, the rejection
+  must cite fact ids plus the packet digest/provenance that the agent could
+  also see. A gate must not be better informed than the agent.
+- APS prompts must render `agentic_active_algorithm_facts` as a concise,
+  high-signal block before raw proposal-tool observations. Raw observations
+  are audit/debug support and may be compacted; active facts should not be
+  buried inside a large truncated observation blob.
+- Proposal-smoke activation-missing evidence is a diagnostic signal, not an
+  ordinary solver-quality screening loss. Keep it distinct from formal
+  validation telemetry gates and feed the diagnosis back into branch lifecycle
+  and repair context.
 - Treat roughly 800 lines as a design warning, not a mechanical hard number.
   A source or test file above that size needs a clear ownership reason and a
   split plan. Files above 1000 lines are active architecture debt; files above

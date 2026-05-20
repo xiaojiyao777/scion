@@ -18,6 +18,7 @@ from scion.problems.cvrp.mechanism_novelty.text import (
 
 @dataclass(frozen=True)
 class _ActiveMechanismFacts:
+    fact_packet_available: bool = False
     has_diverse_construction: bool = False
     has_adaptive_weights: bool = False
     has_cross_route_or_opt_2_3: bool = False
@@ -35,6 +36,8 @@ class _ActiveMechanismFacts:
     feasible_search_evidence: tuple[str, ...] = ()
     route_limit_evidence: tuple[str, ...] = ()
     snapshot_digest: str | None = None
+    fact_packet_digest: str | None = None
+    fact_provenance: Mapping[str, Any] | None = None
 
 
 def _active_solver_snapshot_from_observations(
@@ -46,14 +49,20 @@ def _active_solver_snapshot_from_observations(
         if observation.tool_name != "context.read_active_solver_design":
             continue
         payload = observation.structured_payload
-        if isinstance(payload, Mapping) and isinstance(
-            payload.get("mechanism_summary"), Mapping
-        ):
+        if not isinstance(payload, Mapping):
+            continue
+        if isinstance(payload.get("active_algorithm_facts"), Mapping):
+            return payload
+        if isinstance(payload.get("mechanism_summary"), Mapping):
             return payload
     return None
 
 
 def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
+    fact_packet = _fact_packet(snapshot)
+    if fact_packet:
+        return _facts_from_fact_packet(fact_packet, snapshot)
+
     mechanism_summary = snapshot.get("mechanism_summary")
     mechanism_summary = mechanism_summary if isinstance(mechanism_summary, Mapping) else {}
     construction_text = _normalized_join(
@@ -240,6 +249,137 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
     )
 
 
+def _facts_from_fact_packet(
+    fact_packet: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> _ActiveMechanismFacts:
+    by_id = _facts_by_id(fact_packet)
+    return _ActiveMechanismFacts(
+        fact_packet_available=True,
+        has_diverse_construction=_has_fact(
+            by_id,
+            "cvrp.construction.diverse_feasible_seed",
+        ),
+        has_adaptive_weights=_has_fact(
+            by_id,
+            "cvrp.acceptance.adaptive_operator_weights",
+        ),
+        has_cross_route_or_opt_2_3=_has_fact(
+            by_id,
+            "cvrp.local_search.cross_route_or_opt_2_3",
+        ),
+        has_cross_route_tail_exchange=_has_fact(
+            by_id,
+            "cvrp.local_search.cross_route_tail_exchange",
+        ),
+        has_shaw_related_removal=_has_fact(
+            by_id,
+            "cvrp.destroy_repair.shaw_related_removal",
+        ),
+        has_removal_savings_worst_removal=_has_fact(
+            by_id,
+            "cvrp.destroy_repair.removal_savings_worst_removal",
+        ),
+        starts_feasible_rejects_infeasible=_has_fact(
+            by_id,
+            "cvrp.search_state.starts_feasible_rejects_infeasible",
+        ),
+        guards_route_limit_search_state=_has_fact(
+            by_id,
+            "cvrp.search_state.guards_route_limit",
+        ),
+        construction_evidence=_fact_evidence(
+            by_id,
+            "cvrp.construction.diverse_feasible_seed",
+            fallback=(
+                "_sweep_construction",
+                "_clarke_wright_savings",
+                "_capacity_balanced_construction",
+                "_nearest_neighbor",
+            ),
+        ),
+        adaptive_weight_evidence=_fact_evidence(
+            by_id,
+            "cvrp.acceptance.adaptive_operator_weights",
+            fallback=(
+                "_AdaptiveWeights.choose",
+                "_AdaptiveWeights.record",
+                "_AdaptiveWeights.update",
+            ),
+        ),
+        or_opt_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.cross_route_or_opt_2_3",
+            fallback=(
+                "_or_opt",
+                "_or_opt_1",
+                "_or_opt_2",
+                "_or_opt_3",
+                "cross-route Or-opt segment relocation",
+            ),
+        ),
+        tail_exchange_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.cross_route_tail_exchange",
+            fallback=(
+                "_two_opt_star",
+                "cross-route suffix/tail exchange",
+            ),
+        ),
+        shaw_related_evidence=_fact_evidence(
+            by_id,
+            "cvrp.destroy_repair.shaw_related_removal",
+            fallback=(
+                "_shaw_removal",
+                "seed-based related removal",
+                "distance + demand + original-route relatedness",
+            ),
+        ),
+        removal_savings_evidence=_fact_evidence(
+            by_id,
+            "cvrp.destroy_repair.removal_savings_worst_removal",
+            fallback=(
+                "_worst_removal",
+                "saving = -route.cost_of_remove(pos)",
+                "removal saving / detour eliminated",
+            ),
+        ),
+        feasible_search_evidence=_fact_evidence(
+            by_id,
+            "cvrp.search_state.starts_feasible_rejects_infeasible",
+            fallback=(
+                "starts from feasible construction",
+                "rejects infeasible or route-cap-violating candidates",
+            ),
+        ),
+        route_limit_evidence=tuple(
+            dict.fromkeys(
+                [
+                    *_fact_evidence(
+                        by_id,
+                        "cvrp.search_state.guards_route_limit",
+                        fallback=(
+                            "_capacity_balanced_construction when route cap is exceeded",
+                            "_initial_solution rejects route-limit excess",
+                        ),
+                    ),
+                    *_fact_evidence(
+                        by_id,
+                        "cvrp.search_state.starts_feasible_rejects_infeasible",
+                        fallback=(
+                            "rejects route-cap-violating candidates",
+                            "route-count excess is not accepted as current state",
+                        ),
+                    ),
+                ]
+            )
+        ),
+        snapshot_digest=_fact_packet_digest(fact_packet, snapshot),
+        fact_packet_digest=_fact_packet_digest(fact_packet, snapshot),
+        fact_provenance=_fact_provenance(snapshot),
+    )
+
+
 def _has_or_opt_token(text: str, length: str) -> bool:
     compact = text.replace(" ", "").replace("-", "_")
     return f"_or_opt_{length}" in compact or f"oropt{length}" in compact
@@ -270,3 +410,81 @@ def _removal_savings_evidence(value: Any) -> tuple[str, ...]:
             ]
         )
     )
+
+
+def _fact_packet(snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
+    packet = snapshot.get("active_algorithm_facts")
+    return packet if isinstance(packet, Mapping) else {}
+
+
+def _facts_by_id(fact_packet: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    facts = fact_packet.get("facts")
+    if not isinstance(facts, Sequence) or isinstance(facts, (str, bytes)):
+        return {}
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for item in facts:
+        if not isinstance(item, Mapping):
+            continue
+        fact_id = str(item.get("fact_id") or "").strip()
+        if fact_id:
+            by_id[fact_id] = item
+    return by_id
+
+
+def _has_fact(facts_by_id: Mapping[str, Mapping[str, Any]], fact_id: str) -> bool:
+    fact = facts_by_id.get(fact_id)
+    if not isinstance(fact, Mapping):
+        return False
+    active = fact.get("active", True)
+    used_by_gate = fact.get("used_by_gate", True)
+    return bool(active) and bool(used_by_gate)
+
+
+def _fact_evidence(
+    facts_by_id: Mapping[str, Mapping[str, Any]],
+    fact_id: str,
+    *,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    fact = facts_by_id.get(fact_id)
+    if not isinstance(fact, Mapping):
+        return fallback
+    evidence = [
+        f"fact_id:{fact_id}",
+        *[
+            str(item)
+            for item in _flatten_strings(fact.get("evidence"))
+            if str(item or "").strip()
+        ],
+        *[
+            str(item)
+            for item in _flatten_strings(fact.get("source_paths_or_symbols"))
+            if str(item or "").strip()
+        ],
+    ]
+    result = tuple(dict.fromkeys(item for item in evidence if len(item) <= 240))
+    return result or fallback
+
+
+def _fact_packet_digest(
+    fact_packet: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> str | None:
+    digest = fact_packet.get("fact_packet_digest")
+    if digest:
+        return str(digest)
+    digest = fact_packet.get("snapshot_digest")
+    if digest:
+        return str(digest)
+    return _snapshot_digest(snapshot)
+
+
+def _fact_provenance(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    provenance = snapshot.get("provenance")
+    source_digest = snapshot.get("source_digest")
+    result: dict[str, Any] = {}
+    if isinstance(provenance, Mapping):
+        result["provenance"] = dict(provenance)
+    if isinstance(source_digest, Mapping):
+        result["source_digest"] = dict(source_digest)
+    return result

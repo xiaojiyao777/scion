@@ -110,3 +110,38 @@ def test_agent_quality_feedback_surfaces_algorithm_smoke_failure_detail(
     assert "algorithm_smoke_failure" in rendered
     assert "runtime_smoke.telemetry_guard" in rendered
     assert "DecisionFeatures" in rendered
+
+
+def test_agent_quality_feedback_surfaces_activation_diagnostic_kind(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    blocked = replace(
+        context.step_history[0],
+        protocol_result=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:code_generation_failed: "
+            "agent_quality_blocked:proposal_activation_diagnostic: "
+            "proposal activation diagnostic: code=proposal_activation_diagnostic; "
+            "activation_diagnostic_kind=expected_telemetry_mismatch"
+        ),
+        proposal_session_ref={
+            "primary_failure": {
+                "stage": "agent_quality_blocked",
+                "reason": "proposal_activation_diagnostic",
+                "category": "proposal_activation_diagnostic",
+                "code": "proposal_activation_diagnostic",
+                "detail": (
+                    "proposal activation diagnostic: "
+                    "activation_diagnostic_kind=expected_telemetry_mismatch"
+                ),
+            }
+        },
+    )
+
+    rendered = _build_agent_quality_feedback([blocked], blocked.branch_id)
+
+    assert "proposal_activation_diagnostic" in rendered
+    assert "activation_diagnostic_kind=expected_telemetry_mismatch" in rendered
+    assert "DecisionFeatures" in rendered

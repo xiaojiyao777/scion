@@ -142,6 +142,7 @@ def _agent_quality_failure_summary(step: StepRecord) -> str:
         stage != "agent_quality_blocked"
         and step.failure_stage != "agent_quality_blocked"
         and "algorithm_smoke_failure" not in combined
+        and "proposal_activation_diagnostic" not in combined
         and "proposal_premise_contradicted" not in combined
     ):
         return ""

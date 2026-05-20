@@ -2,6 +2,29 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_solver_design_test_support import *
 
+
+def test_generic_active_solver_snapshot_has_no_cvrp_mechanism_tokens() -> None:
+    source = (
+        Path(__file__).parents[2]
+        / "proposal"
+        / "active_solver_snapshot.py"
+    ).read_text(encoding="utf-8")
+    forbidden = (
+        "CVRP",
+        "ALNS",
+        "VNS",
+        "_ALNSVNSSolver",
+        "_shaw_removal",
+        "_or_opt",
+        "Clarke-Wright",
+        "route-cap",
+        "capacity",
+        "demand",
+    )
+
+    assert all(token not in source for token in forbidden)
+
+
 def test_active_solver_design_snapshot_exposes_active_mechanisms(
     tmp_path: Path,
 ) -> None:
@@ -19,6 +42,13 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     )
     assert payload["provenance"]["source"] == "champion_snapshot"
     assert payload["source_digest"]["snapshot_digest"]
+    fact_packet = payload["active_algorithm_facts"]
+    fact_ids = {fact["fact_id"] for fact in fact_packet["facts"]}
+    assert fact_packet["snapshot_digest"] == payload["source_digest"]["snapshot_digest"]
+    assert fact_packet["fact_packet_digest"]
+    assert "cvrp.destroy_repair.shaw_related_removal" in fact_ids
+    assert "cvrp.local_search.cross_route_or_opt_2_3" in fact_ids
+    assert all(fact["used_by_prompt"] and fact["used_by_gate"] for fact in fact_packet["facts"])
     assert "policies/baseline_modules/scheduler.py" in payload["source_digest"]["files"]
     assert "_initial_solution" in rendered
     assert "alns_loop" in rendered

@@ -1,31 +1,24 @@
-"""Active solver-design snapshot for controlled proposal grounding."""
+"""Generic active solver-design snapshot facade for proposal grounding."""
 
 from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+from scion.problem.providers import (
+    ProblemProviderError,
+    resolve_active_solver_design_provider,
+)
 
 if TYPE_CHECKING:
     from scion.proposal.tools.models import ProposalToolContext
 
 _SOURCE_PREVIEW_CHARS = 12000
 _DIGEST_CHARS = 16
-
-_ALGORITHM_FILE_ROLES: tuple[tuple[str, str, bool], ...] = (
-    ("policies/baseline_algorithm.py", "active_entrypoint", True),
-    ("policies/baseline_modules/scheduler.py", "active_scheduler_alns_vns", True),
-    ("policies/baseline_modules/construction.py", "active_construction", True),
-    ("policies/baseline_modules/destroy_repair.py", "active_destroy_repair", True),
-    ("policies/baseline_modules/local_search.py", "active_local_search_vns", True),
-    ("policies/baseline_modules/acceptance.py", "active_acceptance_weights", True),
-    ("policies/baseline_modules/config.py", "active_runtime_config", True),
-    ("policies/baseline_modules/state.py", "active_solution_state", True),
-)
-
-_ALLOWED_ALGORITHM_FILES = frozenset(path for path, _, _ in _ALGORITHM_FILE_ROLES)
 
 
 def build_active_solver_snapshot(
@@ -36,46 +29,54 @@ def build_active_solver_snapshot(
 ) -> dict[str, Any]:
     """Return a provenance-bearing snapshot of the active solver-design code."""
 
-    source_root, source_kind = active_solver_source_root(context)
-    provenance = _provenance_payload(context, source_root, source_kind)
-    files = list_algorithm_files_payload(context, include_inactive=True)
+    inputs = _active_solver_inputs(context)
+    files = inputs["files"]
     readable_files = [
         item for item in files if item.get("readable") and item.get("active")
     ]
-    digests = {
-        str(item["file_path"]): str(item["sha256"])
-        for item in files
-        if item.get("sha256")
+    entrypoint = _entrypoint_payload(context, inputs)
+    call_graph = _solver_call_graph_payload(context, inputs)
+    mechanism_summary = _mechanism_summary(context, inputs)
+    inputs_with_summary = {
+        **inputs,
+        "entrypoint": entrypoint,
+        "call_graph": call_graph,
+        "mechanism_summary": mechanism_summary,
     }
-    snapshot_digest = _aggregate_digest(digests)
+    fact_packet = _active_algorithm_facts_payload(context, inputs_with_summary)
 
     payload: dict[str, Any] = {
         "surface": "solver_design",
         "active_surface": {
             "name": "solver_design",
-            "entrypoint": "policies/baseline_algorithm.py::solve",
+            "entrypoint": _entrypoint_id(entrypoint),
             "role": "problem_object_solver_algorithm",
         },
-        "provenance": provenance,
-        "source_digest": {
-            "algorithm": "sha256",
-            "snapshot_digest": snapshot_digest,
-            "files": digests,
-        },
-        "entrypoint": _entrypoint_payload(source_root, source_kind),
+        "provenance": inputs["provenance"],
+        "source_digest": inputs["source_digest"],
+        "entrypoint": entrypoint,
         "active_files": [item for item in files if item.get("active")],
         "inactive_files": [item for item in files if not item.get("active")],
-        "call_graph": solver_call_graph_payload(context),
-        "mechanism_summary": _mechanism_summary(source_root, source_kind),
-        "legacy_inactive_surface_exclusion": legacy_inactive_surface_exclusion(),
+        "call_graph": call_graph,
+        "mechanism_summary": mechanism_summary,
+        "active_algorithm_facts": fact_packet,
+        "legacy_inactive_surface_exclusion": legacy_inactive_surface_exclusion(
+            context,
+            inputs_with_summary,
+        ),
         "grounding_guidance": {
             "active_evidence_rule": (
-                "Treat branch_workspace or champion_snapshot code in active_files "
+                "Treat provider-declared active_files from the current source "
                 "as active solver evidence for solver_design."
             ),
+            "fact_packet_rule": (
+                "Use active_algorithm_facts for compact mechanism claims; read "
+                "full files or symbols only when implementation details are "
+                "needed."
+            ),
             "legacy_exclusion_rule": (
-                "Do not cite compact component surfaces or deleted hooks as "
-                "proof that an active solver mechanism is absent."
+                "Do not cite inactive or legacy surfaces as proof that an active "
+                "solver mechanism is present or absent."
             ),
         },
     }
@@ -92,119 +93,7 @@ def build_active_solver_snapshot(
 
 
 def solver_call_graph_payload(context: ProposalToolContext) -> dict[str, Any]:
-    source_root, source_kind = active_solver_source_root(context)
-    files = {
-        path: _file_text(source_root, source_kind, path)
-        for path, _, active in _ALGORITHM_FILE_ROLES
-        if active
-    }
-    symbols = {
-        path: _python_symbols(text)
-        for path, text in files.items()
-        if text
-    }
-    edges = [
-        {
-            "from": "policies/baseline_algorithm.py::solve",
-            "to": "policies/baseline_modules/scheduler.py::_ALNSVNSSolver.__init__",
-            "mechanism": "entrypoint wires config and context into scheduler",
-            "evidence": ["baseline_algorithm.py imports _ALNSVNSSolver"],
-        },
-        {
-            "from": "policies/baseline_algorithm.py::solve",
-            "to": "policies/baseline_modules/scheduler.py::_ALNSVNSSolver.solve",
-            "mechanism": "entrypoint delegates the active search and adapts output",
-            "evidence": ["solver.solve(instance, rng)", "context.make_solution(...)"],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver.solve",
-            "to": "scheduler._ALNSVNSSolver._initial_solution",
-            "mechanism": "seed construction before ALNS loop",
-            "evidence": ["current = self._initial_solution(instance, reserve)"],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver._initial_solution",
-            "to": "construction",
-            "mechanism": (
-                "uses sweep for large instances, Clarke-Wright otherwise, "
-                "capacity-balanced repair for route cap, nearest-neighbor fallback"
-            ),
-            "evidence": [
-                "_sweep_construction",
-                "_clarke_wright_savings",
-                "_capacity_balanced_construction",
-                "_nearest_neighbor",
-            ],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver.solve",
-            "to": "acceptance._AdaptiveWeights",
-            "mechanism": "adaptive destroy/repair operator choice, score, and update",
-            "evidence": ["choose", "record", "update", "segment_length"],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver.solve",
-            "to": "destroy_repair",
-            "mechanism": (
-                "ALNS destroy/repair loop includes Shaw related removal: "
-                "seed-based removal with distance, demand, and route relatedness"
-            ),
-            "evidence": [
-                "_random_removal",
-                "_worst_removal",
-                "_shaw_removal",
-                "seed-based related removal",
-                "distance + demand + original-route relatedness",
-                "_route_removal",
-                "_greedy_insertion",
-                "_regret2_insertion",
-                "_regret3_insertion",
-            ],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver.solve",
-            "to": "local_search._vns",
-            "mechanism": "embedded local search when VNS is enabled and bounded",
-            "evidence": ["_vns", "_default_vns_operators", "vns_embedded"],
-        },
-        {
-            "from": "local_search._default_vns_operators",
-            "to": "local_search operators",
-            "mechanism": "VNS neighborhoods include intra and cross-route moves",
-            "evidence": [
-                "_two_opt_intra",
-                "_relocate",
-                "_or_opt_1",
-                "_or_opt_2",
-                "_or_opt_3",
-                "_swap",
-                "_two_opt_star",
-            ],
-        },
-        {
-            "from": "scheduler._ALNSVNSSolver.solve",
-            "to": "acceptance._SimulatedAnnealing.accept",
-            "mechanism": "accepts best, better, and bounded worse candidates",
-            "evidence": ["SIGMA_BEST", "SIGMA_BETTER", "SIGMA_ACCEPTED", "accept"],
-        },
-    ]
-    return {
-        "surface": "solver_design",
-        "provenance": _provenance_payload(context, source_root, source_kind),
-        "source_digest": {
-            "algorithm": "sha256",
-            "snapshot_digest": _aggregate_digest(
-                {
-                    path: _sha256(text)
-                    for path, text in files.items()
-                    if text
-                }
-            ),
-        },
-        "nodes": _call_graph_nodes(symbols),
-        "edges": edges,
-        "legacy_inactive_surface_exclusion": legacy_inactive_surface_exclusion(),
-    }
+    return _solver_call_graph_payload(context, _active_solver_inputs(context))
 
 
 def list_algorithm_files_payload(
@@ -212,33 +101,11 @@ def list_algorithm_files_payload(
     *,
     include_inactive: bool = False,
 ) -> list[dict[str, Any]]:
-    source_root, source_kind = active_solver_source_root(context)
-    rows: list[dict[str, Any]] = []
-    for rel_path, role, active in _ALGORITHM_FILE_ROLES:
-        if not active and not include_inactive:
-            continue
-        artifact = _read_code_file_from_root(
-            source_root or "",
-            rel_path,
-            max_chars=0,
-            source_kind=source_kind,
-        )
-        text = _file_text(source_root, source_kind, rel_path)
-        rows.append(
-            {
-                "file_path": rel_path,
-                "module": _module_name(rel_path),
-                "role": role,
-                "active": active,
-                "readable": bool(artifact.get("readable")),
-                "reason": artifact.get("reason"),
-                "source": source_kind,
-                "size_chars": len(text) if text else artifact.get("size_chars"),
-                "sha256": _sha256(text) if text else None,
-                "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
-            }
-        )
-    return rows
+    inputs = _active_solver_inputs(context)
+    files = inputs["files"]
+    if include_inactive:
+        return list(files)
+    return [item for item in files if item.get("active")]
 
 
 def read_algorithm_file_payload(
@@ -247,8 +114,10 @@ def read_algorithm_file_payload(
     *,
     max_chars: int,
 ) -> dict[str, Any]:
-    rel_path = _normalize_algorithm_file(file_path)
-    source_root, source_kind = active_solver_source_root(context)
+    inputs = _active_solver_inputs(context)
+    allowed_files = _allowed_algorithm_files(inputs["manifest"])
+    rel_path = _normalize_algorithm_file(file_path, allowed_files)
+    source_kind = str(inputs["source_kind"])
     if rel_path is None:
         safe_path = _safe_rejected_file_path(file_path)
         return {
@@ -256,24 +125,24 @@ def read_algorithm_file_payload(
             "path_rejected": True,
             "readable": False,
             "reason": "file_not_allowlisted_for_solver_design",
-            "allowed_files": sorted(_ALLOWED_ALGORITHM_FILES),
+            "allowed_files": sorted(allowed_files),
             "source": source_kind,
         }
     artifact = _read_code_file_from_root(
-        source_root or "",
+        inputs["source_root"] or "",
         rel_path,
         max_chars=max(0, max_chars),
         source_kind=source_kind,
     )
-    text = _file_text(source_root, source_kind, rel_path)
+    text = _file_text(inputs["source_root"], source_kind, rel_path)
     artifact.update(
         {
-            "active": _is_active_algorithm_file(rel_path),
-            "role": _role_for_path(rel_path),
+            "active": _is_active_algorithm_file(rel_path, inputs["manifest"]),
+            "role": _role_for_path(rel_path, inputs["manifest"]),
             "module": _module_name(rel_path),
             "sha256": _sha256(text) if text else None,
             "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
-            "provenance": _provenance_payload(context, source_root, source_kind),
+            "provenance": inputs["provenance"],
         }
     )
     return artifact
@@ -338,184 +207,279 @@ def active_solver_source_root(
     return None, "missing_snapshot"
 
 
-def legacy_inactive_surface_exclusion() -> dict[str, Any]:
+def legacy_inactive_surface_exclusion(
+    context: ProposalToolContext | None = None,
+    snapshot_context: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    if context is not None and snapshot_context is not None:
+        provider_payload = _provider_mapping(
+            context,
+            snapshot_context,
+            "legacy_inactive_surface_exclusion",
+        )
+        if provider_payload:
+            return dict(provider_payload)
     return {
         "rule": (
-            "The active solver_design object is policies/baseline_algorithm.py "
-            "plus policies/baseline_modules/*.py as listed in active_files. "
-            "Deleted legacy component surfaces are not part of the active "
-            "research object and must not be used as optimization directions "
-            "or as active evidence that a mechanism is present or absent."
+            "The active solver_design object is defined by the problem-owned "
+            "active solver design provider. Inactive or legacy surfaces are not "
+            "part of active solver evidence."
         ),
         "excluded_surface_policy": (
-            "All deleted legacy component surfaces are omitted from active "
-            "solver_design context instead of being exposed by name."
+            "Inactive surfaces are omitted from active solver_design context "
+            "unless the problem provider declares them."
         ),
-        "excluded_files_or_hooks": [
-            {
-                "path": "vrp/",
-                "reason": (
-                    "legacy package implementation; active solver_design does "
-                    "not import it"
-                ),
-            },
-            {
-                "path": "compact context.read_surface component defaults",
-                "reason": "surface metadata is not active branch/champion code",
-            },
-        ],
+        "excluded_files_or_hooks": [],
     }
 
 
-def _entrypoint_payload(
+def _active_solver_inputs(context: ProposalToolContext) -> dict[str, Any]:
+    source_root, source_kind = active_solver_source_root(context)
+    manifest = _algorithm_file_manifest(context)
+    files = _list_algorithm_files_from_manifest(
+        source_root,
+        source_kind,
+        manifest,
+    )
+    file_texts = {
+        str(item["file_path"]): _file_text(source_root, source_kind, str(item["file_path"]))
+        for item in files
+        if item.get("file_path")
+    }
+    file_digests = {
+        path: _sha256(text)
+        for path, text in file_texts.items()
+        if text
+    }
+    source_digest = {
+        "algorithm": "sha256",
+        "snapshot_digest": _aggregate_digest(file_digests),
+        "files": file_digests,
+    }
+    symbols = {
+        path: _python_symbols(text)
+        for path, text in file_texts.items()
+        if text
+    }
+    provenance = _provenance_payload(context, source_kind)
+    return {
+        "provider": _active_solver_provider(context),
+        "source_root": source_root,
+        "source_kind": source_kind,
+        "manifest": manifest,
+        "files": files,
+        "file_texts": file_texts,
+        "file_digests": file_digests,
+        "source_digest": source_digest,
+        "symbols": symbols,
+        "provenance": provenance,
+    }
+
+
+def _algorithm_file_manifest(context: ProposalToolContext) -> tuple[dict[str, Any], ...]:
+    provider = _active_solver_provider(context)
+    method = getattr(provider, "active_solver_algorithm_file_manifest", None)
+    if not callable(method):
+        return ()
+    raw_manifest = method(context)
+    if not isinstance(raw_manifest, Sequence):
+        return ()
+    manifest: list[dict[str, Any]] = []
+    for raw_item in raw_manifest:
+        item = raw_item if isinstance(raw_item, Mapping) else {}
+        normalized = _normalize_rel_path(str(item.get("file_path") or ""))
+        if normalized is None:
+            continue
+        manifest.append(
+            {
+                **{
+                    str(key): value
+                    for key, value in item.items()
+                    if str(key) not in {"file_path", "role", "active"}
+                },
+                "file_path": normalized,
+                "role": str(item.get("role") or "active_algorithm_file"),
+                "active": bool(item.get("active", True)),
+            }
+        )
+    return tuple(manifest)
+
+
+def _list_algorithm_files_from_manifest(
     source_root: str | Path | None,
     source_kind: str,
+    manifest: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in manifest:
+        rel_path = str(item.get("file_path") or "")
+        artifact = _read_code_file_from_root(
+            source_root or "",
+            rel_path,
+            max_chars=0,
+            source_kind=source_kind,
+        )
+        text = _file_text(source_root, source_kind, rel_path)
+        row = {
+            **{
+                str(key): value
+                for key, value in item.items()
+                if str(key) not in {"file_path", "role", "active"}
+            },
+            "file_path": rel_path,
+            "module": _module_name(rel_path),
+            "role": str(item.get("role") or ""),
+            "active": bool(item.get("active")),
+            "readable": bool(artifact.get("readable")),
+            "reason": artifact.get("reason"),
+            "source": source_kind,
+            "size_chars": len(text) if text else artifact.get("size_chars"),
+            "sha256": _sha256(text) if text else None,
+            "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
+        }
+        rows.append(row)
+    return rows
+
+
+def _entrypoint_payload(
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
 ) -> dict[str, Any]:
-    text = _file_text(source_root, source_kind, "policies/baseline_algorithm.py")
+    provider_payload = _provider_mapping(
+        context,
+        snapshot_context,
+        "active_solver_entrypoint_summary",
+    )
+    if provider_payload:
+        return dict(provider_payload)
     return {
-        "file_path": "policies/baseline_algorithm.py",
-        "symbol": "solve",
-        "call_target": "policies/baseline_modules/scheduler.py::_ALNSVNSSolver.solve",
-        "source": source_kind,
-        "readable": bool(text),
-        "digest": _sha256(text)[:_DIGEST_CHARS] if text else None,
-        "summary": (
-            "solve(instance, rng, time_limit_sec, context) constructs "
-            "_ALNSVNSSolver, delegates to solver.solve(instance, rng), records "
-            "stop_reason, and returns context.make_solution(routes_as_tuples())."
+        "readable": False,
+        "source": snapshot_context.get("source_kind"),
+        "summary": "No problem-owned active solver entrypoint was declared.",
+    }
+
+
+def _solver_call_graph_payload(
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
+) -> dict[str, Any]:
+    symbols = snapshot_context.get("symbols")
+    symbols = symbols if isinstance(symbols, Mapping) else {}
+    edges = _provider_sequence(
+        context,
+        snapshot_context,
+        "active_solver_call_graph_edges",
+    )
+    return {
+        "surface": "solver_design",
+        "provenance": snapshot_context.get("provenance"),
+        "source_digest": {
+            "algorithm": "sha256",
+            "snapshot_digest": _snapshot_digest(snapshot_context),
+        },
+        "nodes": _call_graph_nodes(
+            symbols,
+            snapshot_context.get("manifest") or (),
+        ),
+        "edges": list(edges),
+        "legacy_inactive_surface_exclusion": legacy_inactive_surface_exclusion(
+            context,
+            snapshot_context,
         ),
     }
 
 
 def _mechanism_summary(
-    source_root: str | Path | None,
-    source_kind: str,
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
 ) -> dict[str, Any]:
-    scheduler = _file_text(
-        source_root,
-        source_kind,
-        "policies/baseline_modules/scheduler.py",
+    return dict(
+        _provider_mapping(
+            context,
+            snapshot_context,
+            "active_solver_mechanism_summary",
+        )
     )
-    local_search = _file_text(
-        source_root,
-        source_kind,
-        "policies/baseline_modules/local_search.py",
+
+
+def _active_algorithm_facts_payload(
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
+) -> dict[str, Any]:
+    packet = dict(
+        _provider_mapping(
+            context,
+            snapshot_context,
+            "active_algorithm_facts",
+        )
     )
-    acceptance = _file_text(
-        source_root,
-        source_kind,
-        "policies/baseline_modules/acceptance.py",
-    )
-    destroy_repair = _file_text(
-        source_root,
-        source_kind,
-        "policies/baseline_modules/destroy_repair.py",
-    )
-    return {
-        "construction": {
-            "active": "_initial_solution" in scheduler,
-            "summary": (
-                "_initial_solution chooses sweep construction above cw_threshold, "
-                "Clarke-Wright otherwise, capacity-balanced construction if the "
-                "route cap is exceeded, nearest-neighbor only as feasibility "
-                "fallback, then optional vns_initial."
-            ),
-            "evidence_symbols": [
-                "_initial_solution",
-                "_sweep_construction",
-                "_clarke_wright_savings",
-                "_capacity_balanced_construction",
-                "_nearest_neighbor",
-                "vns_initial",
-            ],
-        },
-        "alns_loop": {
-            "active": "while self._within_budget" in scheduler,
-            "summary": (
-                "The main ALNS loop starts from a feasible construction, "
-                "records iterations, samples destroy/repair operators through "
-                "adaptive weights, applies destroy/repair, optionally embeds "
-                "VNS, rejects infeasible or route-cap-violating candidates, "
-                "scores best/better/accepted moves, and updates weights per "
-                "segment. Capacity infeasibility is not a normal accepted "
-                "search state."
-            ),
-            "evidence_symbols": [
-                "record_iteration('alns')",
-                "_AdaptiveWeights.choose",
-                "destroy_op",
-                "repair_op",
-                "record_move('alns')",
-                "segment_length",
-            ],
-        },
-        "destroy_repair": {
-            "active": (
-                "_shaw_removal" in destroy_repair
-                and '"shaw", _shaw_removal' in scheduler
-            ),
-            "summary": (
-                "The destroy operator portfolio contains random, worst, Shaw "
-                "related removal, and whole-route removal, wired through "
-                "scheduler destroy_ops. _shaw_removal is a seed-based "
-                "related/proximity-cluster destroy operator: it picks a seed "
-                "customer, then removes customers ranked by distance, demand, "
-                "and original-route relatedness, with stochastic p sampling."
-            ),
-            "evidence_symbols": [
-                "_shaw_removal",
-                '"shaw", _shaw_removal',
-                "seed customer",
-                "phi_dist",
-                "phi_demand",
-                "phi_route",
-                "original_route",
-                "distance(customer, ref)",
-                "rng.random() ** p",
-            ],
-        },
-        "local_search": {
-            "active": "_default_vns_operators" in local_search,
-            "summary": (
-                "VNS uses _two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
-                "and _two_opt_star. _or_opt skips same-route destinations, so "
-                "length-2 and length-3 cross-route Or-opt already exist. "
-                "_two_opt_star exchanges cross-route suffix/tail segments."
-            ),
-            "evidence_symbols": [
-                "_vns",
-                "_default_vns_operators",
-                "_or_opt_2",
-                "_or_opt_3",
-                "_two_opt_star",
-            ],
-        },
-        "acceptance": {
-            "active": (
-                "_SimulatedAnnealing" in acceptance
-                and "_AdaptiveWeights" in acceptance
-            ),
-            "summary": (
-                "_AdaptiveWeights starts uniform but records scores/usages and "
-                "updates weights with the reaction factor. _SimulatedAnnealing "
-                "accepts worsening moves with a cooling probability."
-            ),
-            "evidence_symbols": [
-                "_AdaptiveWeights.choose",
-                "_AdaptiveWeights.record",
-                "_AdaptiveWeights.update",
-                "_SimulatedAnnealing.accept",
-            ],
-        },
-    }
+    if not packet:
+        return {}
+    packet.setdefault("snapshot_digest", _snapshot_digest(snapshot_context))
+    packet.setdefault("facts", [])
+    packet.setdefault("fact_packet_digest", _fact_packet_digest(packet))
+    return packet
+
+
+def _provider_mapping(
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
+    method_name: str,
+) -> Mapping[str, Any]:
+    provider = snapshot_context.get("provider") or _active_solver_provider(context)
+    method = getattr(provider, method_name, None)
+    if not callable(method):
+        return {}
+    payload = method(context, snapshot_context)
+    return payload if isinstance(payload, Mapping) else {}
+
+
+def _provider_sequence(
+    context: ProposalToolContext,
+    snapshot_context: Mapping[str, Any],
+    method_name: str,
+) -> Sequence[Any]:
+    provider = snapshot_context.get("provider") or _active_solver_provider(context)
+    method = getattr(provider, method_name, None)
+    if not callable(method):
+        return ()
+    payload = method(context, snapshot_context)
+    if isinstance(payload, (str, bytes)) or not isinstance(payload, Sequence):
+        return ()
+    return payload
+
+
+def _active_solver_provider(context: ProposalToolContext) -> Any | None:
+    try:
+        return resolve_active_solver_design_provider(
+            problem_spec=context.problem_spec,
+            adapter=context.adapter,
+        )
+    except ProblemProviderError:
+        return None
+
+
+def _entrypoint_id(entrypoint: Mapping[str, Any]) -> str:
+    file_path = str(entrypoint.get("file_path") or "").strip()
+    symbol = str(entrypoint.get("symbol") or "").strip()
+    if file_path and symbol:
+        return f"{file_path}::{symbol}"
+    return file_path or symbol or ""
+
+
+def _snapshot_digest(snapshot_context: Mapping[str, Any]) -> str:
+    source_digest = snapshot_context.get("source_digest")
+    if isinstance(source_digest, Mapping):
+        digest = source_digest.get("snapshot_digest")
+        if digest:
+            return str(digest)
+    return ""
 
 
 def _provenance_payload(
     context: ProposalToolContext,
-    source_root: str | Path | None,
     source_kind: str,
 ) -> dict[str, Any]:
-    del source_root
     return {
         "source": source_kind,
         "branch_id": context.branch_id,
@@ -526,16 +490,20 @@ def _provenance_payload(
     }
 
 
-def _call_graph_nodes(symbols: Mapping[str, list[str]]) -> list[dict[str, Any]]:
+def _call_graph_nodes(
+    symbols: Mapping[str, list[str]],
+    manifest: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     nodes: list[dict[str, Any]] = []
-    for rel_path, role, active in _ALGORITHM_FILE_ROLES:
-        if not active:
+    for item in manifest:
+        if not item.get("active"):
             continue
+        rel_path = str(item.get("file_path") or "")
         nodes.append(
             {
                 "file_path": rel_path,
                 "module": _module_name(rel_path),
-                "role": role,
+                "role": str(item.get("role") or ""),
                 "symbols": symbols.get(rel_path, []),
             }
         )
@@ -615,11 +583,19 @@ def _parent_class_name(tree: ast.AST, target: ast.AST) -> str | None:
     return None
 
 
-def _normalize_algorithm_file(file_path: str) -> str | None:
+def _normalize_algorithm_file(file_path: str, allowed_files: set[str]) -> str | None:
     normalized = str(file_path or "").replace(os.sep, "/").lstrip("/")
-    if normalized in _ALLOWED_ALGORITHM_FILES:
+    if normalized in allowed_files:
         return normalized
     return None
+
+
+def _allowed_algorithm_files(manifest: Sequence[Mapping[str, Any]]) -> set[str]:
+    return {
+        str(item.get("file_path"))
+        for item in manifest
+        if str(item.get("file_path") or "").strip()
+    }
 
 
 def _safe_rejected_file_path(file_path: str) -> str:
@@ -736,14 +712,20 @@ def _limit_text(text: Any, max_chars: int) -> str:
     return value[: max_chars - 3].rstrip() + "..."
 
 
-def _is_active_algorithm_file(rel_path: str) -> bool:
-    return any(path == rel_path and active for path, _, active in _ALGORITHM_FILE_ROLES)
+def _is_active_algorithm_file(
+    rel_path: str,
+    manifest: Sequence[Mapping[str, Any]],
+) -> bool:
+    return any(
+        str(item.get("file_path") or "") == rel_path and bool(item.get("active"))
+        for item in manifest
+    )
 
 
-def _role_for_path(rel_path: str) -> str:
-    for path, role, _active in _ALGORITHM_FILE_ROLES:
-        if path == rel_path:
-            return role
+def _role_for_path(rel_path: str, manifest: Sequence[Mapping[str, Any]]) -> str:
+    for item in manifest:
+        if str(item.get("file_path") or "") == rel_path:
+            return str(item.get("role") or "")
     return ""
 
 
@@ -759,6 +741,21 @@ def _sha256(text: str) -> str:
 def _aggregate_digest(digests: Mapping[str, str]) -> str:
     joined = "\n".join(f"{path}:{digest}" for path, digest in sorted(digests.items()))
     return _sha256(joined) if joined else ""
+
+
+def _fact_packet_digest(packet: Mapping[str, Any]) -> str:
+    digest_payload = {
+        key: value
+        for key, value in packet.items()
+        if key != "fact_packet_digest"
+    }
+    encoded = json.dumps(
+        digest_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 __all__ = [

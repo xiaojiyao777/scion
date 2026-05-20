@@ -172,7 +172,7 @@ def test_agentic_session_algorithm_smoke_repair_feedback_keeps_runtime_diagnosti
         )
     )
 
-    assert output.failure_category == "algorithm_smoke_failure"
+    assert output.failure_category == "proposal_activation_diagnostic"
     assert len(creative.code_contexts) >= 2
     repair_context = creative.code_contexts[1]
     prior_failure = repair_context["prior_code_failure"]
@@ -617,5 +617,3 @@ def test_agentic_session_observation_budget_bounds_large_tool_results(
         "test.huge_error",
     }
     assert all(event["error_code"] == "result_too_large" for event in huge_events)
-
-

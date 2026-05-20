@@ -115,6 +115,61 @@ def test_agentic_algorithm_smoke_failure_is_quality_block_not_proposal_streak() 
     assert session_ref["primary_failure"]["category"] == "algorithm_smoke_failure"
 
 
+def test_agentic_activation_diagnostic_is_quality_block_not_proposal_streak() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="activation-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_detail=(
+            "algorithm smoke did not pass: proposal activation diagnostic: "
+            "code=proposal_activation_diagnostic; "
+            "activation_diagnostic_kind=instrumentation_missing"
+        ),
+        failure_category="proposal_activation_diagnostic",
+    )
+    failure_streak = {"proposal": 2}
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+    pipeline.failure_streak = failure_streak
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert failures == []
+    assert failure_streak == {"proposal": 2}
+    assert detail is not None
+    assert "agent_quality_blocked" in detail
+    assert "proposal_activation_diagnostic" in detail
+    assert "activation_diagnostic_kind=instrumentation_missing" in detail
+    assert circuit.failures == []
+    assert session_ref is not None
+    assert session_ref["failure_category"] == "proposal_activation_diagnostic"
+    assert session_ref["failure_code"] == "proposal_activation_diagnostic"
+    assert session_ref["agent_block_reason"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["stage"] == "agent_quality_blocked"
+    assert session_ref["primary_failure"]["category"] == (
+        "proposal_activation_diagnostic"
+    )
+    assert session_ref["primary_failure"]["code"] == (
+        "proposal_activation_diagnostic"
+    )
+    assert "activation_diagnostic_kind=instrumentation_missing" in session_ref[
+        "primary_failure"
+    ]["detail"]
+
+
 def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(

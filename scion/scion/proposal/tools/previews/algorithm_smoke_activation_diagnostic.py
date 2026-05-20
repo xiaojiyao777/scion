@@ -1,0 +1,366 @@
+"""Proposal-smoke activation diagnostics for algorithm smoke feedback."""
+
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from scion.proposal.tools.previews.algorithm_smoke_feedback_text import (
+    _compact_agent_text_list,
+    _first_mapping,
+    _mapping_or_none,
+)
+from scion.proposal.tools.surface import _drop_empty_items
+
+PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE = "proposal_activation_diagnostic"
+
+_ACTIVATION_FAILURE_CODES = frozenset(
+    {
+        "TELEMETRY_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+    }
+)
+_STATIC_MISMATCH_CODES = frozenset(
+    {
+        "DECLARED_MECHANISM_ACTIVATION_MISSING",
+    }
+)
+_EFFECT_FIELD_TOKENS = (
+    "improvement",
+    "best_delta",
+    "delta",
+    "objective",
+    "record_move",
+)
+
+
+def _proposal_smoke_activation_diagnostic(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return a compact proposal-smoke activation diagnostic when applicable."""
+    static = _static_activation_mismatch(raw_payload.get("telemetry_static_preview"))
+    if static is not None:
+        return static
+    if telemetry_guard is None or bool(telemetry_guard.get("passed", True)):
+        return None
+    failure = _first_mapping(telemetry_guard.get("failures"))
+    if failure is None:
+        return None
+    failure_code = str(
+        failure.get("code") or telemetry_guard.get("failure_code") or ""
+    ).strip()
+    if failure_code not in _ACTIVATION_FAILURE_CODES:
+        return None
+
+    mechanism = str(
+        failure.get("mechanism") or telemetry_guard.get("mechanism") or ""
+    ).strip()
+    field = str(failure.get("field") or telemetry_guard.get("field") or "").strip()
+    diagnostic = _diagnostic_for_mechanism(telemetry_guard, mechanism)
+    subtype = _activation_subtype(
+        failure=failure,
+        field=field,
+        mechanism=mechanism,
+        diagnostic=diagnostic,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+    )
+    return _diagnostic_payload(
+        subtype=subtype,
+        source="runtime_smoke.telemetry_guard",
+        guard_failure_code=failure_code,
+        mechanism=mechanism,
+        category=str(failure.get("category") or telemetry_guard.get("category") or ""),
+        field=field,
+        counters=_issue_counters(failure),
+        telemetry_guard=telemetry_guard,
+        diagnostic=diagnostic,
+    )
+
+
+def _static_activation_mismatch(value: Any) -> dict[str, Any] | None:
+    static = _mapping_or_none(value)
+    if static is None or static.get("passed") is not False:
+        return None
+    issue_codes = tuple(str(code or "").strip() for code in static.get("issue_codes") or ())
+    issues = _compact_agent_text_list(static.get("issues"), limit=4)
+    joined = "\n".join(issues).lower()
+    mismatch = bool(_STATIC_MISMATCH_CODES.intersection(issue_codes)) or any(
+        marker in joined
+        for marker in (
+            "record_move alone",
+            "effect telemetry, not activation",
+            "expected_telemetry.activation references outcome",
+            "expected_telemetry.activation references aggregate effect",
+            "expected_telemetry.activation references aggregate runtime",
+            "declared mechanism activation",
+        )
+    )
+    if not mismatch:
+        return None
+    declared = _compact_agent_text_list(static.get("declared_mechanisms"), limit=3)
+    checked = _compact_agent_text_list(static.get("checked_fields"), limit=3)
+    mechanism = declared[0] if declared else ""
+    field = checked[0] if checked else ""
+    return _diagnostic_payload(
+        subtype="expected_telemetry_mismatch",
+        source="telemetry_static_preview",
+        guard_failure_code="DECLARED_MECHANISM_ACTIVATION_MISSING",
+        mechanism=mechanism,
+        category="activation",
+        field=field,
+        counters={},
+        telemetry_guard=None,
+        diagnostic=None,
+        static_issues=issues,
+    )
+
+
+def _activation_subtype(
+    *,
+    failure: Mapping[str, Any],
+    field: str,
+    mechanism: str,
+    diagnostic: Mapping[str, Any] | None,
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any],
+) -> str:
+    activation = _status_block(diagnostic, "activation")
+    runtime = _status_block(diagnostic, "runtime")
+    effect = _status_block(diagnostic, "effect")
+    activation_counters = _counters_from_status_block(activation) or _issue_counters(
+        failure
+    )
+    activation_present = int(activation_counters.get("candidate_present", 0) or 0)
+    activation_missing = int(activation_counters.get("candidate_missing", 0) or 0)
+    effect_present = int(
+        (_counters_from_status_block(effect) or {}).get("candidate_present", 0) or 0
+    )
+    field_lower = field.lower()
+    if _field_looks_like_expected_telemetry_mismatch(field_lower, mechanism):
+        return "expected_telemetry_mismatch"
+    if effect_present > 0 and _status_value(activation) in {"missing", "zero"}:
+        return "expected_telemetry_mismatch"
+    if activation_present > 0:
+        return "trigger_not_reached"
+    if _status_value(runtime) == "observed" or _runtime_search_effort(runtime_smoke) > 0:
+        return "instrumentation_missing"
+    case_count = _case_count(runtime_smoke, telemetry_guard)
+    if case_count is not None and case_count <= 1:
+        return "smoke_budget_or_case_insufficient"
+    if activation_missing > 0:
+        return "not_connected"
+    return "unknown"
+
+
+def _field_looks_like_expected_telemetry_mismatch(
+    field_lower: str,
+    mechanism: str,
+) -> bool:
+    if any(token in field_lower for token in _EFFECT_FIELD_TOKENS):
+        return True
+    if field_lower == "solver_algorithm_events":
+        return True
+    mechanism_lower = mechanism.lower()
+    if mechanism_lower and field_lower and mechanism_lower not in field_lower:
+        return True
+    return False
+
+
+def _diagnostic_payload(
+    *,
+    subtype: str,
+    source: str,
+    guard_failure_code: str,
+    mechanism: str,
+    category: str,
+    field: str,
+    counters: Mapping[str, Any],
+    telemetry_guard: Mapping[str, Any] | None,
+    diagnostic: Mapping[str, Any] | None,
+    static_issues: list[str] | None = None,
+) -> dict[str, Any]:
+    subtype_text = subtype or "unknown"
+    return _drop_empty_items(
+        {
+            "category": PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE,
+            "code": PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE,
+            "activation_diagnostic_kind": subtype_text,
+            "source": source,
+            "telemetry_failure_code": guard_failure_code,
+            "telemetry_failure_mechanism": mechanism,
+            "telemetry_failure_category": category,
+            "telemetry_failure_field": field,
+            "counters": dict(counters or {}),
+            "candidate_runs": (
+                telemetry_guard.get("candidate_runs") if telemetry_guard else None
+            ),
+            "champion_runs": (
+                telemetry_guard.get("champion_runs") if telemetry_guard else None
+            ),
+            "activation_status": (
+                diagnostic.get("activation_status") if diagnostic else None
+            ),
+            "runtime_status": diagnostic.get("runtime_status") if diagnostic else None,
+            "effect_status": diagnostic.get("effect_status") if diagnostic else None,
+            "static_issues": static_issues or None,
+            "diagnosis": _diagnosis_text(subtype_text),
+            "repair_guidance": _diagnostic_repair_guidance(subtype_text, mechanism),
+        }
+    )
+
+
+def _diagnostic_for_mechanism(
+    telemetry_guard: Mapping[str, Any],
+    mechanism: str,
+) -> Mapping[str, Any] | None:
+    diagnostics = telemetry_guard.get("mechanism_diagnostics")
+    if not isinstance(diagnostics, (list, tuple)):
+        return None
+    for item in diagnostics:
+        if not isinstance(item, Mapping):
+            continue
+        if mechanism and str(item.get("mechanism") or "").strip() != mechanism:
+            continue
+        return item
+    return None
+
+
+def _status_block(
+    diagnostic: Mapping[str, Any] | None,
+    name: str,
+) -> Mapping[str, Any] | None:
+    if diagnostic is None:
+        return None
+    block = diagnostic.get(name)
+    return block if isinstance(block, Mapping) else None
+
+
+def _status_value(block: Mapping[str, Any] | None) -> str:
+    return str((block or {}).get("status") or "").strip().lower()
+
+
+def _counters_from_status_block(block: Mapping[str, Any] | None) -> dict[str, int]:
+    counters = (block or {}).get("counters")
+    if not isinstance(counters, Mapping):
+        counters = block or {}
+    result: dict[str, int] = {}
+    for key in (
+        "candidate_positive",
+        "candidate_present",
+        "candidate_zero",
+        "candidate_missing",
+    ):
+        try:
+            result[key] = int(counters.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _issue_counters(issue: Mapping[str, Any]) -> dict[str, int]:
+    counters = issue.get("counters")
+    if not isinstance(counters, Mapping):
+        counters = issue
+    result: dict[str, int] = {}
+    for key in (
+        "candidate_positive",
+        "candidate_present",
+        "candidate_zero",
+        "candidate_missing",
+        "champion_positive",
+    ):
+        try:
+            result[key] = int(counters.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _runtime_search_effort(runtime_smoke: Mapping[str, Any] | None) -> int:
+    runtime = _mapping_or_none((runtime_smoke or {}).get("runtime"))
+    if runtime is None:
+        return 0
+    return _nonnegative_int(runtime.get("solver_algorithm_search_iterations")) + (
+        _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
+    )
+
+
+def _case_count(
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any],
+) -> int | None:
+    for value in (
+        (runtime_smoke or {}).get("case_count"),
+        telemetry_guard.get("candidate_runs"),
+    ):
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _diagnosis_text(subtype: str) -> str:
+    if subtype == "not_connected":
+        return "Declared mechanism did not appear on the active proposal-smoke call path."
+    if subtype == "trigger_not_reached":
+        return "Declared activation telemetry was present but never positive in the short smoke case."
+    if subtype == "instrumentation_missing":
+        return "The solver path showed activity, but the declared mechanism did not record activation telemetry."
+    if subtype == "expected_telemetry_mismatch":
+        return "Declared activation evidence is mismatched with effect/objective telemetry or a non-mechanism-specific field."
+    if subtype == "smoke_budget_or_case_insufficient":
+        return "The short smoke case or budget could not prove this dormant mechanism activated."
+    return "Activation telemetry was missing, but the compact smoke payload was insufficient to classify why."
+
+
+def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
+    mech = mechanism or "<declared mechanism>"
+    if subtype == "not_connected":
+        return [
+            f"Wire {mech} into the active solver call path or operator registry.",
+            "Do not leave new helpers/classes inert; call them from the existing solve/search path.",
+        ]
+    if subtype == "trigger_not_reached":
+        return [
+            f"Lower {mech} trigger conditions for smoke-visible cases or emit a no-op activation record when the mechanism is evaluated.",
+            "Keep the declared mechanism id unchanged.",
+        ]
+    if subtype == "instrumentation_missing":
+        return [
+            f"Add context.record_iteration('{mech}', positive_count) or context.record_phase('{mech}', positive_elapsed_ms) on the active mechanism path.",
+            "Preserve effect telemetry separately with context.record_move when moves are attempted.",
+        ]
+    if subtype == "expected_telemetry_mismatch":
+        return [
+            "Use activation telemetry for activation claims: record_iteration or record_phase with the exact mechanism id.",
+            "Do not use objective/effect counters or context.record_move alone as activation evidence.",
+        ]
+    if subtype == "smoke_budget_or_case_insufficient":
+        return [
+            f"Make {mech} smoke-visible by lowering thresholds or recording no-op activation when the dormant mechanism is checked.",
+            "Keep the algorithm valid for full screening; this is proposal-smoke diagnostics only.",
+        ]
+    return [
+        "Inspect the active path and expected_telemetry fields; add exact mechanism activation telemetry where the mechanism can run."
+    ]
+
+
+__all__ = [
+    "PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE",
+    "_proposal_smoke_activation_diagnostic",
+]

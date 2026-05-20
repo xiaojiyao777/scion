@@ -29,6 +29,7 @@ _AGENT_QUALITY_BLOCKED = "agent_quality_blocked"
 _PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
 _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
+_PROPOSAL_ACTIVATION_DIAGNOSTIC = "proposal_activation_diagnostic"
 _AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
 _AGENTIC_SESSION_TIMEOUT = "agentic_session_timeout"
 
@@ -52,6 +53,7 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or _PROPOSAL_PREMISE_CONTRADICTED in text
         or _AGENT_GROUNDING_FAILURE in text
         or _ALGORITHM_SMOKE_FAILURE in text
+        or _PROPOSAL_ACTIVATION_DIAGNOSTIC in text
         or "algorithm smoke did not pass" in text.lower()
         or "runtime_smoke.telemetry_guard" in text.lower()
     )

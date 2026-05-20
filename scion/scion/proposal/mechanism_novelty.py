@@ -25,6 +25,10 @@ class MechanismNoveltyResult:
     reason: str
     evidence: tuple[str, ...] = ()
     snapshot_digest: str | None = None
+    fact_ids: tuple[str, ...] = ()
+    contradicted_fact_ids: tuple[str, ...] = ()
+    fact_packet_digest: str | None = None
+    fact_provenance: Mapping[str, Any] | None = None
 
     def to_rejection(self, hypothesis: HypothesisProposal) -> dict[str, Any]:
         return {
@@ -37,6 +41,10 @@ class MechanismNoveltyResult:
             "mechanism": self.mechanism,
             "evidence": list(self.evidence),
             "snapshot_digest": self.snapshot_digest,
+            "fact_ids": list(self.fact_ids),
+            "contradicted_fact_ids": list(self.contradicted_fact_ids),
+            "fact_packet_digest": self.fact_packet_digest,
+            "fact_provenance": dict(self.fact_provenance or {}),
             "patch_generated": False,
             "screening_allowed": False,
             "source": "mechanism_novelty_gate",
@@ -124,9 +132,11 @@ def _active_solver_snapshot_from_observations(
         if observation.tool_name != "context.read_active_solver_design":
             continue
         payload = observation.structured_payload
-        if isinstance(payload, Mapping) and isinstance(
-            payload.get("mechanism_summary"), Mapping
-        ):
+        if not isinstance(payload, Mapping):
+            continue
+        if isinstance(payload.get("active_algorithm_facts"), Mapping):
+            return payload
+        if isinstance(payload.get("mechanism_summary"), Mapping):
             return payload
     return None
 

@@ -212,6 +212,9 @@ class AgenticRefsMixin:
             _agentic_primary_secondary_failures(output)
         )
         rejection_constraint = _agentic_rejection_constraint(output)
+        failure_code = str(structured.get("failure_code") or "")
+        if not failure_code and isinstance(primary_failure, Mapping):
+            failure_code = str(primary_failure.get("code") or "")
         return {
             "schema_version": output.schema_version,
             "session_id": output.session_id,
@@ -226,7 +229,7 @@ class AgenticRefsMixin:
             if isinstance(output.status, AgenticProposalStatus)
             else str(output.status),
             "failure_category": _agentic_value(output.failure_category),
-            "failure_code": str(structured.get("failure_code") or ""),
+            "failure_code": failure_code,
             "agent_block_reason": (
                 quality["block_reason"] if quality is not None else ""
             ),

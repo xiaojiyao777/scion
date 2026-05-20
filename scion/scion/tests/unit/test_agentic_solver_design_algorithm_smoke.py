@@ -561,7 +561,10 @@ def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too
     assert payload["agent_summary"]["primary_issue"] == (
         "NameError: DESTROY_RATIO_LOW is not defined"
     )
-    assert payload["failure_class"] == "telemetry_guard_failure"
+    assert payload["failure_class"] == "proposal_activation_diagnostic"
+    assert payload["activation_diagnostic"]["activation_diagnostic_kind"] == (
+        "expected_telemetry_mismatch"
+    )
     assert "runs" not in payload["runtime_smoke"]
     assert "run" not in payload["runtime_smoke"]
     assert "runtime" not in payload["runtime_smoke"]
@@ -699,3 +702,125 @@ def test_algorithm_smoke_feedback_separates_mechanism_telemetry_statuses() -> No
     assert diagnostic["effect_status"] == "zero"
     assert diagnostic["effect"]["counters"]["candidate_zero"] == 4
     assert "Add direct activation telemetry" in payload["repair_hints"][0]
+
+
+def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "issues": ["telemetry guard observed no activation evidence"],
+                "runtime": {
+                    "solver_algorithm_search_iterations": 0,
+                    "solver_algorithm_move_attempts": 0,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "champion_runs": 2,
+                    "expected_telemetry_present": True,
+                    "declared_mechanisms": ["new_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "new_probe",
+                            "activation_status": "missing",
+                            "runtime_status": "missing",
+                            "effect_status": "not_declared",
+                            "activation": {
+                                "status": "missing",
+                                "fields": [
+                                    "solver_algorithm_context_records."
+                                    "new_probe_iterations"
+                                ],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_missing": 2,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "new_probe",
+                            "category": "activation",
+                            "field": (
+                                "solver_algorithm_context_records."
+                                "new_probe_iterations"
+                            ),
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 2,
+                            "champion_positive": 0,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    diagnostic = payload["activation_diagnostic"]
+
+    assert payload["failure_class"] == "proposal_activation_diagnostic"
+    assert diagnostic["code"] == "proposal_activation_diagnostic"
+    assert diagnostic["category"] == "proposal_activation_diagnostic"
+    assert diagnostic["activation_diagnostic_kind"] == "not_connected"
+    assert diagnostic["telemetry_failure_code"] == (
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    )
+    assert diagnostic["telemetry_failure_mechanism"] == "new_probe"
+    assert diagnostic["telemetry_failure_category"] == "activation"
+    assert diagnostic["telemetry_failure_field"] == (
+        "solver_algorithm_context_records.new_probe_iterations"
+    )
+    assert any("Wire new_probe" in hint for hint in payload["repair_hints"])
+
+
+def test_algorithm_smoke_activation_diagnostic_flags_effect_counter_mismatch() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "issues": ["telemetry guard observed no activation evidence"],
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "champion_runs": 2,
+                    "expected_telemetry_present": True,
+                    "declared_mechanisms": ["move_probe"],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "move_probe",
+                            "category": "activation",
+                            "field": "solver_algorithm_improving_moves",
+                            "candidate_positive": 0,
+                            "candidate_present": 2,
+                            "candidate_missing": 0,
+                            "champion_positive": 1,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    diagnostic = payload["activation_diagnostic"]
+
+    assert diagnostic["activation_diagnostic_kind"] == (
+        "expected_telemetry_mismatch"
+    )
+    assert "record_move alone" in " ".join(payload["repair_hints"]) or (
+        "effect counters" in diagnostic["diagnosis"]
+    )

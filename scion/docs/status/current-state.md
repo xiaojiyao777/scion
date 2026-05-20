@@ -16,6 +16,21 @@ deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
 
+The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
+latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now
+a generic facade over adapter-provided snapshots; the CVRP active solver facts
+live in `problems/cvrp/active_solver_facts.py` and enter Scion through
+`CvrpAdapter.active_solver_design_provider()`. APS now extracts the same
+adapter fact packet into `agentic_active_algorithm_facts`, renders it as a
+separate high-signal prompt block before raw tool observations, and records the
+packet digest/provenance in the prompt manifest. Semantic novelty/premise
+checks may reject only against that agent-visible fact packet and include fact
+ids plus digest/provenance in the rejection. Proposal-smoke activation-missing
+results are classified as `proposal_activation_diagnostic` so they can guide
+repair and branch lifecycle without being counted as ordinary solver-quality
+screening losses. Focused regressions for this repair pass (`151 passed`);
+short live validation is pending.
+
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
 `core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,

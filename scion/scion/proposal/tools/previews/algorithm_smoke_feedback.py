@@ -11,6 +11,9 @@ from dataclasses import replace
 from typing import Any, Mapping
 
 from scion.proposal.tools.models import ProposalObservation
+from scion.proposal.tools.previews.algorithm_smoke_activation_diagnostic import (
+    _proposal_smoke_activation_diagnostic,
+)
 from scion.proposal.tools.previews.algorithm_smoke_feedback_diagnostics import (
     _algorithm_smoke_case_count,
     _algorithm_smoke_failed_checks,
@@ -70,6 +73,11 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     telemetry_guard = _compact_algorithm_smoke_telemetry_guard(
         runtime_smoke.get("telemetry_guard") if runtime_smoke else None
     )
+    activation_diagnostic = _proposal_smoke_activation_diagnostic(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+    )
     runtime_counters = _compact_algorithm_smoke_runtime_counters(runtime)
     subprocess_tail = _compact_algorithm_smoke_subprocess(run)
     runtime_comparison = _compact_algorithm_smoke_runtime_comparison(runtime_smoke)
@@ -89,11 +97,28 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         primary_issue=primary_issue,
         subprocess_tail=subprocess_tail,
     )
+    if activation_diagnostic is not None:
+        failure_class = str(
+            activation_diagnostic.get("code") or "proposal_activation_diagnostic"
+        )
     repair_hints = _algorithm_smoke_repair_hints(
         raw_payload,
         runtime_smoke=runtime_smoke,
         telemetry_guard=telemetry_guard,
     )
+    if activation_diagnostic is not None:
+        repair_hints = list(
+            dict.fromkeys(
+                [
+                    *repair_hints,
+                    *[
+                        str(item)
+                        for item in activation_diagnostic.get("repair_guidance", [])
+                        if str(item).strip()
+                    ],
+                ]
+            )
+        )[:8]
     failed_checks = _algorithm_smoke_failed_checks(
         raw_payload,
         runtime_smoke=runtime_smoke,
@@ -134,6 +159,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "agent_summary": agent_summary,
             "repair_hints": repair_hints,
             "failed_checks": failed_checks,
+            "activation_diagnostic": activation_diagnostic,
             "telemetry_guard": telemetry_guard,
             "runtime_comparison": runtime_comparison,
             "subprocess": subprocess_tail,

@@ -300,6 +300,13 @@ class AgenticSessionHypothesisMixin:
                     hypothesis_context["agentic_research_diagnosis"] = (
                         research_diagnosis
                     )
+                active_algorithm_facts = _active_algorithm_facts_for_prompt_context(
+                    observations
+                )
+                if active_algorithm_facts:
+                    hypothesis_context["agentic_active_algorithm_facts"] = (
+                        active_algorithm_facts
+                    )
                 hypothesis_context["agentic_tool_observations"] = [
                     _observation_prompt_payload(observation)
                     for observation in prompt_observations

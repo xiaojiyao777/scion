@@ -39,6 +39,15 @@ from scion.problems.cvrp.mechanism_novelty.snapshot import (
     _facts_from_snapshot,
 )
 
+_CONSTRUCTION_FACT = "cvrp.construction.diverse_feasible_seed"
+_ADAPTIVE_WEIGHTS_FACT = "cvrp.acceptance.adaptive_operator_weights"
+_OR_OPT_FACT = "cvrp.local_search.cross_route_or_opt_2_3"
+_TAIL_EXCHANGE_FACT = "cvrp.local_search.cross_route_tail_exchange"
+_SHAW_RELATED_FACT = "cvrp.destroy_repair.shaw_related_removal"
+_REMOVAL_SAVINGS_FACT = "cvrp.destroy_repair.removal_savings_worst_removal"
+_STARTS_FEASIBLE_FACT = "cvrp.search_state.starts_feasible_rejects_infeasible"
+_ROUTE_LIMIT_FACT = "cvrp.search_state.guards_route_limit"
+
 
 class CvrpMechanismNoveltyProvider:
     """Block only explicit duplicate or contradicted CVRP solver premises."""
@@ -59,10 +68,13 @@ class CvrpMechanismNoveltyProvider:
         if not isinstance(snapshot, Mapping):
             return None
         facts = _facts_from_snapshot(snapshot)
+        if not facts.fact_packet_available:
+            return None
         text = _hypothesis_text(hypothesis)
 
         if facts.has_diverse_construction and _claims_nearest_neighbor_only(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="construction_seed_strategy",
@@ -73,11 +85,12 @@ class CvrpMechanismNoveltyProvider:
                     "repair, and nearest-neighbor only as fallback."
                 ),
                 evidence=facts.construction_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_CONSTRUCTION_FACT,),
             )
 
         if facts.has_adaptive_weights and _claims_weights_non_adaptive(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="adaptive_operator_weights",
@@ -87,11 +100,12 @@ class CvrpMechanismNoveltyProvider:
                     "shows _AdaptiveWeights record/update behavior."
                 ),
                 evidence=facts.adaptive_weight_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_ADAPTIVE_WEIGHTS_FACT,),
             )
 
         if facts.has_cross_route_or_opt_2_3 and _claims_missing_or_opt_2_3(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="cross_route_or_opt_2_3",
@@ -103,11 +117,12 @@ class CvrpMechanismNoveltyProvider:
                     "segment relocation already exists."
                 ),
                 evidence=facts.or_opt_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_OR_OPT_FACT,),
             )
 
         if facts.has_cross_route_or_opt_2_3 and _duplicates_or_opt_2_3(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="duplicate",
                 failure_category="duplicate_mechanism",
                 mechanism="cross_route_or_opt_2_3",
@@ -118,13 +133,14 @@ class CvrpMechanismNoveltyProvider:
                     "_or_opt_3 cross-route segment relocation."
                 ),
                 evidence=facts.or_opt_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_OR_OPT_FACT,),
             )
 
         if facts.has_cross_route_tail_exchange and _claims_missing_cross_route_tail_exchange(
             text
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="cross_route_tail_exchange",
@@ -135,13 +151,14 @@ class CvrpMechanismNoveltyProvider:
                     "neighborhood."
                 ),
                 evidence=facts.tail_exchange_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_TAIL_EXCHANGE_FACT,),
             )
 
         if facts.has_cross_route_tail_exchange and _duplicates_cross_route_tail_exchange(
             text
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="duplicate",
                 failure_category="duplicate_mechanism",
                 mechanism="cross_route_tail_exchange",
@@ -151,13 +168,14 @@ class CvrpMechanismNoveltyProvider:
                     "already contains _two_opt_star."
                 ),
                 evidence=facts.tail_exchange_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_TAIL_EXCHANGE_FACT,),
             )
 
         if facts.has_removal_savings_worst_removal and _duplicates_removal_savings_destroy(
             text
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="duplicate",
                 failure_category="duplicate_mechanism",
                 mechanism="removal_savings_worst_removal",
@@ -168,14 +186,15 @@ class CvrpMechanismNoveltyProvider:
                     "removal saving using saving = -route.cost_of_remove(pos)."
                 ),
                 evidence=facts.removal_savings_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_REMOVAL_SAVINGS_FACT,),
             )
 
         if (
             facts.has_removal_savings_worst_removal
             and _claims_missing_removal_savings_destroy(text)
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="removal_savings_worst_removal",
@@ -186,11 +205,12 @@ class CvrpMechanismNoveltyProvider:
                     "candidates by saving = -route.cost_of_remove(pos)."
                 ),
                 evidence=facts.removal_savings_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_REMOVAL_SAVINGS_FACT,),
             )
 
         if facts.has_shaw_related_removal and _claims_missing_shaw_related_removal(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="shaw_related_removal",
@@ -201,11 +221,12 @@ class CvrpMechanismNoveltyProvider:
                     "distance, demand, and original-route relatedness."
                 ),
                 evidence=facts.shaw_related_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_SHAW_RELATED_FACT,),
             )
 
         if facts.has_shaw_related_removal and _duplicates_shaw_related_removal(text):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="duplicate",
                 failure_category="duplicate_mechanism",
                 mechanism="shaw_related_removal",
@@ -216,7 +237,7 @@ class CvrpMechanismNoveltyProvider:
                     "route relatedness criteria."
                 ),
                 evidence=facts.shaw_related_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_SHAW_RELATED_FACT,),
             )
 
         if (
@@ -227,7 +248,8 @@ class CvrpMechanismNoveltyProvider:
                 context=context,
             )
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="route_limit_fleet_repair",
@@ -241,14 +263,15 @@ class CvrpMechanismNoveltyProvider:
                     "fleet_violation or route-limit excess."
                 ),
                 evidence=facts.route_limit_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_ROUTE_LIMIT_FACT, _STARTS_FEASIBLE_FACT),
             )
 
         if (
             facts.starts_feasible_rejects_infeasible
             and _claims_unreachable_feasibility_crossing(text)
         ):
-            return MechanismNoveltyResult(
+            return _result(
+                facts,
                 premise_check="contradicted",
                 failure_category="premise_contradicted",
                 mechanism="feasibility_crossing",
@@ -260,7 +283,32 @@ class CvrpMechanismNoveltyProvider:
                     "become current search states."
                 ),
                 evidence=facts.feasible_search_evidence,
-                snapshot_digest=facts.snapshot_digest,
+                fact_ids=(_STARTS_FEASIBLE_FACT,),
             )
 
         return None
+
+
+def _result(
+    facts: Any,
+    *,
+    premise_check: str,
+    failure_category: str,
+    mechanism: str,
+    reason: str,
+    evidence: tuple[str, ...],
+    fact_ids: tuple[str, ...],
+) -> MechanismNoveltyResult:
+    contradicted_fact_ids = fact_ids if premise_check == "contradicted" else ()
+    return MechanismNoveltyResult(
+        premise_check=premise_check,
+        failure_category=failure_category,
+        mechanism=mechanism,
+        reason=reason,
+        evidence=evidence,
+        snapshot_digest=facts.snapshot_digest,
+        fact_ids=fact_ids,
+        contradicted_fact_ids=contradicted_fact_ids,
+        fact_packet_digest=facts.fact_packet_digest,
+        fact_provenance=facts.fact_provenance,
+    )

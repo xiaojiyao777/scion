@@ -16,6 +16,7 @@ from .constants import (
     ALGORITHM_SMOKE_FAILURE,
     LEGACY_PREMISE_CONTRADICTED,
     LLM_TRANSIENT_API_ERROR,
+    PROPOSAL_ACTIVATION_DIAGNOSTIC,
     PROPOSAL_PREMISE_CONTRADICTED,
     SESSION_TIMEOUT,
     TOOL_BUDGET_EXHAUSTED,
@@ -67,6 +68,16 @@ def _agentic_quality_block_classification(
     failure_code = str(structured.get("failure_code") or "")
     premise_check = str(structured.get("premise_check") or "")
     detail = str(output.failure_detail or "").lower()
+    if (
+        failure_category == PROPOSAL_ACTIVATION_DIAGNOSTIC
+        or failure_code == PROPOSAL_ACTIVATION_DIAGNOSTIC
+        or PROPOSAL_ACTIVATION_DIAGNOSTIC in detail
+    ):
+        return {
+            "failure_class": PROPOSAL_ACTIVATION_DIAGNOSTIC,
+            "failure_code": PROPOSAL_ACTIVATION_DIAGNOSTIC,
+            "block_reason": AGENT_QUALITY_BLOCKED,
+        }
     if (
         failure_category == ALGORITHM_SMOKE_FAILURE
         or failure_code == ALGORITHM_SMOKE_FAILURE

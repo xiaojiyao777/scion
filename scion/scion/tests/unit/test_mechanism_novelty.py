@@ -94,6 +94,19 @@ FALSE_PREMISES = (
     ),
 )
 
+MECHANISM_FACT_IDS = {
+    "construction_seed_strategy": ("cvrp.construction.diverse_feasible_seed",),
+    "adaptive_operator_weights": ("cvrp.acceptance.adaptive_operator_weights",),
+    "cross_route_or_opt_2_3": ("cvrp.local_search.cross_route_or_opt_2_3",),
+    "shaw_related_removal": ("cvrp.destroy_repair.shaw_related_removal",),
+    "cross_route_tail_exchange": ("cvrp.local_search.cross_route_tail_exchange",),
+    "feasibility_crossing": ("cvrp.search_state.starts_feasible_rejects_infeasible",),
+    "route_limit_fleet_repair": (
+        "cvrp.search_state.guards_route_limit",
+        "cvrp.search_state.starts_feasible_rejects_infeasible",
+    ),
+}
+
 
 def _solver_design_hypothesis(text: str) -> HypothesisProposal:
     return HypothesisProposal(
@@ -141,6 +154,11 @@ def test_mechanism_novelty_gate_blocks_known_false_premises(
     assert result.premise_check == "contradicted"
     assert result.mechanism == mechanism
     assert result.evidence
+    assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
+        "fact_packet_digest"
+    ]
+    assert result.fact_provenance
+    assert result.contradicted_fact_ids == MECHANISM_FACT_IDS[mechanism]
     if mechanism == "shaw_related_removal":
         rendered = " ".join([result.reason, *result.evidence])
         assert "_shaw_removal" in rendered
@@ -306,6 +324,10 @@ def test_mechanism_novelty_gate_blocks_explicit_duplicate_or_opt_addition(
     assert result.failure_category == "duplicate_mechanism"
     assert result.premise_check == "duplicate"
     assert result.mechanism == "cross_route_or_opt_2_3"
+    assert result.fact_ids == ("cvrp.local_search.cross_route_or_opt_2_3",)
+    assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
+        "fact_packet_digest"
+    ]
 
 
 def test_mechanism_novelty_gate_blocks_unsystematic_cross_route_segment_claim(
@@ -327,6 +349,9 @@ def test_mechanism_novelty_gate_blocks_unsystematic_cross_route_segment_claim(
     assert result is not None
     assert result.failure_category == "premise_contradicted"
     assert result.mechanism == "cross_route_or_opt_2_3"
+    assert result.contradicted_fact_ids == (
+        "cvrp.local_search.cross_route_or_opt_2_3",
+    )
 
 
 def test_mechanism_novelty_gate_blocks_cross_route_oropt_duplicate_from_smoke_round(
@@ -348,6 +373,7 @@ def test_mechanism_novelty_gate_blocks_cross_route_oropt_duplicate_from_smoke_ro
 
     assert result is not None
     assert result.mechanism == "cross_route_or_opt_2_3"
+    assert result.fact_ids == ("cvrp.local_search.cross_route_or_opt_2_3",)
 
 
 @pytest.mark.parametrize(
@@ -404,6 +430,59 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
     assert result.premise_check == "duplicate"
     assert result.mechanism == "shaw_related_removal"
     assert "_shaw_removal" in " ".join([result.reason, *result.evidence])
+    assert result.fact_ids == ("cvrp.destroy_repair.shaw_related_removal",)
+    assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
+        "fact_packet_digest"
+    ]
+
+
+def test_mechanism_novelty_gate_uses_agent_visible_fact_packet(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    fact_packet = snapshot["active_algorithm_facts"]
+    text = (
+        "The active solver has no proximity-cluster destroy removal, so add "
+        "a seed-based related removal operator using distance and demand."
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(text),
+        context=context,
+        active_solver_snapshot=snapshot,
+    )
+
+    assert result is not None
+    assert result.snapshot_digest == fact_packet["fact_packet_digest"]
+    assert result.fact_packet_digest == fact_packet["fact_packet_digest"]
+    assert result.contradicted_fact_ids == (
+        "cvrp.destroy_repair.shaw_related_removal",
+    )
+    assert "cvrp.destroy_repair.shaw_related_removal" in {
+        fact["fact_id"] for fact in fact_packet["facts"]
+    }
+    assert "fact_id:cvrp.destroy_repair.shaw_related_removal" in result.evidence
+
+
+def test_mechanism_novelty_gate_does_not_use_private_summary_without_fact_packet(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    snapshot_without_facts = dict(snapshot)
+    snapshot_without_facts.pop("active_algorithm_facts")
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(
+            "The active solver lacks inter-route Or-opt segment relocation; "
+            "add an NN-filtered cross-route segment relocation neighborhood."
+        ),
+        context=context,
+        active_solver_snapshot=snapshot_without_facts,
+    )
+
+    assert result is None
 
 
 @pytest.mark.parametrize("case_name,text,mechanism", FALSE_PREMISES)
@@ -466,6 +545,11 @@ def test_agentic_session_rejects_mechanism_false_premise_before_code_context(
     assert output.structured_rejection["agent_block_reason"] == "agent_quality_blocked"
     assert output.structured_rejection["mechanism"] == mechanism
     assert output.structured_rejection["screening_allowed"] is False
+    assert output.structured_rejection["fact_packet_digest"]
+    assert output.structured_rejection["contradicted_fact_ids"] == list(
+        MECHANISM_FACT_IDS[mechanism]
+    )
+    assert output.structured_rejection["fact_provenance"]
     if mechanism == "shaw_related_removal":
         rendered = " ".join(
             [
@@ -537,6 +621,11 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
     assert retry_feedback["premise_check"] == "contradicted"
     assert retry_feedback["failure_code"] == "proposal_premise_contradicted"
     assert retry_feedback["mechanism"] == "cross_route_or_opt_2_3"
+    assert retry_feedback["contradicted_fact_ids"] == [
+        "cvrp.local_search.cross_route_or_opt_2_3"
+    ]
+    assert retry_feedback["fact_packet_digest"]
+    assert retry_feedback["fact_provenance"]
     assert "active solver" in retry_feedback["reason"].lower()
     assert "_or_opt_2" in json.dumps(retry_feedback, sort_keys=True)
     assert "different mechanism family" in retry_context[
@@ -555,6 +644,8 @@ def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> N
             "premise_check": "contradicted",
             "mechanism": "cross_route_or_opt_2_3",
             "reason": "Existing _or_opt_2/_or_opt_3 already relocate segments.",
+            "contradicted_fact_ids": ["cvrp.local_search.cross_route_or_opt_2_3"],
+            "fact_packet_digest": "fact-packet-test-digest",
         }
     ]
 
@@ -577,6 +668,8 @@ def test_hypothesis_semantic_retry_feedback_is_api_visible_prompt_context() -> N
     assert "Hypothesis Semantic Retry Feedback" in rendered
     assert "mechanism_novelty_gate" in rendered
     assert "_or_opt_2" in rendered
+    assert "contradicted_fact_ids" in rendered
+    assert "fact_packet_digest" in rendered
     assert "different mechanism family" in rendered
 
 

@@ -72,6 +72,7 @@ from scion.proposal.agentic_failure_classification import (
 from scion.proposal.agentic_grounding import (
     _SOLVER_DESIGN_FILE_DISCOVERY_TOOLS,
     _SOLVER_DESIGN_GROUNDING_TOOLS,
+    _active_algorithm_facts_for_prompt_context,
     _active_solver_mechanism_evidence_for_code_context,
     _compact_active_solver_observation_for_budget,
     _context_requires_solver_design_grounding,
@@ -259,6 +260,7 @@ __all__ = (
     "_SOLVER_DESIGN_GROUNDING_TOOLS",
     "_active_boundary_novelty_requirements",
     "_active_solver_mechanism_evidence_for_code_context",
+    "_active_algorithm_facts_for_prompt_context",
     "_agentic_output_artifact",
     "_agentic_transcript_artifact",
     "_algorithm_file_path_guidance",

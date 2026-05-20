@@ -58,6 +58,30 @@ class SolverDesignSmokeProvider(Protocol):
         """Return whether a patch path can be smoke-run by this provider."""
 
 
+class ActiveSolverDesignProvider(Protocol):
+    """Optional problem-owned active solver-design facts for proposal tools."""
+
+    def active_solver_algorithm_file_manifest(self, context: Any) -> Sequence[Any]:
+        """Return problem-owned algorithm files and roles for active solver reads."""
+
+
+def resolve_active_solver_design_provider(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> Any | None:
+    """Return an optional problem-owned active solver-design provider."""
+
+    return _resolve_provider(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        factory_names=(
+            "active_solver_design_provider",
+            "solver_design_provider",
+        ),
+    )
+
+
 def resolve_solver_design_prompt_provider(
     *,
     problem_spec: Any = None,
@@ -167,9 +191,11 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
 
 
 __all__ = [
+    "ActiveSolverDesignProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
+    "resolve_active_solver_design_provider",
     "resolve_solver_design_prompt_provider",
     "resolve_solver_design_smoke_provider",
 ]

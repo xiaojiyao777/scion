@@ -21,6 +21,82 @@ def _hypothesis(text: str) -> HypothesisProposal:
 
 def _active_capability_snapshot() -> dict[str, object]:
     return {
+        "provenance": {
+            "source": "unit_test_snapshot",
+            "branch_id": "branch-test",
+        },
+        "source_digest": {"snapshot_digest": "snapshot-test-digest"},
+        "active_algorithm_facts": {
+            "packet_id": "cvrp_active_algorithm_facts_v1",
+            "snapshot_digest": "snapshot-test-digest",
+            "fact_packet_digest": "fact-packet-test-digest",
+            "facts": [
+                _fact(
+                    "cvrp.construction.diverse_feasible_seed",
+                    "Initial construction uses diverse feasible seeding.",
+                    [
+                        "_sweep_construction",
+                        "_clarke_wright_savings",
+                        "_capacity_balanced_construction",
+                        "_nearest_neighbor fallback",
+                    ],
+                ),
+                _fact(
+                    "cvrp.acceptance.adaptive_operator_weights",
+                    "Operator choice uses adaptive weights.",
+                    [
+                        "_AdaptiveWeights.choose",
+                        "_AdaptiveWeights.record score usage",
+                        "_AdaptiveWeights.update",
+                    ],
+                ),
+                _fact(
+                    "cvrp.local_search.cross_route_or_opt_2_3",
+                    "Cross-route Or-opt length 2 and 3 already exist.",
+                    [
+                        "_or_opt_2",
+                        "_or_opt_3",
+                        "_or_opt skips same-route destinations for cross-route moves",
+                    ],
+                ),
+                _fact(
+                    "cvrp.local_search.cross_route_tail_exchange",
+                    "Cross-route suffix/tail exchange already exists.",
+                    ["_two_opt_star cross-route suffix tail exchange"],
+                ),
+                _fact(
+                    "cvrp.destroy_repair.removal_savings_worst_removal",
+                    "_worst_removal ranks removal saving.",
+                    [
+                        "_worst_removal ranks removal saving with "
+                        "saving = -route.cost_of_remove(pos)"
+                    ],
+                ),
+                _fact(
+                    "cvrp.destroy_repair.shaw_related_removal",
+                    "_shaw_removal related removal already exists.",
+                    [
+                        "_shaw_removal related proximity destroy removal distance demand route"
+                    ],
+                ),
+                _fact(
+                    "cvrp.search_state.starts_feasible_rejects_infeasible",
+                    "Search starts feasible and rejects infeasible candidates.",
+                    [
+                        "starts from a feasible construction",
+                        "rejects infeasible route-cap-violating candidates",
+                    ],
+                ),
+                _fact(
+                    "cvrp.search_state.guards_route_limit",
+                    "Search guards route limit.",
+                    [
+                        "_capacity_balanced_construction when route cap is exceeded",
+                        "rejects route-cap-violating candidates",
+                    ],
+                ),
+            ],
+        },
         "mechanism_summary": {
             "construction": [
                 "_sweep_construction",
@@ -49,7 +125,18 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "rejects infeasible route-cap-violating candidates",
             ],
         },
-        "source_digest": {"snapshot_digest": "snapshot-test-digest"},
+    }
+
+
+def _fact(fact_id: str, claim: str, evidence: list[str]) -> dict[str, object]:
+    return {
+        "fact_id": fact_id,
+        "claim": claim,
+        "evidence": evidence,
+        "source_paths_or_symbols": [f"test::{fact_id}"],
+        "importance": "high",
+        "used_by_prompt": True,
+        "used_by_gate": True,
     }
 
 
@@ -69,7 +156,9 @@ def test_cvrp_mechanism_novelty_provider_blocks_duplicate_baseline_capability() 
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
     assert result.mechanism == "cross_route_or_opt_2_3"
-    assert result.snapshot_digest == "snapshot-test-digest"
+    assert result.snapshot_digest == "fact-packet-test-digest"
+    assert result.fact_packet_digest == "fact-packet-test-digest"
+    assert result.fact_ids == ("cvrp.local_search.cross_route_or_opt_2_3",)
 
 
 def test_cvrp_mechanism_novelty_provider_allows_when_capability_not_in_snapshot() -> None:
@@ -78,6 +167,20 @@ def test_cvrp_mechanism_novelty_provider_allows_when_capability_not_in_snapshot(
             "Add cross-route Or-opt 2 and 3 as new neighborhoods to local search."
         ),
         active_solver_snapshot={"mechanism_summary": {"local_search": []}},
+    )
+
+    assert result is None
+
+
+def test_cvrp_mechanism_novelty_provider_does_not_use_private_summary_without_fact_packet() -> None:
+    snapshot = dict(_active_capability_snapshot())
+    snapshot.pop("active_algorithm_facts")
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "The active solver lacks cross-route Or-opt segment relocation."
+        ),
+        active_solver_snapshot=snapshot,
     )
 
     assert result is None
@@ -115,6 +218,10 @@ def test_cvrp_mechanism_novelty_provider_uses_latest_snapshot_observation() -> N
     assert result is not None
     assert result.premise_check == "contradicted"
     assert result.mechanism == "cross_route_tail_exchange"
+    assert result.contradicted_fact_ids == (
+        "cvrp.local_search.cross_route_tail_exchange",
+    )
+    assert result.fact_packet_digest == "fact-packet-test-digest"
 
 
 def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merge() -> None:
@@ -150,6 +257,10 @@ def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merg
     assert result.mechanism == "route_limit_fleet_repair"
     assert "explicitly shows positive fleet_violation" in result.reason
     assert result.evidence
+    assert "cvrp.search_state.guards_route_limit" in result.contradicted_fact_ids
+    assert "cvrp.search_state.starts_feasible_rejects_infeasible" in (
+        result.contradicted_fact_ids
+    )
 
 
 def test_cvrp_mechanism_novelty_provider_allows_route_limit_repair_with_runtime_evidence() -> None:
@@ -296,6 +407,7 @@ def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair(
     assert result is not None
     assert result.premise_check == "contradicted"
     assert result.mechanism == "route_limit_fleet_repair"
+    assert "cvrp.search_state.guards_route_limit" in result.contradicted_fact_ids
 
 
 def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precisely() -> None:
@@ -323,6 +435,9 @@ def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precis
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
     assert result.mechanism == "removal_savings_worst_removal"
+    assert result.fact_ids == (
+        "cvrp.destroy_repair.removal_savings_worst_removal",
+    )
     rendered = " ".join([result.reason, *result.evidence])
     assert "_worst_removal" in rendered
     assert "cost_of_remove" in rendered
@@ -371,6 +486,9 @@ def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:
     assert result.premise_check == "contradicted"
     assert result.failure_category == "premise_contradicted"
     assert result.mechanism == "adaptive_operator_weights"
+    assert result.contradicted_fact_ids == (
+        "cvrp.acceptance.adaptive_operator_weights",
+    )
 
 
 def test_cvrp_provider_allows_vns_adaptive_neighborhood_ordering() -> None:

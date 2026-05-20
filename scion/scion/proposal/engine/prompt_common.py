@@ -15,6 +15,7 @@ class _DefaultDict(dict):
 
 _CACHE_5M = {"type": "ephemeral"}
 _AGENTIC_RESEARCH_DIAGNOSIS_CHARS = 12000
+_AGENTIC_ACTIVE_ALGORITHM_FACTS_CHARS = 16000
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 24000
 _AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 6000
 _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 6000
@@ -70,6 +71,15 @@ def _agentic_research_context_block(
             "evidence should change and why the next mechanism differs from "
             "prior failed attempts.\n\n"
             f"{_bounded_json(diagnosis, _agentic_research_diagnosis_chars(code_phase))}"
+        )
+    active_algorithm_facts = context.get("agentic_active_algorithm_facts")
+    if active_algorithm_facts:
+        parts.append(
+            "## Active Algorithm Facts\n"
+            "These compact problem-adapter facts are the primary active-solver "
+            "mechanism context. They are shared with deterministic semantic "
+            "gates; use raw tool observations only as audit/support material.\n\n"
+            f"{_bounded_json(active_algorithm_facts, _AGENTIC_ACTIVE_ALGORITHM_FACTS_CHARS)}"
         )
     observations = context.get("agentic_tool_observations")
     if observations:

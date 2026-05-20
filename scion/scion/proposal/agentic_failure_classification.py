@@ -53,6 +53,7 @@ _FAILURE_LEDGER_SCHEMA_VERSION = "agentic-retry-error-ledger.v1"
 _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _LEGACY_PREMISE_CONTRADICTED = AgenticFailureCategory.PREMISE_CONTRADICTED.value
 _PROPOSAL_PREMISE_CONTRADICTED_CODE = "proposal_premise_contradicted"
+_PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE = "proposal_activation_diagnostic"
 _AGENT_QUALITY_BLOCKED_REASON = "agent_quality_blocked"
 
 
@@ -75,6 +76,8 @@ def _record_failure_ledger_entry(
     if category_value == _LEGACY_PREMISE_CONTRADICTED:
         category_value = _AGENT_GROUNDING_FAILURE
         failure_code = failure_code or _PROPOSAL_PREMISE_CONTRADICTED_CODE
+    if category_value == _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE:
+        failure_code = failure_code or _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE
     observation_payload: dict[str, Any] = {}
     if observation is not None:
         observation_payload = {
@@ -190,6 +193,14 @@ def _hypothesis_semantic_retry_rejection_payload(
             "reason": _limit_string(payload.get("reason"), 1200),
             "evidence": _compact_string_list(payload.get("evidence"), 8, 180),
             "snapshot_digest": payload.get("snapshot_digest"),
+            "fact_ids": _compact_string_list(payload.get("fact_ids"), 8, 180),
+            "contradicted_fact_ids": _compact_string_list(
+                payload.get("contradicted_fact_ids"),
+                8,
+                180,
+            ),
+            "fact_packet_digest": payload.get("fact_packet_digest"),
+            "fact_provenance": payload.get("fact_provenance"),
             "selected_surface": payload.get("selected_surface"),
             "target_file": payload.get("target_file"),
             "retry_constraint": (
@@ -286,7 +297,7 @@ def _patch_premise_rejection(
 
 def _preview_failure_category(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
-) -> AgenticFailureCategory:
+) -> AgenticFailureCategory | str:
     for observation in reversed(observations):
         if not observation.is_error and _preview_observation_passed(observation):
             continue
@@ -295,6 +306,8 @@ def _preview_failure_category(
         if observation.tool_name == "proposal.schema_preview":
             return AgenticFailureCategory.SCHEMA_OUTPUT_FAILURE
         if observation.tool_name == "proposal.algorithm_smoke":
+            if _algorithm_smoke_activation_diagnostic(observation) is not None:
+                return _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE
             return AgenticFailureCategory.ALGORITHM_SMOKE_FAILURE
         if observation.tool_name == "proposal.contract_preview":
             if _contract_preview_indicates_patch_graph_failure(observation):
@@ -303,6 +316,21 @@ def _preview_failure_category(
         if observation.tool_name == "proposal.target_permission_preview":
             return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
     return AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
+
+
+def _algorithm_smoke_activation_diagnostic(
+    observation: ProposalObservation,
+) -> Mapping[str, Any] | None:
+    payload = observation.structured_payload
+    if not isinstance(payload, Mapping):
+        return None
+    diagnostic = payload.get("activation_diagnostic")
+    if not isinstance(diagnostic, Mapping):
+        return None
+    code = str(diagnostic.get("code") or "").strip()
+    if code != _PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE:
+        return None
+    return diagnostic
 
 
 def _contract_preview_indicates_patch_graph_failure(

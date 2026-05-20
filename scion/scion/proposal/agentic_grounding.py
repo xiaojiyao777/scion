@@ -510,6 +510,9 @@ def _compact_active_solver_design_payload(payload: Mapping[str, Any]) -> dict[st
                 if isinstance(call_graph, Mapping)
                 else None
             ),
+            "active_algorithm_facts": _compact_active_algorithm_facts(
+                payload.get("active_algorithm_facts")
+            ),
             "mechanism_summary": _compact_mechanism_summary(
                 payload.get("mechanism_summary")
             ),
@@ -653,6 +656,87 @@ def _compact_mechanism_summary(value: Any) -> dict[str, Any]:
     return _drop_empty_dict(summary)
 
 
+def _compact_active_algorithm_facts(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    facts_value = value.get("facts")
+    compact_facts: list[dict[str, Any]] = []
+    if isinstance(facts_value, list):
+        for item in facts_value[:16]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_facts.append(
+                _drop_empty_dict(
+                    {
+                        "fact_id": item.get("fact_id"),
+                        "claim": _limit_string(item.get("claim"), 420),
+                        "evidence": _compact_string_list(
+                            item.get("evidence"),
+                            8,
+                            160,
+                        ),
+                        "source_paths_or_symbols": _compact_string_list(
+                            item.get("source_paths_or_symbols"),
+                            8,
+                            160,
+                        ),
+                        "importance": item.get("importance"),
+                        "used_by_prompt": item.get("used_by_prompt"),
+                        "used_by_gate": item.get("used_by_gate"),
+                    }
+                )
+            )
+    return _drop_empty_dict(
+        {
+            "packet_id": value.get("packet_id"),
+            "snapshot_digest": value.get("snapshot_digest"),
+            "fact_packet_digest": value.get("fact_packet_digest"),
+            "fact_ids": [
+                str(item.get("fact_id"))
+                for item in compact_facts
+                if item.get("fact_id")
+            ],
+            "facts": compact_facts,
+        }
+    )
+
+
+def _active_algorithm_facts_for_prompt_context(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> dict[str, Any]:
+    for observation in reversed(tuple(observations)):
+        if observation.is_error:
+            continue
+        if observation.tool_name != "context.read_active_solver_design":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        active_facts = _compact_active_algorithm_facts(
+            payload.get("active_algorithm_facts")
+        )
+        if not active_facts:
+            continue
+        return _drop_empty_dict(
+            {
+                "source": "context.read_active_solver_design",
+                "source_observation_id": observation.observation_id,
+                "source_tool_call_id": observation.tool_call_id,
+                "provenance": payload.get("provenance"),
+                "source_digest": payload.get("source_digest"),
+                "snapshot_digest": active_facts.get("snapshot_digest"),
+                "fact_packet_digest": active_facts.get("fact_packet_digest"),
+                "active_algorithm_facts": active_facts,
+                "prompt_priority": "primary_active_algorithm_facts",
+                "tool_observation_role": (
+                    "Raw active-solver observations are audit/support material; "
+                    "this compact fact packet is the stable mechanism context."
+                ),
+            }
+        )
+    return {}
+
+
 def _compact_string_list(value: Any, limit: int, max_chars: int) -> list[str]:
     if not isinstance(value, (list, tuple, set)):
         return []
@@ -675,6 +759,23 @@ def _active_solver_mechanism_evidence_for_code_context(
         payload = observation.structured_payload
         if not isinstance(payload, Mapping):
             continue
+        active_facts = _active_algorithm_facts_for_prompt_context((observation,))
+        if active_facts:
+            return _drop_empty_dict(
+                {
+                    "source": "context.read_active_solver_design",
+                    "snapshot_digest": active_facts.get("snapshot_digest"),
+                    "fact_packet_digest": active_facts.get("fact_packet_digest"),
+                    "active_algorithm_facts": active_facts.get(
+                        "active_algorithm_facts"
+                    ),
+                    "premise_check_rule": (
+                        "Before returning premise_check='supported', compare "
+                        "the hypothesis against the active_algorithm_facts "
+                        "packet exposed by this surface snapshot."
+                    ),
+                }
+            )
         mechanisms = _compact_mechanism_summary(payload.get("mechanism_summary"))
         if not mechanisms:
             continue

@@ -85,6 +85,7 @@ def _section_record(name: str, value: Any) -> dict[str, Any]:
         "name": name,
         "char_count": _json_chars(value),
         "content_hash": stable_digest(value, length=16),
+        "fact_packet_digest": _section_fact_packet_digest(value),
         "observation_ids": _section_observation_ids(value),
         "observation_digests": _section_observation_digests(value),
         "omitted": _contains_key_fragment(value, "omitted"),
@@ -104,6 +105,7 @@ def _section_status_record(section: Mapping[str, Any]) -> dict[str, Any]:
         "present": True,
         "char_count": section.get("char_count", 0),
         "content_hash": section.get("content_hash", ""),
+        "fact_packet_digest": section.get("fact_packet_digest", ""),
         "observation_id_count": len(section.get("observation_ids") or ()),
         "observation_digest_count": len(section.get("observation_digests") or ()),
     }
@@ -176,6 +178,14 @@ def _section_observation_digests(value: Any) -> list[str]:
         if digest:
             digests.append(str(digest))
     return list(dict.fromkeys(digests))
+
+
+def _section_fact_packet_digest(value: Any) -> str:
+    for item in _iter_mappings(value):
+        digest = item.get("fact_packet_digest")
+        if digest:
+            return str(digest)
+    return ""
 
 
 def _iter_mappings(value: Any) -> list[Mapping[str, Any]]:
