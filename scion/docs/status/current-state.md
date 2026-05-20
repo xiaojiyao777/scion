@@ -57,6 +57,31 @@ and CVRP-owned adapter/provider facts now expose `_two_opt_intra`, relocate,
 swap, and the full VNS registry with corresponding duplicate/premise checks.
 The full unit regression for this repair passes (`907 passed`).
 
+The follow-up 3-round live validation is documented in
+[`v0.4-quality-feedback-vns-facts-sonnet-3r-analysis-20260520.md`](../experiments/v0.4/v0.4-quality-feedback-vns-facts-sonnet-3r-analysis-20260520.md).
+It reached three counted formal screening rounds and one repairable telemetry
+screening, with `proposal_attempts=7` and no hidden-gate facts mismatch:
+agent-visible active facts and novelty/provider gates used the same
+digest/provenance. The remaining P0 gaps were control-quality issues rather
+than CVRP semantics in Scion core: some code-phase tool-selection prompts still
+lacked active-facts anchors, uncounted proposal failures were not compactly
+promoted into later hypothesis context, smoke/telemetry failures lacked
+path-level repair evidence, and CVRP-owned premise gates overmatched allowed
+variants of existing mechanisms.
+
+The current P0 repair keeps those fixes on the v3 boundary. Generic APS now
+anchors every tool-selection prompt with the adapter-owned active-facts
+digest/provenance, renders uncounted proposal failures as compact branch-local
+negative memory, and preserves provider fields such as `variant_allowed`,
+`contradicted_span`, `matched_span`, and `allowed_variant_guidance` in
+agent-quality feedback. CVRP-specific span matching and allowed-variant
+semantics remain inside `problems/cvrp/mechanism_novelty/*`; feasible
+route-merge construction variants and destroy operators that use the existing
+regret repair portfolio are no longer escalated to false premise
+contradictions. Focused regressions pass (`110 passed`) and the full unit suite
+passes (`914 passed`). Next step: rerun a 3-round Sonnet validation and repeat
+trace-level review before any longer run.
+
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
 `core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,

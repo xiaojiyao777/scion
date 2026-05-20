@@ -66,6 +66,7 @@ referenced, not copied into development prompts.
 - [Active algorithm facts and activation diagnostic repair, 2026-05-20](v0.4-active-algorithm-facts-control-repair-20260520.md)
 - [Active facts control Sonnet 3R stopped analysis, 2026-05-20](v0.4-active-facts-control-sonnet-3r-stopped-analysis-20260520.md)
 - [Grounding/routing repair Sonnet 3R stopped analysis, 2026-05-20](v0.4-grounding-routing-repair-sonnet-3r-stopped-analysis-20260520.md)
+- [Quality feedback and VNS facts Sonnet 3R analysis, 2026-05-20](v0.4-quality-feedback-vns-facts-sonnet-3r-analysis-20260520.md)
 
 ## Related
 

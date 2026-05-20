@@ -157,6 +157,9 @@ class AgenticSessionCodeToolsMixin:
                         hypothesis,
                         all_observations,
                     ),
+                    "active_algorithm_facts_anchor": (
+                        self._planner_active_algorithm_facts_anchor(all_observations)
+                    ),
                     "approved_hypothesis": _proposal_payload(hypothesis),
                     "code_context_summary": _code_context_tool_summary(code_context),
                     "remaining_steps": self._remaining_tool_steps(state),

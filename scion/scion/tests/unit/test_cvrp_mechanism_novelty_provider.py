@@ -104,6 +104,15 @@ def _active_capability_snapshot() -> dict[str, object]:
                     ],
                 ),
                 _fact(
+                    "cvrp.destroy_repair.regret_insertion_repair",
+                    "Repair portfolio already includes regret-2 and regret-3 insertion.",
+                    [
+                        "_regret2_insertion",
+                        "_regret3_insertion",
+                        "repair_ops registry includes regret repair operators",
+                    ],
+                ),
+                _fact(
                     "cvrp.search_state.starts_feasible_rejects_infeasible",
                     "Search starts feasible and rejects infeasible candidates.",
                     [
@@ -145,6 +154,8 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "_worst_removal ranks removal saving with "
                 "saving = -route.cost_of_remove(pos)",
                 "_shaw_removal related proximity destroy removal distance demand route",
+                "_regret2_insertion",
+                "_regret3_insertion",
             ],
             "alns_loop": [
                 "starts from a feasible construction",
@@ -287,6 +298,10 @@ def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merg
     assert "cvrp.search_state.starts_feasible_rejects_infeasible" in (
         result.contradicted_fact_ids
     )
+    assert result.variant_allowed is False
+    assert result.contradicted_span
+    assert result.matched_span == result.contradicted_span
+    assert "Allowed variant" in (result.allowed_variant_guidance or "")
 
 
 def test_cvrp_mechanism_novelty_provider_allows_route_limit_repair_with_runtime_evidence() -> None:
@@ -411,6 +426,31 @@ def test_cvrp_route_limit_gate_allows_distance_and_repair_ordering_targets() -> 
         assert result is None, text
 
 
+def test_cvrp_route_limit_gate_allows_feasible_route_merge_quality_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a feasible construction route merge seed pass that merges only "
+            "capacity-compatible routes to reduce total_distance while preserving "
+            "fleet_violation at zero and skipping any route-limit violating merge."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness="Construction seed quality leaves avoidable distance.",
+        expected_effect="Reduce total_distance without changing route-limit guards.",
+        mechanism_changes=(
+            MechanismChange(id="feasible_route_merge_seed", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -434,6 +474,64 @@ def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair(
     assert result.premise_check == "contradicted"
     assert result.mechanism == "route_limit_fleet_repair"
     assert "cvrp.search_state.guards_route_limit" in result.contradicted_fact_ids
+    assert result.variant_allowed is False
+    assert "positive fleet violation" in result.contradicted_span
+
+
+def test_cvrp_regret_gate_blocks_missing_claim_with_exact_span() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The baseline lacks regret insertion repair, so add regret-2 repair "
+            "as a new insertion mechanism after destroy removal."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Regret repair is missing.",
+        expected_effect="Improve total_distance through better repair insertion.",
+        mechanism_changes=(
+            MechanismChange(id="regret_insertion_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "regret_insertion_repair"
+    assert result.variant_allowed is False
+    assert "lacks regret insertion repair" in result.contradicted_span
+    assert result.matched_span == result.contradicted_span
+    assert "Allowed variant" in (result.allowed_variant_guidance or "")
+
+
+def test_cvrp_regret_gate_allows_new_destroy_using_existing_regret_repair() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a costly-arc destroy operator that removes expensive route "
+            "segments, then uses existing regret repair to reinsert removed "
+            "customers without adding a new regret repair mechanism."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy selection misses costly arcs.",
+        expected_effect="Improve total_distance through better removals.",
+        mechanism_changes=(
+            MechanismChange(id="costly_arc_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
 
 
 def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precisely() -> None:

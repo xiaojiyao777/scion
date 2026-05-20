@@ -154,6 +154,97 @@ def test_solver_design_tool_selection_context_carries_active_fact_anchor(
     )
 
 
+def test_code_phase_targeted_read_context_carries_active_fact_anchor(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    original_code = (
+        Path(context.champion.code_snapshot_path) / target_file
+    ).read_text(encoding="utf-8")
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            target_objectives=["total_distance"],
+        )
+    )
+    creative = PlanningCreative(
+        [
+            {"stop": True},
+            {
+                "tool_name": "context.read_algorithm_symbol",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": target_file,
+                    "symbol": "_or_opt",
+                    "max_chars": 4000,
+                },
+            },
+            {"stop": True},
+        ],
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path=target_file,
+            action="modify",
+            code_content=original_code,
+        ),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=16, max_steps=20),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    code_phase_contexts = [
+        planner_context
+        for planner_context in creative.planner_contexts
+        if planner_context.get("code_phase") is True
+    ]
+    anchors = [
+        planner_context.get("active_algorithm_facts_anchor") or {}
+        for planner_context in code_phase_contexts
+    ]
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert anchors
+    assert all(anchor.get("fact_packet_digest") for anchor in anchors)
+    assert all(anchor.get("snapshot_digest") for anchor in anchors)
+    assert all(anchor.get("provenance") for anchor in anchors)
+    assert all(anchor.get("source_tool_call_id") for anchor in anchors)
+    assert any(
+        "cvrp.local_search.or_opt_1_relocation" in anchor.get("fact_ids", ())
+        for anchor in anchors
+    )
+    assert any(
+        event.metadata.get("tool_name") == "context.read_algorithm_symbol"
+        and event.metadata.get("selection_source") == "code_phase_planner"
+        for event in output.transcript
+    )
+
+
 def test_planner_schema_preview_error_does_not_pollute_authoritative_self_check() -> None:
     state = AgenticProposalSessionState(
         session_id="session-preview-filter",

@@ -29,6 +29,12 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
                 "solver evidence already shows cross-route Or-opt."
             ),
             "evidence": ["_or_opt_1", "_or_opt_2", "_or_opt_3", "_or_opt"],
+            "fact_packet_digest": "facts-constraint",
+            "fact_provenance": {"source": "unit_test_provider"},
+            "variant_allowed": False,
+            "contradicted_span": "inter-route Or-opt is missing",
+            "matched_span": "inter-route Or-opt is missing",
+            "allowed_variant_guidance": "Use a materially different mechanism.",
         },
     )
     failure_streak = {"proposal": 2}
@@ -71,6 +77,22 @@ def test_agentic_premise_contradiction_is_quality_block_not_infra_streak() -> No
     assert "active-solver evidence" in session_ref["rejection_constraint"][
         "retry_constraint"
     ]
+    assert session_ref["rejection_constraint"]["fact_packet_digest"] == (
+        "facts-constraint"
+    )
+    assert session_ref["rejection_constraint"]["fact_provenance"] == {
+        "source": "unit_test_provider"
+    }
+    assert session_ref["rejection_constraint"]["variant_allowed"] is False
+    assert session_ref["rejection_constraint"]["contradicted_span"] == (
+        "inter-route Or-opt is missing"
+    )
+    assert session_ref["rejection_constraint"]["matched_span"] == (
+        "inter-route Or-opt is missing"
+    )
+    assert session_ref["rejection_constraint"]["allowed_variant_guidance"] == (
+        "Use a materially different mechanism."
+    )
 
 
 def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None:

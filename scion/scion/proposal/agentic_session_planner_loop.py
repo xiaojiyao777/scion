@@ -610,6 +610,9 @@ class AgenticSessionPlannerLoopMixin:
             return {
                 "source": facts.get("source"),
                 "source_observation_id": facts.get("source_observation_id"),
+                "source_tool_call_id": facts.get("source_tool_call_id"),
+                "provenance": facts.get("provenance"),
+                "source_digest": facts.get("source_digest"),
                 "fact_packet_digest": facts.get("fact_packet_digest"),
                 "snapshot_digest": facts.get("snapshot_digest"),
                 "fact_ids": list(compact.get("fact_ids") or ())[:20],

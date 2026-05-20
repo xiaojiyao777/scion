@@ -11,9 +11,11 @@ from collections import Counter, defaultdict
 from typing import Any, List, Mapping, Optional
 
 from scion.core.models import ExperimentStage, StepRecord
+from scion.core.telemetry_validation import TELEMETRY_VALIDATION_REPAIRABLE
 from scion.proposal.context.feedback_grounding import (
     _auxiliary_screening_reasons,
     _build_feedback_grounding_summary,
+    _mechanism_label_for_feedback,
     _primary_screening_reason,
     _telemetry_validation_feedback_line,
 )
@@ -24,6 +26,7 @@ _SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
     "proposal",
     "hypothesis_contract",
     "code_generation",
+    "code_generation_failed",
     "patch_contract",
     "workspace",
     "verification",
@@ -137,28 +140,108 @@ def _agent_quality_failure_summary(step: StepRecord) -> str:
     category = str(primary.get("category") or "").strip()
     code = str(primary.get("code") or "").strip()
     detail = str(primary.get("detail") or step.failure_detail or "").strip()
+    rejection = ref.get("rejection_constraint") if isinstance(ref, Mapping) else None
+    if not isinstance(rejection, Mapping):
+        rejection = {}
+    telemetry_feedback = _telemetry_validation_feedback_line(step)
+    protocol = getattr(step, "protocol_result", None)
+    reason_codes = tuple(
+        str(item).strip()
+        for item in (
+            tuple(getattr(step, "decision_reason_codes", None) or ())
+            + tuple(getattr(protocol, "reason_codes", ()) or ())
+        )
+        if str(item).strip()
+    )
+    telemetry_repairable = bool(telemetry_feedback) or any(
+        code_text.upper() == TELEMETRY_VALIDATION_REPAIRABLE
+        for code_text in reason_codes
+    )
     combined = " ".join((stage, reason, category, code, detail)).lower()
-    if (
-        stage != "agent_quality_blocked"
-        and step.failure_stage != "agent_quality_blocked"
-        and "algorithm_smoke_failure" not in combined
-        and "proposal_activation_diagnostic" not in combined
-        and "proposal_premise_contradicted" not in combined
+    if "llm_transient_api_error" in combined:
+        return ""
+    if telemetry_repairable:
+        label = TELEMETRY_VALIDATION_REPAIRABLE
+        detail = telemetry_feedback or detail
+    elif not (
+        stage
+        or step.failure_stage in _SAFE_PRE_PROTOCOL_FAILURE_STAGES
+        or "algorithm_smoke_failure" in combined
+        or "proposal_activation_diagnostic" in combined
+        or "proposal_premise_contradicted" in combined
     ):
         return ""
-    label = code or reason or category or stage or "agent_quality_blocked"
+    else:
+        label = code or reason or category or stage or "agent_quality_blocked"
     target = step.hypothesis.target_file or "(no target_file)"
-    detail = _first_line(detail)[:900]
+    detail = _first_line(detail, max_chars=900)
+    mechanism = (
+        _first_text(rejection.get("mechanism"))
+        or _mechanism_label_for_feedback(step)
+    )
+    session_id = _first_text(ref.get("session_id"))
+    failure_category = category or _first_text(ref.get("failure_category"))
+    failure_code = code or _first_text(ref.get("failure_code")) or label
+    fact_packet_digest = (
+        _first_text(rejection.get("fact_packet_digest"))
+        or _first_text(ref.get("fact_packet_digest"))
+        or _first_text(primary.get("fact_packet_digest"))
+    )
     line = (
-        f"- round {step.round_num}: {label}; "
+        f"- attempt=round {step.round_num}; "
+        f"branch={step.branch_id}; "
+        f"session={session_id or 'n/a'}; "
+        f"mechanism={mechanism or 'unknown'}; "
+        f"stage={stage or step.failure_stage or 'unknown'}; "
+        f"failure_code={failure_code}; "
         f"target={target}; action={step.hypothesis.action}; "
         f"locus={step.hypothesis.change_locus}"
     )
-    if category and category != label:
-        line += f"; category={category}"
+    if failure_category and failure_category != failure_code:
+        line += f"; category={failure_category}"
     if detail:
-        line += f"; detail={detail}"
+        line += f"; summary={detail}"
+    if fact_packet_digest:
+        line += f"; fact_packet_digest={fact_packet_digest}"
+    provenance = _feedback_fact_provenance(rejection)
+    if provenance:
+        line += f"; provenance={provenance}"
+    for key in (
+        "variant_allowed",
+        "contradicted_span",
+        "matched_span",
+        "allowed_variant_guidance",
+    ):
+        value = rejection.get(key)
+        if value not in (None, "", (), [], {}):
+            line += f"; {key}={_first_line(str(value), max_chars=240)}"
     return line
+
+
+def _first_text(value: Any) -> str:
+    text = str(value or "").strip()
+    return text
+
+
+def _feedback_fact_provenance(rejection: Mapping[str, Any]) -> str:
+    provenance = rejection.get("fact_provenance")
+    if not isinstance(provenance, Mapping):
+        return ""
+    inner = provenance.get("provenance")
+    if isinstance(inner, Mapping):
+        source = _first_text(inner.get("source"))
+        branch = _first_text(inner.get("branch_id"))
+        champion = _first_text(inner.get("champion_version"))
+        parts = []
+        if source:
+            parts.append(f"source={source}")
+        if branch:
+            parts.append(f"branch_id={branch}")
+        if champion:
+            parts.append(f"champion_version={champion}")
+        return ",".join(parts)
+    source = _first_text(provenance.get("source"))
+    return f"source={source}" if source else ""
 
 
 def _build_experiment_history(
@@ -415,11 +498,11 @@ def _build_consecutive_failure_diagnosis(branch_steps: List[StepRecord]) -> str:
     )
 
 
-def _first_line(detail: str) -> str:
+def _first_line(detail: str, *, max_chars: int = 180) -> str:
     for line in detail.splitlines():
         stripped = line.strip()
         if stripped:
-            return stripped[:180]
+            return stripped[:max_chars]
     return "contract gate failed"
 
 

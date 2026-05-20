@@ -73,3 +73,17 @@ def _normalize_text(text: str) -> str:
 
 def _has_any(text: str, needles: Sequence[str]) -> bool:
     return any(needle in text for needle in needles)
+
+
+def _first_regex_span(
+    text: str,
+    patterns: Sequence[str],
+    *,
+    max_chars: int = 220,
+) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        return text[match.start() : match.end()].strip()[:max_chars]
+    return ""

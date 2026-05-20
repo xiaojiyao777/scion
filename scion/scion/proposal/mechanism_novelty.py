@@ -29,6 +29,10 @@ class MechanismNoveltyResult:
     contradicted_fact_ids: tuple[str, ...] = ()
     fact_packet_digest: str | None = None
     fact_provenance: Mapping[str, Any] | None = None
+    variant_allowed: bool | None = None
+    contradicted_span: str | None = None
+    matched_span: str | None = None
+    allowed_variant_guidance: str | None = None
 
     def to_rejection(self, hypothesis: HypothesisProposal) -> dict[str, Any]:
         return {
@@ -45,6 +49,10 @@ class MechanismNoveltyResult:
             "contradicted_fact_ids": list(self.contradicted_fact_ids),
             "fact_packet_digest": self.fact_packet_digest,
             "fact_provenance": dict(self.fact_provenance or {}),
+            "variant_allowed": self.variant_allowed,
+            "contradicted_span": self.contradicted_span,
+            "matched_span": self.matched_span,
+            "allowed_variant_guidance": self.allowed_variant_guidance,
             "patch_generated": False,
             "screening_allowed": False,
             "source": "mechanism_novelty_gate",

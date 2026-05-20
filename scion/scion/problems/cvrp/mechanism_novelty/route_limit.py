@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from scion.proposal.tools import ProposalObservation
 
-from scion.problems.cvrp.mechanism_novelty.text import _has_any
+from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_any
 
 _RUNTIME_EVIDENCE_TOOLS = frozenset(
     {
@@ -18,6 +18,33 @@ _RUNTIME_EVIDENCE_TOOLS = frozenset(
     }
 )
 
+_ROUTE_LIMIT_CONTRADICTION_PATTERNS = (
+    r"\bconstruction\b.{0,140}\b(?:more routes than|route limit excess|excess routes|positive fleet violation|nonzero fleet violation)",
+    r"\b(?:more routes than|exceeds? route limit|route limit excess|excess routes)",
+    r"\blen\s*\(\s*routes\s*\)\s*>\s*(?:route limit|allowed routes|max routes)",
+    r"\broute count\b.{0,80}\b(?:exceeds?|above|over)\b.{0,40}\b(?:route limit|allowed routes|max routes)\b",
+    r"\b(?:route limit|allowed routes|max routes)\b.{0,80}\b(?:exceeded|excess|violat(?:e|es|ing|ion))\b",
+    r"\bpositive fleet violation\b",
+    r"\b(?:nonzero|non zero) fleet violation\b",
+    r"\bfleet violation\s*(?:=|:|>)\s*[1-9]",
+    r"\bfleet violation deficit\b",
+    r"\bleav(?:e|es|ing)\b.{0,80}\b(?:positive|nonzero|non zero)?\s*fleet violation\b.{0,60}\brepair\b",
+    r"\b(?:positive|nonzero|non zero)\s+fleet violation\b.{0,80}\b(?:repair|recover|reduce|eliminate|zero out)\b",
+    r"\bfleet violation\s*(?:=|:|>)\s*[1-9]\b.{0,80}\b(?:repair|recover|reduce|eliminate|zero out)\b",
+    r"\b(?:repair|recover|reduce|eliminate|zero out)\s+(?:positive|nonzero|non zero)\s+fleet violation\b",
+    r"\bcurrent search state\b.{0,100}\b(?:route cap violating|route limit excess|positive fleet violation)\b",
+    r"\b(?:route cap violating|route limit excess|positive fleet violation)\b.{0,100}\bcurrent search state\b",
+    (
+        r"\binfeasible(?: to | 2 |-)feasible\b.{0,100}\b"
+        r"(?:fleet violation|route limit|route count)"
+    ),
+    (
+        r"\b(?:fleet violation|route limit|route count)\b.{0,100}"
+        r"\binfeasible(?: to | 2 |-)feasible\b"
+    ),
+    r"\bdefault\b.{0,100}\b(?:positive fleet violation|route limit excess|route cap violating|fleet violation repair)\b",
+)
+
 
 def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
     if (
@@ -25,45 +52,11 @@ def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
         and not _has_explicit_positive_route_limit_premise(text)
     ):
         return False
-    if _has_any(
-        text,
-        (
-            "construction route merge",
-            "construction route merging",
-            "route merge post construction",
-            "route merging post construction",
-            "route merge after construction",
-            "route merging after construction",
-        ),
-    ):
-        return True
-    patterns = (
-        r"\bconstruction\b.{0,140}\b(?:more routes than|route limit excess|excess routes|positive fleet violation|nonzero fleet violation)",
-        r"\b(?:more routes than|exceeds? route limit|route limit excess|excess routes)",
-        r"\blen\s*\(\s*routes\s*\)\s*>\s*(?:route limit|allowed routes|max routes)",
-        r"\broute count\b.{0,80}\b(?:exceeds?|above|over)\b.{0,40}\b(?:route limit|allowed routes|max routes)\b",
-        r"\b(?:route limit|allowed routes|max routes)\b.{0,80}\b(?:exceeded|excess|violat(?:e|es|ing|ion))\b",
-        r"\bpositive fleet violation\b",
-        r"\b(?:nonzero|non zero) fleet violation\b",
-        r"\bfleet violation\s*(?:=|:|>)\s*[1-9]",
-        r"\bfleet violation deficit\b",
-        r"\bleav(?:e|es|ing)\b.{0,80}\b(?:positive|nonzero|non zero)?\s*fleet violation\b.{0,60}\brepair\b",
-        r"\b(?:positive|nonzero|non zero)\s+fleet violation\b.{0,80}\b(?:repair|recover|reduce|eliminate|zero out)\b",
-        r"\bfleet violation\s*(?:=|:|>)\s*[1-9]\b.{0,80}\b(?:repair|recover|reduce|eliminate|zero out)\b",
-        r"\b(?:repair|recover|reduce|eliminate|zero out)\s+(?:positive|nonzero|non zero)\s+fleet violation\b",
-        r"\bcurrent search state\b.{0,100}\b(?:route cap violating|route limit excess|positive fleet violation)\b",
-        r"\b(?:route cap violating|route limit excess|positive fleet violation)\b.{0,100}\bcurrent search state\b",
-        (
-            r"\binfeasible(?: to | 2 |-)feasible\b.{0,100}\b"
-            r"(?:fleet violation|route limit|route count)"
-        ),
-        (
-            r"\b(?:fleet violation|route limit|route count)\b.{0,100}"
-            r"\binfeasible(?: to | 2 |-)feasible\b"
-        ),
-        r"\bdefault\b.{0,100}\b(?:positive fleet violation|route limit excess|route cap violating|fleet violation repair)\b",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+    return any(re.search(pattern, text) for pattern in _ROUTE_LIMIT_CONTRADICTION_PATTERNS)
+
+
+def _route_limit_or_fleet_repair_span(text: str) -> str:
+    return _first_regex_span(text, _ROUTE_LIMIT_CONTRADICTION_PATTERNS)
 
 
 def _protects_route_limit_as_constraint(text: str) -> bool:
@@ -167,4 +160,5 @@ def _text_has_positive_route_limit_signal(value: str) -> bool:
 __all__ = [
     "_claims_unproven_route_limit_or_fleet_repair",
     "_has_explicit_route_limit_runtime_evidence",
+    "_route_limit_or_fleet_repair_span",
 ]

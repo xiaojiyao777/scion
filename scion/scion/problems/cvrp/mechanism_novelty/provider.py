@@ -19,10 +19,13 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _claims_missing_regret_insertion_repair,
     _claims_missing_route_removal,
     _claims_missing_shaw_related_removal,
+    _duplicate_regret_insertion_repair_span,
     _duplicates_removal_savings_destroy,
     _duplicates_regret_insertion_repair,
     _duplicates_route_removal,
     _duplicates_shaw_related_removal,
+    _missing_regret_insertion_repair_span,
+    _regret_insertion_allowed_variant_guidance,
 )
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
 from scion.problems.cvrp.mechanism_novelty.local_search import (
@@ -38,6 +41,7 @@ from scion.problems.cvrp.mechanism_novelty.local_search import (
 from scion.problems.cvrp.mechanism_novelty.route_limit import (
     _claims_unproven_route_limit_or_fleet_repair,
     _has_explicit_route_limit_runtime_evidence,
+    _route_limit_or_fleet_repair_span,
 )
 from scion.problems.cvrp.mechanism_novelty.search_state import (
     _claims_unreachable_feasibility_crossing,
@@ -345,6 +349,7 @@ class CvrpMechanismNoveltyProvider:
         if facts.has_regret_insertion_repair and _claims_missing_regret_insertion_repair(
             text
         ):
+            span = _missing_regret_insertion_repair_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -357,11 +362,16 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.regret_insertion_evidence,
                 fact_ids=(_REGRET_INSERTION_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=_regret_allowed_variant_guidance(),
             )
 
         if facts.has_regret_insertion_repair and _duplicates_regret_insertion_repair(
             text
         ):
+            span = _duplicate_regret_insertion_repair_span(text)
             return _result(
                 facts,
                 premise_check="duplicate",
@@ -374,7 +384,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.regret_insertion_evidence,
                 fact_ids=(_REGRET_INSERTION_FACT,),
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=_regret_allowed_variant_guidance(),
             )
+
+        regret_variant_guidance = _regret_insertion_allowed_variant_guidance(text)
+        if facts.has_regret_insertion_repair and regret_variant_guidance:
+            return None
 
         if (
             facts.guards_route_limit_search_state
@@ -384,6 +401,7 @@ class CvrpMechanismNoveltyProvider:
                 context=context,
             )
         ):
+            span = _route_limit_or_fleet_repair_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -400,6 +418,16 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.route_limit_evidence,
                 fact_ids=(_ROUTE_LIMIT_FACT, _STARTS_FEASIBLE_FACT),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: improve feasible construction seed quality, "
+                    "route merge quality, or total_distance while preserving the "
+                    "route-limit guard; only claim fleet/route-limit repair when "
+                    "screening or runtime feedback shows positive fleet_violation "
+                    "or route-limit excess."
+                ),
             )
 
         if (
@@ -434,6 +462,10 @@ def _result(
     reason: str,
     evidence: tuple[str, ...],
     fact_ids: tuple[str, ...],
+    variant_allowed: bool | None = None,
+    contradicted_span: str | None = None,
+    matched_span: str | None = None,
+    allowed_variant_guidance: str | None = None,
 ) -> MechanismNoveltyResult:
     contradicted_fact_ids = fact_ids if premise_check == "contradicted" else ()
     return MechanismNoveltyResult(
@@ -447,4 +479,16 @@ def _result(
         contradicted_fact_ids=contradicted_fact_ids,
         fact_packet_digest=facts.fact_packet_digest,
         fact_provenance=facts.fact_provenance,
+        variant_allowed=variant_allowed,
+        contradicted_span=contradicted_span,
+        matched_span=matched_span,
+        allowed_variant_guidance=allowed_variant_guidance,
+    )
+
+
+def _regret_allowed_variant_guidance() -> str:
+    return (
+        "Allowed variant: add or modify a destroy/removal operator that uses "
+        "the existing _regret2_insertion/_regret3_insertion repair portfolio; "
+        "do not claim the regret repair mechanism itself is missing or newly added."
     )

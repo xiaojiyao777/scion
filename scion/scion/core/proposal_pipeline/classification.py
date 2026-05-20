@@ -252,9 +252,7 @@ def _agentic_rejection_constraint(
     quality = _agentic_quality_block_classification(output)
     if quality is None:
         return None
-    return {
-        key: value
-        for key, value in {
+    payload = {
             "source": structured.get("source") or "mechanism_novelty_gate",
             "gate_name": structured.get("gate_name"),
             "mechanism": structured.get("mechanism"),
@@ -268,6 +266,12 @@ def _agentic_rejection_constraint(
                 for item in list(structured.get("evidence") or ())[:8]
             ],
             "snapshot_digest": structured.get("snapshot_digest"),
+            "fact_packet_digest": structured.get("fact_packet_digest"),
+            "fact_provenance": structured.get("fact_provenance"),
+            "variant_allowed": structured.get("variant_allowed"),
+            "contradicted_span": structured.get("contradicted_span"),
+            "matched_span": structured.get("matched_span"),
+            "allowed_variant_guidance": structured.get("allowed_variant_guidance"),
             "selected_surface": structured.get("selected_surface"),
             "target_file": structured.get("target_file"),
             "retry_constraint": (
@@ -275,6 +279,9 @@ def _agentic_rejection_constraint(
                 "Choose a different mechanism family supported by active-solver "
                 "evidence; changing names or novelty text is not enough."
             ),
-        }.items()
-        if value
+    }
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", (), [], {})
     }

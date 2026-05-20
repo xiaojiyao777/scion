@@ -93,6 +93,11 @@ experiment patches.
   the facts tool has run. Hypothesis and code prompts may include fuller
   rendered fact packets, but every phase must be traceable to the same
   adapter-owned digest/provenance.
+- This active-facts anchor invariant applies to every LLM tool-selection call,
+  including code-phase targeted reads, diagnosis, and repair follow-up tool
+  selection. The anchor should stay compact but must preserve packet digest,
+  snapshot digest, provenance, source observation/tool id when available, and
+  compact fact ids.
 - APS prompts must render `agentic_active_algorithm_facts` as a concise,
   high-signal block before raw proposal-tool observations. Raw observations
   are audit/debug support and may be compacted; active facts should not be
@@ -106,6 +111,16 @@ experiment patches.
   disposable. They must be preserved as branch-local research feedback and
   rendered into the next hypothesis context so the agent can change direction
   instead of restarting from a blank prompt.
+- Proposal failures that do not count as effective screened rounds still belong
+  in tainted proposal feedback. Keep this negative memory compact and
+  branch-local: attempt/session id, branch id, mechanism id, stage,
+  category/code, exact failure summary, fact packet digest/provenance, and
+  provider variant guidance when present. This feedback is not a Decision
+  input.
+- Problem-owned premise/novelty providers should cite exact contradicted or
+  matched spans when rejecting a claim. If a proposal is an allowed variant of
+  an existing mechanism, provider feedback should say that explicitly instead
+  of escalating to premise contradiction.
 - Proposal/contract schema or candidate-quality failures are not infrastructure
   failures. They may trigger LLM repair or candidate discard; only real
   verification/runtime infrastructure evidence, including branch-local repeated
