@@ -63,12 +63,12 @@ class TestFailureRouterStateful:
         action = router.route(_light_failure("contract"), branch, streak=2)
         assert action.action == "retry_llm"
 
-    def test_light_failure_streak_at_threshold_infra_suspected(self):
-        """Light failure streak >= 3 → infra_suspected."""
+    def test_contract_streak_at_threshold_still_retries_llm(self):
+        """Contract streaks are proposal quality, not infra suspicion."""
         router = FailureRouter()
         branch = _make_branch()
         action = router.route(_light_failure("contract"), branch, streak=3)
-        assert action.action == "infra_suspected"
+        assert action.action == "retry_llm"
         assert action.consumes_budget is False
         assert action.escalation_level == 2
 
@@ -129,9 +129,9 @@ class TestFailureRouterStateful:
         action = router.route(_light_failure("contract"), branch, streak=3)
         assert action.action == "retry_llm"
 
-        # streak=5 → infra_suspected
+        # contract streak still stays on LLM repair/discard path
         action = router.route(_light_failure("contract"), branch, streak=5)
-        assert action.action == "infra_suspected"
+        assert action.action == "retry_llm"
 
     def test_infra_category_unaffected_by_streak(self):
         """infra category is not light/heavy → never escalates."""
@@ -405,10 +405,7 @@ class TestFailureCounterLogic:
                 branch,
                 streak=failure_streak[fcode],
             )
-            if i < 3:
-                assert action.action == "retry_llm", f"at i={i}"
-            else:
-                assert action.action == "infra_suspected", f"at i={i}"
+            assert action.action == "retry_llm", f"at i={i}"
 
     def test_streak_reset_on_success(self):
         """After streak reset, router returns to normal routing."""
@@ -416,12 +413,12 @@ class TestFailureCounterLogic:
         branch = _make_branch()
         failure_streak: Dict[str, int] = {"contract": 3}
 
-        # Should be infra_suspected
+        # Contract quality failures do not imply infrastructure suspicion.
         action = router.route(
             FailureEvent(category="contract", detail=""),
             branch, streak=failure_streak["contract"],
         )
-        assert action.action == "infra_suspected"
+        assert action.action == "retry_llm"
 
         # Simulate success → reset
         failure_streak.clear()

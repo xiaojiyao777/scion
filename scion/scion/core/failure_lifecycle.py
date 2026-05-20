@@ -42,6 +42,17 @@ class RegistryLike(Protocol):
         ...
 
 
+def _branch_failure_streak(branch: Branch, category: str) -> int:
+    """Return the current branch-local consecutive streak including this failure."""
+    target = str(category or "").upper()
+    streak = 1
+    for code in reversed(branch.failure_codes):
+        if str(code or "").upper() != target:
+            break
+        streak += 1
+    return streak
+
+
 @dataclass
 class FailureLifecycleService:
     """Route failures and apply branch recovery side effects."""
@@ -112,13 +123,14 @@ class FailureLifecycleService:
     ) -> None:
         """Route a failure and execute the selected recovery action."""
         fcode = failure.category
+        branch_streak = _branch_failure_streak(branch, fcode)
         self.failure_streak[fcode] = self.failure_streak.get(fcode, 0) + 1
         self.total_failures[fcode] = self.total_failures.get(fcode, 0) + 1
 
         action = self.failure_router.route(
             failure,
             branch,
-            streak=self.failure_streak[fcode],
+            streak=branch_streak,
             total=self.total_failures[fcode],
         )
         branch.retry_count += 1
@@ -127,7 +139,7 @@ class FailureLifecycleService:
             "Branch %s: failure=%s streak=%d -> action=%s (budget=%s)",
             branch.branch_id,
             failure.category,
-            self.failure_streak[fcode],
+            branch_streak,
             action.action,
             action.consumes_budget,
         )
@@ -146,11 +158,11 @@ class FailureLifecycleService:
         elif action.action == "abandon":
             self._abandon(branch, "failure_action_abandon")
         elif action.action == "infra_suspected":
-            self._infra_suspected(branch, fcode)
+            self._infra_suspected(branch, fcode, branch_streak)
         elif action.action == "abandon_fast":
-            self._abandon_fast(branch, fcode)
+            self._abandon_fast(branch, fcode, branch_streak)
         elif action.action == "fail_closed":
-            self._fail_closed(branch, fcode)
+            self._fail_closed(branch, fcode, branch_streak)
 
         self._persist_branch_state(bid)
         self._emit_status_heartbeat("failure_handled", branch, failure)
@@ -235,7 +247,7 @@ class FailureLifecycleService:
             try:
                 self.branch_controller.apply_decision(bid, Decision.ABANDON)
                 self.record_hard_abandon(bid, "infra_permanent")
-            except StateTransitionError:
+            except (KeyError, StateTransitionError):
                 pass
         else:
             logger.info("Branch %s: infra failure - blocking for 3 rounds", bid)
@@ -267,15 +279,20 @@ class FailureLifecycleService:
         try:
             self.branch_controller.apply_decision(bid, Decision.ABANDON)
             self.record_hard_abandon(bid, reason)
-        except StateTransitionError:
+        except (KeyError, StateTransitionError):
             pass
 
-    def _infra_suspected(self, branch: Branch, failure_code: str) -> None:
+    def _infra_suspected(
+        self,
+        branch: Branch,
+        failure_code: str,
+        branch_streak: int,
+    ) -> None:
         bid = branch.branch_id
         logger.warning(
             "Branch %s: infra_suspected after %d consecutive '%s' failures - blocking",
             bid,
-            self.failure_streak[failure_code],
+            branch_streak,
             failure_code,
         )
         branch.pending_retry = False
@@ -285,26 +302,31 @@ class FailureLifecycleService:
             event_kind="infra_suspected",
             failure_code=failure_code,
             extra={
-                "streak": self.failure_streak[failure_code],
+                "streak": branch_streak,
                 "suggested_action": "check_environment",
             },
         )
         try:
             self.branch_controller.block_infra(bid)
             branch.blocked_rounds = 0
-        except StateTransitionError as exc:
+        except (KeyError, StateTransitionError) as exc:
             logger.debug(
                 "Branch %s: block_infra (infra_suspected) skipped: %s",
                 bid,
                 exc,
             )
 
-    def _abandon_fast(self, branch: Branch, failure_code: str) -> None:
+    def _abandon_fast(
+        self,
+        branch: Branch,
+        failure_code: str,
+        branch_streak: int,
+    ) -> None:
         bid = branch.branch_id
         logger.warning(
             "Branch %s: abandon_fast after %d consecutive '%s' failures",
             bid,
-            self.failure_streak[failure_code],
+            branch_streak,
             failure_code,
         )
         branch.pending_retry = False
@@ -313,15 +335,20 @@ class FailureLifecycleService:
             branch_id=bid,
             event_kind="abandon_fast",
             failure_code=failure_code,
-            extra={"streak": self.failure_streak[failure_code]},
+            extra={"streak": branch_streak},
         )
         try:
             self.branch_controller.apply_decision(bid, Decision.ABANDON)
             self.record_hard_abandon(bid, "failure_action_abandon_fast")
-        except StateTransitionError:
+        except (KeyError, StateTransitionError):
             pass
 
-    def _fail_closed(self, branch: Branch, failure_code: str) -> None:
+    def _fail_closed(
+        self,
+        branch: Branch,
+        failure_code: str,
+        branch_streak: int,
+    ) -> None:
         bid = branch.branch_id
         logger.warning(
             "Branch %s: fail_closed for deterministic control failure '%s'",
@@ -334,12 +361,12 @@ class FailureLifecycleService:
             branch_id=bid,
             event_kind="framework_control_fail_closed",
             failure_code=failure_code,
-            extra={"streak": self.failure_streak[failure_code]},
+            extra={"streak": branch_streak},
         )
         try:
             self.branch_controller.apply_decision(bid, Decision.ABANDON)
             self.record_hard_abandon(bid, f"{failure_code}_fail_closed")
-        except StateTransitionError:
+        except (KeyError, StateTransitionError):
             pass
 
     def _emit_status_heartbeat(

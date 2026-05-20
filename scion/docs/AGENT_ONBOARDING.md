@@ -89,6 +89,10 @@ experiment patches.
   fact packet. If a novelty or premise gate rejects a proposal, the rejection
   must cite fact ids plus the packet digest/provenance that the agent could
   also see. A gate must not be better informed than the agent.
+- The planner/tool-selection context must carry an active-facts anchor after
+  the facts tool has run. Hypothesis and code prompts may include fuller
+  rendered fact packets, but every phase must be traceable to the same
+  adapter-owned digest/provenance.
 - APS prompts must render `agentic_active_algorithm_facts` as a concise,
   high-signal block before raw proposal-tool observations. Raw observations
   are audit/debug support and may be compacted; active facts should not be
@@ -97,6 +101,10 @@ experiment patches.
   ordinary solver-quality screening loss. Keep it distinct from formal
   validation telemetry gates and feed the diagnosis back into branch lifecycle
   and repair context.
+- Proposal/contract schema or candidate-quality failures are not infrastructure
+  failures. They may trigger LLM repair or candidate discard; only real
+  verification/runtime infrastructure evidence, including branch-local repeated
+  light-verification failures, may become `infra_suspected`.
 - Treat roughly 800 lines as a design warning, not a mechanical hard number.
   A source or test file above that size needs a clear ownership reason and a
   split plan. Files above 1000 lines are active architecture debt; files above

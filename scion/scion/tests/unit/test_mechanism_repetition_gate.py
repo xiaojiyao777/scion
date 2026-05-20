@@ -114,3 +114,33 @@ def test_materially_different_repeated_mechanism_is_allowed() -> None:
     )
 
     assert result is None
+
+
+def test_shared_acceptance_strategy_does_not_define_repeated_mechanism() -> None:
+    previous = _hypothesis(
+        "adaptive_sa_reheat",
+        text="Add adaptive SA reheat to improve plateau escape.",
+    )
+    candidate = _hypothesis(
+        "route_removal",
+        text="Add route removal destroy to diversify the destroy portfolio.",
+    )
+    previous.novelty_signature = {
+        "algorithm_family": "acceptance_control",
+        "improvement_strategy": "adaptive_sa_reheat",
+        "acceptance_strategy": "simulated_annealing+adaptive_operator_weights",
+        "runtime_budget_strategy": "bounded",
+    }
+    candidate.novelty_signature = {
+        "algorithm_family": "destroy_repair",
+        "improvement_strategy": "route_removal",
+        "acceptance_strategy": "simulated_annealing+adaptive_operator_weights",
+        "runtime_budget_strategy": "bounded",
+    }
+
+    result = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous)),
+    )
+
+    assert result is None

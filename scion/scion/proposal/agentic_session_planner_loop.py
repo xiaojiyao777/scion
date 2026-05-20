@@ -98,6 +98,9 @@ class AgenticSessionPlannerLoopMixin:
                     "allowed_tools": self._planner_allowed_tools(context),
                     "allowed_tool_specs": self._planner_allowed_tool_specs(context),
                     "tool_arg_guidance": self._tool_arg_guidance(context, observations),
+                    "active_algorithm_facts_anchor": (
+                        self._planner_active_algorithm_facts_anchor(observations)
+                    ),
                     "hypothesis_constraints": self._hypothesis_constraints(context),
                     "remaining_steps": self._remaining_tool_steps(state),
                     "remaining_tool_calls": self._remaining_tool_calls(state),
@@ -594,6 +597,27 @@ class AgenticSessionPlannerLoopMixin:
                     ),
                 }
             return guidance
+
+    def _planner_active_algorithm_facts_anchor(
+            self,
+            observations: list[ProposalObservation],
+        ) -> dict[str, Any]:
+            facts = _active_algorithm_facts_for_prompt_context(observations)
+            if not facts:
+                return {}
+            active_facts = facts.get("active_algorithm_facts")
+            compact = active_facts if isinstance(active_facts, Mapping) else {}
+            return {
+                "source": facts.get("source"),
+                "source_observation_id": facts.get("source_observation_id"),
+                "fact_packet_digest": facts.get("fact_packet_digest"),
+                "snapshot_digest": facts.get("snapshot_digest"),
+                "fact_ids": list(compact.get("fact_ids") or ())[:20],
+                "rule": (
+                    "Use this same adapter-provided fact packet as the anchor "
+                    "when choosing owner files or deciding more context is needed."
+                ),
+            }
 
     def _hypothesis_constraints(
             self,

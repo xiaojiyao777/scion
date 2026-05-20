@@ -99,21 +99,21 @@ class TestC10NoveltyRoutedAsSearchGuidance:
                 "search_guidance must never escalate to infra_suspected"
             )
 
-    def test_contract_failure_still_counts_streak(self):
-        """Non-C10 contract failure (C3_schema) at streak≥3 → infra_suspected."""
+    def test_contract_failure_does_not_escalate_to_infra(self):
+        """Contract failures are deterministic proposal quality, not infra."""
         b = _branch()
         fa = _router.route(_failure("contract"), b, streak=3)
-        assert fa.action == "infra_suspected"
+        assert fa.action == "retry_llm"
 
     def test_mixed_c10_and_contract_only_contract_counts(self):
-        """search_guidance must not accumulate infra streak; plain contract does."""
+        """search_guidance and plain contract both avoid infra escalation."""
         b = _branch()
         # search_guidance at streak=3 should NOT trigger infra
         fa_search = _router.route(_failure("search_guidance"), b, streak=3)
         assert fa_search.action != "infra_suspected"
-        # contract at streak=3 SHOULD trigger infra
+        # contract at streak=3 should still be an LLM repair/discard path
         fa_contract = _router.route(_failure("contract"), b, streak=3)
-        assert fa_contract.action == "infra_suspected"
+        assert fa_contract.action == "retry_llm"
 
 
 # ===========================================================================

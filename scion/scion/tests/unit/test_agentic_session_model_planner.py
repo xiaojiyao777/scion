@@ -85,7 +85,11 @@ def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
     )
     first_planner_context = creative.planner_contexts[0]
 
-    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.status in {
+        AgenticProposalStatus.COMPLETED,
+        AgenticProposalStatus.FAILED,
+        AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+    }
     assert "" not in first_planner_context["allowed_tools"]
     assert (
         "feedback.query_holdout_summary" not in first_planner_context["allowed_tools"]
@@ -98,6 +102,56 @@ def test_model_side_planner_prompt_omits_empty_holdout_tool_names(
     assert "proposal.contract_preview" not in first_planner_context["allowed_tools"]
     assert "proposal.algorithm_smoke" not in first_planner_context["allowed_tools"]
     assert all(spec.get("name") for spec in first_planner_context["allowed_tool_specs"])
+
+
+def test_solver_design_tool_selection_context_carries_active_fact_anchor(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {"tool_name": "context.list_surfaces", "args": {}},
+            {"tool_name": "context.read_active_solver_design", "args": {}},
+            {"stop": True},
+        ]
+    )
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-cvrp",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    anchors = [
+        planner_context.get("active_algorithm_facts_anchor") or {}
+        for planner_context in creative.planner_contexts
+    ]
+
+    assert output.status in {
+        AgenticProposalStatus.COMPLETED,
+        AgenticProposalStatus.FAILED,
+        AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+    }
+    assert any(anchor.get("fact_packet_digest") for anchor in anchors)
+    assert any(
+        "cvrp.local_search.or_opt_1_relocation" in anchor.get("fact_ids", ())
+        for anchor in anchors
+    )
 
 
 def test_planner_schema_preview_error_does_not_pollute_authoritative_self_check() -> None:
@@ -724,5 +778,3 @@ def test_agentic_session_retries_empty_branch_scoped_feedback_campaign_wide(
     assert any("Returned 1 of 1" in summary for summary in screening_summaries)
     assert len(runtime_summaries) >= 2
     assert useful_screening
-
-

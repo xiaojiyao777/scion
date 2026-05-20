@@ -31,6 +31,17 @@ repair and branch lifecycle without being counted as ordinary solver-quality
 screening losses. Focused regressions for this repair pass (`151 passed`);
 short live validation is pending.
 
+The first 3-round live validation of that repair was stopped early after one
+screened branch because proposal attempts repeatedly hit pre-screen novelty and
+contract failures. Post-run trace analysis is
+[`v0.4-active-facts-control-sonnet-3r-stopped-analysis-20260520.md`](../experiments/v0.4/v0.4-active-facts-control-sonnet-3r-stopped-analysis-20260520.md).
+The follow-up repair keeps planner/tool-selection grounded with an active-facts
+anchor, removes prompt-only `acceptance_strategy` fields from generic repeated
+mechanism identity, expands CVRP adapter facts for `_or_opt_1`, route removal,
+and regret repair, and fixes failure lifecycle routing so proposal/contract
+quality failures do not escalate to infra and failure streaks are branch-local.
+The full unit regression for this follow-up repair passes (`902 passed`).
+
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
 `core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,

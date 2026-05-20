@@ -22,17 +22,23 @@ class _ActiveMechanismFacts:
     has_diverse_construction: bool = False
     has_adaptive_weights: bool = False
     has_cross_route_or_opt_2_3: bool = False
+    has_or_opt_1_relocation: bool = False
     has_cross_route_tail_exchange: bool = False
     has_shaw_related_removal: bool = False
+    has_route_removal: bool = False
     has_removal_savings_worst_removal: bool = False
+    has_regret_insertion_repair: bool = False
     starts_feasible_rejects_infeasible: bool = False
     guards_route_limit_search_state: bool = False
     construction_evidence: tuple[str, ...] = ()
     adaptive_weight_evidence: tuple[str, ...] = ()
     or_opt_evidence: tuple[str, ...] = ()
+    or_opt_1_evidence: tuple[str, ...] = ()
     tail_exchange_evidence: tuple[str, ...] = ()
     shaw_related_evidence: tuple[str, ...] = ()
+    route_removal_evidence: tuple[str, ...] = ()
     removal_savings_evidence: tuple[str, ...] = ()
+    regret_insertion_evidence: tuple[str, ...] = ()
     feasible_search_evidence: tuple[str, ...] = ()
     route_limit_evidence: tuple[str, ...] = ()
     snapshot_digest: str | None = None
@@ -110,6 +116,7 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 ),
             )
         ),
+        has_or_opt_1_relocation=_has_or_opt_token(local_search_combined, "1"),
         has_cross_route_tail_exchange=(
             "two opt star" in local_search_combined
             and _has_any(
@@ -136,9 +143,17 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
             and "demand" in destroy_repair_combined
             and "route" in destroy_repair_combined
         ),
+        has_route_removal=_has_any(
+            destroy_repair_combined,
+            ("_route_removal", "route removal", "whole-route removal"),
+        ),
         has_removal_savings_worst_removal=(
             _has_any(destroy_repair_combined, ("worst removal", "worst"))
             and _has_any(destroy_repair_combined, ("removal", "destroy"))
+        ),
+        has_regret_insertion_repair=(
+            _has_any(destroy_repair_combined, ("_regret2_insertion", "regret 2"))
+            and _has_any(destroy_repair_combined, ("_regret3_insertion", "regret 3"))
         ),
         starts_feasible_rejects_infeasible=(
             _has_any(alns_combined, ("starts from a feasible", "feasible construction"))
@@ -200,6 +215,13 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "cross-route Or-opt segment relocation",
             ),
         ),
+        or_opt_1_evidence=_evidence(
+            mechanism_summary.get("local_search"),
+            fallback=(
+                "_or_opt_1",
+                "single-customer Or-opt relocation",
+            ),
+        ),
         tail_exchange_evidence=_evidence(
             mechanism_summary.get("local_search"),
             fallback=(
@@ -215,8 +237,23 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "distance + demand + original-route relatedness",
             ),
         ),
+        route_removal_evidence=_evidence(
+            mechanism_summary.get("destroy_repair"),
+            fallback=(
+                "_route_removal",
+                "whole-route removal destroy operator",
+            ),
+        ),
         removal_savings_evidence=_removal_savings_evidence(
             mechanism_summary.get("destroy_repair")
+        ),
+        regret_insertion_evidence=_evidence(
+            mechanism_summary.get("destroy_repair"),
+            fallback=(
+                "_regret2_insertion",
+                "_regret3_insertion",
+                "regret repair insertion portfolio",
+            ),
         ),
         feasible_search_evidence=_evidence(
             mechanism_summary.get("alns_loop"),
@@ -268,6 +305,10 @@ def _facts_from_fact_packet(
             by_id,
             "cvrp.local_search.cross_route_or_opt_2_3",
         ),
+        has_or_opt_1_relocation=_has_fact(
+            by_id,
+            "cvrp.local_search.or_opt_1_relocation",
+        ),
         has_cross_route_tail_exchange=_has_fact(
             by_id,
             "cvrp.local_search.cross_route_tail_exchange",
@@ -276,9 +317,17 @@ def _facts_from_fact_packet(
             by_id,
             "cvrp.destroy_repair.shaw_related_removal",
         ),
+        has_route_removal=_has_fact(
+            by_id,
+            "cvrp.destroy_repair.route_removal",
+        ),
         has_removal_savings_worst_removal=_has_fact(
             by_id,
             "cvrp.destroy_repair.removal_savings_worst_removal",
+        ),
+        has_regret_insertion_repair=_has_fact(
+            by_id,
+            "cvrp.destroy_repair.regret_insertion_repair",
         ),
         starts_feasible_rejects_infeasible=_has_fact(
             by_id,
@@ -318,6 +367,14 @@ def _facts_from_fact_packet(
                 "cross-route Or-opt segment relocation",
             ),
         ),
+        or_opt_1_evidence=_fact_evidence(
+            by_id,
+            "cvrp.local_search.or_opt_1_relocation",
+            fallback=(
+                "_or_opt_1",
+                "single-customer Or-opt relocation",
+            ),
+        ),
         tail_exchange_evidence=_fact_evidence(
             by_id,
             "cvrp.local_search.cross_route_tail_exchange",
@@ -335,6 +392,14 @@ def _facts_from_fact_packet(
                 "distance + demand + original-route relatedness",
             ),
         ),
+        route_removal_evidence=_fact_evidence(
+            by_id,
+            "cvrp.destroy_repair.route_removal",
+            fallback=(
+                "_route_removal",
+                "whole-route removal destroy operator",
+            ),
+        ),
         removal_savings_evidence=_fact_evidence(
             by_id,
             "cvrp.destroy_repair.removal_savings_worst_removal",
@@ -342,6 +407,15 @@ def _facts_from_fact_packet(
                 "_worst_removal",
                 "saving = -route.cost_of_remove(pos)",
                 "removal saving / detour eliminated",
+            ),
+        ),
+        regret_insertion_evidence=_fact_evidence(
+            by_id,
+            "cvrp.destroy_repair.regret_insertion_repair",
+            fallback=(
+                "_regret2_insertion",
+                "_regret3_insertion",
+                "regret repair insertion portfolio",
             ),
         ),
         feasible_search_evidence=_fact_evidence(

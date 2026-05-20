@@ -236,12 +236,14 @@ class CvrpActiveSolverDesignProvider:
                 "summary": (
                     "VNS uses _two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
                     "and _two_opt_star. _or_opt skips same-route destinations, so "
-                    "length-2 and length-3 cross-route Or-opt already exist. "
+                    "single-customer, length-2, and length-3 cross-route Or-opt "
+                    "already exist. "
                     "_two_opt_star exchanges cross-route suffix/tail segments."
                 ),
                 "evidence_symbols": [
                     "_vns",
                     "_default_vns_operators",
+                    "_or_opt_1",
                     "_or_opt_2",
                     "_or_opt_3",
                     "_two_opt_star",
@@ -355,6 +357,19 @@ class CvrpActiveSolverDesignProvider:
                 ],
             ),
             _fact(
+                "cvrp.destroy_repair.route_removal",
+                (
+                    "_route_removal is already a destroy operator that removes "
+                    "customers from an entire selected non-empty route and is wired "
+                    "through scheduler destroy_ops."
+                ),
+                mechanism_summary.get("destroy_repair"),
+                [
+                    "policies/baseline_modules/destroy_repair.py::_route_removal",
+                    "policies/baseline_modules/scheduler.py::destroy_ops",
+                ],
+            ),
+            _fact(
                 "cvrp.destroy_repair.removal_savings_worst_removal",
                 (
                     "_worst_removal already ranks candidates by removal saving "
@@ -364,6 +379,31 @@ class CvrpActiveSolverDesignProvider:
                 [
                     "policies/baseline_modules/destroy_repair.py::_worst_removal",
                     "policies/baseline_modules/state.py::_Route.cost_of_remove",
+                ],
+            ),
+            _fact(
+                "cvrp.destroy_repair.regret_insertion_repair",
+                (
+                    "Repair portfolio already includes regret-2 and regret-3 "
+                    "insertion heuristics wired through scheduler repair_ops."
+                ),
+                mechanism_summary.get("destroy_repair"),
+                [
+                    "policies/baseline_modules/destroy_repair.py::_regret2_insertion",
+                    "policies/baseline_modules/destroy_repair.py::_regret3_insertion",
+                    "policies/baseline_modules/scheduler.py::repair_ops",
+                ],
+            ),
+            _fact(
+                "cvrp.local_search.or_opt_1_relocation",
+                (
+                    "Local search already includes _or_opt_1 single-customer "
+                    "relocation through the VNS operator list."
+                ),
+                mechanism_summary.get("local_search"),
+                [
+                    "policies/baseline_modules/local_search.py::_or_opt_1",
+                    "policies/baseline_modules/local_search.py::_default_vns_operators",
                 ],
             ),
             _fact(

@@ -91,6 +91,88 @@ def _duplicates_removal_savings_destroy(text: str) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
 
+def _claims_missing_route_removal(text: str) -> bool:
+    if not _mentions_route_removal(text):
+        return False
+    if _describes_existing_route_removal_improvement(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,100}\b(?:whole route|route)"
+            r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:whole route|route)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
+            r"\b.{0,100}\b(?:missing|lacks?|absent|without|no|does not have|"
+            r"does not include|doesn't have|doesn't include)\b",
+            text,
+        )
+    )
+
+
+def _duplicates_route_removal(text: str) -> bool:
+    if not _mentions_route_removal(text):
+        return False
+    if _describes_existing_route_removal_improvement(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,100}\b(?:whole route|route)\b.{0,60}"
+            r"\b(?:destroy|remov(?:al|e)|operator|capability)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:whole route|route)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
+            r"\b.{0,100}\b(?:new|novel|additional|first|missing|absent|lacks?)\b",
+            text,
+        )
+    )
+
+
+def _claims_missing_regret_insertion_repair(text: str) -> bool:
+    if not _mentions_regret_insertion_repair(text):
+        return False
+    if _describes_existing_regret_repair_improvement(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,120}\b(?:regret[- ]?[23k]?|"
+            r"regret insertion|regret repair)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b"
+            r".{0,120}\b(?:missing|lacks?|absent|without|no|does not have|"
+            r"does not include|doesn't have|doesn't include)\b",
+            text,
+        )
+    )
+
+
+def _duplicates_regret_insertion_repair(text: str) -> bool:
+    if not _mentions_regret_insertion_repair(text):
+        return False
+    if _describes_existing_regret_repair_improvement(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,120}\b(?:regret[- ]?[23k]?|regret insertion|regret repair)"
+            r"\b.{0,80}\b(?:repair|insertion|operator|heuristic|capability)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b"
+            r".{0,100}\b(?:new|novel|additional|first|missing|absent|lacks?)\b",
+            text,
+        )
+    )
+
+
 def _mentions_shaw_related_removal(text: str) -> bool:
     if "shaw" in text and _has_any(text, ("removal", "remove", "destroy")):
         return True
@@ -159,6 +241,43 @@ def _mentions_removal_savings_destroy(text: str) -> bool:
             r".{0,90}\b(?:destroy|remov(?:al|e)|operator|heuristic)\b",
             text,
         )
+    )
+
+
+def _mentions_route_removal(text: str) -> bool:
+    if "_route_removal" in text or "whole-route removal" in text:
+        return True
+    return bool(
+        re.search(
+            r"\b(?:whole route|entire route|route-level|route level|route)\b"
+            r".{0,45}\b(?:destroy|remov(?:al|e))\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:destroy|remov(?:al|e))\b.{0,45}"
+            r"\b(?:whole route|entire route|route-level|route level)\b",
+            text,
+        )
+    )
+
+
+def _mentions_regret_insertion_repair(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "_regret2_insertion",
+            "_regret3_insertion",
+            "regret2",
+            "regret3",
+            "regret 2",
+            "regret 3",
+            "regret-2",
+            "regret-3",
+            "regret k",
+            "regret-k",
+            "regret insertion",
+            "regret repair",
+        ),
     )
 
 
@@ -241,6 +360,77 @@ def _describes_existing_removal_savings_improvement(text: str) -> bool:
             "weights",
             "budget",
             "candidate ordering",
+        ),
+    )
+
+
+def _describes_existing_route_removal_improvement(text: str) -> bool:
+    if _has_any(
+        text,
+        (
+            "missing",
+            "lacks",
+            "lack ",
+            "absent",
+            "new capability",
+            "new destroy capability",
+            "new operator",
+            "entirely new",
+        ),
+    ):
+        return False
+    if not _has_any(text, ("existing", "current", "already", "_route_removal")):
+        return False
+    return _has_any(
+        text,
+        (
+            "refine",
+            "tune",
+            "adjust",
+            "adapt",
+            "sampling",
+            "weight",
+            "trigger",
+            "budget",
+            "candidate",
+        ),
+    )
+
+
+def _describes_existing_regret_repair_improvement(text: str) -> bool:
+    if _has_any(
+        text,
+        (
+            "missing",
+            "lacks",
+            "lack ",
+            "absent",
+            "new capability",
+            "new repair capability",
+            "new operator",
+            "new heuristic",
+            "entirely new",
+            "additional repair",
+        ),
+    ):
+        return False
+    if not _has_any(
+        text,
+        ("existing", "current", "already", "_regret2_insertion", "_regret3_insertion"),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "refine",
+            "tune",
+            "adjust",
+            "adapt",
+            "bias",
+            "sampling",
+            "weight",
+            "candidate ordering",
+            "budget",
         ),
     )
 

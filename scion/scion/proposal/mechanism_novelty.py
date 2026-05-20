@@ -237,7 +237,7 @@ def _mechanism_ids(hypothesis: HypothesisProposal) -> set[str]:
             ids.add(text)
     signature = getattr(hypothesis, "novelty_signature", None)
     if isinstance(signature, Mapping):
-        for key in ("mechanism_id", "improvement_strategy", "acceptance_strategy"):
+        for key in ("mechanism_id", "improvement_strategy"):
             value = signature.get(key)
             if isinstance(value, str):
                 text = _normalize_token(value)
@@ -263,7 +263,7 @@ def _mechanism_family(
 ) -> str:
     signature = getattr(hypothesis, "novelty_signature", None)
     if isinstance(signature, Mapping):
-        for key in ("algorithm_family", "improvement_strategy", "acceptance_strategy"):
+        for key in ("algorithm_family", "improvement_strategy"):
             value = str(signature.get(key) or "").strip()
             if value and not value.startswith("preserve_existing"):
                 return _normalize_token(value)
@@ -313,12 +313,16 @@ def _step_evidence(step: Any) -> str:
         stats = protocol.stats
         return (
             f"round={getattr(step, 'round_num', '')} "
+            f"branch={getattr(step, 'branch_id', '')} "
+            f"target={getattr(getattr(step, 'hypothesis', None), 'target_file', '')} "
             f"failure_code={_failure_code(step)} "
             f"win_rate={getattr(stats, 'win_rate', None)} "
             f"median_delta={getattr(stats, 'median_delta', None)}"
         )
     return (
         f"round={getattr(step, 'round_num', '')} "
+        f"branch={getattr(step, 'branch_id', '')} "
+        f"target={getattr(getattr(step, 'hypothesis', None), 'target_file', '')} "
         f"failure_stage={getattr(step, 'failure_stage', '')} "
         f"detail={str(getattr(step, 'failure_detail', '') or '')[:160]}"
     )

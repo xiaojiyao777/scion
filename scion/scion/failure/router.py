@@ -31,7 +31,8 @@ class FailureAction:
 
 
 # Failure category → severity mapping
-_LIGHT_CATS   = frozenset({"proposal", "contract", "verification_light"})
+_LLM_REPAIR_CATS = frozenset({"proposal", "contract"})
+_LIGHT_CATS   = frozenset({"verification_light"})
 _HEAVY_CATS   = frozenset({"verification_heavy", "evaluation"})
 _SEARCH_CATS  = frozenset({"search_guidance"})  # C10_novelty etc: retry_llm, never infra streak
 _CONTROL_CATS = frozenset({"framework_control", "agentic_budget_control", "session_timeout"})
@@ -50,7 +51,7 @@ class FailureRouter:
       framework_control    → fail_closed (no proposal/infra retry streak)
 
     Streak-based escalation (stateful, requires caller to pass streak/total):
-      light category streak >= light_streak_infra_suspected → infra_suspected
+      verification_light streak >= light_streak_infra_suspected → infra_suspected
       heavy category streak >= heavy_streak_abandon_fast    → abandon_fast
       retry_llm: escalation_level reflects streak (0/1/2)
     """
@@ -117,7 +118,7 @@ class FailureRouter:
         # ----------------------------------------------------------------
         # Normal routing (unchanged logic, with escalation_level tagging)
         # ----------------------------------------------------------------
-        if cat in ("proposal", "contract"):
+        if cat in _LLM_REPAIR_CATS:
             remaining = max(
                 0, self.retry_config.max_llm_retries - branch.retry_count
             )

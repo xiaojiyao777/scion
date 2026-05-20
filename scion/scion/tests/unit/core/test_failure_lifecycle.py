@@ -108,6 +108,55 @@ def test_retry_llm_updates_branch_and_failure_counters() -> None:
     assert branch_store.saved == [branch.branch_id]
 
 
+def test_contract_failures_do_not_block_branch_as_infra() -> None:
+    ctrl = BranchController()
+    branch = ctrl.create_branch(_champion())
+    service, _, _, _, _, streak, _ = _service(ctrl)
+
+    for _ in range(3):
+        service.handle_failure(
+            branch,
+            FailureEvent(category="contract", detail="candidate rejected"),
+        )
+
+    assert branch.state == BranchState.EXPLORE
+    assert branch.pending_retry is False
+    assert branch.failure_codes == ["CONTRACT", "CONTRACT", "CONTRACT"]
+    assert streak["contract"] == 3
+
+
+def test_infra_escalation_uses_branch_local_streak() -> None:
+    ctrl = BranchController()
+    branch_a = ctrl.create_branch(_champion())
+    branch_b = ctrl.create_branch(_champion())
+    service, _, _, _, _, streak, _ = _service(ctrl)
+
+    service.handle_failure(
+        branch_a,
+        FailureEvent(category="verification_light", detail="flaky check"),
+    )
+    service.handle_failure(
+        branch_a,
+        FailureEvent(category="verification_light", detail="flaky check"),
+    )
+    service.handle_failure(
+        branch_b,
+        FailureEvent(category="verification_light", detail="flaky check"),
+    )
+
+    assert streak["verification_light"] == 3
+    assert branch_b.state == BranchState.EXPLORE
+    assert branch_b.pending_retry is True
+
+    service.handle_failure(
+        branch_a,
+        FailureEvent(category="verification_light", detail="flaky check"),
+    )
+
+    assert branch_a.state == BranchState.BLOCKED_INFRA
+    assert branch_b.state == BranchState.EXPLORE
+
+
 def test_heavy_failure_blacklists_hypothesis_and_consumes_budget() -> None:
     ctrl = BranchController()
     branch = ctrl.create_branch(_champion())

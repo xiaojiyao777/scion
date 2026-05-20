@@ -52,6 +52,14 @@ FALSE_PREMISES = (
         "cross_route_or_opt_2_3",
     ),
     (
+        "missing_or_opt_1",
+        (
+            "The active solver lacks Or-opt-1 single customer relocation; "
+            "add that VNS neighborhood."
+        ),
+        "or_opt_1_relocation",
+    ),
+    (
         "missing_inter_route_or_opt_segment_relocation",
         (
             "The active solver lacks inter-route Or-opt segment relocation; "
@@ -66,6 +74,22 @@ FALSE_PREMISES = (
             "a seed-based related removal operator using distance and demand."
         ),
         "shaw_related_removal",
+    ),
+    (
+        "missing_route_removal",
+        (
+            "The active destroy portfolio has no whole route removal operator, "
+            "so add route removal."
+        ),
+        "route_removal",
+    ),
+    (
+        "missing_regret_repair",
+        (
+            "The active repair portfolio lacks regret-2/regret-3 insertion "
+            "repair, so add regret insertion."
+        ),
+        "regret_insertion_repair",
     ),
     (
         "missing_cross_route_tail_exchange",
@@ -98,7 +122,12 @@ MECHANISM_FACT_IDS = {
     "construction_seed_strategy": ("cvrp.construction.diverse_feasible_seed",),
     "adaptive_operator_weights": ("cvrp.acceptance.adaptive_operator_weights",),
     "cross_route_or_opt_2_3": ("cvrp.local_search.cross_route_or_opt_2_3",),
+    "or_opt_1_relocation": ("cvrp.local_search.or_opt_1_relocation",),
     "shaw_related_removal": ("cvrp.destroy_repair.shaw_related_removal",),
+    "route_removal": ("cvrp.destroy_repair.route_removal",),
+    "regret_insertion_repair": (
+        "cvrp.destroy_repair.regret_insertion_repair",
+    ),
     "cross_route_tail_exchange": ("cvrp.local_search.cross_route_tail_exchange",),
     "feasibility_crossing": ("cvrp.search_state.starts_feasible_rejects_infeasible",),
     "route_limit_fleet_repair": (
@@ -431,6 +460,51 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
     assert result.mechanism == "shaw_related_removal"
     assert "_shaw_removal" in " ".join([result.reason, *result.evidence])
     assert result.fact_ids == ("cvrp.destroy_repair.shaw_related_removal",)
+    assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
+        "fact_packet_digest"
+    ]
+
+
+@pytest.mark.parametrize(
+    "text,mechanism,fact_id",
+    (
+        (
+            "Add Or-opt-1 single customer relocation as a new local-search neighborhood.",
+            "or_opt_1_relocation",
+            "cvrp.local_search.or_opt_1_relocation",
+        ),
+        (
+            "Introduce a new whole route removal destroy operator.",
+            "route_removal",
+            "cvrp.destroy_repair.route_removal",
+        ),
+        (
+            "Register an additional regret-2/regret-3 repair insertion operator.",
+            "regret_insertion_repair",
+            "cvrp.destroy_repair.regret_insertion_repair",
+        ),
+    ),
+)
+def test_mechanism_novelty_gate_blocks_explicit_existing_operator_duplicates(
+    tmp_path,
+    text: str,
+    mechanism: str,
+    fact_id: str,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(text),
+        context=context,
+        active_solver_snapshot=snapshot,
+    )
+
+    assert result is not None
+    assert result.failure_category == "duplicate_mechanism"
+    assert result.premise_check == "duplicate"
+    assert result.mechanism == mechanism
+    assert result.fact_ids == (fact_id,)
     assert result.fact_packet_digest == snapshot["active_algorithm_facts"][
         "fact_packet_digest"
     ]

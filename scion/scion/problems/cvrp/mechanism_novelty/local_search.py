@@ -60,6 +60,55 @@ def _duplicates_or_opt_2_3(text: str) -> bool:
     )
 
 
+def _claims_missing_or_opt_1(text: str) -> bool:
+    if not _mentions_or_opt_1(text):
+        return False
+    explicit = bool(
+        re.search(
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,100}\b(?:or opt 1|or-opt-1|"
+            r"oropt1|single customer relocat(?:e|ion)|one customer relocat(?:e|ion))\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:or opt 1|or-opt-1|oropt1|single customer relocat(?:e|ion)|"
+            r"one customer relocat(?:e|ion))\b.{0,100}\b(?:missing|lacks?|"
+            r"absent|without|no|does not have|does not include|doesn't have|"
+            r"doesn't include)\b",
+            text,
+        )
+    )
+    if explicit:
+        return True
+    if _describes_existing_or_opt_improvement(text):
+        return False
+    return False
+
+
+def _duplicates_or_opt_1(text: str) -> bool:
+    if not _mentions_or_opt_1(text):
+        return False
+    explicit = bool(
+        re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,100}\b(?:or opt 1|or-opt-1|oropt1|single customer "
+            r"relocat(?:e|ion)|one customer relocat(?:e|ion))\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:or opt 1|or-opt-1|oropt1|single customer relocat(?:e|ion)|"
+            r"one customer relocat(?:e|ion))\b.{0,100}\b(?:new|novel|first|"
+            r"additional|missing|absent|lacks?)\b",
+            text,
+        )
+    )
+    if explicit:
+        return True
+    if _describes_existing_or_opt_improvement(text):
+        return False
+    return False
+
+
 def _claims_missing_cross_route_tail_exchange(text: str) -> bool:
     if not _mentions_cross_route_tail_exchange(text):
         return False
@@ -147,6 +196,25 @@ def _mentions_or_opt_2_3(text: str) -> bool:
             r"(?:2\s*/\s*3|2\s+and\s+3|length\s+2|length\s+3|\b2\b|\b3\b|two|three)"
             r".{0,35}\b(?:or opt|oropt)\b",
             text,
+        )
+    )
+
+
+def _mentions_or_opt_1(text: str) -> bool:
+    return bool(
+        re.search(r"\b(?:or opt 1|or-opt-1|oropt1|_or_opt_1)\b", text)
+        or (
+            _has_any(text, ("or opt", "oropt"))
+            and _has_any(
+                text,
+                (
+                    "single customer",
+                    "one customer",
+                    "length 1",
+                    "1 customer",
+                    "customer relocation",
+                ),
+            )
         )
     )
 

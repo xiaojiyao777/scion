@@ -16,15 +16,21 @@ from scion.problems.cvrp.mechanism_novelty.construction import (
 )
 from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _claims_missing_removal_savings_destroy,
+    _claims_missing_regret_insertion_repair,
+    _claims_missing_route_removal,
     _claims_missing_shaw_related_removal,
     _duplicates_removal_savings_destroy,
+    _duplicates_regret_insertion_repair,
+    _duplicates_route_removal,
     _duplicates_shaw_related_removal,
 )
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
 from scion.problems.cvrp.mechanism_novelty.local_search import (
     _claims_missing_cross_route_tail_exchange,
+    _claims_missing_or_opt_1,
     _claims_missing_or_opt_2_3,
     _duplicates_cross_route_tail_exchange,
+    _duplicates_or_opt_1,
     _duplicates_or_opt_2_3,
 )
 from scion.problems.cvrp.mechanism_novelty.route_limit import (
@@ -42,9 +48,12 @@ from scion.problems.cvrp.mechanism_novelty.snapshot import (
 _CONSTRUCTION_FACT = "cvrp.construction.diverse_feasible_seed"
 _ADAPTIVE_WEIGHTS_FACT = "cvrp.acceptance.adaptive_operator_weights"
 _OR_OPT_FACT = "cvrp.local_search.cross_route_or_opt_2_3"
+_OR_OPT_1_FACT = "cvrp.local_search.or_opt_1_relocation"
 _TAIL_EXCHANGE_FACT = "cvrp.local_search.cross_route_tail_exchange"
 _SHAW_RELATED_FACT = "cvrp.destroy_repair.shaw_related_removal"
+_ROUTE_REMOVAL_FACT = "cvrp.destroy_repair.route_removal"
 _REMOVAL_SAVINGS_FACT = "cvrp.destroy_repair.removal_savings_worst_removal"
+_REGRET_INSERTION_FACT = "cvrp.destroy_repair.regret_insertion_repair"
 _STARTS_FEASIBLE_FACT = "cvrp.search_state.starts_feasible_rejects_infeasible"
 _ROUTE_LIMIT_FACT = "cvrp.search_state.guards_route_limit"
 
@@ -134,6 +143,36 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.or_opt_evidence,
                 fact_ids=(_OR_OPT_FACT,),
+            )
+
+        if facts.has_or_opt_1_relocation and _claims_missing_or_opt_1(text):
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="or_opt_1_relocation",
+                reason=(
+                    "Hypothesis claims single-customer Or-opt / Or-opt-1 "
+                    "relocation is missing, but the active solver snapshot "
+                    "shows _or_opt_1 registered in the VNS operator list."
+                ),
+                evidence=facts.or_opt_1_evidence,
+                fact_ids=(_OR_OPT_1_FACT,),
+            )
+
+        if facts.has_or_opt_1_relocation and _duplicates_or_opt_1(text):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="or_opt_1_relocation",
+                reason=(
+                    "Hypothesis proposes adding Or-opt-1 / single-customer "
+                    "relocation as a new mechanism, but the active solver "
+                    "already contains _or_opt_1 in local search."
+                ),
+                evidence=facts.or_opt_1_evidence,
+                fact_ids=(_OR_OPT_1_FACT,),
             )
 
         if facts.has_cross_route_tail_exchange and _claims_missing_cross_route_tail_exchange(
@@ -238,6 +277,70 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.shaw_related_evidence,
                 fact_ids=(_SHAW_RELATED_FACT,),
+            )
+
+        if facts.has_route_removal and _claims_missing_route_removal(text):
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="route_removal",
+                reason=(
+                    "Hypothesis claims route-level or whole-route destroy removal "
+                    "is missing, but the active solver snapshot shows "
+                    "_route_removal wired through the destroy operator portfolio."
+                ),
+                evidence=facts.route_removal_evidence,
+                fact_ids=(_ROUTE_REMOVAL_FACT,),
+            )
+
+        if facts.has_route_removal and _duplicates_route_removal(text):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="route_removal",
+                reason=(
+                    "Hypothesis proposes adding route-level / whole-route removal "
+                    "as a new destroy capability, but the active solver already "
+                    "contains _route_removal."
+                ),
+                evidence=facts.route_removal_evidence,
+                fact_ids=(_ROUTE_REMOVAL_FACT,),
+            )
+
+        if facts.has_regret_insertion_repair and _claims_missing_regret_insertion_repair(
+            text
+        ):
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="regret_insertion_repair",
+                reason=(
+                    "Hypothesis claims regret insertion repair is missing, but "
+                    "the active solver snapshot shows _regret2_insertion and "
+                    "_regret3_insertion wired through the repair portfolio."
+                ),
+                evidence=facts.regret_insertion_evidence,
+                fact_ids=(_REGRET_INSERTION_FACT,),
+            )
+
+        if facts.has_regret_insertion_repair and _duplicates_regret_insertion_repair(
+            text
+        ):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="regret_insertion_repair",
+                reason=(
+                    "Hypothesis proposes adding regret insertion repair as a new "
+                    "capability, but the active solver already contains "
+                    "_regret2_insertion and _regret3_insertion."
+                ),
+                evidence=facts.regret_insertion_evidence,
+                fact_ids=(_REGRET_INSERTION_FACT,),
             )
 
         if (
