@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
 from scion.core.branch import StateTransitionError
+from scion.core.branch_lifecycle_policy import BranchLifecyclePolicy
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
 from scion.core.features import BudgetState, SafeFeatureExtractor
@@ -59,6 +60,10 @@ class EvaluationOrchestrator:
     increment_soft_abandon_streak: Callable[[], None]
     increment_telemetry_failed_count: Callable[[], None] = lambda: None
     frozen_budget_ledger: Any | None = None
+    branch_zero_win_streaks: MutableMapping[str, int] = field(default_factory=dict)
+    branch_lifecycle_policy: BranchLifecyclePolicy = field(
+        default_factory=BranchLifecyclePolicy
+    )
 
     def evaluate(
         self,
@@ -163,13 +168,28 @@ class EvaluationOrchestrator:
             and features.win_rate is not None
             and not features.telemetry_validation_repairable
         ):
-            if features.win_rate < 0.3:
+            lifecycle = self.branch_lifecycle_policy.decide(
+                features,
+                current_zero_win_streak=self.branch_zero_win_streaks.get(bid, 0),
+            )
+            if lifecycle.reason_codes:
+                self.decision_reason_codes[bid] = _merge_reason_codes(
+                    coordinated.reason_codes,
+                    lifecycle.reason_codes,
+                )
+            if lifecycle.soft_abandon:
                 logger.info(
-                    "Branch %s: win_rate=%.2f < 0.3 -> soft_abandon (T4)",
+                    "Branch %s: win_rate=%.2f lifecycle=%s -> soft_abandon",
                     bid,
                     features.win_rate,
+                    lifecycle.reason_codes,
                 )
-                self._record_soft_abandon_event(bid, features.win_rate)
+                self.branch_zero_win_streaks[bid] = lifecycle.next_zero_win_streak
+                self._record_soft_abandon_event(
+                    bid,
+                    features.win_rate,
+                    lifecycle.reason_codes,
+                )
                 self.increment_soft_abandon_streak()
                 self.apply_soft_abandon(
                     bid,
@@ -177,7 +197,7 @@ class EvaluationOrchestrator:
                     self.branch_current_hypothesis.get(bid),
                 )
                 return Decision.ABANDON, protocol_result, canary_result
-            if features.win_rate > 0.6:
+            elif features.win_rate > 0.6:
                 logger.info(
                     "Branch %s: win_rate=%.2f > 0.6 -> high_potential (continue_explore)",
                     bid,
@@ -234,7 +254,12 @@ class EvaluationOrchestrator:
             expand_round = branch.validation_expand_count
         return expand, expand_round
 
-    def _record_soft_abandon_event(self, branch_id: str, win_rate: float) -> None:
+    def _record_soft_abandon_event(
+        self,
+        branch_id: str,
+        win_rate: float,
+        reason_codes: tuple[str, ...],
+    ) -> None:
         try:
             self.registry.record_event(
                 {
@@ -242,13 +267,21 @@ class EvaluationOrchestrator:
                     "branch_id": branch_id,
                     "timestamp": datetime.now().isoformat(),
                     "event_kind": "abandon_fast",
-                    "reason": "win_rate_below_threshold",
+                    "reason": reason_codes[0] if reason_codes else "low_signal",
+                    "reason_codes": list(reason_codes),
                     "win_rate": win_rate,
-                    "abandon_type": "soft_t4",
+                    "abandon_type": "soft_lifecycle",
                 }
             )
         except Exception:
             pass
+
+
+def _merge_reason_codes(
+    first: tuple[str, ...],
+    second: tuple[str, ...],
+) -> tuple[str, ...]:
+    return tuple(dict.fromkeys([*first, *second]))
 
 
 def _frozen_budget_protocol_result(*, used: int, limit: int) -> ProtocolResult:

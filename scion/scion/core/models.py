@@ -321,6 +321,9 @@ class DecisionFeatures:
     recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
     budget_remaining_ratio: float
+    wins: int = 0
+    losses: int = 0
+    ties: int = 0
     runtime_guard_passed: Optional[bool] = None
     runtime_guard_ratio: Optional[float] = None
     runtime_guard_timeout: bool = False

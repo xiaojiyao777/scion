@@ -52,6 +52,32 @@ _GENERIC_FIELD_CONTAINER_KEYS = frozenset(
         "probes",
     }
 )
+_FRAMEWORK_RUNTIME_FIELD_EXACT_KEYS = frozenset(
+    {
+        "solver_algorithm_phase_runtime_ms",
+        "solver_algorithm_context_records",
+        "solver_algorithm_phase_delta_sum",
+        "solver_algorithm_phase_best_delta",
+        "solver_algorithm_phase_improvement_counts",
+    }
+)
+_RUNTIME_FIELD_SUFFIXES = (
+    "_runtime_ms",
+    "_elapsed_ms",
+    "_duration_ms",
+    "_time_ms",
+    "_iterations",
+    "_attempts",
+    "_moves",
+    "_counts",
+    "_records",
+    "_delta",
+    "_best_delta",
+    "_objective",
+    "_violation",
+    "_routes",
+    "_stop_reason",
+)
 
 
 def _expected_telemetry_category_errors(value: Any) -> tuple[str, ...]:
@@ -209,9 +235,23 @@ def _clean_mechanism_name(value: Any) -> str:
 
 def _is_explicit_mechanism_key(value: str) -> bool:
     key = str(value or "").strip().lower()
-    return bool(key) and key not in (
-        _WILDCARD_MECHANISM_KEYS
-        | _GENERIC_FIELD_CONTAINER_KEYS
-        | EXPECTED_TELEMETRY_CATEGORIES
-        | _EXPECTED_TELEMETRY_META_KEYS
+    return (
+        bool(key)
+        and key not in (
+            _WILDCARD_MECHANISM_KEYS
+            | _GENERIC_FIELD_CONTAINER_KEYS
+            | EXPECTED_TELEMETRY_CATEGORIES
+            | _EXPECTED_TELEMETRY_META_KEYS
+        )
+        and not _looks_like_runtime_field_key(key)
+    )
+
+
+def _looks_like_runtime_field_key(key: str) -> bool:
+    if key in _FRAMEWORK_RUNTIME_FIELD_EXACT_KEYS:
+        return True
+    if "." in key or "[" in key or "]" in key:
+        return True
+    return key.startswith(("solver_", "runtime_", "candidate_", "champion_")) and (
+        any(key.endswith(suffix) for suffix in _RUNTIME_FIELD_SUFFIXES)
     )

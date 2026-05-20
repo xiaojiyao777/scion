@@ -7,7 +7,9 @@ from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     declared_surface_telemetry_fields,
     format_telemetry_guard_issue,
+    normalize_declared_mechanisms,
     normalize_expected_telemetry,
+    normalize_expected_telemetry_by_mechanism,
     validate_expected_telemetry_contract,
 )
 from scion.runtime.telemetry_guard.evidence import (
@@ -81,6 +83,58 @@ def test_expected_telemetry_normalization_preserves_categories() -> None:
         "budget": ("solver_phase_runtime_ms",),
         "effect": ("mechanisms.seed.delta",),
     }
+
+
+def test_runtime_field_map_key_is_not_auto_declared_mechanism() -> None:
+    expected = {
+        "activation": {
+            "solver_algorithm_phase_runtime_ms": (
+                "solver_algorithm_phase_runtime_ms.multi_start_construction"
+            )
+        }
+    }
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "solver_algorithm_phase_runtime_ms.{mechanism}"
+                        ]
+                    },
+                ),
+            )
+        ]
+    )
+
+    assert normalize_declared_mechanisms(expected_telemetry=expected) == ()
+    assert normalize_expected_telemetry_by_mechanism(expected) == {}
+    assert normalize_declared_mechanisms(
+        [MechanismChange(id="multi_start_construction", change_type="add")],
+        expected_telemetry=expected,
+    ) == ("multi_start_construction",)
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "solver_algorithm_phase_runtime_ms": {
+                    "multi_start_construction": 3
+                }
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        expected_telemetry=expected,
+        declared_mechanisms=[
+            MechanismChange(id="multi_start_construction", change_type="add")
+        ],
+    )
+
+    assert summary["passed"] is True
+    assert summary["declared_mechanisms"] == ["multi_start_construction"]
+    assert "solver_algorithm_phase_runtime_ms" not in summary["mechanisms"]
+    assert set(summary["mechanisms"]) == {"multi_start_construction"}
 
 
 def test_telemetry_guard_treats_protected_objective_effect_as_no_regression_probe() -> None:

@@ -364,6 +364,7 @@ def compose_campaign_services(
         get_budget=lambda: owner._budget,
         decision_coordinator=owner._decision_coordinator,
         decision_reason_codes=owner._decision_reason_codes,
+        branch_zero_win_streaks=owner._branch_zero_win_streaks,
         campaign_id=owner._campaign_id,
         registry=owner._registry,
         materializer=owner._materializer,

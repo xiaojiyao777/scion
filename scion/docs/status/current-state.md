@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-19*
+*Last updated: 2026-05-20*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -15,6 +15,27 @@ framework: generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
+Low-win screening no longer means immediate single-round T4 abandon. Generic
+`core.branch_lifecycle_policy` classifies low-signal screening as weak-positive,
+neutral, zero-streak exhausted, or clearly regressive using only structured
+`DecisionFeatures` (`wins/losses/ties`, median delta, runtime summary, telemetry
+guard state). Weak-positive and mostly-tie branches preserve their workspace and
+patch for same-branch follow-up; clear losses, negative delta, major runtime
+slowdown, or exhausted zero-win streaks still soft-abandon. Scheduler behavior
+now supports an actual branch portfolio: protocol continuations and retries
+remain higher priority, but established ordinary explore branches no longer
+block sibling branch creation while capacity remains, and full research
+portfolios rotate by oldest `updated_at`. This preserves Scion's deterministic
+control boundary while letting the proposal agent iteratively improve weak
+branches instead of restarting from champion every round.
+
+The same repair removes a telemetry-noise source: runtime field container names
+such as `solver_algorithm_phase_runtime_ms` are no longer normalized into fake
+mechanism ids. Mechanism-specific runtime attribution such as
+`solver_algorithm_phase_runtime_ms.<mechanism_id>` remains valid when attached
+to a declared mechanism.
 
 The 2026-05-19 large-file audit is
 [`08-large-file-modularization-audit-20260519.md`](../reviews/scion-code-audit-20260517/08-large-file-modularization-audit-20260519.md).

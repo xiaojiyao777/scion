@@ -7,6 +7,11 @@ from dataclasses import dataclass, replace
 from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
+from scion.core.branch_lifecycle_policy import (
+    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_WEAK_SIGNAL_CONTINUE,
+    SCREENING_ZERO_WIN_STREAK_CONTINUE,
+)
 from scion.core.models import (
     Branch,
     BranchState,
@@ -22,7 +27,10 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
-from scion.core.telemetry_validation import TELEMETRY_VALIDATION_REPAIRABLE
+from scion.core.telemetry_validation import (
+    TELEMETRY_VALIDATION_REPAIRABLE,
+    screened_experiment_effective,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +135,23 @@ class DecisionFinalizer:
             )
 
         if decision == Decision.CONTINUE_EXPLORE:
+            if action_label == "reconcile":
+                self._abandon(branch=branch, h_record=h_record)
+                try:
+                    self.branch_controller.apply_decision(bid, Decision.ABANDON)
+                except StateTransitionError as exc:
+                    logger.error(
+                        "Branch %s: reconcile abandon failed: %s",
+                        bid,
+                        exc,
+                    )
+                self._persist_current_branch(bid)
+                return StepResult(
+                    action="reconcile",
+                    branch_id=bid,
+                    decision=Decision.ABANDON,
+                    reason="reconcile screening failed",
+                )
             return self._continue_explore(
                 branch=branch,
                 hypothesis=hypothesis,
@@ -157,11 +182,16 @@ class DecisionFinalizer:
             updated_branch = self.branch_controller.get_branch(bid)
             if updated_branch and updated_branch.state == BranchState.ABANDONED:
                 self.branch_patches.pop(bid, None)
+                primary_reason = (
+                    effective_reason_codes[0]
+                    if effective_reason_codes
+                    else "soft_lifecycle"
+                )
                 return StepResult(
                     action="soft_abandon",
                     branch_id=bid,
                     decision=decision,
-                    reason="T4: win_rate < 0.3",
+                    reason=f"soft_abandon: {primary_reason}",
                 )
             self._abandon(branch=branch, h_record=h_record)
         else:
@@ -273,32 +303,34 @@ class DecisionFinalizer:
             and protocol_result.stats is not None
             and protocol_result.stats.win_rate > 0
         )
+        preserve_low_signal_branch = _preserve_low_signal_screening_workspace(
+            protocol_result,
+            decision_reason_codes,
+        )
         preserve_workspace = verification_passed and (
-            has_positive_signal or telemetry_repairable
+            has_positive_signal
+            or telemetry_repairable
+            or preserve_low_signal_branch
         )
 
         if not preserve_workspace:
             self.discard_branch_workspace(bid)
             self.branch_patches.pop(bid, None)
 
+        if preserve_workspace and branch.direction is None:
+            branch.direction = (
+                f"{hypothesis.change_locus}: "
+                f"{(hypothesis.hypothesis_text or '')[:100]}"
+            )
+            logger.debug("Branch %s: direction set to %r", bid, branch.direction)
+
         if has_positive_signal:
             self.branch_zero_win_streaks[bid] = 0
-            if branch.direction is None:
-                branch.direction = (
-                    f"{hypothesis.change_locus}: "
-                    f"{(hypothesis.hypothesis_text or '')[:100]}"
-                )
-                logger.debug("Branch %s: direction set to %r", bid, branch.direction)
+        elif telemetry_repairable:
+            self.branch_zero_win_streaks.setdefault(bid, 0)
         else:
             streak = self.branch_zero_win_streaks.get(bid, 0) + 1
             self.branch_zero_win_streaks[bid] = streak
-            if streak >= 3 and branch.direction is not None:
-                logger.debug(
-                    "Branch %s: %d consecutive 0-win-rate rounds - clearing direction",
-                    bid,
-                    streak,
-                )
-                branch.direction = None
 
         if not telemetry_repairable:
             self.branch_hypotheses.pop(bid, None)
@@ -321,7 +353,11 @@ class DecisionFinalizer:
             "TELEMETRY_VALIDATION_REPAIRABLE: repair declared mechanism telemetry "
             "on the same branch"
             if telemetry_repairable
-            else "CONTINUE_EXPLORE: re-propose next step"
+            else (
+                "CONTINUE_EXPLORE: weak screening signal; improve the same branch"
+                if preserve_low_signal_branch
+                else "CONTINUE_EXPLORE: re-propose next step"
+            )
         )
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
@@ -414,3 +450,36 @@ class DecisionFinalizer:
                     self.branch_store.save(branch)
         except Exception as exc:
             logger.debug("BranchStore.save (decision) failed: %s", exc)
+
+
+def _preserve_low_signal_screening_workspace(
+    protocol_result: Optional[ProtocolResult],
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> bool:
+    if protocol_result is None or not screened_experiment_effective(protocol_result):
+        return False
+    if getattr(protocol_result.stage, "value", protocol_result.stage) != "screening":
+        return False
+    stats = protocol_result.stats
+    if stats is None:
+        return False
+    if stats.median_delta is not None and stats.median_delta < 0:
+        return False
+    if stats.candidate_failed_pairs > 0:
+        return False
+    if stats.runtime_ratio_median is not None and stats.runtime_ratio_median > 1.10:
+        return False
+    if (
+        stats.runtime_regression_rate is not None
+        and stats.runtime_regression_rate >= 0.90
+    ):
+        return False
+    lifecycle_codes = {
+        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+        SCREENING_WEAK_SIGNAL_CONTINUE,
+        SCREENING_ZERO_WIN_STREAK_CONTINUE,
+    }
+    reason_set = set(decision_reason_codes or ())
+    if lifecycle_codes & reason_set:
+        return True
+    return bool(stats.win_rate > 0 or stats.losses == 0)

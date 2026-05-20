@@ -105,6 +105,38 @@ class _Protocol:
         )
 
 
+class _WeakPositiveProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        return ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=8,
+                wins=1,
+                losses=0,
+                ties=7,
+                win_rate=0.125,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+                runtime_ratio_median=1.001,
+                runtime_regression_rate=0.56,
+                runtime_pairs=8,
+                valid_pairs=8,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="weak positive screening signal",
+            raw_metrics_ref="/tmp/metrics.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {"passed": True, "candidate_runs": 8},
+            },
+        )
+
+
 def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
@@ -167,3 +199,72 @@ def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
     assert experiment_count == 0
     assert telemetry_count == 1
     assert budget_used == 0
+
+
+def test_weak_positive_low_win_screening_continues_without_soft_abandon() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    experiment_count = 0
+    telemetry_count = 0
+    budget_used = 0
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    def increment_experiment_count() -> None:
+        nonlocal experiment_count
+        experiment_count += 1
+
+    def increment_telemetry_count() -> None:
+        nonlocal telemetry_count
+        telemetry_count += 1
+
+    def increment_budget_used() -> None:
+        nonlocal budget_used
+        budget_used += 1
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_WeakPositiveProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=increment_experiment_count,
+        increment_budget_used=increment_budget_used,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=increment_telemetry_count,
+        branch_zero_win_streaks={},
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.CONTINUE_EXPLORE
+    assert protocol_result is not None
+    assert branch_controller.soft_abandoned is False
+    assert experiment_count == 1
+    assert telemetry_count == 0
+    assert budget_used == 1
+    assert decision_reason_codes[branch.branch_id] == (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_WEAK_SIGNAL_CONTINUE",
+    )

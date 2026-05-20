@@ -1,6 +1,6 @@
 # Scion Agent Onboarding
 
-*Last updated: 2026-05-19*
+*Last updated: 2026-05-20*
 
 This is the first document an agent or developer should read before working on
 Scion. Keep it short. Its job is to establish the project model, the
@@ -61,6 +61,12 @@ reads deterministic `DecisionFeatures`, not raw LLM reasoning.
   fields fail closed when the selected surface declares them.
 - Frozen/holdout detail is exposure-controlled. Proposal agents should receive
   bounded aggregate feedback, not raw validation or benchmark records.
+- Branch governance follows v3: one branch is one research direction and may
+  evolve through multiple hypotheses. A weak but non-regressive screening result
+  is not automatically abandoned; Scion may preserve that branch for same-branch
+  follow-up while the scheduler opens sibling branches up to the active-branch
+  cap. Clear regressions, boundary failures, runtime failures, and exhausted
+  zero-signal streaks can still abandon.
 
 ## Architecture Governance
 
@@ -189,6 +195,12 @@ Important current interpretation:
   runtime failures, and meets `runtime.tie_speedup_ratio` can progress through
   screening/validation/frozen with `*_PASS_RUNTIME_TIE_IMPROVEMENT`; it still
   cannot bypass the three-layer protocol.
+- Low-win screening is now lifecycle-classified instead of single-round T4
+  killed. Weak-positive or mostly-tie branches preserve their branch workspace
+  for further hypothesis/code iterations; clearly regressive branches are still
+  soft-abandoned. The scheduler complements this with a portfolio rule: once an
+  explore branch has an established direction and capacity remains, Scion can
+  create sibling branches and later rotate research branches by last update.
 - Solver-design algorithm smoke must use the active campaign split/seed
   configuration, not a tiny split copied into a branch workspace. Smoke now
   runs canary plus a deterministic spread of screening cases so framework

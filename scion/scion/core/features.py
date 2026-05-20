@@ -98,10 +98,16 @@ class SafeFeatureExtractor:
         candidate_failed_pairs = 0
         champion_failed_pairs = 0
         n_cases = 0
+        wins = 0
+        losses = 0
+        ties = 0
 
         if protocol is not None:
             stats = protocol.stats
             n_cases = stats.n_cases
+            wins = stats.wins
+            losses = stats.losses
+            ties = stats.ties
             protocol_gate_outcome = protocol.gate_outcome
             win_rate = stats.win_rate
             median_delta = stats.median_delta
@@ -136,6 +142,9 @@ class SafeFeatureExtractor:
             verification_passed=verification.passed,
             canary_passed=canary.passed,
             n_cases=n_cases,
+            wins=wins,
+            losses=losses,
+            ties=ties,
             win_rate=win_rate,
             median_delta=median_delta,
             ci_low=ci_low,
@@ -242,6 +251,9 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         "failed_pairs",
         "candidate_failed_pairs",
         "champion_failed_pairs",
+        "wins",
+        "losses",
+        "ties",
     ):
         value = getattr(features, field_name)
         if value < 0:
