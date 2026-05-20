@@ -32,30 +32,21 @@ def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
         ),
     ):
         return True
-    if not _has_any(
-        text,
-        (
-            "fleet violation",
-            "fleet violation deficit",
-            "route limit",
-            "route count",
-            "more routes than",
-            "len(routes)",
-            "routes >",
-            "excess routes",
-        ),
-    ):
-        return False
     patterns = (
-        r"\bconstruction\b.{0,140}\b(?:more routes|route limit|fleet violation|excess routes)",
+        r"\bconstruction\b.{0,140}\b(?:more routes than|route limit excess|excess routes|positive fleet violation|nonzero fleet violation)",
         r"\b(?:more routes than|exceeds? route limit|route limit excess|excess routes)",
         r"\blen\s*\(\s*routes\s*\)\s*>\s*(?:route limit|allowed routes|max routes)",
+        r"\broute count\b.{0,80}\b(?:exceeds?|above|over)\b.{0,40}\b(?:route limit|allowed routes|max routes)\b",
+        r"\b(?:route limit|allowed routes|max routes)\b.{0,80}\b(?:exceeded|excess|violat(?:e|es|ing|ion))\b",
+        r"\bpositive fleet violation\b",
+        r"\b(?:nonzero|non zero) fleet violation\b",
+        r"\bfleet violation\s*(?:=|:|>)\s*[1-9]",
         r"\bfleet violation deficit\b",
-        r"\balns\b.{0,100}\b(?:repair|recover|reduce|drive).{0,80}\bfleet violation",
-        (
-            r"\bfleet violation\b.{0,100}\b"
-            r"(?:repair|recover|reduce|reaches zero|reach zero|becomes zero)"
-        ),
+        r"\bleav(?:e|es|ing)\b.{0,80}\bfleet violation\b.{0,60}\brepair\b",
+        r"\bfleet violation\b.{0,80}\b(?:repair|recover|reduce|eliminate|zero out)\b",
+        r"\b(?:repair|recover|reduce|eliminate|zero out)\s+(?:positive|nonzero|non zero)?\s*fleet violation\b",
+        r"\bcurrent search state\b.{0,100}\b(?:route cap violating|route limit excess|positive fleet violation)\b",
+        r"\b(?:route cap violating|route limit excess|positive fleet violation)\b.{0,100}\bcurrent search state\b",
         (
             r"\binfeasible(?: to | 2 |-)feasible\b.{0,100}\b"
             r"(?:fleet violation|route limit|route count)"
@@ -64,6 +55,7 @@ def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
             r"\b(?:fleet violation|route limit|route count)\b.{0,100}"
             r"\binfeasible(?: to | 2 |-)feasible\b"
         ),
+        r"\bdefault\b.{0,100}\b(?:positive fleet violation|route limit excess|route cap violating|fleet violation repair)\b",
     )
     return any(re.search(pattern, text) for pattern in patterns)
 

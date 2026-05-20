@@ -279,7 +279,7 @@ class ExploreStepPipeline:
                         "hypothesis generation failed",
                     ),
                     stopped=control_timeout,
-                    counts_toward_max_rounds=not control_timeout,
+                    counts_toward_max_rounds=False,
                 )
             if h_record is None:
                 raise RuntimeError(
@@ -325,6 +325,7 @@ class ExploreStepPipeline:
                     action="explore",
                     branch_id=bid,
                     reason="hypothesis contract failed",
+                    counts_toward_max_rounds=False,
                 )
 
             champion = self.get_champion()
@@ -406,7 +407,7 @@ class ExploreStepPipeline:
                     "code generation failed",
                 ),
                 stopped=control_timeout,
-                counts_toward_max_rounds=(not retry_attempt and not control_timeout),
+                counts_toward_max_rounds=False,
             )
 
         p_result = self.contract_gate.validate_patch(

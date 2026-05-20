@@ -261,7 +261,9 @@ class CampaignManager:
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
+            "screened_experiments": self._n_experiments,
             "total_rounds": self._round_num,
+            "proposal_attempts": self._round_num,
             "n_steps": len(self._step_history),
             "n_active_branches": len(branches),
             "champion_version": self._champion.version,

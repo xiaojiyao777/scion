@@ -40,7 +40,9 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "_two_opt_star cross-route suffix tail exchange",
             ],
             "destroy_repair": [
-                "_shaw_removal related proximity destroy removal distance demand route"
+                "_worst_removal ranks removal saving with "
+                "saving = -route.cost_of_remove(pos)",
+                "_shaw_removal related proximity destroy removal distance demand route",
             ],
             "alns_loop": [
                 "starts from a feasible construction",
@@ -189,6 +191,100 @@ def test_cvrp_mechanism_novelty_provider_allows_route_limit_repair_with_runtime_
     )
 
     assert result is None
+
+
+def test_cvrp_mechanism_novelty_provider_allows_distance_stagnation_escalation() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current ALNS destroy/repair loop uses a fixed destroy ratio "
+            "regardless of solution quality plateau length. When the search "
+            "stagnates, small perturbations are insufficient to escape local "
+            "optima. Add perturbation intensity escalation in scheduler.py: "
+            "after several ALNS iterations without best-solution improvement, "
+            "temporarily double the destroy ratio and removed customer count "
+            "ceiling, then reset on any best improvement. The expected effect "
+            "is escaping plateau regions and discovering shorter total_distance "
+            "solutions while fleet_violation remains zero."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness=(
+            "Fixed destroy ratio causes total-distance stagnation on plateau "
+            "regions while preserving fleet feasibility."
+        ),
+        expected_effect=(
+            "Increase solver_algorithm_best_improving_moves and reduce "
+            "solver_algorithm_total_distance without increasing fleet_violation."
+        ),
+        novelty_signature={
+            "predicted_direction": "distance_stagnation_escalation",
+            "target_objectives": ["total_distance"],
+        },
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current ALNS starts with positive fleet_violation after "
+            "construction and must repair fleet_violation to zero before "
+            "distance can improve."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness="Positive fleet_violation remains in the current search state.",
+        expected_effect="Reduce fleet_violation before optimizing distance.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.mechanism == "route_limit_fleet_repair"
+
+
+def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precisely() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a _savings_removal destroy heuristic that ranks customers by "
+            "removal savings and geometric detour cost using cost_of_remove, "
+            "then registers it as a new destroy operator. This capability is "
+            "absent because _shaw_removal uses proximity and _worst_removal "
+            "does not target savings from removal."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="The destroy pool lacks removal-savings targeting.",
+        expected_effect="Reduce total_distance by removing high-detour customers.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "duplicate"
+    assert result.failure_category == "duplicate_mechanism"
+    assert result.mechanism == "removal_savings_worst_removal"
+    rendered = " ".join([result.reason, *result.evidence])
+    assert "_worst_removal" in rendered
+    assert "cost_of_remove" in rendered
+    assert "removal saving" in rendered
+    assert result.mechanism != "shaw_related_removal"
 
 
 def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:

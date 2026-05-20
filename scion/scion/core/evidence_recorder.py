@@ -368,6 +368,11 @@ class EvidenceRecorder:
                 ),
                 "stopped": last_result.stopped,
                 "reason": last_result.reason,
+                "counts_toward_max_rounds": getattr(
+                    last_result,
+                    "counts_toward_max_rounds",
+                    True,
+                ),
             }
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
@@ -679,9 +684,27 @@ class EvidenceRecorder:
             balance_exhausted=inferred_balance_exhausted,
             circuit_breaker_tripped=circuit_breaker_tripped,
         )
+        screened_experiments = sum(
+            1 for step in steps if step.protocol_result is not None
+        )
+        state_screened_experiments: Any | None = None
+        if self.state_provider is not None:
+            try:
+                state_for_counts = dict(self.state_provider())
+                state_screened_experiments = state_for_counts.get(
+                    "screened_experiments",
+                    state_for_counts.get("n_experiments"),
+                )
+            except Exception as exc:  # pragma: no cover - summary is best-effort
+                logger.debug("state snapshot for campaign_summary counts failed: %s", exc)
+        if state_screened_experiments is not None:
+            screened_experiments = int(state_screened_experiments)
+
         summary: Dict[str, Any] = {
             "campaign_id": self.campaign_id,
             "total_rounds": round_num,
+            "proposal_attempts": round_num,
+            "screened_experiments": screened_experiments,
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
@@ -786,6 +809,7 @@ class EvidenceRecorder:
                 "change_locus": step.hypothesis.change_locus,
                 "target_file": step.hypothesis.target_file,
             },
+            "screened_experiment": step.protocol_result is not None,
         }
         if contract_not_run_reason:
             step_data["contract_not_run_reason"] = contract_not_run_reason

@@ -15,7 +15,9 @@ from scion.problems.cvrp.mechanism_novelty.construction import (
     _claims_nearest_neighbor_only,
 )
 from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
+    _claims_missing_removal_savings_destroy,
     _claims_missing_shaw_related_removal,
+    _duplicates_removal_savings_destroy,
     _duplicates_shaw_related_removal,
 )
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
@@ -149,6 +151,41 @@ class CvrpMechanismNoveltyProvider:
                     "already contains _two_opt_star."
                 ),
                 evidence=facts.tail_exchange_evidence,
+                snapshot_digest=facts.snapshot_digest,
+            )
+
+        if facts.has_removal_savings_worst_removal and _duplicates_removal_savings_destroy(
+            text
+        ):
+            return MechanismNoveltyResult(
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="removal_savings_worst_removal",
+                reason=(
+                    "Hypothesis proposes adding a removal-savings or detour-cost "
+                    "destroy operator as a new capability, but the active solver "
+                    "already contains _worst_removal, which ranks candidates by "
+                    "removal saving using saving = -route.cost_of_remove(pos)."
+                ),
+                evidence=facts.removal_savings_evidence,
+                snapshot_digest=facts.snapshot_digest,
+            )
+
+        if (
+            facts.has_removal_savings_worst_removal
+            and _claims_missing_removal_savings_destroy(text)
+        ):
+            return MechanismNoveltyResult(
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="removal_savings_worst_removal",
+                reason=(
+                    "Hypothesis claims removal-savings or detour-cost removal is "
+                    "missing, or that _worst_removal does not use removal "
+                    "savings, but the active solver already ranks _worst_removal "
+                    "candidates by saving = -route.cost_of_remove(pos)."
+                ),
+                evidence=facts.removal_savings_evidence,
                 snapshot_digest=facts.snapshot_digest,
             )
 

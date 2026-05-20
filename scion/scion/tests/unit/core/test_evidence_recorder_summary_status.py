@@ -1,12 +1,16 @@
 """Focused tests split from test_evidence_recorder.py."""
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
+from scion.core.step_result import StepResult
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
         state_provider=lambda: {
+            "n_experiments": 1,
+            "proposal_attempts": 3,
+            "screened_experiments": 1,
             "n_active_branches": 0,
             "branches": [],
         },
@@ -29,6 +33,8 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert from_disk == summary
     assert summary["campaign_id"] == "camp-1"
     assert summary["total_rounds"] == 3
+    assert summary["proposal_attempts"] == 3
+    assert summary["screened_experiments"] == 1
     assert summary["champion_version"] == 7
     assert summary["champion_weight_revision"] == 2
     assert summary["n_active_branches"] == 0
@@ -38,6 +44,7 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
 
     summary_step = summary["steps"][0]
     assert summary_step["round"] == 3
+    assert summary_step["screened_experiment"] is True
     assert summary_step["branch_id"] == "branch-1"
     assert summary_step["decision"] == "queue_validate"
     assert summary_step["hypothesis"]["text"] == "Improve route insertion with regret scoring."
@@ -274,6 +281,31 @@ def test_status_reports_balance_stop_consistently(tmp_path: Path) -> None:
     assert status["stop_category"] == "provider_error"
     assert status["provider_error"]["category"] == "balance_exhausted"
     assert on_disk["stopped_reason"] == "api_balance_exhausted"
+
+
+def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "proposal_attempts": 2,
+            "screened_experiments": 0,
+        },
+    )
+
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="explore",
+            branch_id="branch-1",
+            reason="agent_quality_blocked",
+            counts_toward_max_rounds=False,
+        )
+    )
+
+    assert status["proposal_attempts"] == 2
+    assert status["screened_experiments"] == 0
+    assert status["last_result"]["counts_toward_max_rounds"] is False
 
 
 def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(

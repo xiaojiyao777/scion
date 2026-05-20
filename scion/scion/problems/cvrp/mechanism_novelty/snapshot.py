@@ -23,6 +23,7 @@ class _ActiveMechanismFacts:
     has_cross_route_or_opt_2_3: bool = False
     has_cross_route_tail_exchange: bool = False
     has_shaw_related_removal: bool = False
+    has_removal_savings_worst_removal: bool = False
     starts_feasible_rejects_infeasible: bool = False
     guards_route_limit_search_state: bool = False
     construction_evidence: tuple[str, ...] = ()
@@ -30,6 +31,7 @@ class _ActiveMechanismFacts:
     or_opt_evidence: tuple[str, ...] = ()
     tail_exchange_evidence: tuple[str, ...] = ()
     shaw_related_evidence: tuple[str, ...] = ()
+    removal_savings_evidence: tuple[str, ...] = ()
     feasible_search_evidence: tuple[str, ...] = ()
     route_limit_evidence: tuple[str, ...] = ()
     snapshot_digest: str | None = None
@@ -125,6 +127,10 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
             and "demand" in destroy_repair_combined
             and "route" in destroy_repair_combined
         ),
+        has_removal_savings_worst_removal=(
+            _has_any(destroy_repair_combined, ("worst removal", "worst"))
+            and _has_any(destroy_repair_combined, ("removal", "destroy"))
+        ),
         starts_feasible_rejects_infeasible=(
             _has_any(alns_combined, ("starts from a feasible", "feasible construction"))
             and _has_any(
@@ -200,6 +206,9 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "distance + demand + original-route relatedness",
             ),
         ),
+        removal_savings_evidence=_removal_savings_evidence(
+            mechanism_summary.get("destroy_repair")
+        ),
         feasible_search_evidence=_evidence(
             mechanism_summary.get("alns_loop"),
             fallback=(
@@ -234,3 +243,30 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
 def _has_or_opt_token(text: str, length: str) -> bool:
     compact = text.replace(" ", "").replace("-", "_")
     return f"_or_opt_{length}" in compact or f"oropt{length}" in compact
+
+
+def _removal_savings_evidence(value: Any) -> tuple[str, ...]:
+    relevant = []
+    for item in _evidence(value, fallback=()):
+        normalized = _normalized_join((item,))
+        if _has_any(
+            normalized,
+            (
+                "worst removal",
+                "cost of remove",
+                "removal saving",
+                "savings from removal",
+                "detour",
+            ),
+        ):
+            relevant.append(item)
+    return tuple(
+        dict.fromkeys(
+            [
+                *relevant,
+                "_worst_removal",
+                "saving = -route.cost_of_remove(pos)",
+                "removal saving / detour eliminated",
+            ]
+        )
+    )

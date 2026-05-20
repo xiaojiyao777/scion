@@ -280,10 +280,11 @@ def test_new_hypothesis_attempt_increments_exploration_round() -> None:
         record_step=steps.append,
     )
 
-    pipeline.run(branch)
+    result = pipeline.run(branch)
 
     assert round_calls == 1
     assert idle_calls == 1
+    assert result.counts_toward_max_rounds is False
     assert steps[0].round_num == 1
     assert steps[0].proposal_session_ref == {"session_id": "s1"}
     assert pending[branch.branch_id] == (
@@ -319,7 +320,7 @@ def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> N
     result = pipeline.run(branch)
 
     assert result.reason == "agent_quality_blocked"
-    assert result.counts_toward_max_rounds is True
+    assert result.counts_toward_max_rounds is False
     assert branch.pending_retry is False
     assert pending == {}
     assert steps[0].failure_stage == "agent_quality_blocked"
@@ -435,6 +436,61 @@ def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None
     loop.run(max_rounds=1)
 
     assert calls == 2
+    assert "max_rounds_exhausted" in stopped_reasons
+
+
+def test_campaign_loop_does_not_count_proposal_only_blocks_against_max_rounds() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="agent_quality_blocked",
+            counts_toward_max_rounds=False,
+        ),
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="code generation failed",
+            counts_toward_max_rounds=False,
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    loop = CampaignLoop(
+        write_status=lambda **kwargs: stopped_reasons.append(
+            kwargs.get("stopped_reason")
+        )
+        if "stopped_reason" in kwargs
+        else None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=1)
+
+    assert calls == 3
     assert "max_rounds_exhausted" in stopped_reasons
 
 
