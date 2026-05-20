@@ -262,6 +262,11 @@ class CampaignManager:
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
             "screened_experiments": self._n_experiments,
+            "telemetry_failed_experiments": getattr(
+                self,
+                "_telemetry_failed_experiments",
+                0,
+            ),
             "total_rounds": self._round_num,
             "proposal_attempts": self._round_num,
             "n_steps": len(self._step_history),

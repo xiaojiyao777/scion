@@ -37,6 +37,10 @@ from scion.core.status_reporter import (
     normalize_status_payload,
     normalize_stopped_reason,
 )
+from scion.core.telemetry_validation import (
+    screened_experiment_effective,
+    telemetry_validation_feedback,
+)
 from scion.evidence.final_evidence_refs import (
     FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
     FINAL_EVIDENCE_REASON_PENDING_EXTERNAL,
@@ -373,6 +377,7 @@ class EvidenceRecorder:
                     "counts_toward_max_rounds",
                     True,
                 ),
+                "attempt_kind": getattr(last_result, "attempt_kind", "screening"),
             }
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
@@ -489,6 +494,12 @@ class EvidenceRecorder:
             "runtime_guard": _extract_runtime_guard_evidence(verification_result),
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
+            "screened_experiment_effective": screened_experiment_effective(
+                protocol_result
+            ),
+            "telemetry_validation_feedback": telemetry_validation_feedback(
+                protocol_result
+            ),
         }
         event = {
             "campaign_id": self.campaign_id,
@@ -551,6 +562,12 @@ class EvidenceRecorder:
                 "failure_codes": branch.failure_codes,
                 "runtime_guard": _extract_runtime_guard_evidence(verification_result),
                 "runtime_stats": runtime_stats,
+                "screened_experiment_effective": screened_experiment_effective(
+                    protocol_result
+                ),
+                "telemetry_validation_feedback": telemetry_validation_feedback(
+                    protocol_result
+                ),
             }
         )
         return {
@@ -684,8 +701,16 @@ class EvidenceRecorder:
             balance_exhausted=inferred_balance_exhausted,
             circuit_breaker_tripped=circuit_breaker_tripped,
         )
+        telemetry_failed_experiments = sum(
+            1
+            for step in steps
+            if step.protocol_result is not None
+            and not screened_experiment_effective(step.protocol_result)
+        )
         screened_experiments = sum(
-            1 for step in steps if step.protocol_result is not None
+            1
+            for step in steps
+            if screened_experiment_effective(step.protocol_result)
         )
         state_screened_experiments: Any | None = None
         if self.state_provider is not None:
@@ -694,6 +719,12 @@ class EvidenceRecorder:
                 state_screened_experiments = state_for_counts.get(
                     "screened_experiments",
                     state_for_counts.get("n_experiments"),
+                )
+                telemetry_failed_experiments = int(
+                    state_for_counts.get(
+                        "telemetry_failed_experiments",
+                        telemetry_failed_experiments,
+                    )
                 )
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary counts failed: %s", exc)
@@ -705,6 +736,7 @@ class EvidenceRecorder:
             "total_rounds": round_num,
             "proposal_attempts": round_num,
             "screened_experiments": screened_experiments,
+            "telemetry_failed_experiments": telemetry_failed_experiments,
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
@@ -810,6 +842,9 @@ class EvidenceRecorder:
                 "target_file": step.hypothesis.target_file,
             },
             "screened_experiment": step.protocol_result is not None,
+            "screened_experiment_effective": screened_experiment_effective(
+                step.protocol_result
+            ),
         }
         if contract_not_run_reason:
             step_data["contract_not_run_reason"] = contract_not_run_reason
@@ -962,7 +997,13 @@ class EvidenceRecorder:
                     or step.candidate_runtime_stop_reasons
                     or {}
                 ),
+                "screened_experiment_effective": screened_experiment_effective(pr),
             }
+            telemetry_feedback = telemetry_validation_feedback(pr)
+            if telemetry_feedback:
+                step_data["protocol_result"][
+                    "telemetry_validation_feedback"
+                ] = telemetry_feedback
             step_data["protocol_result"].update(_screening_rate_fields(pr))
             if pr.case_feedback:
                 step_data["case_feedback_summary"] = [

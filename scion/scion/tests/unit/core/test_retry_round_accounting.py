@@ -494,6 +494,72 @@ def test_campaign_loop_does_not_count_proposal_only_blocks_against_max_rounds() 
     assert "max_rounds_exhausted" in stopped_reasons
 
 
+def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_attempts() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="agent_quality_blocked",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        ),
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
+            counts_toward_max_rounds=False,
+            attempt_kind="telemetry_repairable",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        StepResult(action="explore", branch_id="b1", reason="screening 2"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=2)
+
+    assert calls == 4
+    assert [result.attempt_kind for result in last_results[:2]] == [
+        "proposal_block",
+        "telemetry_repairable",
+    ]
+    assert "max_rounds_exhausted" in stopped_reasons
+
+
 def test_campaign_loop_writes_status_heartbeat_before_step_execution() -> None:
     status_calls: list[str] = []
     calls = 0

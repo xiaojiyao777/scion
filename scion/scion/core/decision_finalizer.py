@@ -22,6 +22,7 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
+from scion.core.telemetry_validation import TELEMETRY_VALIDATION_REPAIRABLE
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ class DecisionFinalizer:
                 verification_result=verification_result,
                 action_label=action_label,
                 decision=decision,
+                decision_reason_codes=effective_reason_codes,
             )
 
         if decision == Decision.PROMOTE:
@@ -259,15 +261,21 @@ class DecisionFinalizer:
         verification_result: VerificationResult,
         action_label: str,
         decision: Decision,
+        decision_reason_codes: Optional[tuple[str, ...]],
     ) -> StepResult:
         bid = branch.branch_id
+        telemetry_repairable = TELEMETRY_VALIDATION_REPAIRABLE in set(
+            decision_reason_codes or ()
+        )
         verification_passed = verification_result.passed
         has_positive_signal = (
             protocol_result is not None
             and protocol_result.stats is not None
             and protocol_result.stats.win_rate > 0
         )
-        preserve_workspace = verification_passed and has_positive_signal
+        preserve_workspace = verification_passed and (
+            has_positive_signal or telemetry_repairable
+        )
 
         if not preserve_workspace:
             self.discard_branch_workspace(bid)
@@ -292,8 +300,11 @@ class DecisionFinalizer:
                 )
                 branch.direction = None
 
-        self.branch_hypotheses.pop(bid, None)
-        self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+        if not telemetry_repairable:
+            self.branch_hypotheses.pop(bid, None)
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
+        else:
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
         if branch.state not in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE):
             try:
                 self.branch_controller.apply_decision(bid, decision)
@@ -306,11 +317,19 @@ class DecisionFinalizer:
                 )
         self.reset_recent_abandoned_count()
         self.persist_branch_state(bid)
+        reason = (
+            "TELEMETRY_VALIDATION_REPAIRABLE: repair declared mechanism telemetry "
+            "on the same branch"
+            if telemetry_repairable
+            else "CONTINUE_EXPLORE: re-propose next step"
+        )
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
             branch_id=bid,
             decision=decision,
-            reason="CONTINUE_EXPLORE: re-propose next step",
+            reason=reason,
+            counts_toward_max_rounds=not telemetry_repairable,
+            attempt_kind="telemetry_repairable" if telemetry_repairable else "screening",
         )
 
     def _promote(

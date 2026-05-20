@@ -59,3 +59,20 @@ def test_decision_coordinator_normalizes_empty_reason_codes() -> None:
 
     assert result.reason_codes == ("CONTINUE_EXPLORE_NO_REASON",)
     assert result.rule == "screening:CONTINUE_EXPLORE_NO_REASON->continue_explore"
+
+
+def test_telemetry_validation_repairable_preempts_win_rate_abandon() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            win_rate=0.0,
+            median_delta=0.0,
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+        )
+    )
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.reason_codes == ("TELEMETRY_VALIDATION_REPAIRABLE",)
+    assert "SCREENING_FAIL_WIN_RATE" not in result.reason_codes

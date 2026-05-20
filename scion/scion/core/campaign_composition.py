@@ -217,6 +217,7 @@ def compose_campaign_services(
     owner._term_checker = TerminationChecker(termination_config or TerminationConfig())
     owner._budget = budget or BudgetState(total=1000, used=0)
     owner._n_experiments = 0
+    owner._telemetry_failed_experiments = 0
     owner._recent_abandoned_count = 0
     owner._hard_abandon_counted_branches = set()
     owner._soft_abandon_streak = 0
@@ -375,6 +376,11 @@ def compose_campaign_services(
             owner,
             "_n_experiments",
             owner._n_experiments + 1,
+        ),
+        increment_telemetry_failed_count=lambda: setattr(
+            owner,
+            "_telemetry_failed_experiments",
+            owner._telemetry_failed_experiments + 1,
         ),
         increment_budget_used=lambda: setattr(
             owner._budget,

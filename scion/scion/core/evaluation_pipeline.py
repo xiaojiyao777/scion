@@ -17,6 +17,10 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.telemetry_validation import (
+    telemetry_validation_failure_codes,
+    telemetry_validation_feedback,
+)
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,9 @@ class EvaluationPipeline:
                         mechanism_changes=request.mechanism_changes,
                         protected_objectives=request.protected_objectives,
                     )
+                    protocol_result = _annotate_telemetry_validation_failure(
+                        protocol_result
+                    )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
             else:
                 canary_result = CanaryResult(passed=True, reason="no protocol - auto-pass")
@@ -211,6 +218,8 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
                 f" telemetry_guard_failures={failure_count}"
                 f" telemetry_guard_warnings={warning_count}"
             )
+    telemetry_feedback = telemetry_validation_feedback(result)
+    telemetry_feedback_suffix = f" {telemetry_feedback}" if telemetry_feedback else ""
     exposed_summary = (
         f"stage={result.stage.value} outcome={result.gate_outcome} "
         f"stat={stats.statistical_status or 'legacy'} "
@@ -225,6 +234,7 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"candidate_operator_attempts={result.candidate_operator_attempts} "
         f"candidate_operator_accepted={result.candidate_operator_accepted}"
         f"{telemetry_guard}"
+        f"{telemetry_feedback_suffix}"
     )
     return replace(
         result,
@@ -232,6 +242,24 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         pair_feedback=(),
         case_feedback=(),
         pattern_summary=None,
+    )
+
+
+def _annotate_telemetry_validation_failure(
+    result: ProtocolResult,
+) -> ProtocolResult:
+    codes = telemetry_validation_failure_codes(result)
+    if not codes:
+        return result
+    reason_codes = tuple(dict.fromkeys([*codes, *result.reason_codes]))
+    feedback = telemetry_validation_feedback(result)
+    exposed_summary = result.exposed_summary or ""
+    if feedback and feedback not in exposed_summary:
+        exposed_summary = (exposed_summary + " " + feedback).strip()
+    return replace(
+        result,
+        reason_codes=reason_codes,
+        exposed_summary=exposed_summary,
     )
 
 

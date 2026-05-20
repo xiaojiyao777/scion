@@ -25,6 +25,7 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
+from scion.core.telemetry_validation import screened_experiment_effective
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class EvaluationOrchestrator:
     increment_experiment_count: Callable[[], None]
     increment_budget_used: Callable[[], None]
     increment_soft_abandon_streak: Callable[[], None]
+    increment_telemetry_failed_count: Callable[[], None] = lambda: None
     frozen_budget_ledger: Any | None = None
 
     def evaluate(
@@ -125,8 +127,11 @@ class EvaluationOrchestrator:
                     self.end_status_progress()
             else:
                 evaluation = pipeline.evaluate(request)
-            self.increment_experiment_count()
-            self.increment_budget_used()
+            if screened_experiment_effective(evaluation.protocol_result):
+                self.increment_experiment_count()
+                self.increment_budget_used()
+            elif evaluation.protocol_result is not None:
+                self.increment_telemetry_failed_count()
         except Exception as exc:
             logger.error("Branch %s: experiment failed: %s", bid, exc)
             self.handle_failure(branch, FailureEvent(category="evaluation", detail=str(exc)))
@@ -153,7 +158,11 @@ class EvaluationOrchestrator:
         )
 
         decision = coordinated.decision
-        if decision == Decision.CONTINUE_EXPLORE and features.win_rate is not None:
+        if (
+            decision == Decision.CONTINUE_EXPLORE
+            and features.win_rate is not None
+            and not features.telemetry_validation_repairable
+        ):
             if features.win_rate < 0.3:
                 logger.info(
                     "Branch %s: win_rate=%.2f < 0.3 -> soft_abandon (T4)",

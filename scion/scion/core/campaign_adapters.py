@@ -291,6 +291,13 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
     def increment_experiment_count() -> None:
         setattr(owner, "_n_experiments", getattr(owner, "_n_experiments", 0) + 1)
 
+    def increment_telemetry_failed_count() -> None:
+        setattr(
+            owner,
+            "_telemetry_failed_experiments",
+            getattr(owner, "_telemetry_failed_experiments", 0) + 1,
+        )
+
     def increment_budget_used() -> None:
         budget = owner._budget
         budget.used += 1
@@ -327,4 +334,5 @@ def _evaluation_orchestrator_for(owner: Any) -> EvaluationOrchestrator:
         increment_experiment_count=increment_experiment_count,
         increment_budget_used=increment_budget_used,
         increment_soft_abandon_streak=increment_soft_abandon_streak,
+        increment_telemetry_failed_count=increment_telemetry_failed_count,
     )

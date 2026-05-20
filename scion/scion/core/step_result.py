@@ -24,3 +24,11 @@ class StepResult:
     stopped: bool = False
     reason: str = ""
     counts_toward_max_rounds: bool = True
+    attempt_kind: Literal[
+        "screening",
+        "proposal_block",
+        "proposal_retry",
+        "telemetry_repairable",
+        "same_family_retry",
+        "other",
+    ] = "screening"

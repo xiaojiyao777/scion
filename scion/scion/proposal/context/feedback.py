@@ -15,6 +15,7 @@ from scion.proposal.context.feedback_grounding import (
     _auxiliary_screening_reasons,
     _build_feedback_grounding_summary,
     _primary_screening_reason,
+    _telemetry_validation_feedback_line,
 )
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
@@ -231,6 +232,9 @@ def _build_experiment_history(
                     "\n    protocol_auxiliary_warnings: "
                     + ", ".join(auxiliary_reasons[:4])
                 )
+            telemetry_feedback = _telemetry_validation_feedback_line(s)
+            if telemetry_feedback:
+                line += f"\n    telemetry_validation_feedback: {telemetry_feedback}"
             if is_detailed and pr.pattern_summary:
                 line += "\n" + _render_pattern_summary(pr.pattern_summary)
             if is_detailed and pr.case_feedback:

@@ -10,6 +10,8 @@ from scion.problems.cvrp.mechanism_novelty.text import _has_any
 def _claims_missing_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
         return False
+    if _targets_worst_removal_savings_not_shaw(text):
+        return False
     if _targets_segment_chain_unit_not_related_removal(text):
         return False
     if _scopes_change_to_existing_shaw_related_removal(text):
@@ -30,6 +32,8 @@ def _claims_missing_shaw_related_removal(text: str) -> bool:
 
 def _duplicates_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
+        return False
+    if _targets_worst_removal_savings_not_shaw(text):
         return False
     if _targets_segment_chain_unit_not_related_removal(text):
         return False
@@ -133,6 +137,11 @@ def _mentions_removal_savings_destroy(text: str) -> bool:
             "cost of remove",
             "detour cost",
             "detour based removal",
+            "cost-of-remove",
+            "cost of removal",
+            "worst position",
+            "worst-position",
+            "worst-position removal",
             "position aware targeted removal",
             "marginal distance contribution",
             "geometric detour",
@@ -143,6 +152,11 @@ def _mentions_removal_savings_destroy(text: str) -> bool:
         re.search(
             r"\b(?:saving|savings|detour|marginal distance)\b.{0,70}"
             r"\b(?:destroy|remov(?:al|e)|operator|heuristic)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:worst position|worst-position|cost[- ]of[- ]remove|cost of removal)\b"
+            r".{0,90}\b(?:destroy|remov(?:al|e)|operator|heuristic)\b",
             text,
         )
     )
@@ -283,3 +297,26 @@ def _targets_segment_chain_unit_not_related_removal(text: str) -> bool:
     ):
         return False
     return True
+
+
+def _targets_worst_removal_savings_not_shaw(text: str) -> bool:
+    if not _mentions_removal_savings_destroy(text):
+        return False
+    if "shaw" in text:
+        return False
+    return _has_any(
+        text,
+        (
+            "_worst_removal",
+            "worst removal",
+            "worst-position",
+            "worst position",
+            "cost_of_remove",
+            "cost of remove",
+            "cost-of-remove",
+            "removal saving",
+            "removal savings",
+            "savings from removal",
+            "detour cost",
+        ),
+    )

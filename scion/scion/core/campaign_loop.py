@@ -35,9 +35,23 @@ class CampaignLoop:
         final_reason: str | None = None
         counted_rounds = 0
         attempts = 0
-        # Non-round steps such as pending code retries should not consume the
-        # exploration round budget, but still need a hard guard against loops.
-        attempt_limit = max(1, int(max_rounds)) * 3 + 10
+        bad_proposal_attempts = 0
+        telemetry_repairable_attempts = 0
+        same_family_retry_attempts = 0
+        requested_rounds = max(1, int(max_rounds))
+        bad_proposal_limit = requested_rounds * 5 + 10
+        telemetry_repairable_limit = requested_rounds * 2 + 4
+        same_family_retry_limit = requested_rounds + 4
+        # Non-round steps such as proposal blocks and telemetry-repairable
+        # formal runs do not consume the screened-round budget.  The separate
+        # caps below keep bad proposal loops bounded without ending a campaign
+        # before it reaches the requested number of effective screened rounds.
+        attempt_limit = (
+            requested_rounds
+            + bad_proposal_limit
+            + telemetry_repairable_limit
+            + same_family_retry_limit
+        )
         while counted_rounds < max_rounds and attempts < attempt_limit:
             attempts += 1
             self.drain_weight_opt_events()
@@ -63,9 +77,25 @@ class CampaignLoop:
             result = self.run_one_step()
             if getattr(result, "counts_toward_max_rounds", True):
                 counted_rounds += 1
+            else:
+                kind = _attempt_kind(result)
+                if kind == "telemetry_repairable":
+                    telemetry_repairable_attempts += 1
+                    if telemetry_repairable_attempts >= telemetry_repairable_limit:
+                        final_reason = "telemetry_repairable_budget_exhausted"
+                elif kind == "same_family_retry":
+                    same_family_retry_attempts += 1
+                    if same_family_retry_attempts >= same_family_retry_limit:
+                        final_reason = "same_family_retry_budget_exhausted"
+                else:
+                    bad_proposal_attempts += 1
+                    if bad_proposal_attempts >= bad_proposal_limit:
+                        final_reason = "bad_proposal_budget_exhausted"
             self.write_status(last_result=result)
             if result.stopped:
                 final_reason = result.reason or "stopped"
+                break
+            if final_reason is not None:
                 break
 
             self.run_stagnation_check()
@@ -84,3 +114,15 @@ class CampaignLoop:
         self.drain_weight_opt_events()
         self.write_campaign_summary()
         self.write_status(stopped_reason=final_reason or "run_complete")
+
+
+def _attempt_kind(result: StepResult) -> str:
+    kind = str(getattr(result, "attempt_kind", "") or "")
+    if kind and kind != "screening":
+        return kind
+    reason = str(getattr(result, "reason", "") or "").lower()
+    if "telemetry_validation_repairable" in reason:
+        return "telemetry_repairable"
+    if "same_family" in reason or "semantic retry" in reason:
+        return "same_family_retry"
+    return "proposal_block"

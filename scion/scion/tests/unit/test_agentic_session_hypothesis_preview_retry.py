@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.core.models import Decision, EvalStats, ExperimentStage, ProtocolResult, StepRecord
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -80,6 +81,64 @@ def _duplicate_or_opt_hypothesis() -> HypothesisProposal:
             },
             expected_telemetry=_good_vns_mechanism_telemetry(),
         )
+    )
+
+
+def _targeted_multi_relocate_hypothesis() -> HypothesisProposal:
+    return HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/local_search.py",
+            hypothesis_text=(
+                "Add targeted_multi_relocate as a new local-search mechanism "
+                "for high-cost customers."
+            ),
+            target_weakness="The active local search misses targeted multi relocate.",
+            expected_effect="Improve total_distance with targeted relocations.",
+            mechanism_changes=[
+                {"id": "targeted_multi_relocate", "change_type": "add"},
+            ],
+            novelty_signature={
+                "algorithm_family": "targeted_multi_relocate",
+                "construction_strategy": "preserve_existing_construction",
+                "improvement_strategy": "targeted_multi_relocate",
+                "acceptance_strategy": "preserve_existing_acceptance",
+                "runtime_budget_strategy": "bounded_relocation_pairs",
+            },
+            expected_telemetry=_good_vns_mechanism_telemetry(),
+        )
+    )
+
+
+def _failed_screening_step(hypothesis: HypothesisProposal) -> StepRecord:
+    return StepRecord(
+        round_num=4,
+        branch_id="branch-cvrp",
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=16,
+                wins=0,
+                losses=0,
+                ties=16,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="/tmp/screening.json",
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
     )
 
 
@@ -224,6 +283,47 @@ def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
         and event.metadata.get("failure_code") == "C11_expected_telemetry"
         for event in transcript
     )
+
+
+def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
+    tmp_path: Path,
+) -> None:
+    repeat = _targeted_multi_relocate_hypothesis()
+    good = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    creative = SequentialHypothesisCreative([repeat, good])
+    context = _cvrp_context_with_champion(tmp_path)
+    context = replace(
+        context,
+        step_history=(_failed_screening_step(repeat),),
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-repeated-mechanism-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "repeated-mechanism"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == good
+    assert len(creative.hypothesis_contexts) == 2
+    retry_feedback = creative.hypothesis_contexts[1][
+        "agentic_hypothesis_semantic_rejections"
+    ][0]
+    assert retry_feedback["failure_category"] == "repeated_mechanism"
+    assert retry_feedback["mechanism"] == "targeted_multi_relocate"
+    assert "SCREENING_FAIL_WIN_RATE" in retry_feedback["reason"]
 
 
 def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(

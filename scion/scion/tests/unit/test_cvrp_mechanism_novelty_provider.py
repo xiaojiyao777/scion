@@ -231,6 +231,49 @@ def test_cvrp_mechanism_novelty_provider_allows_distance_stagnation_escalation()
     assert result is None
 
 
+def test_cvrp_route_limit_gate_allows_distance_and_repair_ordering_targets() -> None:
+    cases = [
+        (
+            "Adaptive destroy size should increase after total_distance stagnation "
+            "while preserving fleet_violation and route count as a protected constraint."
+        ),
+        (
+            "Cluster regret repair should improve insertion ordering for "
+            "total_distance; keep the capacity feasibility guard and route "
+            "feasibility guard unchanged."
+        ),
+        (
+            "Or-opt chain repair should reorder segment repair ordering for "
+            "shorter total_distance without increasing fleet_violation."
+        ),
+        (
+            "Large-neighborhood segment repair should target total_distance and "
+            "leave route feasibility guard behavior intact."
+        ),
+        (
+            "Nearest-neighbor-biased repair should reduce total_distance while "
+            "fleet_violation remains zero."
+        ),
+    ]
+
+    for text in cases:
+        hypothesis = HypothesisProposal(
+            hypothesis_text=text,
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            target_weakness=text,
+            expected_effect="Improve total_distance while preserving constraints.",
+        )
+
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is None, text
+
+
 def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -285,6 +328,33 @@ def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precis
     assert "cost_of_remove" in rendered
     assert "removal saving" in rendered
     assert result.mechanism != "shaw_related_removal"
+
+
+def test_cvrp_removal_savings_duplicate_prefers_worst_removal_reason() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a worst-position cost-of-remove destroy operator that selects "
+            "customers by route.cost_of_remove(pos) and removal savings before "
+            "repair. It is a new destroy heuristic, not a relatedness cluster."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Removal savings destroy is missing.",
+        expected_effect="Improve total_distance by removing high saving positions.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.mechanism == "removal_savings_worst_removal"
+    rendered = " ".join([result.reason, *result.evidence])
+    assert "_worst_removal" in rendered
+    assert "cost_of_remove" in rendered
+    assert "_shaw_removal" not in result.reason
 
 
 def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:

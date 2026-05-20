@@ -308,6 +308,74 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
     assert status["last_result"]["counts_toward_max_rounds"] is False
 
 
+def test_campaign_summary_separates_telemetry_failed_experiment(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=16,
+            wins=0,
+            losses=0,
+            ties=16,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=0.0,
+        ),
+        gate_outcome="fail",
+        reason_codes=(
+            "TELEMETRY_VALIDATION_REPAIRABLE",
+            "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+            "SCREENING_FAIL_WIN_RATE",
+        ),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/telemetry.json",
+        candidate_surface_runtime_summary={
+            "selected_surface": "solver_design",
+            "telemetry_guard": {
+                "passed": False,
+                "candidate_runs": 16,
+                "failures": [
+                    {
+                        "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                        "severity": "fail",
+                        "category": "activation",
+                        "mechanism": "iterated_local_search_perturbation",
+                        "field": "solver_algorithm_phase_runtime_ms.ils",
+                        "candidate_missing": 16,
+                        "candidate_present": 0,
+                        "candidate_positive": 0,
+                    }
+                ],
+            },
+        },
+    )
+    step.decision = Decision.CONTINUE_EXPLORE
+    step.decision_reason_codes = ("TELEMETRY_VALIDATION_REPAIRABLE",)
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+        stopped_reason="max_rounds_exhausted",
+    )
+
+    assert summary["screened_experiments"] == 0
+    assert summary["telemetry_failed_experiments"] == 1
+    summary_step = summary["steps"][0]
+    assert summary_step["screened_experiment"] is True
+    assert summary_step["screened_experiment_effective"] is False
+    protocol = summary_step["protocol_result"]
+    assert protocol["screened_experiment_effective"] is False
+    assert "iterated_local_search_perturbation" in (
+        protocol["telemetry_validation_feedback"]
+    )
+    assert "candidate_missing=16" in protocol["telemetry_validation_feedback"]
+
+
 def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(
     tmp_path: Path,
 ) -> None:

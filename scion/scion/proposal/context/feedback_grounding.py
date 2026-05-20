@@ -6,6 +6,10 @@ from collections import defaultdict
 from typing import Any, Mapping, Optional
 
 from scion.core.models import ExperimentStage, StepRecord
+from scion.core.telemetry_validation import (
+    TELEMETRY_VALIDATION_REPAIRABLE,
+    telemetry_validation_feedback,
+)
 from scion.proposal.mechanism_labels import extract_mechanism_label
 
 
@@ -253,6 +257,10 @@ def _choose_primary_reason(reason_codes: tuple[str, ...]) -> str:
         return ""
     for code in cleaned:
         upper = code.upper()
+        if upper == TELEMETRY_VALIDATION_REPAIRABLE:
+            return code
+    for code in cleaned:
+        upper = code.upper()
         if upper.startswith("SCREENING_FAIL") or "WIN_RATE" in upper:
             return code
     for code in cleaned:
@@ -300,6 +308,10 @@ def _mechanism_label_for_feedback(
         taxonomy=taxonomy,
         preferred_label=step.hypothesis.change_locus,
     )
+
+
+def _telemetry_validation_feedback_line(step: StepRecord) -> str:
+    return telemetry_validation_feedback(step.protocol_result)
 
 
 def _objective_set(values: Any) -> set[str]:

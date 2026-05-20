@@ -8,6 +8,10 @@ from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
 )
+from scion.core.telemetry_validation import (
+    is_repairable_telemetry_validation_failure,
+    telemetry_guard_summary,
+)
 
 
 # Failure taxonomy — two layers, both allowed in branch.failure_codes / DecisionFeatures.
@@ -122,6 +126,7 @@ class SafeFeatureExtractor:
         runtime_guard_passed, runtime_guard_ratio, runtime_guard_timeout = (
             _extract_runtime_guard(verification)
         )
+        telemetry_guard = telemetry_guard_summary(protocol)
 
         features = DecisionFeatures(
             branch_id=branch.branch_id,
@@ -157,6 +162,12 @@ class SafeFeatureExtractor:
             failed_pairs=failed_pairs,
             candidate_failed_pairs=candidate_failed_pairs,
             champion_failed_pairs=champion_failed_pairs,
+            telemetry_validation_repairable=(
+                is_repairable_telemetry_validation_failure(protocol)
+            ),
+            telemetry_guard_failed=(
+                telemetry_guard is not None and bool(telemetry_guard.get("passed")) is False
+            ),
         )
 
         _validate_no_free_text(features)
