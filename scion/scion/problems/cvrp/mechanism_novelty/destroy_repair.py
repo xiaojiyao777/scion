@@ -8,15 +8,25 @@ from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_a
 
 
 def _claims_missing_shaw_related_removal(text: str) -> bool:
+    return bool(_missing_shaw_related_removal_span(text))
+
+
+def _missing_shaw_related_removal_span(text: str) -> str:
     if not _mentions_shaw_related_removal(text):
-        return False
+        return ""
     if _targets_worst_removal_savings_not_shaw(text):
-        return False
+        return ""
     if _targets_segment_chain_unit_not_related_removal(text):
-        return False
-    if _scopes_change_to_existing_shaw_related_removal(text):
-        return False
-    patterns = (
+        return ""
+    if (
+        _scopes_change_to_existing_shaw_related_removal(text)
+        or _is_existing_shaw_variant_with_negated_missing_claim(text)
+    ):
+        return ""
+    return _first_regex_span(text, _MISSING_SHAW_RELATED_REMOVAL_PATTERNS)
+
+
+_MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
         r"\b(?:missing|lacks?|absent|without|no)\b.{0,80}"
         r"\b(?:shaw|related|relatedness|proximity|cluster(?:ed)?)\b.{0,80}"
         r"\b(?:destroy|remov(?:al|e)|operator|mechanism)\b",
@@ -26,8 +36,7 @@ def _claims_missing_shaw_related_removal(text: str) -> bool:
         r"\b(?:current|existing|active|champion|baseline|solver)\b.{0,90}"
         r"\b(?:missing|lacks?|absent|without|no)\b.{0,90}"
         r"\b(?:shaw|related|relatedness|proximity|cluster(?:ed)?)\b",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+)
 
 
 def _duplicates_shaw_related_removal(text: str) -> bool:
@@ -56,11 +65,18 @@ def _duplicates_shaw_related_removal(text: str) -> bool:
 
 
 def _claims_missing_removal_savings_destroy(text: str) -> bool:
+    return bool(_missing_removal_savings_destroy_span(text))
+
+
+def _missing_removal_savings_destroy_span(text: str) -> str:
     if not _mentions_removal_savings_destroy(text):
-        return False
+        return ""
     if _describes_existing_removal_savings_improvement(text):
-        return False
-    patterns = (
+        return ""
+    return _first_regex_span(text, _MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS)
+
+
+_MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS = (
         r"\b(?:missing|lacks?|absent|without|no)\b.{0,120}"
         r"\b(?:removal savings?|savings removal|detour cost|marginal distance contribution|cost of remove)\b",
         r"\b(?:removal savings?|savings removal|detour cost|marginal distance contribution|cost of remove)\b.{0,120}"
@@ -68,8 +84,7 @@ def _claims_missing_removal_savings_destroy(text: str) -> bool:
         r"\b(?:worst removal|current|existing|active|baseline|solver)\b.{0,140}"
         r"\b(?:not|does not|doesn t|isn t|is not)\b.{0,80}"
         r"\b(?:removal savings?|savings from removal|cost of remove|detour cost)\b",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+)
 
 
 def _duplicates_removal_savings_destroy(text: str) -> bool:
@@ -92,23 +107,24 @@ def _duplicates_removal_savings_destroy(text: str) -> bool:
 
 
 def _claims_missing_route_removal(text: str) -> bool:
+    return bool(_missing_route_removal_span(text))
+
+
+def _missing_route_removal_span(text: str) -> str:
     if not _mentions_route_removal(text):
-        return False
+        return ""
     if _describes_existing_route_removal_improvement(text):
-        return False
-    return bool(
-        re.search(
+        return ""
+    return _first_regex_span(
+        text,
+        (
             r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
             r"doesn't have|doesn't include)\b.{0,100}\b(?:whole route|route)"
             r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b",
-            text,
-        )
-        or re.search(
             r"\b(?:whole route|route)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
             r"\b.{0,100}\b(?:missing|lacks?|absent|without|no|does not have|"
             r"does not include|doesn't have|doesn't include)\b",
-            text,
-        )
+        ),
     )
 
 
@@ -358,6 +374,8 @@ def _mentions_regret_insertion_repair(text: str) -> bool:
 def _describes_existing_shaw_related_improvement(text: str) -> bool:
     if _scopes_change_to_existing_shaw_related_removal(text):
         return True
+    if _is_existing_shaw_variant_with_negated_missing_claim(text):
+        return True
     if _has_any(
         text,
         (
@@ -535,6 +553,43 @@ def _scopes_change_to_existing_shaw_related_removal(text: str) -> bool:
             "sampling",
             "weight",
             "weights",
+        ),
+    )
+
+
+def _is_existing_shaw_variant_with_negated_missing_claim(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "existing _shaw_removal",
+            "existing shaw removal",
+            "variant of the existing shaw",
+            "modify existing _shaw_removal",
+        ),
+    ):
+        return False
+    if not _has_any(
+        text,
+        (
+            "trigger",
+            "scoring",
+            "score",
+            "schedule",
+            "candidate filtering",
+            "filtering",
+            "adaptive",
+            "weights",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "not a new missing",
+            "not claiming",
+            "do not claim",
+            "does not claim",
+            "without claiming",
         ),
     )
 

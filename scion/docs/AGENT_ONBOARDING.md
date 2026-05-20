@@ -111,6 +111,13 @@ experiment patches.
   disposable. They must be preserved as branch-local research feedback and
   rendered into the next hypothesis context so the agent can change direction
   instead of restarting from a blank prompt.
+- After every experiment, audit provider-quality rejections across StepRecord,
+  DB state, branch failure codes/history, planner-facing experiment history, and
+  compact negative memory. The same rejection should stay in an agent-quality
+  category such as `agent_quality_blocked:proposal_premise_contradicted` or
+  `agent_quality_blocked:proposal_activation_diagnostic`; it must not be
+  persisted as `hypothesis_contract`, `FAILED_HYPOTHESIS_CONTRACT`, or branch
+  `CONTRACT`.
 - Proposal failures that do not count as effective screened rounds still belong
   in tainted proposal feedback. Keep this negative memory compact and
   branch-local: attempt/session id, branch id, mechanism id, stage,

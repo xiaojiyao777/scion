@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from scion.core.models import MechanismChange
 from scion.core.telemetry_validation import TELEMETRY_VALIDATION_REPAIRABLE
+from scion.proposal.context_manager import _build_experiment_history
 from scion.tests.unit.agentic_feedback_test_support import *
 
 def test_validation_and_frozen_raw_metric_refs_are_not_exposed_by_read_only_tools(
@@ -133,6 +134,7 @@ def test_agent_quality_feedback_surfaces_activation_diagnostic_kind(
     tmp_path: Path,
 ) -> None:
     context = _context(tmp_path)
+    branch_id = context.step_history[0].branch_id
     blocked = replace(
         context.step_history[0],
         protocol_result=None,
@@ -144,6 +146,8 @@ def test_agent_quality_feedback_surfaces_activation_diagnostic_kind(
             "activation_diagnostic_kind=expected_telemetry_mismatch"
         ),
         proposal_session_ref={
+            "session_id": "session-activation",
+            "failure_code": "proposal_activation_diagnostic",
             "primary_failure": {
                 "stage": "agent_quality_blocked",
                 "reason": "proposal_activation_diagnostic",
@@ -153,14 +157,29 @@ def test_agent_quality_feedback_surfaces_activation_diagnostic_kind(
                     "proposal activation diagnostic: "
                     "activation_diagnostic_kind=expected_telemetry_mismatch"
                 ),
-            }
+            },
+            "rejection_constraint": {
+                "mechanism": "multi_start_vns_seed",
+                "fact_packet_digest": "facts-digest-activation",
+                "fact_provenance": {
+                    "provenance": {
+                        "source": "champion_snapshot",
+                        "branch_id": branch_id,
+                    }
+                },
+            },
         },
     )
 
     rendered = _build_agent_quality_feedback([blocked], blocked.branch_id)
 
+    assert "session=session-activation" in rendered
+    assert f"branch={blocked.branch_id}" in rendered
+    assert "mechanism=multi_start_vns_seed" in rendered
     assert "proposal_activation_diagnostic" in rendered
     assert "activation_diagnostic_kind=expected_telemetry_mismatch" in rendered
+    assert "fact_packet_digest=facts-digest-activation" in rendered
+    assert "provenance=source=champion_snapshot" in rendered
     assert "DecisionFeatures" in rendered
 
 
@@ -256,6 +275,40 @@ def test_agent_quality_feedback_surfaces_hypothesis_contract_negative_memory(
     assert "fact_packet_digest=facts-digest-contract" in rendered
     assert "provenance=source=active_algorithm_facts_provider" in rendered
     assert "infra_suspected" not in rendered.lower()
+
+
+def test_experiment_history_uses_agent_quality_label_for_provider_blocks(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    blocked = replace(
+        context.step_history[0],
+        protocol_result=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "agentic_proposal:premise_contradicted: "
+            "agent_quality_blocked:proposal_premise_contradicted:"
+            "agent_grounding_failure"
+        ),
+        proposal_session_ref={
+            "session_id": "session-premise",
+            "failure_code": "proposal_premise_contradicted",
+            "agent_block_reason": "agent_quality_blocked",
+            "primary_failure": {
+                "stage": "agent_quality_blocked",
+                "reason": "proposal_premise_contradicted",
+                "category": "agent_grounding_failure",
+                "code": "proposal_premise_contradicted",
+                "detail": "active solver already has this mechanism",
+            },
+        },
+    )
+
+    history = _build_experiment_history([blocked], blocked.branch_id)
+
+    assert "agent_quality_blocked:proposal_premise_contradicted" in history
+    assert "FAILED_HYPOTHESIS_CONTRACT" not in history
+    assert "failed_at: agent_quality_blocked:proposal_premise_contradicted" in history
 
 
 def test_agent_quality_feedback_surfaces_repairable_telemetry_negative_memory(

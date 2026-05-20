@@ -375,6 +375,9 @@ class AgenticLifecycleMixin:
             ),
             "detail": str(detail or "")[:1600],
         }
+        mechanism = _mechanism_id_from_agentic_hypothesis(output.hypothesis)
+        if mechanism:
+            entry["mechanism"] = mechanism
         for key in (
             "gate_name",
             "mechanism",
@@ -385,6 +388,12 @@ class AgenticLifecycleMixin:
             "fact_packet_digest",
             "source_fact_digest",
             "provenance",
+            "fact_provenance",
+            "snapshot_digest",
+            "variant_allowed",
+            "contradicted_span",
+            "matched_span",
+            "allowed_variant_guidance",
         ):
             value = rejection.get(key)
             if value not in (None, "", [], {}):
@@ -401,3 +410,26 @@ class AgenticLifecycleMixin:
 
     def _clear_agentic_quality_feedback(self, branch_id: str) -> None:
         self.agentic_quality_feedback.pop(branch_id, None)
+
+
+def _mechanism_id_from_agentic_hypothesis(
+    hypothesis: HypothesisProposal | None,
+) -> str:
+    if hypothesis is None:
+        return ""
+    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+        value = (
+            change.get("id")
+            if isinstance(change, dict)
+            else getattr(change, "id", None)
+        )
+        text = str(value or "").strip()
+        if text:
+            return text
+    signature = getattr(hypothesis, "novelty_signature", None)
+    if isinstance(signature, dict):
+        for key in ("mechanism_id", "improvement_strategy", "algorithm_family"):
+            text = str(signature.get(key) or "").strip()
+            if text:
+                return text
+    return str(getattr(hypothesis, "change_locus", "") or "").strip()

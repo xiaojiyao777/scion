@@ -10,9 +10,11 @@ from scion.proposal.tools import ProposalObservation
 
 from scion.problems.cvrp.mechanism_novelty.acceptance import (
     _claims_weights_non_adaptive,
+    _weights_non_adaptive_span,
 )
 from scion.problems.cvrp.mechanism_novelty.construction import (
     _claims_nearest_neighbor_only,
+    _nearest_neighbor_only_span,
 )
 from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _claims_missing_removal_savings_destroy,
@@ -24,7 +26,10 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _duplicates_regret_insertion_repair,
     _duplicates_route_removal,
     _duplicates_shaw_related_removal,
+    _missing_removal_savings_destroy_span,
     _missing_regret_insertion_repair_span,
+    _missing_route_removal_span,
+    _missing_shaw_related_removal_span,
     _regret_insertion_allowed_variant_guidance,
 )
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
@@ -37,6 +42,10 @@ from scion.problems.cvrp.mechanism_novelty.local_search import (
     _duplicates_intra_two_opt,
     _duplicates_or_opt_1,
     _duplicates_or_opt_2_3,
+    _missing_cross_route_tail_exchange_span,
+    _missing_intra_two_opt_span,
+    _missing_or_opt_1_span,
+    _missing_or_opt_2_3_span,
 )
 from scion.problems.cvrp.mechanism_novelty.route_limit import (
     _claims_unproven_route_limit_or_fleet_repair,
@@ -45,6 +54,7 @@ from scion.problems.cvrp.mechanism_novelty.route_limit import (
 )
 from scion.problems.cvrp.mechanism_novelty.search_state import (
     _claims_unreachable_feasibility_crossing,
+    _unreachable_feasibility_crossing_span,
 )
 from scion.problems.cvrp.mechanism_novelty.snapshot import (
     _active_solver_snapshot_from_observations,
@@ -89,6 +99,7 @@ class CvrpMechanismNoveltyProvider:
         text = _hypothesis_text(hypothesis)
 
         if facts.has_diverse_construction and _claims_nearest_neighbor_only(text):
+            span = _nearest_neighbor_only_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -102,9 +113,18 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.construction_evidence,
                 fact_ids=(_CONSTRUCTION_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: improve feasible construction seed quality "
+                    "or add a new seed selection schedule without claiming the "
+                    "active baseline is nearest-neighbor-only."
+                ),
             )
 
         if facts.has_adaptive_weights and _claims_weights_non_adaptive(text):
+            span = _weights_non_adaptive_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -117,9 +137,18 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.adaptive_weight_evidence,
                 fact_ids=(_ADAPTIVE_WEIGHTS_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: modify the existing adaptive-weight update, "
+                    "score, or schedule; do not claim ALNS operator weights are "
+                    "uniform or non-adaptive throughout."
+                ),
             )
 
         if facts.has_intra_two_opt_reversal and _claims_missing_intra_two_opt(text):
+            span = _missing_intra_two_opt_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -132,6 +161,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.intra_two_opt_evidence,
                 fact_ids=(_INTRA_TWO_OPT_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: change candidate filtering, scoring, "
+                    "ordering, or budget around the existing _two_opt_intra "
+                    "operator; do not claim intra-route 2-opt is absent."
+                ),
             )
 
         if facts.has_intra_two_opt_reversal and _duplicates_intra_two_opt(text):
@@ -150,6 +187,7 @@ class CvrpMechanismNoveltyProvider:
             )
 
         if facts.has_cross_route_or_opt_2_3 and _claims_missing_or_opt_2_3(text):
+            span = _missing_or_opt_2_3_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -164,6 +202,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.or_opt_evidence,
                 fact_ids=(_OR_OPT_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: add candidate filtering, scoring, or "
+                    "scheduling around existing cross-route Or-opt operators; "
+                    "do not claim the cross-route Or-opt family is missing."
+                ),
             )
 
         if facts.has_cross_route_or_opt_2_3 and _duplicates_or_opt_2_3(text):
@@ -183,6 +229,7 @@ class CvrpMechanismNoveltyProvider:
             )
 
         if facts.has_or_opt_1_relocation and _claims_missing_or_opt_1(text):
+            span = _missing_or_opt_1_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -195,6 +242,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.or_opt_1_evidence,
                 fact_ids=(_OR_OPT_1_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: tune trigger, scoring, filtering, or "
+                    "budget for existing _or_opt_1; do not claim single-customer "
+                    "Or-opt relocation is missing."
+                ),
             )
 
         if facts.has_or_opt_1_relocation and _duplicates_or_opt_1(text):
@@ -215,6 +270,7 @@ class CvrpMechanismNoveltyProvider:
         if facts.has_cross_route_tail_exchange and _claims_missing_cross_route_tail_exchange(
             text
         ):
+            span = _missing_cross_route_tail_exchange_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -228,6 +284,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.tail_exchange_evidence,
                 fact_ids=(_TAIL_EXCHANGE_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: tune candidate filtering or scoring for "
+                    "existing _two_opt_star tail exchange; do not claim the "
+                    "cross-route tail exchange operator is absent."
+                ),
             )
 
         if facts.has_cross_route_tail_exchange and _duplicates_cross_route_tail_exchange(
@@ -269,6 +333,7 @@ class CvrpMechanismNoveltyProvider:
             facts.has_removal_savings_worst_removal
             and _claims_missing_removal_savings_destroy(text)
         ):
+            span = _missing_removal_savings_destroy_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -282,9 +347,18 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.removal_savings_evidence,
                 fact_ids=(_REMOVAL_SAVINGS_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: adjust scoring, sampling, or trigger "
+                    "around existing _worst_removal; do not claim removal "
+                    "savings are absent from the destroy portfolio."
+                ),
             )
 
         if facts.has_shaw_related_removal and _claims_missing_shaw_related_removal(text):
+            span = _missing_shaw_related_removal_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -298,6 +372,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.shaw_related_evidence,
                 fact_ids=(_SHAW_RELATED_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: modify trigger, scoring, schedule, "
+                    "relatedness weights, or candidate filtering for existing "
+                    "_shaw_removal; do not claim Shaw/related removal is absent."
+                ),
             )
 
         if facts.has_shaw_related_removal and _duplicates_shaw_related_removal(text):
@@ -317,6 +399,7 @@ class CvrpMechanismNoveltyProvider:
             )
 
         if facts.has_route_removal and _claims_missing_route_removal(text):
+            span = _missing_route_removal_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -329,6 +412,14 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.route_removal_evidence,
                 fact_ids=(_ROUTE_REMOVAL_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: adjust trigger, scoring, or schedule for "
+                    "existing _route_removal; do not claim whole-route removal "
+                    "is absent."
+                ),
             )
 
         if facts.has_route_removal and _duplicates_route_removal(text):
@@ -434,6 +525,7 @@ class CvrpMechanismNoveltyProvider:
             facts.starts_feasible_rejects_infeasible
             and _claims_unreachable_feasibility_crossing(text)
         ):
+            span = _unreachable_feasibility_crossing_span(text)
             return _result(
                 facts,
                 premise_check="contradicted",
@@ -448,6 +540,15 @@ class CvrpMechanismNoveltyProvider:
                 ),
                 evidence=facts.feasible_search_evidence,
                 fact_ids=(_STARTS_FEASIBLE_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=(
+                    "Allowed variant: improve feasible-state quality or "
+                    "acceptance among feasible candidates; do not rely on an "
+                    "infeasible current search state unless runtime feedback "
+                    "shows one."
+                ),
             )
 
         return None
@@ -467,6 +568,14 @@ def _result(
     matched_span: str | None = None,
     allowed_variant_guidance: str | None = None,
 ) -> MechanismNoveltyResult:
+    if premise_check == "contradicted" and not (contradicted_span or matched_span):
+        premise_check = "duplicate"
+        if failure_category == "premise_contradicted":
+            failure_category = "duplicate_mechanism"
+        allowed_variant_guidance = allowed_variant_guidance or (
+            "Provider did not find an exact contradicted span in the proposal; "
+            "downgraded from premise_contradicted to duplicate/novelty guidance."
+        )
     contradicted_fact_ids = fact_ids if premise_check == "contradicted" else ()
     return MechanismNoveltyResult(
         premise_check=premise_check,

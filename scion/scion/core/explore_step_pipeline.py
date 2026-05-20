@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, MutableMapping, Optional, Tuple
+from typing import Any, Callable, Mapping, MutableMapping, Optional, Tuple
 
 from scion.core.models import (
     Branch,
@@ -57,6 +57,75 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or "algorithm smoke did not pass" in text.lower()
         or "runtime_smoke.telemetry_guard" in text.lower()
     )
+
+
+def _proposal_session_ref_primary_failure(
+    ref: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if not isinstance(ref, Mapping):
+        return {}
+    primary = ref.get("primary_failure")
+    if isinstance(primary, Mapping):
+        return primary
+    return {}
+
+
+def _proposal_session_ref_failure_code(ref: Mapping[str, Any] | None) -> str:
+    if not isinstance(ref, Mapping):
+        return ""
+    primary = _proposal_session_ref_primary_failure(ref)
+    for value in (
+        primary.get("code"),
+        primary.get("reason"),
+        ref.get("failure_code"),
+        ref.get("failure_category"),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _proposal_session_ref_is_agent_quality_blocked(
+    ref: Mapping[str, Any] | None,
+) -> bool:
+    if not isinstance(ref, Mapping):
+        return False
+    primary = _proposal_session_ref_primary_failure(ref)
+    combined = " ".join(
+        str(value or "")
+        for value in (
+            primary.get("stage"),
+            primary.get("reason"),
+            primary.get("category"),
+            primary.get("code"),
+            ref.get("agent_block_reason"),
+            ref.get("failure_code"),
+            ref.get("failure_category"),
+            ref.get("termination_reason"),
+        )
+    )
+    return _is_agent_quality_blocked_detail(combined)
+
+
+def _agent_quality_failure_detail(
+    default_detail: str | None,
+    ref: Mapping[str, Any] | None,
+) -> str:
+    primary = _proposal_session_ref_primary_failure(ref)
+    code = _proposal_session_ref_failure_code(ref) or _AGENT_QUALITY_BLOCKED
+    category = str(primary.get("category") or ref.get("failure_category") or "").strip() if isinstance(ref, Mapping) else ""
+    reason = str(primary.get("reason") or ref.get("termination_reason") or "").strip() if isinstance(ref, Mapping) else ""
+    detail = str(primary.get("detail") or default_detail or "").strip()
+    parts = [_AGENT_QUALITY_BLOCKED, code]
+    if category and category != code:
+        parts.append(category)
+    prefix = ":".join(parts)
+    if reason and reason not in {code, category}:
+        prefix = f"{reason}: {prefix}"
+    if detail:
+        return f"{prefix}: {detail}"
+    return prefix
 
 
 def _is_agentic_control_timeout_detail(detail: str | None) -> bool:
@@ -216,8 +285,37 @@ class ExploreStepPipeline:
                     c_result_pending.failure_reason,
                 )
                 reason = c_result_pending.failure_reason or ""
-                category = "search_guidance" if "C10_novelty" in reason else "contract"
-                self.handle_failure(branch, FailureEvent(category=category, detail=reason))
+                session_ref = self._proposal_session_ref(
+                    bid,
+                    retry_attempt=retry_attempt,
+                    prior_failure=prior_failure,
+                )
+                quality_blocked = (
+                    _proposal_session_ref_is_agent_quality_blocked(session_ref)
+                    or _is_agent_quality_blocked_detail(reason)
+                )
+                failure_stage = (
+                    _AGENT_QUALITY_BLOCKED if quality_blocked else "hypothesis_contract"
+                )
+                failure_detail = (
+                    _agent_quality_failure_detail(reason, session_ref)
+                    if quality_blocked
+                    else c_result_pending.failure_reason
+                )
+                if quality_blocked:
+                    self._record_agent_quality_branch_signal(
+                        branch,
+                        failure_detail,
+                        session_ref,
+                    )
+                else:
+                    category = (
+                        "search_guidance" if "C10_novelty" in reason else "contract"
+                    )
+                    self.handle_failure(
+                        branch,
+                        FailureEvent(category=category, detail=reason),
+                    )
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
                 self.record_step(
                     StepRecord(
@@ -229,20 +327,20 @@ class ExploreStepPipeline:
                         verification_passed=False,
                         protocol_result=None,
                         decision=None,
-                        failure_stage="hypothesis_contract",
-                        failure_detail=c_result_pending.failure_reason,
+                        failure_stage=failure_stage,
+                        failure_detail=failure_detail,
                         hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=self._proposal_session_ref(
-                            bid,
-                            retry_attempt=retry_attempt,
-                            prior_failure=prior_failure,
-                        ),
+                        proposal_session_ref=session_ref,
                     )
                 )
                 return StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason="pending hypothesis re-failed contract gate",
+                    reason=(
+                        _AGENT_QUALITY_BLOCKED
+                        if quality_blocked
+                        else "pending hypothesis re-failed contract gate"
+                    ),
                     counts_toward_max_rounds=False,
                 )
             self.branch_hypotheses[bid] = hypothesis
@@ -254,6 +352,17 @@ class ExploreStepPipeline:
                     or "hypothesis generation failed"
                 )
                 control_timeout = _is_agentic_control_timeout_detail(failure_detail)
+                session_ref = self._proposal_session_ref(bid)
+                failure_stage = _proposal_failure_stage(
+                    failure_detail,
+                    "proposal",
+                )
+                if failure_stage == _AGENT_QUALITY_BLOCKED:
+                    self._record_agent_quality_branch_signal(
+                        branch,
+                        failure_detail,
+                        session_ref,
+                    )
                 self._record_proposal_fail_event(bid, failure_detail)
                 self.record_step(
                     StepRecord(
@@ -265,12 +374,9 @@ class ExploreStepPipeline:
                         verification_passed=False,
                         protocol_result=None,
                         decision=None,
-                        failure_stage=_proposal_failure_stage(
-                            failure_detail,
-                            "proposal",
-                        ),
+                        failure_stage=failure_stage,
                         failure_detail=failure_detail,
-                        proposal_session_ref=self._proposal_session_ref(bid),
+                        proposal_session_ref=session_ref,
                     )
                 )
                 return StepResult(
@@ -304,9 +410,38 @@ class ExploreStepPipeline:
                     c_result.failure_reason,
                 )
                 reason = c_result.failure_reason or ""
-                category = "search_guidance" if "C10_novelty" in reason else "contract"
-                self.handle_failure(branch, FailureEvent(category=category, detail=reason))
-                self._record_contract_failure(bid, hypothesis, c_result.failure_reason or "")
+                session_ref = self._proposal_session_ref(bid)
+                quality_blocked = (
+                    _proposal_session_ref_is_agent_quality_blocked(session_ref)
+                    or _is_agent_quality_blocked_detail(reason)
+                )
+                failure_stage = (
+                    _AGENT_QUALITY_BLOCKED if quality_blocked else "hypothesis_contract"
+                )
+                failure_detail = (
+                    _agent_quality_failure_detail(reason, session_ref)
+                    if quality_blocked
+                    else c_result.failure_reason
+                )
+                if quality_blocked:
+                    self._record_agent_quality_branch_signal(
+                        branch,
+                        failure_detail,
+                        session_ref,
+                    )
+                else:
+                    category = (
+                        "search_guidance" if "C10_novelty" in reason else "contract"
+                    )
+                    self.handle_failure(
+                        branch,
+                        FailureEvent(category=category, detail=reason),
+                    )
+                    self._record_contract_failure(
+                        bid,
+                        hypothesis,
+                        c_result.failure_reason or "",
+                    )
                 self.record_step(
                     StepRecord(
                         round_num=rnum,
@@ -317,16 +452,20 @@ class ExploreStepPipeline:
                         verification_passed=False,
                         protocol_result=None,
                         decision=None,
-                        failure_stage="hypothesis_contract",
-                        failure_detail=c_result.failure_reason,
+                        failure_stage=failure_stage,
+                        failure_detail=failure_detail,
                         hypothesis_id=h_record.hypothesis_id,
-                        proposal_session_ref=self._proposal_session_ref(bid),
+                        proposal_session_ref=session_ref,
                     )
                 )
                 return StepResult(
                     action="explore",
                     branch_id=bid,
-                    reason="hypothesis contract failed",
+                    reason=(
+                        _AGENT_QUALITY_BLOCKED
+                        if quality_blocked
+                        else "hypothesis contract failed"
+                    ),
                     counts_toward_max_rounds=False,
                 )
 
@@ -378,6 +517,21 @@ class ExploreStepPipeline:
                     failure_detail,
                 )
                 self.hypothesis_store.mark_status(h_record.hypothesis_id, "code_failed")
+            session_ref = self._proposal_session_ref(
+                bid,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
+            )
+            failure_stage = _proposal_failure_stage(
+                failure_detail,
+                "code_generation",
+            )
+            if failure_stage == _AGENT_QUALITY_BLOCKED:
+                self._record_agent_quality_branch_signal(
+                    branch,
+                    failure_detail,
+                    session_ref,
+                )
             self.record_step(
                 StepRecord(
                     round_num=rnum,
@@ -388,17 +542,10 @@ class ExploreStepPipeline:
                     verification_passed=False,
                     protocol_result=None,
                     decision=None,
-                    failure_stage=_proposal_failure_stage(
-                        failure_detail,
-                        "code_generation",
-                    ),
+                    failure_stage=failure_stage,
                     failure_detail=failure_detail,
                     hypothesis_id=h_record.hypothesis_id,
-                    proposal_session_ref=self._proposal_session_ref(
-                        bid,
-                        retry_attempt=retry_attempt,
-                        prior_failure=prior_failure,
-                    ),
+                    proposal_session_ref=session_ref,
                 )
             )
             return StepResult(
@@ -883,6 +1030,32 @@ class ExploreStepPipeline:
             )
         except Exception:
             pass
+
+    def _record_agent_quality_branch_signal(
+        self,
+        branch: Branch,
+        failure_detail: str | None,
+        session_ref: Mapping[str, Any] | None,
+    ) -> None:
+        code = _proposal_session_ref_failure_code(session_ref)
+        if not code:
+            if _PROPOSAL_ACTIVATION_DIAGNOSTIC in str(failure_detail or ""):
+                code = _PROPOSAL_ACTIVATION_DIAGNOSTIC
+            elif _PROPOSAL_PREMISE_CONTRADICTED in str(failure_detail or ""):
+                code = _PROPOSAL_PREMISE_CONTRADICTED
+            else:
+                code = _AGENT_QUALITY_BLOCKED
+        normalized = code.upper()
+        branch.failure_codes.append(normalized)
+        branch.updated_at = datetime.now()
+        try:
+            self.persist_branch_state(branch.branch_id)
+        except Exception:
+            logger.debug(
+                "BranchStore.save(%s) failed after agent-quality block",
+                branch.branch_id,
+                exc_info=True,
+            )
 
     def _record_proposal_fail_event(self, branch_id: str, failure_detail: str) -> None:
         try:

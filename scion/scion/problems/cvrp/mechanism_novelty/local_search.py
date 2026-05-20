@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from scion.problems.cvrp.mechanism_novelty.text import _has_any
+from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_any
 
 
 def _claims_missing_or_opt_2_3(text: str) -> bool:
@@ -16,7 +16,22 @@ def _claims_missing_or_opt_2_3(text: str) -> bool:
         return True
     if _describes_existing_or_opt_improvement(text):
         return False
-    patterns = (
+    return bool(_missing_or_opt_2_3_span(text))
+
+
+def _missing_or_opt_2_3_span(text: str) -> str:
+    if not _mentions_cross_route_or_opt_segment_relocation(text):
+        return ""
+    if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
+        return ""
+    if _claims_unsystematic_cross_route_segment_relocation_gap(text):
+        return _unsystematic_cross_route_segment_gap_span(text)
+    if _describes_existing_or_opt_improvement(text):
+        return ""
+    return _first_regex_span(text, _MISSING_OR_OPT_2_3_PATTERNS)
+
+
+_MISSING_OR_OPT_2_3_PATTERNS = (
         r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
         r"doesn't have|doesn't include)\b.{0,80}"
         r"\b(?:cross route|inter route|between route|across routes|different route)"
@@ -27,8 +42,7 @@ def _claims_missing_or_opt_2_3(text: str) -> bool:
         r"relocat(?:e|ion) segment)"
         r"\b.{0,80}\b(?:missing|lacks?|absent|without|no|does not have|"
         r"does not include|doesn't have|doesn't include)\b",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+)
 
 
 def _duplicates_or_opt_2_3(text: str) -> bool:
@@ -67,26 +81,29 @@ def _duplicates_or_opt_2_3(text: str) -> bool:
 def _claims_missing_or_opt_1(text: str) -> bool:
     if not _mentions_or_opt_1(text):
         return False
-    explicit = bool(
-        re.search(
-            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
-            r"doesn't have|doesn't include)\b.{0,100}\b(?:or opt 1|or-opt-1|"
-            r"oropt1|single customer relocat(?:e|ion)|one customer relocat(?:e|ion))\b",
-            text,
-        )
-        or re.search(
-            r"\b(?:or opt 1|or-opt-1|oropt1|single customer relocat(?:e|ion)|"
-            r"one customer relocat(?:e|ion))\b.{0,100}\b(?:missing|lacks?|"
-            r"absent|without|no|does not have|does not include|doesn't have|"
-            r"doesn't include)\b",
-            text,
-        )
-    )
+    explicit = bool(_missing_or_opt_1_span(text))
     if explicit:
         return True
     if _describes_existing_or_opt_improvement(text):
         return False
     return False
+
+
+def _missing_or_opt_1_span(text: str) -> str:
+    if not _mentions_or_opt_1(text):
+        return ""
+    return _first_regex_span(
+        text,
+        (
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,100}\b(?:or opt 1|or-opt-1|"
+            r"oropt1|single customer relocat(?:e|ion)|one customer relocat(?:e|ion))\b",
+            r"\b(?:or opt 1|or-opt-1|oropt1|single customer relocat(?:e|ion)|"
+            r"one customer relocat(?:e|ion))\b.{0,100}\b(?:missing|lacks?|"
+            r"absent|without|no|does not have|does not include|doesn't have|"
+            r"doesn't include)\b",
+        ),
+    )
 
 
 def _duplicates_or_opt_1(text: str) -> bool:
@@ -114,24 +131,33 @@ def _duplicates_or_opt_1(text: str) -> bool:
 
 
 def _claims_missing_intra_two_opt(text: str) -> bool:
+    return bool(_missing_intra_two_opt_span(text))
+
+
+def _missing_intra_two_opt_span(text: str) -> str:
     if not _mentions_intra_two_opt(text):
-        return False
+        return ""
+    if _is_adaptive_vns_neighborhood_ordering_scope(text):
+        return ""
     return _has_missing_gap_near(
         text,
-        (
-            "intra route 2 opt",
-            "intra-route 2-opt",
-            "intra route two opt",
-            "within route 2 opt",
-            "within-route 2-opt",
-            "two opt intra",
-            "_two_opt_intra",
-            "route internal 2 opt",
-            "route-internal 2-opt",
-            "segment reversal",
-            "arc reversal",
-        ),
+        _INTRA_TWO_OPT_TERMS,
     )
+
+
+_INTRA_TWO_OPT_TERMS = (
+    "intra route 2 opt",
+    "intra-route 2-opt",
+    "intra route two opt",
+    "within route 2 opt",
+    "within-route 2-opt",
+    "two opt intra",
+    "_two_opt_intra",
+    "route internal 2 opt",
+    "route-internal 2-opt",
+    "segment reversal",
+    "arc reversal",
+)
 
 
 def _duplicates_intra_two_opt(text: str) -> bool:
@@ -209,24 +235,34 @@ def _acknowledges_existing_or_opt(text: str) -> bool:
     )
 
 
-def _has_missing_gap_near(text: str, terms: tuple[str, ...]) -> bool:
+def _has_missing_gap_near(text: str, terms: tuple[str, ...]) -> str:
     missing = (
         r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
         r"doesn't have|doesn't include)\b"
     )
     term_pattern = r"\b(?:" + "|".join(re.escape(term) for term in terms) + r")\b"
-    return bool(
-        re.search(missing + r".{0,120}" + term_pattern, text)
-        or re.search(term_pattern + r".{0,120}" + missing, text)
+    return _first_regex_span(
+        text,
+        (
+            missing + r".{0,120}" + term_pattern,
+            term_pattern + r".{0,120}" + missing,
+        ),
     )
 
 
 def _claims_missing_cross_route_tail_exchange(text: str) -> bool:
+    return bool(_missing_cross_route_tail_exchange_span(text))
+
+
+def _missing_cross_route_tail_exchange_span(text: str) -> str:
     if not _mentions_cross_route_tail_exchange(text):
-        return False
+        return ""
     if _describes_existing_tail_exchange_improvement(text):
-        return False
-    patterns = (
+        return ""
+    return _first_regex_span(text, _MISSING_CROSS_ROUTE_TAIL_EXCHANGE_PATTERNS)
+
+
+_MISSING_CROSS_ROUTE_TAIL_EXCHANGE_PATTERNS = (
         r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
         r"doesn't have|doesn't include)\b.{0,100}"
         r"\b(?:tail|suffix|two opt star|2 opt star|2optstar|two-opt-star)"
@@ -235,8 +271,7 @@ def _claims_missing_cross_route_tail_exchange(text: str) -> bool:
         r"\b.{0,100}\b(?:swap|exchange|move|neighborhood|operator)\b.{0,100}"
         r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
         r"doesn't have|doesn't include)\b",
-    )
-    return any(re.search(pattern, text) for pattern in patterns)
+)
 
 
 def _duplicates_cross_route_tail_exchange(text: str) -> bool:
@@ -511,12 +546,16 @@ def _has_or_opt_improvement_terms(text: str) -> bool:
 
 
 def _claims_unsystematic_cross_route_segment_relocation_gap(text: str) -> bool:
+    return bool(_unsystematic_cross_route_segment_gap_span(text))
+
+
+def _unsystematic_cross_route_segment_gap_span(text: str) -> str:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
-        return False
+        return ""
     if _targets_existing_or_opt_filter_gap(text) or _adds_or_opt_improvement_control(
         text
     ):
-        return False
+        return ""
     gap_terms = (
         "not systematically",
         "not systematic",
@@ -527,25 +566,54 @@ def _claims_unsystematic_cross_route_segment_relocation_gap(text: str) -> bool:
         "does not explicitly",
         "doesn't explicitly",
     )
-    if _has_any(text, gap_terms):
-        return True
-    return bool(
+    for term in gap_terms:
+        if term in text:
+            start = max(0, text.find(term) - 80)
+            end = min(len(text), text.find(term) + len(term) + 120)
+            return text[start:end].strip()
+    return _first_regex_span(text, _UNSYSTEMATIC_CROSS_ROUTE_SEGMENT_GAP_PATTERNS)
+
+
+_UNSYSTEMATIC_CROSS_ROUTE_SEGMENT_GAP_PATTERNS = (
+    r"\b(?:missing|lacks?|without|no)\b.{0,90}"
+    r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+    r"three customer|2 customer|3 customer|2\s+3 customer|"
+    r"k customer|multi customer)\b"
+    r".{0,90}\b(?:across routes|cross route|inter route|between route|"
+    r"different route)\b",
+    r"\b(?:across routes|cross route|inter route|between route|"
+    r"different route)\b.{0,90}"
+    r"\b(?:missing|lacks?|without|no)\b.{0,90}"
+    r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
+    r"three customer|2 customer|3 customer|2\s+3 customer|"
+    r"k customer|multi customer)\b",
+)
+
+
+def _is_adaptive_vns_neighborhood_ordering_scope(text: str) -> bool:
+    if not _has_any(text, ("adaptive", "adapt", "success counter", "probability")):
+        return False
+    if not _has_any(
+        text,
+        (
+            "vns",
+            "neighborhood order",
+            "neighborhood ordering",
+            "neighborhood scheduling",
+            "operator selection",
+            "neighborhood selection",
+            "fixed sequence",
+            "fixed order",
+        ),
+    ):
+        return False
+    explicit_missing_operator = bool(
         re.search(
-            r"\b(?:missing|lacks?|without|no)\b.{0,90}"
-            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
-            r"three customer|2 customer|3 customer|2\s+3 customer|"
-            r"k customer|multi customer)\b"
-            r".{0,90}\b(?:across routes|cross route|inter route|between route|"
-            r"different route)\b",
-            text,
-        )
-        or re.search(
-            r"\b(?:across routes|cross route|inter route|between route|"
-            r"different route)\b.{0,90}"
-            r"\b(?:missing|lacks?|without|no)\b.{0,90}"
-            r"\b(?:ordered\s+)?(?:segment|chain|length\s*[23]|two customer|"
-            r"three customer|2 customer|3 customer|2\s+3 customer|"
-            r"k customer|multi customer)\b",
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,60}"
+            r"\b(?:operator|neighborhood|move)\b.{0,60}"
+            r"\b(?:2 opt|2-opt|two opt|segment reversal|_two_opt_intra)\b",
             text,
         )
     )
+    return not explicit_missing_operator

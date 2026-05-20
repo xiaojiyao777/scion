@@ -259,6 +259,8 @@ def test_cvrp_mechanism_novelty_provider_uses_latest_snapshot_observation() -> N
         "cvrp.local_search.cross_route_tail_exchange",
     )
     assert result.fact_packet_digest == "fact-packet-test-digest"
+    assert result.contradicted_span
+    assert result.matched_span == result.contradicted_span
 
 
 def test_cvrp_mechanism_novelty_provider_blocks_unproven_construction_route_merge() -> None:
@@ -613,6 +615,8 @@ def test_cvrp_provider_rejects_false_alns_uniform_weight_claim() -> None:
     assert result.contradicted_fact_ids == (
         "cvrp.acceptance.adaptive_operator_weights",
     )
+    assert result.contradicted_span
+    assert result.matched_span == result.contradicted_span
 
 
 def test_cvrp_provider_allows_vns_adaptive_neighborhood_ordering() -> None:
@@ -656,3 +660,141 @@ def test_cvrp_provider_allows_vns_adaptive_neighborhood_ordering() -> None:
     )
 
     assert result is None
+
+
+def test_cvrp_provider_allows_adaptive_neighborhood_selection_with_existing_moves() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current VNS loop applies existing segment reversal, Or-opt, "
+            "swap, and tail-exchange neighborhoods in a fixed order. Add "
+            "adaptive_neighborhood_selection so recent improvement success "
+            "changes neighborhood ordering, without adding a new 2-opt or "
+            "reversal operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "VNS neighborhood ordering is fixed rather than adaptive."
+        ),
+        expected_effect="Improve total_distance by prioritizing productive neighborhoods.",
+        mechanism_changes=(
+            MechanismChange(id="adaptive_neighborhood_selection", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_blocks_missing_shaw_claim_with_span() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The baseline lacks related removal, so add a Shaw-style proximity "
+            "cluster destroy operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Related removal is missing.",
+        expected_effect="Improve destroy diversity.",
+        mechanism_changes=(
+            MechanismChange(id="shaw_related_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "shaw_related_removal"
+    assert result.variant_allowed is False
+    assert "lacks related removal" in result.contradicted_span
+    assert result.matched_span == result.contradicted_span
+    assert "Allowed variant" in (result.allowed_variant_guidance or "")
+
+
+def test_cvrp_provider_allows_shaw_trigger_scoring_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Modify existing _shaw_removal by adding adaptive trigger scoring, "
+            "a schedule for relatedness weights, and candidate filtering; this "
+            "is a variant of the existing Shaw removal, not a new missing "
+            "related-removal operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing Shaw removal trigger/scoring is static.",
+        expected_effect="Improve total_distance through better related removal variants.",
+        mechanism_changes=(
+            MechanismChange(id="shaw_related_removal_variant", change_type="modify"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_premise_contradictions_always_have_exact_span() -> None:
+    cases = [
+        _hypothesis("The active solver uses only nearest neighbor seed construction."),
+        _hypothesis(
+            "ALNS destroy repair weights remain uniform throughout the run."
+        ),
+        _hypothesis("The baseline lacks intra route 2 opt segment reversal."),
+        _hypothesis(
+            "The active solver lacks cross route Or opt segment relocation."
+        ),
+        _hypothesis("The active solver lacks cross route tail exchange."),
+        _hypothesis("The destroy pool lacks removal savings targeting."),
+        _hypothesis("The baseline lacks related removal."),
+        _hypothesis("The baseline lacks regret insertion repair."),
+        HypothesisProposal(
+            hypothesis_text=(
+                "The current ALNS starts with positive fleet violation and must "
+                "repair it before optimizing distance."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+            target_weakness="Positive fleet violation remains.",
+            expected_effect="Reduce fleet violation.",
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add a feasibility crossing phase that triggers when the current "
+                "solution moves from infeasible to feasible."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+            target_weakness="Feasibility crossing is unhandled.",
+            expected_effect="Improve search phases.",
+        ),
+    ]
+
+    for hypothesis in cases:
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is not None, hypothesis.hypothesis_text
+        if result.premise_check == "contradicted":
+            assert result.failure_category == "premise_contradicted"
+            assert result.contradicted_span, result.mechanism
+            assert result.matched_span == result.contradicted_span
+            assert result.variant_allowed is False

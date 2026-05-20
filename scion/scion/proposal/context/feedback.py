@@ -87,6 +87,9 @@ def _history_step_status(step: StepRecord) -> str:
     if _is_screening_protocol_step(step):
         return f"SCREENING_{step.protocol_result.gate_outcome.upper()}"
     if _is_safe_pre_protocol_failure_step(step):
+        agent_quality_label = _agent_quality_history_label(step)
+        if agent_quality_label:
+            return agent_quality_label
         return f"FAILED_{str(step.failure_stage).upper()}"
     return "HIDDEN"
 
@@ -287,7 +290,8 @@ def _build_experiment_history(
             line += f" → {s.hypothesis.target_file}"
         line += f"\n    hypothesis_text: {s.hypothesis.hypothesis_text}"
         if s.failure_stage:
-            line += f"\n    failed_at: {s.failure_stage}"
+            failed_at = _agent_quality_history_label(s) or s.failure_stage
+            line += f"\n    failed_at: {failed_at}"
             if s.failure_stage == "verification" and s.verification_detail:
                 detail_str = s.verification_detail[:200]
                 line += f" — {detail_str}"
@@ -349,6 +353,45 @@ def _pre_protocol_failure_detail_for_history(step: StepRecord) -> str:
     compact = " ".join(part for part in parts if part)
     compact = _first_line(compact)
     return compact[:700]
+
+
+def _agent_quality_history_label(step: StepRecord) -> str:
+    ref = step.proposal_session_ref if isinstance(step.proposal_session_ref, Mapping) else {}
+    primary = ref.get("primary_failure") if isinstance(ref, Mapping) else None
+    if not isinstance(primary, Mapping):
+        primary = {}
+    combined = " ".join(
+        str(value or "")
+        for value in (
+            primary.get("stage"),
+            primary.get("reason"),
+            primary.get("category"),
+            primary.get("code"),
+            ref.get("agent_block_reason"),
+            ref.get("failure_code"),
+            ref.get("failure_category"),
+            step.failure_stage,
+            step.failure_detail,
+        )
+    ).lower()
+    if "agent_quality_blocked" not in combined and not any(
+        marker in combined
+        for marker in (
+            "proposal_premise_contradicted",
+            "proposal_activation_diagnostic",
+            "algorithm_smoke_failure",
+            "agent_grounding_failure",
+        )
+    ):
+        return ""
+    code = (
+        str(primary.get("code") or "").strip()
+        or str(primary.get("reason") or "").strip()
+        or str(ref.get("failure_code") or "").strip()
+        or str(ref.get("failure_category") or "").strip()
+        or "agent_quality_blocked"
+    )
+    return f"agent_quality_blocked:{code}"
 
 
 def _render_pattern_summary(pattern) -> str:

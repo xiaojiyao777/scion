@@ -69,7 +69,8 @@ promoted into later hypothesis context, smoke/telemetry failures lacked
 path-level repair evidence, and CVRP-owned premise gates overmatched allowed
 variants of existing mechanisms.
 
-The current P0 repair keeps those fixes on the v3 boundary. Generic APS now
+The first quality-feedback P0 repair kept those fixes on the v3 boundary.
+Generic APS now
 anchors every tool-selection prompt with the adapter-owned active-facts
 digest/provenance, renders uncounted proposal failures as compact branch-local
 negative memory, and preserves provider fields such as `variant_allowed`,
@@ -79,8 +80,34 @@ semantics remain inside `problems/cvrp/mechanism_novelty/*`; feasible
 route-merge construction variants and destroy operators that use the existing
 regret repair portfolio are no longer escalated to false premise
 contradictions. Focused regressions pass (`110 passed`) and the full unit suite
-passes (`914 passed`). Next step: rerun a 3-round Sonnet validation and repeat
-trace-level review before any longer run.
+passes (`914 passed`).
+
+The follow-up 3-round validation is documented in
+[`v0.4-provenance-quality-feedback-sonnet-3r-analysis-20260520.md`](../experiments/v0.4/v0.4-provenance-quality-feedback-sonnet-3r-analysis-20260520.md).
+It confirmed provenance anchoring and uncounted negative memory were mostly
+working, but exposed two remaining P0 gaps: provider-quality blocks could still
+persist as `hypothesis_contract` / branch `CONTRACT`, and CVRP provider premise
+checks still overmatched adaptive VNS neighborhood ordering and allowed
+Shaw/related-removal variants.
+
+The current P0 repair closes those gaps without moving CVRP semantics into
+Scion core. Generic proposal pipeline code now keeps provider/diagnostic
+quality rejections as agent-quality through StepRecord, branch failure codes,
+and planner-facing experiment history. The same compact labels used by
+negative memory, for example
+`agent_quality_blocked:proposal_premise_contradicted`, are rendered in
+experiment history, and activation diagnostics carry session, branch,
+mechanism, digest, and provenance into later same-branch hypothesis context.
+CVRP-owned novelty/premise providers now require exact `contradicted_span` or
+`matched_span` for `premise_contradicted`; missing spans downgrade to
+duplicate/novelty guidance. Adaptive neighborhood ordering is not classified as
+missing intra-2opt unless the proposal explicitly claims 2-opt/reversal absence,
+and Shaw/related-removal trigger, scoring, schedule, or filtering variants are
+allowed variants rather than premise contradictions. Related regressions pass
+(`134 passed`) and the full unit suite passes (`921 passed`). Next step: run a
+4-round Sonnet validation focused on classification persistence, provider span
+feedback, and branch-continuation behavior before considering a longer 6-round
+run.
 
 The 2026-05-20 branch-lifecycle repair aligns the live scheduler with v3 §11.
 Low-win screening no longer means immediate single-round T4 abandon. Generic
