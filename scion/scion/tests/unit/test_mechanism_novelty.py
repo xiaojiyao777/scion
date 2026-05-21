@@ -320,6 +320,52 @@ def test_mechanism_novelty_gate_allows_segment_chain_repair_not_shaw_duplicate(
     )
 
 
+def test_mechanism_novelty_gate_allows_contiguous_segment_destroy_not_route_removal(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "The current ALNS destroy phase has existing operators "
+        "(shaw_removal, worst_removal, route_removal), but lacks a "
+        "positional/sequential destroy mechanism that removes a contiguous "
+        "block of customers within a route segment. Add segment_destroy as a "
+        "subroute window removal variant, not a whole-route removal."
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            _solver_design_hypothesis(text),
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
+def test_mechanism_novelty_gate_allows_double_bridge_scheduler_perturbation(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "Add double_bridge_perturbation in scheduler.py after ALNS stagnation. "
+        "The existing destroy operators (shaw, route_removal, worst_removal) "
+        "remove and reinsert customers, but none performs topological "
+        "route-segment reconnection. This is not Shaw related removal and not "
+        "proximity removal."
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            _solver_design_hypothesis(text),
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     "text",
     (

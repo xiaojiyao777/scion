@@ -16,6 +16,8 @@ def _missing_shaw_related_removal_span(text: str) -> str:
         return ""
     if not _mentions_exact_shaw_related_fact(text):
         return ""
+    if _targets_perturbation_or_restart_not_removal_family(text):
+        return ""
     if _targets_worst_removal_savings_not_shaw(text):
         return ""
     if _targets_segment_chain_unit_not_related_removal(text):
@@ -46,6 +48,8 @@ _MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
 
 def _duplicates_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
+        return False
+    if _targets_perturbation_or_restart_not_removal_family(text):
         return False
     if _is_shaw_contrast_or_negated_addition(text):
         return False
@@ -114,10 +118,13 @@ def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
             " not a new shaw related ",
             " not a new related removal ",
             " not shaw removal ",
+            " not shaw or proximity removal ",
             " not shaw related removal ",
             " not shaw related ",
+            " not shaw related removal and not proximity removal ",
             " not a proximity cluster ",
             " not proximity cluster ",
+            " not proximity removal ",
             " not a cluster destroy ",
             " not cluster destroy ",
             " does not add shaw ",
@@ -185,15 +192,22 @@ def _claims_missing_route_removal(text: str) -> bool:
 def _missing_route_removal_span(text: str) -> str:
     if not _mentions_route_removal(text):
         return ""
+    if (
+        _targets_contiguous_segment_destroy_not_whole_route_removal(text)
+        or _targets_perturbation_or_restart_not_removal_family(text)
+    ):
+        return ""
     if _describes_existing_route_removal_improvement(text):
         return ""
     return _first_regex_span(
         text,
         (
             r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
-            r"doesn't have|doesn't include)\b.{0,100}\b(?:whole route|route)"
+            r"doesn't have|doesn't include)\b.{0,100}\b(?:whole route|"
+            r"entire route|route level|route removal|route destroy)"
             r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b",
-            r"\b(?:whole route|route)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
+            r"\b(?:whole route|entire route|route level|route removal|"
+            r"route destroy)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
             r"\b.{0,100}\b(?:missing|lacks?|absent|without|no|does not have|"
             r"does not include|doesn't have|doesn't include)\b",
         ),
@@ -203,17 +217,24 @@ def _missing_route_removal_span(text: str) -> str:
 def _duplicates_route_removal(text: str) -> bool:
     if not _mentions_route_removal(text):
         return False
+    if (
+        _targets_contiguous_segment_destroy_not_whole_route_removal(text)
+        or _targets_perturbation_or_restart_not_removal_family(text)
+    ):
+        return False
     if _describes_existing_route_removal_improvement(text):
         return False
     return bool(
         re.search(
             r"\b(?:add|introduce|implement|enable|create|build|register)\b"
-            r".{0,100}\b(?:whole route|route)\b.{0,60}"
+            r".{0,100}\b(?:whole route|entire route|route level|route removal|"
+            r"route destroy)\b.{0,60}"
             r"\b(?:destroy|remov(?:al|e)|operator|capability)\b",
             text,
         )
         or re.search(
-            r"\b(?:whole route|route)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
+            r"\b(?:whole route|entire route|route level|route removal|"
+            r"route destroy)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
             r"\b.{0,100}\b(?:new|novel|additional|first|missing|absent|lacks?)\b",
             text,
         )
@@ -342,7 +363,17 @@ def _regret_insertion_allowed_variant_guidance(text: str) -> str:
 
 
 def _mentions_shaw_related_removal(text: str) -> bool:
-    if "shaw" in text and _has_any(text, ("removal", "remove", "destroy")):
+    if _has_any(
+        text,
+        (
+            "_shaw_removal",
+            "shaw removal",
+            "shaw related removal",
+            "shaw related destroy",
+            "shaw style removal",
+            "shaw style destroy",
+        ),
+    ):
         return True
     phrases = (
         "related removal",
@@ -377,7 +408,17 @@ def _mentions_shaw_related_removal(text: str) -> bool:
 
 
 def _mentions_exact_shaw_related_fact(text: str) -> bool:
-    if "shaw" in text and _has_any(text, ("removal", "remove", "destroy")):
+    if _has_any(
+        text,
+        (
+            "_shaw_removal",
+            "shaw removal",
+            "shaw related removal",
+            "shaw related destroy",
+            "shaw style removal",
+            "shaw style destroy",
+        ),
+    ):
         return True
     return _has_any(
         text,
@@ -522,11 +563,23 @@ def _is_removal_savings_contrast_or_negated_addition(text: str) -> bool:
 
 
 def _mentions_route_removal(text: str) -> bool:
-    if "_route_removal" in text or "whole-route removal" in text:
+    if _has_any(
+        text,
+        (
+            "_route_removal",
+            "route removal",
+            "route destroy",
+            "whole route",
+            "whole-route",
+            "entire route",
+            "route level",
+            "route-level",
+        ),
+    ):
         return True
     return bool(
         re.search(
-            r"\b(?:whole route|entire route|route-level|route level|route)\b"
+            r"\b(?:whole route|entire route|route-level|route level)\b"
             r".{0,45}\b(?:destroy|remov(?:al|e))\b",
             text,
         )
@@ -820,10 +873,18 @@ def _targets_segment_chain_unit_not_related_removal(text: str) -> bool:
         (
             "segment chain",
             "segment-chain",
+            "segment destroy",
+            "sequential destroy",
+            "sequential segment",
             "contiguous segment",
+            "contiguous block",
             "ordered segment",
+            "route segment",
             "chain as a unit",
             "segment as a unit",
+            "subroute",
+            "arc window",
+            "positional window",
             "contiguous customer",
         ),
     ):
@@ -836,6 +897,134 @@ def _targets_segment_chain_unit_not_related_removal(text: str) -> bool:
     ):
         return False
     return True
+
+
+def _targets_contiguous_segment_destroy_not_whole_route_removal(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "segment destroy",
+            "segment removal",
+            "sequential destroy",
+            "sequential segment",
+            "contiguous segment",
+            "contiguous block",
+            "route segment",
+            "route order",
+            "tour order",
+            "subroute",
+            "arc sequence",
+            "arc window",
+            "positional window",
+            "window destroy",
+        ),
+    ):
+        return False
+    if _explicitly_adds_or_claims_missing_whole_route_removal(text):
+        return False
+    return True
+
+
+def _targets_perturbation_or_restart_not_removal_family(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "double bridge",
+            "doublebridge",
+            "4 opt",
+            "four opt",
+            "perturbation",
+            "perturb",
+            "restart",
+            "escape mechanism",
+            "escape to",
+            "new basin",
+            "route segment reconnection",
+            "topological",
+        ),
+    ):
+        return False
+    if _explicitly_adds_or_claims_missing_whole_route_removal(text):
+        return False
+    if _explicitly_adds_or_claims_missing_shaw_related_removal(text):
+        return False
+    return True
+
+
+def _explicitly_adds_or_claims_missing_whole_route_removal(text: str) -> bool:
+    route_family = r"(?:whole route|entire route|route level|route removal|route destroy)"
+    patterns = (
+        r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+        r"doesn t have|doesn t include)\b.{0,80}\b"
+        + route_family
+        + r"\b",
+        r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+        r".{0,80}\b"
+        + route_family
+        + r"\b.{0,50}\b(?:destroy|remov(?:al|e)|operator|capability)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        if _span_lists_existing_operator_family(match.group(0)):
+            continue
+        if _span_is_whole_route_contrast_not_claim(match.group(0)):
+            continue
+        return True
+    return False
+
+
+def _explicitly_adds_or_claims_missing_shaw_related_removal(text: str) -> bool:
+    shaw_family = (
+        r"(?:shaw removal|shaw related removal|shaw related destroy|"
+        r"shaw style removal|shaw style destroy|related removal|"
+        r"relatedness removal|proximity removal|proximity cluster|"
+        r"cluster removal|cluster destroy)"
+    )
+    if _is_shaw_contrast_or_negated_addition(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn t have|doesn t include)\b.{0,80}\b"
+            + shaw_family
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,80}\b"
+            + shaw_family
+            + r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator|capability)\b",
+            text,
+        )
+    )
+
+
+def _span_lists_existing_operator_family(span: str) -> bool:
+    return bool(
+        re.search(
+            r"\bexisting\b.{0,50}\b(?:destroy|removal|repair)?\s*operators\b",
+            span,
+        )
+    )
+
+
+def _span_is_whole_route_contrast_not_claim(span: str) -> bool:
+    return _has_any(
+        span,
+        (
+            " not a whole route ",
+            " not whole route ",
+            " not a route removal ",
+            " not route removal ",
+            " different from whole route ",
+            " rather than whole route ",
+            " existing whole route removal does not ",
+            " existing route removal does not ",
+        ),
+    )
 
 
 def _targets_worst_removal_savings_not_shaw(text: str) -> bool:

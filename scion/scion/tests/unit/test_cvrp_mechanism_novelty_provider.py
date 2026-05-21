@@ -104,6 +104,14 @@ def _active_capability_snapshot() -> dict[str, object]:
                     ],
                 ),
                 _fact(
+                    "cvrp.destroy_repair.route_removal",
+                    "_route_removal removes a whole selected route.",
+                    [
+                        "_route_removal removes customers from an entire selected route",
+                        "scheduler destroy_ops registers route removal",
+                    ],
+                ),
+                _fact(
                     "cvrp.destroy_repair.regret_insertion_repair",
                     "Repair portfolio already includes regret-2 and regret-3 insertion.",
                     [
@@ -154,6 +162,7 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "_worst_removal ranks removal saving with "
                 "saving = -route.cost_of_remove(pos)",
                 "_shaw_removal related proximity destroy removal distance demand route",
+                "_route_removal removes customers from an entire selected route",
                 "_regret2_insertion",
                 "_regret3_insertion",
             ],
@@ -798,6 +807,117 @@ def test_cvrp_provider_allows_double_bridge_after_listing_existing_or_opt() -> N
     )
 
     assert result is None
+
+
+def test_cvrp_provider_allows_contiguous_segment_destroy_after_route_removal_listing() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current ALNS destroy phase has existing operators "
+            "(shaw_removal, worst_removal, route_removal), but lacks a "
+            "positional/sequential destroy mechanism that removes a contiguous "
+            "block of customers within a route segment. Add segment_destroy as "
+            "a subroute window removal variant, not a whole-route removal."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing whole-route removal does not target sequential arc windows."
+        ),
+        expected_effect="Improve total_distance by perturbing local arc structure.",
+        mechanism_changes=(
+            MechanismChange(id="segment_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_scheduler_perturbation_not_shaw_related_removal() -> None:
+    cases = [
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add double_bridge_perturbation in scheduler.py after ALNS "
+                "stagnation. The existing destroy operators (shaw, route_removal, "
+                "worst_removal) remove and reinsert customers, but none performs "
+                "topological route-segment reconnection."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+            target_weakness="VNS-exhausted basins need a large perturbation.",
+            expected_effect="Improve total_distance by opening a new basin.",
+            mechanism_changes=(
+                MechanismChange(id="double_bridge_perturbation", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add a scheduler restart perturbation after repeated no-improve "
+                "iterations using double-bridge route-pair moves. This is not "
+                "Shaw related removal and not proximity removal."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/scheduler.py",
+            target_weakness="The scheduler lacks restart perturbation on plateaus.",
+            expected_effect="Improve total_distance after stagnation.",
+            mechanism_changes=(
+                MechanismChange(id="scheduler_restart_perturbation", change_type="add"),
+            ),
+        ),
+    ]
+
+    for hypothesis in cases:
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            hypothesis,
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is None, hypothesis.hypothesis_text
+
+
+def test_cvrp_provider_keeps_route_removal_blocks_precise() -> None:
+    cases = [
+        (
+            "The active destroy portfolio has no whole route removal operator, "
+            "so add route removal.",
+            "contradicted",
+        ),
+        (
+            "Introduce a new whole route removal destroy operator.",
+            "duplicate",
+        ),
+    ]
+
+    for text, premise_check in cases:
+        result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+            _hypothesis(text),
+            active_solver_snapshot=_active_capability_snapshot(),
+        )
+
+        assert result is not None, text
+        assert result.mechanism == "route_removal"
+        assert result.premise_check == premise_check
+
+
+def test_cvrp_provider_keeps_shaw_related_duplicate_block() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "Add a new proximity-cluster removal operator as a new destroy "
+            "capability for the active ALNS solver."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.mechanism == "shaw_related_removal"
+    assert result.premise_check == "duplicate"
 
 
 def test_cvrp_provider_allows_positional_arc_destroy_variant_near_shaw_terms() -> None:
