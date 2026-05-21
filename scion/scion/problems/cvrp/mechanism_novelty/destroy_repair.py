@@ -23,7 +23,10 @@ def _missing_shaw_related_removal_span(text: str) -> str:
         or _is_existing_shaw_variant_with_negated_missing_claim(text)
     ):
         return ""
-    return _first_regex_span(text, _MISSING_SHAW_RELATED_REMOVAL_PATTERNS)
+    span = _first_regex_span(text, _MISSING_SHAW_RELATED_REMOVAL_PATTERNS)
+    if _span_is_shaw_contrast_not_missing_claim(span):
+        return ""
+    return span
 
 
 _MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
@@ -41,6 +44,8 @@ _MISSING_SHAW_RELATED_REMOVAL_PATTERNS = (
 
 def _duplicates_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
+        return False
+    if _is_shaw_contrast_or_negated_addition(text):
         return False
     if _targets_worst_removal_savings_not_shaw(text):
         return False
@@ -62,6 +67,42 @@ def _duplicates_shaw_related_removal(text: str) -> bool:
         r"\b(?:new|novel|entirely new|first)\b",
     )
     return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _span_is_shaw_contrast_not_missing_claim(span: str) -> bool:
+    if not span:
+        return False
+    return _has_any(
+        span,
+        (
+            " unlike ",
+            " different from ",
+            " rather than ",
+            " not a related ",
+            " not related ",
+            " does not add ",
+            " does not add shaw ",
+            " without adding shaw ",
+        ),
+    )
+
+
+def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            " unlike shaw ",
+            " unlike _shaw_removal ",
+            " unlike shaw related ",
+            " different from shaw ",
+            " rather than shaw ",
+            " not a related destroy ",
+            " not a related removal ",
+            " does not add shaw ",
+            " does not add shaw/proximity ",
+            " without adding shaw ",
+        ),
+    )
 
 
 def _claims_missing_removal_savings_destroy(text: str) -> bool:

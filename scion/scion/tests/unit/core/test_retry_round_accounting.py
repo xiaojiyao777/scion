@@ -329,7 +329,7 @@ def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> N
     assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
 
 
-def test_agentic_session_timeout_hypothesis_failure_stops_campaign() -> None:
+def test_agentic_session_timeout_hypothesis_failure_does_not_stop_campaign() -> None:
     branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
     steps: list[StepRecord] = []
     detail = (
@@ -350,7 +350,7 @@ def test_agentic_session_timeout_hypothesis_failure_stops_campaign() -> None:
 
     result = pipeline.run(branch)
 
-    assert result.stopped is True
+    assert result.stopped is False
     assert result.reason == "agentic_session_timeout"
     assert result.counts_toward_max_rounds is False
     assert pending == {}
@@ -358,7 +358,7 @@ def test_agentic_session_timeout_hypothesis_failure_stops_campaign() -> None:
     assert steps[0].failure_detail == detail
 
 
-def test_agentic_session_timeout_code_failure_stops_without_pending_retry() -> None:
+def test_agentic_session_timeout_code_failure_does_not_stop_campaign() -> None:
     branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
     hypothesis = _hypothesis()
     record = _hypothesis_record(branch.branch_id)
@@ -381,7 +381,7 @@ def test_agentic_session_timeout_code_failure_stops_without_pending_retry() -> N
 
     result = pipeline.run(branch)
 
-    assert result.stopped is True
+    assert result.stopped is False
     assert result.reason == "agentic_session_timeout"
     assert result.counts_toward_max_rounds is False
     assert pending == {}

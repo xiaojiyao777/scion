@@ -453,6 +453,32 @@ def test_cvrp_route_limit_gate_allows_feasible_route_merge_quality_variant() -> 
     assert result is None
 
 
+def test_cvrp_route_limit_gate_ignores_risk_mitigation_text() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add randomized savings construction for shorter total_distance "
+            "while preserving feasible seed construction."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness="Seed quality leaves avoidable distance.",
+        expected_effect="Improve total_distance.",
+        risk_to_higher_priority=(
+            "Risk: randomized savings could produce more routes than "
+            "route_limit, so keep the route-limit guard and reject route-cap "
+            "violating candidates."
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -478,6 +504,33 @@ def test_cvrp_mechanism_novelty_provider_blocks_positive_fleet_violation_repair(
     assert "cvrp.search_state.guards_route_limit" in result.contradicted_fact_ids
     assert result.variant_allowed is False
     assert "positive fleet violation" in result.contradicted_span
+
+
+def test_cvrp_shaw_gate_allows_contrast_text_for_non_shaw_repair() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add stochastic noise-biased insertion repair. Unlike Shaw related "
+            "removal, this targets insertion diversity and does not add "
+            "Shaw/proximity removal."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Repair insertion lacks noise diversity, unlike Shaw related removal."
+        ),
+        expected_effect="Improve total_distance through repair diversification.",
+        mechanism_changes=(
+            MechanismChange(id="noise_biased_insertion_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
 
 
 def test_cvrp_regret_gate_blocks_missing_claim_with_exact_span() -> None:

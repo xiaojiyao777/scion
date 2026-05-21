@@ -351,7 +351,6 @@ class ExploreStepPipeline:
                     self.proposal_failure_detail_for(bid)
                     or "hypothesis generation failed"
                 )
-                control_timeout = _is_agentic_control_timeout_detail(failure_detail)
                 session_ref = self._proposal_session_ref(bid)
                 failure_stage = _proposal_failure_stage(
                     failure_detail,
@@ -386,7 +385,6 @@ class ExploreStepPipeline:
                         failure_detail,
                         "hypothesis generation failed",
                     ),
-                    stopped=control_timeout,
                     counts_toward_max_rounds=False,
                 )
             if h_record is None:
@@ -488,9 +486,9 @@ class ExploreStepPipeline:
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
-            control_timeout = _is_agentic_control_timeout_detail(detailed_failure)
+            session_timeout = _is_agentic_control_timeout_detail(detailed_failure)
             quality_blocked = _is_agent_quality_blocked_detail(detailed_failure)
-            if control_timeout:
+            if session_timeout:
                 branch.pending_retry = False
                 branch.consecutive_llm_retries = 0
                 failure_detail = detailed_failure or _AGENTIC_SESSION_TIMEOUT
@@ -555,7 +553,6 @@ class ExploreStepPipeline:
                     failure_detail,
                     "code generation failed",
                 ),
-                stopped=control_timeout,
                 counts_toward_max_rounds=False,
             )
 
