@@ -123,12 +123,23 @@ class CreativeLayer:
             request_policy=request_policy,
         )
         try:
-            raw = self._client.call_with_tool(
-                prompt,
-                tool,
-                self._model,
-                system_blocks=system_blocks,
-            )
+            try:
+                raw = self._client.call_with_tool(
+                    prompt,
+                    tool,
+                    self._model,
+                    system_blocks=system_blocks,
+                    request_kind=request_kind,
+                )
+            except TypeError as exc:
+                if "request_kind" not in str(exc):
+                    raise
+                raw = self._client.call_with_tool(
+                    prompt,
+                    tool,
+                    self._model,
+                    system_blocks=system_blocks,
+                )
         except Exception as exc:
             trace.write_finish(trace_path, ok=False, error=str(exc))
             raise

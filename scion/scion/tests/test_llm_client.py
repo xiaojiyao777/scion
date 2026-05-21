@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 import pytest
@@ -416,6 +417,24 @@ def test_tool_selection_tool_call_normalizes_common_aliases() -> None:
     assert result["tool_name"] == "context.read_problem"
     assert result["args"] == {"detail": "compact"}
     assert "required" not in TOOL_SELECTION_SCHEMA
+
+
+def test_tool_call_hard_timeout_interrupts_blocking_provider_call() -> None:
+    client = LLMClient(timeout_sec=0.05, max_retries=0)
+
+    def _slow_tool_call(*args, **kwargs):
+        time.sleep(1.0)
+        return {"result": "late"}, False
+
+    client._tool_call_once = MagicMock(side_effect=_slow_tool_call)  # type: ignore[method-assign]
+
+    with pytest.raises(LLMRetryExhaustedError) as exc_info:
+        client.call_with_tool(
+            "prompt",
+            {"name": "x", "input_schema": {"required": ["result"]}},
+        )
+
+    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
 
 
 def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:

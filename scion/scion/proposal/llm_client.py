@@ -8,7 +8,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
+import threading
 import time
+from contextlib import contextmanager
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -202,6 +205,46 @@ def is_llm_transient_api_error(exc: BaseException | None) -> bool:
         or "http 429" in err_str
         or "error code: 429" in err_str
     )
+
+
+@contextmanager
+def _llm_hard_timeout(timeout_sec: float):
+    """Enforce a wall-clock timeout around provider SDK calls on POSIX.
+
+    SDK timeout knobs are not consistently total-request deadlines across
+    OpenAI-compatible providers. In the campaign main thread, SIGALRM gives
+    Scion a final budget-control backstop. Non-main threads fall back to SDK
+    timeout behavior because Python signals can only be installed in the main
+    thread.
+    """
+    if (
+        timeout_sec <= 0
+        or os.name != "posix"
+        or threading.current_thread() is not threading.main_thread()
+    ):
+        yield
+        return
+
+    def _raise_timeout(signum: int, frame: Any) -> None:
+        raise LLMTimeoutError(
+            f"LLM provider call exceeded hard timeout {timeout_sec:.1f}s"
+        )
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0.0)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_sec)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                previous_timer[0],
+                previous_timer[1],
+            )
 
 
 def _retry_exhausted_failure_category(
@@ -454,14 +497,15 @@ class LLMClient:
 
         while attempt <= max_retries:
             try:
-                result, truncated = self._tool_call_once(
-                    prompt,
-                    tool,
-                    effective_model,
-                    system_blocks,
-                    current_max_tokens,
-                    timeout_sec,
-                )
+                with _llm_hard_timeout(timeout_sec):
+                    result, truncated = self._tool_call_once(
+                        prompt,
+                        tool,
+                        effective_model,
+                        system_blocks,
+                        current_max_tokens,
+                        timeout_sec,
+                    )
                 result = self._normalize_tool_call_result(
                     result,
                     tool=tool,
