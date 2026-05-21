@@ -38,7 +38,7 @@ class CampaignLoop:
         counted_rounds = 0
         attempts = 0
         bad_proposal_attempts = 0
-        agent_quality_blocked_attempts = 0
+        proposal_quality_blocked_attempts = 0
         telemetry_repairable_attempts = 0
         same_family_retry_attempts = 0
         requested_rounds = max(1, int(max_rounds))
@@ -98,9 +98,12 @@ class CampaignLoop:
                     same_family_retry_attempts += 1
                     if same_family_retry_attempts >= same_family_retry_limit:
                         final_reason = "same_family_retry_budget_exhausted"
-                elif _is_agent_quality_blocked_attempt(result):
-                    agent_quality_blocked_attempts += 1
-                    if agent_quality_blocked_attempts >= proposal_quality_loop_limit:
+                elif _is_proposal_quality_blocked_attempt(result):
+                    proposal_quality_blocked_attempts += 1
+                    if (
+                        proposal_quality_blocked_attempts
+                        >= proposal_quality_loop_limit
+                    ):
                         final_reason = "proposal_quality_loop"
                 else:
                     bad_proposal_attempts += 1
@@ -150,7 +153,7 @@ def _attempt_kind(result: StepResult) -> str:
     return "proposal_block"
 
 
-def _is_agent_quality_blocked_attempt(result: StepResult) -> bool:
+def _is_proposal_quality_blocked_attempt(result: StepResult) -> bool:
     text = " ".join(
         str(value or "").lower()
         for value in (
@@ -158,7 +161,21 @@ def _is_agent_quality_blocked_attempt(result: StepResult) -> bool:
             getattr(result, "attempt_kind", ""),
         )
     )
-    return "agent_quality_blocked" in text
+    if "agent_quality_blocked" in text:
+        return True
+    if _attempt_kind(result) != "proposal_block":
+        return False
+    reason = str(getattr(result, "reason", "") or "").lower()
+    proposal_quality_tokens = (
+        "duplicate_mechanism",
+        "mechanism_novelty_rejected",
+        "premise_contradicted",
+        "proposal_premise_contradicted",
+        "proposal_quality_blocked",
+        "hypothesis contract failed",
+        "code generation failed",
+    )
+    return any(token in reason for token in proposal_quality_tokens)
 
 
 def _proposal_quality_loop_limit(

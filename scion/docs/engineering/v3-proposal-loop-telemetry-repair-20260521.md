@@ -13,8 +13,9 @@ adapter/provider-owned or come from structured rejection payloads.
   with the conventional signal exit code. The campaign manager also exposes a
   stop request path so the loop will not start new APS/session/LLM work after a
   stop is requested.
-- Campaign loop now has a separate pre-screen agent-quality ceiling.
-  Cumulative `agent_quality_blocked` proposal attempts stop the run with
+- Campaign loop now has a separate pre-screen proposal-quality ceiling.
+  Cumulative duplicate, repeated-mechanism, contradicted-premise, code-not-
+  generated, and other proposal-quality blocks stop the run with
   `proposal_quality_loop` by default after `max(3, rounds + 2)` attempts, or the
   `SCION_PROPOSAL_QUALITY_LOOP_LIMIT` environment override. Repairable telemetry
   and same-family retries keep separate budgets.
@@ -31,6 +32,9 @@ adapter/provider-owned or come from structured rejection payloads.
 - The Chinese runbook background launcher now records a process group and stops
   the process group, preventing wrapper-only termination from leaving a child
   campaign process alive.
+- Duplicate and mechanism-novelty pre-screen blocks are classified as
+  proposal-quality blocks instead of creating a pending code-generation retry
+  when no patch was produced.
 
 ## Verification
 

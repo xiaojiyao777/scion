@@ -329,6 +329,39 @@ def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> N
     assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
 
 
+def test_duplicate_mechanism_pre_screen_block_is_not_code_generation_failure() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    pending: dict[str, tuple[HypothesisProposal, HypothesisRecord, str]] = {}
+    steps: list[StepRecord] = []
+    detail = (
+        "agentic_proposal:duplicate_mechanism: premise_check=duplicate: "
+        "candidate repeats an existing mechanism"
+    )
+
+    pipeline = _pipeline(
+        pending=pending,
+        increment_round=lambda: 1,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: None,
+        record_step=steps.append,
+    )
+    pipeline.proposal_failure_detail_for = lambda branch_id: detail
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "agent_quality_blocked"
+    assert result.counts_toward_max_rounds is False
+    assert branch.pending_retry is False
+    assert pending == {}
+    assert steps[0].failure_stage == "agent_quality_blocked"
+    assert steps[0].failure_detail == detail
+    assert "duplicate_mechanism" in steps[0].failure_detail
+    assert pipeline._test_store.statuses == [("hyp-1", "rejected")]
+
+
 def test_agentic_session_timeout_hypothesis_failure_does_not_stop_campaign() -> None:
     branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
     steps: list[StepRecord] = []
@@ -553,6 +586,69 @@ def test_campaign_loop_stops_agent_quality_blocks_with_explicit_reason() -> None
 
     assert calls == 2
     assert last_results[-1].reason == "agent_quality_blocked"
+    assert last_results[-1].stopped is True
+    assert "proposal_quality_loop" in stopped_reasons
+
+
+def test_campaign_loop_stops_broader_pre_screen_quality_blocks() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="duplicate_mechanism",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        ),
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="mechanism_novelty_rejected",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        ),
+        StepResult(action="explore", branch_id="b1", reason="screening complete"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        proposal_quality_loop_limit=2,
+    )
+
+    loop.run(max_rounds=3)
+
+    assert calls == 2
+    assert last_results[-1].reason == "mechanism_novelty_rejected"
     assert last_results[-1].stopped is True
     assert "proposal_quality_loop" in stopped_reasons
 
