@@ -51,6 +51,10 @@ def _duplicates_shaw_related_removal(text: str) -> bool:
         return False
     if _is_positional_or_arc_destroy_variant(text):
         return False
+    if _is_random_or_noise_removal_variant(text) and not _mentions_exact_shaw_related_fact(
+        text
+    ):
+        return False
     if _targets_worst_removal_savings_not_shaw(text):
         return False
     if _targets_segment_chain_unit_not_related_removal(text):
@@ -87,6 +91,9 @@ def _span_is_shaw_contrast_not_missing_claim(span: str) -> bool:
             " does not add ",
             " does not add shaw ",
             " without adding shaw ",
+            " not shaw removal ",
+            " not a proximity cluster ",
+            " not proximity cluster ",
         ),
     )
 
@@ -102,11 +109,17 @@ def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
             " rather than shaw ",
             " not a related destroy ",
             " not a related removal ",
+            " not related removal ",
             " not a new shaw ",
             " not a new shaw related ",
             " not a new related removal ",
+            " not shaw removal ",
             " not shaw related removal ",
             " not shaw related ",
+            " not a proximity cluster ",
+            " not proximity cluster ",
+            " not a cluster destroy ",
+            " not cluster destroy ",
             " does not add shaw ",
             " does not add shaw/proximity ",
             " without adding shaw ",
@@ -139,6 +152,15 @@ _MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS = (
 
 def _duplicates_removal_savings_destroy(text: str) -> bool:
     if not _mentions_removal_savings_destroy(text):
+        return False
+    if (
+        _is_random_or_noise_removal_variant(text)
+        and _is_removal_savings_contrast_or_negated_addition(text)
+    ):
+        return False
+    if _is_random_or_noise_removal_variant(text) and not _explicit_removal_savings_claim(
+        text
+    ):
         return False
     if _describes_existing_removal_savings_improvement(text):
         return False
@@ -201,6 +223,10 @@ def _duplicates_route_removal(text: str) -> bool:
 def _claims_missing_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
         return False
+    if _is_non_regret_repair_variant(text) and not _missing_regret_insertion_repair_span(
+        text
+    ):
+        return False
     if _uses_existing_regret_repair_after_new_destroy(text):
         return False
     if _describes_existing_regret_repair_improvement(text):
@@ -210,6 +236,8 @@ def _claims_missing_regret_insertion_repair(text: str) -> bool:
 
 def _duplicates_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
+        return False
+    if _is_non_regret_repair_variant(text):
         return False
     if _uses_existing_regret_repair_after_new_destroy(text):
         return False
@@ -429,6 +457,70 @@ def _mentions_removal_savings_destroy(text: str) -> bool:
     )
 
 
+def _is_random_or_noise_removal_variant(text: str) -> bool:
+    if not _has_any(text, ("remove", "removal", "destroy")):
+        return False
+    return _has_any(
+        text,
+        (
+            "random removal",
+            "randomized removal",
+            "random destroy",
+            "randomized destroy",
+            "noise removal",
+            "noise based removal",
+            "noise biased removal",
+            "stochastic removal",
+            "stochastic destroy",
+            "diversity removal",
+            "diversity destroy",
+        ),
+    )
+
+
+def _explicit_removal_savings_claim(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "savings removal",
+            "removal savings",
+            "savings based removal",
+            "detour based removal",
+            "cost of remove",
+            "cost-of-remove",
+            "cost of removal",
+            "worst position",
+            "worst-position",
+            "marginal distance contribution",
+        ),
+    )
+
+
+def _is_removal_savings_contrast_or_negated_addition(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "rather than adding a new savings-removal",
+            "rather than adding a new savings removal",
+            "rather than adding savings-removal",
+            "rather than adding savings removal",
+            "rather than adding a savings-removal",
+            "rather than adding a savings removal",
+            "rather than a new savings-removal",
+            "rather than a new savings removal",
+            "not a savings removal",
+            "not savings removal",
+            "not a new savings removal",
+            "not a new savings-removal",
+            "not removal savings",
+            "does not add savings removal",
+            "does not add removal savings",
+            "without adding savings removal",
+            "without adding removal savings",
+        ),
+    )
+
+
 def _mentions_route_removal(text: str) -> bool:
     if "_route_removal" in text or "whole-route removal" in text:
         return True
@@ -462,6 +554,39 @@ def _mentions_regret_insertion_repair(text: str) -> bool:
             "regret-k",
             "regret insertion",
             "regret repair",
+        ),
+    )
+
+
+def _is_non_regret_repair_variant(text: str) -> bool:
+    if not _has_any(text, ("repair", "insertion", "insert")):
+        return False
+    if not _has_any(
+        text,
+        (
+            "random greedy repair",
+            "randomized greedy repair",
+            "greedy repair",
+            "position diversity repair",
+            "diversity repair",
+            "noise repair",
+            "noise biased insertion",
+            "stochastic repair",
+            "stochastic insertion",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "not regret",
+            "not a regret",
+            "rather than regret",
+            "unlike regret",
+            "alongside existing regret",
+            "uses existing regret",
+            "existing regret",
+            "regret portfolio",
         ),
     )
 

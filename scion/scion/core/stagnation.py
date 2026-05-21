@@ -7,6 +7,18 @@ from typing import Dict, List, Optional, Sequence
 from scion.core.models import Decision, StepRecord
 
 _INFRA_LOOP_THRESHOLD = 5
+_PROPOSAL_QUALITY_FAILURE_CODES = frozenset(
+    {
+        "proposal",
+        "code_generation",
+        "agent_quality_blocked",
+        "proposal_premise_contradicted",
+        "proposal_activation_diagnostic",
+        "hypothesis_contract_failed",
+        "code_generation_failed",
+        "schema_error",
+    }
+)
 
 
 @dataclass
@@ -95,9 +107,15 @@ class StagnationDetector:
             if object_model_loop:
                 signals.append(object_model_loop)
             else:
-                infra_loop = self._check_infra_loop(failure_streak)
-                if infra_loop:
-                    signals.append(infra_loop)
+                proposal_quality_loop = self._check_proposal_quality_loop(
+                    failure_streak
+                )
+                if proposal_quality_loop:
+                    signals.append(proposal_quality_loop)
+                else:
+                    infra_loop = self._check_infra_loop(failure_streak)
+                    if infra_loop:
+                        signals.append(infra_loop)
 
         return signals
 
@@ -265,6 +283,39 @@ class StagnationDetector:
                 )
         return None
 
+    def _check_proposal_quality_loop(
+        self,
+        failure_streak: Dict[str, int],
+    ) -> Optional[StagnationSignal]:
+        """Repeated proposal/code quality failures are not environment failures."""
+        for code, streak in failure_streak.items():
+            normalized = str(code or "").strip().lower()
+            if streak < _INFRA_LOOP_THRESHOLD:
+                continue
+            if normalized not in _PROPOSAL_QUALITY_FAILURE_CODES and not any(
+                marker in normalized
+                for marker in (
+                    "proposal",
+                    "code_generation",
+                    "schema",
+                    "agent_quality",
+                    "premise_contradicted",
+                    "activation_diagnostic",
+                )
+            ):
+                continue
+            return StagnationSignal(
+                kind="proposal_quality_loop",
+                severity="critical",
+                detail=(
+                    f"failure_code='{code}' repeated {streak} consecutive times; "
+                    "this indicates proposal/code-generation quality or prompt/gate "
+                    "feedback mismatch, not an infrastructure loop"
+                ),
+                suggested_action="inspect_agent_trace",
+            )
+        return None
+
     # ------------------------------------------------------------------
     # Diagnosis (T23)
     # ------------------------------------------------------------------
@@ -302,7 +353,7 @@ class StagnationDetector:
 
         # Determine recommendation from signal kinds
         kinds = {s.kind for s in signals}
-        if "object_model_loop" in kinds:
+        if "object_model_loop" in kinds or "proposal_quality_loop" in kinds:
             recommendation = "inspect_agent_trace"
         elif "infra_loop" in kinds or "timeout_cascade" in kinds or "collapse" in kinds:
             recommendation = "check_environment"

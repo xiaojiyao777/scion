@@ -141,6 +141,15 @@ class CvrpSolverDesignProvider:
                 "`solver_algorithm_phase_runtime_ms.m`."
             ),
             (
+                "If the hypothesis modifies an existing ALNS/VNS phase rather "
+                "than adding a brand-new operator, still declare the changed "
+                "lever as a specific mechanism id such as "
+                "`adaptive_destroy_schedule` or `vns_operator_scheduler`, then "
+                "use that same id in expected_telemetry. Do not declare one id "
+                "and point activation/effect/budget at generic `.alns` or "
+                "`.vns` phase buckets."
+            ),
+            (
                 "Active solver invariant: initial construction is route-limit "
                 "guarded (`_capacity_balanced_construction` is used when the "
                 "route cap is exceeded, and `_initial_solution` fails closed if "
@@ -312,6 +321,14 @@ class CvrpSolverDesignProvider:
                 "that same mechanism when it improves the objective. Do not "
                 "rename the mechanism or edit the hypothesis telemetry contract "
                 "to silence algorithm smoke."
+            ),
+            (
+                "For ALNS/VNS phase modifications, instrument the declared "
+                "mechanism id for the modified lever, not the broad phase name. "
+                "For example, if the mechanism id is `vns_operator_scheduler`, "
+                "record `context.record_phase('vns_operator_scheduler', ...)` "
+                "or matching context records; do not rely on an existing `vns` "
+                "or `alns` aggregate phase bucket to satisfy that declaration."
             ),
             (
                 "The active package state model uses `_Solution.routes` as "

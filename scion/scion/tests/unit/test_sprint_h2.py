@@ -278,6 +278,24 @@ class TestStagnationDetectorInfraLoop:
         assert diagnosis is not None
         assert diagnosis.recommendation == "inspect_agent_trace"
 
+    def test_proposal_quality_loop_is_not_environment_infra_loop(self):
+        """Repeated proposal/code quality failures require trace inspection."""
+        detector = StagnationDetector(window_size=5)
+        steps = [
+            _make_step("proposal", "agentic_proposal failed C11_expected_telemetry")
+            for _ in range(5)
+        ]
+        streak = {"proposal": 5}
+
+        signals = detector.check(steps, failure_streak=streak)
+        kinds = {signal.kind for signal in signals}
+        diagnosis = detector.diagnose(5, steps, failure_streak=streak)
+
+        assert "proposal_quality_loop" in kinds
+        assert "infra_loop" not in kinds
+        assert diagnosis is not None
+        assert diagnosis.recommendation == "inspect_agent_trace"
+
 
 # ---------------------------------------------------------------------------
 # T5: Failure pattern warning in context

@@ -559,6 +559,7 @@ class ExploreStepPipeline:
         p_result = self.contract_gate.validate_patch(
             patch,
             approved_hypothesis=hypothesis,
+            base_snapshot_path=self.branch_workspaces.get(bid),
         )
         if not p_result.passed:
             logger.info(
@@ -841,6 +842,7 @@ class ExploreStepPipeline:
                 fixed_contract = self.contract_gate.validate_patch(
                     fixed,
                     approved_hypothesis=hypothesis,
+                    base_snapshot_path=workspace,
                 )
                 if not fixed_contract.passed:
                     logger.info(

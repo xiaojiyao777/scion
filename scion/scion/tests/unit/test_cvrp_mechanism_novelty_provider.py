@@ -826,6 +826,106 @@ def test_cvrp_provider_allows_positional_arc_destroy_variant_near_shaw_terms() -
     assert result is None
 
 
+def test_cvrp_provider_allows_random_greedy_repair_variant_near_regret_terms() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add random_greedy_repair as a stochastic greedy insertion repair "
+            "alongside existing regret repair. It is not a regret insertion "
+            "operator and should diversify insertion ordering after destroy."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Repair insertion ordering is too deterministic.",
+        expected_effect="Improve total_distance by diversifying repair insertion.",
+        mechanism_changes=(
+            MechanismChange(id="random_greedy_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_position_diversity_repair_near_regret_terms() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add position_diversity_repair to diversify insertion positions, "
+            "rather than regret-2/regret-3 scoring. The existing regret "
+            "portfolio remains available as a separate repair family."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Repair choices concentrate on the same route positions.",
+        expected_effect="Improve total_distance through insertion-position diversity.",
+        mechanism_changes=(
+            MechanismChange(id="position_diversity_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_random_removal_near_cluster_terms() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add random_removal with a small stochastic destroy budget to "
+            "diversify removed customers. This is not related removal, not "
+            "Shaw removal, and not a proximity cluster destroy."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy selection lacks random exploration.",
+        expected_effect="Improve total_distance by diversifying destroy choices.",
+        mechanism_changes=(
+            MechanismChange(id="random_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_noise_removal_near_savings_terms() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add noise_removal as a stochastic removal variant that perturbs "
+            "destroy choice around existing cost-of-remove savings rather than "
+            "adding a new savings-removal heuristic."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Worst-removal selection is too deterministic.",
+        expected_effect="Improve total_distance by adding bounded destroy noise.",
+        mechanism_changes=(
+            MechanismChange(id="noise_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_blocks_missing_shaw_claim_with_span() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

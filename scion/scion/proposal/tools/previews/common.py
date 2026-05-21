@@ -60,11 +60,15 @@ def _compact_preview_value(value: Any, *, max_chars: int = 160) -> Any:
 
 def _contract_gate(context: ProposalToolContext) -> ContractGate:
     spec = _contract_problem_spec(context)
+    base_snapshot_path = (
+        str(getattr(context, "branch_workspace", "") or "").strip()
+        or str(_attr(context.champion, "code_snapshot_path") or "").strip()
+        or None
+    )
     return ContractGate(
         spec,
         operator_execute_signature=_operator_execute_signature(context),
-        champion_snapshot_path=str(_attr(context.champion, "code_snapshot_path") or "")
-        or None,
+        champion_snapshot_path=base_snapshot_path,
     )
 
 def _contract_problem_spec(context: ProposalToolContext) -> Any:

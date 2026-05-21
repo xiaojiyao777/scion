@@ -133,9 +133,11 @@ class ContractGate:
         *,
         approved_hypothesis: HypothesisProposal | HypothesisRecord | None = None,
         selected_surface: str | None = None,
+        base_snapshot_path: str | None = None,
     ) -> ContractResult:
         """Run C4–C9 checks on a PatchProposal."""
         checks: List[CheckResult] = []
+        base_file_content = self._file_content_provider(base_snapshot_path)
         contract_hypothesis = (
             approved_hypothesis if approved_hypothesis is not None else hypothesis
         )
@@ -164,6 +166,7 @@ class ContractGate:
                 selected_surface=selected_surface_name,
                 enforce_hypothesis_target=is_primary,
                 patch_graph=patch_graph,
+                base_file_content=base_file_content,
             )
             if is_primary:
                 checks.extend(change_checks)
@@ -177,6 +180,7 @@ class ContractGate:
                 self._c9e_solver_design_integration(
                     patch,
                     selected_surface=selected_surface_name,
+                    base_file_content=base_file_content,
                 )
             )
 
@@ -190,6 +194,7 @@ class ContractGate:
         selected_surface: str | None,
         enforce_hypothesis_target: bool,
         patch_graph: PatchSetGraph | None,
+        base_file_content: Callable[[str], str | None] | None = None,
     ) -> List[CheckResult]:
         checks: List[CheckResult] = []
         checks.append(self._c4_file_whitelist(patch))
@@ -221,6 +226,7 @@ class ContractGate:
             self._c9d_surface_instance_identity(
                 patch,
                 selected_surface=selected_surface,
+                champion_file_content=base_file_content,
             )
         )
         checks.append(self._c9b_non_rng_random(patch))
@@ -642,21 +648,39 @@ class ContractGate:
         patch: PatchProposal,
         *,
         selected_surface: str | None = None,
+        champion_file_content: Callable[[str], str | None] | None = None,
     ) -> CheckResult:
         return check_surface_instance_identity(
             patch,
             selected_surface=selected_surface,
             surface_access=self._surface_access,
             surface_disallows_instance_name=self._surface_disallows_instance_name,
-            champion_file_content=self._champion_file_content,
+            champion_file_content=champion_file_content or self._champion_file_content,
         )
 
     def _champion_file_content(self, file_rel: str) -> str | None:
-        champion_snapshot_path = self._current_champion_snapshot_path()
-        if not champion_snapshot_path:
+        return self._file_content_provider()(file_rel)
+
+    def _file_content_provider(
+        self,
+        snapshot_path: str | None = None,
+    ) -> Callable[[str], str | None]:
+        root_path = str(snapshot_path or "").strip() or self._current_champion_snapshot_path()
+
+        def read_file(file_rel: str) -> str | None:
+            return self._file_content_from_snapshot(root_path, file_rel)
+
+        return read_file
+
+    @staticmethod
+    def _file_content_from_snapshot(
+        snapshot_path: str | None,
+        file_rel: str,
+    ) -> str | None:
+        if not snapshot_path:
             return None
         try:
-            root = Path(champion_snapshot_path).expanduser().resolve(strict=False)
+            root = Path(snapshot_path).expanduser().resolve(strict=False)
             path = (root / file_rel).resolve(strict=False)
             path.relative_to(root)
         except Exception:
@@ -687,13 +711,14 @@ class ContractGate:
         patch: PatchProposal,
         *,
         selected_surface: str | None = None,
+        base_file_content: Callable[[str], str | None] | None = None,
     ) -> CheckResult:
         t0 = time.monotonic_ns()
         result = check_solver_design_integration(
             patch,
             problem_spec=self._spec,
             selected_surface=selected_surface,
-            champion_file_content=self._champion_file_content,
+            champion_file_content=base_file_content or self._champion_file_content,
         )
         return _cr(
             "C9e_solver_design_integration",

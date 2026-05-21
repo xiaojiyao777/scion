@@ -158,3 +158,59 @@ def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c9e(
     assert not c9e.passed
     assert "missing_import_symbols" in c9e.detail
     assert "_missing_recombination" in c9e.detail
+
+
+def test_contract_gate_resolves_imports_against_branch_base_snapshot(
+    tmp_path: Path,
+) -> None:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    local_search_path = "policies/baseline_modules/local_search.py"
+    gate, codes = _gate_with_cvrp_champion(tmp_path, (scheduler_path, local_search_path))
+    branch = tmp_path / "branch"
+    for rel_path in (scheduler_path, local_search_path):
+        target = branch / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(codes[rel_path], encoding="utf-8")
+    branch_local_search = (
+        codes[local_search_path]
+        + "\n\n"
+        "def _double_bridge(solution, instance, rng):\n"
+        "    return solution\n"
+    )
+    (branch / local_search_path).write_text(branch_local_search, encoding="utf-8")
+    scheduler_code = codes[scheduler_path].replace(
+        "from .local_search import _default_vns_operators, _vns\n",
+        "from .local_search import _default_vns_operators, _vns, _double_bridge\n",
+        1,
+    ).replace(
+        "        best = current.copy()\n",
+        "        best = current.copy()\n"
+        "        best = _double_bridge(best, instance, rng)\n",
+        1,
+    )
+    patch = PatchProposal(
+        file_path=scheduler_path,
+        action="modify",
+        code_content=scheduler_code,
+    )
+
+    champion_result = gate.validate_patch(patch, selected_surface="solver_design")
+    branch_result = gate.validate_patch(
+        patch,
+        selected_surface="solver_design",
+        base_snapshot_path=str(branch),
+    )
+
+    champion_c9e = next(
+        check
+        for check in champion_result.checks
+        if check.name == "C9e_solver_design_integration"
+    )
+    branch_c9e = next(
+        check
+        for check in branch_result.checks
+        if check.name == "C9e_solver_design_integration"
+    )
+    assert not champion_c9e.passed
+    assert "_double_bridge" in champion_c9e.detail
+    assert branch_c9e.passed
