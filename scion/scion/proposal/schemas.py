@@ -529,7 +529,6 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
 
 TOOL_SELECTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
-    "required": ["intent"],
     "properties": {
         "intent": {
             "type": "string",

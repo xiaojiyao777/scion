@@ -19,7 +19,11 @@ from scion.proposal.llm_client import (
 )
 from scion.proposal.engine import CreativeLayer
 from scion.proposal.mock_client import MockLLMClient
-from scion.proposal.schemas import HYPOTHESIS_PROPOSAL_SCHEMA, PATCH_PROPOSAL_SCHEMA
+from scion.proposal.schemas import (
+    HYPOTHESIS_PROPOSAL_SCHEMA,
+    PATCH_PROPOSAL_SCHEMA,
+    TOOL_SELECTION_SCHEMA,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +367,55 @@ def test_deepseek_tool_call_kwargs_omit_named_tool_choice(monkeypatch):
 
     assert "tool_choice" not in kwargs
     assert kwargs["reasoning_effort"] == "max"
+
+
+def test_tool_selection_tool_call_defaults_missing_intent() -> None:
+    client = LLMClient(max_retries=0)
+    client._tool_call_once = MagicMock(  # type: ignore[method-assign]
+        return_value=(
+            {"tool_name": "context.read_problem", "args": {}},
+            False,
+        )
+    )
+
+    result = client.call_with_tool(
+        "choose",
+        {
+            "name": "plan_proposal_tool_call",
+            "input_schema": TOOL_SELECTION_SCHEMA,
+        },
+        request_kind="tool_selection",
+    )
+
+    assert result == {
+        "intent": "call_tool",
+        "tool_name": "context.read_problem",
+        "args": {},
+    }
+
+
+def test_tool_selection_tool_call_normalizes_common_aliases() -> None:
+    client = LLMClient(max_retries=0)
+    client._tool_call_once = MagicMock(  # type: ignore[method-assign]
+        return_value=(
+            {"name": "context.read_problem", "input": {"detail": "compact"}},
+            False,
+        )
+    )
+
+    result = client.call_with_tool(
+        "choose",
+        {
+            "name": "plan_proposal_tool_call",
+            "input_schema": TOOL_SELECTION_SCHEMA,
+        },
+        request_kind="tool_selection",
+    )
+
+    assert result["intent"] == "call_tool"
+    assert result["tool_name"] == "context.read_problem"
+    assert result["args"] == {"detail": "compact"}
+    assert "required" not in TOOL_SELECTION_SCHEMA
 
 
 def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
