@@ -515,6 +515,11 @@ def _expected_telemetry_contract_preview(
             "declared_mechanism_runtime_fields": mechanism_fields[
                 : _PREVIEW_MAX_CHECKS * 4
             ],
+            "allowed_expected_telemetry_template": (
+                _expected_telemetry_template_for_mechanism(hypothesis)
+                if not passed
+                else {}
+            ),
             "repair_hint": (
                 "Use only allowed expected_telemetry categories and exact runtime "
                 "keys declared by the selected research surface evidence contract. "
@@ -528,6 +533,30 @@ def _expected_telemetry_contract_preview(
             ),
         }
     )
+
+
+def _expected_telemetry_template_for_mechanism(
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    changes = mechanism_changes(hypothesis)
+    mechanism = changes[0].id if changes else "<mechanism_id>"
+    return {
+        "mechanism_id": mechanism,
+        "expected_telemetry": {
+            "activity": ["solver_algorithm_search_iterations"],
+            "activation": [
+                f"solver_algorithm_context_records.{mechanism}_iterations",
+                f"solver_algorithm_phase_runtime_ms.{mechanism}",
+            ],
+            "effect": [
+                f"solver_algorithm_phase_improvement_counts.{mechanism}",
+            ],
+            "budget": [
+                f"solver_algorithm_phase_runtime_ms.{mechanism}",
+            ],
+        },
+    }
+
 
 def _mechanism_binding_preview(
     hypothesis: HypothesisProposal,

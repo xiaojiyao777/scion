@@ -744,6 +744,88 @@ def test_cvrp_provider_allows_adaptive_neighborhood_selection_with_existing_move
     assert result is None
 
 
+def test_cvrp_provider_allows_cross_route_variant_after_listing_existing_two_opt() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current VNS already has existing _two_opt_intra segment reversal. "
+            "Add a cross-route segment-reversal variant for paired routes rather "
+            "than another intra-route 2-opt operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "Existing intra-route reversal does not target paired cross-route "
+            "route-segment exchanges."
+        ),
+        expected_effect="Improve total_distance through a bounded cross-route variant.",
+        mechanism_changes=(
+            MechanismChange(id="cross_route_segment_reversal_variant", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_double_bridge_after_listing_existing_or_opt() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current VNS operator list already contains _or_opt_1, "
+            "_or_opt_2, and _or_opt_3. It still lacks a cross-route 3-opt / "
+            "double-bridge exchange, so add that separate route-pair move."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "Existing Or-opt relocations do not perform a double-bridge "
+            "route-pair exchange."
+        ),
+        expected_effect="Improve total_distance through a separate double-bridge move.",
+        mechanism_changes=(
+            MechanismChange(id="cross_route_double_bridge", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_allows_positional_arc_destroy_variant_near_shaw_terms() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a positional arc-cluster destroy variant that scores route "
+            "edges by local detour and route position. This is not a new "
+            "Shaw related-removal operator; it targets arc context rather than "
+            "seed relatedness."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy selection misses high-detour positional arcs.",
+        expected_effect="Improve total_distance by removing expensive arc clusters.",
+        mechanism_changes=(
+            MechanismChange(id="positional_arc_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_blocks_missing_shaw_claim_with_span() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

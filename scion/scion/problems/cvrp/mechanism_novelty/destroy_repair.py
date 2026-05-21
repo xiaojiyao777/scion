@@ -14,6 +14,8 @@ def _claims_missing_shaw_related_removal(text: str) -> bool:
 def _missing_shaw_related_removal_span(text: str) -> str:
     if not _mentions_shaw_related_removal(text):
         return ""
+    if not _mentions_exact_shaw_related_fact(text):
+        return ""
     if _targets_worst_removal_savings_not_shaw(text):
         return ""
     if _targets_segment_chain_unit_not_related_removal(text):
@@ -46,6 +48,8 @@ def _duplicates_shaw_related_removal(text: str) -> bool:
     if not _mentions_shaw_related_removal(text):
         return False
     if _is_shaw_contrast_or_negated_addition(text):
+        return False
+    if _is_positional_or_arc_destroy_variant(text):
         return False
     if _targets_worst_removal_savings_not_shaw(text):
         return False
@@ -98,6 +102,11 @@ def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
             " rather than shaw ",
             " not a related destroy ",
             " not a related removal ",
+            " not a new shaw ",
+            " not a new shaw related ",
+            " not a new related removal ",
+            " not shaw related removal ",
+            " not shaw related ",
             " does not add shaw ",
             " does not add shaw/proximity ",
             " without adding shaw ",
@@ -336,6 +345,51 @@ def _mentions_shaw_related_removal(text: str) -> bool:
             r"\b(?:related|relatedness|proximity|cluster(?:ed)?|nearby|neighbou?r)\b",
             text,
         )
+    )
+
+
+def _mentions_exact_shaw_related_fact(text: str) -> bool:
+    if "shaw" in text and _has_any(text, ("removal", "remove", "destroy")):
+        return True
+    return _has_any(
+        text,
+        (
+            "related removal",
+            "relatedness removal",
+            "related destroy",
+            "relatedness destroy",
+            "seed based related removal",
+            "seed related removal",
+        ),
+    )
+
+
+def _is_positional_or_arc_destroy_variant(text: str) -> bool:
+    if not _mentions_shaw_related_removal(text):
+        return False
+    if _mentions_exact_shaw_related_fact(text) and not _is_shaw_contrast_or_negated_addition(
+        text
+    ):
+        return False
+    if not re.search(
+        r"\b(?:arc|edge|positional|position|route position|geographic|"
+        r"spatial|route segment)\b",
+        text,
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "variant",
+            "trigger",
+            "score",
+            "scoring",
+            "filter",
+            "candidate",
+            "new destroy",
+            "destroy operator",
+            "removal operator",
+        ),
     )
 
 

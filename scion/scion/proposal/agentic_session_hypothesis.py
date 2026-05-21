@@ -567,6 +567,11 @@ def _hypothesis_preview_retry_feedback(
     if "C11_expected_telemetry" not in (c11_detail or detail):
         return None
 
+    mechanism_ids = _mechanism_ids_from_preview(
+        hypothesis.get("mechanism_changes")
+    ) or _mechanism_ids_from_runtime_fields(
+        telemetry.get("declared_mechanism_runtime_fields")
+    )
     requested_fields = telemetry.get("requested_fields")
     requested_activation = ()
     if isinstance(requested_fields, Mapping):
@@ -594,16 +599,83 @@ def _hypothesis_preview_retry_feedback(
                 limit=20,
                 max_chars=160,
             ),
+            "allowed_expected_telemetry_template": (
+                _expected_telemetry_retry_template(mechanism_ids)
+            ),
             "retry_constraint": (
                 "Repair expected_telemetry.activation with exact declared "
                 "mechanism-specific activation records. Do not use existing "
                 "phase names such as `.vns` unless that exact mechanism id is "
                 "declared in mechanism_changes; prefer "
                 "`solver_algorithm_context_records.<mechanism_id>_iterations` "
-                "or `solver_algorithm_phase_runtime_ms.<mechanism_id>`."
+                "or `solver_algorithm_phase_runtime_ms.<mechanism_id>`. "
+                "Copy the allowed_expected_telemetry_template shape and replace "
+                "only the mechanism id when needed."
             ),
         }
     )
+
+
+def _mechanism_ids_from_preview(value: Any) -> tuple[str, ...]:
+    ids: list[str] = []
+    if isinstance(value, Mapping):
+        candidate = str(value.get("id") or "").strip()
+        if candidate:
+            ids.append(candidate)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, Mapping):
+                candidate = str(item.get("id") or "").strip()
+                if candidate:
+                    ids.append(candidate)
+    return tuple(dict.fromkeys(ids))
+
+
+def _mechanism_ids_from_runtime_fields(value: Any) -> tuple[str, ...]:
+    fields: list[str] = []
+    if isinstance(value, str):
+        fields = [value]
+    elif isinstance(value, (list, tuple)):
+        fields = [str(field or "").strip() for field in value]
+    ids: list[str] = []
+    for field in fields:
+        if field.startswith("solver_algorithm_context_records.") and field.endswith(
+            "_iterations"
+        ):
+            ids.append(
+                field.removeprefix("solver_algorithm_context_records.").removesuffix(
+                    "_iterations"
+                )
+            )
+        elif field.startswith("solver_algorithm_phase_runtime_ms."):
+            ids.append(field.removeprefix("solver_algorithm_phase_runtime_ms."))
+        elif field.startswith("solver_algorithm_phase_improvement_counts."):
+            ids.append(
+                field.removeprefix("solver_algorithm_phase_improvement_counts.")
+            )
+    return tuple(dict.fromkeys(item for item in ids if item))
+
+
+def _expected_telemetry_retry_template(
+    mechanism_ids: tuple[str, ...],
+) -> dict[str, Any]:
+    mechanism = mechanism_ids[0] if mechanism_ids else "<mechanism_id>"
+    return {
+        "mechanism_id": mechanism,
+        "expected_telemetry": {
+            "activity": ["solver_algorithm_search_iterations"],
+            "activation": [
+                f"solver_algorithm_context_records.{mechanism}_iterations",
+                f"solver_algorithm_phase_runtime_ms.{mechanism}",
+            ],
+            "effect": [
+                f"solver_algorithm_phase_improvement_counts.{mechanism}",
+            ],
+            "budget": [
+                f"solver_algorithm_phase_runtime_ms.{mechanism}",
+            ],
+        },
+    }
 
 
 def _hypothesis_prompt_call_kind(

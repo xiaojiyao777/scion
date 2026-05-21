@@ -92,7 +92,7 @@ def _claims_missing_or_opt_1(text: str) -> bool:
 def _missing_or_opt_1_span(text: str) -> str:
     if not _mentions_or_opt_1(text):
         return ""
-    return _first_regex_span(
+    span = _first_regex_span(
         text,
         (
             r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
@@ -104,6 +104,9 @@ def _missing_or_opt_1_span(text: str) -> str:
             r"doesn't include)\b",
         ),
     )
+    if _span_lists_existing_operator_then_other_gap(span):
+        return ""
+    return span
 
 
 def _duplicates_or_opt_1(text: str) -> bool:
@@ -139,10 +142,15 @@ def _missing_intra_two_opt_span(text: str) -> str:
         return ""
     if _is_adaptive_vns_neighborhood_ordering_scope(text):
         return ""
-    return _has_missing_gap_near(
+    span = _has_missing_gap_near(
         text,
         _INTRA_TWO_OPT_TERMS,
     )
+    if _span_targets_cross_route_or_non_intra_variant(span):
+        return ""
+    if _span_lists_existing_operator_then_other_gap(span):
+        return ""
+    return span
 
 
 _INTRA_TWO_OPT_TERMS = (
@@ -162,6 +170,8 @@ _INTRA_TWO_OPT_TERMS = (
 
 def _duplicates_intra_two_opt(text: str) -> bool:
     if not _mentions_intra_two_opt(text):
+        return False
+    if _mentions_existing_intra_two_opt_as_context_for_variant(text):
         return False
     if _describes_existing_intra_two_opt_improvement(text):
         return False
@@ -220,6 +230,31 @@ def _describes_existing_intra_two_opt_improvement(text: str) -> bool:
     )
 
 
+def _mentions_existing_intra_two_opt_as_context_for_variant(text: str) -> bool:
+    if not _mentions_intra_two_opt(text):
+        return False
+    if not _has_any(text, ("existing", "current", "already", "present")):
+        return False
+    return _has_any(
+        text,
+        (
+            "cross route",
+            "inter route",
+            "between route",
+            "across routes",
+            "different route",
+            "3 opt",
+            "three opt",
+            "double bridge",
+            "neighborhood order",
+            "neighborhood scheduling",
+            "candidate",
+            "filter",
+            "scoring",
+        ),
+    )
+
+
 def _acknowledges_existing_or_opt(text: str) -> bool:
     return bool(
         re.search(
@@ -232,6 +267,56 @@ def _acknowledges_existing_or_opt(text: str) -> bool:
             r"already|present|contains?|covers?|built in|built-in)\b",
             text,
         )
+    )
+
+
+def _span_lists_existing_operator_then_other_gap(span: str) -> bool:
+    if not span:
+        return False
+    if not _has_any(
+        span,
+        (
+            "existing",
+            "already",
+            "present",
+            "contains",
+            "registered",
+        ),
+    ):
+        return False
+    if not _has_any(span, ("missing", "lacks", "lack ", "absent", "without", " no ")):
+        return False
+    return _has_any(
+        span,
+        (
+            "but",
+            "however",
+            "while",
+            "although",
+            "whereas",
+            "rather than",
+            "instead",
+        ),
+    )
+
+
+def _span_targets_cross_route_or_non_intra_variant(span: str) -> bool:
+    if not span:
+        return False
+    if _has_any(span, ("intra route", "within route", "route internal", "two opt intra")):
+        return False
+    return _has_any(
+        span,
+        (
+            "cross route",
+            "inter route",
+            "between route",
+            "across routes",
+            "different route",
+            "3 opt",
+            "three opt",
+            "double bridge",
+        ),
     )
 
 

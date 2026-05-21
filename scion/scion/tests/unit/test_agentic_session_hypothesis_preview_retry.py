@@ -214,6 +214,12 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(retry_feedback)
     assert ".vns" in retry_feedback["retry_constraint"]
     assert "declared_mechanism_runtime_fields" in retry_feedback
+    assert retry_feedback["allowed_expected_telemetry_template"][
+        "expected_telemetry"
+    ]["activation"] == [
+        "solver_algorithm_context_records.adaptive_vns_operator_weights_iterations",
+        "solver_algorithm_phase_runtime_ms.adaptive_vns_operator_weights",
+    ]
     assert any(
         event.metadata.get("failure_code") == "C11_expected_telemetry"
         for event in output.transcript
