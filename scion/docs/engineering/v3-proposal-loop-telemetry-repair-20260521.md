@@ -14,9 +14,10 @@ adapter/provider-owned or come from structured rejection payloads.
   stop request path so the loop will not start new APS/session/LLM work after a
   stop is requested.
 - Campaign loop now has a separate pre-screen proposal-quality ceiling.
-  Cumulative duplicate, repeated-mechanism, contradicted-premise, code-not-
-  generated, and other proposal-quality blocks stop the run with
-  `proposal_quality_loop` by default after `max(3, rounds + 2)` attempts, or the
+  Cumulative duplicate, repeated-mechanism, contradicted-premise, schema/target
+  preview, code-not-generated, and other non-effective `proposal_block` attempts
+  stop the run with `proposal_quality_loop` by default after
+  `max(3, rounds + 2)` attempts, or the
   `SCION_PROPOSAL_QUALITY_LOOP_LIMIT` environment override. Repairable telemetry
   and same-family retries keep separate budgets.
 - Algorithm-smoke telemetry treats activation as required but effect/objective

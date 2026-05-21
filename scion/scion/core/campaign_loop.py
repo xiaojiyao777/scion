@@ -98,7 +98,7 @@ class CampaignLoop:
                     same_family_retry_attempts += 1
                     if same_family_retry_attempts >= same_family_retry_limit:
                         final_reason = "same_family_retry_budget_exhausted"
-                elif _is_proposal_quality_blocked_attempt(result):
+                elif kind == "proposal_block":
                     proposal_quality_blocked_attempts += 1
                     if (
                         proposal_quality_blocked_attempts
@@ -151,31 +151,6 @@ def _attempt_kind(result: StepResult) -> str:
     if "same_family" in reason or "semantic retry" in reason:
         return "same_family_retry"
     return "proposal_block"
-
-
-def _is_proposal_quality_blocked_attempt(result: StepResult) -> bool:
-    text = " ".join(
-        str(value or "").lower()
-        for value in (
-            getattr(result, "reason", ""),
-            getattr(result, "attempt_kind", ""),
-        )
-    )
-    if "agent_quality_blocked" in text:
-        return True
-    if _attempt_kind(result) != "proposal_block":
-        return False
-    reason = str(getattr(result, "reason", "") or "").lower()
-    proposal_quality_tokens = (
-        "duplicate_mechanism",
-        "mechanism_novelty_rejected",
-        "premise_contradicted",
-        "proposal_premise_contradicted",
-        "proposal_quality_blocked",
-        "hypothesis contract failed",
-        "code generation failed",
-    )
-    return any(token in reason for token in proposal_quality_tokens)
 
 
 def _proposal_quality_loop_limit(
