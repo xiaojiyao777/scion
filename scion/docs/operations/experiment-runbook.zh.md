@@ -214,6 +214,14 @@ EOF
 
 nohup setsid bash -lc '
 source "'"$RUN_ROOT"'/launch.env"
+write_exit() {
+  code="$1"
+  reason="${2:-normal}"
+  printf "EXIT_CODE:%s\nEXIT_REASON:%s\nEXIT_UTC:%s\n" \
+    "$code" "$reason" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUN_ROOT/exit.txt"
+}
+trap '\''write_exit 143 signal_SIGTERM; exit 143'\'' TERM
+trap '\''write_exit 130 signal_SIGINT; exit 130'\'' INT
 cd "$SCION_DIR"
 export SCION_MODEL
 export SCION_PROBLEM_DATA_ROOT
@@ -241,7 +249,7 @@ printf " %q" "${cmd[@]}" >> "$RUN_ROOT/command.txt"
 printf "\n" >> "$RUN_ROOT/command.txt"
 "${cmd[@]}"
 code=$?
-printf "EXIT_CODE:%s\n" "$code" > "'"$RUN_ROOT"'/exit.txt"
+write_exit "$code" command_returned
 exit "$code"
 ' > "$RUN_ROOT/run.log" 2>&1 &
 
