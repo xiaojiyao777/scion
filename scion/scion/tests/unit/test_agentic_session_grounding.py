@@ -191,6 +191,87 @@ def test_solver_design_grounding_reads_file_list_and_target_file(
     )
 
 
+def test_pending_code_retry_skips_fresh_duplicate_gate_for_approved_hypothesis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scion.proposal.agentic_session_hypothesis as hypothesis_module
+
+    class RejectingGate:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def evaluate(self, *_args, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                reason="same approved mechanism seen in campaign history",
+                mechanism="adaptive_sa_reheat",
+                to_rejection=lambda _hypothesis: {
+                    "premise_check": "duplicate",
+                    "failure_category": "duplicate_mechanism",
+                    "reason": "same approved mechanism seen in campaign history",
+                    "mechanism": "adaptive_sa_reheat",
+                },
+            )
+
+    rejecting_gate = RejectingGate()
+    monkeypatch.setattr(
+        hypothesis_module,
+        "_MECHANISM_NOVELTY_GATE",
+        rejecting_gate,
+    )
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/scheduler.py",
+            mechanism_changes=[
+                {"id": "adaptive_sa_reheat", "change_type": "add"}
+            ],
+        )
+    )
+    session = AgenticProposalSession(
+        FakeCreative(),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-code-repair",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-1",
+    )
+    request = AgenticProposalRequest(
+        campaign_id=context.campaign_id,
+        branch=context.branch,
+        champion=context.champion,
+        hypothesis_context=None,
+        build_code_context=lambda _hypothesis: {"kind": "code"},
+        problem_id=context.problem_id,
+        problem_spec_hash=context.problem_spec_hash,
+        prior_failure="code_generation_failed: C9e inert helper reheat_count",
+        approved_hypothesis=hypothesis,
+        tool_context=context,
+    )
+
+    output = session._check_approved_solver_design_grounding(
+        request=request,
+        session_id=state.session_id,
+        state=state,
+        tool_context=context,
+        hypothesis=hypothesis,
+        observations=[],
+        evidence=[],
+    )
+
+    assert output is None
+    assert rejecting_gate.calls == 0
+    assert any(
+        event.metadata.get("policy") == "approved_hypothesis_code_repair_continuation"
+        for event in state.transcript
+    )
+
+
 def test_solver_design_grounding_allows_declared_new_module_without_file_read(
     tmp_path: Path,
 ) -> None:
@@ -291,5 +372,4 @@ def test_budget_denial_does_not_apply_to_mandatory_code_surface_read(
         selection_source="code_phase_required_compact",
         state=state,
     )
-
 

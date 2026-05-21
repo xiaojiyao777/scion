@@ -65,6 +65,101 @@ _DEFAULT_PENDING_FINAL_EVIDENCE_REASON = (
 )
 
 
+def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
+    if raw_ref is None:
+        return {}
+    try:
+        path = Path(str(raw_ref))
+    except TypeError:
+        return {}
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, Mapping):
+        return {}
+    return {
+        key: data[key]
+        for key in (
+            "stage",
+            "complete",
+            "total_pairs",
+            "attempted_pairs",
+            "valid_pairs",
+            "failed_pairs",
+            "candidate_failed_pairs",
+            "champion_failed_pairs",
+        )
+        if key in data
+    }
+
+
+def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
+    stage = str(progress.get("stage") or "").strip()
+    raw_metrics_ref = progress.get("raw_metrics_ref")
+    target_file = progress.get("target_file")
+    hypothesis_action = progress.get("hypothesis_action")
+    mechanism_changes = progress.get("mechanism_changes")
+    complete = bool(progress.get("complete", False))
+    snapshot = {
+        "phase": f"formal_{stage}" if stage else "formal_protocol",
+        "stage": stage or None,
+        "branch_id": progress.get("branch_id"),
+        "candidate": _drop_none(
+            {
+                "branch_id": progress.get("branch_id"),
+                "target_file": target_file,
+                "hypothesis_action": hypothesis_action,
+                "mechanism_changes": mechanism_changes,
+            }
+        ),
+        "hypothesis": _drop_none(
+            {
+                "text": progress.get("hypothesis_text"),
+                "action": hypothesis_action,
+                "target_file": target_file,
+                "mechanism_changes": mechanism_changes,
+            }
+        ),
+        "partial_metrics_ref": raw_metrics_ref,
+        "partial_metrics_ref_scope": progress.get("raw_metrics_ref_scope"),
+        "partial_metrics_internal_only": progress.get("raw_metrics_internal_only"),
+        "attempted_pairs": _optional_int(progress.get("attempted_pairs")),
+        "total_pairs": _optional_int(progress.get("total_pairs")),
+        "valid_pairs": _optional_int(
+            progress.get("valid_pairs", progress.get("completed_pairs"))
+        ),
+        "failed_pairs": _optional_int(progress.get("failed_pairs")),
+        "candidate_failed_pairs": _optional_int(
+            progress.get("candidate_failed_pairs")
+        ),
+        "champion_failed_pairs": _optional_int(progress.get("champion_failed_pairs")),
+        "complete": complete,
+        "decision_formed": False,
+        "counts_toward_n_experiments": False,
+        "last_case": progress.get("case"),
+        "last_seed": progress.get("seed"),
+        "step_started_at": progress.get("step_started_at"),
+        "last_progress_at": progress.get("last_progress_at"),
+    }
+    return _drop_none(snapshot)
+
+
+def _drop_none(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: item for key, item in value.items() if item is not None}
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _serialize_verification_checks(
     verification_result: VerificationResult,
 ) -> list[Dict[str, Any]]:
@@ -336,6 +431,7 @@ class EvidenceRecorder:
         self.protocol_version = protocol_version
         self.family_taxonomy = family_taxonomy
         self.current_status_progress: Dict[str, Any] | None = None
+        self.in_flight_protocol: Dict[str, Any] | None = None
         self.last_status_result: Dict[str, Any] | None = None
         self.final_evidence_refs: Dict[str, Any] = {}
 
@@ -389,6 +485,10 @@ class EvidenceRecorder:
             )
         if self.current_status_progress is not None:
             payload["current_progress"] = self.current_status_progress
+        if self.in_flight_protocol is not None:
+            payload["in_flight_protocol"] = self.in_flight_protocol
+            if self.last_status_result is not None:
+                payload["last_completed_result"] = self.last_status_result
         payload = normalize_status_payload(payload)
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:
@@ -399,14 +499,30 @@ class EvidenceRecorder:
 
     def record_protocol_progress(self, **payload: Any) -> Dict[str, Any]:
         """Merge a protocol progress update and refresh ``status.json``."""
+        metrics_snapshot = _read_partial_metrics_snapshot(payload.get("raw_metrics_ref"))
         progress = dict(self.current_status_progress or {})
         progress.update(payload)
+        for key in (
+            "stage",
+            "complete",
+            "total_pairs",
+            "attempted_pairs",
+            "valid_pairs",
+            "failed_pairs",
+            "candidate_failed_pairs",
+            "champion_failed_pairs",
+        ):
+            if key not in progress and key in metrics_snapshot:
+                progress[key] = metrics_snapshot[key]
+        if "valid_pairs" not in progress and "completed_pairs" in progress:
+            progress["valid_pairs"] = progress["completed_pairs"]
         if progress.get("raw_metrics_ref"):
             progress["raw_metrics_ref_scope"] = "public_artifact_ref"
             progress["raw_metrics_internal_only"] = True
         progress["last_progress_at"] = datetime.now().isoformat()
         progress = redact_public_refs(progress, base_dir=self.campaign_dir)
         self.current_status_progress = progress
+        self.in_flight_protocol = _in_flight_protocol_snapshot(progress)
         self.write_status()
         return progress
 

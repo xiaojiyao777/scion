@@ -110,11 +110,19 @@ class TestCodeFailureRetry:
         captured_contexts = []
         original_build = ContextManager.build_code_context
 
-        def capturing_build(self_ctx, branch, hypothesis, champion, problem_spec,
-                            prior_failure=None):
+        def capturing_build(
+            self_ctx,
+            branch,
+            hypothesis,
+            champion,
+            problem_spec,
+            prior_failure=None,
+            branch_workspace=None,
+        ):
             ctx = original_build(self_ctx, branch=branch, hypothesis=hypothesis,
                                  champion=champion, problem_spec=problem_spec,
-                                 prior_failure=prior_failure)
+                                 prior_failure=prior_failure,
+                                 branch_workspace=branch_workspace)
             captured_contexts.append(ctx)
             return ctx
 
@@ -140,6 +148,12 @@ class TestCodeFailureRetry:
         # Retry attempt: prior failure context present
         assert "prior_code_failure" in captured_contexts[1], \
             "retry attempt must include prior_code_failure in context"
+        assert captured_contexts[1]["pending_code_retry_policy"]["status"] == (
+            "approved_hypothesis_code_repair"
+        )
+        assert captured_contexts[1]["pending_code_retry_policy"][
+            "fresh_proposal_duplicate_gate"
+        ] == "skip_for_same_approved_hypothesis"
 
     def test_successful_code_clears_pending(self, tmp_path):
         """A successful code gen round leaves no pending hypothesis."""

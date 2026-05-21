@@ -517,6 +517,16 @@ class ContextManager:
             )
         if prior_failure is not None:
             ctx["prior_code_failure"] = prior_failure
+            ctx["pending_code_retry_policy"] = {
+                "status": "approved_hypothesis_code_repair",
+                "fresh_proposal_duplicate_gate": "skip_for_same_approved_hypothesis",
+                "rule": (
+                    "Repair code for the already approved hypothesis. Do not "
+                    "rename the mechanism or generate a fresh replacement "
+                    "hypothesis unless the framework explicitly closes this "
+                    "pending retry."
+                ),
+            }
         return ctx
 
     # ------------------------------------------------------------------

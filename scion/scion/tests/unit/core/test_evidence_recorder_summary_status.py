@@ -308,6 +308,79 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
     assert status["last_result"]["counts_toward_max_rounds"] is False
 
 
+def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(
+    tmp_path: Path,
+) -> None:
+    metrics_dir = tmp_path / "metrics"
+    metrics_dir.mkdir()
+    metrics_path = metrics_dir / "partial-screening.json"
+    metrics_path.write_text(
+        json.dumps(
+            {
+                "stage": "screening",
+                "complete": False,
+                "total_pairs": 16,
+                "attempted_pairs": 3,
+                "valid_pairs": 3,
+                "failed_pairs": 0,
+                "candidate_failed_pairs": 0,
+                "champion_failed_pairs": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "n_experiments": 0,
+            "screened_experiments": 0,
+        },
+    )
+
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        hypothesis_action="modify",
+        hypothesis_text="Add a random segment removal operator.",
+        mechanism_changes=[
+            {"id": "random_segment_removal", "change_type": "add"}
+        ],
+        raw_metrics_ref=str(metrics_path),
+    )
+    recorder.current_status_progress = None
+    status = recorder.write_status(
+        last_result=StepResult(
+            action="explore",
+            branch_id="branch-old",
+            reason="agent_quality_blocked",
+            counts_toward_max_rounds=False,
+        ),
+        stopped_reason="signal:SIGTERM",
+    )
+
+    assert status["n_experiments"] == 0
+    assert status["screened_experiments"] == 0
+    assert status["last_result"]["reason"] == "agent_quality_blocked"
+    inflight = status["in_flight_protocol"]
+    assert inflight["phase"] == "formal_screening"
+    assert inflight["branch_id"] == "branch-1"
+    assert inflight["candidate"]["mechanism_changes"][0]["id"] == (
+        "random_segment_removal"
+    )
+    assert inflight["partial_metrics_ref"] == "metrics/partial-screening.json"
+    assert inflight["attempted_pairs"] == 3
+    assert inflight["total_pairs"] == 16
+    assert inflight["valid_pairs"] == 3
+    assert inflight["failed_pairs"] == 0
+    assert inflight["complete"] is False
+    assert inflight["decision_formed"] is False
+    assert inflight["counts_toward_n_experiments"] is False
+    assert status["last_completed_result"]["reason"] == "agent_quality_blocked"
+
+
 def test_campaign_summary_separates_telemetry_failed_experiment(
     tmp_path: Path,
 ) -> None:

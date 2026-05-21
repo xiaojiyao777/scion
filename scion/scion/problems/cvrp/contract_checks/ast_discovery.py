@@ -66,6 +66,33 @@ def _class_method_defs(tree: ast.AST) -> dict[str, set[str]]:
     return result
 
 
+def _class_property_method_defs(tree: ast.AST) -> dict[str, set[str]]:
+    if not isinstance(tree, ast.Module):
+        return {}
+    result: dict[str, set[str]] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        properties = {
+            item.name
+            for item in node.body
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and _has_property_decorator(item)
+        }
+        if properties:
+            result[node.name] = properties
+    return result
+
+
+def _has_property_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id == "property":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "property":
+            return True
+    return False
+
+
 def _class_method_defs_from_source(code: str | None) -> dict[str, set[str]]:
     if not code:
         return {}
@@ -98,20 +125,29 @@ def _module_call_references(
     if not isinstance(tree, ast.Module):
         return set(), {}, {}
 
+    property_methods = _class_property_method_defs(tree)
     module_calls: set[str] = set()
     function_calls: dict[str, set[str]] = {}
     class_method_calls: dict[str, dict[str, set[str]]] = {}
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            function_calls[node.name] = _call_reference_names(node)
+            function_calls[node.name] = _call_reference_names(
+                node,
+                property_methods=property_methods,
+            )
         elif isinstance(node, ast.ClassDef):
             method_calls: dict[str, set[str]] = {}
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    method_calls[item.name] = _call_reference_names(item)
+                    method_calls[item.name] = _call_reference_names(
+                        item,
+                        property_methods=property_methods,
+                    )
             class_method_calls[node.name] = method_calls
         else:
-            module_calls.update(_call_reference_names(node))
+            module_calls.update(
+                _call_reference_names(node, property_methods=property_methods)
+            )
     return module_calls, function_calls, class_method_calls
 
 
@@ -170,7 +206,11 @@ def _reachable_class_method_calls(
     return calls
 
 
-def _call_reference_names(node: ast.AST) -> set[str]:
+def _call_reference_names(
+    node: ast.AST,
+    *,
+    property_methods: dict[str, set[str]] | None = None,
+) -> set[str]:
     names: set[str] = set()
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
@@ -193,6 +233,45 @@ def _call_reference_names(node: ast.AST) -> set[str]:
             )
             if any(_is_active_registration_target(target) for target in targets):
                 names.update(_active_registration_reference_names(child.value))
+    if property_methods:
+        names.update(_property_getter_reference_names(node, property_methods))
+    return names
+
+
+def _property_getter_reference_names(
+    node: ast.AST,
+    property_methods: dict[str, set[str]],
+) -> set[str]:
+    instance_types: dict[str, str] = {}
+    for child in ast.walk(node):
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(child, ast.Assign):
+            targets = list(child.targets)
+            value = child.value
+        elif isinstance(child, ast.AnnAssign):
+            targets = [child.target]
+            value = child.value
+        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name):
+            continue
+        class_name = value.func.id
+        if class_name not in property_methods:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                instance_types[target.id] = class_name
+
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Attribute) or not isinstance(child.ctx, ast.Load):
+            continue
+        if not isinstance(child.value, ast.Name):
+            continue
+        class_name = instance_types.get(child.value.id)
+        if class_name is None:
+            continue
+        if child.attr in property_methods.get(class_name, set()):
+            names.add(child.attr)
     return names
 
 

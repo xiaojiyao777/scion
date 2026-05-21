@@ -353,6 +353,17 @@ class CampaignManager:
             "stage": stage.value,
             "target_file": hypothesis.target_file,
             "hypothesis_action": hypothesis.action,
+            "hypothesis_text": hypothesis.hypothesis_text,
+            "mechanism_changes": [
+                {
+                    "id": str(getattr(change, "id", "") or ""),
+                    "change_type": str(getattr(change, "change_type", "") or ""),
+                }
+                for change in tuple(
+                    getattr(hypothesis, "mechanism_changes", ()) or ()
+                )
+                if str(getattr(change, "id", "") or "")
+            ],
             "base_champion_id": branch.base_champion_id,
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "champion_version": self._champion.version,
@@ -366,8 +377,11 @@ class CampaignManager:
         self._write_status()
 
     def _end_status_progress(self) -> None:
+        preserve_in_flight = bool(getattr(self, "_external_stop_requested", False))
         self._current_status_progress = None
         self._evidence_recorder.current_status_progress = None
+        if not preserve_in_flight:
+            self._evidence_recorder.in_flight_protocol = None
         self._write_status()
 
     def _persist_branch_state(self, branch_id: str) -> None:

@@ -402,6 +402,17 @@ class AgenticSessionOrchestrationMixin:
             )
             return self._persist(output, state)
 
+        if request.prior_failure is not None:
+            state.note(
+                AgenticProposalPhase.DIAGNOSE,
+                "Approved hypothesis is continuing a code repair retry; skipping fresh mechanism novelty duplicate gate.",
+                metadata={
+                    "policy": "approved_hypothesis_code_repair_continuation",
+                    "prior_failure": str(request.prior_failure)[:400],
+                },
+            )
+            return None
+
         return self._mechanism_novelty_failed_output(
             request=request,
             session_id=session_id,

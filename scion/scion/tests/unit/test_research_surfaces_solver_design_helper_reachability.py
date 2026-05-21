@@ -167,6 +167,51 @@ def test_contract_gate_allows_solver_design_helper_called_from_runtime_class_ali
     assert c9e.passed
 
 
+def test_contract_gate_allows_solver_design_property_getter_reachability(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    champion = tmp_path / "champion"
+    target = champion / "policies" / "baseline_modules" / "scheduler.py"
+    target.parent.mkdir(parents=True)
+    base_code = (
+        _CVRP_ROOT / "policies" / "baseline_modules" / "scheduler.py"
+    ).read_text(encoding="utf-8")
+    target.write_text(base_code, encoding="utf-8")
+    code = (
+        "class _AdaptiveAnnealing:\n"
+        "    def __init__(self):\n"
+        "        self._reheats = 1\n\n"
+        "    @property\n"
+        "    def reheat_count(self):\n"
+        "        return self._reheats\n\n"
+        "class _ALNSVNSSolver:\n"
+        "    def solve(self, instance, rng):\n"
+        "        annealing = _AdaptiveAnnealing()\n"
+        "        if annealing.reheat_count > 0:\n"
+        "            return instance\n"
+        "        return instance\n"
+    )
+    gate = ContractGate(
+        legacy_problem_spec_from_v1(spec),
+        champion_snapshot_path=str(champion),
+    )
+
+    result = gate.validate_patch(
+        PatchProposal(
+            file_path="policies/baseline_modules/scheduler.py",
+            action="modify",
+            code_content=code,
+        ),
+        selected_surface="solver_design",
+    )
+
+    c9e = next(
+        check for check in result.checks if check.name == "C9e_solver_design_integration"
+    )
+    assert c9e.passed
+
+
 def test_contract_gate_rejects_solver_design_helper_only_called_from_detached_class(
     tmp_path: Path,
 ) -> None:
