@@ -736,10 +736,10 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
         StepResult(
             action="validate",
             branch_id="b1",
-            decision=Decision.CONTINUE_EXPLORE,
+            decision=Decision.VALIDATION_REPAIR_REQUIRED,
             reason="VALIDATION_TELEMETRY_REPAIRABLE: repair declared telemetry",
             counts_toward_max_rounds=False,
-            attempt_kind="validation_telemetry_repairable",
+            attempt_kind="validation_repair_required",
         ),
         StepResult(action="explore", branch_id="b1", reason="screening 1"),
         StepResult(action="explore", branch_id="b1", reason="screening 2"),
@@ -786,7 +786,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
     assert [result.attempt_kind for result in last_results[:3]] == [
         "proposal_block",
         "telemetry_repairable",
-        "validation_telemetry_repairable",
+        "validation_repair_required",
     ]
     assert "max_rounds_exhausted" in stopped_reasons
 

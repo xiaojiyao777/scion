@@ -41,7 +41,9 @@ from .feedback import (
 from .runtime_observation import (
     _append_guard_runtime,
     _build_runtime_stats,
+    _candidate_runtime_counter_template,
     _candidate_runtime_observation,
+    _format_runtime_counter_summary,
     _format_runtime_summary,
     _format_telemetry_guard_summary,
     _merge_runtime_observation,
@@ -105,28 +107,15 @@ def run_experiment(
     runtime_deltas_ms: list[float] = []
     candidate_runtime_categories: dict[str, int] = {}
     candidate_first_runtime_failure: dict[str, Any] | None = None
-    candidate_runtime_counters: dict[str, int] = {
-        "operator_attempts": 0,
-        "operator_accepted": 0,
-        "operator_errors": 0,
-        "operator_invalid_outputs": 0,
-        "policy_errors": 0,
-        "construction_errors": 0,
-        "portfolio_errors": 0,
-        "solver_algorithm_errors": 0,
-        "solver_algorithm_search_iterations": 0,
-        "solver_algorithm_move_attempts": 0,
-        "solver_algorithm_accepted_moves": 0,
-        "solver_algorithm_improving_moves": 0,
-        "solver_algorithm_neutral_accepted_moves": 0,
-        "solver_algorithm_baseline_calls": 0,
-        "solver_algorithm_baseline_errors": 0,
-    }
     candidate_runtime_stop_reasons: dict[str, int] = {}
     candidate_guard_runtimes: list[Mapping[str, Any]] = []
     champion_guard_runtimes: list[Mapping[str, Any]] = []
     candidate_telemetry_guard_summary: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
+    candidate_runtime_counters: dict[str, int] = _candidate_runtime_counter_template(
+        problem_spec=protocol._problem_spec,
+        selected_surface=normalized_selected_surface,
+    )
     surface_required_runtime_fields = declared_surface_required_runtime_fields(
         protocol._problem_spec,
         normalized_selected_surface,
@@ -217,6 +206,8 @@ def run_experiment(
             runtime_fields = _runtime_fields(
                 cand_r,
                 champ_r,
+                problem_spec=protocol._problem_spec,
+                selected_surface=normalized_selected_surface,
                 candidate_required_runtime_fields=surface_required_runtime_fields,
             )
             _append_guard_runtime(candidate_guard_runtimes, cand_r)
@@ -226,7 +217,11 @@ def run_experiment(
                 runtime_ratios,
                 runtime_deltas_ms,
             )
-            runtime_observation = _candidate_runtime_observation(cand_r)
+            runtime_observation = _candidate_runtime_observation(
+                cand_r,
+                problem_spec=protocol._problem_spec,
+                selected_surface=normalized_selected_surface,
+            )
             _merge_runtime_observation(
                 runtime_observation,
                 categories=candidate_runtime_categories,
@@ -669,30 +664,7 @@ def run_experiment(
         if failure_category_summary
         else ""
     )
-    runtime_attempt_summary = (
-        " candidate_operator_attempts="
-        f"{candidate_runtime_counters['operator_attempts']}"
-        " candidate_operator_accepted="
-        f"{candidate_runtime_counters['operator_accepted']}"
-        " candidate_operator_errors="
-        f"{candidate_runtime_counters['operator_errors']}"
-        " candidate_invalid_outputs="
-        f"{candidate_runtime_counters['operator_invalid_outputs']}"
-        " candidate_solver_algorithm_iterations="
-        f"{candidate_runtime_counters['solver_algorithm_search_iterations']}"
-        " candidate_solver_algorithm_move_attempts="
-        f"{candidate_runtime_counters['solver_algorithm_move_attempts']}"
-        " candidate_solver_algorithm_accepted_moves="
-        f"{candidate_runtime_counters['solver_algorithm_accepted_moves']}"
-        " candidate_solver_algorithm_improving_moves="
-        f"{candidate_runtime_counters['solver_algorithm_improving_moves']}"
-        " candidate_solver_algorithm_neutral_moves="
-        f"{candidate_runtime_counters['solver_algorithm_neutral_accepted_moves']}"
-        " candidate_solver_algorithm_baseline_calls="
-        f"{candidate_runtime_counters['solver_algorithm_baseline_calls']}"
-        " candidate_solver_algorithm_errors="
-        f"{candidate_runtime_counters['solver_algorithm_errors']}"
-    )
+    runtime_attempt_summary = _format_runtime_counter_summary(candidate_runtime_counters)
     telemetry_guard_summary = _format_telemetry_guard_summary(
         candidate_telemetry_guard_summary
     )

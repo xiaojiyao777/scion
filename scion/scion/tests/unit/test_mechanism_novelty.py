@@ -588,7 +588,7 @@ def test_mechanism_novelty_gate_uses_agent_visible_fact_packet(
     )
 
     assert result is not None
-    assert result.snapshot_digest == fact_packet["fact_packet_digest"]
+    assert result.snapshot_digest == fact_packet["snapshot_digest"]
     assert result.fact_packet_digest == fact_packet["fact_packet_digest"]
     assert result.contradicted_fact_ids == (
         "cvrp.destroy_repair.shaw_related_removal",

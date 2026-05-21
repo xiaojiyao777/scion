@@ -193,7 +193,11 @@ def _runtime_algorithm_smoke_preview(
                     if isinstance(raw, Mapping)
                     else None,
                     "feasible": raw.get("feasible") if isinstance(raw, Mapping) else None,
-                    "runtime": _compact_runtime_smoke_payload(runtime),
+                    "runtime": _compact_runtime_smoke_payload(
+                        runtime,
+                        context=context,
+                        selected_surface=surface_name,
+                    ),
                     "run": run_payload,
                 }
                 if audit_failure is not None:
@@ -321,7 +325,11 @@ def _runtime_algorithm_smoke_preview(
         "time_limit_sec": _ALGORITHM_SMOKE_TIME_LIMIT_SEC,
         "objective": representative.get("objective"),
         "feasible": representative.get("feasible"),
-        "runtime": representative.get("runtime") or {},
+        "runtime": _compact_runtime_smoke_payload(
+            representative.get("runtime"),
+            context=context,
+            selected_surface=surface_name,
+        ),
         "issues": issues,
         "run": representative.get("run") or {},
         "runs": runs,

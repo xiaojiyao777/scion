@@ -29,7 +29,7 @@ class StepResult:
         "proposal_block",
         "proposal_retry",
         "telemetry_repairable",
-        "validation_telemetry_repairable",
+        "validation_repair_required",
         "same_family_retry",
         "other",
     ] = "screening"

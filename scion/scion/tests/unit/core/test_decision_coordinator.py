@@ -100,13 +100,13 @@ def test_validation_telemetry_repairable_has_stage_specific_reason() -> None:
         )
     )
 
-    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.decision == Decision.VALIDATION_REPAIR_REQUIRED
     assert result.reason_codes == (
         VALIDATION_TELEMETRY_REPAIRABLE,
         TELEMETRY_VALIDATION_REPAIRABLE,
     )
     assert result.rule == (
-        "validation:VALIDATION_TELEMETRY_REPAIRABLE->continue_explore"
+        "validation:VALIDATION_TELEMETRY_REPAIRABLE->validation_repair_required"
     )
 
 

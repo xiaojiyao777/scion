@@ -326,7 +326,7 @@ def test_validation_telemetry_repairable_preserves_workspace_with_stage_attempt_
 
     result = finalizer.apply(
         branch=branch,
-        decision=Decision.CONTINUE_EXPLORE,
+        decision=Decision.VALIDATION_REPAIR_REQUIRED,
         hypothesis=hypothesis,
         h_record=h_record,
         protocol_result=protocol,
@@ -340,9 +340,9 @@ def test_validation_telemetry_repairable_preserves_workspace_with_stage_attempt_
         ),
     )
 
-    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.decision == Decision.VALIDATION_REPAIR_REQUIRED
     assert result.counts_toward_max_rounds is False
-    assert result.attempt_kind == "validation_telemetry_repairable"
+    assert result.attempt_kind == "validation_repair_required"
     assert result.reason.startswith("VALIDATION_TELEMETRY_REPAIRABLE")
     assert discarded == []
     assert patches[branch.branch_id] is patch

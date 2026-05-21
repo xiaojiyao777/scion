@@ -166,7 +166,7 @@ def _field_looks_like_expected_telemetry_mismatch(
 ) -> bool:
     if any(token in field_lower for token in _EFFECT_FIELD_TOKENS):
         return True
-    if field_lower == "solver_algorithm_events":
+    if field_lower.replace(".", "_").endswith("events"):
         return True
     mechanism_lower = mechanism.lower()
     if mechanism_lower and field_lower and mechanism_lower not in field_lower:
@@ -288,9 +288,14 @@ def _runtime_search_effort(runtime_smoke: Mapping[str, Any] | None) -> int:
     runtime = _mapping_or_none((runtime_smoke or {}).get("runtime"))
     if runtime is None:
         return 0
-    return _nonnegative_int(runtime.get("solver_algorithm_search_iterations")) + (
-        _nonnegative_int(runtime.get("solver_algorithm_move_attempts"))
-    )
+    effort = 0
+    for key, value in runtime.items():
+        normalized = str(key).replace(".", "_").lower()
+        if normalized.endswith("_errors"):
+            continue
+        if normalized.endswith(("_iterations", "_attempts", "_move_attempts")):
+            effort += _nonnegative_int(value)
+    return effort
 
 
 def _case_count(

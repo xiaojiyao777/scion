@@ -227,3 +227,65 @@ def test_validate_unknown_failure_code_raises():
     )
     with pytest.raises(DecisionInputGuardError):
         _validate_no_free_text(features)
+
+
+def test_validate_statistical_metric_rejects_free_text_prose():
+    from scion.core.models import DecisionFeatures
+
+    features = DecisionFeatures(
+        branch_id=str(uuid.uuid4()),
+        hypothesis_action="modify",
+        stage="validation",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=4,
+        win_rate=0.75,
+        median_delta=1.0,
+        ci_low=0.1,
+        ci_high=2.0,
+        stale=False,
+        recent_retry_count=0,
+        recent_failure_codes=(),
+        budget_remaining_ratio=1.0,
+        statistical_metric="total cost improved because candidate looked better",
+    )
+
+    with pytest.raises(DecisionInputGuardError):
+        _validate_no_free_text(features)
+
+
+def test_extractor_rejects_statistical_metric_not_declared_in_metric_stats():
+    from dataclasses import replace
+    from scion.core.models import MetricEvalStats
+
+    protocol = _protocol(
+        statistical_status="positive",
+        statistical_metric="undeclared_metric",
+    )
+    protocol = replace(
+        protocol,
+        stats=replace(
+            protocol.stats,
+            metric_stats=(
+                MetricEvalStats(
+                    metric_name="declared_metric",
+                    median_delta=1.0,
+                    ci_low=0.1,
+                    ci_high=2.0,
+                    n_cases=4,
+                ),
+            ),
+        ),
+    )
+
+    with pytest.raises(DecisionInputGuardError):
+        _extractor.extract(
+            branch=_branch(),
+            hypothesis_action="modify",
+            contract=_contract(),
+            verification=_verification(),
+            canary=_canary(),
+            protocol=protocol,
+            budget=BudgetState(total=100, used=0),
+        )

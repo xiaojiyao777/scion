@@ -781,6 +781,109 @@ def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
     assert any("Wire new_probe" in hint for hint in payload["repair_hints"])
 
 
+def test_algorithm_smoke_activation_diagnostic_uses_declared_non_cvrp_activity_fields() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "dispatch_policy",
+                "case_count": 2,
+                "issues": ["telemetry guard observed no activation evidence"],
+                "runtime": {
+                    "dispatch_search_iterations": 4,
+                    "dispatch_move_attempts": 6,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "dispatch_policy",
+                    "candidate_runs": 2,
+                    "champion_runs": 2,
+                    "expected_telemetry_present": True,
+                    "declared_mechanisms": ["new_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "new_probe",
+                            "activation_status": "missing",
+                            "runtime_status": "missing",
+                            "effect_status": "not_declared",
+                            "activation": {
+                                "status": "missing",
+                                "fields": [
+                                    "dispatch_context_records.new_probe_iterations"
+                                ],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_missing": 2,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "new_probe",
+                            "category": "activation",
+                            "field": (
+                                "dispatch_context_records.new_probe_iterations"
+                            ),
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 2,
+                            "champion_positive": 0,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    diagnostic = payload["activation_diagnostic"]
+
+    assert payload["selected_surface"] == "dispatch_policy"
+    assert diagnostic["activation_diagnostic_kind"] == "instrumentation_missing"
+    assert diagnostic["telemetry_failure_field"] == (
+        "dispatch_context_records.new_probe_iterations"
+    )
+    assert any("record_iteration" in hint for hint in payload["repair_hints"])
+
+
+def test_algorithm_smoke_primary_issue_uses_declared_non_cvrp_runtime_events() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "dispatch_policy",
+                "case_count": 1,
+                "runtime": {
+                    "dispatch_errors": 1,
+                    "dispatch_events": [
+                        {"detail": "dispatch runtime failed in policy step"}
+                    ],
+                },
+                "runtime_audit_failure": {
+                    "error_category": "dispatch_runtime_error",
+                    "detail": "",
+                    "runtime_error_field": "dispatch_errors",
+                    "runtime_error_count": 1,
+                    "runtime_events": [
+                        {"detail": "dispatch runtime failed in policy step"}
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["failure_class"] == "runtime_audit_failure"
+    assert payload["primary_issue"] == "dispatch runtime failed in policy step"
+    assert payload["runtime_smoke"]["runtime_audit_failure"][
+        "runtime_error_field"
+    ] == "dispatch_errors"
+
+
 def test_algorithm_smoke_activation_diagnostic_flags_effect_counter_mismatch() -> None:
     payload = _algorithm_smoke_agent_payload(
         {

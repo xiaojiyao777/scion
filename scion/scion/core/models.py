@@ -36,6 +36,7 @@ class ExperimentStage(Enum):
 
 class Decision(Enum):
     CONTINUE_EXPLORE = "continue_explore"
+    VALIDATION_REPAIR_REQUIRED = "validation_repair_required"
     EXPAND_SCREENING = "expand_screening"
     QUEUE_VALIDATE = "queue_validate"
     EXPAND_VALIDATION = "expand_validation"

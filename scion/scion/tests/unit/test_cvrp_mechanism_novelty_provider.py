@@ -5,6 +5,7 @@ from scion.problems.cvrp.mechanism_novelty import CvrpMechanismNoveltyProvider
 from scion.problems.cvrp.mechanism_novelty.provider import (
     CvrpMechanismNoveltyProvider as DirectCvrpMechanismNoveltyProvider,
 )
+from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.tools import ProposalObservation
 
 
@@ -202,9 +203,27 @@ def test_cvrp_mechanism_novelty_provider_blocks_duplicate_baseline_capability() 
     assert result.premise_check == "duplicate"
     assert result.failure_category == "duplicate_mechanism"
     assert result.mechanism == "cross_route_or_opt_2_3"
-    assert result.snapshot_digest == "fact-packet-test-digest"
+    assert result.snapshot_digest == "snapshot-test-digest"
     assert result.fact_packet_digest == "fact-packet-test-digest"
     assert result.fact_ids == ("cvrp.local_search.cross_route_or_opt_2_3",)
+
+
+def test_cvrp_mechanism_novelty_rejection_keeps_distinct_source_and_packet_digests() -> None:
+    hypothesis = _hypothesis(
+        "Add cross-route Or-opt 2 and 3 as new neighborhoods to local search."
+    )
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    rejection = result.to_rejection(hypothesis)
+    assert rejection["snapshot_digest"] == "snapshot-test-digest"
+    assert rejection["fact_packet_digest"] == "fact-packet-test-digest"
+    rendered = render_negative_fact_block(structured_rejections=(rejection,))
+    assert "snapshot_digest=snapshot-test-digest" in rendered
+    assert "fact_packet_digest=fact-packet-test-digest" in rendered
 
 
 def test_cvrp_mechanism_novelty_provider_allows_when_capability_not_in_snapshot() -> None:

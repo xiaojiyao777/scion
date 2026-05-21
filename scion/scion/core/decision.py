@@ -24,6 +24,10 @@ class DecisionEngine:
         self.config = config
 
     def decide(self, features: DecisionFeatures) -> DecisionOutcome:
+        from scion.core.features import _validate_no_free_text
+
+        _validate_no_free_text(features)
+
         # Pre-flight safety checks
         if not features.contract_passed:
             return self._out(features, Decision.ABANDON, ["CONTRACT_FAILED"])
@@ -36,10 +40,14 @@ class DecisionEngine:
 
         if features.telemetry_validation_repairable:
             if features.stage == "validation":
-                reason_codes = [
-                    VALIDATION_TELEMETRY_REPAIRABLE,
-                    TELEMETRY_VALIDATION_REPAIRABLE,
-                ]
+                return self._out(
+                    features,
+                    Decision.VALIDATION_REPAIR_REQUIRED,
+                    [
+                        VALIDATION_TELEMETRY_REPAIRABLE,
+                        TELEMETRY_VALIDATION_REPAIRABLE,
+                    ],
+                )
             elif features.stage == "screening":
                 reason_codes = [
                     TELEMETRY_VALIDATION_REPAIRABLE,

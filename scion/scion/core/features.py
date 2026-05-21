@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from math import isfinite
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from scion.core.models import (
     Branch, BranchState, ContractResult, VerificationResult,
@@ -37,6 +37,7 @@ KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+_METRIC_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
 
 
 class DecisionInputGuardError(Exception):
@@ -114,7 +115,7 @@ class SafeFeatureExtractor:
             ci_low = stats.ci_low
             ci_high = stats.ci_high
             statistical_status = stats.statistical_status
-            statistical_metric = stats.statistical_metric
+            statistical_metric = _declared_statistical_metric_id(stats)
             runtime_ratio_median = stats.runtime_ratio_median
             runtime_delta_median_ms = stats.runtime_delta_median_ms
             runtime_regression_rate = stats.runtime_regression_rate
@@ -210,6 +211,13 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         raise DecisionInputGuardError(
             f"protocol_gate_outcome is not a known enum: {features.protocol_gate_outcome!r}"
         )
+    if features.statistical_metric is not None:
+        metric = str(features.statistical_metric)
+        if not _METRIC_ID_RE.fullmatch(metric):
+            raise DecisionInputGuardError(
+                "statistical_metric must be a declared metric id, not free text: "
+                f"{features.statistical_metric!r}"
+            )
     for code in features.recent_failure_codes:
         if code not in KNOWN_FAILURE_CODES:
             raise DecisionInputGuardError(
@@ -260,6 +268,28 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
             raise DecisionInputGuardError(
                 f"{field_name} must be non-negative: {value!r}"
             )
+
+
+def _declared_statistical_metric_id(stats: Any) -> str | None:
+    metric = getattr(stats, "statistical_metric", None)
+    if metric in (None, ""):
+        return None
+    metric_id = str(metric).strip()
+    if not _METRIC_ID_RE.fullmatch(metric_id):
+        raise DecisionInputGuardError(
+            "statistical_metric must be a declared metric id, not free text: "
+            f"{metric!r}"
+        )
+    declared = {
+        str(getattr(row, "metric_name", "") or "").strip()
+        for row in getattr(stats, "metric_stats", ()) or ()
+        if str(getattr(row, "metric_name", "") or "").strip()
+    }
+    if declared and metric_id not in declared:
+        raise DecisionInputGuardError(
+            f"statistical_metric {metric_id!r} is not present in metric_stats"
+        )
+    return metric_id
 
 
 def _extract_runtime_guard(

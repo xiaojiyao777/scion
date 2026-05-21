@@ -66,13 +66,15 @@ def _entry_from_rejection(payload: Mapping[str, Any]) -> str:
     ]
     if guidance:
         parts.append(f"allowed_variant_guidance={guidance}")
-    digest = _text(
+    fact_packet_digest = _text(
         payload.get("fact_packet_digest")
         or payload.get("source_fact_digest")
-        or payload.get("snapshot_digest")
     )
-    if digest:
-        parts.append(f"fact_digest={digest}")
+    snapshot_digest = _text(payload.get("snapshot_digest"))
+    if fact_packet_digest:
+        parts.append(f"fact_packet_digest={fact_packet_digest}")
+    if snapshot_digest:
+        parts.append(f"snapshot_digest={snapshot_digest}")
     return "; ".join(parts)
 
 

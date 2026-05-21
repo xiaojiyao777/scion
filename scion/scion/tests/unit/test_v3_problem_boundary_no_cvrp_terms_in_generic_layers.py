@@ -13,6 +13,7 @@ GENERIC_LAYER_DIRS = (
     "protocol",
     "verification",
 )
+GENERIC_PREVIEW_DIR = PACKAGE_ROOT / "proposal" / "tools" / "previews"
 
 FORBIDDEN_PATTERNS = {
     "cvrp": re.compile(r"\bCVRP\b|\bCvrpSolution\b|from_cvrp_solution"),
@@ -74,22 +75,6 @@ LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
         "runtime/workspace.py",
         "vns",
     ): "legacy default frozen-file compatibility pattern",
-    (
-        "proposal/solver_design_smoke/audit.py",
-        "solver_algorithm_fleet_violation",
-    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
-    (
-        "proposal/solver_design_smoke/audit.py",
-        "solver_algorithm_total_distance",
-    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
-    (
-        "proposal/tools/previews/algorithm_smoke_feedback_runtime.py",
-        "solver_algorithm_fleet_violation",
-    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
-    (
-        "proposal/tools/previews/algorithm_smoke_feedback_runtime.py",
-        "solver_algorithm_total_distance",
-    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
 }
 
 
@@ -116,5 +101,25 @@ def test_generic_layers_do_not_contain_cvrp_solver_design_semantics() -> None:
         "layers. Move CVRP guidance to scion/problems/cvrp provider hooks or "
         "add a narrowly documented legacy allowlist entry if this is known "
         "compatibility debt.\n"
+        + "\n".join(violations)
+    )
+
+
+def test_generic_preview_tools_do_not_hardcode_solver_algorithm_fields() -> None:
+    violations: list[str] = []
+    for path in GENERIC_PREVIEW_DIR.rglob("*.py"):
+        relative = path.relative_to(PACKAGE_ROOT).as_posix()
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            if "solver_algorithm_" not in line:
+                continue
+            violations.append(f"{relative}:{line_number}: {line.strip()}")
+
+    assert not violations, (
+        "Generic proposal preview tools must consume declared telemetry fields "
+        "from problem/surface providers instead of hardcoding CVRP-shaped "
+        "solver_algorithm_* names.\n"
         + "\n".join(violations)
     )

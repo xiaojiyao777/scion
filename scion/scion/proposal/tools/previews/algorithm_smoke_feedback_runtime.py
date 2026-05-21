@@ -76,7 +76,13 @@ def _compact_runtime_audit_failure_for_agent(value: Any) -> dict[str, Any] | Non
     if audit is None:
         text = _compact_agent_text(value)
         return {"detail": text} if text else None
-    event_text = _runtime_event_text(audit.get("solver_algorithm_events"))
+    event_text = _runtime_event_text(audit.get("runtime_events"))
+    if not event_text:
+        for key, item in audit.items():
+            if str(key).replace(".", "_").endswith("events"):
+                event_text = _runtime_event_text(item)
+                if event_text:
+                    break
     compact = _drop_empty_items(
         {
             "error_category": _compact_agent_text(
@@ -87,7 +93,8 @@ def _compact_runtime_audit_failure_for_agent(value: Any) -> dict[str, Any] | Non
             "failed_runtime_fields": _compact_agent_text_list(
                 audit.get("failed_runtime_fields")
             ),
-            "solver_algorithm_errors": audit.get("solver_algorithm_errors"),
+            "runtime_error_field": audit.get("runtime_error_field"),
+            "runtime_error_count": audit.get("runtime_error_count"),
             "event_tail": event_text,
         }
     )
@@ -98,39 +105,40 @@ def _compact_algorithm_smoke_runtime_counters(value: Any) -> dict[str, Any] | No
     runtime = _mapping_or_none(value)
     if runtime is None:
         return None
-    keys = (
-        "solver_algorithm_path",
-        "solver_algorithm_loaded",
-        "solver_algorithm_active",
-        "solver_algorithm_errors",
-        "solver_algorithm_elapsed_ms",
-        "solver_algorithm_solution_valid",
-        "solver_algorithm_total_distance",
-        "solver_algorithm_fleet_violation",
-        "solver_algorithm_baseline_calls",
-        "solver_algorithm_baseline_errors",
-        "solver_algorithm_search_iterations",
-        "solver_algorithm_move_attempts",
-        "solver_algorithm_accepted_moves",
-        "solver_algorithm_improving_moves",
-        "solver_algorithm_best_delta",
-        "solver_algorithm_phase_delta_sum",
-        "solver_algorithm_stop_reason",
-    )
     compact: dict[str, Any] = {}
-    for key in keys:
-        if key not in runtime:
+    for key, value in runtime.items():
+        key_text = str(key)
+        if key_text.replace(".", "_").endswith("events"):
             continue
-        if key == "solver_algorithm_path":
-            path = str(runtime.get(key) or "")
+        if _looks_like_path_key(key_text):
+            path = str(value or "")
             if path.startswith("/"):
                 continue
-            compact[key] = path
+            compact[key_text] = path
+        elif _agent_counter_value(value):
+            compact[key_text] = value
+        else:
             continue
-        compact[key] = runtime.get(key)
         if len(compact) >= _ALGORITHM_SMOKE_AGENT_COUNTER_ITEMS:
             break
     return _drop_empty_items(compact) or None
+
+
+def _looks_like_path_key(key: str) -> bool:
+    normalized = str(key or "").replace(".", "_")
+    return normalized.endswith("path") or normalized.endswith("file")
+
+
+def _agent_counter_value(value: Any) -> bool:
+    if isinstance(value, (bool, int, float)):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip()) and len(value) <= 160
+    if isinstance(value, Mapping):
+        return True
+    if isinstance(value, (list, tuple)):
+        return len(value) <= 8
+    return False
 
 
 def _compact_algorithm_smoke_subprocess(value: Any) -> dict[str, Any] | None:
@@ -229,13 +237,14 @@ def _compact_objective(value: Any) -> dict[str, Any] | None:
     objective = _mapping_or_none(value)
     if objective is None:
         return None
-    return _drop_empty_items(
-        {
-            key: objective.get(key)
-            for key in ("fleet_violation", "total_distance")
-            if key in objective
-        }
-    ) or None
+    compact: dict[str, Any] = {}
+    for key, item in objective.items():
+        if not isinstance(item, (bool, int, float, str)):
+            continue
+        compact[str(key)] = item
+        if len(compact) >= 4:
+            break
+    return _drop_empty_items(compact) or None
 
 
 def _compact_algorithm_smoke_telemetry_guard(value: Any) -> dict[str, Any] | None:

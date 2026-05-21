@@ -25,12 +25,12 @@ def _candidate_audit_failure_category(issue: dict[str, Any]) -> str:
         return "construction_error"
     if raw == "portfolio_runtime_error":
         return "portfolio_error"
-    if raw == "solver_algorithm_runtime_error":
-        return "solver_algorithm_error"
     if raw == "surface_runtime_contract_error":
         return "surface_contract_error"
     if raw == "baseline_runtime_error":
         return "baseline_error"
+    if raw.endswith("_runtime_error"):
+        return raw.removesuffix("_runtime_error") + "_error"
     return raw or "runtime_error"
 
 

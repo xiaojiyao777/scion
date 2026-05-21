@@ -91,6 +91,8 @@ def test_solver_design_baseline_algorithm_exception_fails_selected_surface(
 
 
 def test_solver_design_runtime_audit_rejects_inconsistent_phase_runtime() -> None:
+    spec_v1 = load_problem_spec_v1_from_yaml(CVRP_DIR / "problem-v1.yaml")
+    legacy_spec = legacy_problem_spec_from_v1(spec_v1)
     issue = runtime_audit_failure_from_runtime(
         {
             "solver_algorithm_errors": 0,
@@ -100,12 +102,14 @@ def test_solver_design_runtime_audit_rejects_inconsistent_phase_runtime() -> Non
                 "bad_phase": 100000,
             },
         },
+        problem_spec=legacy_spec,
+        selected_surface="solver_design",
     )
 
     assert issue is not None
     assert issue["error_category"] == "solver_algorithm_runtime_telemetry_error"
-    assert issue["solver_algorithm_phase"] == "bad_phase"
-    assert "record_phase expects per-phase elapsed delta" in (
+    assert issue["runtime_phase"] == "bad_phase"
+    assert "phase runtime fields must record per-phase elapsed delta" in (
         format_runtime_audit_failure(issue)
     )
 

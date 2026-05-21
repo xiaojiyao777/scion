@@ -364,46 +364,56 @@ def test_solver_algorithm_surface_declaration_fails_closed(tmp_path):
     assert "not declared" in result.candidate_first_runtime_failure["detail_summary"]
 
 
-def test_runtime_summary_includes_solver_algorithm_telemetry_without_selected_surface(
+def test_runtime_summary_includes_declared_surface_telemetry(
     tmp_path,
 ):
     runner = MagicMock()
     candidate_runtime = {
-        "solver_algorithm_stop_reason": "no_improvement",
-        "solver_algorithm_search_iterations": 7,
-        "solver_algorithm_move_attempts": 42,
-        "solver_algorithm_accepted_moves": 5,
-        "solver_algorithm_improving_moves": 3,
-        "solver_algorithm_neutral_accepted_moves": 2,
-        "solver_algorithm_baseline_calls": 1,
-        "solver_algorithm_errors": 0,
+        "dispatch_stop_reason": "no_improvement",
+        "dispatch_search_iterations": 7,
+        "dispatch_move_attempts": 42,
+        "dispatch_accepted_moves": 5,
+        "dispatch_improving_moves": 3,
+        "dispatch_neutral_accepted_moves": 2,
+        "dispatch_baseline_calls": 1,
+        "dispatch_errors": 0,
     }
     pair = [
         _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
         _make_run_result(1, 900, elapsed_ms=110, runtime=candidate_runtime),
     ]
     runner.run_solver.side_effect = pair * 4
-    proto = _make_protocol(runner, tmp_path)
+    runtime_fields = tuple(candidate_runtime)
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="dispatch_policy",
+            required_runtime_fields=runtime_fields,
+        ),
+    )
 
     result = proto.run_experiment(
         ExperimentStage.SCREENING,
         "/cand",
         "/champ",
         "modify",
+        selected_surface="dispatch_policy",
     )
 
     assert result.candidate_runtime_stop_reasons == {"no_improvement": 4}
-    assert "candidate_solver_algorithm_iterations=28" in result.exposed_summary
-    assert "candidate_solver_algorithm_move_attempts=168" in result.exposed_summary
+    assert "candidate_runtime_counters=" in result.exposed_summary
+    assert "dispatch_search_iterations:28" in result.exposed_summary
+    assert "dispatch_move_attempts:168" in result.exposed_summary
     raw = json.loads(open(result.raw_metrics_ref).read())
     candidate_runtime_summary = raw["pairs"][0]["candidate_runtime"]
-    assert candidate_runtime_summary["solver_algorithm_stop_reason"] == "no_improvement"
-    assert candidate_runtime_summary["solver_algorithm_search_iterations"] == 7
-    assert candidate_runtime_summary["solver_algorithm_move_attempts"] == 42
-    assert candidate_runtime_summary["solver_algorithm_accepted_moves"] == 5
-    assert candidate_runtime_summary["solver_algorithm_improving_moves"] == 3
-    assert candidate_runtime_summary["solver_algorithm_neutral_accepted_moves"] == 2
-    assert candidate_runtime_summary["solver_algorithm_baseline_calls"] == 1
+    assert candidate_runtime_summary["dispatch_stop_reason"] == "no_improvement"
+    assert candidate_runtime_summary["dispatch_search_iterations"] == 7
+    assert candidate_runtime_summary["dispatch_move_attempts"] == 42
+    assert candidate_runtime_summary["dispatch_accepted_moves"] == 5
+    assert candidate_runtime_summary["dispatch_improving_moves"] == 3
+    assert candidate_runtime_summary["dispatch_neutral_accepted_moves"] == 2
+    assert candidate_runtime_summary["dispatch_baseline_calls"] == 1
 
 
 @pytest.mark.parametrize(

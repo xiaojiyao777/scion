@@ -4,6 +4,17 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.core.models import RunResult, SolverOutput
+from scion.runtime.surface_telemetry import (
+    component_from_runtime_field,
+    declared_error_runtime_fields,
+    declared_event_fields_for,
+    declared_sibling_field,
+    declared_surface_telemetry_fields,
+    find_research_surface,
+    normalize_surface_name as _surface_normalize_surface_name,
+    runtime_path_present,
+    runtime_path_value,
+)
 
 
 def runtime_audit_failure_from_result(
@@ -89,8 +100,14 @@ def runtime_audit_failure_from_runtime(
     treated as runtime failures rather than objective ties.
     """
 
+    surface = find_research_surface(problem_spec, selected_surface)
     baseline_issue = _baseline_audit_failure(runtime)
-    solver_algorithm_errors = _as_int(runtime.get("solver_algorithm_errors"))
+    surface_error_issue = _declared_surface_runtime_error_failure(
+        runtime,
+        problem_spec=problem_spec,
+        selected_surface=selected_surface,
+        surface=surface,
+    )
     construction_errors = _as_int(runtime.get("construction_errors"))
     portfolio_errors = _as_int(runtime.get("portfolio_errors"))
     policy_errors = _as_int(runtime.get("policy_errors"))
@@ -98,18 +115,23 @@ def runtime_audit_failure_from_runtime(
     operator_invalid_outputs = _as_int(runtime.get("operator_invalid_outputs"))
     if (
         baseline_issue is None
-        and solver_algorithm_errors <= 0
+        and surface_error_issue is None
         and construction_errors <= 0
         and portfolio_errors <= 0
         and policy_errors <= 0
         and operator_errors <= 0
         and operator_invalid_outputs <= 0
     ):
-        solver_algorithm_telemetry_issue = (
-            _solver_algorithm_telemetry_consistency_failure(runtime)
+        telemetry_issue = (
+            _declared_telemetry_consistency_failure(
+                runtime,
+                problem_spec=problem_spec,
+                selected_surface=selected_surface,
+                surface=surface,
+            )
         )
-        if solver_algorithm_telemetry_issue is not None:
-            return solver_algorithm_telemetry_issue
+        if telemetry_issue is not None:
+            return telemetry_issue
         surface_issue = _surface_runtime_contract_failure(
             runtime,
             problem_spec=problem_spec,
@@ -150,23 +172,8 @@ def runtime_audit_failure_from_runtime(
             "detail": baseline_issue,
         }
 
-    if solver_algorithm_errors > 0:
-        solver_algorithm_events = runtime.get("solver_algorithm_events")
-        if not isinstance(solver_algorithm_events, list):
-            solver_algorithm_events = []
-        return {
-            "error_category": "solver_algorithm_runtime_error",
-            "solver_algorithm_errors": solver_algorithm_errors,
-            "solver_algorithm_path": runtime.get("solver_algorithm_path"),
-            "solver_algorithm_loaded": bool(runtime.get("solver_algorithm_loaded")),
-            "solver_algorithm_active": bool(runtime.get("solver_algorithm_active")),
-            "solver_algorithm_stop_reason": runtime.get("solver_algorithm_stop_reason"),
-            "solver_algorithm_events": solver_algorithm_events[:5],
-            "detail": (
-                "solver runtime audit reported "
-                f"solver_algorithm_errors={solver_algorithm_errors}"
-            ),
-        }
+    if surface_error_issue is not None:
+        return surface_error_issue
 
     if construction_errors > 0:
         return {
@@ -243,33 +250,140 @@ def runtime_audit_failure_from_runtime(
     }
 
 
-def _solver_algorithm_telemetry_consistency_failure(
+def _declared_surface_runtime_error_failure(
     runtime: Mapping[str, Any],
+    *,
+    problem_spec: Any | None,
+    selected_surface: str | None,
+    surface: Any | None,
 ) -> dict[str, Any] | None:
-    elapsed_ms = _as_int(runtime.get("solver_algorithm_elapsed_ms"))
-    if elapsed_ms <= 0:
+    if surface is None:
         return None
-    phase_runtime = runtime.get("solver_algorithm_phase_runtime_ms")
-    if not isinstance(phase_runtime, Mapping):
-        return None
-    max_allowed = max(elapsed_ms * 20, elapsed_ms + 60000)
-    for phase, value in phase_runtime.items():
-        phase_ms = _as_int(value)
-        if phase_ms <= max_allowed:
+    for error_field in declared_error_runtime_fields(
+        surface,
+        problem_spec=problem_spec,
+    ):
+        count = _as_int(runtime_path_value(runtime, error_field))
+        if count <= 0:
             continue
-        return {
-            "error_category": "solver_algorithm_runtime_telemetry_error",
-            "solver_algorithm_elapsed_ms": elapsed_ms,
-            "solver_algorithm_phase": str(phase),
-            "solver_algorithm_phase_runtime_ms": phase_ms,
-            "detail": (
-                "solver runtime audit reported inconsistent phase runtime: "
-                f"solver_algorithm_phase_runtime_ms.{phase}={phase_ms} exceeds "
-                f"solver_algorithm_elapsed_ms={elapsed_ms}; record_phase expects "
-                "per-phase elapsed delta, not cumulative context.elapsed_ms()"
-            ),
+        component = component_from_runtime_field(error_field)
+        event_fields = declared_event_fields_for(runtime, error_field)
+        events = _first_list_runtime_value(runtime, event_fields)
+        issue: dict[str, Any] = {
+            "error_category": _runtime_error_category(component),
+            "selected_surface": normalize_surface_name(selected_surface),
+            "runtime_error_field": error_field,
+            "runtime_error_count": count,
+            "runtime_event_fields": event_fields,
+            "runtime_events": events[:5],
+            error_field: count,
+            "detail": f"solver runtime audit reported {error_field}={count}",
         }
+        for suffix in ("path", "loaded", "active", "stop_reason"):
+            sibling = declared_sibling_field(runtime, error_field, suffix)
+            if sibling is not None:
+                issue[f"runtime_{suffix}_field"] = sibling
+                issue[sibling] = runtime_path_value(runtime, sibling)
+        for event_field in event_fields:
+            issue[event_field] = runtime_path_value(runtime, event_field)
+        return issue
     return None
+
+
+def _declared_telemetry_consistency_failure(
+    runtime: Mapping[str, Any],
+    *,
+    problem_spec: Any | None,
+    selected_surface: str | None,
+    surface: Any | None,
+) -> dict[str, Any] | None:
+    if surface is None:
+        return None
+    fields = declared_surface_telemetry_fields(surface, problem_spec=problem_spec)
+    phase_fields = [
+        field
+        for field in sorted(fields)
+        if str(field).replace(".", "_").endswith("phase_runtime_ms")
+        and runtime_path_present(runtime, field)
+    ]
+    if not phase_fields:
+        return None
+    elapsed_fields = [
+        field
+        for field in sorted(fields)
+        if str(field).replace(".", "_").endswith(("elapsed_ms", "runtime_ms"))
+        and "phase_runtime" not in str(field).replace(".", "_")
+        and runtime_path_present(runtime, field)
+    ]
+    for phase_field in phase_fields:
+        phase_runtime = runtime_path_value(runtime, phase_field)
+        if not isinstance(phase_runtime, Mapping):
+            continue
+        elapsed_field, elapsed_ms = _best_elapsed_reference(runtime, elapsed_fields)
+        if elapsed_ms <= 0:
+            continue
+        max_allowed = max(elapsed_ms * 20, elapsed_ms + 60000)
+        for phase, value in phase_runtime.items():
+            phase_ms = _as_int(value)
+            if phase_ms <= max_allowed:
+                continue
+            component = component_from_runtime_field(phase_field)
+            return {
+                "error_category": _runtime_telemetry_error_category(component),
+                "selected_surface": normalize_surface_name(selected_surface),
+                "runtime_elapsed_field": elapsed_field,
+                "runtime_phase_field": phase_field,
+                "runtime_phase": str(phase),
+                "runtime_phase_ms": phase_ms,
+                elapsed_field: elapsed_ms,
+                phase_field: phase_runtime,
+                "detail": (
+                    "solver runtime audit reported inconsistent phase runtime: "
+                    f"{phase_field}.{phase}={phase_ms} exceeds "
+                    f"{elapsed_field}={elapsed_ms}; phase runtime fields must "
+                    "record per-phase elapsed delta, not cumulative elapsed time"
+                ),
+            }
+    return None
+
+
+def _best_elapsed_reference(
+    runtime: Mapping[str, Any],
+    elapsed_fields: list[str],
+) -> tuple[str, int]:
+    for field in elapsed_fields:
+        value = _as_int(runtime_path_value(runtime, field))
+        if value > 0:
+            return field, value
+    return "elapsed_ms", 0
+
+
+def _first_list_runtime_value(
+    runtime: Mapping[str, Any],
+    fields: tuple[str, ...],
+) -> list[Any]:
+    for field in fields:
+        value = runtime_path_value(runtime, field)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _runtime_error_category(component: str) -> str:
+    normalized = _identifier(component)
+    return f"{normalized}_runtime_error" if normalized else "surface_runtime_error"
+
+
+def _runtime_telemetry_error_category(component: str) -> str:
+    normalized = _identifier(component)
+    if normalized:
+        return f"{normalized}_runtime_telemetry_error"
+    return "surface_runtime_telemetry_error"
+
+
+def _identifier(value: str) -> str:
+    text = str(value or "").strip().replace(".", "_").strip("_")
+    return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in text).strip("_")
 
 
 def declared_surface_required_runtime_fields(
@@ -310,16 +424,13 @@ def format_runtime_audit_failure(issue: Mapping[str, Any]) -> str:
             event_detail = first_policy.get("detail")
             if event_detail:
                 return f"{detail}: first_policy_event detail={event_detail}"
-    solver_algorithm_events = issue.get("solver_algorithm_events")
-    if isinstance(solver_algorithm_events, list) and solver_algorithm_events:
-        first_solver_algorithm = solver_algorithm_events[0]
-        if isinstance(first_solver_algorithm, Mapping):
-            event_detail = first_solver_algorithm.get("detail")
+    runtime_events = issue.get("runtime_events")
+    if isinstance(runtime_events, list) and runtime_events:
+        first_runtime_event = runtime_events[0]
+        if isinstance(first_runtime_event, Mapping):
+            event_detail = first_runtime_event.get("detail")
             if event_detail:
-                return (
-                    f"{detail}: first_solver_algorithm_event "
-                    f"detail={event_detail}"
-                )
+                return f"{detail}: first_runtime_event detail={event_detail}"
     events = issue.get("operator_events")
     if isinstance(events, list) and events:
         first = events[0]
@@ -462,10 +573,7 @@ def _find_research_surface(problem_spec: Any | None, name: str) -> Any | None:
 def normalize_surface_name(name: Any) -> str:
     """Normalize public compatibility aliases to declared research surfaces."""
 
-    surface_name = str(name or "").strip()
-    if surface_name == "solver_algorithm":
-        return "solver_design"
-    return surface_name
+    return _surface_normalize_surface_name(name)
 
 
 def _required_runtime_fields(surface: Any) -> tuple[str, ...]:

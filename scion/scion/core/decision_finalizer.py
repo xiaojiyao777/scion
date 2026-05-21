@@ -136,7 +136,7 @@ class DecisionFinalizer:
                 decision_reason_codes=effective_reason_codes,
             )
 
-        if decision == Decision.CONTINUE_EXPLORE:
+        if decision in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED):
             if action_label == "reconcile":
                 self._abandon(branch=branch, h_record=h_record)
                 try:
@@ -345,8 +345,9 @@ class DecisionFinalizer:
                 self.branch_controller.apply_decision(bid, decision)
             except StateTransitionError as exc:
                 logger.error(
-                    "Branch %s: apply_decision(CONTINUE_EXPLORE) from %s failed: %s",
+                    "Branch %s: apply_decision(%s) from %s failed: %s",
                     bid,
+                    decision.value,
                     branch.state.value,
                     exc,
                 )
@@ -358,12 +359,9 @@ class DecisionFinalizer:
                 if telemetry_repair_stage == "validation"
                 else TELEMETRY_VALIDATION_REPAIRABLE
             )
-            reason = (
-                f"{reason_code}: repair declared mechanism telemetry on the "
-                "same branch"
-            )
+            reason = f"{reason_code}: repair declared mechanism telemetry on the same branch"
             attempt_kind = (
-                "validation_telemetry_repairable"
+                "validation_repair_required"
                 if telemetry_repair_stage == "validation"
                 else "telemetry_repairable"
             )

@@ -40,6 +40,7 @@ class CampaignLoop:
         bad_proposal_attempts = 0
         proposal_quality_blocked_attempts = 0
         telemetry_repairable_attempts = 0
+        validation_repair_required_attempts = 0
         same_family_retry_attempts = 0
         requested_rounds = max(1, int(max_rounds))
         proposal_quality_loop_limit = _proposal_quality_loop_limit(
@@ -48,6 +49,7 @@ class CampaignLoop:
         )
         bad_proposal_limit = requested_rounds * 5 + 10
         telemetry_repairable_limit = requested_rounds * 2 + 4
+        validation_repair_required_limit = requested_rounds + 2
         same_family_retry_limit = requested_rounds + 4
         # Non-round steps such as proposal blocks and telemetry-repairable
         # formal runs do not consume the screened-round budget.  The separate
@@ -58,6 +60,7 @@ class CampaignLoop:
             + proposal_quality_loop_limit
             + bad_proposal_limit
             + telemetry_repairable_limit
+            + validation_repair_required_limit
             + same_family_retry_limit
         )
         while counted_rounds < max_rounds and attempts < attempt_limit:
@@ -87,10 +90,14 @@ class CampaignLoop:
                 counted_rounds += 1
             else:
                 kind = _attempt_kind(result)
-                if kind in (
-                    "telemetry_repairable",
-                    "validation_telemetry_repairable",
-                ):
+                if kind == "validation_repair_required":
+                    validation_repair_required_attempts += 1
+                    if (
+                        validation_repair_required_attempts
+                        >= validation_repair_required_limit
+                    ):
+                        final_reason = "validation_repair_required_budget_exhausted"
+                elif kind == "telemetry_repairable":
                     telemetry_repairable_attempts += 1
                     if telemetry_repairable_attempts >= telemetry_repairable_limit:
                         final_reason = "telemetry_repairable_budget_exhausted"
@@ -147,6 +154,8 @@ def _attempt_kind(result: StepResult) -> str:
         "telemetry_validation_repairable" in reason
         or "validation_telemetry_repairable" in reason
     ):
+        if "validation" in reason:
+            return "validation_repair_required"
         return "telemetry_repairable"
     if "same_family" in reason or "semantic retry" in reason:
         return "same_family_retry"

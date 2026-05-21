@@ -533,7 +533,7 @@ def _facts_from_fact_packet(
                 ]
             )
         ),
-        snapshot_digest=_fact_packet_digest(fact_packet, snapshot),
+        snapshot_digest=_source_snapshot_digest(fact_packet, snapshot),
         fact_packet_digest=_fact_packet_digest(fact_packet, snapshot),
         fact_provenance=_fact_provenance(snapshot),
     )
@@ -632,6 +632,13 @@ def _fact_packet_digest(
     digest = fact_packet.get("fact_packet_digest")
     if digest:
         return str(digest)
+    return _snapshot_digest(snapshot)
+
+
+def _source_snapshot_digest(
+    fact_packet: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> str | None:
     digest = fact_packet.get("snapshot_digest")
     if digest:
         return str(digest)

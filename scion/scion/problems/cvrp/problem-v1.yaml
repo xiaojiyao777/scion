@@ -160,6 +160,9 @@ research_surfaces:
         - solver_algorithm_phase_best_delta
         - solver_algorithm_phase_improvement_counts
         - solver_algorithm_stop_reason
+      optional_runtime_fields:
+        - solver_algorithm_path
+        - solver_algorithm_events
       activation_runtime_fields:
         "{mechanism}":
           - solver_algorithm_context_records.{mechanism}_iterations
@@ -199,9 +202,11 @@ research_surfaces:
         protected_outcome:
           - solver_algorithm_fleet_violation
         diagnostic:
+          - solver_algorithm_path
           - solver_algorithm_loaded
           - solver_algorithm_active
           - solver_algorithm_errors
+          - solver_algorithm_events
           - solver_algorithm_stop_reason
     novelty:
       strategy: semantic_signature

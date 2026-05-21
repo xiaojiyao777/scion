@@ -71,22 +71,14 @@ def _algorithm_smoke_primary_issue(
             candidates.extend(
                 [
                     audit.get("detail"),
-                    _runtime_event_text(audit.get("solver_algorithm_events")),
+                    _first_runtime_event_text(audit),
                     audit.get("error_category"),
                 ]
             )
         runtime = _mapping_or_none(runtime_smoke.get("runtime"))
         if runtime is not None:
-            candidates.extend(
-                [
-                    _runtime_event_text(runtime.get("solver_algorithm_events")),
-                    (
-                        f"solver_algorithm_errors={runtime.get('solver_algorithm_errors')}"
-                        if runtime.get("solver_algorithm_errors") not in (None, "")
-                        else None
-                    ),
-                ]
-            )
+            candidates.extend([_first_runtime_event_text(runtime)])
+            candidates.extend(_runtime_error_summaries(runtime))
     telemetry_issue = _telemetry_guard_primary_issue(telemetry_guard)
     if telemetry_issue:
         candidates.append(telemetry_issue)
@@ -112,6 +104,44 @@ def _algorithm_smoke_primary_issue(
         if text:
             return text
     return ""
+
+
+def _first_runtime_event_text(value: Mapping[str, Any]) -> str:
+    events = value.get("runtime_events")
+    text = _first_event_detail(events) or _runtime_event_text(events)
+    if text:
+        return text
+    for key, item in value.items():
+        if str(key).replace(".", "_").endswith("events"):
+            text = _first_event_detail(item) or _runtime_event_text(item)
+            if text:
+                return text
+    return ""
+
+
+def _first_event_detail(value: Any) -> str:
+    if not isinstance(value, (list, tuple)):
+        return ""
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        detail = str(item.get("detail") or "").strip()
+        if detail:
+            return detail
+    return ""
+
+
+def _runtime_error_summaries(runtime: Mapping[str, Any]) -> list[str]:
+    summaries: list[str] = []
+    for key, value in sorted(runtime.items()):
+        if not str(key).replace(".", "_").endswith("errors"):
+            continue
+        if value in (None, ""):
+            continue
+        summaries.append(f"{key}={value}")
+        if len(summaries) >= 3:
+            break
+    return summaries
 
 
 def _algorithm_smoke_failure_class(
