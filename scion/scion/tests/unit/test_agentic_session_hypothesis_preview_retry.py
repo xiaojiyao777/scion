@@ -16,6 +16,30 @@ class SequentialHypothesisCreative(FakeCreative):
         return self.hypotheses.pop(0)
 
 
+class SequentialHypothesisToolClient:
+    def __init__(self, payloads: list[dict]) -> None:
+        self.payloads = list(payloads)
+        self.tool_names: list[str] = []
+
+    def call_with_tool(
+        self,
+        prompt,
+        tool,
+        model=None,
+        system_blocks=None,
+        request_kind=None,
+    ):
+        del prompt, model, system_blocks, request_kind
+        self.tool_names.append(tool["name"])
+        if tool["name"] == "plan_proposal_tool_call":
+            return {"intent": "stop"}
+        if tool["name"] == "generate_hypothesis":
+            if not self.payloads:
+                raise AssertionError("generate_hypothesis called too many times")
+            return self.payloads.pop(0)
+        raise AssertionError(f"unexpected tool request: {tool['name']}")
+
+
 def _vns_hypothesis(expected_telemetry: dict) -> HypothesisProposal:
     return HypothesisProposal(
         **_valid_hypothesis_payload(
@@ -225,6 +249,88 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
         event.metadata.get("failure_code") == "C11_expected_telemetry"
         for event in output.transcript
     )
+
+
+def test_hypothesis_text_survives_preview_failure_artifact_serialization(
+    tmp_path: Path,
+) -> None:
+    hypothesis_text = (
+        "The current simulated annealing acceptance cools monotonically, and "
+        "the search can become trapped behind a frozen SA temperature after "
+        "early improvements. Add a bounded stagnation-triggered reheat so the "
+        "acceptance probability can recover without changing feasibility "
+        "checks or the operator portfolio."
+    )
+    bad_payload = _valid_hypothesis_payload(
+        change_locus="solver_design",
+        target_file="policies/baseline_modules/acceptance.py",
+        hypothesis_text=hypothesis_text,
+        target_weakness=(
+            "The acceptance temperature can freeze before late search "
+            "diversification is useful."
+        ),
+        expected_effect="Improve total_distance by escaping late local optima.",
+        mechanism_changes=[{"id": "sa_reheat", "change_type": "add"}],
+        novelty_signature={
+            "algorithm_family": "alns_with_sa_reheat",
+            "construction_strategy": "preserve_existing_construction",
+            "improvement_strategy": "preserve_existing_vns_portfolio",
+            "acceptance_strategy": "stagnation_triggered_sa_reheat",
+            "runtime_budget_strategy": "bounded_reheat_checks",
+        },
+        expected_telemetry={
+            "activity": ["solver_algorithm_search_iterations"],
+            "activation": {
+                "sa_reheat": [
+                    "solver_algorithm_accepted_moves",
+                    "solver_algorithm_neutral_accepted_moves",
+                ]
+            },
+            "effect": ["solver_algorithm_best_delta"],
+            "budget": ["solver_algorithm_elapsed_ms"],
+        },
+    )
+    client = SequentialHypothesisToolClient([bad_payload, dict(bad_payload)])
+    creative = CreativeLayer(client, model="test-model")
+    context = _cvrp_context_with_champion(tmp_path)
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-hyp-text-handoff",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "hypothesis-text-handoff"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    output_ref = next(
+        ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
+    )
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    rendered_codes = json.dumps(output.self_check.schema_preview_codes)
+    ledger_entry = artifact["failure_ledger"]["entries"][0]
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.hypothesis is not None
+    assert output.hypothesis.hypothesis_text == hypothesis_text
+    assert artifact["hypothesis"]["hypothesis_text"] == hypothesis_text
+    assert "frozen SA temperature" in artifact["hypothesis"]["hypothesis_text"]
+    assert "C11_expected_telemetry" in (output.failure_detail or "")
+    assert "hypothesis_text" not in rendered_codes
+    assert ledger_entry["category"] == "schema_output_failure"
+    assert "C11_expected_telemetry" in ledger_entry["detail"]
+    assert "hypothesis_text" not in ledger_entry["detail"]
 
 
 def test_semantic_retry_then_self_check_c11_retry_reaches_approval(

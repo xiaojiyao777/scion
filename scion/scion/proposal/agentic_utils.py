@@ -100,17 +100,27 @@ def _sanitize_agentic_value(value: Any) -> Any:
 
 
 def _sanitize_agentic_text(text: str) -> str:
-    forbidden_terms = (
+    # Keep this filter focused on hidden evidence references.  Proposal text is
+    # tainted audit data and may legitimately use domain words such as "frozen"
+    # in non-holdout contexts (for example, a frozen temperature schedule).
+    forbidden_markers = (
         "raw_metrics_ref",
+        "raw_metrics_path",
+        "raw_metrics_public_ref",
         "raw metrics",
-        "validation",
-        "frozen",
-        "holdout",
+        "raw_ref",
+        "secret_raw",
+        "secret_validation",
+        "secret_frozen",
+        "secret_holdout",
+        "private-validation",
+        "private-frozen",
+        "private-holdout",
     )
     safe_lines = []
     for line in text.splitlines():
         lowered = line.lower()
-        if any(term in lowered for term in forbidden_terms):
+        if any(marker in lowered for marker in forbidden_markers):
             continue
         safe_lines.append(line)
     return "\n".join(safe_lines)
