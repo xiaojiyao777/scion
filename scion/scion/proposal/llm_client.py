@@ -255,6 +255,32 @@ def _retry_exhausted_failure_category(
     return None
 
 
+def _masked_hard_timeout_error(
+    exc: Exception,
+    *,
+    attempt_started_at: float | None,
+    timeout_sec: float,
+) -> LLMTimeoutError | None:
+    """Return timeout when a provider masks our hard deadline as transport."""
+    if attempt_started_at is None or timeout_sec <= 0:
+        return None
+    elapsed = time.monotonic() - attempt_started_at
+    threshold = max(timeout_sec * 0.95, timeout_sec - 1.0)
+    if elapsed < threshold:
+        return None
+    err_str = str(exc).lower()
+    if (
+        isinstance(exc, TimeoutError)
+        or _is_timeout_error_text(err_str)
+        or _is_transient_provider_error(err_str)
+    ):
+        return LLMTimeoutError(
+            "LLM provider call exceeded hard timeout "
+            f"{timeout_sec:.1f}s (elapsed {elapsed:.1f}s)"
+        )
+    return None
+
+
 def _transient_retry_exhausted_error(
     *,
     request_label: str,
@@ -496,7 +522,9 @@ class LLMClient:
         truncation_retries = 0
 
         while attempt <= max_retries:
+            attempt_started_at: float | None = None
             try:
+                attempt_started_at = time.monotonic()
                 with _llm_hard_timeout(timeout_sec):
                     result, truncated = self._tool_call_once(
                         prompt,
@@ -587,6 +615,25 @@ class LLMClient:
                 raise
 
             except Exception as exc:
+                masked_timeout = _masked_hard_timeout_error(
+                    exc,
+                    attempt_started_at=attempt_started_at,
+                    timeout_sec=timeout_sec,
+                )
+                if masked_timeout is not None:
+                    last_error = masked_timeout
+                    if attempt < max_retries:
+                        delay = _BACKOFF_DELAYS[
+                            min(attempt, len(_BACKOFF_DELAYS) - 1)
+                        ]
+                        logger.warning(
+                            "Tool call timeout (attempt %d/%d)",
+                            attempt + 1,
+                            max_retries,
+                        )
+                        time.sleep(delay)
+                    attempt += 1
+                    continue
                 try:
                     self._raise_classified(exc)
                 except LLMRateLimitError as rle:

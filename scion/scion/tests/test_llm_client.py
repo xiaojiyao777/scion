@@ -437,6 +437,28 @@ def test_tool_call_hard_timeout_interrupts_blocking_provider_call() -> None:
     assert isinstance(exc_info.value.last_error, LLMTimeoutError)
 
 
+def test_tool_call_masks_connection_error_at_hard_timeout_as_timeout() -> None:
+    client = LLMClient(timeout_sec=0.05, max_retries=0)
+
+    def _masked_timeout(*args, **kwargs):
+        try:
+            time.sleep(1.0)
+        except LLMTimeoutError as exc:
+            raise RuntimeError("Connection error.") from exc
+        return {"result": "late"}, False
+
+    client._tool_call_once = MagicMock(side_effect=_masked_timeout)  # type: ignore[method-assign]
+
+    with pytest.raises(LLMRetryExhaustedError) as exc_info:
+        client.call_with_tool(
+            "prompt",
+            {"name": "x", "input_schema": {"required": ["result"]}},
+        )
+
+    assert isinstance(exc_info.value.last_error, LLMTimeoutError)
+    assert "hard timeout" in str(exc_info.value.last_error)
+
+
 def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
     usage = SimpleNamespace(prompt_cache_hit_tokens=25, prompt_cache_miss_tokens=75)
 
