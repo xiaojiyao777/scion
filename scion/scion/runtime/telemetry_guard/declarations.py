@@ -1,7 +1,7 @@
 """Declared research-surface telemetry extraction."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scion.runtime.audit import normalize_surface_name
@@ -35,9 +35,36 @@ _BUDGET_SUFFIXES = (
     "_runtime_ms",
     "_elapsed_ms",
 )
+TELEMETRY_FIELD_ROLES = frozenset(
+    {
+        "activity",
+        "aggregate_activity",
+        "aggregate_effect",
+        "budget",
+        "diagnostic",
+        "effect",
+        "mechanism_activity",
+        "mechanism_activation",
+        "mechanism_effect",
+        "objective_outcome",
+        "outcome",
+        "protected_outcome",
+    }
+)
+_ROLE_MAPPING_FIELD_NAMES = (
+    "runtime_field_roles",
+    "telemetry_field_roles",
+    "runtime_telemetry_roles",
+    "field_roles",
+)
 
 
-def declared_surface_telemetry_fields(surface: Any | None) -> frozenset[str]:
+def declared_surface_telemetry_fields(
+    surface: Any | None,
+    *,
+    problem_spec: Any | None = None,
+    declared_mechanisms: Sequence[str] = (),
+) -> frozenset[str]:
     """Return all runtime telemetry fields a surface exposes for guard use."""
 
     evidence = _field(surface, "evidence")
@@ -59,7 +86,99 @@ def declared_surface_telemetry_fields(surface: Any | None) -> frozenset[str]:
     for telemetry in _mechanism_telemetry_values(evidence):
         fields.update(_string_list(_field(telemetry, "activation_runtime_fields")))
         fields.update(_string_list(_field(telemetry, "effect_probe_runtime_fields")))
+    for role_fields in declared_runtime_field_roles(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=declared_mechanisms,
+    ).values():
+        fields.update(role_fields)
     return frozenset(field for field in fields if field)
+
+
+def declared_runtime_field_roles(
+    surface: Any | None,
+    *,
+    problem_spec: Any | None = None,
+    declared_mechanisms: Sequence[str] = (),
+) -> dict[str, frozenset[str]]:
+    """Return role -> runtime fields declared by the selected surface.
+
+    Role declarations are problem-owned metadata. Generic telemetry guards use
+    these role labels to reason about category misuse without knowing concrete
+    problem field names.
+    """
+
+    evidence = _field(surface, "evidence")
+    roles: dict[str, set[str]] = {}
+    _add_role_fields(
+        roles,
+        "activity",
+        _string_list(_field(evidence, "activity_runtime_fields")),
+        declared_mechanisms=declared_mechanisms,
+    )
+    activation = _field(evidence, "activation_runtime_fields")
+    _add_role_fields(
+        roles,
+        "mechanism_activation",
+        _string_list(activation),
+        declared_mechanisms=declared_mechanisms,
+    )
+    _add_role_fields(
+        roles,
+        "effect",
+        _string_list(_field(evidence, "effect_probe_runtime_fields")),
+        declared_mechanisms=declared_mechanisms,
+    )
+    _add_role_fields(
+        roles,
+        "budget",
+        _string_list(_field(evidence, "stage_budget_runtime_fields")),
+        declared_mechanisms=declared_mechanisms,
+    )
+    for telemetry in _mechanism_telemetry_values(evidence):
+        _add_role_fields(
+            roles,
+            "mechanism_activation",
+            _string_list(_field(telemetry, "activation_runtime_fields")),
+            declared_mechanisms=declared_mechanisms,
+        )
+        _add_role_fields(
+            roles,
+            "mechanism_effect",
+            _string_list(_field(telemetry, "effect_probe_runtime_fields")),
+            declared_mechanisms=declared_mechanisms,
+        )
+
+    for source in _role_mapping_sources(
+        surface=surface,
+        evidence=evidence,
+        problem_spec=problem_spec,
+    ):
+        _merge_role_mapping(
+            roles,
+            source,
+            declared_mechanisms=declared_mechanisms,
+        )
+    return {
+        role: frozenset(fields)
+        for role, fields in sorted(roles.items())
+        if role and fields
+    }
+
+
+def runtime_field_roles_for(
+    field: str,
+    role_map: Mapping[str, Sequence[str] | frozenset[str]],
+) -> frozenset[str]:
+    field_text = str(field or "").strip()
+    if not field_text:
+        return frozenset()
+    roles = [
+        role
+        for role, fields in role_map.items()
+        if field_text in {str(item) for item in fields}
+    ]
+    return frozenset(roles)
 
 
 def declared_activity_runtime_fields(surface: Any | None) -> tuple[str, ...]:
@@ -118,3 +237,99 @@ def _mechanism_telemetry_values(evidence: Any | None) -> tuple[Any, ...]:
     if not isinstance(telemetry, Mapping):
         return ()
     return tuple(telemetry.values())
+
+
+def _role_mapping_sources(
+    *,
+    surface: Any | None,
+    evidence: Any | None,
+    problem_spec: Any | None,
+) -> tuple[Any, ...]:
+    sources: list[Any] = []
+    for owner in (
+        _field(problem_spec, "telemetry_guard"),
+        _field(problem_spec, "runtime_telemetry_guard"),
+        _field(problem_spec, "telemetry_probes"),
+        _field(problem_spec, "runtime_telemetry_probes"),
+        _field(_field(problem_spec, "evidence"), "telemetry_guard"),
+        _field(_field(problem_spec, "evidence"), "runtime_telemetry_guard"),
+        evidence,
+        surface,
+        _field(evidence, "telemetry_guard"),
+        _field(evidence, "runtime_telemetry_guard"),
+        _field(surface, "telemetry_guard"),
+        _field(surface, "runtime_telemetry_guard"),
+    ):
+        if owner is None:
+            continue
+        for field_name in _ROLE_MAPPING_FIELD_NAMES:
+            source = _field(owner, field_name)
+            if source is not None:
+                sources.append(source)
+    return tuple(sources)
+
+
+def _merge_role_mapping(
+    roles: dict[str, set[str]],
+    value: Any,
+    *,
+    declared_mechanisms: Sequence[str],
+) -> None:
+    if not isinstance(value, Mapping):
+        return
+    for raw_key, raw_value in value.items():
+        key = str(raw_key or "").strip()
+        normalized_key = key.lower()
+        if normalized_key in TELEMETRY_FIELD_ROLES:
+            _add_role_fields(
+                roles,
+                normalized_key,
+                _string_list(raw_value),
+                declared_mechanisms=declared_mechanisms,
+            )
+            continue
+        for role in _string_list(raw_value):
+            normalized_role = str(role or "").strip().lower()
+            if normalized_role not in TELEMETRY_FIELD_ROLES:
+                continue
+            _add_role_fields(
+                roles,
+                normalized_role,
+                [key],
+                declared_mechanisms=declared_mechanisms,
+            )
+
+
+def _add_role_fields(
+    roles: dict[str, set[str]],
+    role: str,
+    fields: Sequence[str],
+    *,
+    declared_mechanisms: Sequence[str],
+) -> None:
+    normalized_role = str(role or "").strip().lower()
+    if not normalized_role:
+        return
+    target = roles.setdefault(normalized_role, set())
+    for field in _expand_role_field_templates(fields, declared_mechanisms):
+        if field:
+            target.add(field)
+
+
+def _expand_role_field_templates(
+    fields: Sequence[str],
+    mechanisms: Sequence[str],
+) -> tuple[str, ...]:
+    expanded: list[str] = []
+    for field in fields:
+        text = str(field or "").strip()
+        if not text:
+            continue
+        if "{mechanism}" in text and mechanisms:
+            expanded.extend(
+                text.replace("{mechanism}", str(mechanism))
+                for mechanism in mechanisms
+            )
+        else:
+            expanded.append(text)
+    return tuple(dict.fromkeys(expanded))

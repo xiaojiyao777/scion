@@ -5,8 +5,10 @@ from typing import Any
 
 from scion.runtime.audit import normalize_surface_name
 from scion.runtime.telemetry_guard.declarations import (
+    declared_runtime_field_roles,
     declared_surface_telemetry_fields,
     find_research_surface,
+    runtime_field_roles_for,
 )
 from scion.runtime.telemetry_guard.expected_schema import (
     EXPECTED_TELEMETRY_CATEGORIES,
@@ -56,10 +58,21 @@ def validate_expected_telemetry_contract(
             ]
         )
 
-    allowed = set(declared_surface_telemetry_fields(surface))
+    allowed = set(
+        declared_surface_telemetry_fields(
+            surface,
+            problem_spec=problem_spec,
+            declared_mechanisms=mechanisms,
+        )
+    )
     mechanism_probes = declared_mechanism_runtime_probes(
         problem_spec=problem_spec,
         surface=surface,
+        declared_mechanisms=mechanisms,
+    )
+    role_map = declared_runtime_field_roles(
+        surface,
+        problem_spec=problem_spec,
         declared_mechanisms=mechanisms,
     )
     for probe in mechanism_probes:
@@ -85,6 +98,7 @@ def validate_expected_telemetry_contract(
                 category,
                 fields,
                 mechanism_fields=mechanism_fields,
+                role_map=role_map,
             )
         )
         unknown = [field for field in fields if field not in allowed]
@@ -96,19 +110,14 @@ def validate_expected_telemetry_contract(
     return tuple(errors)
 
 
-_OBJECTIVE_OUTCOME_TELEMETRY_FIELDS = frozenset(
-    {
-        "solver_algorithm_fleet_violation",
-        "solver_algorithm_total_distance",
-        "solver_algorithm_objective",
-        "solver_algorithm_solution_routes",
-    }
+_ACTIVATION_OUTCOME_ROLES = frozenset(
+    {"objective_outcome", "outcome", "protected_outcome"}
 )
-_AGGREGATE_EFFECT_ACTIVITY_TELEMETRY_FIELDS = frozenset(
-    {
-        "solver_algorithm_improving_moves",
-        "solver_algorithm_best_improving_moves",
-    }
+_ACTIVATION_AGGREGATE_ROLES = frozenset(
+    {"activity", "aggregate_activity", "aggregate_effect", "effect"}
+)
+_ACTIVATION_ALLOWED_ROLES = frozenset(
+    {"mechanism_activity", "mechanism_activation"}
 )
 
 
@@ -117,6 +126,7 @@ def _category_field_semantic_errors(
     fields: tuple[str, ...],
     *,
     mechanism_fields: tuple[str, ...] = (),
+    role_map: dict[str, frozenset[str]] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     for field in fields:
@@ -131,21 +141,23 @@ def _category_field_semantic_errors(
             )
         if category != "activation":
             continue
-        if field_text in _OBJECTIVE_OUTCOME_TELEMETRY_FIELDS:
+        roles = runtime_field_roles_for(field_text, role_map or {})
+        outcome_roles = roles & _ACTIVATION_OUTCOME_ROLES
+        aggregate_roles = roles & _ACTIVATION_AGGREGATE_ROLES
+        if outcome_roles:
             errors.append(
-                "expected_telemetry.activation references outcome/objective field "
-                f"{field_text}; activation must use mechanism-specific activity "
-                "evidence such as adapter-declared context_records or "
-                "phase_runtime fields, while objective fields belong under effect "
-                "or protected-objective checks."
+                "expected_telemetry.activation references declared outcome field "
+                f"{field_text} (role(s): {', '.join(sorted(outcome_roles))}); "
+                "activation must use mechanism-specific activity evidence "
+                "declared by the selected research surface."
             )
-        if field_text in _AGGREGATE_EFFECT_ACTIVITY_TELEMETRY_FIELDS:
+        if aggregate_roles and not (roles & _ACTIVATION_ALLOWED_ROLES):
             errors.append(
-                "expected_telemetry.activation references aggregate effect/activity "
-                f"field {field_text}; activation must use mechanism-specific "
-                "activity evidence such as adapter-declared context_records or "
-                "phase_runtime fields, while aggregate effect/activity fields "
-                "belong under activity or effect checks."
+                "expected_telemetry.activation references declared aggregate or "
+                f"effect field {field_text} (role(s): "
+                f"{', '.join(sorted(aggregate_roles))}); activation must use "
+                "mechanism-specific activity evidence declared by the selected "
+                "research surface."
             )
         specific_field = _mechanism_specific_field_for_aggregate(
             field_text,

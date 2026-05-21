@@ -11,9 +11,11 @@ from scion.runtime.telemetry_guard.declarations import (
     _mechanism_telemetry_values,
     declared_activity_runtime_fields,
     declared_effect_probe_runtime_fields,
+    declared_runtime_field_roles,
     declared_stage_budget_runtime_fields,
     declared_surface_telemetry_fields,
     find_research_surface,
+    runtime_field_roles_for,
 )
 from scion.runtime.telemetry_guard.evidence import (
     _as_bool,
@@ -83,6 +85,7 @@ __all__ = [
     "declared_activity_runtime_fields",
     "declared_effect_probe_runtime_fields",
     "declared_mechanism_runtime_probes",
+    "declared_runtime_field_roles",
     "declared_stage_budget_runtime_fields",
     "declared_surface_telemetry_fields",
     "find_research_surface",
@@ -90,5 +93,6 @@ __all__ = [
     "normalize_declared_mechanisms",
     "normalize_expected_telemetry",
     "normalize_expected_telemetry_by_mechanism",
+    "runtime_field_roles_for",
     "validate_expected_telemetry_contract",
 ]

@@ -9,6 +9,10 @@ from scion.problem.providers import (
     resolve_solver_design_smoke_provider,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.runtime.telemetry_guard import (
+    build_telemetry_guard_summary,
+    validate_expected_telemetry_contract,
+)
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
@@ -82,6 +86,46 @@ def test_cvrp_prompt_provider_demotes_legacy_surfaces() -> None:
     assert "initial construction is route-limit guarded" in rendered
     assert "positive fleet_violation or route-limit excess" in rendered
     assert "explicitly repairs that compatibility hook" not in rendered
+
+
+def test_cvrp_problem_spec_declares_solver_algorithm_telemetry_roles() -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+
+    activation_errors = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="solver_design",
+        expected_telemetry={
+            "activation": ["solver_algorithm_fleet_violation"],
+            "effect": ["solver_algorithm_fleet_violation"],
+        },
+    )
+    activation_ok = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="solver_design",
+        expected_telemetry={
+            "activation": ["solver_algorithm_phase_runtime_ms.route_merge_seed"],
+        },
+        declared_mechanisms=["route_merge_seed"],
+    )
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{"solver_algorithm_fleet_violation": 0}],
+        problem_spec=spec,
+        selected_surface="solver_design",
+        expected_telemetry={"effect": ["solver_algorithm_fleet_violation"]},
+        protected_objectives=("fleet_violation",),
+    )
+
+    assert activation_errors == (
+        "expected_telemetry.activation references declared outcome field "
+        "solver_algorithm_fleet_violation (role(s): protected_outcome); "
+        "activation must use mechanism-specific activity evidence declared by "
+        "the selected research surface.",
+    )
+    assert activation_ok == ()
+    assert summary["passed"] is True
+    assert summary["fields"]["solver_algorithm_fleet_violation"][
+        "candidate_positive"
+    ] == 0
 
 
 def test_cvrp_smoke_provider_owns_low_effort_interpretation() -> None:

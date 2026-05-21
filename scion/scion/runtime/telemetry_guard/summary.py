@@ -7,8 +7,10 @@ from typing import Any
 from scion.runtime.audit import normalize_surface_name
 from scion.runtime.telemetry_guard.declarations import (
     declared_activity_runtime_fields,
+    declared_runtime_field_roles,
     declared_stage_budget_runtime_fields,
     find_research_surface,
+    runtime_field_roles_for,
 )
 from scion.runtime.telemetry_guard.evidence import _as_bool
 from scion.runtime.telemetry_guard.expected_schema import (
@@ -53,6 +55,11 @@ def build_telemetry_guard_summary(
         declared_mechanisms,
         expected_telemetry=expected_telemetry,
     )
+    role_map = declared_runtime_field_roles(
+        surface,
+        problem_spec=problem_spec,
+        declared_mechanisms=mechanisms,
+    )
     protected_tokens = _protected_objective_tokens(protected_objectives)
     if not mechanisms and mechanism_claims:
         mechanisms = tuple(mechanism_claims)
@@ -89,7 +96,10 @@ def build_telemetry_guard_summary(
                         summary=summary,
                     )
                 )
-            elif category == "effect" and _is_objective_outcome_effect_field(field):
+            elif category == "effect" and _is_objective_outcome_effect_field(
+                field,
+                role_map=role_map,
+            ):
                 if summary["candidate_present"] == 0:
                     code = (
                         "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED"
@@ -315,18 +325,19 @@ def build_telemetry_guard_summary(
     }
 
 
-_OBJECTIVE_OUTCOME_EFFECT_FIELDS = frozenset(
-    {
-        "solver_algorithm_fleet_violation",
-        "solver_algorithm_total_distance",
-        "solver_algorithm_objective",
-        "solver_algorithm_solution_routes",
-    }
+_OBJECTIVE_OUTCOME_EFFECT_ROLES = frozenset(
+    {"objective_outcome", "outcome", "protected_outcome"}
 )
 
 
-def _is_objective_outcome_effect_field(field: str) -> bool:
-    return str(field or "").strip() in _OBJECTIVE_OUTCOME_EFFECT_FIELDS
+def _is_objective_outcome_effect_field(
+    field: str,
+    *,
+    role_map: Mapping[str, Sequence[str] | frozenset[str]],
+) -> bool:
+    return bool(
+        runtime_field_roles_for(field, role_map) & _OBJECTIVE_OUTCOME_EFFECT_ROLES
+    )
 
 
 def _has_explicit_mechanism_field(

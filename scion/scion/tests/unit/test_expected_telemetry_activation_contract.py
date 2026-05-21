@@ -23,6 +23,16 @@ def _surface_spec() -> SimpleNamespace:
                             "solver_algorithm_phase_runtime_ms.{mechanism}",
                         ]
                     },
+                    runtime_field_roles={
+                        "mechanism_activation": [
+                            "solver_algorithm_context_records.{mechanism}_iterations",
+                            "solver_algorithm_phase_runtime_ms.{mechanism}",
+                        ],
+                        "aggregate_effect": [
+                            "solver_algorithm_improving_moves",
+                            "solver_algorithm_best_improving_moves",
+                        ],
+                    },
                 ),
             )
         ]
@@ -84,9 +94,8 @@ def test_activation_rejects_aggregate_effect_activity_fields() -> None:
         )
 
         assert errors == (
-            "expected_telemetry.activation references aggregate effect/activity "
-            f"field {field}; activation must use mechanism-specific activity "
-            "evidence such as adapter-declared context_records or phase_runtime "
-            "fields, while aggregate effect/activity fields belong under "
-            "activity or effect checks.",
+            "expected_telemetry.activation references declared aggregate or "
+            f"effect field {field} (role(s): aggregate_effect); activation "
+            "must use mechanism-specific activity evidence declared by the "
+            "selected research surface.",
         )

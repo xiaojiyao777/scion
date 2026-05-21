@@ -135,6 +135,7 @@ class ResearchSurfaceEvidenceSpec(_Strict):
     activation_runtime_fields: dict[str, list[str]] = Field(default_factory=dict)
     effect_probe_runtime_fields: list[str] = Field(default_factory=list)
     stage_budget_runtime_fields: list[str] = Field(default_factory=list)
+    runtime_field_roles: dict[str, list[str]] = Field(default_factory=dict)
     mechanism_telemetry: dict[str, ResearchSurfaceMechanismTelemetrySpec] = Field(
         default_factory=dict
     )

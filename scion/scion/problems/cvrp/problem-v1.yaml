@@ -167,6 +167,42 @@ research_surfaces:
       effect_probe_runtime_fields:
         - solver_algorithm_phase_improvement_counts.{mechanism}
         - solver_algorithm_phase_best_delta.{mechanism}
+      runtime_field_roles:
+        mechanism_activation:
+          - solver_algorithm_context_records.{mechanism}_iterations
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+        budget:
+          - solver_algorithm_elapsed_ms
+          - solver_algorithm_phase_runtime_ms
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+        activity:
+          - solver_algorithm_search_iterations
+          - solver_algorithm_move_attempts
+          - solver_algorithm_accepted_moves
+          - solver_algorithm_neutral_accepted_moves
+        aggregate_effect:
+          - solver_algorithm_improving_moves
+          - solver_algorithm_best_improving_moves
+          - solver_algorithm_best_delta
+          - solver_algorithm_phase_delta_sum
+          - solver_algorithm_phase_best_delta
+          - solver_algorithm_phase_improvement_counts
+        mechanism_effect:
+          - solver_algorithm_phase_improvement_counts.{mechanism}
+          - solver_algorithm_phase_best_delta.{mechanism}
+        outcome:
+          - solver_algorithm_solution_valid
+          - solver_algorithm_solution_routes
+          - solver_algorithm_objective
+        objective_outcome:
+          - solver_algorithm_total_distance
+        protected_outcome:
+          - solver_algorithm_fleet_violation
+        diagnostic:
+          - solver_algorithm_loaded
+          - solver_algorithm_active
+          - solver_algorithm_errors
+          - solver_algorithm_stop_reason
     novelty:
       strategy: semantic_signature
       signature_fields:

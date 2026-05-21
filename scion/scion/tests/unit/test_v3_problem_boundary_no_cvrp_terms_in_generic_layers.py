@@ -35,7 +35,7 @@ FORBIDDEN_PATTERNS = {
 }
 
 # Keep this list intentionally small. Each entry is either non-domain wording
-# that collides with a forbidden token, or documented legacy/P0-B debt that has
+# that collides with a forbidden token, or documented legacy/P1 debt that has
 # not yet been migrated behind provider declarations. Do not allowlist generic
 # proposal prompt/schema files here; CVRP prompt semantics belong under
 # scion/problems/cvrp.
@@ -71,53 +71,25 @@ LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
         "vehicle",
     ): "legacy complexity scale fallback for pre-v3 specs",
     (
-        "runtime/telemetry_guard/expected_schema.py",
-        "route",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/contract.py",
-        "solver_algorithm_fleet_violation",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/contract.py",
-        "solver_algorithm_total_distance",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/contract.py",
-        "route",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/summary.py",
-        "solver_algorithm_fleet_violation",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/summary.py",
-        "solver_algorithm_total_distance",
-    ): "P0-B telemetry declaration migration pending",
-    (
-        "runtime/telemetry_guard/summary.py",
-        "route",
-    ): "P0-B telemetry declaration migration pending",
-    (
         "runtime/workspace.py",
         "vns",
     ): "legacy default frozen-file compatibility pattern",
     (
         "proposal/solver_design_smoke/audit.py",
         "solver_algorithm_fleet_violation",
-    ): "P0-B telemetry declaration migration pending",
+    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
     (
         "proposal/solver_design_smoke/audit.py",
         "solver_algorithm_total_distance",
-    ): "P0-B telemetry declaration migration pending",
+    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
     (
         "proposal/tools/previews/algorithm_smoke_feedback_runtime.py",
         "solver_algorithm_fleet_violation",
-    ): "P0-B telemetry declaration migration pending",
+    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
     (
         "proposal/tools/previews/algorithm_smoke_feedback_runtime.py",
         "solver_algorithm_total_distance",
-    ): "P0-B telemetry declaration migration pending",
+    ): "P1 smoke preview runtime diagnostics still use CVRP telemetry names",
 }
 
 

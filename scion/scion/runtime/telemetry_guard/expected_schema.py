@@ -52,15 +52,6 @@ _GENERIC_FIELD_CONTAINER_KEYS = frozenset(
         "probes",
     }
 )
-_FRAMEWORK_RUNTIME_FIELD_EXACT_KEYS = frozenset(
-    {
-        "solver_algorithm_phase_runtime_ms",
-        "solver_algorithm_context_records",
-        "solver_algorithm_phase_delta_sum",
-        "solver_algorithm_phase_best_delta",
-        "solver_algorithm_phase_improvement_counts",
-    }
-)
 _RUNTIME_FIELD_SUFFIXES = (
     "_runtime_ms",
     "_elapsed_ms",
@@ -73,9 +64,9 @@ _RUNTIME_FIELD_SUFFIXES = (
     "_records",
     "_delta",
     "_best_delta",
+    "_delta_sum",
     "_objective",
     "_violation",
-    "_routes",
     "_stop_reason",
 )
 
@@ -248,8 +239,6 @@ def _is_explicit_mechanism_key(value: str) -> bool:
 
 
 def _looks_like_runtime_field_key(key: str) -> bool:
-    if key in _FRAMEWORK_RUNTIME_FIELD_EXACT_KEYS:
-        return True
     if "." in key or "[" in key or "]" in key:
         return True
     return key.startswith(("solver_", "runtime_", "candidate_", "champion_")) and (

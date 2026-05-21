@@ -29,8 +29,16 @@ def _problem_spec() -> SimpleNamespace:
                     required_runtime_fields=[
                         "solver_search_iterations",
                         "solver_phase_runtime_ms",
+                        "solution_cost",
+                        "violation_count",
+                        "solver_best_delta",
                     ],
                     stage_budget_runtime_fields=["solver_phase_runtime_ms"],
+                    runtime_field_roles={
+                        "objective_outcome": ["solution_cost"],
+                        "protected_outcome": ["violation_count"],
+                        "aggregate_effect": ["solver_best_delta"],
+                    },
                 ),
             )
         ]
@@ -141,62 +149,62 @@ def test_telemetry_guard_treats_protected_objective_effect_as_no_regression_prob
     summary = build_telemetry_guard_summary(
         candidate_runtimes=[
             {
-                "solver_algorithm_fleet_violation": 0,
-                "solver_algorithm_best_delta": 2.0,
+                "violation_count": 0,
+                "solver_best_delta": 2.0,
             }
         ],
         champion_runtimes=[
             {
-                "solver_algorithm_fleet_violation": 0,
-                "solver_algorithm_best_delta": 1.0,
+                "violation_count": 0,
+                "solver_best_delta": 1.0,
             }
         ],
         problem_spec=_problem_spec(),
         selected_surface="solver",
         expected_telemetry={
             "effect": [
-                "solver_algorithm_fleet_violation",
-                "solver_algorithm_best_delta",
+                "violation_count",
+                "solver_best_delta",
             ]
         },
-        protected_objectives=("fleet_violation",),
+        protected_objectives=("violation_count",),
     )
 
     assert summary["passed"] is True
-    assert summary["protected_objectives"] == ["fleet_violation"]
-    assert summary["fields"]["solver_algorithm_fleet_violation"][
+    assert summary["protected_objectives"] == ["violation_count"]
+    assert summary["fields"]["violation_count"][
         "candidate_present"
     ] == 1
-    assert summary["fields"]["solver_algorithm_fleet_violation"][
+    assert summary["fields"]["violation_count"][
         "candidate_positive"
     ] == 0
 
 
 def test_effect_objective_outcome_field_accepts_zero_when_present() -> None:
     summary = build_telemetry_guard_summary(
-        candidate_runtimes=[{"solver_algorithm_fleet_violation": 0}],
+        candidate_runtimes=[{"violation_count": 0}],
         problem_spec=_problem_spec(),
         selected_surface="solver",
-        expected_telemetry={"effect": ["solver_algorithm_fleet_violation"]},
+        expected_telemetry={"effect": ["violation_count"]},
     )
 
     assert summary["passed"] is True
     assert summary["failures"] == []
-    assert summary["fields"]["solver_algorithm_fleet_violation"][
+    assert summary["fields"]["violation_count"][
         "candidate_present"
     ] == 1
-    assert summary["fields"]["solver_algorithm_fleet_violation"][
+    assert summary["fields"]["violation_count"][
         "candidate_positive"
     ] == 0
 
 
 def test_telemetry_guard_requires_protected_objective_probe_presence() -> None:
     summary = build_telemetry_guard_summary(
-        candidate_runtimes=[{"solver_algorithm_best_delta": 2.0}],
+        candidate_runtimes=[{"solver_best_delta": 2.0}],
         problem_spec=_problem_spec(),
         selected_surface="solver",
-        expected_telemetry={"effect": ["solver_algorithm_fleet_violation"]},
-        protected_objectives=("fleet_violation",),
+        expected_telemetry={"effect": ["violation_count"]},
+        protected_objectives=("violation_count",),
     )
 
     assert summary["passed"] is False
@@ -222,26 +230,143 @@ def test_expected_telemetry_activation_rejects_objective_outcome_fields() -> Non
                     name="solver",
                     evidence=SimpleNamespace(
                         required_runtime_fields=[
-                            "solver_algorithm_fleet_violation",
-                            "solver_algorithm_context_records",
+                            "solution_cost",
+                            "planner_stage_runtime_ms",
                         ],
+                        runtime_field_roles={
+                            "objective_outcome": ["solution_cost"],
+                        },
                     ),
                 )
             ]
         ),
         selected_surface="solver",
         expected_telemetry={
-            "activation": ["solver_algorithm_fleet_violation"],
-            "effect": ["solver_algorithm_fleet_violation"],
+            "activation": ["solution_cost"],
+            "effect": ["solution_cost"],
         },
     )
 
     assert errors == (
-        "expected_telemetry.activation references outcome/objective field "
-        "solver_algorithm_fleet_violation; activation must use "
-        "mechanism-specific activity evidence such as adapter-declared "
-        "context_records or phase_runtime fields, while objective fields "
-        "belong under effect or protected-objective checks.",
+        "expected_telemetry.activation references declared outcome field "
+        "solution_cost (role(s): objective_outcome); activation must use "
+        "mechanism-specific activity evidence declared by the selected "
+        "research surface.",
+    )
+
+
+def test_synthetic_surface_declares_non_cvrp_telemetry_roles() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="planner_solver",
+                evidence=SimpleNamespace(
+                    required_runtime_fields=[
+                        "planner_stage_runtime_ms",
+                        "search_node_count",
+                        "solution_cost",
+                        "violation_count",
+                    ],
+                    activation_runtime_fields={
+                        "{mechanism}": ["planner_stage_runtime_ms.{mechanism}"]
+                    },
+                    runtime_field_roles={
+                        "mechanism_activation": [
+                            "planner_stage_runtime_ms.{mechanism}"
+                        ],
+                        "activity": ["search_node_count"],
+                        "objective_outcome": ["solution_cost"],
+                        "protected_outcome": ["violation_count"],
+                    },
+                ),
+            )
+        ]
+    )
+
+    accepted = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="planner_solver",
+        expected_telemetry={
+            "activation": ["planner_stage_runtime_ms.regret_seed"],
+            "activity": ["search_node_count"],
+            "effect": ["solution_cost", "violation_count"],
+        },
+        declared_mechanisms=[MechanismChange(id="regret_seed", change_type="add")],
+    )
+    rejected = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="planner_solver",
+        expected_telemetry={"activation": ["solution_cost"]},
+        declared_mechanisms=[MechanismChange(id="regret_seed", change_type="add")],
+    )
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "planner_stage_runtime_ms": {"regret_seed": 4},
+                "search_node_count": 12,
+                "solution_cost": 0,
+                "violation_count": 0,
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="planner_solver",
+        expected_telemetry={
+            "activation": ["planner_stage_runtime_ms.regret_seed"],
+            "activity": ["search_node_count"],
+            "effect": ["solution_cost", "violation_count"],
+        },
+        declared_mechanisms=[MechanismChange(id="regret_seed", change_type="add")],
+        protected_objectives=("violation_count",),
+    )
+
+    assert accepted == ()
+    assert rejected == (
+        "expected_telemetry.activation references declared outcome field "
+        "solution_cost (role(s): objective_outcome); activation must use "
+        "mechanism-specific activity evidence declared by the selected "
+        "research surface.",
+    )
+    assert summary["passed"] is True
+    assert summary["fields"]["solution_cost"]["candidate_positive"] == 0
+    assert summary["fields"]["violation_count"]["candidate_present"] == 1
+
+
+def test_provider_level_telemetry_roles_are_used_by_generic_guard() -> None:
+    spec = SimpleNamespace(
+        telemetry_guard=SimpleNamespace(
+            runtime_field_roles={
+                "mechanism_activation": ["planner_stage_runtime_ms.{mechanism}"],
+                "objective_outcome": ["solution_cost"],
+            }
+        ),
+        research_surfaces=[
+            SimpleNamespace(
+                name="planner_solver",
+                evidence=SimpleNamespace(required_runtime_fields=["solution_cost"]),
+            )
+        ],
+    )
+
+    errors = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="planner_solver",
+        expected_telemetry={"activation": ["solution_cost"]},
+    )
+    accepted = validate_expected_telemetry_contract(
+        problem_spec=spec,
+        selected_surface="planner_solver",
+        expected_telemetry={
+            "activation": ["planner_stage_runtime_ms.regret_seed"],
+        },
+        declared_mechanisms=["regret_seed"],
+    )
+
+    assert accepted == ()
+    assert errors == (
+        "expected_telemetry.activation references declared outcome field "
+        "solution_cost (role(s): objective_outcome); activation must use "
+        "mechanism-specific activity evidence declared by the selected "
+        "research surface.",
     )
 
 
