@@ -33,6 +33,8 @@ _DEFAULT_TRANSIENT_PROVIDER_MAX_RETRIES = 1
 LLM_TRANSIENT_API_ERROR_CATEGORY = "llm_transient_api_error"
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
+_DEEPSEEK_MODEL_PREFIXES = ("deepseek-",)
+_DEEPSEEK_MAX_ALIASES = {"v4pro-max", "deepseek-v4-pro-max"}
 _CODE_REQUEST_KINDS = {"code", "fix"}
 _TOOL_REQUEST_KIND_BY_NAME = {
     "generate_patch": "code",
@@ -45,6 +47,18 @@ _TOOL_REQUEST_KIND_BY_NAME = {
 def _is_openai_model(model: str) -> bool:
     """Non-Anthropic models use the OpenAI-compatible API via aihubmix."""
     return not any(model.startswith(p) for p in _ANTHROPIC_MODEL_PREFIXES)
+
+
+def _is_deepseek_model(model: str) -> bool:
+    return any(model.startswith(p) for p in _DEEPSEEK_MODEL_PREFIXES)
+
+
+def _normalize_model_alias(model: str) -> tuple[str, str]:
+    """Return normalized model id plus implied reasoning effort, if any."""
+    value = str(model or "").strip()
+    if value.lower() in _DEEPSEEK_MAX_ALIASES:
+        return "deepseek-v4-pro", "max"
+    return value, ""
 
 
 def _normalize_request_kind(
@@ -252,11 +266,18 @@ class LLMClient:
         max_tokens: int | None = None,
         sdk_max_retries: int | None = None,
     ) -> None:
-        self.model = str(
+        raw_model = str(
             model
             or os.environ.get("SCION_MODEL")
             or os.environ.get("ANTHROPIC_MODEL")
             or _DEFAULT_MODEL
+        ).strip()
+        self.model, implied_reasoning_effort = _normalize_model_alias(raw_model)
+        self.reasoning_effort = str(
+            os.environ.get("SCION_REASONING_EFFORT")
+            or os.environ.get("SCION_DEEPSEEK_REASONING_EFFORT")
+            or implied_reasoning_effort
+            or ""
         ).strip()
         self.api_key = str(
             api_key
@@ -700,18 +721,32 @@ class LLMClient:
         }
 
         response = client.chat.completions.create(
-            model=model,
-            max_completion_tokens=max_tokens,
-            messages=messages,
-            tools=[openai_tool],
-            tool_choice={"type": "function", "function": {"name": tool_name}},
-            timeout=timeout_sec,
+            **self._openai_chat_kwargs(
+                model=model,
+                max_tokens=max_tokens,
+                messages=messages,
+                timeout_sec=timeout_sec,
+                tools=[openai_tool],
+                tool_choice={"type": "function", "function": {"name": tool_name}},
+            )
         )
 
         usage = response.usage
         if usage:
+            cache_read, cache_miss = self._openai_cache_usage(usage)
+            uncached = cache_miss if cache_read or cache_miss else usage.prompt_tokens or 0
             self._cache_stats["calls"] += 1
-            self._cache_stats["uncached_tokens"] += usage.prompt_tokens or 0
+            self._cache_stats["cache_read_tokens"] += cache_read
+            self._cache_stats["uncached_tokens"] += uncached
+            if self._token_tracker is not None:
+                self._token_tracker.record(
+                    request_kind=_normalize_request_kind(tool=tool) or "llm_call",
+                    model_id=model,
+                    prompt_tokens=uncached,
+                    completion_tokens=usage.completion_tokens or 0,
+                    cache_read_tokens=cache_read,
+                    cache_create_tokens=0,
+                )
 
         choice = response.choices[0]
         if choice.finish_reason in ("length",):
@@ -800,16 +835,22 @@ class LLMClient:
             messages.append({"role": "user", "content": prompt})
 
             response = client.chat.completions.create(
-                model=model,
-                max_completion_tokens=self.max_tokens,
-                messages=messages,
-                timeout=self.timeout_sec,
+                **self._openai_chat_kwargs(
+                    model=model,
+                    max_tokens=self.max_tokens,
+                    messages=messages,
+                    timeout_sec=self.timeout_sec,
+                )
             )
             usage = response.usage
             if usage:
-                input_tokens = usage.prompt_tokens or 0
+                cache_read, cache_miss = self._openai_cache_usage(usage)
+                input_tokens = (
+                    cache_miss if cache_read or cache_miss else usage.prompt_tokens or 0
+                )
                 output_tokens = usage.completion_tokens or 0
                 self._cache_stats["calls"] += 1
+                self._cache_stats["cache_read_tokens"] += cache_read
                 self._cache_stats["uncached_tokens"] += input_tokens
                 if self._token_tracker is not None:
                     self._token_tracker.record(
@@ -817,12 +858,68 @@ class LLMClient:
                         model_id=model,
                         prompt_tokens=input_tokens,
                         completion_tokens=output_tokens,
-                        cache_read_tokens=0,
+                        cache_read_tokens=cache_read,
                         cache_create_tokens=0,
                     )
             return response.choices[0].message.content
         except Exception as exc:
             self._raise_classified(exc)
+
+    def _openai_chat_kwargs(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        messages: list[Dict[str, Any]],
+        timeout_sec: float,
+        tools: list[Dict[str, Any]] | None = None,
+        tool_choice: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "max_completion_tokens": max_tokens,
+            "messages": messages,
+            "timeout": timeout_sec,
+        }
+        if tools is not None:
+            kwargs["tools"] = tools
+        if tool_choice is not None and not _is_deepseek_model(str(model or "")):
+            kwargs["tool_choice"] = tool_choice
+        reasoning_effort = self._openai_reasoning_effort(model)
+        if reasoning_effort:
+            kwargs["reasoning_effort"] = reasoning_effort
+        extra_body = self._openai_extra_body(model)
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        return kwargs
+
+    def _openai_reasoning_effort(self, model: str) -> str:
+        if not _is_deepseek_model(str(model or "")):
+            return ""
+        effort = self.reasoning_effort
+        if not effort:
+            return ""
+        normalized = effort.lower()
+        if normalized == "xhigh":
+            normalized = "max"
+        elif normalized in {"low", "medium"}:
+            normalized = "high"
+        if normalized not in {"high", "max"}:
+            return ""
+        return normalized
+
+    def _openai_extra_body(self, model: str) -> Dict[str, Any]:
+        if not _is_deepseek_model(str(model or "")):
+            return {}
+        if not self._openai_reasoning_effort(model):
+            return {}
+        return {"thinking": {"type": "enabled"}}
+
+    @staticmethod
+    def _openai_cache_usage(usage: Any) -> tuple[int, int]:
+        cache_read = int(getattr(usage, "prompt_cache_hit_tokens", 0) or 0)
+        cache_miss = int(getattr(usage, "prompt_cache_miss_tokens", 0) or 0)
+        return cache_read, cache_miss
 
     @staticmethod
     def _raise_classified(exc: Exception) -> None:
@@ -893,7 +990,9 @@ class LLMClient:
         try:
             import openai
             base = self.base_url.rstrip("/")
-            if not base.endswith("/v1"):
+            if "api.deepseek.com" in base:
+                base = "https://api.deepseek.com" if base.endswith("/v1") else base
+            elif not base.endswith("/v1"):
                 base += "/v1"
             self._openai_client = openai.OpenAI(
                 api_key=self.api_key,

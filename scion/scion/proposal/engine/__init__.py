@@ -85,6 +85,7 @@ from .tool_selection import (
     _build_tool_selection_prompt,
     _parse_tool_selection,
     _sanitize_tool_selection_context,
+    _split_tool_selection_context,
 )
 from .trace import (
     _TraceWriter,
@@ -156,6 +157,7 @@ __all__ = [
     "_prompt_hash",
     "_provider_prompt_lines",
     "_sanitize_tool_selection_context",
+    "_split_tool_selection_context",
     "_solver_design_broad_terms",
     "_solver_design_code_rules_section",
     "_solver_design_hypothesis_guidance",

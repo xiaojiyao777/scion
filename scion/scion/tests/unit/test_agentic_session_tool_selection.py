@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.proposal.engine import _split_tool_selection_context
 from scion.tests.unit.agentic_session_test_support import *
 
 def test_agentic_active_boundary_tool_guidance_is_not_forced_surface(
@@ -125,6 +126,28 @@ def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
         "context.read_surface",
         "feedback.query_runtime",
     }
+
+
+def test_tool_selection_prompt_splits_cacheable_catalog_from_dynamic_context() -> None:
+    system_blocks, user_prompt = _split_tool_selection_context(
+        {
+            "phase": "inspect",
+            "allowed_tools": ["context.read_surface"],
+            "allowed_tool_specs": {
+                "context.read_surface": {"description": "Read a declared surface."}
+            },
+            "remaining_tool_calls": 3,
+            "observations": [{"tool_name": "context.list_surfaces"}],
+        }
+    )
+
+    assert len(system_blocks) == 2
+    assert all(block.get("cache_control") for block in system_blocks)
+    assert "Tool Selection Catalog" in system_blocks[1]["text"]
+    assert "context.read_surface" in system_blocks[1]["text"]
+    assert "allowed_tool_specs" not in user_prompt
+    assert "remaining_tool_calls" in user_prompt
+    assert "context.list_surfaces" in user_prompt
 
 
 def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() -> None:
@@ -642,4 +665,3 @@ def test_solver_design_file_reads_cannot_starve_required_surface_inventory(
         in event.metadata.get("detail", "")
         for event in state.transcript
     )
-

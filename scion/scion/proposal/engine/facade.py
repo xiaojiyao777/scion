@@ -16,7 +16,7 @@ from .code_prompts import _split_code_context
 from .fix_context import _split_fix_context
 from .hypothesis_prompts import _split_hypothesis_context
 from .parsing import _parse_hypothesis, _parse_patch
-from .tool_selection import _build_tool_selection_prompt, _parse_tool_selection
+from .tool_selection import _parse_tool_selection, _split_tool_selection_context
 from .trace import _TraceWriter, _client_request_policy
 
 
@@ -88,12 +88,12 @@ class CreativeLayer:
         The model only returns a plan. APS validates the selected tool against
         its allowed list and executes through ProposalToolRegistry.
         """
-        prompt = _build_tool_selection_prompt(context)
+        system_blocks, prompt = _split_tool_selection_context(context)
         raw = self._call_with_trace(
             request_kind="tool_selection",
             prompt=prompt,
             tool=TOOL_SELECTION_TOOL,
-            system_blocks=[],
+            system_blocks=system_blocks,
             context=context,
         )
         return _parse_tool_selection(raw)

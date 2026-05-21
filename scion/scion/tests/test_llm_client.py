@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 import pytest
 
@@ -294,6 +295,80 @@ def test_llm_client_strips_config_values(monkeypatch):
     assert client.model == "claude-sonnet-4-6"
     assert client.api_key == "sk-test"
     assert client.base_url == "https://aihubmix.com"
+
+
+def test_deepseek_v4pro_max_alias_sets_reasoning_effort(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "v4pro-max")
+    monkeypatch.delenv("SCION_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("SCION_DEEPSEEK_REASONING_EFFORT", raising=False)
+
+    client = LLMClient()
+
+    assert client.model == "deepseek-v4-pro"
+    assert client.reasoning_effort == "max"
+    assert client._openai_reasoning_effort(client.model) == "max"
+    assert client._openai_extra_body(client.model) == {"thinking": {"type": "enabled"}}
+
+
+def test_deepseek_reasoning_effort_env_is_normalized(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("SCION_REASONING_EFFORT", "xhigh")
+
+    client = LLMClient()
+
+    assert client._openai_reasoning_effort(client.model) == "max"
+
+
+def test_deepseek_openai_base_url_does_not_append_v1(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("SCION_BASE_URL", "https://api.deepseek.com")
+    client = LLMClient(sdk_max_retries=0)
+    fake_openai = MagicMock()
+
+    with patch.dict("sys.modules", {"openai": fake_openai}):
+        client._get_openai_client()
+
+    assert fake_openai.OpenAI.call_args.kwargs["base_url"] == "https://api.deepseek.com"
+
+
+def test_deepseek_chat_kwargs_include_thinking_and_max_effort(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("SCION_REASONING_EFFORT", "max")
+    client = LLMClient()
+
+    kwargs = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "hi"}],
+        timeout_sec=10,
+    )
+
+    assert kwargs["reasoning_effort"] == "max"
+    assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+
+
+def test_deepseek_tool_call_kwargs_omit_named_tool_choice(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("SCION_REASONING_EFFORT", "max")
+    client = LLMClient()
+
+    kwargs = client._openai_chat_kwargs(
+        model=client.model,
+        max_tokens=128,
+        messages=[{"role": "user", "content": "hi"}],
+        timeout_sec=10,
+        tools=[{"type": "function", "function": {"name": "x", "parameters": {}}}],
+        tool_choice={"type": "function", "function": {"name": "x"}},
+    )
+
+    assert "tool_choice" not in kwargs
+    assert kwargs["reasoning_effort"] == "max"
+
+
+def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
+    usage = SimpleNamespace(prompt_cache_hit_tokens=25, prompt_cache_miss_tokens=75)
+
+    assert LLMClient._openai_cache_usage(usage) == (25, 75)
 
 
 def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):

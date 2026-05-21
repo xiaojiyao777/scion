@@ -153,10 +153,12 @@ class ToolSelectionClient:
     def __init__(self, selections: list[dict]) -> None:
         self.selections = list(selections)
         self.prompts: list[str] = []
+        self.system_blocks: list[list[dict]] = []
         self.tool_names: list[str] = []
 
     def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
         self.prompts.append(prompt)
+        self.system_blocks.append(list(system_blocks or []))
         self.tool_names.append(tool["name"])
         if tool["name"] == "plan_proposal_tool_call":
             if not self.selections:
