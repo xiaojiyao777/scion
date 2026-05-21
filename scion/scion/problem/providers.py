@@ -57,6 +57,9 @@ class SolverDesignSmokeProvider(Protocol):
     def is_runtime_patch_path(self, path: str | None) -> bool:
         """Return whether a patch path can be smoke-run by this provider."""
 
+    def requires_smoke_effect_observation(self, hypothesis: Any = None) -> bool:
+        """Return true when smoke must see positive effect, not just activation."""
+
 
 class ActiveSolverDesignProvider(Protocol):
     """Optional problem-owned active solver-design facts for proposal tools."""

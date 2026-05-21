@@ -714,6 +714,13 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
     ]
     assert retry_feedback["fact_packet_digest"]
     assert retry_feedback["fact_provenance"]
+    assert "agentic_negative_fact_block" in retry_context
+    assert "fact_id=cvrp.local_search.cross_route_or_opt_2_3" in retry_context[
+        "agentic_negative_fact_block"
+    ]
+    assert "mechanism=cross_route_or_opt_2_3" in retry_context[
+        "agentic_negative_fact_block"
+    ]
     assert "active solver" in retry_feedback["reason"].lower()
     assert "_or_opt_2" in json.dumps(retry_feedback, sort_keys=True)
     assert "different mechanism family" in retry_context[

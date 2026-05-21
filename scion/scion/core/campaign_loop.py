@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -28,6 +29,7 @@ class CampaignLoop:
     terminalize_active_branches: Callable[[str], None]
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
+    proposal_quality_loop_limit: int | None = None
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
@@ -36,9 +38,14 @@ class CampaignLoop:
         counted_rounds = 0
         attempts = 0
         bad_proposal_attempts = 0
+        agent_quality_blocked_attempts = 0
         telemetry_repairable_attempts = 0
         same_family_retry_attempts = 0
         requested_rounds = max(1, int(max_rounds))
+        proposal_quality_loop_limit = _proposal_quality_loop_limit(
+            requested_rounds,
+            configured=self.proposal_quality_loop_limit,
+        )
         bad_proposal_limit = requested_rounds * 5 + 10
         telemetry_repairable_limit = requested_rounds * 2 + 4
         same_family_retry_limit = requested_rounds + 4
@@ -48,6 +55,7 @@ class CampaignLoop:
         # before it reaches the requested number of effective screened rounds.
         attempt_limit = (
             requested_rounds
+            + proposal_quality_loop_limit
             + bad_proposal_limit
             + telemetry_repairable_limit
             + same_family_retry_limit
@@ -90,13 +98,19 @@ class CampaignLoop:
                     same_family_retry_attempts += 1
                     if same_family_retry_attempts >= same_family_retry_limit:
                         final_reason = "same_family_retry_budget_exhausted"
+                elif _is_agent_quality_blocked_attempt(result):
+                    agent_quality_blocked_attempts += 1
+                    if agent_quality_blocked_attempts >= proposal_quality_loop_limit:
+                        final_reason = "proposal_quality_loop"
                 else:
                     bad_proposal_attempts += 1
                     if bad_proposal_attempts >= bad_proposal_limit:
                         final_reason = "bad_proposal_budget_exhausted"
+            if final_reason == "proposal_quality_loop":
+                result.stopped = True
             self.write_status(last_result=result)
             if result.stopped:
-                final_reason = result.reason or "stopped"
+                final_reason = final_reason or result.reason or "stopped"
                 break
             if final_reason is not None:
                 break
@@ -105,6 +119,8 @@ class CampaignLoop:
             self.check_soft_stagnation()
         if final_reason is None and counted_rounds >= max_rounds:
             final_reason = "max_rounds_exhausted"
+        elif final_reason is None and counted_rounds == 0:
+            final_reason = "no_effective_round_loop"
         elif final_reason is None:
             final_reason = "attempt_limit_exhausted"
 
@@ -132,3 +148,34 @@ def _attempt_kind(result: StepResult) -> str:
     if "same_family" in reason or "semantic retry" in reason:
         return "same_family_retry"
     return "proposal_block"
+
+
+def _is_agent_quality_blocked_attempt(result: StepResult) -> bool:
+    text = " ".join(
+        str(value or "").lower()
+        for value in (
+            getattr(result, "reason", ""),
+            getattr(result, "attempt_kind", ""),
+        )
+    )
+    return "agent_quality_blocked" in text
+
+
+def _proposal_quality_loop_limit(
+    requested_rounds: int,
+    *,
+    configured: int | None,
+) -> int:
+    """Return the cumulative pre-screen agent-quality block cap."""
+    if configured is not None:
+        return max(1, int(configured))
+    raw = os.environ.get("SCION_PROPOSAL_QUALITY_LOOP_LIMIT")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_PROPOSAL_QUALITY_LOOP_LIMIT=%r",
+                raw,
+            )
+    return max(3, int(requested_rounds) + 2)

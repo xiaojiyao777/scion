@@ -40,7 +40,8 @@ def _proposal_smoke_activation_diagnostic(
     telemetry_guard: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
     """Return a compact proposal-smoke activation diagnostic when applicable."""
-    static = _static_activation_mismatch(raw_payload.get("telemetry_static_preview"))
+    telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
+    static = _static_activation_mismatch(telemetry_static)
     if static is not None:
         return static
     if telemetry_guard is None or bool(telemetry_guard.get("passed", True)):
@@ -66,6 +67,7 @@ def _proposal_smoke_activation_diagnostic(
         diagnostic=diagnostic,
         runtime_smoke=runtime_smoke,
         telemetry_guard=telemetry_guard,
+        telemetry_static=telemetry_static,
     )
     return _diagnostic_payload(
         subtype=subtype,
@@ -126,6 +128,7 @@ def _activation_subtype(
     diagnostic: Mapping[str, Any] | None,
     runtime_smoke: Mapping[str, Any] | None,
     telemetry_guard: Mapping[str, Any],
+    telemetry_static: Mapping[str, Any] | None,
 ) -> str:
     activation = _status_block(diagnostic, "activation")
     runtime = _status_block(diagnostic, "runtime")
@@ -143,6 +146,8 @@ def _activation_subtype(
         return "expected_telemetry_mismatch"
     if effect_present > 0 and _status_value(activation) in {"missing", "zero"}:
         return "expected_telemetry_mismatch"
+    if _static_has_activation_helper(telemetry_static, mechanism):
+        return "path_not_reached"
     if activation_present > 0:
         return "trigger_not_reached"
     if _status_value(runtime) == "observed" or _runtime_search_effort(runtime_smoke) > 0:
@@ -317,6 +322,8 @@ def _nonnegative_int(value: Any) -> int:
 def _diagnosis_text(subtype: str) -> str:
     if subtype == "not_connected":
         return "Declared mechanism did not appear on the active proposal-smoke call path."
+    if subtype == "path_not_reached":
+        return "Declared activation helper exists in the patch, but proposal smoke did not reach that mechanism path."
     if subtype == "trigger_not_reached":
         return "Declared activation telemetry was present but never positive in the short smoke case."
     if subtype == "instrumentation_missing":
@@ -334,6 +341,11 @@ def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
         return [
             f"Wire {mech} into the active solver call path or operator registry.",
             "Do not leave new helpers/classes inert; call them from the existing solve/search path.",
+        ]
+    if subtype == "path_not_reached":
+        return [
+            f"Adjust {mech} trigger conditions or provide a smoke-observable activation path.",
+            "The patch already contains a record helper for this mechanism; do not only add another record call inside the same unreachable branch.",
         ]
     if subtype == "trigger_not_reached":
         return [
@@ -358,6 +370,21 @@ def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
     return [
         "Inspect the active path and expected_telemetry fields; add exact mechanism activation telemetry where the mechanism can run."
     ]
+
+
+def _static_has_activation_helper(
+    telemetry_static: Mapping[str, Any] | None,
+    mechanism: str,
+) -> bool:
+    if telemetry_static is None:
+        return False
+    helper_evidence = telemetry_static.get("helper_evidence")
+    if not isinstance(helper_evidence, Mapping):
+        return False
+    evidence = helper_evidence.get(mechanism)
+    if not isinstance(evidence, Mapping):
+        return False
+    return bool(evidence.get("record_iteration") or evidence.get("record_phase"))
 
 
 __all__ = [

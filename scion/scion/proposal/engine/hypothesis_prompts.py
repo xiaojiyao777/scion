@@ -122,6 +122,7 @@ def _split_hypothesis_context(
     agentic_context = _agentic_research_context_block(D)
     if agentic_context:
         branch_context_parts.append(agentic_context)
+    negative_fact_block = str(D["agentic_negative_fact_block"]).strip()
 
     system_blocks = [
         {
@@ -180,6 +181,7 @@ def _split_hypothesis_context(
         f"enumeration over problem entities; describe any top-k, "
         f"sampling, or early-stop cap needed to keep runtime comparable to the champion.\n\n"
         f"If your hypothesis duplicates an existing surface's capability (even partially), it will be REJECTED.\n\n"
+        f"{negative_fact_block + chr(10) + chr(10) if negative_fact_block else ''}"
         f"{_hypothesis_task_prompt(D)}"
     )
 

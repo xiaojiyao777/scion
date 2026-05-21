@@ -235,6 +235,22 @@ class CampaignManager:
         self._run_runtime_preflight()
         self._campaign_loop.run(max_rounds=max_rounds)
 
+    def request_stop(self, reason: str = "external_stop_requested") -> None:
+        """Request graceful campaign stop before starting more work."""
+        self._external_stop_requested = True
+        self._last_stop_reason = reason or "external_stop_requested"
+        self._write_status(stopped_reason=self._last_stop_reason)
+
+    def finalize_requested_stop(self, reason: str | None = None) -> None:
+        """Write final artifacts for an externally requested stop."""
+        self._external_stop_requested = True
+        if reason:
+            self._last_stop_reason = reason
+        elif not self._last_stop_reason:
+            self._last_stop_reason = "external_stop_requested"
+        self._write_campaign_summary()
+        self._write_status(stopped_reason=self._last_stop_reason)
+
     def _run_runtime_preflight(self) -> None:
         """Validate problem-owned runtime dependencies before proposal work."""
         if getattr(self, "_runtime_preflight_checked", False):
@@ -249,6 +265,10 @@ class CampaignManager:
         return _branch_step_runner_for(self).run_one_step()
 
     def should_stop(self) -> bool:
+        if getattr(self, "_external_stop_requested", False):
+            if not self._last_stop_reason:
+                self._last_stop_reason = "external_stop_requested"
+            return True
         return self._governance.should_stop()
 
     @staticmethod

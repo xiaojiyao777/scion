@@ -27,6 +27,7 @@ from scion.proposal.llm_client import (
     LLMTransientProviderError,
     is_llm_transient_api_error,
 )
+from scion.proposal.negative_facts import render_negative_fact_block
 
 from .agentic_lifecycle import AgenticLifecycleMixin
 from .agentic_refs import AgenticRefsMixin
@@ -171,6 +172,11 @@ class ProposalPipeline(
                 "target; use the cited source/gate/failure_code/reason as the "
                 "starting point for a different hypothesis."
             )
+            negative_fact_block = render_negative_fact_block(
+                prior_quality_blocks=quality_feedback
+            )
+            if negative_fact_block:
+                context["agentic_negative_fact_block"] = negative_fact_block
         if self._agentic_enabled:
             return self._generate_agentic_hypothesis(
                 branch=branch,

@@ -108,6 +108,7 @@ def compose_campaign_services(
     owner._last_status_result = None
     owner._current_status_progress = None
     owner._last_stop_reason = None
+    owner._external_stop_requested = False
     owner._objective_lower_bounds = objective_lower_bounds
     owner._use_objective_lower_bounds_for_early_stop = (
         use_objective_lower_bounds_for_early_stop

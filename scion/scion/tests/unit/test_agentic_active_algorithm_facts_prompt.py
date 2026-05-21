@@ -157,3 +157,29 @@ def test_prompt_manifest_marks_large_observations_truncated_but_facts_included()
     assert observations_status["status"] == "truncated"
     assert "agentic_tool_observations" in manifest["truncated_sections"]
     assert "agentic_active_algorithm_facts" not in manifest["truncated_sections"]
+
+
+def test_negative_fact_block_renders_before_hypothesis_task_without_domain_terms() -> None:
+    block = (
+        "## Do Not Claim Missing / Known Existing Mechanisms\n"
+        "- fact_id=planner.swap_window.exists; mechanism=swap_window; "
+        "do_not_claim_missing=true; allowed_variant_guidance=Change trigger "
+        "or observable behavior."
+    )
+    _blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Synthetic planner problem.",
+            "research_surfaces": "planner_policy",
+            "champion_operators_code": "def solve():\n    pass\n",
+            "champion_stats": "{}",
+            "operator_categories": "planner_policy",
+            "agentic_negative_fact_block": block,
+        }
+    )
+
+    assert block in user_prompt
+    assert user_prompt.index("## Do Not Claim Missing") < user_prompt.index("## Task")
+    lowered = user_prompt.lower()
+    assert "cvrp" not in lowered
+    assert "alns" not in lowered
+    assert "vns" not in lowered

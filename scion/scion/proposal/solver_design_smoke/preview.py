@@ -254,6 +254,9 @@ def _runtime_algorithm_smoke_preview(
                         hypothesis,
                         provider=provider,
                     ),
+                    effect_observation_required=(
+                        _smoke_effect_observation_required(provider, hypothesis)
+                    ),
                 )
                 issue = format_telemetry_guard_issue(telemetry_guard_summary)
             if issue is None:
@@ -339,3 +342,42 @@ def _runtime_algorithm_smoke_preview(
         if repair_guidance:
             payload["repair_guidance"] = repair_guidance
     return payload
+
+
+def _smoke_effect_observation_required(
+    provider: Any,
+    hypothesis: HypothesisProposal | None,
+) -> bool:
+    """Return whether algorithm-smoke must see positive effect evidence."""
+    for name in (
+        "requires_smoke_effect_observation",
+        "smoke_effect_observation_required",
+        "algorithm_smoke_requires_positive_effect",
+    ):
+        hook = getattr(provider, name, None)
+        if not callable(hook):
+            continue
+        try:
+            return bool(hook(hypothesis=hypothesis))
+        except TypeError:
+            try:
+                return bool(hook(hypothesis))
+            except TypeError:
+                return bool(hook())
+    if hypothesis is None:
+        return False
+    for name in (
+        "smoke_effect_required",
+        "smoke_requires_positive_effect",
+        "algorithm_smoke_requires_positive_effect",
+    ):
+        value = getattr(hypothesis, name, None)
+        if value not in (None, "", (), [], {}):
+            return bool(value)
+    expected = getattr(hypothesis, "expected_telemetry", None)
+    if isinstance(expected, Mapping):
+        return bool(
+            expected.get("smoke_effect_required")
+            or expected.get("smoke_requires_positive_effect")
+        )
+    return False

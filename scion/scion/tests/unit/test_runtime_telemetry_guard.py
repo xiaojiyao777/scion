@@ -716,6 +716,88 @@ def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None
     ]
 
 
+def test_algorithm_smoke_can_treat_missing_effect_as_advisory() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": ["mechanism_activation"]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_effect"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": 1},
+                "mechanism_effect": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        expected_telemetry={"effect": {"target_probe": ["mechanism_effect"]}},
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+        effect_observation_required=False,
+    )
+
+    assert summary["passed"] is True
+    assert summary["effect_observation_required"] is False
+    assert summary["failures"] == []
+    warning_codes = [warning["code"] for warning in summary["warnings"]]
+    assert "TELEMETRY_EFFECT_NOT_OBSERVED" in warning_codes
+    assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in warning_codes
+
+
+def test_activation_missing_still_blocks_when_effect_is_advisory() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": ["mechanism_activation"]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": ["mechanism_effect"]
+                    },
+                ),
+            )
+        ]
+    )
+
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": 0},
+                "mechanism_effect": {"target_probe": 0.0},
+            }
+        ],
+        problem_spec=spec,
+        selected_surface="solver",
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+        effect_observation_required=False,
+    )
+
+    assert summary["passed"] is False
+    assert [failure["code"] for failure in summary["failures"]] == [
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    ]
+    assert [warning["code"] for warning in summary["warnings"]] == [
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED"
+    ]
+
+
 def test_runtime_path_parser_handles_dotted_brackets_and_indices() -> None:
     assert _parse_runtime_path("mechanisms['target_probe'].events[0].delta") == (
         "mechanisms",

@@ -740,6 +740,7 @@ class EvidenceRecorder:
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
+            "stopped": effective_stopped_reason not in (None, "run_complete"),
             "balance_exhausted": inferred_balance_exhausted,
             "circuit_breaker_tripped": circuit_breaker_tripped,
             "cache_stats": {

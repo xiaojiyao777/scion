@@ -245,12 +245,21 @@ def _compact_algorithm_smoke_telemetry_guard(value: Any) -> dict[str, Any] | Non
     failures = _compact_telemetry_issues(guard.get("failures"))
     warnings = _compact_telemetry_issues(guard.get("warnings"), limit=3)
     first_failure = failures[0] if failures else None
+    first_warning = warnings[0] if warnings else None
     compact = _drop_empty_items(
         {
             "triggered": bool(failures),
             "passed": guard.get("passed"),
             "selected_surface": guard.get("selected_surface"),
             "failure_code": first_failure.get("code") if first_failure else None,
+            "advisory_code": first_warning.get("code") if first_warning else None,
+            "advisory_mechanism": (
+                first_warning.get("mechanism") if first_warning else None
+            ),
+            "advisory_category": (
+                first_warning.get("category") if first_warning else None
+            ),
+            "advisory_field": first_warning.get("field") if first_warning else None,
             "mechanism": first_failure.get("mechanism") if first_failure else None,
             "category": first_failure.get("category") if first_failure else None,
             "field": first_failure.get("field") if first_failure else None,
@@ -259,6 +268,7 @@ def _compact_algorithm_smoke_telemetry_guard(value: Any) -> dict[str, Any] | Non
             "champion_runs": guard.get("champion_runs"),
             "expected_telemetry_present": guard.get("expected_telemetry_present"),
             "implicit_activity_claim": guard.get("implicit_activity_claim"),
+            "effect_observation_required": guard.get("effect_observation_required"),
             "protected_objectives": _compact_agent_text_list(
                 guard.get("protected_objectives")
             ),

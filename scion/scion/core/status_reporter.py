@@ -63,6 +63,8 @@ def normalize_status_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     )
     if effective_reason is not None:
         normalized["stopped_reason"] = effective_reason
+        if effective_reason != "run_complete":
+            normalized["stopped"] = True
     if effective_reason == API_BALANCE_EXHAUSTED_STOP_REASON:
         normalized["balance_exhausted"] = True
         normalized["stop_category"] = "provider_error"

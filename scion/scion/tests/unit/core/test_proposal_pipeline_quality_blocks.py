@@ -164,6 +164,13 @@ def test_agentic_quality_block_feedback_enters_next_hypothesis_context() -> None
     assert context is not None
     rendered = json.dumps(context, sort_keys=True)
     assert "agentic_prior_quality_blocks" in context
+    assert "agentic_negative_fact_block" in context
+    assert "fact_id=cvrp.local_search.or_opt_cross_route" in context[
+        "agentic_negative_fact_block"
+    ]
+    assert "mechanism=cross_route_or_opt_2_3" in context[
+        "agentic_negative_fact_block"
+    ]
     assert "proposal_premise_contradicted" in rendered
     assert "cross_route_or_opt_2_3" in rendered
     assert "facts-123" in rendered

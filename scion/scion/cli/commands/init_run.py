@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import signal
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +16,36 @@ from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
     validate_declared_problem_data_cases,
 )
+
+
+class _CampaignSignalStop(KeyboardInterrupt):
+    """Raised by the CLI signal handler after recording stop intent."""
+
+    def __init__(self, signum: int, reason: str) -> None:
+        self.signum = signum
+        self.reason = reason
+        super().__init__(reason)
+
+
+@contextmanager
+def _campaign_signal_handlers(manager):
+    """Install minimal SIGTERM/SIGINT handlers for a running campaign."""
+    previous: dict[int, object] = {}
+
+    def _handler(signum: int, _frame) -> None:
+        signame = signal.Signals(signum).name
+        reason = f"signal:{signame}"
+        manager.request_stop(reason)
+        raise _CampaignSignalStop(signum, reason)
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        previous[signum] = signal.getsignal(signum)
+        signal.signal(signum, _handler)
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def register_init_run_commands(app: typer.Typer) -> None:
@@ -404,7 +436,13 @@ def register_init_run_commands(app: typer.Typer) -> None:
             f"(max_rounds={rounds}, mock_llm={mock_llm}, "
             f"disable_early_stop={disable_early_stop}{forced_surface_note})"
         )
-        mgr.run(max_rounds=rounds)
+        try:
+            with _campaign_signal_handlers(mgr):
+                mgr.run(max_rounds=rounds)
+        except _CampaignSignalStop as exc:
+            mgr.finalize_requested_stop(exc.reason)
+            typer.echo(f"Campaign stopped: {exc.reason}", err=True)
+            raise typer.Exit(code=128 + int(exc.signum))
 
         state_data = mgr.get_state()
         typer.echo("Campaign finished.")

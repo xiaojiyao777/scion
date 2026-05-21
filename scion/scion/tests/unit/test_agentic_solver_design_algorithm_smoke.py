@@ -824,3 +824,114 @@ def test_algorithm_smoke_activation_diagnostic_flags_effect_counter_mismatch() -
     assert "record_move alone" in " ".join(payload["repair_hints"]) or (
         "effect counters" in diagnostic["diagnosis"]
     )
+
+
+def test_algorithm_smoke_effect_warning_is_advisory_not_failure() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": True,
+            "runtime_smoke": {
+                "passed": True,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "issues": [],
+                "telemetry_guard": {
+                    "passed": True,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "expected_telemetry_present": True,
+                    "effect_observation_required": False,
+                    "declared_mechanisms": ["probe"],
+                    "failures": [],
+                    "warnings": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                            "severity": "warn",
+                            "mechanism": "probe",
+                            "category": "effect",
+                            "field": "mechanism_effect",
+                            "candidate_positive": 0,
+                            "candidate_present": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["failure_class"] == "passed"
+    assert payload["telemetry_guard"]["triggered"] is False
+    assert payload["telemetry_guard"]["advisory_code"] == (
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED"
+    )
+
+
+def test_algorithm_smoke_feedback_guides_unreached_activation_helper() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "telemetry_static_preview": {
+                "passed": True,
+                "declared_mechanisms": ["late_probe"],
+                "checked_fields": ["mechanism_activation.late_probe"],
+                "helper_evidence": {
+                    "late_probe": {
+                        "record_iteration": True,
+                        "record_phase": False,
+                    }
+                },
+            },
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "runtime": {
+                    "solver_algorithm_search_iterations": 10,
+                    "solver_algorithm_move_attempts": 2,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "declared_mechanisms": ["late_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "late_probe",
+                            "activation_status": "missing",
+                            "runtime_status": "missing",
+                            "effect_status": "not_declared",
+                            "activation": {
+                                "status": "missing",
+                                "fields": ["mechanism_activation.late_probe"],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_missing": 2,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "late_probe",
+                            "category": "activation",
+                            "field": "mechanism_activation.late_probe",
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    diagnostic = payload["activation_diagnostic"]
+
+    assert diagnostic["activation_diagnostic_kind"] == "path_not_reached"
+    hints = " ".join(payload["repair_hints"])
+    assert "trigger conditions" in hints
+    assert "smoke-observable activation path" in hints

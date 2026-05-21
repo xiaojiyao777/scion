@@ -48,6 +48,7 @@ def _algorithm_smoke_telemetry_static_preview(value: Any) -> dict[str, Any] | No
             ),
             "checked_fields": _compact_agent_text_list(preview.get("checked_fields")),
             "required_calls": _compact_preview_value(preview.get("required_calls")),
+            "helper_evidence": _compact_preview_value(preview.get("helper_evidence")),
         }
     )
 

@@ -1,6 +1,6 @@
 # Scion v0.4 本地实验运行、回溯与复现手册
 
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-21*
 
 本文档面向需要自己在本地启动、监控、收尾、逐轮回溯、分析和复现
 Scion v0.4 实验的人。目标是让你能回答三个问题：怎么跑、每一轮输入输出
@@ -176,9 +176,11 @@ SCION_PROBLEM_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/vrp \
 
 ## 5. 可复现后台启动模板
 
-长一点的手动实验建议后台跑，并显式写 `launch.env`、`pid.txt`、
-`run.log`、`exit.txt`。`launch.env` 是复现实验的最小入口记录：后续回溯时先
-source 它，再从 `campaign_summary.json`、`scion.db`、`llm_traces/`、
+长一点的手动实验建议后台跑，并显式写 `launch.env`、`pid.txt`、`pgid.txt`、
+`run.log`、`exit.txt`。`pid.txt` 只记录 launcher PID，停止时必须 kill 整个
+process group，避免只杀掉 wrapper 而留下 `python -m scion.cli.main run`
+子进程继续发起 APS/LLM 调用。`launch.env` 是复现实验的最小入口记录：后续回溯
+时先 source 它，再从 `campaign_summary.json`、`scion.db`、`llm_traces/`、
 `agentic_sessions/` 和 `metrics/` 找每轮证据。
 
 不要把 API key 写进 `launch.env`。在启动前从 shell export
@@ -210,7 +212,7 @@ GIT_COMMIT=$(git -C /home/clawd/research/or-autoresearch-agent rev-parse --short
 STARTED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
-nohup bash -lc '
+nohup setsid bash -lc '
 source "'"$RUN_ROOT"'/launch.env"
 cd "$SCION_DIR"
 export SCION_MODEL
@@ -243,15 +245,30 @@ printf "EXIT_CODE:%s\n" "$code" > "'"$RUN_ROOT"'/exit.txt"
 exit "$code"
 ' > "$RUN_ROOT/run.log" 2>&1 &
 
-echo $! > "$RUN_ROOT/pid.txt"
+LAUNCH_PID=$!
+echo "$LAUNCH_PID" > "$RUN_ROOT/pid.txt"
+ps -o pgid= -p "$LAUNCH_PID" | tr -d " " > "$RUN_ROOT/pgid.txt"
 ```
 
 验证启动：
 
 ```bash
 ps -p "$(cat "$RUN_ROOT/pid.txt")" -o pid,ppid,stat,etime,cmd
+ps -o pid,ppid,pgid,stat,etime,cmd -g "$(cat "$RUN_ROOT/pgid.txt")"
 tail -n 80 "$RUN_ROOT/run.log"
 ```
+
+停止后台实验：
+
+```bash
+PGID=$(cat "$RUN_ROOT/pgid.txt" 2>/dev/null || cat "$RUN_ROOT/pid.txt")
+kill -TERM -- "-$PGID"
+```
+
+CLI 收到 `SIGTERM`/`SIGINT` 后会写入 `status.json` / `campaign_summary.json`
+的停止原因，并停止启动新的 APS/session/LLM 调用。若进程组在短时间内没有退出，
+先检查 `ps -o pid,ppid,pgid,stat,etime,cmd -g "$PGID"`，确认没有 orphaned
+Python 子进程后再考虑更强的终止手段。
 
 需要强制 `algorithm_blueprint` 时，只改 `launch.env`：
 
@@ -262,10 +279,11 @@ sed -i 's/^FORCE_SURFACE=.*/FORCE_SURFACE=algorithm_blueprint/' "$RUN_ROOT/launc
 为了复现同一次实验，至少保留这些文件：
 
 ```text
-launch.env
-command.txt
-pid.txt
-run.log
+  launch.env
+  command.txt
+  pid.txt
+  pgid.txt
+  run.log
 exit.txt
 campaign/
 ```

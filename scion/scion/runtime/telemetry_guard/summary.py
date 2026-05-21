@@ -44,6 +44,7 @@ def build_telemetry_guard_summary(
     declared_mechanisms: Any = None,
     protected_objectives: Sequence[str] = (),
     implicit_activity_claim: bool = False,
+    effect_observation_required: bool = True,
 ) -> dict[str, Any]:
     """Build an aggregate, deterministic sanity summary for runtime telemetry."""
 
@@ -109,25 +110,31 @@ def build_telemetry_guard_summary(
                         )
                         else "TELEMETRY_EFFECT_NOT_OBSERVED"
                     )
-                    failures.append(
-                        _guard_issue(
-                            code,
-                            category=category,
-                            field=field,
-                            severity="fail",
-                            summary=summary,
-                        )
-                    )
-            elif summary["candidate_positive"] == 0:
-                failures.append(
-                    _guard_issue(
-                        f"TELEMETRY_{category.upper()}_NOT_OBSERVED",
+                    issue = _guard_issue(
+                        code,
                         category=category,
                         field=field,
-                        severity="fail",
+                        severity=(
+                            "fail" if effect_observation_required else "warn"
+                        ),
                         summary=summary,
                     )
+                    (failures if issue["severity"] == "fail" else warnings).append(
+                        issue
+                    )
+            elif summary["candidate_positive"] == 0:
+                issue = _guard_issue(
+                    f"TELEMETRY_{category.upper()}_NOT_OBSERVED",
+                    category=category,
+                    field=field,
+                    severity=(
+                        "warn"
+                        if category == "effect" and not effect_observation_required
+                        else "fail"
+                    ),
+                    summary=summary,
                 )
+                (failures if issue["severity"] == "fail" else warnings).append(issue)
 
     mechanism_probe_categories: dict[str, dict[str, list[str]]] = {
         mechanism: {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES}
@@ -212,11 +219,14 @@ def build_telemetry_guard_summary(
                 else f"TELEMETRY_MECHANISM_{category.upper()}_NOT_OBSERVED"
             )
             severity = "fail"
-            if category == "effect" and not _has_explicit_mechanism_field(
-                explicit_mechanism_fields,
-                mechanism=mechanism,
-                category=category,
-                fields=fields,
+            if category == "effect" and (
+                not effect_observation_required
+                or not _has_explicit_mechanism_field(
+                    explicit_mechanism_fields,
+                    mechanism=mechanism,
+                    category=category,
+                    fields=fields,
+                )
             ):
                 severity = "warn"
             issue = _guard_issue(
@@ -306,6 +316,7 @@ def build_telemetry_guard_summary(
         "passed": not failures,
         "expected_telemetry_present": expected_present,
         "implicit_activity_claim": bool(implicit_activity_claim),
+        "effect_observation_required": bool(effect_observation_required),
         "declared_mechanisms": list(mechanisms),
         "protected_objectives": list(protected_tokens),
         "candidate_runs": len(candidate_runtimes),

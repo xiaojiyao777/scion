@@ -1,7 +1,10 @@
 """AgenticSessionHypothesis mixin."""
 from __future__ import annotations
 
+from typing import Mapping
+
 from scion.proposal.agentic_session_common import *
+from scion.proposal.negative_facts import render_negative_fact_block
 
 
 class AgenticSessionHypothesisMixin:
@@ -311,6 +314,27 @@ class AgenticSessionHypothesisMixin:
                     _observation_prompt_payload(observation)
                     for observation in prompt_observations
                 ]
+                negative_fact_block = render_negative_fact_block(
+                    active_algorithm_facts=active_algorithm_facts,
+                    structured_rejections=semantic_rejections,
+                    prior_quality_blocks=tuple(
+                        block
+                        for block in hypothesis_context.get(
+                            "agentic_prior_quality_blocks",
+                            (),
+                        )
+                        if isinstance(block, Mapping)
+                    ),
+                )
+                if negative_fact_block:
+                    existing = str(
+                        hypothesis_context.get("agentic_negative_fact_block") or ""
+                    ).strip()
+                    hypothesis_context["agentic_negative_fact_block"] = (
+                        existing + "\n" + negative_fact_block
+                        if existing
+                        else negative_fact_block
+                    )
             else:
                 prompt_observations = []
             return hypothesis_context, prompt_observations

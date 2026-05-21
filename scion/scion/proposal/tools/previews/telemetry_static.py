@@ -73,10 +73,13 @@ def _mechanism_telemetry_static_preview(
     warnings: list[str] = []
     checked_fields: list[str] = []
     required_calls: dict[str, list[str]] = {}
+    helper_evidence: dict[str, dict[str, bool]] = {}
     issue_codes: list[str] = []
     for mechanism in mechanisms:
         code_text = code_by_mechanism.get(mechanism, "")
         calls = _mechanism_call_evidence(code_text, mechanism)
+        if any(calls.values()):
+            helper_evidence[mechanism] = dict(calls)
         mechanism_activation_fields: list[str] = []
         mechanism_budget_fields: list[str] = []
         mechanism_effect_fields: list[str] = []
@@ -183,6 +186,7 @@ def _mechanism_telemetry_static_preview(
                 for mechanism, calls in required_calls.items()
                 if calls
             },
+            "helper_evidence": helper_evidence,
             "issues": list(dict.fromkeys(issues)),
             "warnings": list(dict.fromkeys(warnings)),
             "repair_hints": _telemetry_repair_hints() if issues else [],
