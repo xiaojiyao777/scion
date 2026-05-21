@@ -311,24 +311,6 @@ class CvrpMechanismNoveltyProvider:
                 fact_ids=(_TAIL_EXCHANGE_FACT,),
             )
 
-        if facts.has_removal_savings_worst_removal and _duplicates_removal_savings_destroy(
-            text
-        ):
-            return _result(
-                facts,
-                premise_check="duplicate",
-                failure_category="duplicate_mechanism",
-                mechanism="removal_savings_worst_removal",
-                reason=(
-                    "Hypothesis proposes adding a removal-savings or detour-cost "
-                    "destroy operator as a new capability, but the active solver "
-                    "already contains _worst_removal, which ranks candidates by "
-                    "removal saving using saving = -route.cost_of_remove(pos)."
-                ),
-                evidence=facts.removal_savings_evidence,
-                fact_ids=(_REMOVAL_SAVINGS_FACT,),
-            )
-
         if (
             facts.has_removal_savings_worst_removal
             and _claims_missing_removal_savings_destroy(text)
@@ -355,6 +337,24 @@ class CvrpMechanismNoveltyProvider:
                     "around existing _worst_removal; do not claim removal "
                     "savings are absent from the destroy portfolio."
                 ),
+            )
+
+        if facts.has_removal_savings_worst_removal and _duplicates_removal_savings_destroy(
+            text
+        ):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="removal_savings_worst_removal",
+                reason=(
+                    "Hypothesis proposes adding a removal-savings or detour-cost "
+                    "destroy operator as a new capability, but the active solver "
+                    "already contains _worst_removal, which ranks candidates by "
+                    "removal saving using saving = -route.cost_of_remove(pos)."
+                ),
+                evidence=facts.removal_savings_evidence,
+                fact_ids=(_REMOVAL_SAVINGS_FACT,),
             )
 
         if facts.has_shaw_related_removal and _claims_missing_shaw_related_removal(text):

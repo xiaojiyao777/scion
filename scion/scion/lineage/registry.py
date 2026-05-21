@@ -62,6 +62,8 @@ class LineageRegistry:
                     screening_median_delta REAL,
                     screening_ci_low       REAL,
                     screening_ci_high      REAL,
+                    telemetry_guard_failed INTEGER,
+                    telemetry_failure_categories_json TEXT,
                     decision_features_json TEXT,
                     decision               TEXT,
                     decision_reason        TEXT,
@@ -91,6 +93,8 @@ class LineageRegistry:
                 "screening_pair_ties": "INTEGER",
                 "screening_pair_total": "INTEGER",
                 "screening_pair_win_rate": "REAL",
+                "telemetry_guard_failed": "INTEGER",
+                "telemetry_failure_categories_json": "TEXT",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
@@ -345,6 +349,14 @@ class LineageRegistry:
                 "SELECT COUNT(*) FROM experiment_events "
                 "WHERE event_kind = 'experiment' AND verification_result = 'failed'"
             ).fetchone()[0]
+            telemetry_failed_experiments = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
+            ).fetchone()[0]
+            telemetry_category_rows = conn.execute(
+                "SELECT telemetry_failure_categories_json FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
+            ).fetchall()
             screening = conn.execute("""
                 SELECT
                     COALESCE(SUM(screening_n_cases), 0) AS case_total,
@@ -384,6 +396,20 @@ class LineageRegistry:
                 if screening_pair_total
                 else 0.0
             )
+            telemetry_failed_experiments_by_category: Dict[str, int] = {}
+            for row in telemetry_category_rows:
+                try:
+                    categories = json.loads(row[0] or "[]")
+                except (TypeError, json.JSONDecodeError):
+                    categories = []
+                if not isinstance(categories, list):
+                    categories = []
+                if not categories:
+                    categories = ["unknown"]
+                for category in dict.fromkeys(str(item) for item in categories):
+                    telemetry_failed_experiments_by_category[category] = (
+                        telemetry_failed_experiments_by_category.get(category, 0) + 1
+                    )
         return {
             "total_events": total,
             "by_decision": by_decision,
@@ -391,6 +417,10 @@ class LineageRegistry:
             "n_champions": n_champions,
             "contract_failures": contract_failures,
             "verification_failures": verification_failures,
+            "telemetry_failed_experiments": telemetry_failed_experiments,
+            "telemetry_failed_experiments_by_category": (
+                telemetry_failed_experiments_by_category
+            ),
             "screening_win_rate": screening_case_win_rate,
             "screening_win_rate_scope": "case_level_gate",
             "screening_case_wins": screening_case_wins,

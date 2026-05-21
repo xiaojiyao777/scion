@@ -22,6 +22,8 @@ def _missing_shaw_related_removal_span(text: str) -> str:
         return ""
     if _targets_segment_chain_unit_not_related_removal(text):
         return ""
+    if _is_pure_geographic_cluster_variant_acknowledging_shaw(text):
+        return ""
     if (
         _scopes_change_to_existing_shaw_related_removal(text)
         or _is_existing_shaw_variant_with_negated_missing_claim(text)
@@ -62,6 +64,8 @@ def _duplicates_shaw_related_removal(text: str) -> bool:
     if _targets_worst_removal_savings_not_shaw(text):
         return False
     if _targets_segment_chain_unit_not_related_removal(text):
+        return False
+    if _is_pure_geographic_cluster_variant_acknowledging_shaw(text):
         return False
     if _describes_existing_shaw_related_improvement(text):
         return False
@@ -141,6 +145,8 @@ def _claims_missing_removal_savings_destroy(text: str) -> bool:
 def _missing_removal_savings_destroy_span(text: str) -> str:
     if not _mentions_removal_savings_destroy(text):
         return ""
+    if _is_pure_geographic_cluster_variant_acknowledging_removal_savings(text):
+        return ""
     if _describes_existing_removal_savings_improvement(text):
         return ""
     return _first_regex_span(text, _MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS)
@@ -159,6 +165,8 @@ _MISSING_REMOVAL_SAVINGS_DESTROY_PATTERNS = (
 
 def _duplicates_removal_savings_destroy(text: str) -> bool:
     if not _mentions_removal_savings_destroy(text):
+        return False
+    if _is_pure_geographic_cluster_variant_acknowledging_removal_savings(text):
         return False
     if (
         _is_random_or_noise_removal_variant(text)
@@ -554,11 +562,161 @@ def _is_removal_savings_contrast_or_negated_addition(text: str) -> bool:
             "not a new savings removal",
             "not a new savings-removal",
             "not removal savings",
+            "not another removal savings",
+            "not another savings removal",
+            "not another removal-savings",
+            "not another savings-removal",
+            "not a removal savings",
+            "not a removal-savings",
             "does not add savings removal",
             "does not add removal savings",
             "without adding savings removal",
             "without adding removal savings",
         ),
+    )
+
+
+def _is_pure_geographic_cluster_variant_acknowledging_removal_savings(
+    text: str,
+) -> bool:
+    if not _proposes_pure_geographic_cluster_destroy_variant(text):
+        return False
+    if _proposes_removal_savings_as_new_destroy_capability(text):
+        return False
+    return _acknowledges_existing_removal_savings_destroy(
+        text
+    ) or _is_removal_savings_contrast_or_negated_addition(text)
+
+
+def _is_pure_geographic_cluster_variant_acknowledging_shaw(text: str) -> bool:
+    if not _proposes_pure_geographic_cluster_destroy_variant(text):
+        return False
+    return _acknowledges_existing_shaw_related_removal(
+        text
+    ) or _is_shaw_contrast_or_negated_addition(text)
+
+
+def _proposes_pure_geographic_cluster_destroy_variant(text: str) -> bool:
+    if not _has_any(text, ("destroy", "removal", "remove")):
+        return False
+    if not _has_any(
+        text,
+        (
+            "cluster removal",
+            "cluster destroy",
+            "clustered removal",
+            "clustered destroy",
+            "geographic cluster",
+            "spatial cluster",
+            "proximity variant",
+            "nearby customer",
+            "nearest customer",
+            "nearest customers",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "pure geographic",
+            "geographic",
+            "spatial",
+            "euclidean",
+            "coordinate",
+            "coordinates",
+            "distance only",
+            "nearest customer",
+            "nearest customers",
+            "orthogonal",
+            "independent of route",
+        ),
+    )
+
+
+def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "worst removal",
+            "existing removal savings",
+            "current removal savings",
+            "active removal savings",
+        ),
+    ):
+        return False
+    savings_terms = (
+        r"removal savings?",
+        r"savings from removal",
+        r"cost of remove",
+        r"cost of removal",
+        r"detour cost",
+    )
+    savings = r"(?:%s)" % "|".join(savings_terms)
+    return bool(
+        re.search(
+            r"\b(?:existing|current|active|baseline|already)?\b.{0,80}"
+            r"\bworst removal\b.{0,140}"
+            r"\b(?:already|uses?|ranks?|seeds?|sorts?|orders?|targets?|"
+            r"based|by|with)\b.{0,100}\b"
+            + savings
+            + r"\b",
+            text,
+        )
+        or re.search(
+            r"\b"
+            + savings
+            + r"\b.{0,140}\b(?:existing|current|active|baseline|already)?"
+            r".{0,80}\bworst removal\b",
+            text,
+        )
+    )
+
+
+def _acknowledges_existing_shaw_related_removal(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "shaw removal",
+            "existing related removal",
+            "current related removal",
+            "active related removal",
+        ),
+    ):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:existing|current|active|baseline|already)?\b.{0,80}"
+            r"\bshaw removal\b.{0,140}"
+            r"\b(?:already|uses?|blends?|combines?|based|with)\b.{0,100}"
+            r"\b(?:distance|demand|route|relatedness|proximity)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:distance|demand|route|relatedness|proximity)\b.{0,140}"
+            r"\bshaw removal\b",
+            text,
+        )
+    )
+
+
+def _proposes_removal_savings_as_new_destroy_capability(text: str) -> bool:
+    if _is_removal_savings_contrast_or_negated_addition(text):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:add|introduce|implement|enable|create|build|register)\b"
+            r".{0,120}\b(?:removal savings?|savings removal|detour cost|"
+            r"cost of remove|cost of removal|marginal distance contribution)\b"
+            r".{0,100}\b(?:destroy|remov(?:al|e)|operator|heuristic|capability)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:removal savings?|savings removal|detour cost|cost of remove|"
+            r"cost of removal|marginal distance contribution)\b.{0,120}"
+            r"\b(?:new|novel|additional|first|missing|absent|lacks?)\b.{0,80}"
+            r"\b(?:destroy|remov(?:al|e)|operator|heuristic|capability)\b",
+            text,
+        )
     )
 
 

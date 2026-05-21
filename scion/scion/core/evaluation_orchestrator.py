@@ -26,7 +26,10 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
-from scion.core.telemetry_validation import screened_experiment_effective
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    screened_experiment_effective,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +138,7 @@ class EvaluationOrchestrator:
             if screened_experiment_effective(evaluation.protocol_result):
                 self.increment_experiment_count()
                 self.increment_budget_used()
-            elif evaluation.protocol_result is not None:
+            if formal_telemetry_guard_failed(evaluation.protocol_result):
                 self.increment_telemetry_failed_count()
         except Exception as exc:
             logger.error("Branch %s: experiment failed: %s", bid, exc)

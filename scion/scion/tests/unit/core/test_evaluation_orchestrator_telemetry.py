@@ -105,6 +105,48 @@ class _Protocol:
         )
 
 
+class _ActivityTelemetryFailureProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        return ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=16,
+                wins=0,
+                losses=14,
+                ties=2,
+                win_rate=0.0,
+                median_delta=-8.0,
+                ci_low=-38.0,
+                ci_high=-5.25,
+            ),
+            gate_outcome="fail",
+            reason_codes=("TELEMETRY_GUARD_FAILED", "TELEMETRY_ACTIVITY_NOT_OBSERVED"),
+            exposed_summary="formal activity telemetry failed",
+            raw_metrics_ref="/tmp/metrics.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {
+                    "passed": False,
+                    "candidate_runs": 16,
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                            "severity": "fail",
+                            "category": "activity",
+                            "mechanism": "adaptive_vns_scheduler",
+                            "field": "solver_algorithm_neutral_accepted_moves",
+                            "candidate_present": 16,
+                            "candidate_positive": 0,
+                        }
+                    ],
+                },
+            },
+        )
+
+
 class _WeakPositiveProtocol:
     def run_canary(self, *_args, **_kwargs) -> CanaryResult:
         return CanaryResult(passed=True)
@@ -263,6 +305,70 @@ def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
     assert experiment_count == 0
     assert telemetry_count == 1
     assert budget_used == 0
+
+
+def test_formal_activity_telemetry_failure_counts_but_still_consumes_screening() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    experiment_count = 0
+    telemetry_count = 0
+    budget_used = 0
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    def increment_experiment_count() -> None:
+        nonlocal experiment_count
+        experiment_count += 1
+
+    def increment_telemetry_count() -> None:
+        nonlocal telemetry_count
+        telemetry_count += 1
+
+    def increment_budget_used() -> None:
+        nonlocal budget_used
+        budget_used += 1
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces={branch.branch_id: "/tmp/candidate"},
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_ActivityTelemetryFailureProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=increment_experiment_count,
+        increment_budget_used=increment_budget_used,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=increment_telemetry_count,
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.ABANDON
+    assert protocol_result is not None
+    assert experiment_count == 1
+    assert telemetry_count == 1
+    assert budget_used == 1
+    assert decision_reason_codes[branch.branch_id] == ("SCREENING_TELEMETRY_FAILED",)
 
 
 def test_weak_positive_low_win_screening_continues_without_soft_abandon() -> None:

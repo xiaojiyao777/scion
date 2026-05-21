@@ -34,6 +34,39 @@ def telemetry_guard_summary(
     return guard if isinstance(guard, Mapping) else None
 
 
+def formal_telemetry_guard_failed(
+    protocol_result: ProtocolResult | None,
+) -> bool:
+    """True when a completed protocol result failed its telemetry guard.
+
+    Proposal previews and code-phase smoke checks do not produce ProtocolResult
+    objects, so this predicate is restricted to formal protocol evidence.
+    """
+    if protocol_result is None:
+        return False
+    if _stage_value(protocol_result.stage) not in {"screening", "validation", "frozen"}:
+        return False
+    guard = telemetry_guard_summary(protocol_result)
+    return guard is not None and bool(guard.get("passed", True)) is False
+
+
+def telemetry_failure_categories(
+    protocol_result: ProtocolResult | None,
+) -> tuple[str, ...]:
+    """Return unique failed telemetry guard categories for one formal result."""
+    if not formal_telemetry_guard_failed(protocol_result):
+        return ()
+    guard = telemetry_guard_summary(protocol_result)
+    categories: list[str] = []
+    for item in _failure_items(guard):
+        if str(item.get("severity") or "").strip().lower() != "fail":
+            continue
+        category = _normal_failure_category(item)
+        if category not in categories:
+            categories.append(category)
+    return tuple(categories)
+
+
 def is_repairable_telemetry_validation_failure(
     protocol_result: ProtocolResult | None,
 ) -> bool:
@@ -148,6 +181,21 @@ def _failure_items(guard: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], 
     return tuple(item for item in failures if isinstance(item, Mapping))
 
 
+def _normal_failure_category(item: Mapping[str, Any]) -> str:
+    category = str(item.get("category") or "").strip().lower()
+    if category:
+        return category
+    code = str(item.get("code") or "").strip().upper()
+    for candidate in ("ACTIVATION", "ACTIVITY", "EFFECT", "BUDGET"):
+        if candidate in code:
+            return candidate.lower()
+    return "unknown"
+
+
+def _stage_value(stage: Any) -> str:
+    return str(getattr(stage, "value", stage) or "")
+
+
 def _is_repairable_failure(item: Mapping[str, Any]) -> bool:
     code = str(item.get("code") or "").strip()
     severity = str(item.get("severity") or "").strip().lower()
@@ -200,8 +248,10 @@ __all__ = [
     "TELEMETRY_VALIDATION_REPAIRABLE",
     "VALIDATION_TELEMETRY_FAILED",
     "VALIDATION_TELEMETRY_REPAIRABLE",
+    "formal_telemetry_guard_failed",
     "is_repairable_telemetry_validation_failure",
     "screened_experiment_effective",
+    "telemetry_failure_categories",
     "telemetry_guard_summary",
     "telemetry_repairable_stage",
     "telemetry_validation_failure_codes",

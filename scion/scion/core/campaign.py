@@ -26,6 +26,10 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    telemetry_failure_categories,
+)
 from scion.core.termination import TerminationConfig
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 from scion.failure.router import RetryConfig
@@ -280,15 +284,32 @@ class CampaignManager:
 
     def get_state(self) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_active_branches()
+        telemetry_failed_from_steps = sum(
+            1
+            for step in self._step_history
+            if formal_telemetry_guard_failed(step.protocol_result)
+        )
+        telemetry_failed_experiments = max(
+            getattr(self, "_telemetry_failed_experiments", 0),
+            telemetry_failed_from_steps,
+        )
+        telemetry_failed_by_category: Dict[str, int] = {}
+        for step in self._step_history:
+            if not formal_telemetry_guard_failed(step.protocol_result):
+                continue
+            categories = telemetry_failure_categories(step.protocol_result) or (
+                "unknown",
+            )
+            for category in categories:
+                telemetry_failed_by_category[category] = (
+                    telemetry_failed_by_category.get(category, 0) + 1
+                )
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
             "screened_experiments": self._n_experiments,
-            "telemetry_failed_experiments": getattr(
-                self,
-                "_telemetry_failed_experiments",
-                0,
-            ),
+            "telemetry_failed_experiments": telemetry_failed_experiments,
+            "telemetry_failed_experiments_by_category": telemetry_failed_by_category,
             "total_rounds": self._round_num,
             "proposal_attempts": self._round_num,
             "n_steps": len(self._step_history),

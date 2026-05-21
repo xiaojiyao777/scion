@@ -622,14 +622,13 @@ def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precis
         hypothesis_text=(
             "Add a _savings_removal destroy heuristic that ranks customers by "
             "removal savings and geometric detour cost using cost_of_remove, "
-            "then registers it as a new destroy operator. This capability is "
-            "absent because _shaw_removal uses proximity and _worst_removal "
-            "does not target savings from removal."
+            "then registers it as an additional destroy operator alongside "
+            "the current destroy pool."
         ),
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/destroy_repair.py",
-        target_weakness="The destroy pool lacks removal-savings targeting.",
+        target_weakness="Need an additional high-detour removal operator.",
         expected_effect="Reduce total_distance by removing high-detour customers.",
     )
 
@@ -662,7 +661,7 @@ def test_cvrp_removal_savings_duplicate_prefers_worst_removal_reason() -> None:
         change_locus="solver_design",
         action="modify",
         target_file="policies/baseline_modules/destroy_repair.py",
-        target_weakness="Removal savings destroy is missing.",
+        target_weakness="Need another high-saving removal operator.",
         expected_effect="Improve total_distance by removing high saving positions.",
     )
 
@@ -676,6 +675,93 @@ def test_cvrp_removal_savings_duplicate_prefers_worst_removal_reason() -> None:
     rendered = " ".join([result.reason, *result.evidence])
     assert "_worst_removal" in rendered
     assert "cost_of_remove" in rendered
+    assert "_shaw_removal" not in result.reason
+
+
+def test_cvrp_provider_allows_geographic_cluster_variant_acknowledging_worst_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current ALNS destroy portfolio lacks a pure geographic-cluster "
+            "destroy operator. Existing _shaw_removal uses blended distance, "
+            "demand, and route relatedness, and _worst_removal already seeds on "
+            "removal savings with cost_of_remove. Add cluster_removal that picks "
+            "a random seed customer and removes the nearest customers by "
+            "Euclidean coordinates across routes before repair; this is an "
+            "orthogonal pure geographic variant, not another removal-savings or "
+            "detour-cost operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy lacks a pure geographic cluster variant.",
+        expected_effect="Improve total_distance by perturbing nearby customers.",
+        mechanism_changes=(
+            MechanismChange(id="cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active baseline has no removal-savings destroy operator. "
+            "Add a detour-cost removal capability for high-saving positions."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Removal savings destroy is missing.",
+        expected_effect="Improve total_distance by removing high-saving customers.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "removal_savings_worst_removal"
+    assert "removal-savings or detour-cost removal is missing" in result.reason
+    rendered = " ".join([result.reason, *result.evidence])
+    assert "_worst_removal" in rendered
+    assert "cost_of_remove" in rendered
+    assert "_shaw_removal" not in result.reason
+
+
+def test_cvrp_provider_rejects_repeated_worst_removal_with_precise_reason() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Register a new _worst_removal clone that ranks customers by "
+            "saving = -route.cost_of_remove(pos), removal savings, and detour "
+            "cost before repair."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Need another worst-removal operator.",
+        expected_effect="Improve total_distance by repeating worst removal.",
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "duplicate"
+    assert result.failure_category == "duplicate_mechanism"
+    assert result.mechanism == "removal_savings_worst_removal"
+    assert "removal-savings or detour-cost destroy operator" in result.reason
+    assert "_worst_removal" in " ".join([result.reason, *result.evidence])
     assert "_shaw_removal" not in result.reason
 
 

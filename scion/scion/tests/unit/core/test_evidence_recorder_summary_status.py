@@ -308,6 +308,30 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
     assert status["last_result"]["counts_toward_max_rounds"] is False
 
 
+def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-1",
+            "screened_experiments": 3,
+            "telemetry_failed_experiments": 2,
+            "telemetry_failed_experiments_by_category": {
+                "activity": 1,
+                "effect": 1,
+            },
+        },
+    )
+
+    status = recorder.write_status()
+
+    assert status["telemetry_failed_experiments"] == 2
+    assert status["telemetry_failed_experiments_by_category"] == {
+        "activity": 1,
+        "effect": 1,
+    }
+
+
 def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
@@ -473,6 +497,99 @@ def test_campaign_summary_separates_telemetry_failed_experiment(
         protocol["telemetry_validation_feedback"]
     )
     assert "candidate_missing=16" in protocol["telemetry_validation_feedback"]
+
+
+def test_campaign_summary_counts_formal_screening_telemetry_guard_failure(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "screened_experiments": 1,
+            "telemetry_failed_experiments": 0,
+            "telemetry_failed_experiments_by_category": {},
+        },
+    )
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("TELEMETRY_GUARD_FAILED", "TELEMETRY_ACTIVITY_NOT_OBSERVED"),
+        exposed_summary="screening telemetry guard failed",
+        raw_metrics_ref="/tmp/activity-telemetry.json",
+        candidate_surface_runtime_summary={
+            "selected_surface": "solver_design",
+            "telemetry_guard": {
+                "passed": False,
+                "candidate_runs": 16,
+                "failures": [
+                    {
+                        "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                        "severity": "fail",
+                        "category": "activity",
+                        "mechanism": "adaptive_vns_scheduler",
+                        "field": "solver_algorithm_neutral_accepted_moves",
+                        "candidate_present": 16,
+                        "candidate_positive": 0,
+                    }
+                ],
+            },
+        },
+    )
+    step.decision = Decision.ABANDON
+    step.decision_reason_codes = ("SCREENING_TELEMETRY_FAILED",)
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    assert summary["screened_experiments"] == 1
+    assert summary["telemetry_failed_experiments"] == 1
+    assert summary["telemetry_failed_experiments_by_category"] == {"activity": 1}
+    summary_step = summary["steps"][0]
+    assert summary_step["screened_experiment_effective"] is True
+    assert summary_step["telemetry_guard_failed"] is True
+    assert summary_step["telemetry_failure_categories"] == ["activity"]
+    protocol = summary_step["protocol_result"]
+    assert protocol["telemetry_guard_failed"] is True
+    assert protocol["telemetry_failure_categories"] == ["activity"]
+    assert protocol["effective_reason_codes"] == ["SCREENING_TELEMETRY_FAILED"]
+
+
+def test_campaign_summary_does_not_count_proposal_preflight_telemetry_failure(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Rejected before formal screening."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="agent_quality_blocked",
+        failure_detail=(
+            "proposal.schema_preview:C11 telemetry preflight failed: "
+            "TELEMETRY_ACTIVITY_NOT_OBSERVED"
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    assert summary["screened_experiments"] == 0
+    assert summary["telemetry_failed_experiments"] == 0
+    assert summary["telemetry_failed_experiments_by_category"] == {}
+    assert summary["steps"][0]["telemetry_guard_failed"] is False
 
 
 def test_campaign_summary_exposes_runtime_veto_decision_reason_codes(

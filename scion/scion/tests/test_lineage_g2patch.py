@@ -52,6 +52,35 @@ class TestEventKind:
         summary = reg.get_campaign_summary()
         assert summary["total_events"] == 2
 
+    def test_campaign_summary_counts_telemetry_failed_experiment_rows(self, tmp_path):
+        reg = _reg(tmp_path)
+        reg.record_event(
+            {
+                "branch_id": "b1",
+                "timestamp": datetime.now().isoformat(),
+                "telemetry_guard_failed": 1,
+                "telemetry_failure_categories_json": '["activity", "effect"]',
+            }
+        )
+        reg.record_event(
+            {
+                "branch_id": "b2",
+                "timestamp": datetime.now().isoformat(),
+                "telemetry_guard_failed": 0,
+                "telemetry_failure_categories_json": "[]",
+            }
+        )
+        reg.record_decision("b1", "{}", "abandon", '["SCREENING_TELEMETRY_FAILED"]')
+
+        summary = reg.get_campaign_summary()
+
+        assert summary["total_events"] == 2
+        assert summary["telemetry_failed_experiments"] == 1
+        assert summary["telemetry_failed_experiments_by_category"] == {
+            "activity": 1,
+            "effect": 1,
+        }
+
     def test_existing_record_event_preserves_explicit_event_kind(self, tmp_path):
         """Caller can override event_kind if needed."""
         reg = _reg(tmp_path)
@@ -76,7 +105,15 @@ class TestAuditColumns:
         _reg(tmp_path)  # init creates the table
         with sqlite3.connect(str(tmp_path / "scion.db")) as conn:
             cols = {row[1] for row in conn.execute("PRAGMA table_info(experiment_events)")}
-        for col in ("event_kind", "model_id", "protocol_version", "prompt_tokens", "completion_tokens"):
+        for col in (
+            "event_kind",
+            "model_id",
+            "protocol_version",
+            "prompt_tokens",
+            "completion_tokens",
+            "telemetry_guard_failed",
+            "telemetry_failure_categories_json",
+        ):
             assert col in cols, f"Missing column: {col}"
 
     def test_audit_columns_are_writable(self, tmp_path):
