@@ -31,6 +31,11 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
         # Expand screening didn't yield a strong enough win_rate — fall back to
         # a fresh explore iteration on the same branch.
         BranchState.EXPLORE_EXPAND: BranchState.EXPLORE,
+        # Validation telemetry repair is branch-local: return to exploration so
+        # the same hypothesis can add missing declared activation evidence
+        # without counting as a successful validation attempt.
+        BranchState.VALIDATING: BranchState.EXPLORE,
+        BranchState.VALIDATING_EXPAND: BranchState.EXPLORE,
     },
     Decision.EXPAND_SCREENING: {
         BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,

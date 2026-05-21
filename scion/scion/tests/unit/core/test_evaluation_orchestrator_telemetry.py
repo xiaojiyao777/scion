@@ -137,6 +137,70 @@ class _WeakPositiveProtocol:
         )
 
 
+class _RegressiveLowMidProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        return ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=10,
+                wins=4,
+                losses=3,
+                ties=3,
+                win_rate=0.4,
+                median_delta=-0.01,
+                ci_low=-0.02,
+                ci_high=0.01,
+                runtime_ratio_median=1.0,
+                runtime_regression_rate=0.0,
+                runtime_pairs=10,
+                valid_pairs=10,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="low-mid regressive screening signal",
+            raw_metrics_ref="/tmp/metrics.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {"passed": True, "candidate_runs": 10},
+            },
+        )
+
+
+class _RuntimeSlowLowMidProtocol:
+    def run_canary(self, *_args, **_kwargs) -> CanaryResult:
+        return CanaryResult(passed=True)
+
+    def run_experiment(self, **_kwargs) -> ProtocolResult:
+        return ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=10,
+                wins=4,
+                losses=0,
+                ties=6,
+                win_rate=0.4,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+                runtime_ratio_median=1.2,
+                runtime_regression_rate=0.95,
+                runtime_pairs=10,
+                valid_pairs=10,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="low-mid runtime regression",
+            raw_metrics_ref="/tmp/metrics.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {"passed": True, "candidate_runs": 10},
+            },
+        )
+
+
 def test_telemetry_repairable_does_not_soft_abandon_or_count_screened() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
@@ -267,4 +331,111 @@ def test_weak_positive_low_win_screening_continues_without_soft_abandon() -> Non
     assert decision_reason_codes[branch.branch_id] == (
         "SCREENING_FAIL_WIN_RATE",
         "SCREENING_WEAK_SIGNAL_CONTINUE",
+    )
+
+
+def test_low_mid_regressive_screening_soft_abandons_and_discards_workspace() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    workspaces = {branch.branch_id: "/tmp/candidate"}
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces=workspaces,
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_RegressiveLowMidProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+        branch_zero_win_streaks={},
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.ABANDON
+    assert protocol_result is not None
+    assert branch_controller.soft_abandoned is True
+    assert branch.branch_id not in workspaces
+    assert decision_reason_codes[branch.branch_id] == (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
+    )
+
+
+def test_low_mid_runtime_regression_soft_abandons_and_discards_workspace() -> None:
+    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch_controller = _BranchController()
+    workspaces = {branch.branch_id: "/tmp/candidate"}
+    decision_reason_codes: dict[str, tuple[str, ...]] = {}
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=branch_controller,
+        champion_lock=nullcontext(),
+        get_champion=_champion,
+        branch_patches={},
+        branch_workspaces=workspaces,
+        branch_hypotheses={},
+        branch_current_hypothesis={},
+        experiment_protocol_provider=_RuntimeSlowLowMidProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        get_budget=lambda: BudgetState(total=4, used=0),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        decision_reason_codes=decision_reason_codes,
+        campaign_id="campaign",
+        registry=SimpleNamespace(record_event=lambda payload: None),
+        materializer=SimpleNamespace(
+            archive_workspace=lambda *args, **kwargs: None,
+            cleanup=lambda *args, **kwargs: None,
+        ),
+        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
+        persist_branch_state=lambda _branch_id: None,
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        handle_failure=lambda *_args, **_kwargs: None,
+        increment_experiment_count=lambda: None,
+        increment_budget_used=lambda: None,
+        increment_soft_abandon_streak=lambda: None,
+        increment_telemetry_failed_count=lambda: None,
+        branch_zero_win_streaks={},
+    )
+
+    decision, protocol_result, _canary = orchestrator.evaluate(
+        branch,
+        "/tmp/candidate",
+        _hypothesis(),
+    )
+
+    assert decision == Decision.ABANDON
+    assert protocol_result is not None
+    assert branch_controller.soft_abandoned is True
+    assert branch.branch_id not in workspaces
+    assert decision_reason_codes[branch.branch_id] == (
+        "SCREENING_FAIL_WIN_RATE",
+        "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN",
+        "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",
     )

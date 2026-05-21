@@ -28,7 +28,9 @@ from scion.core.models import (
 from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
+    SCREENING_TELEMETRY_REPAIRABLE,
     TELEMETRY_VALIDATION_REPAIRABLE,
+    VALIDATION_TELEMETRY_REPAIRABLE,
     screened_experiment_effective,
 )
 
@@ -294,9 +296,11 @@ class DecisionFinalizer:
         decision_reason_codes: Optional[tuple[str, ...]],
     ) -> StepResult:
         bid = branch.branch_id
-        telemetry_repairable = TELEMETRY_VALIDATION_REPAIRABLE in set(
-            decision_reason_codes or ()
+        telemetry_repair_stage = _telemetry_repair_stage(
+            protocol_result,
+            decision_reason_codes,
         )
+        telemetry_repairable = telemetry_repair_stage is not None
         verification_passed = verification_result.passed
         has_positive_signal = (
             protocol_result is not None
@@ -308,8 +312,7 @@ class DecisionFinalizer:
             decision_reason_codes,
         )
         preserve_workspace = verification_passed and (
-            has_positive_signal
-            or telemetry_repairable
+            telemetry_repairable
             or preserve_low_signal_branch
         )
 
@@ -349,23 +352,35 @@ class DecisionFinalizer:
                 )
         self.reset_recent_abandoned_count()
         self.persist_branch_state(bid)
-        reason = (
-            "TELEMETRY_VALIDATION_REPAIRABLE: repair declared mechanism telemetry "
-            "on the same branch"
-            if telemetry_repairable
-            else (
+        if telemetry_repairable:
+            reason_code = (
+                VALIDATION_TELEMETRY_REPAIRABLE
+                if telemetry_repair_stage == "validation"
+                else TELEMETRY_VALIDATION_REPAIRABLE
+            )
+            reason = (
+                f"{reason_code}: repair declared mechanism telemetry on the "
+                "same branch"
+            )
+            attempt_kind = (
+                "validation_telemetry_repairable"
+                if telemetry_repair_stage == "validation"
+                else "telemetry_repairable"
+            )
+        else:
+            reason = (
                 "CONTINUE_EXPLORE: weak screening signal; improve the same branch"
                 if preserve_low_signal_branch
                 else "CONTINUE_EXPLORE: re-propose next step"
             )
-        )
+            attempt_kind = "screening"
         return StepResult(
             action=action_label,  # type: ignore[arg-type]
             branch_id=bid,
             decision=decision,
             reason=reason,
             counts_toward_max_rounds=not telemetry_repairable,
-            attempt_kind="telemetry_repairable" if telemetry_repairable else "screening",
+            attempt_kind=attempt_kind,  # type: ignore[arg-type]
         )
 
     def _promote(
@@ -482,4 +497,22 @@ def _preserve_low_signal_screening_workspace(
     reason_set = set(decision_reason_codes or ())
     if lifecycle_codes & reason_set:
         return True
-    return bool(stats.win_rate > 0 or stats.losses == 0)
+    return False
+
+
+def _telemetry_repair_stage(
+    protocol_result: Optional[ProtocolResult],
+    decision_reason_codes: Optional[tuple[str, ...]],
+) -> str | None:
+    reason_set = set(decision_reason_codes or ())
+    if VALIDATION_TELEMETRY_REPAIRABLE in reason_set:
+        return "validation"
+    if SCREENING_TELEMETRY_REPAIRABLE in reason_set:
+        return "screening"
+    if TELEMETRY_VALIDATION_REPAIRABLE not in reason_set:
+        return None
+    if protocol_result is not None:
+        stage = getattr(protocol_result.stage, "value", protocol_result.stage)
+        if stage in ("screening", "validation"):
+            return str(stage)
+    return "screening"

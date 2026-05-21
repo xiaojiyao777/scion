@@ -2,6 +2,14 @@ from __future__ import annotations
 from typing import List
 
 from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
+from scion.core.telemetry_validation import (
+    FROZEN_TELEMETRY_FAILED,
+    SCREENING_TELEMETRY_FAILED,
+    SCREENING_TELEMETRY_REPAIRABLE,
+    TELEMETRY_VALIDATION_REPAIRABLE,
+    VALIDATION_TELEMETRY_FAILED,
+    VALIDATION_TELEMETRY_REPAIRABLE,
+)
 from scion.config.problem import ProtocolConfig
 
 
@@ -27,10 +35,33 @@ class DecisionEngine:
             return self._out(features, Decision.ABANDON, ["CANARY_FAILED"])
 
         if features.telemetry_validation_repairable:
+            if features.stage == "validation":
+                reason_codes = [
+                    VALIDATION_TELEMETRY_REPAIRABLE,
+                    TELEMETRY_VALIDATION_REPAIRABLE,
+                ]
+            elif features.stage == "screening":
+                reason_codes = [
+                    TELEMETRY_VALIDATION_REPAIRABLE,
+                    SCREENING_TELEMETRY_REPAIRABLE,
+                ]
+            else:
+                return self._out(
+                    features,
+                    Decision.ABANDON,
+                    [FROZEN_TELEMETRY_FAILED],
+                )
             return self._out(
                 features,
                 Decision.CONTINUE_EXPLORE,
-                ["TELEMETRY_VALIDATION_REPAIRABLE"],
+                reason_codes,
+            )
+
+        if features.telemetry_guard_failed:
+            return self._out(
+                features,
+                Decision.ABANDON,
+                [_telemetry_failed_reason_code(features.stage)],
             )
 
         runtime_veto = self._runtime_veto(features)
@@ -256,3 +287,11 @@ class DecisionEngine:
             reason_codes=tuple(reason_codes),
             features_snapshot=features,
         )
+
+
+def _telemetry_failed_reason_code(stage: str) -> str:
+    if stage == "frozen":
+        return FROZEN_TELEMETRY_FAILED
+    if stage == "validation":
+        return VALIDATION_TELEMETRY_FAILED
+    return SCREENING_TELEMETRY_FAILED

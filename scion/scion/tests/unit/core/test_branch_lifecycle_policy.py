@@ -5,6 +5,7 @@ import uuid
 from scion.core.branch_lifecycle_policy import (
     BranchLifecyclePolicy,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
+    SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
     SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,
     SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
@@ -108,3 +109,87 @@ def test_stale_rescreen_low_win_remains_abandon_for_reconcile() -> None:
 
     assert decision.action == "soft_abandon"
     assert decision.reason_codes == (SCREENING_STALE_RESCREEN_FAIL,)
+
+
+def test_low_mid_win_negative_delta_soft_abandons() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=10,
+            wins=4,
+            losses=3,
+            ties=3,
+            win_rate=0.4,
+            median_delta=-0.01,
+            valid_pairs=10,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+        ),
+    )
+
+    assert decision.action == "soft_abandon"
+    assert decision.reason_codes == (SCREENING_SOFT_ABANDON_NEGATIVE_DELTA,)
+
+
+def test_low_mid_win_runtime_slowdown_soft_abandons() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=10,
+            wins=4,
+            losses=0,
+            ties=6,
+            win_rate=0.4,
+            median_delta=0.0,
+            valid_pairs=10,
+            runtime_ratio_median=1.2,
+            runtime_regression_rate=0.95,
+        ),
+    )
+
+    assert decision.action == "soft_abandon"
+    assert decision.reason_codes == (
+        SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
+        SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
+    )
+
+
+def test_low_mid_weak_positive_mostly_tie_non_regressive_keeps_branch() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=10,
+            wins=4,
+            losses=0,
+            ties=6,
+            win_rate=0.4,
+            median_delta=0.0,
+            valid_pairs=10,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+            candidate_failed_pairs=0,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_WEAK_SIGNAL_CONTINUE,)
+    assert decision.next_zero_win_streak == 0
+
+
+def test_low_mid_candidate_runtime_failures_soft_abandon() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            n_cases=10,
+            wins=4,
+            losses=0,
+            ties=6,
+            win_rate=0.4,
+            median_delta=0.0,
+            valid_pairs=10,
+            runtime_ratio_median=1.0,
+            runtime_regression_rate=0.0,
+            candidate_failed_pairs=1,
+        ),
+    )
+
+    assert decision.action == "soft_abandon"
+    assert decision.reason_codes == (
+        SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
+    )

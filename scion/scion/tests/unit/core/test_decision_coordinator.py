@@ -5,6 +5,12 @@ import uuid
 from scion.config.problem import ProtocolConfig
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
+from scion.core.telemetry_validation import (
+    FROZEN_TELEMETRY_FAILED,
+    SCREENING_TELEMETRY_REPAIRABLE,
+    TELEMETRY_VALIDATION_REPAIRABLE,
+    VALIDATION_TELEMETRY_REPAIRABLE,
+)
 
 
 def _features(**overrides) -> DecisionFeatures:
@@ -74,5 +80,49 @@ def test_telemetry_validation_repairable_preempts_win_rate_abandon() -> None:
     )
 
     assert result.decision == Decision.CONTINUE_EXPLORE
-    assert result.reason_codes == ("TELEMETRY_VALIDATION_REPAIRABLE",)
+    assert result.reason_codes == (
+        TELEMETRY_VALIDATION_REPAIRABLE,
+        SCREENING_TELEMETRY_REPAIRABLE,
+    )
     assert "SCREENING_FAIL_WIN_RATE" not in result.reason_codes
+
+
+def test_validation_telemetry_repairable_has_stage_specific_reason() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            stage="validation",
+            win_rate=0.0,
+            median_delta=0.0,
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+        )
+    )
+
+    assert result.decision == Decision.CONTINUE_EXPLORE
+    assert result.reason_codes == (
+        VALIDATION_TELEMETRY_REPAIRABLE,
+        TELEMETRY_VALIDATION_REPAIRABLE,
+    )
+    assert result.rule == (
+        "validation:VALIDATION_TELEMETRY_REPAIRABLE->continue_explore"
+    )
+
+
+def test_frozen_telemetry_guard_failure_fails_closed() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            stage="frozen",
+            win_rate=1.0,
+            median_delta=0.1,
+            ci_low=0.01,
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+        )
+    )
+
+    assert result.decision == Decision.ABANDON
+    assert result.reason_codes == (FROZEN_TELEMETRY_FAILED,)

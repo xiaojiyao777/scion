@@ -7,6 +7,11 @@ from typing import Any
 from scion.core.models import ExperimentStage, ProtocolResult
 
 TELEMETRY_VALIDATION_REPAIRABLE = "TELEMETRY_VALIDATION_REPAIRABLE"
+SCREENING_TELEMETRY_REPAIRABLE = "SCREENING_TELEMETRY_REPAIRABLE"
+VALIDATION_TELEMETRY_REPAIRABLE = "VALIDATION_TELEMETRY_REPAIRABLE"
+SCREENING_TELEMETRY_FAILED = "SCREENING_TELEMETRY_FAILED"
+VALIDATION_TELEMETRY_FAILED = "VALIDATION_TELEMETRY_FAILED"
+FROZEN_TELEMETRY_FAILED = "FROZEN_TELEMETRY_FAILED"
 
 _REPAIRABLE_TELEMETRY_CODES = frozenset(
     {
@@ -46,19 +51,38 @@ def is_repairable_telemetry_validation_failure(
     return any(_is_repairable_failure(item) for item in _failure_items(guard))
 
 
+def telemetry_repairable_stage(protocol_result: ProtocolResult | None) -> str | None:
+    """Return the protocol stage for repairable activation telemetry failures."""
+    if not is_repairable_telemetry_validation_failure(protocol_result):
+        return None
+    if protocol_result is None:
+        return None
+    if protocol_result.stage == ExperimentStage.SCREENING:
+        return "screening"
+    if protocol_result.stage == ExperimentStage.VALIDATION:
+        return "validation"
+    return None
+
+
 def telemetry_validation_failure_codes(
     protocol_result: ProtocolResult | None,
 ) -> tuple[str, ...]:
     """Return stable reason codes for a repairable telemetry validation failure."""
     if not is_repairable_telemetry_validation_failure(protocol_result):
         return ()
+    stage = telemetry_repairable_stage(protocol_result)
     guard = telemetry_guard_summary(protocol_result)
     codes = [
         str(item.get("code") or "").strip()
         for item in _failure_items(guard)
         if _is_repairable_failure(item)
     ]
-    return tuple(dict.fromkeys([TELEMETRY_VALIDATION_REPAIRABLE, *codes]))
+    stage_codes = (
+        (VALIDATION_TELEMETRY_REPAIRABLE, TELEMETRY_VALIDATION_REPAIRABLE)
+        if stage == "validation"
+        else (TELEMETRY_VALIDATION_REPAIRABLE, SCREENING_TELEMETRY_REPAIRABLE)
+    )
+    return tuple(dict.fromkeys([*stage_codes, *codes]))
 
 
 def screened_experiment_effective(
@@ -83,8 +107,13 @@ def telemetry_validation_feedback(
     if not failures:
         return ""
     first = failures[0]
+    stage = telemetry_repairable_stage(protocol_result)
     parts = [
-        "telemetry_validation_repairable",
+        (
+            "validation_telemetry_repairable"
+            if stage == "validation"
+            else "telemetry_validation_repairable"
+        ),
         f"code={first.get('code') or 'TELEMETRY_GUARD_FAILED'}",
     ]
     for label, key in (
@@ -165,10 +194,16 @@ def _repair_guidance_for_issue(
 
 
 __all__ = [
+    "FROZEN_TELEMETRY_FAILED",
+    "SCREENING_TELEMETRY_FAILED",
+    "SCREENING_TELEMETRY_REPAIRABLE",
     "TELEMETRY_VALIDATION_REPAIRABLE",
+    "VALIDATION_TELEMETRY_FAILED",
+    "VALIDATION_TELEMETRY_REPAIRABLE",
     "is_repairable_telemetry_validation_failure",
     "screened_experiment_effective",
     "telemetry_guard_summary",
+    "telemetry_repairable_stage",
     "telemetry_validation_failure_codes",
     "telemetry_validation_feedback",
 ]

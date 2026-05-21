@@ -79,7 +79,10 @@ class CampaignLoop:
                 counted_rounds += 1
             else:
                 kind = _attempt_kind(result)
-                if kind == "telemetry_repairable":
+                if kind in (
+                    "telemetry_repairable",
+                    "validation_telemetry_repairable",
+                ):
                     telemetry_repairable_attempts += 1
                     if telemetry_repairable_attempts >= telemetry_repairable_limit:
                         final_reason = "telemetry_repairable_budget_exhausted"
@@ -121,7 +124,10 @@ def _attempt_kind(result: StepResult) -> str:
     if kind and kind != "screening":
         return kind
     reason = str(getattr(result, "reason", "") or "").lower()
-    if "telemetry_validation_repairable" in reason:
+    if (
+        "telemetry_validation_repairable" in reason
+        or "validation_telemetry_repairable" in reason
+    ):
         return "telemetry_repairable"
     if "same_family" in reason or "semantic retry" in reason:
         return "same_family_retry"

@@ -21,6 +21,9 @@ SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN = "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDO
 SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE = (
     "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE"
 )
+SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE = (
+    "SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE"
+)
 SCREENING_STALE_RESCREEN_FAIL = "SCREENING_STALE_RESCREEN_FAIL"
 
 
@@ -39,7 +42,7 @@ class BranchLifecycleDecision:
 class BranchLifecyclePolicy:
     """Classify low-win screening branches without problem-specific semantics."""
 
-    low_win_rate_threshold: float = 0.3
+    low_win_rate_threshold: float = 0.5
     zero_win_streak_limit: int = 3
     soft_runtime_ratio_threshold: float = 1.10
     high_runtime_regression_rate: float = 0.90
@@ -120,6 +123,8 @@ class BranchLifecyclePolicy:
         reasons: list[str] = []
         if losses > 0 and wins == 0:
             reasons.append(SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN)
+        if features.candidate_failed_pairs > 0:
+            reasons.append(SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE)
         if features.median_delta is not None and features.median_delta < 0:
             reasons.append(SCREENING_SOFT_ABANDON_NEGATIVE_DELTA)
         if (
@@ -153,6 +158,7 @@ __all__ = [
     "BranchLifecycleDecision",
     "BranchLifecyclePolicy",
     "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
+    "SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE",
     "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN",
     "SCREENING_SOFT_ABANDON_NEGATIVE_DELTA",
     "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",

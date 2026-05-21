@@ -19,6 +19,11 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.telemetry_validation import (
+    SCREENING_TELEMETRY_REPAIRABLE,
+    TELEMETRY_VALIDATION_REPAIRABLE,
+    VALIDATION_TELEMETRY_REPAIRABLE,
+)
 
 
 def _request(
@@ -388,9 +393,58 @@ def test_telemetry_activation_failure_is_marked_repairable() -> None:
     assert outcome.protocol_result is not None
     assert outcome.decision_features.telemetry_validation_repairable is True
     assert outcome.decision_features.telemetry_guard_failed is True
-    assert "TELEMETRY_VALIDATION_REPAIRABLE" in outcome.protocol_result.reason_codes
+    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
     assert "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED" in (
         outcome.protocol_result.reason_codes
     )
     assert "iterated_local_search_perturbation" in outcome.protocol_result.exposed_summary
     assert "candidate_missing=16" in outcome.protocol_result.exposed_summary
+
+
+def test_validation_telemetry_activation_failure_has_stage_specific_reason() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                "severity": "fail",
+                "category": "activation",
+                "mechanism": "iterated_local_search_perturbation",
+                "field": (
+                    "solver_algorithm_context_records."
+                    "iterated_local_search_perturbation_iterations"
+                ),
+                "candidate_missing": 16,
+                "candidate_present": 0,
+                "candidate_positive": 0,
+            }
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.VALIDATION,
+            exposed_summary="validation telemetry missing",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.VALIDATING))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.stage == "validation"
+    assert outcome.decision_features.telemetry_validation_repairable is True
+    assert outcome.decision_features.telemetry_guard_failed is True
+    assert outcome.protocol_result.reason_codes[:2] == (
+        VALIDATION_TELEMETRY_REPAIRABLE,
+        TELEMETRY_VALIDATION_REPAIRABLE,
+    )
+    assert "validation_telemetry_repairable" in (
+        outcome.protocol_result.exposed_summary
+    )
