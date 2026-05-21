@@ -716,6 +716,126 @@ def test_campaign_loop_counts_generic_proposal_blocks_in_quality_ceiling() -> No
     assert "proposal_quality_loop" in stopped_reasons
 
 
+def test_campaign_loop_default_three_round_quality_limit_allows_five_blocks() -> None:
+    results = [
+        *[
+            StepResult(
+                action="explore",
+                branch_id="b1",
+                reason="agent_quality_blocked",
+                counts_toward_max_rounds=False,
+                attempt_kind="proposal_block",
+            )
+            for _ in range(5)
+        ],
+        StepResult(action="explore", branch_id="b1", reason="screening 1"),
+        StepResult(action="explore", branch_id="b1", reason="screening 2"),
+        StepResult(action="explore", branch_id="b1", reason="screening 3"),
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=3)
+
+    assert calls == 8
+    assert "proposal_quality_loop" not in stopped_reasons
+    assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["proposal_quality_limit"] == 6
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 5
+
+
+def test_campaign_loop_default_three_round_quality_limit_stops_on_sixth_block() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            reason="agent_quality_blocked",
+            counts_toward_max_rounds=False,
+            attempt_kind="proposal_block",
+        )
+        for _ in range(8)
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    last_results: list[StepResult] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "last_result" in kwargs:
+            last_results.append(kwargs["last_result"])
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=3)
+
+    assert calls == 6
+    assert last_results[-1].stopped is True
+    assert "proposal_quality_loop" in stopped_reasons
+    assert loop_statuses[-1]["proposal_quality_limit"] == 6
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 6
+
+
 def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_attempts() -> None:
     results = [
         StepResult(

@@ -308,6 +308,32 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
     assert status["last_result"]["counts_toward_max_rounds"] is False
 
 
+def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {"campaign_id": "camp-1"},
+    )
+    loop_status = {
+        "requested_rounds": 3,
+        "proposal_quality_limit": 6,
+        "proposal_quality_loop_limit": 6,
+        "proposal_quality_blocks_consumed": 4,
+        "proposal_quality_blocks_remaining": 2,
+    }
+
+    status = recorder.write_status(loop_status=loop_status)
+    summary = recorder.write_campaign_summary(
+        step_history=[],
+        round_num=0,
+        champion=_champion(),
+    )
+
+    assert status["campaign_loop"]["proposal_quality_limit"] == 6
+    assert status["campaign_loop"]["proposal_quality_blocks_consumed"] == 4
+    assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
+
+
 def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_inflight(
     tmp_path: Path,
 ) -> None:

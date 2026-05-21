@@ -99,6 +99,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--rounds",
             help="Maximum number of campaign rounds",
         ),
+        proposal_quality_loop_limit: Optional[int] = typer.Option(
+            None,
+            "--proposal-quality-loop-limit",
+            help=(
+                "Maximum proposal-quality blocks before stopping; defaults to "
+                "rounds + max(3, rounds), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT"
+            ),
+        ),
         campaign_dir: str = typer.Option(
             "campaign_out",
             "--campaign-dir",
@@ -426,6 +434,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             force_surface=forced_request.surface if forced_request else None,
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,
+            proposal_quality_loop_limit=proposal_quality_loop_limit,
         )
 
         forced_surface_note = (

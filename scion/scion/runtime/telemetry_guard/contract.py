@@ -16,6 +16,7 @@ from scion.runtime.telemetry_guard.expected_schema import (
     normalize_declared_mechanisms,
     normalize_expected_telemetry,
 )
+from scion.runtime.telemetry_guard.guidance import expected_telemetry_guidance
 from scion.runtime.telemetry_guard.mechanism_probes import (
     declared_mechanism_runtime_probes,
 )
@@ -107,6 +108,14 @@ def validate_expected_telemetry_contract(
                 f"expected_telemetry.{category} references undeclared "
                 f"runtime field(s): {', '.join(sorted(unknown))}"
             )
+    if errors:
+        guidance = expected_telemetry_guidance(
+            problem_spec=problem_spec,
+            selected_surface=surface_name,
+            declared_mechanisms=mechanisms,
+        )
+        if guidance:
+            errors.append(guidance)
     return tuple(errors)
 
 
@@ -114,7 +123,13 @@ _ACTIVATION_OUTCOME_ROLES = frozenset(
     {"objective_outcome", "outcome", "protected_outcome"}
 )
 _ACTIVATION_AGGREGATE_ROLES = frozenset(
-    {"activity", "aggregate_activity", "aggregate_effect", "effect"}
+    {
+        "activity",
+        "aggregate_activity",
+        "aggregate_effect",
+        "effect",
+        "mechanism_effect",
+    }
 )
 _ACTIVATION_ALLOWED_ROLES = frozenset(
     {"mechanism_activity", "mechanism_activation"}

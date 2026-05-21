@@ -87,6 +87,7 @@ class CampaignManager:
         force_surface: Optional[str] = None,
         force_action: Optional[str] = None,
         force_target_file: Optional[str] = None,
+        proposal_quality_loop_limit: Optional[int] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
         from scion.core.forced_surface import validate_forced_surface_request
@@ -128,6 +129,7 @@ class CampaignManager:
             force_surface=forced_request.surface if forced_request else None,
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,
+            proposal_quality_loop_limit=proposal_quality_loop_limit,
         )
 
     # ------------------------------------------------------------------
@@ -323,12 +325,14 @@ class CampaignManager:
         *,
         last_result: StepResult | None = None,
         stopped_reason: str | None = None,
+        loop_status: Dict[str, Any] | None = None,
     ) -> None:
         self._evidence_recorder.current_status_progress = self._current_status_progress
         self._evidence_recorder.last_status_result = self._last_status_result
         self._evidence_recorder.write_status(
             last_result=last_result,
             stopped_reason=stopped_reason,
+            loop_status=loop_status,
         )
         self._last_status_result = self._evidence_recorder.last_status_result
 

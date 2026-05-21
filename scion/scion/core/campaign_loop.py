@@ -33,7 +33,6 @@ class CampaignLoop:
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
-        self.write_status()
         final_reason: str | None = None
         counted_rounds = 0
         attempts = 0
@@ -63,13 +62,28 @@ class CampaignLoop:
             + validation_repair_required_limit
             + same_family_retry_limit
         )
+
+        def loop_status() -> dict[str, int]:
+            return _campaign_loop_status(
+                requested_rounds=requested_rounds,
+                attempt_limit=attempt_limit,
+                attempts=attempts,
+                counted_rounds=counted_rounds,
+                proposal_quality_loop_limit=proposal_quality_loop_limit,
+                proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
+            )
+
+        self.write_status(loop_status=loop_status())
         while counted_rounds < max_rounds and attempts < attempt_limit:
             attempts += 1
             self.drain_weight_opt_events()
             if self.should_stop():
                 final_reason = self.get_last_stop_reason() or "termination condition met"
                 logger.info("Campaign terminated.")
-                self.write_status(stopped_reason=final_reason)
+                self.write_status(
+                    stopped_reason=final_reason,
+                    loop_status=loop_status(),
+                )
                 break
 
             circuit_breaker = self.get_circuit_breaker()
@@ -81,10 +95,13 @@ class CampaignLoop:
                     self.circuit_breaker_threshold,
                     circuit_breaker.last_failure_detail,
                 )
-                self.write_status(stopped_reason="circuit_breaker")
+                self.write_status(
+                    stopped_reason="circuit_breaker",
+                    loop_status=loop_status(),
+                )
                 break
 
-            self.write_status()
+            self.write_status(loop_status=loop_status())
             result = self.run_one_step()
             if getattr(result, "counts_toward_max_rounds", True):
                 counted_rounds += 1
@@ -118,7 +135,10 @@ class CampaignLoop:
                         final_reason = "bad_proposal_budget_exhausted"
             if final_reason == "proposal_quality_loop":
                 result.stopped = True
-            self.write_status(last_result=result)
+            self.write_status(
+                last_result=result,
+                loop_status=loop_status(),
+            )
             if result.stopped:
                 final_reason = final_reason or result.reason or "stopped"
                 break
@@ -142,7 +162,10 @@ class CampaignLoop:
         self.wait_weight_opt_all(final_wait_timeout)
         self.drain_weight_opt_events()
         self.write_campaign_summary()
-        self.write_status(stopped_reason=final_reason or "run_complete")
+        self.write_status(
+            stopped_reason=final_reason or "run_complete",
+            loop_status=loop_status(),
+        )
 
 
 def _attempt_kind(result: StepResult) -> str:
@@ -179,4 +202,33 @@ def _proposal_quality_loop_limit(
                 "Ignoring invalid SCION_PROPOSAL_QUALITY_LOOP_LIMIT=%r",
                 raw,
             )
-    return max(3, int(requested_rounds) + 2)
+    rounds = max(1, int(requested_rounds))
+    return rounds + max(3, rounds)
+
+
+def _campaign_loop_status(
+    *,
+    requested_rounds: int,
+    attempt_limit: int,
+    attempts: int,
+    counted_rounds: int,
+    proposal_quality_loop_limit: int,
+    proposal_quality_blocked_attempts: int,
+) -> dict[str, int]:
+    return {
+        "requested_rounds": max(1, int(requested_rounds)),
+        "attempt_limit": max(0, int(attempt_limit)),
+        "attempts": max(0, int(attempts)),
+        "effective_rounds_completed": max(0, int(counted_rounds)),
+        "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
+        "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
+        "proposal_quality_blocks_consumed": max(
+            0,
+            int(proposal_quality_blocked_attempts),
+        ),
+        "proposal_quality_blocks_remaining": max(
+            0,
+            int(proposal_quality_loop_limit)
+            - int(proposal_quality_blocked_attempts),
+        ),
+    }

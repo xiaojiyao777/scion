@@ -320,12 +320,14 @@ def test_synthetic_surface_declares_non_cvrp_telemetry_roles() -> None:
     )
 
     assert accepted == ()
-    assert rejected == (
+    assert rejected[0] == (
         "expected_telemetry.activation references declared outcome field "
         "solution_cost (role(s): objective_outcome); activation must use "
         "mechanism-specific activity evidence declared by the selected "
-        "research surface.",
+        "research surface."
     )
+    assert "planner_stage_runtime_ms.regret_seed" in rejected[1]
+    assert "selected_surface='planner_solver'" in rejected[1]
     assert summary["passed"] is True
     assert summary["fields"]["solution_cost"]["candidate_positive"] == 0
     assert summary["fields"]["violation_count"]["candidate_present"] == 1
@@ -362,12 +364,13 @@ def test_provider_level_telemetry_roles_are_used_by_generic_guard() -> None:
     )
 
     assert accepted == ()
-    assert errors == (
+    assert errors[0] == (
         "expected_telemetry.activation references declared outcome field "
         "solution_cost (role(s): objective_outcome); activation must use "
         "mechanism-specific activity evidence declared by the selected "
-        "research surface.",
+        "research surface."
     )
+    assert "planner_stage_runtime_ms.<mechanism_id>" in errors[1]
 
 
 def test_expected_telemetry_rejects_prose_field_values() -> None:

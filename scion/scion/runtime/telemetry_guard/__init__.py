@@ -38,6 +38,10 @@ from scion.runtime.telemetry_guard.expected_schema import (
     normalize_expected_telemetry,
     normalize_expected_telemetry_by_mechanism,
 )
+from scion.runtime.telemetry_guard.guidance import (
+    expected_telemetry_guidance,
+    expected_telemetry_template,
+)
 from scion.runtime.telemetry_guard.issues import (
     _guard_issue,
     format_telemetry_guard_issue,
@@ -88,6 +92,8 @@ __all__ = [
     "declared_runtime_field_roles",
     "declared_stage_budget_runtime_fields",
     "declared_surface_telemetry_fields",
+    "expected_telemetry_guidance",
+    "expected_telemetry_template",
     "find_research_surface",
     "format_telemetry_guard_issue",
     "normalize_declared_mechanisms",

@@ -433,6 +433,7 @@ class EvidenceRecorder:
         self.current_status_progress: Dict[str, Any] | None = None
         self.in_flight_protocol: Dict[str, Any] | None = None
         self.last_status_result: Dict[str, Any] | None = None
+        self.campaign_loop_status: Dict[str, Any] | None = None
         self.final_evidence_refs: Dict[str, Any] = {}
 
     def record_step(
@@ -452,11 +453,16 @@ class EvidenceRecorder:
         *,
         last_result: Any | None = None,
         stopped_reason: str | None = None,
+        loop_status: Mapping[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Write ``status.json`` using the existing CampaignManager payload shape."""
         payload: Dict[str, Any] = (
             dict(self.state_provider()) if self.state_provider is not None else {}
         )
+        if loop_status is not None:
+            self.campaign_loop_status = dict(loop_status)
+        if self.campaign_loop_status is not None:
+            payload["campaign_loop"] = dict(self.campaign_loop_status)
         if last_result is not None:
             self.last_status_result = {
                 "action": last_result.action,
@@ -888,6 +894,8 @@ class EvidenceRecorder:
             }
         if frozen_budget is not None:
             summary["frozen_budget"] = dict(frozen_budget)
+        if self.campaign_loop_status is not None:
+            summary["campaign_loop"] = dict(self.campaign_loop_status)
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))

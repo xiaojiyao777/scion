@@ -115,12 +115,15 @@ def test_cvrp_problem_spec_declares_solver_algorithm_telemetry_roles() -> None:
         protected_objectives=("fleet_violation",),
     )
 
-    assert activation_errors == (
+    assert activation_errors[0] == (
         "expected_telemetry.activation references declared outcome field "
         "solver_algorithm_fleet_violation (role(s): protected_outcome); "
         "activation must use mechanism-specific activity evidence declared by "
-        "the selected research surface.",
+        "the selected research surface."
     )
+    assert "Legal expected_telemetry template" in activation_errors[1]
+    assert "mechanism_id='<mechanism_id>'" in activation_errors[1]
+    assert "solver_algorithm_phase_runtime_ms.<mechanism_id>" in activation_errors[1]
     assert activation_ok == ()
     assert summary["passed"] is True
     assert summary["fields"]["solver_algorithm_fleet_violation"][

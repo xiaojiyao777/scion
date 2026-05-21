@@ -61,9 +61,8 @@ from scion.proposal.tools.surface import (
 from scion.proposal.tools.utils import _attr, _limit_text, _model_payload, _strip_forbidden_value
 from scion.runtime.telemetry_guard import (
     EXPECTED_TELEMETRY_CATEGORIES,
-    declared_runtime_field_roles,
-    declared_mechanism_runtime_probes,
     declared_surface_telemetry_fields,
+    expected_telemetry_template,
     normalize_expected_telemetry,
 )
 
@@ -480,27 +479,36 @@ def _expected_telemetry_contract_preview(
                 invalid_categories.append(category)
 
     surface = _surface_for_hypothesis(context, hypothesis)
-    declared_fields = sorted(declared_surface_telemetry_fields(surface))
     try:
         problem_spec = _contract_problem_spec(context)
     except Exception:
         problem_spec = None
-    probes = declared_mechanism_runtime_probes(
-        problem_spec=problem_spec,
-        surface=surface,
-        declared_mechanisms=mechanism_changes(hypothesis),
-    )
-    mechanism_fields = sorted({probe.field for probe in probes})
-    probe_fields_by_category = {
-        category: sorted(
-            {probe.field for probe in probes if probe.category == category}
+    declared_mechanisms = mechanism_changes(hypothesis)
+    declared_fields = sorted(
+        declared_surface_telemetry_fields(
+            surface,
+            problem_spec=problem_spec,
+            declared_mechanisms=declared_mechanisms,
         )
-        for category in EXPECTED_TELEMETRY_CATEGORIES
-    }
-    role_map = declared_runtime_field_roles(
-        surface,
+    )
+    allowed_template = expected_telemetry_template(
         problem_spec=problem_spec,
-        declared_mechanisms=mechanism_changes(hypothesis),
+        selected_surface=getattr(hypothesis, "change_locus", None),
+        declared_mechanisms=declared_mechanisms,
+        max_fields_per_category=_PREVIEW_MAX_CHECKS,
+    )
+    template_expected = allowed_template.get("expected_telemetry")
+    mechanism_fields = sorted(
+        {
+            str(field)
+            for fields in (
+                template_expected.values()
+                if isinstance(template_expected, Mapping)
+                else ()
+            )
+            if isinstance(fields, (list, tuple))
+            for field in fields
+        }
     )
     claims = normalize_expected_telemetry(expected)
     requested_fields = {
@@ -524,11 +532,7 @@ def _expected_telemetry_contract_preview(
                 : _PREVIEW_MAX_CHECKS * 4
             ],
             "allowed_expected_telemetry_template": (
-                _expected_telemetry_template_for_mechanism(
-                    hypothesis,
-                    role_map=role_map,
-                    probe_fields_by_category=probe_fields_by_category,
-                )
+                allowed_template
                 if not passed
                 else {}
             ),
@@ -545,64 +549,6 @@ def _expected_telemetry_contract_preview(
             ),
         }
     )
-
-
-def _expected_telemetry_template_for_mechanism(
-    hypothesis: HypothesisProposal,
-    *,
-    role_map: Mapping[str, Any],
-    probe_fields_by_category: Mapping[str, list[str]],
-) -> dict[str, Any]:
-    changes = mechanism_changes(hypothesis)
-    mechanism = changes[0].id if changes else "<mechanism_id>"
-    expected = {
-        "activity": _template_fields(
-            role_map,
-            "activity",
-            fallback=(),
-        ),
-        "activation": _template_fields(
-            role_map,
-            "mechanism_activation",
-            fallback=probe_fields_by_category.get("activation", ()),
-        ),
-        "effect": _template_fields(
-            role_map,
-            "mechanism_effect",
-            "effect",
-            fallback=probe_fields_by_category.get("effect", ()),
-        ),
-        "budget": _template_fields(
-            role_map,
-            "budget",
-            fallback=probe_fields_by_category.get("budget", ()),
-        ),
-    }
-    return {
-        "mechanism_id": mechanism,
-        "expected_telemetry": {
-            category: fields
-            for category, fields in expected.items()
-            if fields
-        },
-    }
-
-
-def _template_fields(
-    role_map: Mapping[str, Any],
-    *roles: str,
-    fallback: Any,
-) -> list[str]:
-    fields: list[str] = []
-    for role in roles:
-        value = role_map.get(role)
-        if isinstance(value, (list, tuple, set, frozenset)):
-            fields.extend(str(field) for field in value if str(field or ""))
-    if not fields and isinstance(fallback, (list, tuple, set, frozenset)):
-        fields.extend(str(field) for field in fallback if str(field or ""))
-    return list(dict.fromkeys(fields))[:_PREVIEW_MAX_CHECKS]
-
-
 def _mechanism_binding_preview(
     hypothesis: HypothesisProposal,
     c12_check: Any | None,
