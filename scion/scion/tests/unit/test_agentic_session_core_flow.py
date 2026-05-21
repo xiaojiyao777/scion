@@ -270,11 +270,11 @@ def test_agentic_session_retries_code_generation_timeout_with_compact_scope(
     assert retry_context["code_generation_mode"] == "compact_timeout_retry"
     assert "code_generation_timeout" in retry_context["prior_code_failure"]
     assert (
-        "one primary construction or seeding path"
+        "one primary mechanism"
         in retry_context["agentic_code_scope_control"]["required_shape"]
     )
     assert (
-        "no more than two move families"
+        "minimal integration needed to reach the active solver path"
         in retry_context["agentic_code_scope_control"]["required_shape"]
     )
     assert any(

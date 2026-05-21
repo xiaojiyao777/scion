@@ -39,8 +39,8 @@ _CODE_PROMPT_ALGORITHM_TOOLS = frozenset(
 )
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
 _SOLVER_DESIGN_BROAD_TERMS = (
-    "hybrid", "alns", "vns", "lns", "destroy", "repair",
-    "recombination", "route-pool", "route pool", "population",
+    "hybrid", "lns", "destroy", "repair",
+    "recombination", "population",
     "portfolio", "ensemble", "multi-operator", "multi operator",
     "restart", "perturb",
 )
@@ -95,6 +95,7 @@ def _with_code_scope_control(
     else:
         prepared.setdefault("code_generation_mode", "compact_solver_design")
     prepared["agentic_code_scope_control"] = _solver_design_code_scope_control(
+        prepared,
         hypothesis,
         timeout_retry=timeout_retry,
         failure_detail=failure_detail,
@@ -165,24 +166,20 @@ def _is_solver_design_code_context(
         or ""
     ).strip()
     kind = str(code_context.get("research_surface_kind") or "").strip()
-    target_file = str(
-        code_context.get("target_file") or hypothesis.target_file or ""
-    ).strip()
     return (
         surface in _SOLVER_DESIGN_SURFACE_NAMES
         or kind in _SOLVER_DESIGN_SURFACE_NAMES
-        or target_file.endswith("policies/baseline_algorithm.py")
-        or target_file.startswith("policies/baseline_modules/")
     )
 
 
 def _solver_design_code_scope_control(
+    code_context: Mapping[str, Any],
     hypothesis: HypothesisProposal,
     *,
     timeout_retry: bool,
     failure_detail: str | None,
 ) -> dict[str, Any]:
-    broad_terms = _solver_design_broad_terms(hypothesis)
+    broad_terms = _solver_design_broad_terms(code_context, hypothesis)
     mechanism_ids = _solver_design_mechanism_ids(hypothesis)
     return _drop_empty_mapping(
         {
@@ -194,73 +191,25 @@ def _solver_design_code_scope_control(
             "failure_detail": failure_detail,
             "detected_broad_terms": broad_terms,
             "required_shape": (
-                "complete target module content with one primary construction "
-                "or seeding path and one bounded improvement/search loop using "
-                "no more than two move families"
+                "complete target module content with one primary mechanism, "
+                "explicit bounds, and the minimal integration needed to reach "
+                "the active solver path"
             ),
             "scope_rule": (
                 "Reduce broad hybrid hypotheses to one executable vertical "
-                "algorithm slice for this patch. Prefer the focused "
-                "solver-design modules under policies/baseline_modules; do not "
-                "turn the entrypoint into a context.baseline post-processing "
-                "wrapper. The final JSON top-level file_path must remain the "
-                "approved target_file; choose target modules by mechanism "
-                "ownership, put entrypoint/scheduler/module wiring in "
-                "additional_changes, and ensure any new helper is called from "
-                "an existing solver path. If scheduler.py or "
-                "baseline_algorithm.py is only an integration edit, preserve "
-                "the stable runtime contract: baseline_algorithm.py calls "
-                "_ALNSVNSSolver(...).solve(instance, rng), and scheduler.py "
-                "keeps the class-based _ALNSVNSSolver.__init__(self, *, "
-                "time_limit, destroy_ratio, segment_length, reaction_factor, "
-                "vns_max_no_improve, use_vns, cw_threshold, vns_threshold, "
-                "alns_threshold, max_destroy_customers, max_routes, context) "
-                "plus _ALNSVNSSolver.solve(self, instance, rng) path without "
-                "top-level solve, run, or main entrypoints. Put new seed or "
-                "initial-state hooks inside scheduler methods, not by changing "
-                "the baseline_algorithm.py call protocol."
+                "algorithm slice for this patch. The final JSON top-level "
+                "file_path must remain the approved target_file; put only "
+                "minimal executable integration in additional_changes, and "
+                "ensure any new helper is called from the active solver path."
             ),
             "import_rule": (
-                "Use package-relative imports inside policies, for example "
-                "from .baseline_modules.local_search import _vns or "
-                "from .state import _Solution. Do not import "
-                "policies.baseline_modules.*."
+                "Use only imports allowed by the selected surface and the "
+                "problem-owned interface/manifest supplied in context."
             ),
             "entrypoint_rule": (
-                "If additional_changes touches policies/baseline_algorithm.py, "
-                "keep the stable scheduler class API: import _ALNSVNSSolver "
-                "from .baseline_modules.scheduler, instantiate it with the "
-                "current explicit keywords (time_limit, destroy_ratio, "
-                "segment_length, reaction_factor, vns_max_no_improve, use_vns, "
-                "cw_threshold, vns_threshold, alns_threshold, "
-                "max_destroy_customers, max_routes, context), and call "
-                "solver.solve(instance, rng) with no extra seed/context/"
-                "initial_solution arguments. Do not import scheduler solve, "
-                "run, or main."
-            ),
-            "context_api_rule": (
-                "context.nearest_neighbor() takes no arguments and returns a "
-                "public CvrpSolution; do not pass rng and do not call .copy() "
-                "on that public solution. Internal _Solution.copy() applies "
-                "only to baseline_modules/state.py objects. _Solution has no "
-                "from_routes, from_public, from_cvrp_solution, or to_public "
-                "bridge API. Do not add those methods to state.py. Existing "
-                "construction.py helpers already return internal _Solution "
-                "objects; if public route tuples must become internal state, "
-                "construct _Solution(instance, [_Route(instance, route) for "
-                "route in routes]) and return public output via "
-                "context.make_solution(solution.routes_as_tuples())."
-            ),
-            "state_model_rule": (
-                "Do not use policies/baseline_modules/state.py as an "
-                "additional-change adapter bridge unless state.py is the "
-                "approved target. For scheduler, construction, destroy/repair, "
-                "and local_search repairs, re-read the support artifact API "
-                "summary and align with the existing _Route/_Solution methods "
-                "instead of inventing conversion methods."
-            ),
-            "target_module_rule": _solver_design_target_module_rule(
-                hypothesis.target_file
+                "Preserve the selected surface entrypoint and return contract "
+                "exactly. If integration edits are required, base them on the "
+                "problem-owned manifest and branch-current files in context."
             ),
             "runtime_rule": (
                 "Use explicit loop caps and context time checks; runtime is an "
@@ -272,21 +221,12 @@ def _solver_design_code_scope_control(
                 "When repairing telemetry preview or smoke failures, preserve "
                 "mechanism-specific records that already satisfied an earlier "
                 "category. Add the missing activation/effect/budget evidence "
-                "instead of replacing record_phase/record_iteration with "
-                "record_move or vice versa. Supported helper signatures are "
-                "context.record_phase(name, elapsed_ms), "
-                "context.record_iteration(phase='search', count=1), and "
-                "context.record_move(phase='search', attempted=1, accepted=0, "
-                "delta=None, best_improved=0); do not pass extra=... or other "
-                "arbitrary keywords."
+                "through the telemetry helpers declared by the selected "
+                "surface; do not rename the mechanism id or weaken the "
+                "approved telemetry contract."
             ),
             "telemetry_obligation_rule": _solver_design_telemetry_obligation_rule(
                 mechanism_ids
-            ),
-            "local_search_rule": (
-                "For local_search targets, integrate new move operators through "
-                "the existing _default_vns_operators()/_vns(...) path; do not "
-                "invent detached scheduler _run or run entrypoints."
             ),
         }
     )
@@ -308,16 +248,30 @@ def _solver_design_telemetry_obligation_rule(mechanism_ids: list[str]) -> str:
     return (
         "Declared mechanism telemetry obligations: every mechanism_changes id "
         f"({ids}) must have active-path evidence using that exact id. Include "
-        "context.record_iteration(id, ...), context.record_phase(id, ...), and "
-        "context.record_move(id, ...) for each declared id unless premise_check "
-        "is duplicate/contradicted/wrong_owner. Do not only record a parent "
-        "mechanism while leaving a helper mechanism id unrecorded."
+        "the selected surface's declared activity, activation, effect, or "
+        "budget records for each declared id unless premise_check is "
+        "duplicate/contradicted/wrong_owner. Do not only record a parent "
+        "mechanism while leaving a helper mechanism id without evidence."
     )
 
 
 def _solver_design_broad_terms(
+    code_context: Mapping[str, Any],
     hypothesis: HypothesisProposal,
 ) -> list[str]:
+    provider_terms: list[str] = []
+    provider = (
+        code_context.get("solver_design_prompt_provider")
+        or code_context.get("problem_prompt_provider")
+        or code_context.get("prompt_provider")
+    )
+    terms_method = getattr(provider, "solver_design_broad_scope_terms", None)
+    if callable(terms_method):
+        provider_terms = [
+            str(term).lower()
+            for term in terms_method()
+            if str(term).strip()
+        ]
     fields = (
         hypothesis.hypothesis_text,
         hypothesis.target_weakness,
@@ -326,33 +280,8 @@ def _solver_design_broad_terms(
         hypothesis.runtime_budget_strategy,
     )
     text = "\n".join(str(field or "") for field in fields).lower()
-    return [term for term in _SOLVER_DESIGN_BROAD_TERMS if term in text]
-
-
-def _solver_design_target_module_rule(target_file: str | None) -> str:
-    target = str(target_file or "").replace("\\", "/").lstrip("/")
-    if target == "policies/baseline_modules/destroy_repair.py":
-        return (
-            "destroy_repair.py is the primary mechanism owner. Implement "
-            "destroy/repair operators in that file; scheduler.py may only "
-            "wire exact destroy_repair symbols into destroy_ops/repair_ops. "
-            "Do not add scheduler imports from construction.py for a "
-            "destroy_repair target unless the same patch also changes "
-            "construction.py and defines that exact imported symbol."
-        )
-    if target == "policies/baseline_modules/local_search.py":
-        return (
-            "local_search.py is the primary move owner. Wire new move "
-            "functions through _default_vns_operators() or existing _vns(...) "
-            "calls; do not create detached scheduler entrypoints."
-        )
-    if target == "policies/baseline_modules/construction.py":
-        return (
-            "construction.py is the primary seed owner. New construction "
-            "helpers must return internal _Solution objects and scheduler.py "
-            "may only import exact construction symbols defined by the branch."
-        )
-    return ""
+    terms = (*_SOLVER_DESIGN_BROAD_TERMS, *provider_terms)
+    return [term for term in dict.fromkeys(terms) if term in text]
 
 
 def _code_prompt_observations(

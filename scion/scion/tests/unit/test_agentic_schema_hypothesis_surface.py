@@ -260,23 +260,14 @@ def test_hypothesis_schema_teaches_expected_telemetry_categories() -> None:
     assert "top-level categories" in description
     assert "not put explanatory prose" in description
     assert "top-level expected_telemetry keys" in tool_description.lower()
-    assert (
-        "solver_algorithm_context_records.<mechanism_id>_iterations" in description
-    )
-    assert "solver_algorithm_phase_runtime_ms.<mechanism_id>" in description
-    assert "solver_algorithm_improving_moves" in description
-    assert "solver_algorithm_best_improving_moves" in description
+    assert "mechanism-specific activity evidence" in description
+    assert "objective/outcome fields" in description
+    assert "Aggregate outcome or activity fields" in description
     assert "effect or activity, not activation" in description
-    assert "existing phase such as ALNS or VNS" in description
-    assert "broad phase keys such as .alns or .vns" in description
-    assert ".vns" in description
-    assert (
-        "solver_algorithm_context_records.<mechanism_id>_iterations"
-        in tool_description
-    )
-    assert "solver_algorithm_phase_runtime_ms.<mechanism_id>" in tool_description
-    assert "generic .alns/.vns phase buckets" in tool_description
-    assert ".vns" in tool_description
+    assert "mechanism-specific path containing the declared mechanism id" in description
+    assert "existing phase or component" in description
+    assert "mechanism-specific activity evidence" in tool_description
+    assert "existing phase or component" in tool_description
 
 
 def test_draft_hypothesis_accepts_structured_fields_and_rejects_invalid_values(

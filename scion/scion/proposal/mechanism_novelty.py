@@ -280,9 +280,6 @@ def _mechanism_family(
                 return _normalize_token(value)
         family = _normalize_token(signature.get("algorithm_family"))
         if family and family not in {
-            "alns",
-            "vns",
-            "alns_vns",
             "solver_design",
             "local_search",
             "destroy_repair",

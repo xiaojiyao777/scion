@@ -605,10 +605,9 @@ def _hypothesis_preview_retry_feedback(
             "retry_constraint": (
                 "Repair expected_telemetry.activation with exact declared "
                 "mechanism-specific activation records. Do not use existing "
-                "phase names such as `.vns` unless that exact mechanism id is "
-                "declared in mechanism_changes; prefer "
-                "`solver_algorithm_context_records.<mechanism_id>_iterations` "
-                "or `solver_algorithm_phase_runtime_ms.<mechanism_id>`. "
+                "phase names unless that exact mechanism id is declared in "
+                "mechanism_changes; prefer one of the declared mechanism "
+                "runtime fields when available. "
                 "Copy the allowed_expected_telemetry_template shape and replace "
                 "only the mechanism id when needed."
             ),

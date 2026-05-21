@@ -77,6 +77,11 @@ def _sanitize_agentic_value(value: Any) -> Any:
                 "case_ids",
                 "seed_set",
                 "pair_feedback",
+                "solver_design_prompt_provider",
+                "problem_prompt_provider",
+                "prompt_provider",
+                "adapter",
+                "problem_spec",
             }:
                 continue
             cleaned[key_text] = _sanitize_agentic_value(item)

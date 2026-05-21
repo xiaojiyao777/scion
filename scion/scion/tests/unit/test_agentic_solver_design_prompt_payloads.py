@@ -1,7 +1,29 @@
 from __future__ import annotations
 
 from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
+from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_solver_design_test_support import *
+
+
+class SyntheticSolverDesignPromptProvider:
+    def solver_design_broad_scope_terms(self):
+        return ("synthetic-wide",)
+
+    def solver_design_code_rules(self, _context):
+        return (
+            "SYNTHETIC_CODE_RULE: keep beam-state updates inside the declared solver body.",
+        )
+
+    def solver_design_scope_guidance(self, _context, *, mode, broad_terms):
+        return (
+            f"SYNTHETIC_SCOPE: mode={mode or 'default'} terms={','.join(broad_terms)}",
+        )
+
+    def solver_design_user_constraints(self, _context):
+        return (
+            "SYNTHETIC_USER_CONSTRAINT: return a synthetic artifact with a stable score.",
+        )
+
 
 def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> None:
     client = CapturingToolClient()
@@ -178,6 +200,68 @@ def test_solver_design_code_prompt_default_stays_problem_agnostic() -> None:
     assert "_ALNSVNSSolver" not in rendered_system
     assert "_Solution" not in rendered_system
     assert "CVRP" not in rendered_system
+
+
+def test_solver_design_code_prompt_uses_synthetic_provider_guidance() -> None:
+    client = CapturingToolClient()
+    creative = CreativeLayer(client)
+
+    creative.generate_code(
+        {
+            "problem_summary": "Synthetic packing problem.",
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "change_locus": "solver_design",
+            "problem_prompt_provider": SyntheticSolverDesignPromptProvider(),
+            "code_generation_mode": "compact_solver_design",
+            "hypothesis_detail": "Implement a synthetic-wide beam update.",
+            "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+            "import_whitelist": "math, random, time",
+            "champion_operators_code": "",
+            "target_file_code": (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    return None\n"
+            ),
+            "reference_operators": "",
+            "editable_patterns": "solver_body.py",
+            "frozen_patterns": "adapter.py",
+        }
+    )
+
+    rendered_system = "\n".join(
+        block["text"] for blocks in client.system_blocks for block in blocks
+    )
+    rendered_prompt = "\n".join(client.prompts)
+    rendered = rendered_system + rendered_prompt
+
+    assert "SYNTHETIC_CODE_RULE" in rendered_system
+    assert "SYNTHETIC_SCOPE" in rendered_system
+    assert "synthetic-wide" in rendered_system
+    assert "SYNTHETIC_USER_CONSTRAINT" in rendered_prompt
+    assert "_ALNSVNSSolver" not in rendered
+    assert "CvrpSolution" not in rendered
+    assert "ALNS" not in rendered
+    assert "VNS" not in rendered
+
+
+def test_prompt_manifest_omits_live_solver_design_provider_handle() -> None:
+    manifest = build_api_visible_prompt_manifest(
+        session_id="s1",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context={
+            "solver_design_prompt_provider": SyntheticSolverDesignPromptProvider(),
+            "solver_design_prompt_provider_ref": (
+                "tests.SyntheticSolverDesignPromptProvider"
+            ),
+            "hypothesis_detail": "Synthetic provider handle should not persist.",
+        },
+        observations=[],
+        call_index=1,
+    )
+
+    assert "solver_design_prompt_provider" not in manifest["section_names"]
+    assert "solver_design_prompt_provider_ref" in manifest["section_names"]
 
 
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:

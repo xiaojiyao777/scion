@@ -212,7 +212,8 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
     assert retry_feedback["failure_code"] == "C11_expected_telemetry"
     assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(retry_feedback)
-    assert ".vns" in retry_feedback["retry_constraint"]
+    assert "Do not use existing phase names" in retry_feedback["retry_constraint"]
+    assert "declared mechanism runtime fields" in retry_feedback["retry_constraint"]
     assert "declared_mechanism_runtime_fields" in retry_feedback
     assert retry_feedback["allowed_expected_telemetry_template"][
         "expected_telemetry"

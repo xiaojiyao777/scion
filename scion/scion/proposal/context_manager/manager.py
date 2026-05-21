@@ -495,6 +495,12 @@ class ContextManager:
                 problem_spec=problem_spec,
                 adapter=self._adapter,
             )
+            if solver_design_prompt_provider is not None:
+                ctx["solver_design_prompt_provider"] = solver_design_prompt_provider
+                ctx["solver_design_prompt_provider_ref"] = (
+                    f"{type(solver_design_prompt_provider).__module__}."
+                    f"{type(solver_design_prompt_provider).__qualname__}"
+                )
             ctx["solver_design_api_manifest"] = _build_solver_design_api_manifest(
                 source_root=source_root,
                 champion_root=champion.code_snapshot_path,
