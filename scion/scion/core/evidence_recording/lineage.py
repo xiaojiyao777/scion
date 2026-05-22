@@ -1,0 +1,280 @@
+"""Lineage payload builders for campaign evidence recording."""
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime
+from typing import Any, Dict, Iterable
+
+from scion.core.models import (
+    Branch,
+    CanaryResult,
+    ChampionState,
+    ContractResult,
+    Decision,
+    HypothesisProposal,
+    PatchProposal,
+    ProtocolResult,
+    VerificationResult,
+)
+from scion.core.public_refs import public_artifact_ref, public_case_ref
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    screened_experiment_effective,
+    telemetry_decision_details,
+    telemetry_failure_categories,
+    telemetry_validation_feedback,
+)
+
+from .artifact_refs import (
+    _extract_protocol_runtime_stats,
+    _extract_runtime_guard_evidence,
+    _screening_rate_fields,
+    _serialize_verification_checks,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class LineageRecorderMixin:
+    def build_step_lineage_event(
+        self,
+        *,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal | None,
+        contract_result: ContractResult,
+        verification_result: VerificationResult,
+        canary_result: CanaryResult,
+        protocol_result: ProtocolResult | None,
+        decision: Decision,
+        champion: ChampionState,
+        hypothesis_id: str = "",
+        decision_reason_codes: Iterable[str] | None = None,
+        event_id: str | None = None,
+    ) -> Dict[str, Any]:
+        """Build the experiment event payload currently written to lineage."""
+        stats = protocol_result.stats if protocol_result else None
+        runtime_stats = _extract_protocol_runtime_stats(protocol_result)
+        raw_metrics_internal_ref = (
+            protocol_result.raw_metrics_ref if protocol_result else ""
+        )
+        raw_metrics_public_ref = (
+            public_artifact_ref(
+                raw_metrics_internal_ref,
+                base_dir=self.campaign_dir,
+                kind="metrics",
+            )
+            or ""
+        )
+        public_case_ids = [
+            public_case_ref(case, base_dir=self.campaign_dir)
+            for case in (protocol_result.case_ids if protocol_result else ())
+        ]
+        public_case_ids = [case for case in public_case_ids if case is not None]
+        telemetry_details = list(telemetry_decision_details(protocol_result))
+        protocol_reason_codes = (
+            list(protocol_result.reason_codes) if protocol_result else []
+        )
+        internal_audit_payload = {
+            "schema": "scion.internal_audit_refs.v1",
+            "internal_only": True,
+            "raw_metrics_ref": raw_metrics_public_ref,
+            "raw_metrics_public_ref": raw_metrics_public_ref,
+            "raw_metrics_ref_scope": "public_artifact_ref",
+            "protocol_raw_metrics_ref": raw_metrics_public_ref,
+            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_internal_only": True,
+            "case_ids": public_case_ids,
+            "metrics_refs": {
+                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_ref_scope": "public_artifact_ref",
+                "protocol_raw_metrics_ref": raw_metrics_public_ref,
+                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+                "raw_metrics_internal_only": True,
+            },
+        }
+        evidence_metadata = {
+            "branch_state": branch.state.value,
+            "branch_base_champion_id": branch.base_champion_id,
+            "branch_weight_revision": getattr(branch, "weight_revision", 0),
+            "current_champion_version": champion.version,
+            "current_champion_weight_revision": getattr(champion, "weight_revision", 0),
+            "protocol_raw_metrics_ref": raw_metrics_public_ref,
+            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_public_ref": raw_metrics_public_ref,
+            "raw_metrics_ref_scope": "public_artifact_ref",
+            "raw_metrics_internal_only": True,
+            "internal_audit_payload": "experiment_events.audit_payload_json",
+            "metrics_refs": {
+                "raw_metrics_ref": raw_metrics_public_ref,
+                "raw_metrics_ref_scope": "public_artifact_ref",
+                "protocol_raw_metrics_ref": raw_metrics_public_ref,
+                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
+                "raw_metrics_internal_only": True,
+                "audit_payload_stored_in": "experiment_events.audit_payload_json",
+            },
+            "selected_surface": (
+                protocol_result.selected_surface if protocol_result else None
+            ),
+            "verification_checks": _serialize_verification_checks(verification_result),
+            "runtime_guard": _extract_runtime_guard_evidence(verification_result),
+            "runtime_stats": runtime_stats,
+            "decision_reason_codes": list(decision_reason_codes or ()),
+            "auxiliary_protocol_reason_codes": protocol_reason_codes,
+            "screened_experiment_effective": screened_experiment_effective(
+                protocol_result
+            ),
+            "telemetry_guard_failed": formal_telemetry_guard_failed(protocol_result),
+            "telemetry_failure_categories": list(
+                telemetry_failure_categories(protocol_result)
+            ),
+            "telemetry_failure_details": telemetry_details,
+            "telemetry_validation_feedback": telemetry_validation_feedback(
+                protocol_result
+            ),
+        }
+        event = {
+            "campaign_id": self.campaign_id,
+            "branch_id": branch.branch_id,
+            "timestamp": datetime.now().isoformat(),
+            "hypothesis_id": hypothesis_id,
+            "code_hash": branch.current_code_hash or "",
+            "patch_action": patch.action if patch else "",
+            "patch_file": patch.file_path if patch else "",
+            "hypothesis_text": (hypothesis.hypothesis_text or "")[:500],
+            "contract_passed": str(contract_result.passed),
+            "verification_passed": str(verification_result.passed),
+            "contract_result": "passed" if contract_result.passed else "failed",
+            "verification_result": "passed" if verification_result.passed else "failed",
+            "canary_result": "passed" if canary_result.passed else "failed",
+            "stage": protocol_result.stage.value if protocol_result else "",
+            "case_ids": json.dumps(public_case_ids) if protocol_result else "[]",
+            "seed_set": json.dumps(list(protocol_result.seed_set)) if protocol_result else "[]",
+            "raw_metrics_ref": raw_metrics_public_ref,
+            "screening_n_cases": stats.n_cases if stats else 0,
+            "screening_win_rate": stats.win_rate if stats else None,
+            "screening_median_delta": stats.median_delta if stats else None,
+            "screening_ci_low": stats.ci_low if stats else None,
+            "screening_ci_high": stats.ci_high if stats else None,
+            "telemetry_guard_failed": int(
+                formal_telemetry_guard_failed(protocol_result)
+            ),
+            "telemetry_failure_categories_json": json.dumps(
+                list(telemetry_failure_categories(protocol_result))
+            ),
+            "telemetry_failure_details_json": json.dumps(telemetry_details),
+            "decision_features_json": json.dumps(evidence_metadata),
+            "decision": decision.value,
+            "model_id": self.model_id,
+            "protocol_version": self.protocol_version,
+            "audit_payload_json": json.dumps(internal_audit_payload, sort_keys=True),
+        }
+        event.update(_screening_rate_fields(protocol_result))
+        if event_id:
+            event["event_id"] = event_id
+        return event
+
+    def build_decision_lineage_payload(
+        self,
+        *,
+        branch: Branch,
+        protocol_result: ProtocolResult | None,
+        contract_result: ContractResult,
+        verification_result: VerificationResult,
+        canary_result: CanaryResult,
+        decision: Decision,
+        decision_reason_codes: Iterable[str] | None = None,
+    ) -> Dict[str, str]:
+        """Build the append-only decision payload for LineageRegistry.record_decision."""
+        stats = protocol_result.stats if protocol_result else None
+        runtime_stats = _extract_protocol_runtime_stats(protocol_result)
+        telemetry_details = list(telemetry_decision_details(protocol_result))
+        protocol_reason_codes = (
+            list(protocol_result.reason_codes) if protocol_result else []
+        )
+        features_json = json.dumps(
+            {
+                "branch_id": branch.branch_id,
+                "stage": protocol_result.stage.value if protocol_result else "",
+                "contract_passed": contract_result.passed,
+                "verification_passed": verification_result.passed,
+                "canary_passed": canary_result.passed,
+                "win_rate": stats.win_rate if stats else None,
+                "median_delta": stats.median_delta if stats else None,
+                "retry_count": branch.retry_count,
+                "failure_codes": branch.failure_codes,
+                "runtime_guard": _extract_runtime_guard_evidence(verification_result),
+                "runtime_stats": runtime_stats,
+                "auxiliary_protocol_reason_codes": protocol_reason_codes,
+                "screened_experiment_effective": screened_experiment_effective(
+                    protocol_result
+                ),
+                "telemetry_guard_failed": formal_telemetry_guard_failed(
+                    protocol_result
+                ),
+                "telemetry_failure_categories": list(
+                    telemetry_failure_categories(protocol_result)
+                ),
+                "telemetry_failure_details": telemetry_details,
+                "telemetry_validation_feedback": telemetry_validation_feedback(
+                    protocol_result
+                ),
+            }
+        )
+        return {
+            "branch_id": branch.branch_id,
+            "features_json": features_json,
+            "decision": decision.value,
+            "reason": json.dumps(list(decision_reason_codes or ())),
+        }
+
+    def record_step_lineage(
+        self,
+        *,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal | None,
+        contract_result: ContractResult,
+        verification_result: VerificationResult,
+        canary_result: CanaryResult,
+        protocol_result: ProtocolResult | None,
+        decision: Decision,
+        champion: ChampionState,
+        hypothesis_id: str = "",
+        decision_reason_codes: Iterable[str] | None = None,
+        event_id: str | None = None,
+    ) -> Dict[str, Any]:
+        """Write experiment + decision lineage rows where a registry is configured."""
+        event = self.build_step_lineage_event(
+            branch=branch,
+            hypothesis=hypothesis,
+            patch=patch,
+            contract_result=contract_result,
+            verification_result=verification_result,
+            canary_result=canary_result,
+            protocol_result=protocol_result,
+            decision=decision,
+            champion=champion,
+            hypothesis_id=hypothesis_id,
+            decision_reason_codes=decision_reason_codes,
+            event_id=event_id,
+        )
+        if self.registry is not None:
+            try:
+                self.registry.record_event(event)
+            except Exception as exc:  # pragma: no cover - mirrors campaign best-effort behavior
+                logger.debug("registry.record_event failed: %s", exc)
+            decision_payload = self.build_decision_lineage_payload(
+                branch=branch,
+                protocol_result=protocol_result,
+                contract_result=contract_result,
+                verification_result=verification_result,
+                canary_result=canary_result,
+                decision=decision,
+                decision_reason_codes=decision_reason_codes,
+            )
+            try:
+                self.registry.record_decision(**decision_payload)
+            except Exception as exc:  # pragma: no cover
+                logger.debug("registry.record_decision failed: %s", exc)
