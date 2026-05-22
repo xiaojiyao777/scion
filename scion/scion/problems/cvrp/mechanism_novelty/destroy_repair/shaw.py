@@ -95,6 +95,7 @@ def _span_is_shaw_contrast_not_missing_claim(span: str) -> bool:
         span,
         (
             " unlike ",
+            " distinct from ",
             " different from ",
             " rather than ",
             " not a related ",
@@ -115,6 +116,10 @@ def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
             " unlike shaw ",
             " unlike _shaw_removal ",
             " unlike shaw related ",
+            " distinct from shaw ",
+            " distinct from _shaw_removal ",
+            " distinct from shaw related ",
+            " distinct from related removal ",
             " different from shaw ",
             " rather than shaw ",
             " not a related destroy ",

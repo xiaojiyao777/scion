@@ -106,6 +106,8 @@ def _missing_or_opt_1_span(text: str) -> str:
     )
     if _span_lists_existing_operator_then_other_gap(span):
         return ""
+    if _span_targets_existing_or_opt_filter_gap(span):
+        return ""
     return span
 
 
@@ -142,10 +144,14 @@ def _missing_intra_two_opt_span(text: str) -> str:
         return ""
     if _is_adaptive_vns_neighborhood_ordering_scope(text):
         return ""
+    if _describes_existing_intra_two_opt_improvement(text):
+        return ""
     span = _has_missing_gap_near(
         text,
         _INTRA_TWO_OPT_TERMS,
     )
+    if _span_targets_existing_intra_two_opt_filter_gap(span):
+        return ""
     if _span_targets_cross_route_or_non_intra_variant(span):
         return ""
     if _span_lists_existing_operator_then_other_gap(span):
@@ -216,7 +222,6 @@ def _describes_existing_intra_two_opt_improvement(text: str) -> bool:
     return _has_any(
         text,
         (
-            "improve",
             "refine",
             "tune",
             "adjust",
@@ -551,8 +556,9 @@ def _describes_existing_or_opt_improvement(text: str) -> bool:
 
 def _targets_existing_or_opt_filter_gap(text: str) -> bool:
     existing_or_opt = (
-        r"\b(?:existing|current|already present|built in|built-in)\b"
-        r".{0,80}\b(?:or opt|oropt)\b"
+        r"\b(?:existing|current|already present|built in|built-in|uses?|"
+        r"contains?|registered|listed|includes?)\b.{0,100}"
+        r"\b(?:or opt|oropt|_or_opt_[123])\b"
     )
     filter_gap = (
         r"\b(?:missing|lacks?|without|no|does not have|does not include|"
@@ -563,6 +569,79 @@ def _targets_existing_or_opt_filter_gap(text: str) -> bool:
     return bool(
         re.search(existing_or_opt + r".{0,100}" + filter_gap, text)
         or re.search(filter_gap + r".{0,100}" + existing_or_opt, text)
+    )
+
+
+def _span_targets_existing_or_opt_filter_gap(span: str) -> bool:
+    if not span:
+        return False
+    if not _mentions_or_opt_family(span):
+        return False
+    if not _has_any(
+        span,
+        (
+            "filter",
+            "filtered",
+            "candidate",
+            "nearest neighbor",
+            " nn ",
+            "prune",
+            "pruning",
+            "ordering",
+            "score",
+            "scoring",
+            "delta",
+        ),
+    ):
+        return False
+    if not _has_any(
+        span,
+        ("without", "lacks", "lack ", "missing", "no ", "does not have"),
+    ):
+        return False
+    return _has_any(
+        span,
+        (
+            "_or_opt_",
+            "existing",
+            "current",
+            "already",
+            "present",
+            "uses",
+            "contains",
+            "registered",
+            "listed",
+            "includes",
+            "without adding a new",
+        ),
+    )
+
+
+def _span_targets_existing_intra_two_opt_filter_gap(span: str) -> bool:
+    if not span:
+        return False
+    if not _mentions_intra_two_opt(span):
+        return False
+    if not _has_any(
+        span,
+        (
+            "filter",
+            "filtered",
+            "candidate",
+            "nearest neighbor",
+            " nn ",
+            "prune",
+            "pruning",
+            "ordering",
+            "score",
+            "scoring",
+            "delta",
+        ),
+    ):
+        return False
+    return _has_any(
+        span,
+        ("without", "lacks", "lack ", "missing", "no ", "does not have"),
     )
 
 

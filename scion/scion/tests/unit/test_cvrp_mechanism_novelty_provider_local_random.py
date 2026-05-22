@@ -160,6 +160,37 @@ def test_cvrp_provider_allows_double_bridge_after_listing_existing_or_opt() -> N
     assert result is None
 
 
+def test_cvrp_provider_allows_or_opt_candidate_filter_after_listing_moves() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active VNS local search uses _two_opt_intra, _relocate, "
+            "_or_opt_1/_2/_3, _swap, and _two_opt_star, but it lacks "
+            "distance-based nearest-neighbor candidate filtering and delta "
+            "pruning inside the existing Or-opt evaluations. Add a KNN "
+            "candidate filter to reduce unproductive route-pair scans without "
+            "adding a new Or-opt operator."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "Existing Or-opt neighborhoods spend effort on low-value route pairs."
+        ),
+        expected_effect="Improve total_distance within the same time budget.",
+        mechanism_changes=(
+            MechanismChange(id="knn_candidate_filter", change_type="add"),
+            MechanismChange(id="or_opt_local_search", change_type="modify"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_allows_contiguous_segment_destroy_after_route_removal_listing() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -375,6 +406,36 @@ def test_cvrp_provider_blocks_duplicate_random_removal_near_cluster_terms() -> N
     assert result.mechanism == "random_removal_destroy"
     assert result.fact_ids == ("cvrp.destroy_repair.random_removal_destroy",)
     assert "_random_removal" in " ".join([result.reason, *result.evidence])
+
+
+def test_cvrp_provider_allows_cluster_destroy_contrasting_random_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add proximity-cluster destroy from a random seed that greedily "
+            "removes the nearest customers across routes. This is distinct from "
+            "Shaw related removal and from random removal (uniform sampling). "
+            "No-op condition: fall back to existing destroy selection when a "
+            "cluster cannot be formed."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Destroy lacks a pure spatial cluster variant separate from uniform "
+            "random removal."
+        ),
+        expected_effect="Improve total_distance by perturbing spatially related stops.",
+        mechanism_changes=(
+            MechanismChange(id="cluster_removal_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
 
 
 def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:

@@ -15,8 +15,12 @@ def _missing_random_removal_destroy_span(text: str) -> str:
         return ""
     if _describes_existing_random_removal_variant(text):
         return ""
+    if _describes_existing_random_removal_contrast_variant(text):
+        return ""
     span = _first_regex_span(text, _MISSING_RANDOM_REMOVAL_DESTROY_PATTERNS)
     if _span_is_random_exploration_weakness_not_missing_removal(span):
+        return ""
+    if _span_is_noop_condition_not_missing_random_removal(span):
         return ""
     return span
 
@@ -35,6 +39,8 @@ def _duplicates_random_removal_destroy(text: str) -> bool:
     if not _mentions_random_removal_destroy(text):
         return False
     if _describes_existing_random_removal_variant(text):
+        return False
+    if _describes_existing_random_removal_contrast_variant(text):
         return False
     patterns = (
         r"\b(?:add|introduce|implement|enable|create|build|register)\b"
@@ -56,6 +62,11 @@ def _span_is_random_exploration_weakness_not_missing_removal(span: str) -> bool:
         re.search(r"\blacks?\b.{0,40}\brandom exploration\b", span)
         or re.search(r"\bmissing\b.{0,40}\brandom exploration\b", span)
     )
+
+def _span_is_noop_condition_not_missing_random_removal(span: str) -> bool:
+    if not span:
+        return False
+    return _has_any(span, ("no-op", "no op", "noop", "no-op condition"))
 
 def _describes_existing_random_removal_variant(text: str) -> bool:
     if not _mentions_random_removal_destroy(text):
@@ -102,6 +113,43 @@ def _describes_existing_random_removal_variant(text: str) -> bool:
             "q budget",
             "telemetry",
             "instrumentation",
+        ),
+    )
+
+def _describes_existing_random_removal_contrast_variant(text: str) -> bool:
+    if not _mentions_random_removal_destroy(text):
+        return False
+    if not _has_any(
+        text,
+        (
+            "cluster",
+            "proximity",
+            "geographic",
+            "spatial",
+            "nearest customer",
+            "nearest customers",
+            "nearby customer",
+            "nearby customers",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "distinct from random",
+            "different from random",
+            "unlike random",
+            "rather than random",
+            "not random removal",
+            "not a random removal",
+            "random removal (uniform",
+            "uniform random",
+            "uniform sampling",
+            "existing random removal",
+            "current random removal",
+            "baseline random removal",
+            "random removal is uniform",
+            "random removal samples uniformly",
         ),
     )
 
