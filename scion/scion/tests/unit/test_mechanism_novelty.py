@@ -328,6 +328,20 @@ def test_mechanism_novelty_gate_blocks_cross_route_oropt_duplicate_from_smoke_ro
         ),
         "Add nearest-neighbor candidate filtering to cross-route Or-opt evaluation.",
         "The existing cross-route Or-opt lacks NN candidate filtering; add that filter.",
+        (
+            "The active solver's VNS local search applies operators in a fixed "
+            "round-robin sequence (_two_opt_intra, _relocate, _or_opt_1, "
+            "_or_opt_2, _or_opt_3, _swap, _two_opt_star) with no inter-route "
+            "node-pair distance filter. Add a neighbor-list filter for existing "
+            "cross-route operators without adding any new Or-opt neighborhood."
+        ),
+        (
+            "The active VNS phase applies every local-search operator "
+            "(_two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
+            "_two_opt_star) on every pass with no adaptive ordering or success "
+            "feedback. Add adaptive_vns_op_order to reorder the existing "
+            "operators by recent improvement evidence."
+        ),
     ),
 )
 def test_mechanism_novelty_gate_allows_existing_or_opt_improvements(

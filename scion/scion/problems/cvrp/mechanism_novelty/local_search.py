@@ -92,6 +92,8 @@ def _claims_missing_or_opt_1(text: str) -> bool:
 def _missing_or_opt_1_span(text: str) -> str:
     if not _mentions_or_opt_1(text):
         return ""
+    if _describes_existing_or_opt_improvement(text):
+        return ""
     span = _first_regex_span(
         text,
         (
@@ -557,18 +559,19 @@ def _describes_existing_or_opt_improvement(text: str) -> bool:
 def _targets_existing_or_opt_filter_gap(text: str) -> bool:
     existing_or_opt = (
         r"\b(?:existing|current|already present|built in|built-in|uses?|"
-        r"contains?|registered|listed|includes?)\b.{0,100}"
+        r"contains?|registered|listed|includes?|applies?|runs?)\b.{0,140}"
         r"\b(?:or opt|oropt|_or_opt_[123])\b"
     )
     filter_gap = (
         r"\b(?:missing|lacks?|without|no|does not have|does not include|"
-        r"doesn't have|doesn't include)\b.{0,60}"
+        r"doesn't have|doesn't include)\b.{0,90}"
         r"\b(?:filter|filtered|candidate|nearest neighbor|nn|prun(?:e|ing)|"
-        r"ordering|score|scoring|delta)\b"
+        r"ordering|order|adapt(?:ive|ation)?|success feedback|success rate|"
+        r"score|scoring|delta)\b"
     )
     return bool(
-        re.search(existing_or_opt + r".{0,100}" + filter_gap, text)
-        or re.search(filter_gap + r".{0,100}" + existing_or_opt, text)
+        re.search(existing_or_opt + r".{0,180}" + filter_gap, text)
+        or re.search(filter_gap + r".{0,180}" + existing_or_opt, text)
     )
 
 
@@ -588,6 +591,12 @@ def _span_targets_existing_or_opt_filter_gap(span: str) -> bool:
             "prune",
             "pruning",
             "ordering",
+            "order",
+            "adapt",
+            "adaptive",
+            "adaptation",
+            "success feedback",
+            "success rate",
             "score",
             "scoring",
             "delta",
@@ -633,6 +642,12 @@ def _span_targets_existing_intra_two_opt_filter_gap(span: str) -> bool:
             "prune",
             "pruning",
             "ordering",
+            "order",
+            "adapt",
+            "adaptive",
+            "adaptation",
+            "success feedback",
+            "success rate",
             "score",
             "scoring",
             "delta",
@@ -697,6 +712,12 @@ def _has_or_opt_improvement_terms(text: str) -> bool:
             "pruning",
             "candidate",
             "ordering",
+            "order",
+            "adapt",
+            "adaptive",
+            "adaptation",
+            "success feedback",
+            "success rate",
             "filter",
             "filtered",
             "nearest neighbor",

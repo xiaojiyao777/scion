@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from scion.tests.unit.cvrp_mechanism_novelty_provider_helpers import (
     CvrpMechanismNoveltyProvider,
     DirectCvrpMechanismNoveltyProvider,
@@ -179,6 +181,64 @@ def test_cvrp_provider_allows_or_opt_candidate_filter_after_listing_moves() -> N
         expected_effect="Improve total_distance within the same time budget.",
         mechanism_changes=(
             MechanismChange(id="knn_candidate_filter", change_type="add"),
+            MechanismChange(id="or_opt_local_search", change_type="modify"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "hypothesis_text,mechanism_id,target_weakness",
+    (
+        (
+            "The active solver's VNS local search applies operators in a fixed "
+            "round-robin sequence (_two_opt_intra, _relocate, _or_opt_1, "
+            "_or_opt_2, _or_opt_3, _swap, _two_opt_star) with no inter-route "
+            "node-pair distance filter. Add a neighbor-list filter for existing "
+            "cross-route operators without adding any new Or-opt neighborhood.",
+            "vns_neighbor_list_filter",
+            "Existing VNS route-pair scans lack a node-pair distance filter.",
+        ),
+        (
+            "The active solver's VNS local search applies its full operator "
+            "portfolio (_two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
+            "_two_opt_star) in a fixed sequential order every pass, with no "
+            "route-pair candidate list or spatial filtering. Add a candidate "
+            "list filter around the existing Or-opt evaluations.",
+            "vns_candidate_list_filter",
+            "Existing VNS scans lack route-pair candidate lists.",
+        ),
+        (
+            "The active VNS phase applies every local-search operator "
+            "(_two_opt_intra, _relocate, _or_opt_1/_2/_3, _swap, "
+            "_two_opt_star) on every pass with no adaptive ordering or success "
+            "feedback. Add adaptive_vns_op_order to reorder the existing "
+            "operators by recent improvement evidence.",
+            "adaptive_vns_op_order",
+            "Existing VNS operator order is fixed rather than success-adaptive.",
+        ),
+    ),
+)
+def test_cvrp_provider_allows_existing_or_opt_list_with_variant_gap(
+    hypothesis_text: str,
+    mechanism_id: str,
+    target_weakness: str,
+) -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=hypothesis_text,
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=target_weakness,
+        expected_effect="Improve total_distance using the existing VNS operators.",
+        mechanism_changes=(
+            MechanismChange(id=mechanism_id, change_type="add"),
             MechanismChange(id="or_opt_local_search", change_type="modify"),
         ),
     )
