@@ -185,6 +185,33 @@ def test_cvrp_provider_allows_geographic_cluster_variant_acknowledging_worst_rem
     assert result is None
 
 
+def test_cvrp_provider_allows_zone_cluster_variant_contrasting_existing_shaw() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Unlike the existing _shaw_removal, which grows from a seed using "
+            "distance, demand, and route relatedness, add centroid zone "
+            "cluster_removal that removes customers from a fixed geographic "
+            "cell before repair. The runtime budget uses no extra polling "
+            "cluster removal loop."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy lacks a route-independent centroid zone variant.",
+        expected_effect="Improve total_distance by perturbing spatial zones.",
+        mechanism_changes=(
+            MechanismChange(id="cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -240,5 +267,4 @@ def test_cvrp_provider_rejects_repeated_worst_removal_with_precise_reason() -> N
     assert "removal-savings or detour-cost destroy operator" in result.reason
     assert "_worst_removal" in " ".join([result.reason, *result.evidence])
     assert "_shaw_removal" not in result.reason
-
 

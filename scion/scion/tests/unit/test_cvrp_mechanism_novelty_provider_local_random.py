@@ -630,6 +630,33 @@ def test_cvrp_provider_allows_shaw_trigger_scoring_variant() -> None:
     assert result is None
 
 
+def test_cvrp_provider_allows_single_seed_trajectory_after_listing_construction_portfolio() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current construction portfolio (sweep, Clarke-Wright, "
+            "capacity-balanced, nearest-neighbor) generates a single seed "
+            "solution per solve call, then follows one ALNS+VNS trajectory. "
+            "Add perturbation_restart in scheduler.py to diversify the basin "
+            "after stagnation without claiming construction is nearest-neighbor-only."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness="Search follows a single incumbent trajectory per solve.",
+        expected_effect="Improve total_distance by exploring additional basins.",
+        mechanism_changes=(
+            MechanismChange(id="perturbation_restart", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_premise_contradictions_always_have_exact_span() -> None:
     cases = [
         _hypothesis("The active solver uses only nearest neighbor seed construction."),

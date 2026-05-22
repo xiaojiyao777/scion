@@ -30,6 +30,8 @@ def _missing_shaw_related_removal_span(text: str) -> str:
         return ""
     if _is_pure_geographic_cluster_variant_acknowledging_shaw(text):
         return ""
+    if _is_cluster_variant_contrasting_existing_shaw(text):
+        return ""
     if (
         _scopes_change_to_existing_shaw_related_removal(text)
         or _is_existing_shaw_variant_with_negated_missing_claim(text)
@@ -109,6 +111,29 @@ def _span_is_shaw_contrast_not_missing_claim(span: str) -> bool:
         ),
     )
 
+
+def _is_cluster_variant_contrasting_existing_shaw(text: str) -> bool:
+    if not _mentions_shaw_related_removal(text):
+        return False
+    if not _has_any(text, ("cluster", "zone", "centroid", "geographic", "spatial")):
+        return False
+    if not _has_any(text, ("existing shaw removal", "current shaw removal")):
+        return False
+    return _has_any(
+        text,
+        (
+            "unlike the existing shaw",
+            "unlike existing shaw",
+            "unlike current shaw",
+            "distinct from existing shaw",
+            "different from existing shaw",
+            "rather than existing shaw",
+            "compared with existing shaw",
+            "instead of existing shaw",
+        ),
+    )
+
+
 def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
     return _has_any(
         text,
@@ -116,12 +141,18 @@ def _is_shaw_contrast_or_negated_addition(text: str) -> bool:
             " unlike shaw ",
             " unlike _shaw_removal ",
             " unlike shaw related ",
+            " unlike the existing shaw ",
+            " unlike existing shaw ",
+            " unlike current shaw ",
             " distinct from shaw ",
             " distinct from _shaw_removal ",
             " distinct from shaw related ",
             " distinct from related removal ",
+            " distinct from existing shaw ",
             " different from shaw ",
+            " different from existing shaw ",
             " rather than shaw ",
+            " rather than existing shaw ",
             " not a related destroy ",
             " not a related removal ",
             " not related removal ",

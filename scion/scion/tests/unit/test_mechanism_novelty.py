@@ -154,6 +154,49 @@ def test_mechanism_novelty_gate_allows_shaw_related_improvements(
     )
 
 
+def test_mechanism_novelty_gate_allows_zone_cluster_contrast_with_existing_shaw(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "Unlike the existing _shaw_removal, which grows from a seed using "
+        "distance and demand relatedness, add centroid zone cluster_removal "
+        "that removes customers from a fixed geographic cell before repair."
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            _solver_design_hypothesis(text),
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
+def test_mechanism_novelty_gate_allows_single_seed_trajectory_with_portfolio(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    text = (
+        "The current construction portfolio (sweep, Clarke-Wright, "
+        "capacity-balanced, nearest-neighbor) generates a single seed solution "
+        "per solve call, then follows one ALNS+VNS trajectory. Add a "
+        "perturbation_restart in scheduler.py after stagnation."
+    )
+
+    assert (
+        MechanismNoveltyGate().evaluate(
+            _solver_design_hypothesis(text),
+            context=context,
+            active_solver_snapshot=snapshot,
+        )
+        is None
+    )
+
+
 def test_mechanism_novelty_gate_allows_segment_chain_repair_not_shaw_duplicate(
     tmp_path,
 ) -> None:
