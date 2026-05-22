@@ -11,14 +11,14 @@ from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
-from scion.evidence.cvrp_case_manifest import CvrpCaseManifest
-from scion.evidence.cvrp_final_evaluation import (
+from scion.problems.cvrp.evidence.case_manifest import CvrpCaseManifest
+from scion.problems.cvrp.evidence.final_evaluation import (
     CvrpFinalEvaluationConfig,
     build_cvrp_final_evidence_package,
     write_cvrp_final_evidence_package,
 )
-from scion.evidence.cvrp_package import CvrpEvidencePackageResult
-from scion.evidence.final_quality import FinalQualityPackage
+from scion.problems.cvrp.evidence.package import CvrpEvidencePackageResult
+from scion.problems.cvrp.evidence.final_quality import FinalQualityPackage
 
 if TYPE_CHECKING:
     from scion.problem.contracts import ProblemAdapter

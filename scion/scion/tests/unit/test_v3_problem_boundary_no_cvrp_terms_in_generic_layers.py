@@ -12,11 +12,14 @@ GENERIC_LAYER_DIRS = (
     "runtime",
     "protocol",
     "verification",
+    "evidence",
 )
 GENERIC_PREVIEW_DIR = PACKAGE_ROOT / "proposal" / "tools" / "previews"
 
 FORBIDDEN_PATTERNS = {
-    "cvrp": re.compile(r"\bCVRP\b|\bCvrpSolution\b|from_cvrp_solution"),
+    "cvrp": re.compile(
+        r"\bCVRP\b|\bcvrp\b|\bCvrpSolution\b|from_cvrp_solution"
+    ),
     "alns": re.compile(r"\bALNS\b|\balns\b"),
     "vns": re.compile(r"\bVNS\b|\bvns\b"),
     "alns_vns_solver": re.compile(r"_ALNSVNSSolver"),
@@ -32,6 +35,13 @@ FORBIDDEN_PATTERNS = {
     ),
     "solver_algorithm_total_distance": re.compile(
         r"solver_algorithm_total_distance"
+    ),
+    "route_gap": re.compile(r"route_gap"),
+    "bks_routes": re.compile(r"bks_routes"),
+    "baseline_routes": re.compile(r"baseline_routes"),
+    "candidate_routes": re.compile(r"candidate_routes"),
+    "baseline_candidate_route_fields": re.compile(
+        r"baseline_route_|candidate_route_"
     ),
 }
 

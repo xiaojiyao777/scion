@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from scion.evidence.cvrp_baseline_import import (
+from scion.problems.cvrp.evidence.baseline_import import (
     CvrpCsvResultRow,
     load_cvrp_result_rows,
 )

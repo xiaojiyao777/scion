@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SeedLedgerConfig, SplitManifest
-from scion.evidence import load_cvrp_case_manifest
+from scion.problems.cvrp.evidence import load_cvrp_case_manifest
 
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"

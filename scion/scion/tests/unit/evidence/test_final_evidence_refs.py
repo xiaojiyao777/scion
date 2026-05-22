@@ -12,7 +12,6 @@ from scion.core.models import (
 )
 from scion.core.public_refs import contains_absolute_path
 from scion.evidence import (
-    CvrpEvidencePackageResult,
     FinalQualityPackage,
     attach_final_evidence_package,
     build_final_evidence_refs,
@@ -22,6 +21,7 @@ from scion.evidence.final_evidence_refs import (
     FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
     FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
 )
+from scion.problems.cvrp.evidence import CvrpEvidencePackageResult
 
 
 _ARTIFACT_KEYS = (

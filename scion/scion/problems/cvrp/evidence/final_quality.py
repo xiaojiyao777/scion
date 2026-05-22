@@ -1,8 +1,7 @@
-"""Generic final quality evidence package writer.
+"""Final quality evidence package writer.
 
-Callers provide already-evaluated case records. Problem-specific fields stay in
-the extension payload supplied by the problem package; this module only writes
-common artifact structure and aggregate outcome/runtime statistics.
+This module is intentionally pure: callers provide already-evaluated case
+records, and the writer turns them into deterministic JSON/CSV artifacts.
 """
 from __future__ import annotations
 
@@ -59,7 +58,23 @@ _COMMON_CASE_FIELDS = [
     "runtime_ratio",
     "runtime_regression",
     "error_category",
-    "problem_extension",
+]
+
+_CVRP_CASE_FIELDS = [
+    "baseline_cost",
+    "candidate_cost",
+    "bks",
+    "baseline_gap_pct",
+    "candidate_gap_pct",
+    "baseline_routes",
+    "candidate_routes",
+    "bks_routes",
+    "baseline_route_gap",
+    "candidate_route_gap",
+    "baseline_feasible",
+    "candidate_feasible",
+    "baseline_benchmark_feasible",
+    "candidate_benchmark_feasible",
 ]
 
 _FINAL_QUALITY_FIELDS = [
@@ -73,6 +88,7 @@ _FINAL_QUALITY_FIELDS = [
     "n_timeout",
     "n_error",
     "n_infeasible",
+    "n_benchmark_incomparable",
     "better_vs_baseline",
     "equal_vs_baseline",
     "worse_vs_baseline",
@@ -81,8 +97,14 @@ _FINAL_QUALITY_FIELDS = [
     "wall_time_total_ms",
     "wall_time_median_ms",
     "runtime_regressions",
-    "problem_extension_schema",
-    "problem_extension_summary",
+    "n_with_bks",
+    "n_with_bks_routes",
+    "mean_candidate_gap_pct",
+    "median_candidate_gap_pct",
+    "mean_baseline_gap_pct",
+    "median_baseline_gap_pct",
+    "candidate_benchmark_feasible",
+    "baseline_benchmark_feasible",
 ]
 
 _PACKAGE_FILES = {
@@ -112,7 +134,20 @@ class QualityCaseRecord:
     baseline_elapsed_ms: float | None = None
     candidate_elapsed_ms: float | None = None
     error_category: str | None = None
-    problem_extension: Mapping[str, Any] = field(default_factory=dict)
+    baseline_cost: float | None = None
+    candidate_cost: float | None = None
+    bks: float | None = None
+    baseline_gap_pct: float | None = None
+    candidate_gap_pct: float | None = None
+    baseline_routes: int | None = None
+    candidate_routes: int | None = None
+    bks_routes: int | None = None
+    baseline_route_gap: int | None = None
+    candidate_route_gap: int | None = None
+    baseline_feasible: bool | None = None
+    candidate_feasible: bool | None = None
+    baseline_benchmark_feasible: bool | None = None
+    candidate_benchmark_feasible: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -127,13 +162,11 @@ class FinalQualityConfig:
     objective_sense: str = "minimize"
     primary_metric: str = "primary_objective"
     objective_tolerance: float = 1e-9
-    problem_extension_schema: str | None = None
-    problem_extension_summary: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class FinalQualityPackage:
-    """In-memory representation of the final evidence package."""
+    """In-memory representation of the six-file final evidence package."""
 
     manifest: Mapping[str, Any]
     final_quality: Mapping[str, Any]
@@ -166,7 +199,6 @@ def build_final_quality_package(
         "campaign_id": config.campaign_id,
         "baseline_label": config.baseline_label,
         "candidate_label": config.candidate_label,
-        "problem_extension_schema": config.problem_extension_schema,
         "n_cases": len(per_case_rows),
         "files": dict(_PACKAGE_FILES),
     }
@@ -192,7 +224,11 @@ def write_final_quality_package(
     _write_json(paths["manifest"], package.manifest)
     _write_json(paths["final_quality_json"], package.final_quality)
     _write_csv(paths["final_quality_csv"], [package.final_quality], _FINAL_QUALITY_FIELDS)
-    _write_csv(paths["per_case_quality_csv"], list(package.per_case_quality), _COMMON_CASE_FIELDS)
+    _write_csv(
+        paths["per_case_quality_csv"],
+        list(package.per_case_quality),
+        _COMMON_CASE_FIELDS + _CVRP_CASE_FIELDS,
+    )
     _write_json(paths["runtime_summary"], package.runtime_summary)
     _write_json(paths["failure_summary"], package.failure_summary)
     return paths
@@ -221,7 +257,44 @@ def _build_case_row(
     if primary_delta is not None and config.primary_metric not in metric_deltas:
         metric_deltas[config.primary_metric] = primary_delta
 
-    comparison = _comparison(record, config, primary_delta, failure_categories)
+    baseline_gap_pct = _gap_pct(record.baseline_gap_pct, record.baseline_cost, record.bks)
+    candidate_gap_pct = _gap_pct(record.candidate_gap_pct, record.candidate_cost, record.bks)
+    baseline_route_gap = _route_gap(
+        record.baseline_route_gap,
+        record.baseline_routes,
+        record.bks_routes,
+    )
+    candidate_route_gap = _route_gap(
+        record.candidate_route_gap,
+        record.candidate_routes,
+        record.bks_routes,
+    )
+    baseline_benchmark_feasible = _benchmark_feasible(
+        explicit=record.baseline_benchmark_feasible,
+        feasible=record.baseline_feasible,
+        routes=record.baseline_routes,
+        bks_routes=record.bks_routes,
+    )
+    candidate_benchmark_feasible = _benchmark_feasible(
+        explicit=record.candidate_benchmark_feasible,
+        feasible=record.candidate_feasible,
+        routes=record.candidate_routes,
+        bks_routes=record.bks_routes,
+    )
+    benchmark_comparable = not (
+        _has_cvrp_fields(record)
+        and (
+            baseline_benchmark_feasible is not True
+            or candidate_benchmark_feasible is not True
+        )
+    )
+    comparison = _comparison(
+        record,
+        config,
+        primary_delta,
+        failure_categories,
+        benchmark_comparable=benchmark_comparable,
+    )
     error_category = record.error_category or (
         failure_categories[0] if failure_categories else None
     )
@@ -242,8 +315,22 @@ def _build_case_row(
         "runtime_ratio": runtime_ratio,
         "runtime_regression": runtime_regression,
         "error_category": error_category,
-        "problem_extension": dict(record.problem_extension or {}),
+        "baseline_cost": record.baseline_cost,
+        "candidate_cost": record.candidate_cost,
+        "bks": record.bks,
+        "baseline_gap_pct": baseline_gap_pct,
+        "candidate_gap_pct": candidate_gap_pct,
+        "baseline_routes": record.baseline_routes,
+        "candidate_routes": record.candidate_routes,
+        "bks_routes": record.bks_routes,
+        "baseline_route_gap": baseline_route_gap,
+        "candidate_route_gap": candidate_route_gap,
+        "baseline_feasible": record.baseline_feasible,
+        "candidate_feasible": record.candidate_feasible,
+        "baseline_benchmark_feasible": baseline_benchmark_feasible,
+        "candidate_benchmark_feasible": candidate_benchmark_feasible,
         "_failure_categories": tuple(failure_categories),
+        "_has_cvrp_fields": _has_cvrp_fields(record),
     }
 
 
@@ -274,10 +361,13 @@ def _build_failure_summary(rows: tuple[Mapping[str, Any], ...]) -> dict[str, Any
         "crash": 0,
         "error": 0,
         "infeasible": 0,
+        "benchmark_incomparable": 0,
     }
     failures: list[dict[str, Any]] = []
     for row in rows:
         categories = list(row["_failure_categories"])
+        if not categories and _is_benchmark_incomparable(row):
+            categories.append("benchmark_incomparable")
         for category in categories:
             counts[category] = counts.get(category, 0) + 1
         if categories:
@@ -309,6 +399,8 @@ def _build_final_quality_summary(
 ) -> dict[str, Any]:
     primary_deltas = _number_values(row["primary_delta"] for row in per_case_rows)
     candidate_times = _number_values(row["candidate_elapsed_ms"] for row in per_case_rows)
+    candidate_gaps = _number_values(row["candidate_gap_pct"] for row in per_case_rows)
+    baseline_gaps = _number_values(row["baseline_gap_pct"] for row in per_case_rows)
     failure_counts = failure_summary["counts_by_category"]
     return {
         "schema": "scion.final_quality.v1",
@@ -321,6 +413,9 @@ def _build_final_quality_summary(
         "n_timeout": failure_counts["timeout"],
         "n_error": failure_counts["crash"] + failure_counts["error"],
         "n_infeasible": failure_counts["infeasible"],
+        "n_benchmark_incomparable": sum(
+            1 for row in per_case_rows if _is_benchmark_incomparable(row)
+        ),
         "better_vs_baseline": sum(
             1 for row in per_case_rows if row["comparison"] == COMPARISON_BETTER
         ),
@@ -335,8 +430,24 @@ def _build_final_quality_summary(
         "wall_time_total_ms": _sum_or_none(candidate_times),
         "wall_time_median_ms": _median_or_none(candidate_times),
         "runtime_regressions": runtime_summary["runtime_regressions"],
-        "problem_extension_schema": config.problem_extension_schema,
-        "problem_extension_summary": dict(config.problem_extension_summary or {}),
+        "n_with_bks": sum(1 for row in per_case_rows if row["bks"] is not None),
+        "n_with_bks_routes": sum(
+            1 for row in per_case_rows if row["bks_routes"] is not None
+        ),
+        "mean_candidate_gap_pct": _mean_or_none(candidate_gaps),
+        "median_candidate_gap_pct": _median_or_none(candidate_gaps),
+        "mean_baseline_gap_pct": _mean_or_none(baseline_gaps),
+        "median_baseline_gap_pct": _median_or_none(baseline_gaps),
+        "candidate_benchmark_feasible": _all_known_true(
+            row["candidate_benchmark_feasible"]
+            for row in per_case_rows
+            if row["_has_cvrp_fields"]
+        ),
+        "baseline_benchmark_feasible": _all_known_true(
+            row["baseline_benchmark_feasible"]
+            for row in per_case_rows
+            if row["_has_cvrp_fields"]
+        ),
     }
 
 
@@ -345,8 +456,12 @@ def _comparison(
     config: FinalQualityConfig,
     primary_delta: float | None,
     failure_categories: list[str],
+    *,
+    benchmark_comparable: bool,
 ) -> str:
     if failure_categories:
+        return COMPARISON_NOT_COMPARABLE
+    if not benchmark_comparable:
         return COMPARISON_NOT_COMPARABLE
     if record.comparison is not None:
         return _normalize_comparison(record.comparison)
@@ -381,6 +496,13 @@ def _failure_categories(record: QualityCaseRecord) -> list[str]:
         status_category = _status_failure_category(status)
         if status_category and status_category not in categories:
             categories.append(status_category)
+    if (
+        record.baseline_feasible is False
+        or record.candidate_feasible is False
+        or record.baseline_status in _INFEASIBLE_STATUSES
+        or record.candidate_status in _INFEASIBLE_STATUSES
+    ) and "infeasible" not in categories:
+        categories.append("infeasible")
     if record.error_category:
         category = _normalize_failure_category(record.error_category)
         if category and category not in categories:
@@ -413,6 +535,8 @@ def _normalize_failure_category(category: str) -> str | None:
         return "infeasible"
     if normalized in _ERROR_STATUSES:
         return "error"
+    if normalized == "benchmark_incomparable":
+        return normalized
     return "error" if normalized else None
 
 
@@ -450,6 +574,62 @@ def _runtime_ratio(
     return candidate_elapsed_ms / baseline_elapsed_ms
 
 
+def _gap_pct(
+    explicit_gap: float | None,
+    cost: float | None,
+    bks: float | None,
+) -> float | None:
+    if explicit_gap is not None:
+        return explicit_gap
+    if cost is None or bks is None or bks == 0:
+        return None
+    return (cost - bks) / bks * 100.0
+
+
+def _route_gap(
+    explicit_gap: int | None,
+    routes: int | None,
+    bks_routes: int | None,
+) -> int | None:
+    if explicit_gap is not None:
+        return explicit_gap
+    if routes is None or bks_routes is None:
+        return None
+    return routes - bks_routes
+
+
+def _benchmark_feasible(
+    *,
+    explicit: bool | None,
+    feasible: bool | None,
+    routes: int | None,
+    bks_routes: int | None,
+) -> bool | None:
+    if bks_routes is None:
+        return None
+    if explicit is not None:
+        return bool(explicit)
+    if feasible is None or routes is None:
+        return None
+    return bool(feasible and routes <= bks_routes)
+
+
+def _has_cvrp_fields(record: QualityCaseRecord) -> bool:
+    return any(
+        getattr(record, field_name) is not None
+        for field_name in _CVRP_CASE_FIELDS
+    )
+
+
+def _is_benchmark_incomparable(row: Mapping[str, Any]) -> bool:
+    if not row["_has_cvrp_fields"]:
+        return False
+    return (
+        row["baseline_benchmark_feasible"] is not True
+        or row["candidate_benchmark_feasible"] is not True
+    )
+
+
 def _is_ok_case(row: Mapping[str, Any]) -> bool:
     categories = set(row["_failure_categories"])
     return not categories.intersection({"timeout", "crash", "error", "infeasible"})
@@ -473,6 +653,23 @@ def _median_or_none(values: list[float]) -> float | None:
     if not values:
         return None
     return float(median(values))
+
+
+def _mean_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _all_known_true(values: Any) -> bool | None:
+    known = list(values)
+    if not known:
+        return None
+    if any(value is False for value in known):
+        return False
+    if any(value is None for value in known):
+        return None
+    return True
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -508,11 +705,11 @@ def _public_payload(payload: Any) -> Any:
     return payload
 
 
-def _csv_cell(value: Any) -> str:
+def _csv_cell(value: Any) -> str | int | float:
     if value is None:
         return ""
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, (Mapping, list, tuple)):
+    if isinstance(value, (dict, list, tuple)):
         return json.dumps(_public_payload(value), sort_keys=True)
-    return str(value)
+    return value

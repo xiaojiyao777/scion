@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from scion.evidence.cvrp_baseline_import import CvrpCsvResultRow
-from scion.evidence.cvrp_case_manifest import (
+from scion.problems.cvrp.evidence.baseline_import import CvrpCsvResultRow
+from scion.problems.cvrp.evidence.case_manifest import (
     CvrpCaseSelectionConfig,
     build_cvrp_case_manifest_from_csv,
     build_cvrp_case_manifest_from_rows,

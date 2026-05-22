@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scion.evidence import (
+from scion.problems.cvrp.evidence import (
     CvrpEvidencePackageConfig,
     build_cvrp_evidence_package_from_csv,
     write_cvrp_evidence_package_from_csv,

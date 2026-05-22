@@ -9,7 +9,7 @@ from typing import Mapping
 import pytest
 
 from scion.core.models import RunResult
-from scion.evidence import (
+from scion.problems.cvrp.evidence import (
     CvrpFinalEvaluationConfig,
     build_cvrp_final_evidence_package,
     evaluate_cvrp_final_quality_records,

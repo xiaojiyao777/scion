@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from scion.evidence import (
+from scion.problems.cvrp.evidence import (
     FinalQualityConfig,
     build_final_quality_package,
 )
-from scion.evidence.cvrp_baseline_import import (
+from scion.problems.cvrp.evidence.baseline_import import (
     build_cvrp_quality_records,
     load_cvrp_quality_records,
     load_cvrp_result_rows,

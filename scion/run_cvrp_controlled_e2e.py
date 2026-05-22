@@ -21,9 +21,9 @@ from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
 from scion.core.termination import TerminationConfig
-from scion.evidence import (
+from scion.evidence import attach_final_evidence_package
+from scion.problems.cvrp.evidence import (
     CvrpManifestEvaluationConfig,
-    attach_final_evidence_package,
     load_cvrp_case_manifest,
     write_cvrp_manifest_final_evidence_package,
 )

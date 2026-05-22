@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scion.evidence.cvrp_baseline_import import load_cvrp_quality_records
-from scion.evidence.final_quality import (
+from scion.problems.cvrp.evidence.baseline_import import load_cvrp_quality_records
+from scion.problems.cvrp.evidence.final_quality import (
     FinalQualityConfig,
     FinalQualityPackage,
     build_final_quality_package,

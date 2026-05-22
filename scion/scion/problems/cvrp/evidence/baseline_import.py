@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
 
-from scion.evidence.final_quality import QualityCaseRecord
+from scion.problems.cvrp.evidence.final_quality import QualityCaseRecord
 
 
 __all__ = [

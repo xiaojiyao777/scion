@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scion.evidence import (
+from scion.problems.cvrp.evidence import (
     CvrpCaseEntry,
     CvrpCaseManifest,
     CvrpCaseSelectionConfig,
@@ -12,7 +12,7 @@ from scion.evidence import (
     build_cvrp_final_evaluation_config_from_manifest,
     load_cvrp_case_manifest,
 )
-from scion.evidence.cvrp_baseline_import import load_cvrp_result_rows
+from scion.problems.cvrp.evidence.baseline_import import load_cvrp_result_rows
 from scion.problems.cvrp.adapter import CvrpAdapter
 
 

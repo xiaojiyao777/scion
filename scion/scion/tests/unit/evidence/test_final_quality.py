@@ -14,7 +14,7 @@ from scion.evidence import (
 
 def _config(**overrides: object) -> FinalQualityConfig:
     values = {
-        "problem_id": "cvrp",
+        "problem_id": "generic-problem",
         "campaign_id": "camp-final",
         "baseline_label": "baseline-v0",
         "candidate_label": "champion-v4",
@@ -130,7 +130,6 @@ def test_failure_summary_preserves_timeout_crash_error_and_infeasible_rows(
         "crash": 1,
         "error": 2,
         "infeasible": 1,
-        "benchmark_incomparable": 0,
     }
     assert [row["case_id"] for row in failure_summary["failures"]] == [
         "timeout",
@@ -186,22 +185,23 @@ def test_runtime_regression_threshold_is_configurable(tmp_path: Path) -> None:
     }
 
 
-def test_cvrp_fields_are_report_only_and_emitted(tmp_path: Path) -> None:
+def test_problem_extension_is_report_only_and_emitted(tmp_path: Path) -> None:
     records = [
         QualityCaseRecord(
-            case_id="cvrp-a",
+            case_id="case-a",
             comparison="tie",
-            baseline_cost=120.0,
-            candidate_cost=100.0,
-            bks=100.0,
-            baseline_routes=10,
-            candidate_routes=9,
-            bks_routes=10,
-            baseline_feasible=True,
-            candidate_feasible=True,
+            baseline_objective=120.0,
+            candidate_objective=100.0,
+            problem_extension={"domain_metric": 3, "domain_flag": True},
         )
     ]
-    package = build_final_quality_package(records, _config())
+    package = build_final_quality_package(
+        records,
+        _config(
+            problem_extension_schema="example.extension.v1",
+            problem_extension_summary={"domain_metric_total": 3},
+        ),
+    )
 
     write_final_quality_package(package, tmp_path)
 
@@ -209,84 +209,12 @@ def test_cvrp_fields_are_report_only_and_emitted(tmp_path: Path) -> None:
     assert final_quality["better_vs_baseline"] == 0
     assert final_quality["equal_vs_baseline"] == 1
     assert final_quality["worse_vs_baseline"] == 0
-    assert final_quality["n_with_bks"] == 1
-    assert final_quality["n_with_bks_routes"] == 1
-    assert final_quality["mean_candidate_gap_pct"] == 0.0
-    assert final_quality["mean_baseline_gap_pct"] == 20.0
-    assert final_quality["candidate_benchmark_feasible"] is True
-    assert final_quality["baseline_benchmark_feasible"] is True
+    assert final_quality["problem_extension_schema"] == "example.extension.v1"
+    assert final_quality["problem_extension_summary"] == {"domain_metric_total": 3}
 
     per_case_rows = _read_csv(tmp_path / "per_case_quality.csv")
     row = per_case_rows[0]
-    assert row["bks"] == "100.0"
-    assert row["baseline_gap_pct"] == "20.0"
-    assert row["candidate_gap_pct"] == "0.0"
-    assert row["baseline_route_gap"] == "0"
-    assert row["candidate_route_gap"] == "-1"
-    assert row["baseline_benchmark_feasible"] == "true"
-    assert row["candidate_benchmark_feasible"] == "true"
-
-
-def test_missing_bks_routes_does_not_mark_benchmark_comparable_true(
-    tmp_path: Path,
-) -> None:
-    records = [
-        QualityCaseRecord(
-            case_id="missing-routes",
-            comparison="tie",
-            baseline_cost=100.0,
-            candidate_cost=99.0,
-            bks=95.0,
-            baseline_routes=8,
-            candidate_routes=8,
-            bks_routes=None,
-            baseline_feasible=True,
-            candidate_feasible=True,
-            baseline_benchmark_feasible=True,
-            candidate_benchmark_feasible=True,
-        )
-    ]
-    package = build_final_quality_package(records, _config())
-
-    assert package.per_case_quality[0]["baseline_benchmark_feasible"] is None
-    assert package.per_case_quality[0]["candidate_benchmark_feasible"] is None
-
-    write_final_quality_package(package, tmp_path)
-
-    final_quality = _read_json(tmp_path / "final_quality.json")
-    assert final_quality["n_with_bks"] == 1
-    assert final_quality["n_with_bks_routes"] == 0
-    assert final_quality["n_benchmark_incomparable"] == 1
-    assert final_quality["baseline_benchmark_feasible"] is None
-    assert final_quality["candidate_benchmark_feasible"] is None
-
-    per_case_rows = _read_csv(tmp_path / "per_case_quality.csv")
-    assert per_case_rows[0]["baseline_benchmark_feasible"] == ""
-    assert per_case_rows[0]["candidate_benchmark_feasible"] == ""
-
-
-def test_benchmark_incomparable_cvrp_row_cannot_report_fake_win() -> None:
-    records = [
-        QualityCaseRecord(
-            case_id="more-routes",
-            comparison="better",
-            baseline_objective=100.0,
-            candidate_objective=90.0,
-            baseline_cost=100.0,
-            candidate_cost=90.0,
-            bks=95.0,
-            baseline_routes=5,
-            candidate_routes=6,
-            bks_routes=5,
-            baseline_feasible=True,
-            candidate_feasible=True,
-        )
-    ]
-
-    package = build_final_quality_package(records, _config())
-
-    row = package.per_case_quality[0]
-    assert row["candidate_benchmark_feasible"] is False
-    assert row["comparison"] == "not_comparable"
-    assert package.final_quality["better_vs_baseline"] == 0
-    assert package.final_quality["n_benchmark_incomparable"] == 1
+    assert json.loads(row["problem_extension"]) == {
+        "domain_flag": True,
+        "domain_metric": 3,
+    }

@@ -8,7 +8,7 @@ from typing import Mapping
 import pytest
 
 from scion.core.models import RunResult
-from scion.evidence import (
+from scion.problems.cvrp.evidence import (
     CvrpCaseEntry,
     CvrpCaseManifest,
     CvrpManifestEvaluationConfig,

@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from scion.evidence.cvrp_package import CvrpEvidencePackageResult
-from scion.evidence.final_quality import (
+from scion.problems.cvrp.evidence.package import CvrpEvidencePackageResult
+from scion.problems.cvrp.evidence.final_quality import (
     FinalQualityConfig,
     FinalQualityPackage,
     QualityCaseRecord,
