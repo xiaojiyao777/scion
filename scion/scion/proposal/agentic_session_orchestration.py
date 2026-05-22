@@ -228,7 +228,6 @@ class AgenticSessionOrchestrationMixin:
                     observations,
                     state,
                 ),
-                failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
             )
             state.status = output.status
             state.note(

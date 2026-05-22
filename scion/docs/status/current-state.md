@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-05-22*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -15,6 +15,21 @@ framework: generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-22 stopped-run analysis is
+[`v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md`](../experiments/v0.4/v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md).
+It found framework observability gaps rather than a v3 boundary breach: an
+in-flight APS session could be interrupted by campaign SIGTERM after writing a
+prompt manifest but before writing `output.json`, `transcript.json`, or an
+index row; partial `hypothesis_awaiting_approval` sessions were summarized like
+contract failures; failed session index rows hid the useful failure/hypothesis
+summary fields; and generic telemetry guard wording collapsed present-but-zero
+activity into "not observed." The current repair keeps these fixes generic:
+APS now persists and indexes `campaign_abort` failed stubs before re-raising
+`KeyboardInterrupt`, session index rows preserve failure detail plus compact
+surface/action/target/mechanism summaries, awaiting approval no longer receives
+`contract_boundary_failure`, and activity telemetry now distinguishes missing
+fields from declared fields present in all candidate runs but all zero.
 
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now

@@ -151,6 +151,126 @@ def _tool_budget_has_activity(value: Any) -> bool:
     return False
 
 
+def _agentic_index_summary_fields(
+    output: AgenticProposalOutput,
+) -> dict[str, Any]:
+    hypothesis = output.hypothesis
+    mechanism_ids: list[str] = []
+    if hypothesis is not None:
+        for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+            mechanism_id = (
+                change.get("id")
+                if isinstance(change, Mapping)
+                else getattr(change, "id", "")
+            )
+            mechanism_id = str(mechanism_id or "").strip()
+            if mechanism_id and mechanism_id not in mechanism_ids:
+                mechanism_ids.append(mechanism_id)
+    selected_surface = str(
+        output.selected_surface
+        or (getattr(hypothesis, "change_locus", "") if hypothesis is not None else "")
+        or ""
+    )
+    action = str(
+        output.action
+        or (getattr(hypothesis, "action", "") if hypothesis is not None else "")
+        or ""
+    )
+    target_file = str(
+        getattr(hypothesis, "target_file", "") if hypothesis is not None else ""
+    )
+    hypothesis_text = str(
+        getattr(hypothesis, "hypothesis_text", "") if hypothesis is not None else ""
+    )
+    hypothesis_summary = _drop_empty_index_summary(
+        {
+            "selected_surface": selected_surface,
+            "action": action,
+            "target_file": target_file,
+            "mechanism_ids": mechanism_ids,
+            "hypothesis_text": hypothesis_text[:240],
+            "predicted_direction": (
+                getattr(hypothesis, "predicted_direction", "")
+                if hypothesis is not None
+                else ""
+            ),
+            "target_runtime_effect": (
+                getattr(hypothesis, "target_runtime_effect", "")
+                if hypothesis is not None
+                else ""
+            ),
+        }
+    )
+    failure_detail = str(output.failure_detail or "")
+    return {
+        "failure_category": str(_enum_value(output.failure_category) or ""),
+        "failure_detail": failure_detail,
+        "failure_reason": failure_detail,
+        "selected_surface": selected_surface,
+        "action": action,
+        "target_file": target_file,
+        "mechanism_ids": tuple(mechanism_ids),
+        "hypothesis_summary": hypothesis_summary,
+    }
+
+
+def _agentic_index_summary_fields_from_item(
+    item: Mapping[str, Any],
+) -> dict[str, Any]:
+    hypothesis_summary = item.get("hypothesis_summary")
+    if not isinstance(hypothesis_summary, Mapping):
+        hypothesis_summary = {}
+    mechanism_ids = _string_tuple(
+        item.get("mechanism_ids") or hypothesis_summary.get("mechanism_ids") or ()
+    )
+    failure_detail = str(
+        item.get("failure_detail") or item.get("failure_reason") or ""
+    )
+    return {
+        "failure_category": str(item.get("failure_category") or ""),
+        "failure_detail": failure_detail,
+        "failure_reason": str(item.get("failure_reason") or failure_detail),
+        "selected_surface": str(
+            item.get("selected_surface")
+            or hypothesis_summary.get("selected_surface")
+            or ""
+        ),
+        "action": str(item.get("action") or hypothesis_summary.get("action") or ""),
+        "target_file": str(
+            item.get("target_file") or hypothesis_summary.get("target_file") or ""
+        ),
+        "mechanism_ids": mechanism_ids,
+        "hypothesis_summary": dict(_sanitize_agentic_value(hypothesis_summary)),
+    }
+
+
+def _string_tuple(values: Any) -> tuple[str, ...]:
+    if isinstance(values, str):
+        raw_values = values.split(",")
+    elif isinstance(values, (list, tuple)):
+        raw_values = values
+    else:
+        try:
+            raw_values = list(values or ())
+        except TypeError:
+            raw_values = (values,)
+    compact: list[str] = []
+    for value in raw_values:
+        text = str(value or "").strip()
+        if text and text not in compact:
+            compact.append(text)
+    return tuple(compact)
+
+
+def _drop_empty_index_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key, value in payload.items():
+        if value in (None, "", (), [], {}):
+            continue
+        compact[key] = _sanitize_agentic_value(value)
+    return compact
+
+
 class AgenticSessionStore:
     """File-backed, ops-safe index for persisted APS output artifacts."""
 
@@ -182,6 +302,7 @@ class AgenticSessionStore:
             if prompt_manifest_required
             else _prompt_manifest_not_required_reason_for_output(output)
         )
+        summary_fields = _agentic_index_summary_fields(output)
         kept: list[AgenticSessionIndexEntry] = []
         for entry in entries:
             if entry.session_id == output.session_id:
@@ -213,6 +334,7 @@ class AgenticSessionStore:
             prompt_manifest_ref_scope="artifact_dir_relative",
             raw_prompt_saved=False,
             prompt_manifest_not_required_reason=prompt_manifest_not_required_reason,
+            **summary_fields,
         )
         kept.append(entry)
         self._write_entries(kept)
@@ -303,6 +425,7 @@ class AgenticSessionStore:
                     if prompt_manifest_required
                     else _prompt_manifest_not_required_reason_for_index_item(item)
                 )
+                summary_fields = _agentic_index_summary_fields_from_item(item)
                 entries.append(
                     AgenticSessionIndexEntry(
                         schema_version=str(item.get("schema_version") or ""),
@@ -333,6 +456,7 @@ class AgenticSessionStore:
                         prompt_manifest_not_required_reason=(
                             prompt_manifest_not_required_reason
                         ),
+                        **summary_fields,
                     )
                 )
             except Exception:
@@ -391,7 +515,10 @@ class FileAgenticSessionArtifactStore:
 
     def write_output(self, output: AgenticProposalOutput) -> str:
         path = self._session_dir(output.session_id) / "output.json"
-        ref = self._write_json(path, _agentic_output_artifact(output))
+        ref = self._write_json(
+            path,
+            _agentic_output_artifact(output, base_dir=self._root),
+        )
         self.session_store.record_output(output, ref)
         return ref
 
@@ -538,6 +665,13 @@ def inspect_agentic_session_artifact(
         "termination_reason": payload.get("termination_reason"),
         "status": payload.get("status"),
         "failure_category": payload.get("failure_category"),
+        "failure_detail": payload.get("failure_detail"),
+        "failure_reason": payload.get("failure_reason") or payload.get("failure_detail"),
+        "selected_surface": payload.get("selected_surface"),
+        "action": payload.get("action"),
+        "target_file": payload.get("target_file"),
+        "mechanism_ids": payload.get("mechanism_ids", []),
+        "hypothesis_summary": payload.get("hypothesis_summary") or {},
         "failure_ledger": {
             "first_root_cause": failure_ledger.get("first_root_cause"),
             "latest_failure": failure_ledger.get("latest_failure"),

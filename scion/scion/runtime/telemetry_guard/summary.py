@@ -124,7 +124,7 @@ def build_telemetry_guard_summary(
                     )
             elif summary["candidate_positive"] == 0:
                 issue = _guard_issue(
-                    f"TELEMETRY_{category.upper()}_NOT_OBSERVED",
+                    _zero_activity_issue_code(category, summary),
                     category=category,
                     field=field,
                     severity=(
@@ -252,6 +252,9 @@ def build_telemetry_guard_summary(
         activity_fields = declared_activity_runtime_fields(surface)
         if activity_fields:
             activity_positive = 0
+            activity_present = 0
+            activity_missing = 0
+            activity_champion_positive = 0
             for field in activity_fields:
                 summary = field_summaries.get(field)
                 if summary is None:
@@ -262,9 +265,19 @@ def build_telemetry_guard_summary(
                     )
                     field_summaries[field] = summary
                 activity_positive += int(summary["candidate_positive"])
+                activity_present += int(summary["candidate_present"])
+                activity_missing += int(summary["candidate_missing"])
+                activity_champion_positive += int(summary["champion_positive"])
             if candidate_runtimes and activity_positive == 0:
                 issue = _guard_issue(
-                    "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                    _zero_activity_issue_code(
+                        "activity",
+                        {
+                            "candidate_present": activity_present,
+                            "candidate_missing": activity_missing,
+                            "candidate_positive": activity_positive,
+                        },
+                    ),
                     category="activity",
                     field=",".join(activity_fields),
                     severity=(
@@ -275,7 +288,10 @@ def build_telemetry_guard_summary(
                     ),
                     summary={
                         "candidate_runs": len(candidate_runtimes),
-                        "candidate_positive": 0,
+                        "candidate_positive": activity_positive,
+                        "candidate_present": activity_present,
+                        "candidate_missing": activity_missing,
+                        "champion_positive": activity_champion_positive,
                     },
                 )
                 (failures if issue["severity"] == "fail" else warnings).append(issue)
@@ -349,6 +365,20 @@ def _is_objective_outcome_effect_field(
     return bool(
         runtime_field_roles_for(field, role_map) & _OBJECTIVE_OUTCOME_EFFECT_ROLES
     )
+
+
+def _zero_activity_issue_code(category: str, summary: Mapping[str, Any]) -> str:
+    if str(category or "").lower() != "activity":
+        return f"TELEMETRY_{category.upper()}_NOT_OBSERVED"
+    try:
+        present = int(summary.get("candidate_present", 0) or 0)
+        missing = int(summary.get("candidate_missing", 0) or 0)
+        positive = int(summary.get("candidate_positive", 0) or 0)
+    except (TypeError, ValueError):
+        return "TELEMETRY_ACTIVITY_NOT_OBSERVED"
+    if present > 0 and missing == 0 and positive == 0:
+        return "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO"
+    return "TELEMETRY_ACTIVITY_NOT_OBSERVED"
 
 
 def _has_explicit_mechanism_field(

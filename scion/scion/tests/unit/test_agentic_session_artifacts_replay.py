@@ -239,6 +239,186 @@ def test_agentic_session_index_explains_tool_only_prompt_manifest_not_required(
     )
 
 
+class _InterruptingHypothesisCreative(FakeCreative):
+    def generate_hypothesis(self, context):
+        self.hypothesis_contexts.append(dict(context))
+        raise KeyboardInterrupt("synthetic campaign abort")
+
+
+def test_agentic_session_persists_abort_stub_on_keyboard_interrupt(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    session = AgenticProposalSession(
+        _InterruptingHypothesisCreative(),
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    branch = Branch(
+        branch_id="branch-abort",
+        state=BranchState.EXPLORE,
+        base_champion_id=7,
+        base_champion_hash="code-hash",
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        session.run(
+            AgenticProposalRequest(
+                campaign_id="camp-abort",
+                branch=branch,
+                champion=None,
+                hypothesis_context={"seed": "abort"},
+                build_code_context=lambda _hypothesis: {"kind": "code"},
+            )
+        )
+
+    [session_dir] = [path for path in artifact_dir.iterdir() if path.is_dir()]
+    output_path = session_dir / "output.json"
+    transcript_path = session_dir / "transcript.json"
+    index_path = artifact_dir / "agentic_session_index.json"
+    output = json.loads(output_path.read_text(encoding="utf-8"))
+    transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+    index_entry = json.loads(index_path.read_text(encoding="utf-8"))[0]
+
+    assert output_path.exists()
+    assert transcript_path.exists()
+    assert index_path.exists()
+    assert output["status"] == "failed"
+    assert output["termination_reason"] == "campaign_abort"
+    assert output["failure_category"] == "agentic_budget_control"
+    assert "abort" in output["failure_detail"]
+    assert "KeyboardInterrupt" in output["failure_detail"]
+    assert output["session_id"] == session_dir.name
+    assert output["campaign_id"] == "camp-abort"
+    assert output["branch_id"] == "branch-abort"
+    assert output["idempotency_key"].startswith("aps:")
+    assert output["phase"] == "draft_hypothesis"
+    assert output["tool_budget_used"]["tool_calls"] == 0
+    assert output["compact_transcript"]
+    assert transcript["status"] == "failed"
+    assert transcript["termination_reason"] == "campaign_abort"
+    assert any(
+        "api_visible_prompt_manifest" in ref
+        for ref in output["prompt_manifest_artifact_refs"]
+    )
+    assert any(
+        "api_visible_prompt_manifest" in ref
+        for ref in output["tainted_artifact_refs"]
+    )
+    assert index_entry["status"] == "failed"
+    assert index_entry["termination_reason"] == "campaign_abort"
+    assert index_entry["failure_category"] == "agentic_budget_control"
+    assert index_entry["failure_reason"] == index_entry["failure_detail"]
+    assert index_entry["prompt_manifest_required"] is True
+    assert "api_visible_prompt_manifest" in index_entry["prompt_manifest_artifact_ref"]
+
+
+def test_agentic_session_index_preserves_failure_and_hypothesis_summary_fields(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    artifact_store = FileAgenticSessionArtifactStore(artifact_dir)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="generic_surface",
+            action="modify",
+            target_file="policies/generic_policy.py",
+            mechanism_changes=(
+                {"id": "generic_counter_probe", "change_type": "modify"},
+            ),
+        )
+    )
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="session-failed-summary",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        request_id="request-failed-summary",
+        idempotency_key="idempotency-failed-summary",
+        selected_surface="generic_surface",
+        action="modify",
+        hypothesis=hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_category="algorithm_smoke_failure",
+        failure_detail="synthetic smoke rejected declared activity attribution",
+    )
+
+    output_ref = artifact_store.write_output(output)
+    store = AgenticSessionStore(artifact_dir)
+    index_entry = json.loads(store.index_path.read_text(encoding="utf-8"))[0]
+    loaded = store.load_by_session_id(output.session_id)
+    artifact_summary = inspect_agentic_session_artifact(output_ref)
+
+    assert index_entry["failure_category"] == "algorithm_smoke_failure"
+    assert index_entry["failure_detail"] == (
+        "synthetic smoke rejected declared activity attribution"
+    )
+    assert index_entry["failure_reason"] == index_entry["failure_detail"]
+    assert index_entry["selected_surface"] == "generic_surface"
+    assert index_entry["action"] == "modify"
+    assert index_entry["target_file"] == "policies/generic_policy.py"
+    assert index_entry["mechanism_ids"] == ["generic_counter_probe"]
+    assert index_entry["hypothesis_summary"]["mechanism_ids"] == [
+        "generic_counter_probe"
+    ]
+    assert loaded is not None
+    assert loaded.entry.failure_reason == loaded.entry.failure_detail
+    assert loaded.entry.target_file == "policies/generic_policy.py"
+    assert loaded.entry.mechanism_ids == ("generic_counter_probe",)
+    assert artifact_summary["failure_reason"] == output.failure_detail
+    assert artifact_summary["target_file"] == "policies/generic_policy.py"
+    assert artifact_summary["mechanism_ids"] == ["generic_counter_probe"]
+
+
+def test_partial_hypothesis_awaiting_approval_is_not_contract_failure(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = tmp_path / "aps-artifacts"
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="generic_surface",
+            action="modify",
+            target_file="policies/generic_policy.py",
+            mechanism_changes=(
+                {"id": "generic_counter_probe", "change_type": "modify"},
+            ),
+        )
+    )
+    session = AgenticProposalSession(
+        FakeCreative(hypothesis=hypothesis),
+        artifact_store=FileAgenticSessionArtifactStore(artifact_dir),
+    )
+    branch = Branch(
+        branch_id="branch-partial",
+        state=BranchState.EXPLORE,
+        base_champion_id=7,
+        base_champion_hash="code-hash",
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-partial",
+            branch=branch,
+            champion=None,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+        )
+    )
+    index_entry = json.loads(
+        (artifact_dir / "agentic_session_index.json").read_text(encoding="utf-8")
+    )[0]
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.termination_reason == (
+        AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+    )
+    assert output.failure_category is None
+    assert index_entry["termination_reason"] == "hypothesis_awaiting_approval"
+    assert index_entry["failure_category"] == ""
+    assert index_entry["failure_detail"] == "hypothesis awaits ContractGate approval"
+    assert index_entry["target_file"] == "policies/generic_policy.py"
+    assert index_entry["mechanism_ids"] == ["generic_counter_probe"]
+
+
 def test_agentic_replay_validator_rejects_budget_duplicate_step_and_raw_marker(
     tmp_path: Path,
 ) -> None:

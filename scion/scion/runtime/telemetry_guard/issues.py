@@ -40,12 +40,21 @@ def format_telemetry_guard_issue(summary: Mapping[str, Any]) -> str | None:
     field = str(first.get("field") or "")
     mechanism = str(first.get("mechanism") or "")
     category = str(first.get("category") or "telemetry")
-    if code == "TELEMETRY_ACTIVITY_NOT_OBSERVED":
+    if code in {
+        "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+        "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+        "TELEMETRY_ACTIVITY_ZERO",
+    }:
         activity_fields = []
         for item in failures:
             if (
                 isinstance(item, Mapping)
-                and item.get("code") == "TELEMETRY_ACTIVITY_NOT_OBSERVED"
+                and item.get("code")
+                in {
+                    "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                    "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+                    "TELEMETRY_ACTIVITY_ZERO",
+                }
             ):
                 activity_fields.extend(
                     part.strip()
@@ -57,9 +66,18 @@ def format_telemetry_guard_issue(summary: Mapping[str, Any]) -> str | None:
         field_zero_text = ", ".join(
             f"{item.strip()}=0" for item in field.split(",") if item.strip()
         )
+        if code in {
+            "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+            "TELEMETRY_ACTIVITY_ZERO",
+        }:
+            return (
+                "telemetry guard observed declared activity telemetry but all "
+                f"candidate values were zero: {field_zero_text or field} across "
+                f"{summary.get('candidate_runs', 0)} candidate run(s)"
+            )
         return (
-            "telemetry guard observed zero active search effort: "
-            f"{field_zero_text or field} had no positive runtime evidence across "
+            "telemetry guard did not observe declared activity telemetry: "
+            f"{field or 'activity fields'} had no positive runtime evidence across "
             f"{summary.get('candidate_runs', 0)} candidate run(s)"
         )
     if code == "TELEMETRY_BUDGET_STARVED":

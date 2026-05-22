@@ -74,6 +74,45 @@ def test_telemetry_guard_flags_stage_budget_starvation() -> None:
     )
 
 
+def test_telemetry_guard_distinguishes_present_all_zero_activity() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {"solver_search_iterations": 0},
+            {"solver_search_iterations": 0},
+        ],
+        champion_runtimes=[{"solver_search_iterations": 7}],
+        problem_spec=_problem_spec(),
+        selected_surface="solver",
+        expected_telemetry={"activity": ["solver_search_iterations"]},
+    )
+
+    assert summary["passed"] is False
+    assert summary["failures"][0]["code"] == "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO"
+    assert summary["failures"][0]["candidate_present"] == 2
+    assert summary["failures"][0]["candidate_missing"] == 0
+    assert (
+        format_telemetry_guard_issue(summary)
+        == "telemetry guard observed declared activity telemetry but all "
+        "candidate values were zero: solver_search_iterations=0 across "
+        "2 candidate run(s)"
+    )
+
+
+def test_telemetry_guard_keeps_missing_activity_not_observed_code() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[{}, {}],
+        champion_runtimes=[{"solver_search_iterations": 7}],
+        problem_spec=_problem_spec(),
+        selected_surface="solver",
+        expected_telemetry={"activity": ["solver_search_iterations"]},
+    )
+
+    assert summary["passed"] is False
+    assert summary["failures"][0]["code"] == "TELEMETRY_ACTIVITY_NOT_OBSERVED"
+    assert summary["failures"][0]["candidate_present"] == 0
+    assert summary["failures"][0]["candidate_missing"] == 2
+
+
 def test_expected_telemetry_normalization_preserves_categories() -> None:
     normalized = normalize_expected_telemetry(
         {

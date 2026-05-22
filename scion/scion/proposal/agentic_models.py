@@ -26,6 +26,7 @@ class AgenticTerminationReason(str, Enum):
     """Typed reason for session termination."""
 
     COMPLETED = "completed"
+    CAMPAIGN_ABORT = "campaign_abort"
     ANCHOR_VALIDATION_FAILED = "anchor_validation_failed"
     HYPOTHESIS_AWAITING_APPROVAL = "hypothesis_awaiting_approval"
     HYPOTHESIS_APPROVAL_FAILED = "hypothesis_approval_failed"
@@ -172,6 +173,7 @@ class AgenticProposalOutput:
     failure_category: AgenticFailureCategory | str | None = None
     structured_rejection: Mapping[str, Any] | None = None
     failure_ledger: Mapping[str, Any] = field(default_factory=dict)
+    phase: str | None = None
 
     @property
     def is_completed(self) -> bool:
@@ -241,6 +243,14 @@ class AgenticSessionIndexEntry:
     prompt_manifest_ref_scope: str = "artifact_dir_relative"
     raw_prompt_saved: bool = False
     prompt_manifest_not_required_reason: str = ""
+    failure_category: str = ""
+    failure_detail: str = ""
+    failure_reason: str = ""
+    selected_surface: str = ""
+    action: str = ""
+    target_file: str = ""
+    mechanism_ids: tuple[str, ...] = field(default_factory=tuple)
+    hypothesis_summary: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

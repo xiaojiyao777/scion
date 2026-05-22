@@ -88,71 +88,59 @@ class AgenticProposalSession(
         )
 
     def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
-        session_id, state, evidence, observations = self._start_run_state(request)
-        tool_context, output = self._prepare_tool_context_or_output(
-            request=request,
-            session_id=session_id,
-            state=state,
-            evidence=evidence,
-            observations=observations,
-        )
-        if output is not None:
-            return output
+        state: AgenticProposalSessionState | None = None
+        evidence: list[AgenticEvidenceRef] = []
+        try:
+            session_id, state, evidence, observations = self._start_run_state(request)
+            tool_context, output = self._prepare_tool_context_or_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                evidence=evidence,
+                observations=observations,
+            )
+            if output is not None:
+                return output
 
-        output = self._preflight_output_or_none(
-            request=request,
-            session_id=session_id,
-            state=state,
-        )
-        if output is not None:
-            return output
+            output = self._preflight_output_or_none(
+                request=request,
+                session_id=session_id,
+                state=state,
+            )
+            if output is not None:
+                return output
 
-        hypothesis, output = self._prepare_hypothesis_or_output(
-            request=request,
-            session_id=session_id,
-            state=state,
-            tool_context=tool_context,
-            observations=observations,
-            evidence=evidence,
-        )
-        if output is not None:
-            return output
-        assert hypothesis is not None
-
-        patch, code_context, repair_attempts, output = self._build_initial_patch_or_output(
-            request=request,
-            session_id=session_id,
-            state=state,
-            tool_context=tool_context,
-            hypothesis=hypothesis,
-            observations=observations,
-            evidence=evidence,
-        )
-        if output is not None:
-            return output
-        assert patch is not None and code_context is not None
-
-        patch, repair_attempts, output = self._validate_patch_or_output(
-            request=request,
-            session_id=session_id,
-            state=state,
-            hypothesis=hypothesis,
-            patch=patch,
-            code_context=code_context,
-            observations=observations,
-            evidence=evidence,
-            code_repair_attempts_used=repair_attempts,
-        )
-        if output is not None:
-            return output
-        assert patch is not None
-
-        if tool_context is not None:
-            patch, repair_attempts, output = self._run_patch_preview_repair_loop(
+            hypothesis, output = self._prepare_hypothesis_or_output(
                 request=request,
                 session_id=session_id,
                 state=state,
                 tool_context=tool_context,
+                observations=observations,
+                evidence=evidence,
+            )
+            if output is not None:
+                return output
+            assert hypothesis is not None
+
+            patch, code_context, repair_attempts, output = (
+                self._build_initial_patch_or_output(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    tool_context=tool_context,
+                    hypothesis=hypothesis,
+                    observations=observations,
+                    evidence=evidence,
+                )
+            )
+            if output is not None:
+                return output
+            assert patch is not None and code_context is not None
+
+            patch, repair_attempts, output = self._validate_patch_or_output(
+                request=request,
+                session_id=session_id,
+                state=state,
                 hypothesis=hypothesis,
                 patch=patch,
                 code_context=code_context,
@@ -164,13 +152,68 @@ class AgenticProposalSession(
                 return output
             assert patch is not None
 
-        return self._finalize_patch_output(
-            request=request,
-            session_id=session_id,
-            state=state,
-            tool_context=tool_context,
-            hypothesis=hypothesis,
-            patch=patch,
-            observations=observations,
-            evidence=evidence,
+            if tool_context is not None:
+                patch, repair_attempts, output = self._run_patch_preview_repair_loop(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    tool_context=tool_context,
+                    hypothesis=hypothesis,
+                    patch=patch,
+                    code_context=code_context,
+                    observations=observations,
+                    evidence=evidence,
+                    code_repair_attempts_used=repair_attempts,
+                )
+                if output is not None:
+                    return output
+                assert patch is not None
+
+            return self._finalize_patch_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                tool_context=tool_context,
+                hypothesis=hypothesis,
+                patch=patch,
+                observations=observations,
+                evidence=evidence,
+            )
+        except KeyboardInterrupt as exc:
+            if state is not None:
+                self._persist_campaign_abort_stub(
+                    request=request,
+                    state=state,
+                    exc=exc,
+                    evidence_used=tuple(evidence),
+                )
+            raise
+
+    def _persist_campaign_abort_stub(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        state: AgenticProposalSessionState,
+        exc: KeyboardInterrupt,
+        evidence_used: tuple[AgenticEvidenceRef, ...],
+    ) -> None:
+        state.loop_stop_reason = AgenticTerminationReason.CAMPAIGN_ABORT.value
+        state.status = AgenticProposalStatus.FAILED
+        state.note(
+            state.phase,
+            "Session aborted by campaign interruption before terminal output.",
+            metadata={
+                "stop_reason": AgenticTerminationReason.CAMPAIGN_ABORT.value,
+                "error_code": type(exc).__name__,
+            },
         )
+        output = self._campaign_abort_output(
+            request=request,
+            state=state,
+            exc=exc,
+            evidence_used=evidence_used,
+        )
+        try:
+            self._persist(output, state)
+        except Exception:
+            pass

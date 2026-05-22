@@ -202,9 +202,10 @@ def test_run_experiment_fails_closed_on_declared_zero_activity_probe(tmp_path):
 
     assert result.gate_outcome == "fail"
     assert "TELEMETRY_GUARD_FAILED" in result.reason_codes
-    assert "TELEMETRY_ACTIVITY_NOT_OBSERVED" in result.reason_codes
+    assert "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO" in result.reason_codes
     guard = result.candidate_surface_runtime_summary["telemetry_guard"]
     assert guard["passed"] is False
+    assert guard["failures"][0]["code"] == "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO"
     assert guard["failures"][0]["field"] == "generic_solver_search_iterations"
     assert "telemetry_guard=" in result.exposed_summary
 

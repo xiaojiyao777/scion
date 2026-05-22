@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from scion.core.models import ChampionState, PatchProposal
+from scion.core.public_refs import public_artifact_ref
 from scion.proposal.agentic_models import (
     AGENTIC_SESSION_SCHEMA_VERSION,
     AgenticProposalOutput,
@@ -163,10 +164,22 @@ def _agentic_transcript_artifact(
         "tainted": True,
     }
 
-def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
+def _agentic_output_artifact(
+    output: AgenticProposalOutput,
+    *,
+    base_dir: str | Path | None = None,
+) -> dict[str, Any]:
     compact_transcript = _compact_transcript(tuple(output.transcript))
     transcript_digest = output.transcript_digest or _transcript_digest(
         compact_transcript
+    )
+    hypothesis_summary = _compact_hypothesis_summary(output.hypothesis)
+    tainted_refs = _public_tainted_refs(
+        output.tainted_artifact_refs,
+        base_dir=base_dir,
+    )
+    prompt_manifest_refs = tuple(
+        ref for ref in tainted_refs if "api_visible_prompt_manifest" in ref
     )
     artifact = {
         "schema_version": output.schema_version or AGENTIC_SESSION_SCHEMA_VERSION,
@@ -176,6 +189,7 @@ def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
         "idempotency_key": output.idempotency_key,
         "campaign_id": output.campaign_id,
         "branch_id": output.branch_id,
+        "phase": output.phase,
         "status": _enum_value(output.status),
         "termination_reason": _enum_value(output.termination_reason),
         "tool_loop_config": dict(output.tool_loop_config),
@@ -183,6 +197,9 @@ def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
         "transcript_digest": transcript_digest,
         "selected_surface": output.selected_surface,
         "action": output.action,
+        "target_file": hypothesis_summary.get("target_file"),
+        "mechanism_ids": hypothesis_summary.get("mechanism_ids", []),
+        "hypothesis_summary": hypothesis_summary,
         "problem_id": output.problem_id,
         "problem_spec_hash": output.problem_spec_hash,
         "champion_version": output.champion_version,
@@ -206,14 +223,68 @@ def _agentic_output_artifact(output: AgenticProposalOutput) -> dict[str, Any]:
         "self_check": _json_ready(output.self_check),
         "compact_transcript": compact_transcript,
         "failure_detail": _sanitize_agentic_value(output.failure_detail),
+        "failure_reason": _sanitize_agentic_value(output.failure_detail),
         "failure_category": _enum_value(output.failure_category),
         "structured_rejection": _sanitize_agentic_value(output.structured_rejection),
         "failure_ledger": _json_ready(
             _sanitize_agentic_value(output.failure_ledger)
         ),
+        "tainted_artifact_refs": list(tainted_refs),
+        "prompt_manifest_artifact_ref": (
+            prompt_manifest_refs[-1] if prompt_manifest_refs else ""
+        ),
+        "prompt_manifest_artifact_refs": list(prompt_manifest_refs),
         "tainted": True,
     }
     return _json_ready(_sanitize_agentic_value(artifact))
+
+
+def _public_tainted_refs(
+    refs: tuple[str, ...],
+    *,
+    base_dir: str | Path | None,
+) -> tuple[str, ...]:
+    public_refs: list[str] = []
+    for ref in refs:
+        public_ref = public_artifact_ref(ref, base_dir=base_dir, kind="artifact")
+        if public_ref and public_ref not in public_refs:
+            public_refs.append(public_ref)
+    return tuple(public_refs)
+
+
+def _compact_hypothesis_summary(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    mechanism_ids: list[str] = []
+    for change in getattr(value, "mechanism_changes", ()) or ():
+        mechanism_id = (
+            change.get("id")
+            if isinstance(change, Mapping)
+            else getattr(change, "id", "")
+        )
+        mechanism_id = str(mechanism_id or "").strip()
+        if mechanism_id and mechanism_id not in mechanism_ids:
+            mechanism_ids.append(mechanism_id)
+    return _drop_empty_hypothesis_summary(
+        {
+            "selected_surface": getattr(value, "change_locus", None),
+            "action": getattr(value, "action", None),
+            "target_file": getattr(value, "target_file", None),
+            "mechanism_ids": mechanism_ids,
+            "hypothesis_text": str(getattr(value, "hypothesis_text", "") or "")[:240],
+            "predicted_direction": getattr(value, "predicted_direction", None),
+            "target_runtime_effect": getattr(value, "target_runtime_effect", None),
+        }
+    )
+
+
+def _drop_empty_hypothesis_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key, value in payload.items():
+        if value in (None, "", (), [], {}):
+            continue
+        compact[key] = _sanitize_agentic_value(value)
+    return compact
 
 def _patch_artifact_payload(patch: PatchProposal) -> dict[str, Any]:
     payload = _proposal_payload(patch)

@@ -229,6 +229,33 @@ class AgenticSessionOutputMixin:
                 failure_category=failure_category,
             )
 
+    def _campaign_abort_output(
+            self,
+            *,
+            request: AgenticProposalRequest,
+            state: AgenticProposalSessionState,
+            exc: KeyboardInterrupt,
+            evidence_used: tuple[AgenticEvidenceRef, ...] = (),
+        ) -> AgenticProposalOutput:
+            detail_text = str(exc or "").strip()
+            detail = (
+                "campaign abort interrupted agentic proposal session"
+                + (
+                    f": {type(exc).__name__}: {detail_text}"
+                    if detail_text
+                    else f": {type(exc).__name__}"
+                )
+            )
+            return self._failed_output(
+                request=request,
+                session_id=state.session_id,
+                status=AgenticProposalStatus.FAILED,
+                termination_reason=AgenticTerminationReason.CAMPAIGN_ABORT,
+                detail=detail,
+                evidence_used=evidence_used,
+                failure_category=AgenticFailureCategory.AGENTIC_BUDGET_CONTROL,
+            )
+
     def _timeout_output(
             self,
             request: AgenticProposalRequest,
@@ -275,6 +302,7 @@ class AgenticSessionOutputMixin:
                 schema_version=AGENTIC_SESSION_SCHEMA_VERSION,
                 request_id=output.request_id or state.request_id or state.session_id,
                 idempotency_key=output.idempotency_key or state.idempotency_key,
+                phase=output.phase or state.phase.value,
                 transcript=tuple(state.transcript),
                 tool_loop_config=_tool_loop_config_payload(self._tool_loop_config),
                 tool_budget_used=_tool_budget_used_payload(state),
