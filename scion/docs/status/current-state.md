@@ -46,6 +46,11 @@ declared field for that mechanism failed formal guard validation. The same
 pass split `ContractGate` hypothesis/mechanism-binding checks into
 `contract/hypothesis_checks.py` and moved telemetry mechanism-diagnostic tests
 into a focused test file. Full unit regression passes (`1016 passed`).
+The immediate validation run is
+[`v0.4-v3-balance-fatalstop-sonnet-3r-stopped-20260522.md`](../experiments/v0.4/v0.4-v3-balance-fatalstop-sonnet-3r-stopped-20260522.md):
+the provider still returned 403 balance errors, but Scion stopped after one
+proposal attempt with `circuit_breaker_tripped=false`, confirming the fatal-stop
+behavior.
 
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now
