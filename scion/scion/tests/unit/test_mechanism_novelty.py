@@ -84,6 +84,14 @@ FALSE_PREMISES = (
         "shaw_related_removal",
     ),
     (
+        "missing_random_removal_destroy",
+        (
+            "The active destroy portfolio lacks random customer removal, so add "
+            "a random removal destroy operator."
+        ),
+        "random_removal_destroy",
+    ),
+    (
         "missing_route_removal",
         (
             "The active destroy portfolio has no whole route removal operator, "
@@ -133,6 +141,7 @@ MECHANISM_FACT_IDS = {
     "or_opt_1_relocation": ("cvrp.local_search.or_opt_1_relocation",),
     "intra_two_opt_reversal": ("cvrp.local_search.intra_two_opt_reversal",),
     "shaw_related_removal": ("cvrp.destroy_repair.shaw_related_removal",),
+    "random_removal_destroy": ("cvrp.destroy_repair.random_removal_destroy",),
     "route_removal": ("cvrp.destroy_repair.route_removal",),
     "regret_insertion_repair": (
         "cvrp.destroy_repair.regret_insertion_repair",
@@ -539,6 +548,11 @@ def test_mechanism_novelty_gate_blocks_duplicate_shaw_related_removal(
             "cvrp.destroy_repair.route_removal",
         ),
         (
+            "Add a new random customer removal destroy operator.",
+            "random_removal_destroy",
+            "cvrp.destroy_repair.random_removal_destroy",
+        ),
+        (
             "Register an additional regret-2/regret-3 repair insertion operator.",
             "regret_insertion_repair",
             "cvrp.destroy_repair.regret_insertion_repair",
@@ -597,6 +611,40 @@ def test_mechanism_novelty_gate_uses_agent_visible_fact_packet(
         fact["fact_id"] for fact in fact_packet["facts"]
     }
     assert "fact_id:cvrp.destroy_repair.shaw_related_removal" in result.evidence
+
+
+def test_mechanism_novelty_gate_uses_agent_visible_random_removal_fact(
+    tmp_path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    snapshot = build_active_solver_snapshot(context)
+    fact_packet = snapshot["active_algorithm_facts"]
+
+    result = MechanismNoveltyGate().evaluate(
+        _solver_design_hypothesis(
+            "The active destroy portfolio lacks random customer removal, so add "
+            "a random removal destroy operator."
+        ),
+        context=context,
+        active_solver_snapshot=snapshot,
+    )
+
+    random_facts = [
+        fact
+        for fact in fact_packet["facts"]
+        if fact.get("fact_id") == "cvrp.destroy_repair.random_removal_destroy"
+    ]
+    assert result is not None
+    assert result.snapshot_digest == fact_packet["snapshot_digest"]
+    assert result.fact_packet_digest == fact_packet["fact_packet_digest"]
+    assert result.contradicted_fact_ids == (
+        "cvrp.destroy_repair.random_removal_destroy",
+    )
+    assert random_facts
+    random_fact = random_facts[0]
+    assert random_fact["fact_digest"]
+    assert random_fact["provenance"]["source"] == "active_algorithm_facts_provider"
+    assert "fact_id:cvrp.destroy_repair.random_removal_destroy" in result.evidence
 
 
 def test_mechanism_novelty_gate_does_not_use_private_summary_without_fact_packet(

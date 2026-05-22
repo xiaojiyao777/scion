@@ -44,15 +44,25 @@ def test_active_solver_design_snapshot_exposes_active_mechanisms(
     assert payload["source_digest"]["snapshot_digest"]
     fact_packet = payload["active_algorithm_facts"]
     fact_ids = {fact["fact_id"] for fact in fact_packet["facts"]}
+    random_fact = next(
+        fact
+        for fact in fact_packet["facts"]
+        if fact["fact_id"] == "cvrp.destroy_repair.random_removal_destroy"
+    )
     assert fact_packet["snapshot_digest"] == payload["source_digest"]["snapshot_digest"]
     assert fact_packet["fact_packet_digest"]
     assert "cvrp.destroy_repair.shaw_related_removal" in fact_ids
+    assert "cvrp.destroy_repair.random_removal_destroy" in fact_ids
     assert "cvrp.local_search.cross_route_or_opt_2_3" in fact_ids
     assert all(fact["used_by_prompt"] and fact["used_by_gate"] for fact in fact_packet["facts"])
+    assert random_fact["fact_digest"]
+    assert random_fact["provenance"]["source"] == "active_algorithm_facts_provider"
     assert "policies/baseline_modules/scheduler.py" in payload["source_digest"]["files"]
     assert "_initial_solution" in rendered
     assert "alns_loop" in rendered
     assert "destroy_repair" in rendered
+    assert "_random_removal" in rendered
+    assert "random customer-removal" in rendered
     assert "_shaw_removal" in rendered
     assert "seed-based related/proximity-cluster destroy operator" in rendered
     assert "distance" in rendered

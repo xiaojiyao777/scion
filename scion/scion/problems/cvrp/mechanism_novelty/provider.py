@@ -18,15 +18,18 @@ from scion.problems.cvrp.mechanism_novelty.construction import (
 )
 from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _claims_missing_removal_savings_destroy,
+    _claims_missing_random_removal_destroy,
     _claims_missing_regret_insertion_repair,
     _claims_missing_route_removal,
     _claims_missing_shaw_related_removal,
     _duplicate_regret_insertion_repair_span,
     _duplicates_removal_savings_destroy,
+    _duplicates_random_removal_destroy,
     _duplicates_regret_insertion_repair,
     _duplicates_route_removal,
     _duplicates_shaw_related_removal,
     _missing_removal_savings_destroy_span,
+    _missing_random_removal_destroy_span,
     _missing_regret_insertion_repair_span,
     _missing_route_removal_span,
     _missing_shaw_related_removal_span,
@@ -68,6 +71,7 @@ _OR_OPT_1_FACT = "cvrp.local_search.or_opt_1_relocation"
 _INTRA_TWO_OPT_FACT = "cvrp.local_search.intra_two_opt_reversal"
 _TAIL_EXCHANGE_FACT = "cvrp.local_search.cross_route_tail_exchange"
 _SHAW_RELATED_FACT = "cvrp.destroy_repair.shaw_related_removal"
+_RANDOM_REMOVAL_FACT = "cvrp.destroy_repair.random_removal_destroy"
 _ROUTE_REMOVAL_FACT = "cvrp.destroy_repair.route_removal"
 _REMOVAL_SAVINGS_FACT = "cvrp.destroy_repair.removal_savings_worst_removal"
 _REGRET_INSERTION_FACT = "cvrp.destroy_repair.regret_insertion_repair"
@@ -398,6 +402,49 @@ class CvrpMechanismNoveltyProvider:
                 fact_ids=(_SHAW_RELATED_FACT,),
             )
 
+        if (
+            facts.has_random_removal_destroy
+            and _claims_missing_random_removal_destroy(text)
+        ):
+            span = _missing_random_removal_destroy_span(text)
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="random_removal_destroy",
+                reason=(
+                    "Hypothesis claims random customer-removal destroy is "
+                    "missing, but the active solver snapshot shows "
+                    '_random_removal wired as the scheduler "random" destroy '
+                    "operator."
+                ),
+                evidence=facts.random_removal_evidence,
+                fact_ids=(_RANDOM_REMOVAL_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=_random_removal_allowed_variant_guidance(),
+            )
+
+        if facts.has_random_removal_destroy and _duplicates_random_removal_destroy(
+            text
+        ):
+            return _result(
+                facts,
+                premise_check="duplicate",
+                failure_category="duplicate_mechanism",
+                mechanism="random_removal_destroy",
+                reason=(
+                    "Hypothesis proposes adding random customer-removal destroy "
+                    "as a new capability, but the active solver already contains "
+                    '_random_removal and scheduler destroy_ops "random".'
+                ),
+                evidence=facts.random_removal_evidence,
+                fact_ids=(_RANDOM_REMOVAL_FACT,),
+                variant_allowed=False,
+                allowed_variant_guidance=_random_removal_allowed_variant_guidance(),
+            )
+
         if facts.has_route_removal and _claims_missing_route_removal(text):
             span = _missing_route_removal_span(text)
             return _result(
@@ -600,4 +647,13 @@ def _regret_allowed_variant_guidance() -> str:
         "Allowed variant: add or modify a destroy/removal operator that uses "
         "the existing _regret2_insertion/_regret3_insertion repair portfolio; "
         "do not claim the regret repair mechanism itself is missing or newly added."
+    )
+
+
+def _random_removal_allowed_variant_guidance() -> str:
+    return (
+        "Allowed variant: change the sampling distribution, adaptive "
+        "randomization, noise schedule, trigger, budget, or telemetry around "
+        'existing _random_removal / scheduler "random"; do not claim random '
+        "customer removal is absent or a newly added destroy capability."
     )

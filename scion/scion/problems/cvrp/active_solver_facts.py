@@ -208,18 +208,30 @@ class CvrpActiveSolverDesignProvider:
             },
             "destroy_repair": {
                 "active": (
-                    "_shaw_removal" in destroy_repair
+                    "_random_removal" in destroy_repair
+                    and '"random", _random_removal' in scheduler
+                    and "_worst_removal" in destroy_repair
+                    and '"worst", _worst_removal' in scheduler
+                    and "_route_removal" in destroy_repair
+                    and '"route", _route_removal' in scheduler
+                    and "_shaw_removal" in destroy_repair
                     and '"shaw", _shaw_removal' in scheduler
                 ),
                 "summary": (
                     "The destroy operator portfolio contains random, worst, Shaw "
                     "related removal, and whole-route removal, wired through "
-                    "scheduler destroy_ops. _shaw_removal is a seed-based "
+                    "scheduler destroy_ops. _random_removal uniformly samples "
+                    "customers from the active solution and removes them as the "
+                    'scheduler "random" destroy operator. '
+                    "_shaw_removal is a seed-based "
                     "related/proximity-cluster destroy operator: it picks a seed "
                     "customer, then removes customers ranked by distance, demand, "
                     "and original-route relatedness, with stochastic p sampling."
                 ),
                 "evidence_symbols": [
+                    "_random_removal",
+                    '"random", _random_removal',
+                    "rng.sample(customers, q)",
                     "_shaw_removal",
                     '"shaw", _shaw_removal',
                     "seed customer",
@@ -282,6 +294,14 @@ class CvrpActiveSolverDesignProvider:
             mechanism_summary if isinstance(mechanism_summary, Mapping) else {}
         )
         snapshot_digest = _snapshot_digest(snapshot_context)
+        scheduler_text = _file_text(
+            snapshot_context,
+            "policies/baseline_modules/scheduler.py",
+        )
+        destroy_repair_text = _file_text(
+            snapshot_context,
+            "policies/baseline_modules/destroy_repair.py",
+        )
         facts = [
             _fact(
                 "cvrp.construction.diverse_feasible_seed",
@@ -358,6 +378,43 @@ class CvrpActiveSolverDesignProvider:
                     "policies/baseline_modules/destroy_repair.py::_shaw_removal",
                     "policies/baseline_modules/scheduler.py::destroy_ops",
                 ],
+            ),
+            *(
+                [
+                    _fact(
+                        "cvrp.destroy_repair.random_removal_destroy",
+                        (
+                            "_random_removal is already a random customer-removal "
+                            "destroy operator: it uniformly samples customers "
+                            "with rng.sample(customers, q), removes them from the "
+                            "solution, and is wired as scheduler destroy_ops "
+                            '"random".'
+                        ),
+                        mechanism_summary.get("destroy_repair"),
+                        [
+                            (
+                                "policies/baseline_modules/destroy_repair.py::"
+                                "_random_removal"
+                            ),
+                            "policies/baseline_modules/scheduler.py::destroy_ops",
+                            'policies/baseline_modules/scheduler.py::"random"',
+                        ],
+                        mechanism="random_removal_destroy",
+                        allowed_variant_guidance=(
+                            "Allowed variant: modify the existing _random_removal "
+                            "sampling distribution, adaptive randomization, noise "
+                            "schedule, trigger, or budget while explicitly "
+                            "acknowledging _random_removal / scheduler \"random\" "
+                            "already exists; do not claim random customer removal "
+                            "is missing or newly added."
+                        ),
+                    )
+                ]
+                if (
+                    "_random_removal" in destroy_repair_text
+                    and '"random", _random_removal' in scheduler_text
+                )
+                else []
             ),
             _fact(
                 "cvrp.destroy_repair.route_removal",
@@ -479,6 +536,8 @@ class CvrpActiveSolverDesignProvider:
         packet: dict[str, Any] = {
             "packet_id": "cvrp_active_algorithm_facts_v1",
             "snapshot_digest": snapshot_digest,
+            "provenance": _packet_provenance(snapshot_context),
+            "fact_ids": [fact["fact_id"] for fact in facts],
             "facts": facts,
         }
         packet["fact_packet_digest"] = _packet_digest(packet)
@@ -553,8 +612,11 @@ def _fact(
     claim: str,
     evidence_source: Any,
     source_paths_or_symbols: Sequence[str],
+    *,
+    mechanism: str | None = None,
+    allowed_variant_guidance: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "fact_id": fact_id,
         "claim": claim,
         "evidence": _evidence(evidence_source),
@@ -562,7 +624,20 @@ def _fact(
         "importance": _FACT_IMPORTANCE,
         "used_by_prompt": True,
         "used_by_gate": True,
+        "provenance": {
+            "source": "active_algorithm_facts_provider",
+            "provider": (
+                "scion.problems.cvrp.active_solver_facts."
+                "CvrpActiveSolverDesignProvider"
+            ),
+        },
     }
+    if mechanism:
+        payload["mechanism"] = mechanism
+    if allowed_variant_guidance:
+        payload["allowed_variant_guidance"] = allowed_variant_guidance
+    payload["fact_digest"] = _digest_mapping(payload, exclude_keys=("fact_digest",))
+    return payload
 
 
 def _evidence(value: Any) -> list[str]:
@@ -592,10 +667,19 @@ def _flatten_strings(value: Any) -> list[str]:
 
 
 def _packet_digest(packet: Mapping[str, Any]) -> str:
+    return _digest_mapping(packet, exclude_keys=("fact_packet_digest",))
+
+
+def _digest_mapping(
+    value: Mapping[str, Any],
+    *,
+    exclude_keys: Sequence[str],
+) -> str:
+    excluded = set(exclude_keys)
     digest_payload = {
-        key: value
-        for key, value in packet.items()
-        if key != "fact_packet_digest"
+        key: item
+        for key, item in value.items()
+        if key not in excluded
     }
     encoded = json.dumps(
         digest_payload,
@@ -604,6 +688,21 @@ def _packet_digest(packet: Mapping[str, Any]) -> str:
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _packet_provenance(snapshot_context: Mapping[str, Any]) -> dict[str, Any]:
+    provenance: dict[str, Any] = {"source": "active_algorithm_facts_provider"}
+    source_provenance = snapshot_context.get("provenance")
+    if isinstance(source_provenance, Mapping):
+        provenance["source_snapshot"] = dict(source_provenance)
+    source_digest = snapshot_context.get("source_digest")
+    if isinstance(source_digest, Mapping):
+        provenance["source_digest"] = {
+            key: value
+            for key, value in source_digest.items()
+            if key in {"algorithm", "snapshot_digest"}
+        }
+    return provenance
 
 
 __all__ = ["CvrpActiveSolverDesignProvider"]

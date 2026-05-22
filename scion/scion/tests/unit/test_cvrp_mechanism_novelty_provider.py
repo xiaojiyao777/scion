@@ -105,6 +105,14 @@ def _active_capability_snapshot() -> dict[str, object]:
                     ],
                 ),
                 _fact(
+                    "cvrp.destroy_repair.random_removal_destroy",
+                    "_random_removal random customer-removal destroy already exists.",
+                    [
+                        "_random_removal uniformly samples customers with rng.sample",
+                        'scheduler destroy_ops registers "random" removal',
+                    ],
+                ),
+                _fact(
                     "cvrp.destroy_repair.route_removal",
                     "_route_removal removes a whole selected route.",
                     [
@@ -163,6 +171,8 @@ def _active_capability_snapshot() -> dict[str, object]:
                 "_worst_removal ranks removal saving with "
                 "saving = -route.cost_of_remove(pos)",
                 "_shaw_removal related proximity destroy removal distance demand route",
+                "_random_removal uniformly samples customers with rng.sample",
+                'scheduler destroy_ops registers "random" removal',
                 "_route_removal removes customers from an entire selected route",
                 "_regret2_insertion",
                 "_regret3_insertion",
@@ -1101,7 +1111,7 @@ def test_cvrp_provider_allows_position_diversity_repair_near_regret_terms() -> N
     assert result is None
 
 
-def test_cvrp_provider_allows_random_removal_near_cluster_terms() -> None:
+def test_cvrp_provider_blocks_duplicate_random_removal_near_cluster_terms() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
             "Add random_removal with a small stochastic destroy budget to "
@@ -1115,6 +1125,61 @@ def test_cvrp_provider_allows_random_removal_near_cluster_terms() -> None:
         expected_effect="Improve total_distance by diversifying destroy choices.",
         mechanism_changes=(
             MechanismChange(id="random_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "duplicate"
+    assert result.failure_category == "duplicate_mechanism"
+    assert result.mechanism == "random_removal_destroy"
+    assert result.fact_ids == ("cvrp.destroy_repair.random_removal_destroy",)
+    assert "_random_removal" in " ".join([result.reason, *result.evidence])
+
+
+def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "The active destroy portfolio lacks random customer removal, so add "
+            "a random removal destroy operator."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.premise_check == "contradicted"
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism == "random_removal_destroy"
+    assert result.contradicted_fact_ids == (
+        "cvrp.destroy_repair.random_removal_destroy",
+    )
+    assert "lacks random customer removal" in result.contradicted_span
+    assert result.matched_span == result.contradicted_span
+    assert "scheduler" in result.reason
+
+
+def test_cvrp_provider_allows_acknowledged_random_removal_distribution_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Modify existing _random_removal by adding an adaptive sampling "
+            "distribution and noise schedule around the scheduler random destroy "
+            "operator; this is a variant of the existing random removal, not a "
+            "claim that random customer removal is missing."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing random removal samples uniformly.",
+        expected_effect="Improve total_distance through adaptive randomization.",
+        mechanism_changes=(
+            MechanismChange(
+                id="adaptive_random_removal_distribution",
+                change_type="modify",
+            ),
         ),
     )
 

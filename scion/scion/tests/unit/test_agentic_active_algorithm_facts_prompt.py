@@ -81,6 +81,7 @@ def test_hypothesis_and_code_context_include_active_algorithm_facts(
     assert hypothesis_facts["fact_packet_digest"] == code_facts["fact_packet_digest"]
     assert hypothesis_packet["fact_packet_digest"] == code_packet["fact_packet_digest"]
     assert "cvrp.destroy_repair.shaw_related_removal" in hypothesis_packet["fact_ids"]
+    assert "cvrp.destroy_repair.random_removal_destroy" in hypothesis_packet["fact_ids"]
     assert "cvrp.search_state.starts_feasible_rejects_infeasible" in hypothesis_packet[
         "fact_ids"
     ]

@@ -28,6 +28,7 @@ class _ActiveMechanismFacts:
     has_vns_operator_registry: bool = False
     has_cross_route_tail_exchange: bool = False
     has_shaw_related_removal: bool = False
+    has_random_removal_destroy: bool = False
     has_route_removal: bool = False
     has_removal_savings_worst_removal: bool = False
     has_regret_insertion_repair: bool = False
@@ -42,6 +43,7 @@ class _ActiveMechanismFacts:
     vns_registry_evidence: tuple[str, ...] = ()
     tail_exchange_evidence: tuple[str, ...] = ()
     shaw_related_evidence: tuple[str, ...] = ()
+    random_removal_evidence: tuple[str, ...] = ()
     route_removal_evidence: tuple[str, ...] = ()
     removal_savings_evidence: tuple[str, ...] = ()
     regret_insertion_evidence: tuple[str, ...] = ()
@@ -156,6 +158,20 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
             and "distance" in destroy_repair_combined
             and "demand" in destroy_repair_combined
             and "route" in destroy_repair_combined
+        ),
+        has_random_removal_destroy=(
+            _has_any(
+                destroy_repair_combined,
+                (
+                    "_random_removal",
+                    "random removal",
+                    "random destroy",
+                    "random customer removal",
+                    "rng sample",
+                ),
+            )
+            and _has_any(destroy_repair_combined, ("customer", "customers"))
+            and _has_any(destroy_repair_combined, ("destroy", "removal", "remove"))
         ),
         has_route_removal=_has_any(
             destroy_repair_combined,
@@ -279,6 +295,14 @@ def _facts_from_snapshot(snapshot: Mapping[str, Any]) -> _ActiveMechanismFacts:
                 "distance + demand + original-route relatedness",
             ),
         ),
+        random_removal_evidence=_evidence(
+            mechanism_summary.get("destroy_repair"),
+            fallback=(
+                "_random_removal",
+                '"random" destroy operator',
+                "rng.sample(customers, q)",
+            ),
+        ),
         route_removal_evidence=_evidence(
             mechanism_summary.get("destroy_repair"),
             fallback=(
@@ -370,6 +394,10 @@ def _facts_from_fact_packet(
         has_shaw_related_removal=_has_fact(
             by_id,
             "cvrp.destroy_repair.shaw_related_removal",
+        ),
+        has_random_removal_destroy=_has_fact(
+            by_id,
+            "cvrp.destroy_repair.random_removal_destroy",
         ),
         has_route_removal=_has_fact(
             by_id,
@@ -475,6 +503,15 @@ def _facts_from_fact_packet(
                 "_shaw_removal",
                 "seed-based related removal",
                 "distance + demand + original-route relatedness",
+            ),
+        ),
+        random_removal_evidence=_fact_evidence(
+            by_id,
+            "cvrp.destroy_repair.random_removal_destroy",
+            fallback=(
+                "_random_removal",
+                '"random" destroy operator',
+                "rng.sample(customers, q)",
             ),
         ),
         route_removal_evidence=_fact_evidence(
