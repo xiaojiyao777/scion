@@ -10,6 +10,7 @@ import pytest
 from scion.proposal.llm_client import (
     LLMClient,
     LLM_TRANSIENT_API_ERROR_CATEGORY,
+    LLMBalanceError,
     LLMFormatError,
     LLMRateLimitError,
     LLMRetryExhaustedError,
@@ -584,6 +585,19 @@ def test_code_tool_exhausted_502_html_is_transient_api_failure(monkeypatch):
     assert exc.failure_category == LLM_TRANSIENT_API_ERROR_CATEGORY
     assert isinstance(exc.last_error, LLMTransientProviderError)
     assert is_llm_transient_api_error(exc)
+
+
+def test_403_insufficient_balance_classifies_before_transient_provider() -> None:
+    provider_error = Exception(
+        "Error code: 403 - {'error': {'type': 'Aihubmix_api_error', "
+        "'message': 'Your account balance is insufficient. Please recharge "
+        "your account.'}}"
+    )
+
+    with pytest.raises(LLMBalanceError) as exc_info:
+        LLMClient._raise_classified(provider_error)
+
+    assert "balance exhausted" in str(exc_info.value)
 
 
 def test_creative_trace_records_llm_request_policy(tmp_path):

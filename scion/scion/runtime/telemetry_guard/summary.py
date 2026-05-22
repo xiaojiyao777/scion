@@ -119,6 +119,13 @@ def build_telemetry_guard_summary(
                         ),
                         summary=summary,
                     )
+                    _record_declared_field_issue_for_mechanisms(
+                        mechanism_summaries,
+                        mechanisms=mechanisms,
+                        category=category,
+                        field=field,
+                        issue=issue,
+                    )
                     (failures if issue["severity"] == "fail" else warnings).append(
                         issue
                     )
@@ -133,6 +140,13 @@ def build_telemetry_guard_summary(
                         else "fail"
                     ),
                     summary=summary,
+                )
+                _record_declared_field_issue_for_mechanisms(
+                    mechanism_summaries,
+                    mechanisms=mechanisms,
+                    category=category,
+                    field=field,
+                    issue=issue,
                 )
                 (failures if issue["severity"] == "fail" else warnings).append(issue)
 
@@ -392,6 +406,52 @@ def _has_explicit_mechanism_field(
     return any(field in category_fields for field in fields)
 
 
+def _record_declared_field_issue_for_mechanisms(
+    mechanism_summaries: Mapping[str, dict[str, Any]],
+    *,
+    mechanisms: Sequence[str],
+    category: str,
+    field: str,
+    issue: Mapping[str, Any],
+) -> None:
+    matched = [
+        mechanism
+        for mechanism in mechanisms
+        if _field_mentions_mechanism(field, mechanism)
+    ]
+    for mechanism in matched:
+        summary = mechanism_summaries.get(mechanism)
+        if not isinstance(summary, dict):
+            continue
+        key = (
+            "declared_field_failures"
+            if issue.get("severity") == "fail"
+            else "declared_field_warnings"
+        )
+        entries = summary.setdefault(key, [])
+        if isinstance(entries, list):
+            entries.append(
+                {
+                    "category": category,
+                    "field": field,
+                    "code": issue.get("code"),
+                    "severity": issue.get("severity"),
+                }
+            )
+        if issue.get("severity") == "fail":
+            summary["passed"] = False
+
+
+def _field_mentions_mechanism(field: str, mechanism: str) -> bool:
+    field_text = str(field or "")
+    mechanism_text = str(mechanism or "").strip()
+    if not field_text or not mechanism_text:
+        return False
+    if "{mechanism}" in field_text:
+        return True
+    return mechanism_text in field_text
+
+
 def _mechanism_diagnostics(
     mechanism_summaries: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -422,12 +482,19 @@ def _mechanism_diagnostics(
         diagnostics.append(
             {
                 "mechanism": mechanism,
+                "passed": bool(summary.get("passed", True)),
                 "activation_status": activation["status"],
                 "runtime_status": runtime["status"],
                 "effect_status": effect["status"],
                 "activation_observed": activation["status"] == "observed",
                 "runtime_observed": runtime["status"] == "observed",
                 "effect_observed": effect["status"] == "positive",
+                "declared_field_failures": list(
+                    summary.get("declared_field_failures") or []
+                ),
+                "declared_field_warnings": list(
+                    summary.get("declared_field_warnings") or []
+                ),
                 "activation": activation,
                 "runtime": runtime,
                 "effect": effect,

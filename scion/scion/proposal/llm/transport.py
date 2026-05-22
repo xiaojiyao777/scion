@@ -321,16 +321,17 @@ class TransportMixin:
     @staticmethod
     def _raise_classified(exc: Exception) -> None:
         """Classify a raw SDK exception and re-raise as the appropriate LLM* type."""
-        err_str = str(exc).lower()
+        raw_error = str(exc)
+        err_str = raw_error.lower()
         if _is_timeout_error_text(err_str):
             raise LLMTimeoutError(f"Request timed out: {exc}") from exc
+        if "403" in err_str and ("balance" in err_str or "insufficient" in err_str):
+            raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
         if _is_transient_provider_error(err_str):
             raise LLMTransientProviderError(f"Transient provider error: {exc}") from exc
-        if "429" in str(exc) or "rate_limit" in err_str or "ratelimit" in err_str:
+        if "429" in raw_error or "rate_limit" in err_str or "ratelimit" in err_str:
             retry_after = _parse_retry_after(exc)
             raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
-        if "403" in str(exc) and ("balance" in err_str or "insufficient" in err_str):
-            raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
         raise LLMError(f"API error: {exc}") from exc
 
     def get_cache_stats(self) -> dict:
@@ -407,4 +408,3 @@ class TransportMixin:
             raise LLMError(
                 "The 'openai' package is not installed. pip install openai"
             ) from exc
-

@@ -31,6 +31,20 @@ surface/action/target/mechanism summaries, awaiting approval no longer receives
 `contract_boundary_failure`, and activity telemetry now distinguishes missing
 fields from declared fields present in all candidate runs but all zero.
 
+The follow-up 3-round run reached one formal screening round and then stopped
+on upstream provider balance exhaustion; post-run trace analysis is
+[`v0.4-v3-abort-telemetry-audit-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-abort-telemetry-audit-sonnet-3r-postrun-20260522.md).
+The repair keeps the v3 boundary generic: LLM transport now classifies 403
+insufficient-balance errors before transient-provider retries; agentic
+`primary_failure` attribution now preserves explicit runtime categories such
+as `llm_transient_api_error` ahead of default self-check/schema fallbacks; and
+telemetry guard mechanism diagnostics now mirror declared field-level
+failures, so a mechanism cannot appear `passed=true` when an explicit
+declared field for that mechanism failed formal guard validation. The same
+pass split `ContractGate` hypothesis/mechanism-binding checks into
+`contract/hypothesis_checks.py` and moved telemetry mechanism-diagnostic tests
+into a focused test file. Full unit regression passes (`1016 passed`).
+
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now
 a generic facade over adapter-provided snapshots; the CVRP active solver facts

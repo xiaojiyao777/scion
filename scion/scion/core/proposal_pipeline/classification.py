@@ -110,6 +110,27 @@ def _agentic_output_is_quality_blocked(output: AgenticProposalOutput) -> bool:
     return _agentic_quality_block_classification(output) is not None
 
 
+def _agentic_explicit_runtime_failure(
+    output: AgenticProposalOutput,
+) -> dict[str, str] | None:
+    category = _agentic_value(output.failure_category)
+    if category not in {
+        LLM_TRANSIENT_API_ERROR,
+        AGENTIC_BUDGET_CONTROL,
+        TOOL_BUDGET_EXHAUSTED,
+    }:
+        return None
+    reason = _agentic_value(output.termination_reason) or "agentic_proposal"
+    primary = {
+        "stage": reason,
+        "reason": _bounded_agentic_failure_text(output.failure_detail or reason),
+        "category": category,
+    }
+    if category == TOOL_BUDGET_EXHAUSTED:
+        primary["code"] = TOOL_BUDGET_EXHAUSTED
+    return primary
+
+
 def _agentic_detail_is_framework_boundary(detail: str | None) -> bool:
     text = str(detail or "").lower()
     return (
@@ -200,6 +221,10 @@ def _agentic_primary_secondary_failures(
         if output.failure_detail:
             primary["detail"] = _bounded_agentic_failure_text(output.failure_detail)
         return primary, secondary
+
+    explicit_runtime_failure = _agentic_explicit_runtime_failure(output)
+    if explicit_runtime_failure is not None:
+        return explicit_runtime_failure, secondary
 
     if output.self_check.schema_valid is False:
         primary = {

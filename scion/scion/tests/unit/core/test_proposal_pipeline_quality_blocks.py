@@ -415,6 +415,41 @@ def test_agentic_transient_api_failure_routes_as_infra_not_structured_output() -
     assert session_ref["primary_failure"]["stage"] == "code_generation_failed"
 
 
+def test_agentic_hypothesis_api_failure_category_overrides_default_self_check() -> None:
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="hyp-api-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+        failure_detail=(
+            "Tool call failed after 2 transient API attempt(s). Last error: "
+            "Transient provider error: HTTP 502 Bad Gateway"
+        ),
+        failure_category=AgenticFailureCategory.LLM_TRANSIENT_API_ERROR,
+        self_check=AgenticSelfCheck(schema_valid=False),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert hypothesis is None
+    assert record is None
+    assert len(failures) == 1
+    assert failures[0][1].category == "infra"
+    assert circuit.failures == []
+    assert session_ref is not None
+    assert session_ref["failure_category"] == "llm_transient_api_error"
+    assert session_ref["primary_failure"]["category"] == "llm_transient_api_error"
+    assert session_ref["primary_failure"]["stage"] == "hypothesis_generation_failed"
+
+
 def test_agentic_premise_contradiction_enters_search_memory_as_primary_block() -> None:
     creative = FakeCreative()
     search_memory = CampaignSearchMemory()
