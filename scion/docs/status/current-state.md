@@ -2420,6 +2420,19 @@ P2:
 
 ## Remaining Risks
 
+2026-05-22 update: the latest construction/Shaw validation run is documented in
+[`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md).
+It completed 3 effective screening rounds with no construction/Shaw false
+positive recurrence and no P0 findings. The remaining P1 provider noise was
+kept inside the CVRP problem package: the random-removal matcher now allows
+geographic/spatial cluster variants that explicitly contrast existing uniform
+random removal, and regret-repair premise feedback now describes semantic
+mischaracterization rather than only "missing" repair. A design-first cleanup
+also split CVRP `solver_design` manifest/smoke-effort interpretation into the
+problem-owned `solver_design/` package, and split retry-round accounting tests
+by explore-pipeline versus campaign-loop responsibility. The full unit suite
+passes at `1007 passed`.
+
 - CVRP `solver_design` is now validly routed, self-checked, and contract-valid
   as a direct full-algorithm hook. It has not yet shown experiment-level solver
   efficacy under the new boundary.
@@ -2451,6 +2464,6 @@ P2:
 - Experiment index:
   [`../experiments/v0.4/README.md`](../experiments/v0.4/README.md)
 - Latest experiment analysis:
-  [`v0.4-solver-design-integration-api-repair-20260516.md`](../experiments/v0.4/v0.4-solver-design-integration-api-repair-20260516.md)
+  [`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md)
 - Problem-object adaptation pivot:
   [`problem-object-adaptation-pivot.md`](../engineering/problem-object-adaptation-pivot.md)

@@ -494,9 +494,11 @@ class CvrpMechanismNoveltyProvider:
                 failure_category="premise_contradicted",
                 mechanism="regret_insertion_repair",
                 reason=(
-                    "Hypothesis claims regret insertion repair is missing, but "
-                    "the active solver snapshot shows _regret2_insertion and "
-                    "_regret3_insertion wired through the repair portfolio."
+                    "Hypothesis claims or implies regret insertion repair is "
+                    "absent, or mischaracterizes the active regret repair "
+                    "semantics, but the active solver snapshot shows "
+                    "_regret2_insertion and _regret3_insertion wired through "
+                    "the repair portfolio."
                 ),
                 evidence=facts.regret_insertion_evidence,
                 fact_ids=(_REGRET_INSERTION_FACT,),

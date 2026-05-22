@@ -145,11 +145,14 @@ def _describes_existing_random_removal_contrast_variant(text: str) -> bool:
             "random removal (uniform",
             "uniform random",
             "uniform sampling",
+            "purely uniform",
             "existing random removal",
             "current random removal",
             "baseline random removal",
             "random removal is uniform",
+            "random removal is purely uniform",
             "random removal samples uniformly",
+            "random removal only samples uniformly",
         ),
     )
 

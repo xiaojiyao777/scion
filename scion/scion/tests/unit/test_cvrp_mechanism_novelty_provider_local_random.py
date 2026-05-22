@@ -498,6 +498,36 @@ def test_cvrp_provider_allows_cluster_destroy_contrasting_random_removal() -> No
     assert result is None
 
 
+def test_cvrp_provider_allows_geographic_cluster_variant_after_uniform_random_contrast() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add geographic_cluster_removal as a grid-based spatial patch "
+            "destroy operator. The active destroy phase already uses random, "
+            "Shaw, worst, and route removal. Random removal is purely uniform. "
+            "No systematic spatial patch removal exists, so this mechanism "
+            "targets geographic clusters rather than random sampling."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing random removal is purely uniform and does not form "
+            "geographic customer clusters."
+        ),
+        expected_effect="Improve total_distance by removing spatially coherent patches.",
+        mechanism_changes=(
+            MechanismChange(id="geographic_cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:
     result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
         _hypothesis(
@@ -517,6 +547,22 @@ def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:
     assert "lacks random customer removal" in result.contradicted_span
     assert result.matched_span == result.contradicted_span
     assert "scheduler" in result.reason
+
+
+def test_cvrp_provider_regret_semantic_contradiction_uses_precise_reason() -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        _hypothesis(
+            "Regret insertion repair operators always insert customers at "
+            "globally cheapest positions without considering regret score."
+        ),
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.mechanism == "regret_insertion_repair"
+    assert result.premise_check == "contradicted"
+    assert "mischaracterizes" in result.reason
+    assert "without considering regret score" in result.contradicted_span
 
 
 def test_cvrp_provider_allows_acknowledged_random_removal_distribution_variant() -> None:
