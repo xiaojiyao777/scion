@@ -106,21 +106,14 @@ class DecisionEngine:
             # → pass to validation which has more diverse instances
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_MARGINAL_DELTA"])
         elif wr >= threshold and md is not None and md < 0:
-            # Win rate passes gate but median delta is negative at screening.
-            # Screening cases are deterministic — expanding with the same cases
-            # produces no new info. Validation's bootstrap CI on diverse cases is
-            # the proper adjudicator (w16-optimization deep-fix principle).
-            #
-            # No expand_count cap here: A1's prior cap used branch.expand_count
-            # which leaked screening_expand history into SPND decisions on later
-            # candidates (post-T3 this is split into screening_expand_count, so the
-            # counter cross-contamination is gone — and the rate-limit itself
-            # wasn't supported by data: F experiment showed SPND candidates often
-            # pass validation+frozen legitimately via lex ordering).
-            # Budget protection now lives at: A2 (idle counter excludes val/frozen),
-            # A3 (stagnation_window=25), v3 §11.5 (frozen uses per campaign: 3),
-            # and the new T2 validation-layer md guard below.
-            return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_NEGATIVE_DELTA"])
+            # v3 screening requires both win rate and practical effect evidence.
+            # A high win rate with negative median effect stays in exploration by
+            # default unless a problem-owned protocol explicitly models it.
+            return self._out(
+                features,
+                Decision.CONTINUE_EXPLORE,
+                ["SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT"],
+            )
         elif self._runtime_tie_improvement(features):
             return self._out(features, Decision.QUEUE_VALIDATE, ["SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT"])
         elif wr >= 0.5 and wr < threshold:

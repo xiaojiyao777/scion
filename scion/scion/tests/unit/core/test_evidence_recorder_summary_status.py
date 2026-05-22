@@ -309,6 +309,24 @@ def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:
 
 
 def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
+    telemetry_detail = {
+        "schema": "scion.telemetry_decision_detail.v1",
+        "stage": "screening",
+        "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+        "category": "activity",
+        "mechanism_id": "activity_probe",
+        "surface_field_id": "activity_counter",
+        "surface_field_ids": ["activity_counter"],
+        "runtime_role": "activity",
+        "missing_fields": [],
+        "invalid_fields": [],
+        "repairable": False,
+        "declaration_source_digest": "surface-digest-1",
+        "candidate_missing": 0,
+        "candidate_present": 16,
+        "candidate_positive": 0,
+        "champion_positive": 0,
+    }
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
@@ -320,6 +338,7 @@ def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
                 "activity": 1,
                 "effect": 1,
             },
+            "telemetry_failure_details": [telemetry_detail],
         },
     )
 
@@ -330,6 +349,7 @@ def test_status_reports_telemetry_failed_breakdown(tmp_path: Path) -> None:
         "activity": 1,
         "effect": 1,
     }
+    assert status["telemetry_failure_details"] == [telemetry_detail]
 
 
 def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) -> None:
@@ -457,17 +477,20 @@ def test_campaign_summary_separates_telemetry_failed_experiment(
         exposed_summary="screening failed",
         raw_metrics_ref="/tmp/telemetry.json",
         candidate_surface_runtime_summary={
-            "selected_surface": "solver_design",
+            "selected_surface": "generic_surface",
+            "declaration_source_digest": "surface-digest-activation",
             "telemetry_guard": {
                 "passed": False,
                 "candidate_runs": 16,
+                "declaration_source_digest": "guard-digest-activation",
                 "failures": [
                     {
                         "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
                         "severity": "fail",
                         "category": "activation",
-                        "mechanism": "iterated_local_search_perturbation",
-                        "field": "solver_algorithm_phase_runtime_ms.ils",
+                        "mechanism": "activation_probe",
+                        "field": "mechanisms.activation_probe.active",
+                        "runtime_role": "activation",
                         "candidate_missing": 16,
                         "candidate_present": 0,
                         "candidate_positive": 0,
@@ -488,15 +511,23 @@ def test_campaign_summary_separates_telemetry_failed_experiment(
 
     assert summary["screened_experiments"] == 0
     assert summary["telemetry_failed_experiments"] == 1
+    assert summary["telemetry_failure_details"][0]["repairable"] is True
     summary_step = summary["steps"][0]
     assert summary_step["screened_experiment"] is True
     assert summary_step["screened_experiment_effective"] is False
     protocol = summary_step["protocol_result"]
     assert protocol["screened_experiment_effective"] is False
-    assert "iterated_local_search_perturbation" in (
-        protocol["telemetry_validation_feedback"]
-    )
+    assert "activation_probe" in protocol["telemetry_validation_feedback"]
     assert "candidate_missing=16" in protocol["telemetry_validation_feedback"]
+    detail = protocol["telemetry_failure_details"][0]
+    assert detail["stage"] == "screening"
+    assert detail["category"] == "activation"
+    assert detail["mechanism_id"] == "activation_probe"
+    assert detail["surface_field_id"] == "mechanisms.activation_probe.active"
+    assert detail["runtime_role"] == "activation"
+    assert detail["missing_fields"] == ["mechanisms.activation_probe.active"]
+    assert detail["repairable"] is True
+    assert detail["declaration_source_digest"] == "guard-digest-activation"
 
 
 def test_campaign_summary_counts_formal_screening_telemetry_guard_failure(
@@ -520,17 +551,20 @@ def test_campaign_summary_counts_formal_screening_telemetry_guard_failure(
         exposed_summary="screening telemetry guard failed",
         raw_metrics_ref="/tmp/activity-telemetry.json",
         candidate_surface_runtime_summary={
-            "selected_surface": "solver_design",
+            "selected_surface": "generic_surface",
+            "declaration_source_digest": "surface-digest-activity",
             "telemetry_guard": {
                 "passed": False,
                 "candidate_runs": 16,
+                "declaration_source_digest": "guard-digest-activity",
                 "failures": [
                     {
                         "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
                         "severity": "fail",
                         "category": "activity",
-                        "mechanism": "adaptive_vns_scheduler",
-                        "field": "solver_algorithm_neutral_accepted_moves",
+                        "mechanism": "activity_probe",
+                        "field": "activity_counter",
+                        "runtime_role": "activity",
                         "candidate_present": 16,
                         "candidate_positive": 0,
                     }
@@ -550,13 +584,32 @@ def test_campaign_summary_counts_formal_screening_telemetry_guard_failure(
     assert summary["screened_experiments"] == 1
     assert summary["telemetry_failed_experiments"] == 1
     assert summary["telemetry_failed_experiments_by_category"] == {"activity": 1}
+    assert summary["telemetry_failure_details"][0]["mechanism_id"] == (
+        "activity_probe"
+    )
     summary_step = summary["steps"][0]
     assert summary_step["screened_experiment_effective"] is True
     assert summary_step["telemetry_guard_failed"] is True
     assert summary_step["telemetry_failure_categories"] == ["activity"]
+    assert summary_step["telemetry_failure_details"][0]["category"] == "activity"
     protocol = summary_step["protocol_result"]
     assert protocol["telemetry_guard_failed"] is True
     assert protocol["telemetry_failure_categories"] == ["activity"]
+    detail = protocol["telemetry_failure_details"][0]
+    assert detail["schema"] == "scion.telemetry_decision_detail.v1"
+    assert detail["stage"] == "screening"
+    assert detail["category"] == "activity"
+    assert detail["mechanism_id"] == "activity_probe"
+    assert detail["surface_field_id"] == "activity_counter"
+    assert detail["runtime_role"] == "activity"
+    assert detail["missing_fields"] == []
+    assert detail["invalid_fields"] == []
+    assert detail["repairable"] is False
+    assert detail["declaration_source_digest"] == "guard-digest-activity"
+    assert protocol["auxiliary_protocol_reason_codes"] == [
+        "TELEMETRY_GUARD_FAILED",
+        "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+    ]
     assert protocol["effective_reason_codes"] == ["SCREENING_TELEMETRY_FAILED"]
 
 

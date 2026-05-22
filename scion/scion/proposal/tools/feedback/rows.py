@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    telemetry_decision_details,
+    telemetry_failure_categories,
+)
 from scion.core.models import StepRecord
 from scion.proposal.tools.feedback.attribution import _surface_runtime_attribution_payload
 from scion.proposal.tools.feedback.scope import _feedback_step_provenance
@@ -54,6 +59,9 @@ def _screening_step_payload(
         "candidate_surface_runtime_summary": _strip_forbidden_value(
             protocol.candidate_surface_runtime_summary or {}
         ),
+        "telemetry_guard_failed": formal_telemetry_guard_failed(protocol),
+        "telemetry_failure_categories": list(telemetry_failure_categories(protocol)),
+        "telemetry_failure_details": list(telemetry_decision_details(protocol)),
         "candidate_surface_runtime_attribution": _surface_runtime_attribution_payload(
             step
         ),
@@ -104,6 +112,9 @@ def _holdout_step_payload(
         "candidate_surface_runtime_summary": _strip_forbidden_value(
             protocol.candidate_surface_runtime_summary or {}
         ),
+        "telemetry_guard_failed": formal_telemetry_guard_failed(protocol),
+        "telemetry_failure_categories": list(telemetry_failure_categories(protocol)),
+        "telemetry_failure_details": list(telemetry_decision_details(protocol)),
         "metrics_file_ref_exposed": False,
         "case_ids_exposed": False,
         "pair_feedback_exposed": False,

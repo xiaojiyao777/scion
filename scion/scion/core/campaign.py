@@ -28,6 +28,7 @@ from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
+    telemetry_decision_details,
     telemetry_failure_categories,
 )
 from scion.core.termination import TerminationConfig
@@ -294,6 +295,7 @@ class CampaignManager:
             telemetry_failed_from_steps,
         )
         telemetry_failed_by_category: Dict[str, int] = {}
+        telemetry_failure_details: list[dict[str, Any]] = []
         for step in self._step_history:
             if not formal_telemetry_guard_failed(step.protocol_result):
                 continue
@@ -304,12 +306,21 @@ class CampaignManager:
                 telemetry_failed_by_category[category] = (
                     telemetry_failed_by_category.get(category, 0) + 1
                 )
+            for detail in telemetry_decision_details(step.protocol_result):
+                telemetry_failure_details.append(
+                    {
+                        **detail,
+                        "round": step.round_num,
+                        "branch_id": step.branch_id,
+                    }
+                )
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
             "screened_experiments": self._n_experiments,
             "telemetry_failed_experiments": telemetry_failed_experiments,
             "telemetry_failed_experiments_by_category": telemetry_failed_by_category,
+            "telemetry_failure_details": telemetry_failure_details[-16:],
             "total_rounds": self._round_num,
             "proposal_attempts": self._round_num,
             "n_steps": len(self._step_history),

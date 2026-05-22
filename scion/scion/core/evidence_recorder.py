@@ -40,6 +40,7 @@ from scion.core.status_reporter import (
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
     screened_experiment_effective,
+    telemetry_decision_details,
     telemetry_failure_categories,
     telemetry_validation_feedback,
 )
@@ -271,6 +272,24 @@ def _telemetry_failed_experiment_category_counts(
         for category in categories:
             counts[category] = counts.get(category, 0) + 1
     return counts
+
+
+def _telemetry_failed_experiment_details(
+    steps: Iterable[StepRecord],
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    for step in steps:
+        if not formal_telemetry_guard_failed(step.protocol_result):
+            continue
+        for detail in telemetry_decision_details(step.protocol_result):
+            details.append(
+                {
+                    **detail,
+                    "round": step.round_num,
+                    "branch_id": step.branch_id,
+                }
+            )
+    return details
 
 
 def _contract_not_run_reason(step: StepRecord) -> str | None:
@@ -586,6 +605,10 @@ class EvidenceRecorder:
             for case in (protocol_result.case_ids if protocol_result else ())
         ]
         public_case_ids = [case for case in public_case_ids if case is not None]
+        telemetry_details = list(telemetry_decision_details(protocol_result))
+        protocol_reason_codes = (
+            list(protocol_result.reason_codes) if protocol_result else []
+        )
         internal_audit_payload = {
             "schema": "scion.internal_audit_refs.v1",
             "internal_only": True,
@@ -631,6 +654,7 @@ class EvidenceRecorder:
             "runtime_guard": _extract_runtime_guard_evidence(verification_result),
             "runtime_stats": runtime_stats,
             "decision_reason_codes": list(decision_reason_codes or ()),
+            "auxiliary_protocol_reason_codes": protocol_reason_codes,
             "screened_experiment_effective": screened_experiment_effective(
                 protocol_result
             ),
@@ -638,6 +662,7 @@ class EvidenceRecorder:
             "telemetry_failure_categories": list(
                 telemetry_failure_categories(protocol_result)
             ),
+            "telemetry_failure_details": telemetry_details,
             "telemetry_validation_feedback": telemetry_validation_feedback(
                 protocol_result
             ),
@@ -671,6 +696,7 @@ class EvidenceRecorder:
             "telemetry_failure_categories_json": json.dumps(
                 list(telemetry_failure_categories(protocol_result))
             ),
+            "telemetry_failure_details_json": json.dumps(telemetry_details),
             "decision_features_json": json.dumps(evidence_metadata),
             "decision": decision.value,
             "model_id": self.model_id,
@@ -696,6 +722,10 @@ class EvidenceRecorder:
         """Build the append-only decision payload for LineageRegistry.record_decision."""
         stats = protocol_result.stats if protocol_result else None
         runtime_stats = _extract_protocol_runtime_stats(protocol_result)
+        telemetry_details = list(telemetry_decision_details(protocol_result))
+        protocol_reason_codes = (
+            list(protocol_result.reason_codes) if protocol_result else []
+        )
         features_json = json.dumps(
             {
                 "branch_id": branch.branch_id,
@@ -709,6 +739,7 @@ class EvidenceRecorder:
                 "failure_codes": branch.failure_codes,
                 "runtime_guard": _extract_runtime_guard_evidence(verification_result),
                 "runtime_stats": runtime_stats,
+                "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "screened_experiment_effective": screened_experiment_effective(
                     protocol_result
                 ),
@@ -718,6 +749,7 @@ class EvidenceRecorder:
                 "telemetry_failure_categories": list(
                     telemetry_failure_categories(protocol_result)
                 ),
+                "telemetry_failure_details": telemetry_details,
                 "telemetry_validation_feedback": telemetry_validation_feedback(
                     protocol_result
                 ),
@@ -864,6 +896,7 @@ class EvidenceRecorder:
                 step.protocol_result for step in steps
             )
         )
+        telemetry_failure_details = _telemetry_failed_experiment_details(steps)
         screened_experiments = sum(
             1
             for step in steps
@@ -900,6 +933,18 @@ class EvidenceRecorder:
                             )
                         except (TypeError, ValueError):
                             continue
+                state_telemetry_details = state_for_counts.get(
+                    "telemetry_failure_details"
+                )
+                if (
+                    not telemetry_failure_details
+                    and isinstance(state_telemetry_details, list)
+                ):
+                    telemetry_failure_details = [
+                        dict(item)
+                        for item in state_telemetry_details
+                        if isinstance(item, Mapping)
+                    ]
             except Exception as exc:  # pragma: no cover - summary is best-effort
                 logger.debug("state snapshot for campaign_summary counts failed: %s", exc)
         if state_screened_experiments is not None:
@@ -914,6 +959,7 @@ class EvidenceRecorder:
             "telemetry_failed_experiments_by_category": (
                 telemetry_failed_experiments_by_category
             ),
+            "telemetry_failure_details": telemetry_failure_details,
             "champion_version": champion.version,
             "champion_weight_revision": getattr(champion, "weight_revision", 0),
             "stopped_reason": effective_stopped_reason,
@@ -1031,6 +1077,9 @@ class EvidenceRecorder:
             "telemetry_failure_categories": list(
                 telemetry_failure_categories(step.protocol_result)
             ),
+            "telemetry_failure_details": list(
+                telemetry_decision_details(step.protocol_result)
+            ),
         }
         if contract_not_run_reason:
             step_data["contract_not_run_reason"] = contract_not_run_reason
@@ -1069,6 +1118,7 @@ class EvidenceRecorder:
             pr = step.protocol_result
             protocol_reason_codes = list(pr.reason_codes)
             effective_reason_codes = decision_reason_codes or protocol_reason_codes
+            telemetry_details = list(telemetry_decision_details(pr))
             raw_metrics_public_ref = public_artifact_ref(
                 pr.raw_metrics_ref,
                 base_dir=self.campaign_dir,
@@ -1113,6 +1163,7 @@ class EvidenceRecorder:
                 "reason_codes": list(pr.reason_codes),
                 "protocol_reason_codes": protocol_reason_codes,
                 "decision_reason_codes": decision_reason_codes,
+                "auxiliary_protocol_reason_codes": protocol_reason_codes,
                 "effective_reason_codes": effective_reason_codes,
                 "effective_reason_source": (
                     "decision_engine" if decision_reason_codes else "protocol_gate"
@@ -1138,6 +1189,7 @@ class EvidenceRecorder:
                 "telemetry_failure_categories": list(
                     telemetry_failure_categories(pr)
                 ),
+                "telemetry_failure_details": telemetry_details,
                 "candidate_runtime_failure_categories": dict(
                     pr.candidate_runtime_failure_categories
                     or step.candidate_runtime_failure_categories

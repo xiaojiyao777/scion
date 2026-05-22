@@ -53,6 +53,59 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert "raw_metrics_ref" not in rendered
 
 
+def test_feedback_query_screening_exposes_typed_telemetry_details(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    telemetry_step = replace(
+        context.step_history[0],
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=_stats(n_cases=4, wins=0, losses=0, ties=4, win_rate=0.0),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_TELEMETRY_FAILED", "SCREENING_FAIL_WIN_RATE"),
+            exposed_summary="typed telemetry guard failed",
+            raw_metrics_ref="/SECRET/raw/telemetry.json",
+            candidate_surface_runtime_summary={
+                "selected_surface": "generic_surface",
+                "telemetry_guard": {
+                    "passed": False,
+                    "declaration_source_digest": "guard-digest-feedback",
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+                            "severity": "fail",
+                            "category": "activity",
+                            "mechanism": "activity_probe",
+                            "field": "activity_counter",
+                            "runtime_role": "activity",
+                            "candidate_present": 4,
+                            "candidate_positive": 0,
+                        }
+                    ],
+                },
+            },
+        ),
+    )
+    context = replace(context, step_history=(telemetry_step,))
+
+    observation = registry.call("feedback.query_screening", {}, context)
+    row = observation.structured_payload["screening_steps"][0]
+    detail = row["telemetry_failure_details"][0]
+
+    assert row["telemetry_guard_failed"] is True
+    assert row["telemetry_failure_categories"] == ["activity"]
+    assert detail["schema"] == "scion.telemetry_decision_detail.v1"
+    assert detail["mechanism_id"] == "activity_probe"
+    assert detail["surface_field_id"] == "activity_counter"
+    assert detail["runtime_role"] == "activity"
+    assert detail["declaration_source_digest"] == "guard-digest-feedback"
+    rendered = json.dumps(observation.structured_payload, sort_keys=True)
+    assert "raw_metrics_ref" not in rendered
+    assert "SECRET" not in rendered
+
+
 def test_experiment_history_marks_stable_objectives_and_no_effect_mechanisms(
     tmp_path: Path,
 ) -> None:

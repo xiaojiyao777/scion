@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scion.core.models import StepRecord
+from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
+    telemetry_decision_details,
+    telemetry_failure_categories,
+)
 from scion.proposal.tools.feedback.constants import (
     _RUNTIME_ATTRIBUTION_PRIORITY_SUFFIXES,
     _RUNTIME_ATTRIBUTION_SUFFIXES,
@@ -21,9 +26,10 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
     summary = protocol.candidate_surface_runtime_summary or {}
     if not isinstance(summary, Mapping):
         return {}
+    telemetry_details = list(telemetry_decision_details(protocol))
     fields = summary.get("fields")
     if not isinstance(fields, Mapping):
-        return {}
+        fields = {}
     candidates: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
     for field_name, field_summary in fields.items():
         if not isinstance(field_name, str) or not isinstance(field_summary, Mapping):
@@ -50,7 +56,7 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
         )
     candidates.sort(key=lambda item: item[0])
     highlights = [payload for _sort_key, payload in candidates[:12]]
-    if not highlights:
+    if not highlights and not telemetry_details:
         return {}
     return {
         "round_num": step.round_num,
@@ -60,6 +66,9 @@ def _surface_runtime_attribution_payload(step: StepRecord) -> dict[str, Any]:
         "gate_outcome": protocol.gate_outcome,
         "reason_codes": list(protocol.reason_codes),
         "stats": _eval_stats_payload(protocol.stats),
+        "telemetry_guard_failed": formal_telemetry_guard_failed(protocol),
+        "telemetry_failure_categories": list(telemetry_failure_categories(protocol)),
+        "telemetry_failure_details": telemetry_details,
         "runtime_field_highlights": highlights,
     }
 def _runtime_highlight_is_all_zero_numeric(highlight: Mapping[str, Any]) -> bool:

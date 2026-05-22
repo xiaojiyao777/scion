@@ -170,6 +170,14 @@ def _compact_screening_step_for_budget(row: Mapping[str, Any]) -> dict[str, Any]
             "candidate_runtime_stop_reasons": _compact_counts_for_budget(
                 row.get("candidate_runtime_stop_reasons")
             ),
+            "telemetry_guard_failed": row.get("telemetry_guard_failed"),
+            "telemetry_failure_categories": _bounded_string_list(
+                row.get("telemetry_failure_categories"),
+                limit=6,
+            ),
+            "telemetry_failure_details": _compact_feedback_value_for_budget(
+                row.get("telemetry_failure_details")
+            ),
             "candidate_surface_runtime_attribution": _compact_runtime_attribution_for_budget(
                 row.get("candidate_surface_runtime_attribution")
             ),
@@ -199,6 +207,14 @@ def _compact_runtime_attribution_for_budget(value: Any) -> dict[str, Any]:
             "gate_outcome": value.get("gate_outcome"),
             "reason_codes": _bounded_string_list(value.get("reason_codes"), limit=6),
             "stats": _compact_eval_stats_for_budget(value.get("stats")),
+            "telemetry_guard_failed": value.get("telemetry_guard_failed"),
+            "telemetry_failure_categories": _bounded_string_list(
+                value.get("telemetry_failure_categories"),
+                limit=6,
+            ),
+            "telemetry_failure_details": _compact_feedback_value_for_budget(
+                value.get("telemetry_failure_details")
+            ),
             "runtime_field_highlights": compact_highlights,
         }
     )

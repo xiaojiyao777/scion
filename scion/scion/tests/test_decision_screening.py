@@ -79,10 +79,11 @@ def test_decision_frozen_protocol_gate_fail_cannot_promote():
     assert "FROZEN_PROTOCOL_GATE_NOT_PASS" in out.reason_codes
 
 
-def test_decision_screening_pass_to_queue_validate():
+def test_decision_screening_high_win_positive_effect_queues_validation():
     f = _features(stage="screening", win_rate=0.7, median_delta=0.01)
     out = _engine.decide(f)
     assert out.decision == Decision.QUEUE_VALIDATE
+    assert "SCREENING_PASS" in out.reason_codes
 
 
 def test_decision_screening_fail():
@@ -107,10 +108,11 @@ def test_decision_screening_runtime_tie_improvement_queues_validation():
     assert "SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT" in out.reason_codes
 
 
-def test_decision_screening_expand():
+def test_decision_screening_low_win_positive_effect_expands_screening():
     f = _features(stage="screening", win_rate=0.55, median_delta=0.01)
     out = _engine.decide(f)
     assert out.decision == Decision.EXPAND_SCREENING
+    assert "SCREENING_EXPAND" in out.reason_codes
 
 
 def test_decision_screening_expand_exhausted_borderline_positive_delta():
@@ -150,20 +152,17 @@ def test_decision_screening_expand_exhausted_borderline_negative_delta():
     assert "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_NEGATIVE_DELTA" in out.reason_codes
 
 
-def test_decision_screening_pass_negative_delta_queues_validation():
-    """wr >= threshold but md < 0 → queue_validate (v3 lex-order: splits-better candidate,
-    validation's bootstrap CI on diverse cases is the authoritative judge)."""
+def test_decision_screening_high_win_negative_effect_does_not_queue_validation():
+    """wr >= threshold but md < 0 stays in exploration by default."""
     f = _features(stage="screening", win_rate=0.7, median_delta=-1000.0)
     out = _engine.decide(f)
-    assert out.decision == Decision.QUEUE_VALIDATE
-    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT" in out.reason_codes
+    assert all("PASS" not in reason for reason in out.reason_codes)
 
 
-def test_decision_screening_pass_negative_delta_unaffected_by_screening_expand():
-    """T1: SPND no longer has expand_count cap. A prior screening_expand on the
-    same candidate (or leaked from the same branch pre-T3) must NOT block SPND
-    from QUEUE_VALIDATE. Per v3, screening_expand_count and the SPND decision
-    are independent concerns."""
+def test_decision_screening_high_win_negative_effect_ignores_screening_expand_count():
+    """The high-win negative-effect decision is not an expand retry path."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -176,14 +175,13 @@ def test_decision_screening_pass_negative_delta_unaffected_by_screening_expand()
         budget_remaining_ratio=1.0, screening_expand_count=1,
     )
     out = _engine.decide(f)
-    assert out.decision == Decision.QUEUE_VALIDATE
-    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT" in out.reason_codes
+    assert all("PASS" not in reason for reason in out.reason_codes)
 
 
-def test_decision_screening_pass_negative_delta_unaffected_by_validation_expand_count():
-    """T3: validation_expand_count leaking from a prior candidate must NOT affect
-    SPND decision on the current candidate (this was the cross-stage counter leak
-    that caused sonnet s11 to 0-promote in the 2026-04-24 F experiment)."""
+def test_decision_screening_high_win_negative_effect_ignores_validation_expand_count():
+    """Validation expand history cannot promote a negative-effect screening result."""
     from scion.core.models import DecisionFeatures
     f = DecisionFeatures(
         branch_id=str(uuid.uuid4()),
@@ -197,5 +195,6 @@ def test_decision_screening_pass_negative_delta_unaffected_by_validation_expand_
         screening_expand_count=0, validation_expand_count=1,
     )
     out = _engine.decide(f)
-    assert out.decision == Decision.QUEUE_VALIDATE
-    assert "SCREENING_PASS_NEGATIVE_DELTA" in out.reason_codes
+    assert out.decision == Decision.CONTINUE_EXPLORE
+    assert "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT" in out.reason_codes
+    assert all("PASS" not in reason for reason in out.reason_codes)

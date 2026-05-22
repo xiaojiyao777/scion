@@ -64,6 +64,7 @@ class LineageRegistry:
                     screening_ci_high      REAL,
                     telemetry_guard_failed INTEGER,
                     telemetry_failure_categories_json TEXT,
+                    telemetry_failure_details_json TEXT,
                     decision_features_json TEXT,
                     decision               TEXT,
                     decision_reason        TEXT,
@@ -95,6 +96,7 @@ class LineageRegistry:
                 "screening_pair_win_rate": "REAL",
                 "telemetry_guard_failed": "INTEGER",
                 "telemetry_failure_categories_json": "TEXT",
+                "telemetry_failure_details_json": "TEXT",
             })
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
@@ -354,7 +356,8 @@ class LineageRegistry:
                 "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
             ).fetchone()[0]
             telemetry_category_rows = conn.execute(
-                "SELECT telemetry_failure_categories_json FROM experiment_events "
+                "SELECT telemetry_failure_categories_json, telemetry_failure_details_json "
+                "FROM experiment_events "
                 "WHERE event_kind = 'experiment' AND telemetry_guard_failed = 1"
             ).fetchall()
             screening = conn.execute("""
@@ -397,6 +400,7 @@ class LineageRegistry:
                 else 0.0
             )
             telemetry_failed_experiments_by_category: Dict[str, int] = {}
+            telemetry_failure_details: list[dict[str, Any]] = []
             for row in telemetry_category_rows:
                 try:
                     categories = json.loads(row[0] or "[]")
@@ -410,6 +414,16 @@ class LineageRegistry:
                     telemetry_failed_experiments_by_category[category] = (
                         telemetry_failed_experiments_by_category.get(category, 0) + 1
                     )
+                try:
+                    details = json.loads(row[1] or "[]")
+                except (TypeError, json.JSONDecodeError):
+                    details = []
+                if isinstance(details, dict):
+                    details = [details]
+                if isinstance(details, list):
+                    telemetry_failure_details.extend(
+                        item for item in details if isinstance(item, dict)
+                    )
         return {
             "total_events": total,
             "by_decision": by_decision,
@@ -421,6 +435,7 @@ class LineageRegistry:
             "telemetry_failed_experiments_by_category": (
                 telemetry_failed_experiments_by_category
             ),
+            "telemetry_failure_details": telemetry_failure_details,
             "screening_win_rate": screening_case_win_rate,
             "screening_win_rate_scope": "case_level_gate",
             "screening_case_wins": screening_case_wins,
