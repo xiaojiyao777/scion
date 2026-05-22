@@ -2420,7 +2420,7 @@ P2:
 
 ## Remaining Risks
 
-2026-05-22 update: the latest construction/Shaw validation run is documented in
+2026-05-22 update: the construction/Shaw validation run is documented in
 [`v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-construction-shaw-sonnet-3r-postrun-20260522.md).
 It completed 3 effective screening rounds with no construction/Shaw false
 positive recurrence and no P0 findings. The remaining P1 provider noise was
@@ -2432,6 +2432,19 @@ also split CVRP `solver_design` manifest/smoke-effort interpretation into the
 problem-owned `solver_design/` package, and split retry-round accounting tests
 by explore-pipeline versus campaign-loop responsibility. The full unit suite
 passes at `1007 passed`.
+
+The follow-up solver-design provider P1 validation is documented in
+[`v0.4-v3-solver-design-provider-p1-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-solver-design-provider-p1-sonnet-3r-postrun-20260522.md).
+It completed 3/3 effective screening rounds with `qblocks=0`; the first
+screened branch was a geographic/spatial cluster destroy variant and was no
+longer misclassified as missing random/Shaw removal. The remaining P1 repairs
+add a generic provider hook for static algorithm-smoke quality checks while
+keeping domain semantics in CVRP: CVRP now rejects approved-hypothesis/code
+semantic drift for cross-route double-bridge claims, rejects non-causal destroy
+effect telemetry recorded inside destroy helpers, and separates regret repair
+semantic mischaracterization from true missing-regret claims. The active solver
+fact packet now states the regret score/tie-break semantics used by
+`_regret_insertion`.
 
 - CVRP `solver_design` is now validly routed, self-checked, and contract-valid
   as a direct full-algorithm hook. It has not yet shown experiment-level solver

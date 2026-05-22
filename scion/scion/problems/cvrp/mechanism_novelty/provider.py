@@ -28,12 +28,14 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair import (
     _duplicates_regret_insertion_repair,
     _duplicates_route_removal,
     _duplicates_shaw_related_removal,
+    _mischaracterizes_regret_insertion_repair,
     _missing_removal_savings_destroy_span,
     _missing_random_removal_destroy_span,
     _missing_regret_insertion_repair_span,
     _missing_route_removal_span,
     _missing_shaw_related_removal_span,
     _regret_insertion_allowed_variant_guidance,
+    _regret_semantic_mischaracterization_span,
 )
 from scion.problems.cvrp.mechanism_novelty.hypothesis import _hypothesis_text
 from scion.problems.cvrp.mechanism_novelty.local_search import (
@@ -484,6 +486,30 @@ class CvrpMechanismNoveltyProvider:
                 fact_ids=(_ROUTE_REMOVAL_FACT,),
             )
 
+        if facts.has_regret_insertion_repair and _mischaracterizes_regret_insertion_repair(
+            text
+        ):
+            span = _regret_semantic_mischaracterization_span(text)
+            return _result(
+                facts,
+                premise_check="contradicted",
+                failure_category="premise_contradicted",
+                mechanism="regret_insertion_repair",
+                reason=(
+                    "Hypothesis mischaracterizes the active regret repair "
+                    "semantics. The active solver snapshot shows "
+                    "_regret2_insertion and _regret3_insertion choose the next "
+                    "customer by regret score, with cheapest insertion delta as "
+                    "tie-break, rather than globally cheapest insertion alone."
+                ),
+                evidence=facts.regret_insertion_evidence,
+                fact_ids=(_REGRET_INSERTION_FACT,),
+                contradicted_span=span,
+                matched_span=span,
+                variant_allowed=False,
+                allowed_variant_guidance=_regret_allowed_variant_guidance(),
+            )
+
         if facts.has_regret_insertion_repair and _claims_missing_regret_insertion_repair(
             text
         ):
@@ -495,8 +521,7 @@ class CvrpMechanismNoveltyProvider:
                 mechanism="regret_insertion_repair",
                 reason=(
                     "Hypothesis claims or implies regret insertion repair is "
-                    "absent, or mischaracterizes the active regret repair "
-                    "semantics, but the active solver snapshot shows "
+                    "absent, but the active solver snapshot shows "
                     "_regret2_insertion and _regret3_insertion wired through "
                     "the repair portfolio."
                 ),

@@ -202,3 +202,69 @@ def test_cvrp_smoke_provider_owns_low_effort_interpretation() -> None:
     assert issue is not None
     assert "low active search effort" in issue
     assert "policies/baseline_modules/scheduler.py" in issue
+
+
+def test_cvrp_smoke_provider_rejects_double_bridge_semantic_drift() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a cross-route double-bridge perturbation across up to 4 routes."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        mechanism_changes=(SimpleNamespace(id="double_bridge_perturbation"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/local_search.py",
+        action="modify",
+        code_content=(
+            "def _double_bridge_perturbation(solution, rng, context=None):\n"
+            "    for route in solution.routes:\n"
+            "        customers = route.customers\n"
+            "        if len(customers) >= 8:\n"
+            "            route.customers = customers[:2] + customers[4:6] + customers[2:4] + customers[6:]\n"
+            "            context.record_move('double_bridge_perturbation', attempted=1, accepted=1, delta=1, best_improved=1)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "semantic drift" in issue
+    assert "single route" in issue
+
+
+def test_cvrp_smoke_provider_rejects_destroy_helper_effect_telemetry() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add spatial_cluster_removal destroy.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_changes=(SimpleNamespace(id="spatial_cluster_removal"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_repair.py",
+        action="modify",
+        code_content=(
+            "def _spatial_cluster_removal(solution, q, rng, context=None):\n"
+            "    if context:\n"
+            "        context.record_move('spatial_cluster_removal', attempted=1, accepted=1, delta=5, best_improved=1)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "non-causal destroy telemetry" in issue

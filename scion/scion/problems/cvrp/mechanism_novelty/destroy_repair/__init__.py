@@ -19,8 +19,10 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair.regret import (
     _claims_missing_regret_insertion_repair,
     _duplicate_regret_insertion_repair_span,
     _duplicates_regret_insertion_repair,
+    _mischaracterizes_regret_insertion_repair,
     _missing_regret_insertion_repair_span,
     _regret_insertion_allowed_variant_guidance,
+    _regret_semantic_mischaracterization_span,
 )
 from scion.problems.cvrp.mechanism_novelty.destroy_repair.route import (
     _claims_missing_route_removal,
@@ -45,10 +47,12 @@ __all__ = [
     "_duplicates_regret_insertion_repair",
     "_duplicates_route_removal",
     "_duplicates_shaw_related_removal",
+    "_mischaracterizes_regret_insertion_repair",
     "_missing_removal_savings_destroy_span",
     "_missing_random_removal_destroy_span",
     "_missing_regret_insertion_repair_span",
     "_missing_route_removal_span",
     "_missing_shaw_related_removal_span",
     "_regret_insertion_allowed_variant_guidance",
+    "_regret_semantic_mischaracterization_span",
 ]

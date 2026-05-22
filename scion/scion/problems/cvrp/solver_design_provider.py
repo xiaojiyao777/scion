@@ -17,6 +17,7 @@ from scion.problems.cvrp.solver_design.smoke import (
     low_effort_issue as _low_effort_issue,
     patch_claims_search_effort as _patch_claims_search_effort,
     runtime_smoke_repair_guidance as _runtime_smoke_repair_guidance,
+    static_smoke_issue as _static_smoke_issue,
     zero_effort_issue as _zero_effort_issue,
 )
 
@@ -564,6 +565,14 @@ class CvrpSolverDesignProvider:
         hypothesis: HypothesisProposal | None,
     ) -> bool:
         return _patch_claims_search_effort(patch, hypothesis)
+
+    def solver_design_static_smoke_issue(
+        self,
+        *,
+        patch: PatchProposal,
+        hypothesis: HypothesisProposal | None,
+    ) -> str | None:
+        return _static_smoke_issue(patch=patch, hypothesis=hypothesis)
 
     def zero_effort_issue(
         self,

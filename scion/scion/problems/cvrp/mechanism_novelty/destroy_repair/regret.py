@@ -21,6 +21,9 @@ def _claims_missing_regret_insertion_repair(text: str) -> bool:
         return False
     return bool(_missing_regret_insertion_repair_span(text))
 
+def _mischaracterizes_regret_insertion_repair(text: str) -> bool:
+    return bool(_regret_semantic_mischaracterization_span(text))
+
 def _duplicates_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
         return False
@@ -50,6 +53,22 @@ def _missing_regret_insertion_repair_span(text: str) -> str:
     ):
         return ""
     return span
+
+def _regret_semantic_mischaracterization_span(text: str) -> str:
+    if not _mentions_regret_insertion_repair(text):
+        return ""
+    return _first_regex_span(
+        text,
+        (
+            r"\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b"
+            r".{0,160}\b(?:globally cheapest|cheapest positions?|"
+            r"without considering regret|ignores? regret|no regret score|"
+            r"not use regret score)\b",
+            r"\b(?:globally cheapest|cheapest positions?|without considering regret|"
+            r"ignores? regret|no regret score|not use regret score)\b"
+            r".{0,160}\b(?:regret[- ]?[23k]?|regret insertion|regret repair)\b",
+        ),
+    )
 
 def _duplicate_regret_insertion_repair_span(text: str) -> str:
     return _first_regex_span(

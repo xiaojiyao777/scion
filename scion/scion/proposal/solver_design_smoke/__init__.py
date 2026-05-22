@@ -54,6 +54,7 @@ from .effort import (
     _solver_design_patch_claims_search_effort,
     _solver_design_patch_paths,
     _solver_design_smoke_runtime_underspent,
+    _solver_design_static_issue,
     _solver_design_zero_effort_issue,
 )
 from .guidance import _solver_design_smoke_repair_guidance
@@ -139,6 +140,7 @@ __all__ = [
     "_solver_design_smoke_provider",
     "_solver_design_smoke_repair_guidance",
     "_solver_design_smoke_runtime_underspent",
+    "_solver_design_static_issue",
     "_solver_design_zero_effort_issue",
     "_solver_run_failure_detail",
     "_string_list",

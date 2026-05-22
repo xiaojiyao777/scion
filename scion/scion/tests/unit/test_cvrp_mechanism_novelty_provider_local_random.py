@@ -562,7 +562,9 @@ def test_cvrp_provider_regret_semantic_contradiction_uses_precise_reason() -> No
     assert result.mechanism == "regret_insertion_repair"
     assert result.premise_check == "contradicted"
     assert "mischaracterizes" in result.reason
-    assert "without considering regret score" in result.contradicted_span
+    assert "absent" not in result.reason
+    assert "tie-break" in result.reason
+    assert "without considering regret" in result.contradicted_span
 
 
 def test_cvrp_provider_allows_acknowledged_random_removal_distribution_variant() -> None:

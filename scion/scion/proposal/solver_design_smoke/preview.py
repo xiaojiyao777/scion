@@ -38,6 +38,7 @@ from .constants import (
 from .effort import (
     _solver_design_low_effort_issue,
     _solver_design_patch_claims_search_effort,
+    _solver_design_static_issue,
     _solver_design_zero_effort_issue,
 )
 from .guidance import _solver_design_smoke_repair_guidance
@@ -94,6 +95,20 @@ def _runtime_algorithm_smoke_preview(
             "workspace_materialized": False,
             "runtime_smoke_run": False,
             "issues": ["No canary_case_path configured for solver_design smoke."],
+        }
+    static_issue = _solver_design_static_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+        provider=provider,
+    )
+    if static_issue:
+        return {
+            "passed": False,
+            "skipped": False,
+            "workspace_materialized": False,
+            "runtime_smoke_run": False,
+            "selected_surface": surface_name,
+            "issues": [static_issue],
         }
 
     with tempfile.TemporaryDirectory(prefix="scion_algorithm_smoke_") as tmp:

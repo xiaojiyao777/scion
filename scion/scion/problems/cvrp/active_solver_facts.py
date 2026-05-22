@@ -445,7 +445,10 @@ class CvrpActiveSolverDesignProvider:
                 "cvrp.destroy_repair.regret_insertion_repair",
                 (
                     "Repair portfolio already includes regret-2 and regret-3 "
-                    "insertion heuristics wired through scheduler repair_ops."
+                    "insertion heuristics wired through scheduler repair_ops; "
+                    "_regret_insertion chooses the next customer by regret score "
+                    "computed from alternative insertion deltas, with cheapest "
+                    "insertion delta as tie-break."
                 ),
                 mechanism_summary.get("destroy_repair"),
                 [

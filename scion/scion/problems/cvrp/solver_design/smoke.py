@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from scion.core.models import HypothesisProposal, PatchProposal, patch_file_changes
 from scion.core.paths import normalize_relative_patch_path
+from scion.problems.cvrp.solver_design.static_quality import static_smoke_issue
 
 _LOW_EFFORT_MIN_CASES = 2
 _LOW_EFFORT_MAX_ITERATIONS = 5
@@ -286,5 +287,6 @@ __all__ = [
     "low_effort_issue",
     "patch_claims_search_effort",
     "runtime_smoke_repair_guidance",
+    "static_smoke_issue",
     "zero_effort_issue",
 ]

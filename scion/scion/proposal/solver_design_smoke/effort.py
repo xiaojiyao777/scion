@@ -45,6 +45,29 @@ def _solver_design_low_effort_issue(
     return None
 
 
+def _solver_design_static_issue(
+    *,
+    patch: PatchProposal,
+    hypothesis: HypothesisProposal | None,
+    provider: Any | None = None,
+) -> str | None:
+    for name in (
+        "solver_design_static_smoke_issue",
+        "static_smoke_issue",
+        "algorithm_smoke_static_issue",
+    ):
+        checker = getattr(provider, name, None)
+        if not callable(checker):
+            continue
+        try:
+            issue = checker(patch=patch, hypothesis=hypothesis)
+        except TypeError:
+            issue = checker(patch, hypothesis)
+        if issue:
+            return str(issue)
+    return None
+
+
 def _solver_design_patch_claims_search_effort(
     patch: PatchProposal,
     hypothesis: HypothesisProposal | None,
