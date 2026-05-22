@@ -540,6 +540,8 @@ class TestT6BalanceExhaustedStop:
         # run_one_step triggers LLM call → raises LLMBalanceError
         cm.run_one_step()
         assert cm._balance_exhausted is True
+        assert cm.should_stop() is True
+        assert cm._last_stop_reason == "api_balance_exhausted"
 
     def test_stopped_reason_api_balance_exhausted(self, tmp_path):
         """campaign_summary must record stopped_reason='api_balance_exhausted' on balance error."""
@@ -559,9 +561,8 @@ class TestT6BalanceExhaustedStop:
                 return {}
 
         cm = _campaign(tmp_path, llm_client=BalanceExhaustedMockClient())
-        # Drain the circuit breaker threshold
-        for _ in range(4):
-            cm.run_one_step()
+        cm.run_one_step()
+        assert cm.should_stop() is True
         # Simulate the summary write
         cm._write_campaign_summary()
         import json

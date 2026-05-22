@@ -63,6 +63,12 @@ def _stagnation_object_model_markers(adapter: Any | None) -> tuple[str, ...]:
     return tuple(str(marker) for marker in markers if str(marker or "").strip())
 
 
+def _mark_balance_exhausted(owner: Any) -> None:
+    owner._balance_exhausted = True
+    if not getattr(owner, "_external_stop_requested", False):
+        owner.request_stop("api_balance_exhausted")
+
+
 def compose_campaign_services(
     owner: Any,
     *,
@@ -489,7 +495,7 @@ def compose_campaign_services(
         research_log=owner._research_log,
         handle_failure=owner._handle_failure,
         circuit_breaker=owner._circuit_breaker,
-        mark_balance_exhausted=lambda: setattr(owner, "_balance_exhausted", True),
+        mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
         lineage_registry=owner._registry,
         split_manifest=owner._split_manifest,
         seed_ledger=owner._seed_ledger,

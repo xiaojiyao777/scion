@@ -35,7 +35,9 @@ The follow-up 3-round run reached one formal screening round and then stopped
 on upstream provider balance exhaustion; post-run trace analysis is
 [`v0.4-v3-abort-telemetry-audit-sonnet-3r-postrun-20260522.md`](../experiments/v0.4/v0.4-v3-abort-telemetry-audit-sonnet-3r-postrun-20260522.md).
 The repair keeps the v3 boundary generic: LLM transport now classifies 403
-insufficient-balance errors before transient-provider retries; agentic
+insufficient-balance errors before transient-provider retries, and balance
+exhaustion now requests a campaign stop immediately instead of waiting for the
+circuit breaker threshold; agentic
 `primary_failure` attribution now preserves explicit runtime categories such
 as `llm_transient_api_error` ahead of default self-check/schema fallbacks; and
 telemetry guard mechanism diagnostics now mirror declared field-level
