@@ -67,9 +67,11 @@ def _parse_patch(
         raw
     )
     try:
+        edit_context = dict(context or {})
+        edit_context.setdefault("reject_legacy_code_content_full_file_modify", True)
         normalized_raw, edit_attribution = normalize_patch_typed_edits(
             normalized_raw,
-            context=context,
+            context=edit_context,
         )
     except PatchEditProtocolError as exc:
         raise ProposalValidationError(str(exc)) from exc

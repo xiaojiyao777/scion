@@ -4,6 +4,19 @@ from scion.proposal.edit_protocol import source_digest_for_content
 
 from .agentic_schema_test_support import *  # noqa: F401,F403
 
+
+def _exact_replace_policy_patch(tmp_path: Path) -> dict:
+    raw_source = (
+        tmp_path / "champion" / "policies" / "search_policy.py"
+    ).read_text(encoding="utf-8")
+    return _valid_policy_patch_payload(
+        code_content="",
+        edit_intent="exact_replace",
+        source_digest=source_digest_for_content(raw_source),
+        old_string="return 0.50",
+        new_string="return 0.35",
+    )
+
 def test_draft_patch_returns_artifact_without_workspace_write(tmp_path: Path) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = _context(tmp_path, policy=_tool_enabled_policy())
@@ -67,9 +80,11 @@ def test_schema_target_and_interface_previews_catch_static_issues(
     )
     missing_function = registry.call(
         "proposal.interface_preview",
-        _valid_policy_patch_payload(
-            code_content="def baseline_time_fraction(size):\n    return 0.35\n"
-        ),
+        {
+            "file_path": "policies/search_policy.py",
+            "action": "modify",
+            "code_content": "def baseline_time_fraction(size):\n    return 0.35\n",
+        },
         context,
     )
 
@@ -136,7 +151,7 @@ def test_contract_preview_is_static_and_does_not_materialize_workspace(
         "proposal.contract_preview",
         {
             "hypothesis": _valid_hypothesis_payload(),
-            "patch": _valid_policy_patch_payload(),
+            "patch": _exact_replace_policy_patch(tmp_path),
         },
         context,
     )
@@ -188,12 +203,54 @@ def test_contract_preview_expands_typed_exact_replace_to_raw_code_content(
     )
 
 
+def test_schema_preview_rejects_existing_full_file_modify_with_exact_replace_guidance(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    source_path = tmp_path / "champion" / "policies" / "search_policy.py"
+    raw_source = source_path.read_text(encoding="utf-8")
+
+    observation = registry.call(
+        "proposal.schema_preview",
+        {
+            "patch": {
+                "file_path": "policies/search_policy.py",
+                "action": "modify",
+                "edit_intent": "full_file",
+                "source_digest": source_digest_for_content(raw_source),
+                "content_after": raw_source.replace("return 0.50", "return 0.35")
+                + "# avoid full file retry\n" * 800,
+                "full_file_reason": "rewrite is simpler",
+            }
+        },
+        context,
+    )
+    rendered_errors = json.dumps(
+        observation.structured_payload["patch"]["errors"],
+        sort_keys=True,
+    )
+
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert observation.structured_payload["patch"]["passed"] is False
+    assert "existing_file_full_file_modify_rejected" in rendered_errors
+    assert "exact_replace" in rendered_errors
+    assert "old_string" in rendered_errors
+    assert "new_string" in rendered_errors
+    assert "full_file_reason is not an authorization" in rendered_errors
+
+
 def test_contract_preview_patch_payload_is_compact_without_code_content(
     tmp_path: Path,
 ) -> None:
     registry = ProposalToolRegistry.default_read_only()
     context = _context(tmp_path, policy=_tool_enabled_policy())
-    patch_payload = _valid_policy_patch_payload()
+    patch_payload = _exact_replace_policy_patch(tmp_path)
+    raw_source = (
+        tmp_path / "champion" / "policies" / "search_policy.py"
+    ).read_text(encoding="utf-8")
+    expected_content = raw_source.replace("return 0.50", "return 0.35", 1)
 
     schema = registry.call(
         "proposal.schema_preview",
@@ -219,7 +276,7 @@ def test_contract_preview_patch_payload_is_compact_without_code_content(
     assert contract.is_error is False
     assert schema_patch["file_path"] == "policies/search_policy.py"
     assert schema_patch["action"] == "modify"
-    assert schema_patch["code_char_count"] == len(patch_payload["code_content"])
+    assert schema_patch["code_char_count"] == len(expected_content)
     assert len(schema_patch["code_digest"]) == 64
     assert schema_patch["functions"] == [
         "baseline_time_fraction",

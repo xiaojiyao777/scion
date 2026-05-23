@@ -167,7 +167,10 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
         }
         from scion.proposal.tools.previews.schema import _schema_preview_patch_payload
 
-        patch_preview = _schema_preview_patch_payload(patch_payload, context)
+        # ``interface_preview`` is a legacy scratch tool whose input contract is
+        # a raw candidate source string. Final patch/schema/contract paths still
+        # enforce typed edits against the host-visible current file.
+        patch_preview = _schema_preview_patch_payload(patch_payload, None)
         if not patch_preview["passed"]:
             payload = {
                 "passed": False,

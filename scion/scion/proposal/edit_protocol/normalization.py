@@ -73,9 +73,13 @@ def normalize_patch_typed_edits(
         return normalized, ()
 
     source_files = _source_files_from_context(context)
+    reject_legacy_code_content = bool(
+        (context or {}).get("reject_legacy_code_content_full_file_modify")
+    )
     normalized, metadata = _normalize_patch_set_changes(
         normalized,
         source_files=source_files,
+        reject_legacy_code_content=reject_legacy_code_content,
     )
 
     return normalized, tuple(metadata)
@@ -114,11 +118,13 @@ def _normalize_change(
     composing_same_file: bool = False,
     prior_change_pointers: tuple[str, ...] = (),
     has_source_context: bool | None = None,
+    reject_legacy_code_content: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     change = dict(raw_change)
     explicit_intent = _edit_intent(change)
     edit_intent = explicit_intent
     has_content_after = isinstance(change.get("content_after"), str)
+    has_code_content = isinstance(change.get("code_content"), str)
     if not edit_intent:
         edit_intent = "full_file" if _has_full_file_content(change) else ""
     if not edit_intent:
@@ -152,6 +158,16 @@ def _normalize_change(
             prior_change_pointers=prior_change_pointers,
         )
     else:
+        _validate_existing_file_full_file_modify(
+            file_path=file_path,
+            action=action,
+            before=before,
+            explicit_intent=explicit_intent,
+            has_content_after=has_content_after,
+            has_code_content=has_code_content,
+            reject_legacy_code_content=reject_legacy_code_content,
+            change_pointer=change_pointer,
+        )
         content_after = _full_file_content_after(change)
         if action == "delete":
             content_after = ""
@@ -186,6 +202,7 @@ def _normalize_patch_set_changes(
     normalized: dict[str, Any],
     *,
     source_files: Mapping[str, str],
+    reject_legacy_code_content: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     slots = _patch_set_slots(normalized)
     path_counts = Counter(
@@ -226,6 +243,7 @@ def _normalize_patch_set_changes(
             composing_same_file=prior is not None,
             prior_change_pointers=tuple(prior.json_pointers) if prior else (),
             has_source_context=bool(source_files),
+            reject_legacy_code_content=reject_legacy_code_content,
         )
         slot_results[slot.pointer] = change
         metadata.extend(change_metadata)
@@ -487,6 +505,57 @@ def _raise_duplicate_file_error(
     )
 
 
+def _validate_existing_file_full_file_modify(
+    *,
+    file_path: str,
+    action: str,
+    before: str | None,
+    explicit_intent: str,
+    has_content_after: bool,
+    has_code_content: bool,
+    reject_legacy_code_content: bool,
+    change_pointer: str,
+) -> None:
+    if action != "modify" or before is None:
+        return
+    if (
+        explicit_intent != "full_file"
+        and not has_content_after
+        and (not has_code_content or not reject_legacy_code_content)
+    ):
+        return
+    content_field = "content_after" if has_content_after else "code_content"
+    raise PatchEditProtocolError(
+        json.dumps(
+            {
+                "error": "patch_edit_protocol",
+                "reason": "existing_file_full_file_modify_rejected",
+                "file_path": file_path,
+                "json_pointer": change_pointer,
+                "action": action,
+                "edit_intent": "full_file",
+                "content_field": content_field,
+                "source_digest": source_digest_for_content(before),
+                "detail": (
+                    "action=modify targets an existing host-visible file; "
+                    "model-supplied full_file/content_after is disabled by "
+                    "default. full_file_reason is not an authorization."
+                ),
+                "guidance": (
+                    "Rewrite this change as edit_intent='exact_replace': set "
+                    "source_digest to the shown sha256 digest, omit "
+                    "content_after/code_content, provide a non-empty "
+                    "old_string copied exactly from the current file, and "
+                    "provide new_string with only the replacement text. "
+                    "old_string must match exactly once unless replace_all=true."
+                ),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+
+
 def _apply_exact_replace(
     change: Mapping[str, Any],
     *,
@@ -535,6 +604,31 @@ def _apply_exact_replace(
     if not isinstance(new_string, str):
         raise PatchEditProtocolError(
             f"{change_pointer}: exact_replace requires new_string"
+        )
+    if old_string == before:
+        raise PatchEditProtocolError(
+            json.dumps(
+                {
+                    "error": "patch_edit_protocol",
+                    "reason": "existing_file_whole_file_exact_replace_rejected",
+                    "file_path": file_path,
+                    "json_pointer": change_pointer,
+                    "source_digest": actual_digest,
+                    "detail": (
+                        "exact_replace old_string is the complete existing file; "
+                        "whole-file rewrites of host-visible files are disabled "
+                        "by default."
+                    ),
+                    "guidance": (
+                        "Split the change into one or more smaller exact_replace "
+                        "edits. Each old_string should identify only the function, "
+                        "import block, registration entry, or local code block that "
+                        "actually changes."
+                    ),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
         )
     occurrences = before.count(old_string)
     if occurrences == 0:

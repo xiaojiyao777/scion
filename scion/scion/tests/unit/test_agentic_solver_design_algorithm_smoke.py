@@ -3,6 +3,7 @@ from __future__ import annotations
 from scion.proposal.tools.previews.algorithm_smoke_feedback import (
     _algorithm_smoke_agent_payload,
 )
+from scion.proposal.edit_protocol import source_digest_for_content
 from scion.tests.unit.agentic_solver_design_test_support import *
 
 
@@ -252,6 +253,31 @@ def test_algorithm_smoke_materializes_readonly_champion_snapshot(
             ".ruff_cache",
         ),
     )
+    baseline_path = champion_root / "policies" / "baseline_algorithm.py"
+    baseline_before = baseline_path.read_text(encoding="utf-8")
+    old_solve = (
+        'def solve(instance, rng, time_limit_sec, context):\n'
+        '    """Run the controlled solver-design algorithm."""\n'
+        "    if not ENABLE_BASELINE_ALGORITHM:\n"
+        "        return None\n"
+        "    solver = _ALNSVNSSolver(\n"
+        "        time_limit=max(0.05, float(time_limit_sec) * BASELINE_TIME_FRACTION),\n"
+        "        destroy_ratio=DESTROY_RATIO,\n"
+        "        segment_length=SEGMENT_LENGTH,\n"
+        "        reaction_factor=REACTION_FACTOR,\n"
+        "        vns_max_no_improve=VNS_MAX_NO_IMPROVE,\n"
+        "        use_vns=USE_VNS,\n"
+        "        cw_threshold=CW_THRESHOLD,\n"
+        "        vns_threshold=VNS_THRESHOLD,\n"
+        "        alns_threshold=ALNS_THRESHOLD,\n"
+        "        max_destroy_customers=MAX_DESTROY_CUSTOMERS,\n"
+        "        max_routes=instance.allowed_routes or instance.bks_routes,\n"
+        "        context=context,\n"
+        "    )\n"
+        "    solution = solver.solve(instance, rng)\n"
+        "    context.set_stop_reason(solution.stop_reason)\n"
+        "    return context.make_solution(solution.routes_as_tuples())\n"
+    )
     for path in sorted(champion_root.rglob("*"), reverse=True):
         path.chmod(0o555 if path.is_dir() else 0o444)
     champion_root.chmod(0o555)
@@ -274,13 +300,16 @@ def test_algorithm_smoke_materializes_readonly_champion_snapshot(
                     change_locus="solver_design",
                     target_file="policies/baseline_algorithm.py",
                 ),
-                "patch": {
-                    "file_path": "policies/baseline_algorithm.py",
-                    "action": "modify",
-                    "code_content": (
-                        "def solve(instance, rng, time_limit_sec, context):\n"
-                        "    solution = context.make_solution(context.nearest_neighbor())\n"
-                        "    context.record_iteration('seed', 1)\n"
+                    "patch": {
+                        "file_path": "policies/baseline_algorithm.py",
+                        "action": "modify",
+                        "edit_intent": "exact_replace",
+                        "source_digest": source_digest_for_content(baseline_before),
+                        "old_string": old_solve,
+                        "new_string": (
+                            "def solve(instance, rng, time_limit_sec, context):\n"
+                            "    solution = context.make_solution(context.nearest_neighbor())\n"
+                            "    context.record_iteration('seed', 1)\n"
                         "    return solution\n"
                     ),
                 },

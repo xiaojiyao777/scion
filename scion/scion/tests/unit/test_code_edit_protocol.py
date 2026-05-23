@@ -161,12 +161,108 @@ def test_exact_replace_rejects_stale_source_digest() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "typed_payload",
+    [
+        {
+            "edit_intent": "full_file",
+            "content_after": "VALUE = 2\n",
+        },
+        {
+            "content_after": "VALUE = 2\n",
+        },
+        {
+            "code_content": "VALUE = 2\n",
+        },
+    ],
+    ids=["explicit-full-file", "implicit-content-after", "legacy-code-content"],
+)
+def test_existing_modify_full_file_content_after_is_rejected_with_guidance(
+    typed_payload: dict[str, str],
+) -> None:
+    before = "VALUE = 1\n"
+    raw = {
+        "file_path": "policies/example.py",
+        "action": "modify",
+        "full_file_reason": "rewrite is simpler",
+        **typed_payload,
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            raw,
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "existing_file_full_file_modify_rejected" in message
+    assert "exact_replace" in message
+    assert "old_string" in message
+    assert "new_string" in message
+    assert source_digest_for_content(before) in message
+    assert "full_file_reason is not an authorization" in message
+
+
+def test_existing_modify_whole_file_exact_replace_is_rejected_with_guidance() -> None:
+    before = "VALUE = 1\nLIMIT = 3\n"
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            {
+                "file_path": "policies/example.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(before),
+                "old_string": before,
+                "new_string": "VALUE = 2\nLIMIT = 4\n",
+            },
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "existing_file_whole_file_exact_replace_rejected" in message
+    assert "smaller exact_replace edits" in message
+    assert "function, import block, registration entry, or local code block" in message
+
+
+def test_create_new_file_full_file_content_after_remains_allowed() -> None:
+    patch = _parse_patch(
+        {
+            "file_path": "policies/new_helper.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": "VALUE = 2\n",
+            "full_file_reason": "new helper module",
+        },
+        context={
+            "patch_source_files": {
+                "policies/example.py": "VALUE = 1\n",
+            },
+        },
+    )
+
+    assert patch.file_path == "policies/new_helper.py"
+    assert patch.action == "create"
+    assert patch.code_content == "VALUE = 2\n"
+
+
 def test_additional_changes_accept_typed_exact_replace() -> None:
+    main_before = "def solve():\n    return None\n"
     helper_before = "def helper():\n    return 'old'\n"
     raw = {
         "file_path": "policies/main.py",
         "action": "modify",
-        "code_content": "def solve():\n    return helper()\n",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(main_before),
+        "old_string": "return None",
+        "new_string": "return helper()",
         "additional_changes": [
             {
                 "file_path": "policies/helper.py",
@@ -183,7 +279,7 @@ def test_additional_changes_accept_typed_exact_replace() -> None:
         raw,
         context={
             "target_file": "policies/main.py",
-            "target_file_code": "def solve():\n    return None\n",
+            "target_file_code": main_before,
             "patch_source_files": {"policies/helper.py": helper_before},
         },
     )

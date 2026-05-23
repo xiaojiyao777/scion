@@ -23,6 +23,7 @@ from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.lineage.registry import LineageRegistry
 from scion.proposal.llm_client import LLMBalanceError
 from scion.proposal.mock_client import MockLLMClient
+from scion.proposal.edit_protocol import source_digest_for_content
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
 
 
@@ -138,9 +139,9 @@ def _solver_design_campaign(
 ) -> CampaignManager:
     code_dir = tmp_path / "solver_design_champion"
     (code_dir / "policies").mkdir(parents=True)
-    (code_dir / "policies" / "solver_algorithm.py").write_text(
-        "def solve(instance, rng, time_limit_sec, context):\n"
-        "    return None\n",
+    solver_code = "def solve(instance, rng, time_limit_sec, context):\n    return None\n"
+    (code_dir / "policies" / "baseline_algorithm.py").write_text(
+        solver_code,
         encoding="utf-8",
     )
     spec = _make_solver_design_problem_spec(str(code_dir))
@@ -159,10 +160,10 @@ def _solver_design_campaign(
     patch = {
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
-        "code_content": (
-            "def solve(instance, rng, time_limit_sec, context):\n"
-            "    return None\n"
-        ),
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(solver_code + "\n"),
+        "old_string": "    return None\n",
+        "new_string": "    return None\n",
         "test_hint": None,
     }
     return CampaignManager(

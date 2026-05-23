@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 
+from scion.proposal.edit_protocol import source_digest_for_content
 from scion.proposal.tools import ProposalToolRegistry
 from scion.tests.unit.test_agentic_proposal_tools_helpers import (
     _CVRP_ROOT,
@@ -22,12 +23,6 @@ def test_contract_preview_resolves_solver_design_imports_against_branch_workspac
         _cvrp_context(tmp_path),
         branch_workspace=str(branch_workspace),
     )
-    scheduler_code = _scheduler_code_using(
-        branch_workspace,
-        import_line="    _noise_greedy_repair,\n",
-        call_line="        best = _noise_greedy_repair(best)\n",
-    )
-
     observation = registry.call(
         "proposal.contract_preview",
         {
@@ -36,9 +31,11 @@ def test_contract_preview_resolves_solver_design_imports_against_branch_workspac
                 target_file="policies/baseline_modules/scheduler.py",
             ),
             "patch": {
-                "file_path": "policies/baseline_modules/scheduler.py",
-                "action": "modify",
-                "code_content": scheduler_code,
+                **_scheduler_patch_with_noise_repair(
+                    branch_workspace,
+                    import_line="    _noise_greedy_repair,\n",
+                    call_line="        best = _noise_greedy_repair(best)\n",
+                ),
             },
         },
         context,
@@ -62,12 +59,22 @@ def test_contract_preview_resolves_same_patch_solver_design_imports(
         _cvrp_context(tmp_path),
         branch_workspace=str(branch_workspace),
     )
-    scheduler_code = _scheduler_code_using(
+    patch = _scheduler_patch_with_noise_repair(
         branch_workspace,
         import_block="from .noise_repair import _noise_greedy_repair\n",
         call_line="        best = _noise_greedy_repair(best)\n",
     )
-
+    patch["additional_changes"] = [
+        *patch["additional_changes"],
+        {
+            "file_path": "policies/baseline_modules/noise_repair.py",
+            "action": "create",
+            "code_content": (
+                "def _noise_greedy_repair(solution):\n"
+                "    return solution\n"
+            ),
+        },
+    ]
     observation = registry.call(
         "proposal.contract_preview",
         {
@@ -75,21 +82,7 @@ def test_contract_preview_resolves_same_patch_solver_design_imports(
                 change_locus="solver_design",
                 target_file="policies/baseline_modules/scheduler.py",
             ),
-            "patch": {
-                "file_path": "policies/baseline_modules/scheduler.py",
-                "action": "modify",
-                "code_content": scheduler_code,
-                "additional_changes": [
-                    {
-                        "file_path": "policies/baseline_modules/noise_repair.py",
-                        "action": "create",
-                        "code_content": (
-                            "def _noise_greedy_repair(solution):\n"
-                            "    return solution\n"
-                        ),
-                    }
-                ],
-            },
+            "patch": patch,
         },
         context,
     )
@@ -109,12 +102,6 @@ def test_algorithm_smoke_resolves_solver_design_imports_against_branch_workspace
         _cvrp_context(tmp_path),
         branch_workspace=str(branch_workspace),
     )
-    scheduler_code = _scheduler_code_using(
-        branch_workspace,
-        import_line="    _noise_greedy_repair,\n",
-        call_line="        best = _noise_greedy_repair(best)\n",
-    )
-
     observation = registry.call(
         "proposal.algorithm_smoke",
         {
@@ -123,9 +110,11 @@ def test_algorithm_smoke_resolves_solver_design_imports_against_branch_workspace
                 target_file="policies/baseline_modules/scheduler.py",
             ),
             "patch": {
-                "file_path": "policies/baseline_modules/scheduler.py",
-                "action": "modify",
-                "code_content": scheduler_code,
+                **_scheduler_patch_with_noise_repair(
+                    branch_workspace,
+                    import_line="    _noise_greedy_repair,\n",
+                    call_line="        best = _noise_greedy_repair(best)\n",
+                ),
             },
         },
         context,
@@ -196,3 +185,43 @@ def _scheduler_code_using(
         "        best = current.copy()\n" + call_line,
         1,
     )
+
+
+def _scheduler_patch_with_noise_repair(
+    workspace: Path,
+    *,
+    call_line: str,
+    import_line: str = "",
+    import_block: str = "",
+) -> dict:
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    before = (workspace / scheduler_path).read_text(encoding="utf-8")
+    first_old = (
+        "    _worst_removal,\n"
+        if import_line
+        else "from .local_search import _default_vns_operators, _vns\n"
+    )
+    first_new = (
+        "    _worst_removal,\n" + import_line
+        if import_line
+        else "from .local_search import _default_vns_operators, _vns\n"
+        + import_block
+    )
+    return {
+        "file_path": scheduler_path,
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(before),
+        "old_string": first_old,
+        "new_string": first_new,
+        "additional_changes": [
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(before),
+                "old_string": "        best = current.copy()\n",
+                "new_string": "        best = current.copy()\n" + call_line,
+            }
+        ],
+    }

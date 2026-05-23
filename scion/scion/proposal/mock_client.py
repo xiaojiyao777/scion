@@ -1,6 +1,7 @@
 """MockLLMClient — deterministic stand-in for tests."""
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, Literal, Optional
 
 from scion.proposal.llm_client import (
@@ -24,14 +25,21 @@ _DEFAULT_HYPOTHESIS_RESPONSE: Dict[str, Any] = {
     "suggested_weight": 0.3,
 }
 
+_DEFAULT_LOCAL_SEARCH_SOURCE = (
+    "class LocalSearch:\n"
+    "    def execute(self, solution, rng):\n"
+    "        return solution\n\n"
+)
+
 _DEFAULT_PATCH_RESPONSE: Dict[str, Any] = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": (
-        "class LocalSearch:\n"
-        "    def execute(self, solution, rng):\n"
-        "        return solution\n"
-    ),
+    "edit_intent": "exact_replace",
+    "source_digest": hashlib.sha256(
+        _DEFAULT_LOCAL_SEARCH_SOURCE.encode("utf-8")
+    ).hexdigest(),
+    "old_string": "        return solution\n",
+    "new_string": "        return solution\n",
     "test_hint": "Test with small instances.",
 }
 
@@ -63,7 +71,9 @@ class MockLLMClient:
     ) -> None:
         self.mode = mode
         self._hypothesis_response = hypothesis_response or dict(_DEFAULT_HYPOTHESIS_RESPONSE)
-        self._patch_response = patch_response or dict(_DEFAULT_PATCH_RESPONSE)
+        self._patch_response = _normalise_patch_response_for_edit_protocol(
+            patch_response or dict(_DEFAULT_PATCH_RESPONSE)
+        )
         self._mode_sequence = list(mode_sequence) if mode_sequence else None
         self._call_count = 0
 
@@ -128,3 +138,26 @@ class MockLLMClient:
     @property
     def call_count(self) -> int:
         return self._call_count
+
+
+def _normalise_patch_response_for_edit_protocol(
+    patch_response: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep older unit fixtures compatible with the typed edit protocol."""
+
+    patch = dict(patch_response)
+    if (
+        patch.get("file_path") == "operators/local_search.py"
+        and patch.get("action") == "modify"
+        and "edit_intent" not in patch
+        and isinstance(patch.get("code_content"), str)
+    ):
+        patch.pop("code_content", None)
+        patch.setdefault("edit_intent", "exact_replace")
+        patch.setdefault(
+            "source_digest",
+            hashlib.sha256(_DEFAULT_LOCAL_SEARCH_SOURCE.encode("utf-8")).hexdigest(),
+        )
+        patch.setdefault("old_string", "        return solution\n")
+        patch.setdefault("new_string", "        return solution\n")
+    return patch

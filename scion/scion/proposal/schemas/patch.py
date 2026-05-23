@@ -160,9 +160,10 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "enum": ["exact_replace", "full_file"],
             "description": (
                 "Default to exact_replace for action=modify on an existing "
-                "file. Use full_file only for creates, deletes, or explicitly "
-                "justified larger rewrites. Omit for legacy full-file "
-                "code_content responses."
+                "file. Use full_file only for creates or deletes; "
+                "host-visible existing-file modifies with full_file/content_after "
+                "are rejected by default. Omit for legacy full-file code_content "
+                "responses."
             ),
         },
         "source_digest": {
@@ -200,7 +201,8 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "full_file_reason": {
             "type": ["string", "null"],
             "description": (
-                "Brief justification when edit_intent=full_file. Omit or leave "
+                "Brief note when edit_intent=full_file for create/delete. This "
+                "is not authorization for existing-file modify. Omit or leave "
                 "empty for exact_replace."
             ),
         },
@@ -209,7 +211,7 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "description": (
                 "Legacy complete file content. Supported for compatibility, "
                 "but new responses should use typed exact_replace for modify "
-                "actions or content_after for justified full_file changes."
+                "actions or content_after only for create/delete full_file changes."
             ),
         },
         "derived_diff_ref": {
@@ -317,7 +319,7 @@ Produce a typed edit set that implements the hypothesis.
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
-- Use `edit_intent="full_file"` with `content_after` only for creates, deletes, or explicitly justified larger rewrites. Include `full_file_reason` when using full_file. Legacy `code_content` full-file output is still accepted only as a compatibility fallback.
+- Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization. Legacy `code_content` full-file output is still accepted only as a compatibility fallback.
 - Do not emit unified diffs; Scion derives audit diffs from host before/after content.
 - If action is "delete", use `edit_intent="full_file"` and set `content_after` to an empty string ""
 - If the approved algorithm change requires extra files to be executable, put
@@ -368,8 +370,8 @@ Respond with a single JSON object (no markdown fences, no extra text):
 FIX_PROMPT_TEMPLATE = """\
 You are a software engineer fixing an optimisation research-surface file that failed verification.
 Correct the code so it passes, while preserving the intended logic. Prefer a
-small typed exact_replace edit when possible; use full_file only when the
-repair is a larger rewrite and include full_file_reason.
+small typed exact_replace edit when possible; use full_file only for creates or
+deletes. full_file_reason is not authorization for existing-file modify.
 
 ## Problem Summary
 {problem_summary}

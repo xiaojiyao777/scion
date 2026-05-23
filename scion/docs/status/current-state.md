@@ -52,14 +52,18 @@ the provider still returned 403 balance errors, but Scion stopped after one
 proposal attempt with `circuit_breaker_tripped=false`, confirming the fatal-stop
 behavior.
 
-The former code-phase protocol gap is now partially closed: model-facing code
-generation can submit typed `exact_replace` edits for existing files while Scion
-still canonicalizes to full after-content before Contract, Verification,
-Protocol, Workspace, and Decision. Unified diff input remains deferred, and
-full-file output remains a compatibility fallback for creates, deletes, or
-explicitly justified larger rewrites. This stays problem-agnostic in core;
-problem packages may only validate problem-specific patch semantics through
-declared hooks.
+The former code-phase protocol gap is now closed for existing-file modifies:
+model-facing code generation must submit typed `exact_replace` edits for
+host-visible existing files while Scion canonicalizes to full after-content
+before Contract, Verification, Protocol, Workspace, and Decision. Full-file
+model output (`edit_intent=full_file`, `content_after`, or legacy
+`code_content`) is rejected on final raw patch parsing for existing modifies,
+and whole-file `exact_replace` is also rejected as an equivalent full-file
+rewrite. `full_file` remains allowed for creates/deletes and host-internal
+canonical `PatchProposal.code_content` remains valid after parsing. Unified
+diff input remains deferred. This stays problem-agnostic in core; problem
+packages may only validate problem-specific patch semantics through declared
+hooks.
 
 The 2026-05-23 APS context/tooling repair addresses the two deferred issues from
 the current-resume Sonnet validation. The active-solver file-read guard is no
@@ -117,6 +121,29 @@ bounded model-facing handoff with previous failure summary, active-fact digest,
 read receipts, file digests, tool-step summary, and patch summary. Raw active
 facts are deduplicated from tool observations so the model sees the full active
 fact packet once, before lower-priority observations.
+
+The 2026-05-23 validation run
+`v04-v3-attempt-bound-telemetry-feedback-sonnet-3r-20260523T115407Z` was stopped
+after confirming the typed-edit protocol had only partially landed: response
+traces no longer used legacy `code_content`, but a later code session still
+submitted `edit_intent=full_file` with 14k-18k `content_after` for an existing
+`local_search.py` modify. The follow-up repair moves the rule from prompt
+guidance into the host edit protocol, preserves actionable retry feedback, and
+updates the test fixtures to use typed edits where they simulate raw LLM code
+output. Full unit regression for this pass is `1062 passed`.
+
+The fresh short validation run
+`v04-v3-hard-edit-protocol-sonnet-3r-20260523T130427Z` confirmed the code-edit
+protocol behavior but did not produce a screened candidate. Five proposal
+attempts were consumed by quality gates (`algorithm_smoke_failure`,
+`premise_contradicted`, and `duplicate_mechanism`), with zero screened
+experiments. The edit-protocol acceptance criteria passed: every host-visible
+existing-file modify in raw code traces used `edit_intent=exact_replace` with
+`content_after=0` and `code_content=0`; `full_file` appeared only for
+`action=create` on a new `elite_pool.py` module, and same-patch integration
+changes to existing `scheduler.py` were typed `exact_replace`. Next work should
+focus on agent hypothesis quality and smoke-repair feedback rather than the
+full-file output protocol.
 
 `06-code-edit-protocol-reference-claude-code.md` is now partially implemented
 in the live code path. Code generation still normalizes into canonical
