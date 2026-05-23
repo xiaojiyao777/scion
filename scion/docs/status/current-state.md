@@ -52,6 +52,18 @@ the provider still returned 403 balance errors, but Scion stopped after one
 proposal attempt with `circuit_breaker_tripped=false`, confirming the fatal-stop
 behavior.
 
+Deferred code-phase protocol item: the current `generate_patch` path still
+expects full replacement file content for modified files. This is compatible
+with Sonnet but expensive and poorly suited to DeepSeek V4 Pro under
+non-streaming tool-call code generation. After the current validation round,
+design a v3-compatible patch-edit protocol: models may submit a typed edit set
+or unified diff for branch-owned files, while Scion applies edits
+deterministically, records the patch artifact, runs the same Contract,
+Verification, Protocol, and Decision chain, and keeps full-file output as a
+fallback for file creation or failed structured edits. This must remain
+problem-agnostic in core; problem packages may only validate problem-specific
+patch semantics through declared hooks.
+
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now
 a generic facade over adapter-provided snapshots; the CVRP active solver facts
