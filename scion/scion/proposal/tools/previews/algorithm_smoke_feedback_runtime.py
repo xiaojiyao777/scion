@@ -344,6 +344,12 @@ def _compact_mechanism_diagnostics(value: Any, *, limit: int = 6) -> list[dict[s
                     "activation_observed": item.get("activation_observed"),
                     "runtime_observed": item.get("runtime_observed"),
                     "effect_observed": item.get("effect_observed"),
+                    "declared_field_failures": _compact_declared_field_issues(
+                        item.get("declared_field_failures")
+                    ),
+                    "declared_field_warnings": _compact_declared_field_issues(
+                        item.get("declared_field_warnings")
+                    ),
                     "activation": _compact_status_block(item.get("activation")),
                     "runtime": _compact_status_block(item.get("runtime")),
                     "effect": _compact_status_block(item.get("effect")),
@@ -355,6 +361,30 @@ def _compact_mechanism_diagnostics(value: Any, *, limit: int = 6) -> list[dict[s
             )
         )
     return diagnostics
+
+
+def _compact_declared_field_issues(
+    value: Any,
+    *,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    issues: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        issues.append(
+            _drop_empty_items(
+                {
+                    "category": item.get("category"),
+                    "field": item.get("field"),
+                    "code": item.get("code"),
+                    "severity": item.get("severity"),
+                }
+            )
+        )
+    return issues
 
 
 def _compact_status_block(value: Any) -> dict[str, Any] | None:

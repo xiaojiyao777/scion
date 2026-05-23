@@ -367,13 +367,20 @@ def _code_prompt_observation_payload(
 def _compact_code_algorithm_file_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     return _drop_empty_mapping(
         {
+            "already_observed": payload.get("already_observed"),
+            "source_observation_id": payload.get("source_observation_id"),
+            "read_receipt": _compact_code_prompt_value(payload.get("read_receipt")),
             "surface": payload.get("surface"),
             "file_path": payload.get("file_path"),
+            "symbol": payload.get("symbol"),
             "readable": payload.get("readable"),
             "source": payload.get("source"),
+            "digest": payload.get("digest"),
+            "source_digest": _compact_code_prompt_value(payload.get("source_digest")),
             "truncated": payload.get("truncated"),
             "size_chars": payload.get("size_chars"),
             "max_chars": payload.get("max_chars"),
+            "coverage": _compact_code_prompt_value(payload.get("coverage")),
             "content_preview": _limit_string(
                 payload.get("content_preview"),
                 _CODE_PROMPT_ALGORITHM_FILE_CHARS,
@@ -391,12 +398,18 @@ def _compact_code_algorithm_symbol_payload(
 ) -> dict[str, Any]:
     return _drop_empty_mapping(
         {
+            "already_observed": payload.get("already_observed"),
+            "source_observation_id": payload.get("source_observation_id"),
+            "read_receipt": _compact_code_prompt_value(payload.get("read_receipt")),
             "surface": payload.get("surface"),
             "file_path": payload.get("file_path"),
             "symbol": payload.get("symbol"),
             "readable": payload.get("readable"),
             "source": payload.get("source"),
+            "digest": payload.get("digest"),
+            "source_digest": _compact_code_prompt_value(payload.get("source_digest")),
             "truncated": payload.get("truncated"),
+            "coverage": _compact_code_prompt_value(payload.get("coverage")),
             "content_preview": _limit_string(
                 payload.get("content_preview"),
                 _CODE_PROMPT_ALGORITHM_SYMBOL_CHARS,

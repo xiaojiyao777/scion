@@ -500,9 +500,15 @@ def test_resume_from_artifact_returns_sanitized_length_bounded_context(
         ref for ref in output.tainted_artifact_refs if ref.endswith("output.json")
     )
 
+    full_resume_context = resume_from_artifact(output_ref, max_chars=8000)
     resume_context = resume_from_artifact(output_ref, max_chars=600)
     rendered = json.dumps(resume_context, sort_keys=True)
 
+    artifact = json.loads(Path(output_ref).read_text(encoding="utf-8"))
+    assert artifact["observation_ledger"]["observations"]
+    assert artifact["observation_ledger"]["read_receipts"]
+    assert full_resume_context["observation_ledger"]["observations"]
+    assert full_resume_context["read_receipts"]
     assert len(resume_context["summary"]) <= 600
     assert resume_context["session_id"] == output.session_id
     assert resume_context["transcript_digest"] == output.transcript_digest

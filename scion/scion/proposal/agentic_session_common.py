@@ -47,6 +47,14 @@ from scion.proposal.agentic_models import (
     AgenticToolLoopConfig,
     CreativeProposalLike,
 )
+from scion.proposal.agentic_observation_ledger import (
+    AgenticObservationLedger,
+    agentic_observation_ledger_payload,
+    already_observed_from_inherited_ledger,
+    inherited_ledger_read_budget_paths,
+    initialize_agentic_observation_ledger_state,
+    record_agentic_ledger_observation,
+)
 from scion.proposal.agentic_code_context import (
     _code_context_tool_summary,
     _code_observation_prompt_payload,
@@ -210,6 +218,7 @@ __all__ = (
     "AGENTIC_SESSION_SCHEMA_VERSION",
     "AgenticEvidenceRef",
     "AgenticFailureCategory",
+    "AgenticObservationLedger",
     "AgenticProposalOutput",
     "AgenticProposalPhase",
     "AgenticProposalRequest",
@@ -261,6 +270,8 @@ __all__ = (
     "_active_boundary_novelty_requirements",
     "_active_solver_mechanism_evidence_for_code_context",
     "_active_algorithm_facts_for_prompt_context",
+    "agentic_observation_ledger_payload",
+    "already_observed_from_inherited_ledger",
     "_agentic_output_artifact",
     "_agentic_transcript_artifact",
     "_algorithm_file_path_guidance",
@@ -302,6 +313,8 @@ __all__ = (
     "_has_successful_surface_read",
     "_has_successful_tool",
     "_hypothesis_prompt_observations",
+    "inherited_ledger_read_budget_paths",
+    "initialize_agentic_observation_ledger_state",
     "_hypothesis_semantic_retry_rejection_payload",
     "_is_authoritative_self_check_preview_call",
     "_is_code_generation_timeout",
@@ -339,6 +352,7 @@ __all__ = (
     "_push_deferred_code_phase_tool_call",
     "_recommended_algorithm_file_path",
     "_record_failure_ledger_entry",
+    "record_agentic_ledger_observation",
     "_rejection_termination_reason",
     "_remaining_observation_chars_for_config",
     "_remaining_tool_calls_for_config",

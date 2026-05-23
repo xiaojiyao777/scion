@@ -309,6 +309,7 @@ class AgenticSessionOutputMixin:
                 transcript_digest=transcript_digest,
                 failure_category=terminal_category,
                 failure_ledger=ledger,
+                observation_ledger=agentic_observation_ledger_payload(state, output),
             )
             state.idempotency_key = output.idempotency_key or state.idempotency_key
             if self._artifact_store is None:

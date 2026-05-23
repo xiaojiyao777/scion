@@ -45,6 +45,9 @@ from scion.proposal.agentic_artifact_payloads import (
     _tool_loop_config_payload,
     _transcript_digest,
 )
+from scion.proposal.agentic_observation_ledger import (
+    compact_observation_ledger_for_resume,
+)
 
 _RAW_REF_MARKERS = (
     "raw_metrics_ref",
@@ -658,6 +661,11 @@ def inspect_agentic_session_artifact(
         if isinstance(payload.get("failure_ledger"), Mapping)
         else {}
     )
+    observation_ledger = (
+        payload.get("observation_ledger", {})
+        if isinstance(payload.get("observation_ledger"), Mapping)
+        else {}
+    )
     return {
         "schema_version": payload.get("schema_version"),
         "session_id": payload.get("session_id"),
@@ -676,6 +684,10 @@ def inspect_agentic_session_artifact(
             "first_root_cause": failure_ledger.get("first_root_cause"),
             "latest_failure": failure_ledger.get("latest_failure"),
             "entry_count": failure_ledger.get("entry_count", 0),
+        },
+        "observation_ledger": {
+            "entry_count": observation_ledger.get("observation_count", 0),
+            "read_receipt_count": len(observation_ledger.get("read_receipts") or ()),
         },
         "tool_loop_config": payload.get("tool_loop_config", {}),
         "tool_budget_used": payload.get("tool_budget_used", {}),
@@ -725,6 +737,9 @@ def resume_from_artifact(
         payload.get("tool_budget_used", {})
         if isinstance(payload.get("tool_budget_used"), Mapping)
         else {}
+    )
+    observation_ledger = compact_observation_ledger_for_resume(
+        payload.get("observation_ledger")
     )
     compact_budget = {
         key: raw_budget.get(key)
@@ -786,19 +801,43 @@ def resume_from_artifact(
         }
     if int(failure_ledger.get("entry_count") or 0) > 0:
         context["failure_ledger"] = failure_ledger
-    summary = json.dumps(context, sort_keys=True, default=str)
+    if observation_ledger:
+        context["observation_ledger"] = observation_ledger
+        if observation_ledger.get("read_receipts"):
+            context["read_receipts"] = observation_ledger.get("read_receipts")
+        if observation_ledger.get("active_fact_anchor"):
+            context["active_fact_anchor"] = observation_ledger.get(
+                "active_fact_anchor"
+            )
+    summary_context = dict(context)
+    summary = json.dumps(summary_context, sort_keys=True, default=str)
     if len(summary) > max_chars:
         allowed_steps: list[dict[str, Any]] = []
         for step in tool_steps:
-            candidate = dict(context, tool_steps=[*allowed_steps, step])
+            candidate = dict(summary_context, tool_steps=[*allowed_steps, step])
             if len(json.dumps(candidate, sort_keys=True, default=str)) > max_chars:
                 break
             allowed_steps.append(step)
-        context["tool_steps"] = allowed_steps
-        summary = json.dumps(context, sort_keys=True, default=str)
+        summary_context["tool_steps"] = allowed_steps
+        summary = json.dumps(summary_context, sort_keys=True, default=str)
         if len(summary) > max_chars:
-            context["tool_steps"] = []
-            summary = json.dumps(context, sort_keys=True, default=str)
+            summary_context["tool_steps"] = []
+            summary = json.dumps(summary_context, sort_keys=True, default=str)
+        if len(summary) > max_chars and observation_ledger:
+            compact_ledger = dict(observation_ledger)
+            compact_ledger["observations"] = []
+            compact_ledger["read_receipts"] = list(
+                (observation_ledger.get("read_receipts") or [])[:4]
+            )
+            summary_context["observation_ledger"] = compact_ledger
+            summary_context["read_receipts"] = compact_ledger["read_receipts"]
+            summary = json.dumps(summary_context, sort_keys=True, default=str)
+        if len(summary) > max_chars and observation_ledger:
+            compact_ledger = dict(summary_context.get("observation_ledger") or {})
+            compact_ledger["read_receipts"] = []
+            summary_context["observation_ledger"] = compact_ledger
+            summary_context.pop("read_receipts", None)
+            summary = json.dumps(summary_context, sort_keys=True, default=str)
             if len(summary) > max_chars:
                 summary = summary[: max(0, max_chars - 3)] + "..."
     context["summary"] = summary

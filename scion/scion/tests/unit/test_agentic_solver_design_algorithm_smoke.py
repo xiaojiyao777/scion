@@ -416,6 +416,59 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
     assert "record_move alone" in rendered
 
 
+def test_algorithm_smoke_rejects_declared_best_delta_with_none_delta(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context(tmp_path)
+    mechanism = {"id": "best_delta_probe", "change_type": "modify"}
+
+    observation = registry.call(
+        "proposal.algorithm_smoke",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                change_locus="solver_design",
+                target_file="policies/baseline_algorithm.py",
+                mechanism_changes=[mechanism],
+                expected_telemetry={
+                    "activation": [
+                        "solver_algorithm_context_records."
+                        "best_delta_probe_iterations",
+                    ],
+                    "effect": [
+                        "solver_algorithm_phase_best_delta.best_delta_probe",
+                    ],
+                },
+            ),
+            "patch": {
+                "file_path": "policies/baseline_algorithm.py",
+                "action": "modify",
+                "code_content": (
+                    "def solve(instance, rng, time_limit_sec, context):\n"
+                    "    solution = context.make_solution(context.nearest_neighbor())\n"
+                    "    context.record_iteration('best_delta_probe', 1)\n"
+                    "    context.record_phase('best_delta_probe', 1)\n"
+                    "    context.record_move('best_delta_probe', attempted=1, "
+                    "accepted=1, delta=None, best_improved=1)\n"
+                    "    return solution\n"
+                ),
+                "mechanism_changes": [mechanism],
+            },
+        },
+        context,
+    )
+
+    payload = observation.structured_payload
+    rendered = json.dumps(payload, sort_keys=True)
+    assert observation.is_error is False
+    assert payload["passed"] is False
+    assert "runtime_smoke" not in payload
+    assert "telemetry_static_preview" in payload
+    assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in rendered
+    assert "best_delta_probe" in rendered
+    assert "delta=None" in rendered
+
+
 def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too_large(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

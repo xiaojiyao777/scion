@@ -133,7 +133,16 @@ class AgenticSessionToolCallMixin:
                     },
                 )
                 return observation
-            if self._should_deny_optional_tool_for_budget(
+            observation = already_observed_from_inherited_ledger(
+                state,
+                context,
+                tool_name=name,
+                args=args,
+                tool_call_id=step_id,
+            )
+            if observation is not None:
+                pass
+            elif self._should_deny_optional_tool_for_budget(
                 name,
                 selection_source=selection_source,
                 state=state,
@@ -238,6 +247,14 @@ class AgenticSessionToolCallMixin:
                     error_code="observation_budget_exhausted",
                     tool_name=name,
                 )
+            record_agentic_ledger_observation(
+                state,
+                context,
+                observation,
+                args=args,
+                proposal_phase=phase.value,
+                prompt_visible_chars=prompt_payload_chars,
+            )
             state.note(
                 phase,
                 f"Proposal tool observation: {name}",

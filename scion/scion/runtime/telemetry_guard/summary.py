@@ -479,6 +479,19 @@ def _mechanism_diagnostics(
             effect_fields,
             positive_label="positive",
         )
+        declared_field_failures = list(summary.get("declared_field_failures") or [])
+        declared_field_warnings = list(summary.get("declared_field_warnings") or [])
+        effect_declared_failures = _declared_field_issues_for_category(
+            declared_field_failures,
+            "effect",
+        )
+        if effect_declared_failures and effect["status"] == "positive":
+            effect = {
+                **effect,
+                "aggregate_status": effect["status"],
+                "status": "declared_field_failed",
+                "declared_field_failures": effect_declared_failures,
+            }
         diagnostics.append(
             {
                 "mechanism": mechanism,
@@ -489,12 +502,8 @@ def _mechanism_diagnostics(
                 "activation_observed": activation["status"] == "observed",
                 "runtime_observed": runtime["status"] == "observed",
                 "effect_observed": effect["status"] == "positive",
-                "declared_field_failures": list(
-                    summary.get("declared_field_failures") or []
-                ),
-                "declared_field_warnings": list(
-                    summary.get("declared_field_warnings") or []
-                ),
+                "declared_field_failures": declared_field_failures,
+                "declared_field_warnings": declared_field_warnings,
                 "activation": activation,
                 "runtime": runtime,
                 "effect": effect,
@@ -503,6 +512,7 @@ def _mechanism_diagnostics(
                     activation_status=activation["status"],
                     runtime_status=runtime["status"],
                     effect_status=effect["status"],
+                    declared_field_failures=declared_field_failures,
                 ),
             }
         )
@@ -570,14 +580,52 @@ def _observation_status(
     return {"status": status, "fields": list(fields)} | totals
 
 
+def _declared_field_issues_for_category(
+    issues: Sequence[Any],
+    category: str,
+) -> list[dict[str, Any]]:
+    category_text = str(category or "").strip().lower()
+    result: list[dict[str, Any]] = []
+    for item in issues:
+        if not isinstance(item, Mapping):
+            continue
+        if str(item.get("category") or "").strip().lower() != category_text:
+            continue
+        result.append(dict(item))
+    return result
+
+
 def _mechanism_repair_guidance(
     *,
     mechanism: str,
     activation_status: str,
     runtime_status: str,
     effect_status: str,
+    declared_field_failures: Sequence[Any] = (),
 ) -> list[str]:
     guidance: list[str] = []
+    effect_field_failures = _declared_field_issues_for_category(
+        declared_field_failures,
+        "effect",
+    )
+    if effect_field_failures:
+        fields = ", ".join(
+            dict.fromkeys(
+                str(item.get("field") or "").strip()
+                for item in effect_field_failures
+                if str(item.get("field") or "").strip()
+            )
+        )
+        observed_prefix = ""
+        if activation_status == "observed" and runtime_status == "observed":
+            observed_prefix = "Activation and runtime telemetry are observed; "
+        guidance.append(
+            f"{observed_prefix}declared effect field(s) "
+            f"{fields or 'unknown'} for mechanism {mechanism} are not positive. "
+            "This is not activation missing; repair effect telemetry attribution "
+            "or make the mechanism produce true positive evidence for the "
+            "declared effect field(s)."
+        )
     if activation_status in {"missing", "zero"}:
         guidance.append(
             "Add direct activation telemetry for declared mechanism "

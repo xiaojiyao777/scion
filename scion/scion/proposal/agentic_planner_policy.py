@@ -118,15 +118,33 @@ def _solver_design_planner_algorithm_file_read_budget_exhausted(
     observations: list[ProposalObservation],
     *,
     next_tool_name: str,
+    next_args: Mapping[str, Any] | None = None,
 ) -> bool:
     if not _context_requires_solver_design_grounding(context):
         return False
     if next_tool_name != "context.read_algorithm_file":
         return False
-    return (
-        _successful_planner_algorithm_file_read_count(observations)
-        >= _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT
+    args = dict(next_args or {})
+    requested_path = _normalized_algorithm_read_path(args.get("file_path"))
+    if not requested_path:
+        return False
+    if _planner_has_reusable_algorithm_read(observations, requested_path):
+        return False
+    target_path = _normalized_algorithm_read_path(context.forced_target_file)
+    if target_path and requested_path == target_path:
+        return False
+    read_count = _successful_planner_algorithm_file_read_count(observations)
+    if read_count < _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT:
+        return False
+    priority = _planner_algorithm_read_priority(
+        context,
+        requested_path,
+        target_path=target_path,
     )
+    hard_limit = _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT + 2
+    if priority in {"primary_entrypoint", "integration_role", "integration_neighbor"}:
+        return read_count >= hard_limit
+    return True
 
 
 def _successful_planner_algorithm_file_read_count(
@@ -139,9 +157,75 @@ def _successful_planner_algorithm_file_read_count(
         payload = observation.structured_payload
         file_path = ""
         if isinstance(payload, Mapping):
+            if (
+                observation.observation_type == "already_observed"
+                or payload.get("already_observed")
+            ):
+                continue
             file_path = str(payload.get("file_path") or "").strip()
         file_paths.add(file_path or observation.observation_id)
     return len(file_paths)
+
+
+def _planner_has_reusable_algorithm_read(
+    observations: list[ProposalObservation],
+    requested_path: str,
+) -> bool:
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_algorithm_file":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        path = _normalized_algorithm_read_path(payload.get("file_path"))
+        if path == requested_path:
+            return True
+    return False
+
+
+def _planner_algorithm_read_priority(
+    context: ProposalToolContext,
+    requested_path: str,
+    *,
+    target_path: str,
+) -> str:
+    role = ""
+    try:
+        from scion.proposal.active_solver_snapshot import (
+            list_algorithm_files_payload,
+            solver_call_graph_payload,
+        )
+
+        rows = list_algorithm_files_payload(context, include_inactive=True)
+        for item in rows:
+            if _normalized_algorithm_read_path(item.get("file_path")) != requested_path:
+                continue
+            role = str(item.get("role") or "").lower()
+            break
+        if target_path:
+            graph = solver_call_graph_payload(context)
+            edges = graph.get("edges") if isinstance(graph, Mapping) else None
+            if isinstance(edges, list):
+                for edge in edges:
+                    if not isinstance(edge, Mapping):
+                        continue
+                    endpoints = " ".join(
+                        str(edge.get(key) or "")
+                        for key in ("from", "to", "caller", "callee")
+                    )
+                    if requested_path in endpoints and target_path in endpoints:
+                        return "integration_neighbor"
+    except Exception:
+        pass
+    if "entrypoint" in role or "primary" in role:
+        return "primary_entrypoint"
+    if any(token in role for token in ("integration", "scheduler", "caller", "callee")):
+        return "integration_role"
+    return ""
+
+
+def _normalized_algorithm_read_path(value: Any) -> str:
+    return str(value or "").replace("\\", "/").lstrip("/").strip()
 
 
 def _should_defer_diagnosis_tool_to_code_phase(

@@ -312,6 +312,102 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
     )
 
 
+def test_planner_solver_design_file_read_budget_keeps_target_available_after_non_targets(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/acceptance.py"
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file=target_file,
+    )
+    observations = [
+        _algorithm_read_observation(
+            "context.read_algorithm_file",
+            _algorithm_file_payload(
+                path,
+                max_chars=12000,
+                preview_chars=1000,
+                size_chars=1000,
+            ),
+        )
+        for path in (
+            "policies/baseline_algorithm.py",
+            "policies/baseline_modules/scheduler.py",
+            "policies/baseline_modules/construction.py",
+            "policies/baseline_modules/local_search.py",
+            "policies/baseline_modules/destroy_repair.py",
+        )
+    ]
+
+    assert not agentic_session_module._solver_design_planner_algorithm_file_read_budget_exhausted(
+        context,
+        observations,
+        next_tool_name="context.read_algorithm_file",
+        next_args={
+            "surface": "solver_design",
+            "file_path": target_file,
+            "max_chars": 24000,
+        },
+    )
+
+
+def test_solver_design_file_read_budget_ignores_inherited_read_receipts(
+    tmp_path: Path,
+) -> None:
+    context = _cvrp_context_with_champion(tmp_path)
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/acceptance.py",
+            target_objectives=["total_distance"],
+        )
+    )
+    observations = []
+    for path in (
+        "policies/baseline_algorithm.py",
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/construction.py",
+        "policies/baseline_modules/local_search.py",
+        "policies/baseline_modules/destroy_repair.py",
+    ):
+        observations.append(
+            ProposalObservation(
+                observation_id=f"receipt-{path}",
+                session_id="session-receipts",
+                tool_name="context.read_algorithm_file",
+                tool_call_id="tool-receipt",
+                observation_type="already_observed",
+                summary="Already observed.",
+                structured_payload={
+                    "already_observed": True,
+                    "file_path": path,
+                    "readable": True,
+                    "max_chars": 24000,
+                    "coverage": {
+                        "max_chars": 24000,
+                        "content_preview_chars": 1000,
+                        "size_chars": 1000,
+                        "truncated": False,
+                    },
+                },
+                exposure_level=ProposalExposureLevel.CHAMPION_CODE,
+            )
+        )
+
+    assert not agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(
+        context,
+        observations,
+        hypothesis=hypothesis,
+        next_args={
+            "surface": "solver_design",
+            "file_path": "policies/baseline_modules/config.py",
+            "max_chars": 24000,
+        },
+    )
+
+
 def test_algorithm_symbol_reusable_observations_are_scoped_by_file_and_symbol() -> None:
     path = "policies/baseline_modules/local_search.py"
     other_path = "policies/baseline_algorithm.py"

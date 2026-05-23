@@ -320,10 +320,33 @@ def _solver_design_code_algorithm_file_read_budget_exhausted(
     target_path = _normalized_algorithm_read_path(hypothesis.target_file)
     if target_path and requested_path == target_path:
         return False
-    current_paths = _successful_algorithm_file_read_paths(observations)
+    if _has_successful_reusable_observation(
+        observations,
+        "context.read_algorithm_file",
+        next_args,
+        forced_surface=hypothesis.change_locus,
+    ):
+        return False
+    current_paths = _successful_algorithm_file_read_paths(
+        observations,
+        count_already_observed=False,
+    )
     if requested_path in set(current_paths):
         return False
-    return len(current_paths) >= _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT
+    priority = _solver_design_algorithm_read_priority(
+        context,
+        requested_path,
+        target_path=target_path,
+    )
+    if len(current_paths) < _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT:
+        return False
+    hard_limit = max(
+        _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT + 2,
+        _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT,
+    )
+    if priority in {"primary_entrypoint", "integration_neighbor", "integration_role"}:
+        return len(current_paths) >= hard_limit
+    return True
 
 
 def _algorithm_file_paths_from_observations(
@@ -363,6 +386,8 @@ def _active_solver_design_paths_first(
 
 def _successful_algorithm_file_read_paths(
     observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    count_already_observed: bool = True,
 ) -> list[str]:
     paths: list[str] = []
     for observation in observations:
@@ -370,6 +395,14 @@ def _successful_algorithm_file_read_paths(
             continue
         payload = observation.structured_payload
         if not isinstance(payload, Mapping):
+            continue
+        if (
+            not count_already_observed
+            and (
+                observation.observation_type == "already_observed"
+                or payload.get("already_observed")
+            )
+        ):
             continue
         path = _normalized_algorithm_read_path(payload.get("file_path"))
         if path and path not in paths:
@@ -596,6 +629,28 @@ def _algorithm_payload_satisfies_read_request(
 ) -> bool:
     if payload.get("readable") is not True:
         return False
+    if payload.get("already_observed"):
+        coverage = payload.get("coverage")
+        if isinstance(coverage, Mapping):
+            observed_max = _coerce_nonnegative_int(coverage.get("max_chars"))
+            preview_chars = _coerce_nonnegative_int(
+                coverage.get("content_preview_chars")
+            )
+            size_chars = _coerce_nonnegative_int(coverage.get("size_chars"))
+            truncated = bool(coverage.get("truncated"))
+            if requested_max_chars <= 0:
+                return True
+            if (
+                not truncated
+                and size_chars is not None
+                and preview_chars is not None
+                and preview_chars >= min(size_chars, requested_max_chars)
+            ):
+                return True
+            if observed_max is not None and requested_max_chars <= observed_max and not truncated:
+                return True
+        max_chars = _coerce_nonnegative_int(payload.get("max_chars"))
+        return bool(max_chars is not None and requested_max_chars <= max_chars)
     if bool(payload.get("truncated")):
         return False
     observed_max_chars = _coerce_nonnegative_int(payload.get("max_chars"))
@@ -615,6 +670,77 @@ def _algorithm_payload_satisfies_read_request(
     if not bool(payload.get("compacted_for_agentic_budget")):
         return True
     return preview_chars >= requested_max_chars
+
+
+def _solver_design_algorithm_read_priority(
+    context: ProposalToolContext,
+    requested_path: str,
+    *,
+    target_path: str,
+) -> str:
+    if target_path and requested_path == target_path:
+        return "target"
+    rows = _solver_design_algorithm_file_rows(context)
+    role = ""
+    active = False
+    for item in rows:
+        if _normalized_algorithm_read_path(item.get("file_path")) != requested_path:
+            continue
+        role = str(item.get("role") or "").lower()
+        active = bool(item.get("active"))
+        break
+    if "entrypoint" in role or "primary" in role:
+        return "primary_entrypoint"
+    if any(token in role for token in ("integration", "scheduler", "caller", "callee")):
+        return "integration_role"
+    if target_path and _solver_design_call_graph_neighbors(
+        context,
+        requested_path,
+        target_path,
+    ):
+        return "integration_neighbor"
+    if active:
+        return "active_manifest"
+    if role:
+        return "manifest"
+    return ""
+
+
+def _solver_design_algorithm_file_rows(
+    context: ProposalToolContext,
+) -> list[Mapping[str, Any]]:
+    try:
+        from scion.proposal.active_solver_snapshot import list_algorithm_files_payload
+
+        return list(list_algorithm_files_payload(context, include_inactive=True))
+    except Exception:
+        return []
+
+
+def _solver_design_call_graph_neighbors(
+    context: ProposalToolContext,
+    requested_path: str,
+    target_path: str,
+) -> bool:
+    try:
+        from scion.proposal.active_solver_snapshot import solver_call_graph_payload
+
+        payload = solver_call_graph_payload(context)
+    except Exception:
+        return False
+    edges = payload.get("edges") if isinstance(payload, Mapping) else None
+    if not isinstance(edges, list):
+        return False
+    for edge in edges:
+        if not isinstance(edge, Mapping):
+            continue
+        endpoints = " ".join(
+            str(edge.get(key) or "")
+            for key in ("from", "to", "caller", "callee")
+        )
+        if requested_path in endpoints and target_path in endpoints:
+            return True
+    return False
 
 
 def _has_code_phase_surface_read(

@@ -103,14 +103,14 @@ def telemetry_decision_details(
         code = str(item.get("code") or "TELEMETRY_GUARD_FAILED").strip()
         if not invalid_fields and _code_indicates_invalid_field(code):
             invalid_fields = field_ids
+        mechanism_id = _issue_mechanism_id(guard, item)
+        guidance = _repair_guidance_for_issue(guard, item)
         detail: dict[str, Any] = {
             "schema": TELEMETRY_DECISION_DETAIL_SCHEMA,
             "stage": stage or None,
             "code": code,
             "category": _normal_failure_category(item),
-            "mechanism_id": _clean_optional_str(
-                item.get("mechanism_id") or item.get("mechanism")
-            ),
+            "mechanism_id": mechanism_id,
             "surface_field_id": field_ids[0] if field_ids else None,
             "surface_field_ids": field_ids,
             "runtime_role": _clean_optional_str(
@@ -127,6 +127,8 @@ def telemetry_decision_details(
             "candidate_positive": counters.get("candidate_positive", 0),
             "champion_positive": counters.get("champion_positive", 0),
         }
+        if guidance:
+            detail["repair_guidance"] = guidance
         details.append(detail)
     return tuple(details)
 
@@ -352,7 +354,7 @@ def _repair_guidance_for_issue(
     guard: Mapping[str, Any],
     issue: Mapping[str, Any],
 ) -> list[str]:
-    mechanism = str(issue.get("mechanism") or "").strip()
+    mechanism = _issue_mechanism_id(guard, issue) or ""
     diagnostics = guard.get("mechanism_diagnostics")
     if mechanism and isinstance(diagnostics, Sequence):
         for item in diagnostics:
@@ -365,11 +367,81 @@ def _repair_guidance_for_issue(
                 guidance,
                 (str, bytes, bytearray),
             ):
-                return [str(entry).strip() for entry in guidance if str(entry).strip()]
+                return [
+                    str(entry).strip()
+                    for entry in guidance
+                    if str(entry).strip()
+                ]
+    category = _normal_failure_category(issue)
+    fields = ", ".join(_field_ids(issue.get("field") or issue.get("fields")))
+    if category == "effect":
+        return [
+            "Declared effect telemetry field(s) "
+            f"{fields or 'unknown'} are not positive. This is not activation "
+            "missing; repair effect telemetry attribution or make the mechanism "
+            "produce true positive evidence for the declared effect field(s)."
+        ]
+    if category == "budget":
+        return [
+            "Add positive runtime/budget telemetry on the declared mechanism "
+            "path before treating runtime evidence as validated."
+        ]
     return [
         "Add direct positive activation telemetry on the declared mechanism path "
         "before treating win-rate as validated."
     ]
+
+
+def _issue_mechanism_id(
+    guard: Mapping[str, Any] | None,
+    issue: Mapping[str, Any],
+) -> str | None:
+    direct = _clean_optional_str(issue.get("mechanism_id") or issue.get("mechanism"))
+    if direct:
+        return direct
+    if guard is None:
+        return None
+    field_ids = _field_ids(
+        issue.get("surface_field_ids")
+        or issue.get("surface_field_id")
+        or issue.get("field")
+        or issue.get("fields")
+    )
+    if not field_ids:
+        return None
+    code = str(issue.get("code") or "").strip()
+    category = _normal_failure_category(issue)
+    diagnostics = guard.get("mechanism_diagnostics")
+    if not isinstance(diagnostics, Sequence) or isinstance(
+        diagnostics,
+        (str, bytes, bytearray),
+    ):
+        return None
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, Mapping):
+            continue
+        mechanism = _clean_optional_str(diagnostic.get("mechanism"))
+        if not mechanism:
+            continue
+        for key in ("declared_field_failures", "declared_field_warnings"):
+            entries = diagnostic.get(key)
+            if not isinstance(entries, Sequence) or isinstance(
+                entries,
+                (str, bytes, bytearray),
+            ):
+                continue
+            for entry in entries:
+                if not isinstance(entry, Mapping):
+                    continue
+                entry_field = str(entry.get("field") or "").strip()
+                if entry_field not in field_ids:
+                    continue
+                if code and str(entry.get("code") or "").strip() != code:
+                    continue
+                if category and str(entry.get("category") or "").strip() != category:
+                    continue
+                return mechanism
+    return None
 
 
 __all__ = [

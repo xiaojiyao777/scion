@@ -35,6 +35,17 @@ def test_algorithm_smoke_feedback_separates_mechanism_telemetry_statuses() -> No
                             "activation_observed": False,
                             "runtime_observed": False,
                             "effect_observed": False,
+                            "declared_field_failures": [
+                                {
+                                    "category": "effect",
+                                    "field": (
+                                        "solver_algorithm_phase_best_delta."
+                                        "vns_local_search"
+                                    ),
+                                    "code": "TELEMETRY_EFFECT_NOT_OBSERVED",
+                                    "severity": "fail",
+                                }
+                            ],
                             "activation": {
                                 "status": "missing",
                                 "fields": [
@@ -124,6 +135,9 @@ def test_algorithm_smoke_feedback_separates_mechanism_telemetry_statuses() -> No
     assert diagnostic["activation_status"] == "missing"
     assert diagnostic["runtime_status"] == "missing"
     assert diagnostic["effect_status"] == "zero"
+    assert diagnostic["declared_field_failures"][0]["field"] == (
+        "solver_algorithm_phase_best_delta.vns_local_search"
+    )
     assert diagnostic["effect"]["counters"]["candidate_zero"] == 4
     assert "Add direct activation telemetry" in payload["repair_hints"][0]
 

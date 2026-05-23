@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-05-23*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -69,6 +69,7 @@ referenced, not copied into development prompts.
 - [Quality feedback and VNS facts Sonnet 3R analysis, 2026-05-20](v0.4-quality-feedback-vns-facts-sonnet-3r-analysis-20260520.md)
 - [Provenance and quality feedback Sonnet 3R analysis, 2026-05-20](v0.4-provenance-quality-feedback-sonnet-3r-analysis-20260520.md)
 - [Provider-quality classification Sonnet 4R balance-stopped analysis, 2026-05-20](v0.4-provider-quality-classification-sonnet-4r-balance-stopped-20260520.md)
+- [Current-resume Sonnet 3R post-run analysis, 2026-05-23](v0.4-current-resume-sonnet-3r-postrun-20260523.md)
 
 ## Related
 

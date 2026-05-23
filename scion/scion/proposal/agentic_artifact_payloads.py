@@ -229,6 +229,9 @@ def _agentic_output_artifact(
         "failure_ledger": _json_ready(
             _sanitize_agentic_value(output.failure_ledger)
         ),
+        "observation_ledger": _json_ready(
+            _sanitize_agentic_value(output.observation_ledger)
+        ),
         "tainted_artifact_refs": list(tainted_refs),
         "prompt_manifest_artifact_ref": (
             prompt_manifest_refs[-1] if prompt_manifest_refs else ""

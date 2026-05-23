@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-22*
+*Last updated: 2026-05-23*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -63,6 +63,21 @@ Verification, Protocol, and Decision chain, and keeps full-file output as a
 fallback for file creation or failed structured edits. This must remain
 problem-agnostic in core; problem packages may only validate problem-specific
 patch semantics through declared hooks.
+
+The 2026-05-23 APS context/tooling repair addresses the two deferred issues from
+the current-resume Sonnet validation. The active-solver file-read guard is no
+longer a fixed file-count cutoff: it now uses a target/role/call-graph-aware
+policy where the selected target and direct integration context remain readable,
+and inherited `already_observed` receipts do not consume the bulky-read budget.
+Hypothesis and code remain separate APS requests for v3 boundary control, but
+their handoff now includes an audit-safe observation ledger keyed by source
+path, digest, coverage, evidence reference, active-facts digest, branch code
+hash, and champion snapshot. The code phase can reuse unchanged hypothesis-stage
+observations through compact read receipts and perform fresh reads only when it
+needs more source coverage. The repair is generic Scion infrastructure; problem
+packages still supply active object facts and manifests through adapter/provider
+hooks. Full unit regression for this pass is `1022 passed`; live validation is
+pending.
 
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now

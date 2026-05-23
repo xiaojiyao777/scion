@@ -362,6 +362,7 @@ class AgenticSessionPlannerLoopMixin:
                     context,
                     observations,
                     next_tool_name=name,
+                    next_args=args,
                 ):
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,

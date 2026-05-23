@@ -28,6 +28,7 @@ class AgenticSessionOrchestrationMixin:
             AgenticProposalPhase.DIAGNOSE,
             "Prepared deterministic APS-1 proposal path.",
         )
+        initialize_agentic_observation_ledger_state(state, request)
         return session_id, state, [], []
 
     def _prepare_tool_context_or_output(

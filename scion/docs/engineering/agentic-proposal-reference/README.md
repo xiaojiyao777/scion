@@ -46,6 +46,12 @@ holdout detail, or smuggle free text into `DecisionFeatures`.
 - `05-claude-code-source-reference-for-scion-v3.md`: source-inspection-backed
   reference for repairing Scion's active solver grounding, tool protocol,
   structured patch output, patch-set graph validation, and context projection.
+- `06-code-edit-protocol-reference-claude-code.md`: source-reference-backed
+  notes for replacing full-file replacement with a typed edit/diff protocol in a
+  future pass.
+- `07-claude-code-context-tooling-reference-for-scion.md`: context/tooling
+  reference for Scion APS observation ledgers, source read receipts, active fact
+  anchors, and deterministic context budgeting.
 
 ## Sources Read
 

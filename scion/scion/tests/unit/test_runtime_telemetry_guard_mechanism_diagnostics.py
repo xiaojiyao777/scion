@@ -168,15 +168,37 @@ def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None
 
 
 def test_declared_field_failure_marks_matching_mechanism_diagnostic_failed() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver",
+                evidence=SimpleNamespace(
+                    activation_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_activation.{mechanism}",
+                            "mechanism_phase_runtime_ms.{mechanism}",
+                        ]
+                    },
+                    effect_probe_runtime_fields={
+                        "{mechanism}": [
+                            "mechanism_effect.{mechanism}",
+                            "mechanism_best_delta.{mechanism}",
+                        ]
+                    },
+                ),
+            )
+        ]
+    )
     summary = build_telemetry_guard_summary(
         candidate_runtimes=[
             {
                 "mechanism_activation": {"target_probe": 1},
+                "mechanism_phase_runtime_ms": {"target_probe": 5},
                 "mechanism_effect": {"target_probe": 3},
                 "mechanism_best_delta": {"target_probe": 0.0},
             }
         ],
-        problem_spec=_mechanism_probe_spec(),
+        problem_spec=spec,
         selected_surface="solver",
         expected_telemetry={"effect": ["mechanism_best_delta.target_probe"]},
         declared_mechanisms=[
@@ -186,8 +208,10 @@ def test_declared_field_failure_marks_matching_mechanism_diagnostic_failed() -> 
 
     assert summary["passed"] is False
     diagnostic = summary["mechanism_diagnostics"][0]
-    assert diagnostic["effect_status"] == "positive"
+    assert diagnostic["effect_status"] == "declared_field_failed"
     assert diagnostic["passed"] is False
+    assert diagnostic["effect_observed"] is False
+    assert diagnostic["effect"]["aggregate_status"] == "positive"
     assert diagnostic["declared_field_failures"] == [
         {
             "category": "effect",
@@ -196,6 +220,11 @@ def test_declared_field_failure_marks_matching_mechanism_diagnostic_failed() -> 
             "severity": "fail",
         }
     ]
+    assert "Activation and runtime telemetry are observed" in (
+        diagnostic["repair_guidance"][0]
+    )
+    assert "not activation missing" in diagnostic["repair_guidance"][0]
+    assert "mechanism_best_delta.target_probe" in diagnostic["repair_guidance"][0]
 
 
 def test_algorithm_smoke_can_treat_missing_effect_as_advisory() -> None:

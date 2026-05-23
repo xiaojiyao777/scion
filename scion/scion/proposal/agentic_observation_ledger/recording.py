@@ -1,0 +1,158 @@
+"""Recording helpers for APS observation ledgers."""
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from scion.proposal.agentic_utils import (
+    _drop_empty_dict,
+    _enum_value,
+    _limit_string,
+    _sanitize_agentic_value,
+)
+from scion.proposal.prompt_manifest import stable_digest
+from scion.proposal.tools import ProposalObservation, ProposalToolContext
+
+from scion.proposal.agentic_observation_ledger.digests import (
+    coverage_payload,
+    normalize_tool_args,
+    primary_digest,
+    snapshot_digest_from_source,
+    source_digest_payload,
+)
+from scion.proposal.agentic_observation_ledger.models import REUSABLE_CONTEXT_TOOLS
+from scion.proposal.agentic_observation_ledger.payloads import (
+    compact_active_algorithm_facts,
+)
+from scion.proposal.agentic_observation_ledger.utils import (
+    compact_provenance,
+    file_path_from_observation,
+    logical_phase,
+    resume_ledger_entries,
+    reusable_by_phases,
+    symbol_from_observation,
+)
+
+
+def initialize_agentic_observation_ledger_state(
+    state: Any,
+    request: Any,
+) -> None:
+    """Attach inherited ledger state to a fresh session state object."""
+
+    phase = "code" if getattr(request, "approved_hypothesis", None) else "hypothesis"
+    setattr(state, "_agentic_logical_phase", phase)
+    inherited = resume_ledger_entries(getattr(request, "resume_context", None))
+    setattr(state, "_inherited_observation_ledger", inherited)
+    if inherited:
+        state.note(
+            state.phase,
+            "Loaded inherited APS observation ledger.",
+            metadata={
+                "observation_ledger_entries": len(inherited),
+                "reusable_phase": phase,
+            },
+        )
+
+
+def record_agentic_ledger_observation(
+    state: Any,
+    context: ProposalToolContext,
+    observation: ProposalObservation,
+    *,
+    args: Mapping[str, Any],
+    proposal_phase: str,
+    prompt_visible_chars: int | None = None,
+) -> None:
+    """Record one compact observation ledger entry on session state."""
+
+    if observation.tool_name not in REUSABLE_CONTEXT_TOOLS:
+        return
+    entry = build_agentic_ledger_observation(
+        context,
+        observation,
+        args=args,
+        logical_phase=logical_phase(state),
+        proposal_phase=proposal_phase,
+        prompt_visible_chars=prompt_visible_chars,
+    )
+    if entry:
+        state.observation_ledger.append(entry)
+
+
+def build_agentic_ledger_observation(
+    context: ProposalToolContext,
+    observation: ProposalObservation,
+    *,
+    args: Mapping[str, Any],
+    logical_phase: str,
+    proposal_phase: str,
+    prompt_visible_chars: int | None = None,
+) -> dict[str, Any]:
+    payload = (
+        observation.structured_payload
+        if isinstance(observation.structured_payload, Mapping)
+        else {}
+    )
+    normalized_args = normalize_tool_args(observation.tool_name, args)
+    coverage = coverage_payload(observation.tool_name, payload, normalized_args)
+    source_digest = source_digest_payload(observation.tool_name, payload)
+    digest = primary_digest(payload, source_digest)
+    active_facts = compact_active_algorithm_facts(
+        payload.get("active_algorithm_facts")
+    )
+    entry = _drop_empty_dict(
+        {
+            "observation_id": observation.observation_id,
+            "tool_name": observation.tool_name,
+            "normalized_args": normalized_args,
+            "args_hash": stable_digest(normalized_args, length=16),
+            "file_path": file_path_from_observation(payload, normalized_args),
+            "symbol": symbol_from_observation(payload, normalized_args),
+            "digest": digest,
+            "source_digest": source_digest,
+            "source_digest_hash": stable_digest(source_digest or digest, length=16),
+            "fact_packet_digest": active_facts.get("fact_packet_digest"),
+            "fact_ids": active_facts.get("fact_ids"),
+            "snapshot_digest": snapshot_digest_from_source(source_digest),
+            "max_chars": coverage.get("max_chars"),
+            "truncated": coverage.get("truncated"),
+            "coverage": coverage,
+            "artifact_ref": observation.artifact_ref,
+            "evidence_ref": observation.observation_id,
+            "phase": logical_phase,
+            "proposal_phase": proposal_phase,
+            "reusable_by_phases": reusable_by_phases(
+                observation,
+                phase=logical_phase,
+            ),
+            "summary": _limit_string(observation.summary, 300),
+            "observation_type": observation.observation_type,
+            "exposure_level": _enum_value(observation.exposure_level),
+            "taint": _enum_value(observation.taint),
+            "is_error": observation.is_error,
+            "failure_code": _enum_value(observation.failure_code),
+            "prompt_visible_chars": prompt_visible_chars,
+            "active_algorithm_facts": active_facts,
+            "provenance": compact_provenance(payload.get("provenance")),
+            "stale_if": _drop_empty_dict(
+                {
+                    "champion_version": getattr(context.champion, "version", None),
+                    "champion_code_snapshot_hash": getattr(
+                        context.champion,
+                        "code_snapshot_hash",
+                        None,
+                    ),
+                    "problem_spec_hash": context.problem_spec_hash,
+                    "context_policy_id": getattr(context.policy, "context_policy_id", ""),
+                }
+            ),
+        }
+    )
+    return _sanitize_agentic_value(entry)
+
+
+__all__ = [
+    "build_agentic_ledger_observation",
+    "initialize_agentic_observation_ledger_state",
+    "record_agentic_ledger_observation",
+]

@@ -38,6 +38,7 @@ _ISSUE_MISSING_ACTIVATION = "DECLARED_MECHANISM_ACTIVATION_MISSING"
 _ISSUE_ZERO_PHASE_RUNTIME = "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO"
 _ISSUE_MISSING_RUNTIME = "DECLARED_MECHANISM_RUNTIME_MISSING"
 _ISSUE_MISSING_EFFECT = "DECLARED_MECHANISM_EFFECT_MISSING"
+_ISSUE_MISSING_DELTA_EVIDENCE = "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"
 
 
 def _mechanism_telemetry_static_preview(
@@ -83,6 +84,7 @@ def _mechanism_telemetry_static_preview(
         mechanism_activation_fields: list[str] = []
         mechanism_budget_fields: list[str] = []
         mechanism_effect_fields: list[str] = []
+        mechanism_delta_value_fields: list[str] = []
         for category, fields in sorted(explicit_fields.items()):
             for field in fields:
                 field_text = str(field or "").strip()
@@ -109,6 +111,10 @@ def _mechanism_telemetry_static_preview(
                     or "delta" in lower_field
                 ):
                     mechanism_effect_fields.append(field_text)
+                if category == "effect" and _field_requires_positive_delta(
+                    lower_field
+                ):
+                    mechanism_delta_value_fields.append(field_text)
         if mechanism_activation_fields and not any(
             calls.get(name) for name in _ACTIVATION_HELPERS
         ):
@@ -170,6 +176,31 @@ def _mechanism_telemetry_static_preview(
                 (
                     f"context.record_move('{mechanism}', attempted=1, "
                     "accepted=accepted_flag, delta=objective_delta, "
+                    "best_improved=best_improved_flag)"
+                ),
+            )
+        if (
+            mechanism_delta_value_fields
+            and calls.get("record_move")
+            and not calls.get("record_move_delta_evidence")
+        ):
+            issue_codes.append(_ISSUE_MISSING_DELTA_EVIDENCE)
+            issues.append(
+                "Declared mechanism "
+                f"{mechanism!r} declares delta-valued effect field(s) "
+                f"{', '.join(dict.fromkeys(mechanism_delta_value_fields))}, but "
+                "its context.record_move call(s) do not provide a usable positive "
+                f"delta for {mechanism!r}. delta=None, a missing delta, or a "
+                "literal non-positive delta can still increment improvement "
+                "counts via best_improved but leaves delta-valued effect "
+                "evidence at zero."
+            )
+            _add_required_call(
+                required_calls,
+                mechanism,
+                (
+                    f"context.record_move('{mechanism}', attempted=1, "
+                    "accepted=accepted_flag, delta=positive_objective_delta, "
                     "best_improved=best_improved_flag)"
                 ),
             )
@@ -257,6 +288,11 @@ def _context_helper_signature_issues(patch: PatchProposal) -> list[str]:
     return list(dict.fromkeys(issues))
 
 
+def _field_requires_positive_delta(field: str) -> bool:
+    normalized = str(field or "").strip().lower()
+    return "best_delta" in normalized or "delta_sum" in normalized
+
+
 def _add_required_call(
     target: dict[str, list[str]],
     mechanism: str,
@@ -288,7 +324,8 @@ def _telemetry_repair_hints() -> list[str]:
             "Use context.record_phase(name, elapsed_ms), "
             "context.record_iteration(phase='search', count=1), and "
             "context.record_move(phase='search', attempted=1, accepted=0, "
-            "delta=None, best_improved=0)."
+            "delta=positive_objective_delta when declaring best_delta effect "
+            "evidence; reserve delta=None for no-op/non-effect move records."
         ),
     ]
 
@@ -320,6 +357,10 @@ def _mechanism_call_evidence(code_text: str, mechanism: str) -> dict[str, bool]:
         "record_phase_zero_literal": False,
         "record_iteration": False,
         "record_move": False,
+        "record_move_delta_evidence": False,
+        "record_move_delta_missing": False,
+        "record_move_delta_none_literal": False,
+        "record_move_delta_nonpositive_literal": False,
     }
     if not str(code_text or "").strip():
         return evidence
@@ -347,6 +388,16 @@ def _mechanism_call_evidence(code_text: str, mechanism: str) -> dict[str, bool]:
             evidence["record_iteration"] = True
         elif helper_name == "record_move":
             evidence["record_move"] = True
+            delta = _record_move_delta_argument(node)
+            delta_status = _record_move_delta_status(delta)
+            if delta_status == "usable":
+                evidence["record_move_delta_evidence"] = True
+            elif delta_status == "missing":
+                evidence["record_move_delta_missing"] = True
+            elif delta_status == "none":
+                evidence["record_move_delta_none_literal"] = True
+            elif delta_status == "nonpositive_literal":
+                evidence["record_move_delta_nonpositive_literal"] = True
     return evidence
 
 
@@ -374,6 +425,26 @@ def _record_phase_elapsed_argument(node: ast.Call) -> ast.AST | None:
         if keyword.arg == "elapsed_ms":
             return keyword.value
     return None
+
+
+def _record_move_delta_argument(node: ast.Call) -> ast.AST | None:
+    for keyword in node.keywords:
+        if keyword.arg == "delta":
+            return keyword.value
+    return None
+
+
+def _record_move_delta_status(node: ast.AST | None) -> str:
+    if node is None:
+        return "missing"
+    if isinstance(node, ast.Constant) and node.value is None:
+        return "none"
+    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+        return "usable" if node.value else "nonpositive_literal"
+    literal = _literal_number(node)
+    if literal is not None:
+        return "usable" if literal > 0.0 else "nonpositive_literal"
+    return "usable"
 
 
 def _literal_string(node: ast.AST) -> str | None:

@@ -49,7 +49,7 @@ def test_static_preview_expands_adapter_declared_mechanism_probes(tmp_path) -> N
         _patch(
             "def apply(context):\n"
             "    context.record_move('vns_local_search', attempted=1, "
-            "accepted=1, delta=-1.0, best_improved=1)\n"
+            "accepted=1, delta=1.0, best_improved=1)\n"
         ),
     )
 
@@ -73,7 +73,7 @@ def test_static_preview_accepts_direct_iteration_activation(tmp_path) -> None:
             "def apply(context):\n"
             "    context.record_iteration('tail_swap_probe', 1)\n"
             "    context.record_move('tail_swap_probe', attempted=1, "
-            "accepted=1, delta=-1.0, best_improved=1)\n"
+            "accepted=1, delta=1.0, best_improved=1)\n"
         ),
     )
 
@@ -90,7 +90,7 @@ def test_static_preview_accepts_direct_phase_activation(tmp_path) -> None:
             "def apply(context):\n"
             "    context.record_phase('tail_swap_probe', 3)\n"
             "    context.record_move('tail_swap_probe', attempted=1, "
-            "accepted=1, delta=-1.0, best_improved=1)\n"
+            "accepted=1, delta=1.0, best_improved=1)\n"
         ),
     )
 
@@ -108,7 +108,7 @@ def test_static_preview_rejects_literal_zero_phase_runtime(tmp_path) -> None:
             "    context.record_iteration('tail_swap_probe', 1)\n"
             "    context.record_phase('tail_swap_probe', 0.0)\n"
             "    context.record_move('tail_swap_probe', attempted=1, "
-            "accepted=1, delta=-1.0, best_improved=1)\n"
+            "accepted=1, delta=1.0, best_improved=1)\n"
         ),
     )
 
@@ -127,10 +127,67 @@ def test_static_preview_rejects_unknown_context_helper_keywords(tmp_path) -> Non
             "    context.record_phase('tail_swap_probe', 1, extra={'x': 1})\n"
             "    context.record_iteration('tail_swap_probe', 1)\n"
             "    context.record_move('tail_swap_probe', attempted=1, "
-            "accepted=1, delta=-1.0, best_improved=1)\n"
+            "accepted=1, delta=1.0, best_improved=1)\n"
         ),
     )
 
     assert preview is not None
     assert preview["passed"] is False
     assert any("does not accept keyword(s): extra" in issue for issue in preview["issues"])
+
+
+def test_static_preview_rejects_best_delta_record_move_with_none_delta(tmp_path) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(
+            expected_telemetry={
+                "effect": ["solver_algorithm_phase_best_delta.tail_swap_probe"],
+            },
+        ),
+        _patch(
+            "def apply(context):\n"
+            "    context.record_iteration('tail_swap_probe', 1)\n"
+            "    context.record_phase('tail_swap_probe', 2)\n"
+            "    context.record_move('tail_swap_probe', attempted=1, "
+            "accepted=1, delta=None, best_improved=1)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is False
+    assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in preview["issue_codes"]
+    rendered = " ".join(preview["issues"])
+    assert "best_delta" in rendered
+    assert "delta=None" in rendered
+    assert preview["helper_evidence"]["tail_swap_probe"][
+        "record_move_delta_none_literal"
+    ] is True
+
+
+def test_static_preview_allows_best_delta_record_move_with_delta_variable(
+    tmp_path,
+) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(
+            expected_telemetry={
+                "effect": ["solver_algorithm_phase_best_delta.tail_swap_probe"],
+            },
+        ),
+        _patch(
+            "def apply(context, before, after):\n"
+            "    objective_delta = max(0.0, before - after)\n"
+            "    context.record_iteration('tail_swap_probe', 1)\n"
+            "    context.record_phase('tail_swap_probe', 2)\n"
+            "    context.record_move('tail_swap_probe', attempted=1, "
+            "accepted=1, delta=objective_delta, "
+            "best_improved=objective_delta > 0)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is True
+    assert preview.get("issues", []) == []
+    assert preview["helper_evidence"]["tail_swap_probe"][
+        "record_move_delta_evidence"
+    ] is True
