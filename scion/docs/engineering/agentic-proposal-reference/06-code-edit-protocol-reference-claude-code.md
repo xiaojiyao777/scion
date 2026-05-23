@@ -330,6 +330,20 @@ still letting the code phase use smaller, less error-prone edit operations.
 The model should not submit a unified diff as the canonical artifact. Unified
 diff can be accepted only as a display/export format derived by the host.
 
+Implementation status as of 2026-05-23:
+
+- `exact_replace` and `full_file` are implemented as the first typed-edit
+  intents.
+- The proposal engine normalizes typed edits into canonical full-file
+  `PatchProposal` content before Contract, Verification, Workspace, Protocol,
+  and Decision.
+- `exact_replace` checks the source digest and exact source text before
+  producing host-derived `content_after` and compact diff metadata.
+- Full-file output remains supported as a compatibility fallback.
+- Unified diff input and multi-edit transaction UX remain deferred; unified
+  diffs should still be host-derived audit/display artifacts, not the
+  canonical submitted artifact.
+
 ### Premise Revalidation
 
 The final code-stage submit tool should require:

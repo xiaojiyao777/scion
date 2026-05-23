@@ -141,7 +141,7 @@ def _solver_design_planner_algorithm_file_read_budget_exhausted(
         requested_path,
         target_path=target_path,
     )
-    hard_limit = _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT + 2
+    hard_limit = _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT + 4
     if priority in {"primary_entrypoint", "integration_role", "integration_neighbor"}:
         return read_count >= hard_limit
     return True

@@ -87,6 +87,23 @@ def test_telemetry_validation_repairable_preempts_win_rate_abandon() -> None:
     assert "SCREENING_FAIL_WIN_RATE" not in result.reason_codes
 
 
+def test_runtime_regression_preempts_telemetry_diagnostic_retry() -> None:
+    coordinator = DecisionCoordinator(config=ProtocolConfig())
+
+    result = coordinator.decide(
+        _features(
+            win_rate=0.0,
+            median_delta=0.0,
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            runtime_ratio_median=3.0,
+        )
+    )
+
+    assert result.decision == Decision.ABANDON
+    assert result.reason_codes == ("RUNTIME_REGRESSION",)
+
+
 def test_validation_telemetry_repairable_has_stage_specific_reason() -> None:
     coordinator = DecisionCoordinator(config=ProtocolConfig())
 

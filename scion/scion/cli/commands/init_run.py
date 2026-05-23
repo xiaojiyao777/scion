@@ -104,7 +104,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--proposal-quality-loop-limit",
             help=(
                 "Maximum proposal-quality blocks before stopping; defaults to "
-                "rounds + max(3, rounds), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT"
+                "rounds + max(6, rounds * 2), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT"
             ),
         ),
         campaign_dir: str = typer.Option(

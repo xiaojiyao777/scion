@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scion.problems.cvrp.solver_design_provider import CvrpSolverDesignProvider
+from scion.proposal.engine import _split_code_context
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_solver_design_test_support import *
 
@@ -245,23 +246,29 @@ def test_solver_design_code_prompt_uses_synthetic_provider_guidance() -> None:
 
 
 def test_prompt_manifest_omits_live_solver_design_provider_handle() -> None:
+    prompt_context = {
+        "solver_design_prompt_provider": SyntheticSolverDesignPromptProvider(),
+        "solver_design_prompt_provider_ref": (
+            "tests.SyntheticSolverDesignPromptProvider"
+        ),
+        "hypothesis_detail": "Synthetic provider handle should not persist.",
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
     manifest = build_api_visible_prompt_manifest(
         session_id="s1",
         phase="draft_patch",
         call_kind="code",
-        prompt_context={
-            "solver_design_prompt_provider": SyntheticSolverDesignPromptProvider(),
-            "solver_design_prompt_provider_ref": (
-                "tests.SyntheticSolverDesignPromptProvider"
-            ),
-            "hypothesis_detail": "Synthetic provider handle should not persist.",
-        },
+        prompt_context=prompt_context,
         observations=[],
         call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
     )
 
     assert "solver_design_prompt_provider" not in manifest["section_names"]
-    assert "solver_design_prompt_provider_ref" in manifest["section_names"]
+    assert "solver_design_prompt_provider_ref" in manifest["raw_context_audit"][
+        "top_level_keys"
+    ]
 
 
 def test_latest_preview_failure_detail_uses_latest_preview_not_stale_smoke() -> None:

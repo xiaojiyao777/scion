@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict
 
+from scion.proposal.edit_protocol import build_patch_edit_source_manifest
+
 from .prompt_common import (
     _CACHE_5M,
     _DefaultDict,
@@ -140,7 +142,7 @@ def _split_code_context(
 
     static_text = (
         "You are a software engineer implementing a declared research surface for a combinatorial optimisation solver framework.\n"
-        "Your task is to write the complete file contents that implement the approved hypothesis below.\n\n"
+        "Your task is to submit typed edits that implement the approved hypothesis below.\n\n"
         "## Code Quality Rules\n"
         "- Write ONLY what the hypothesis requires. For non-solver surfaces, do not add extra helper functions or abstractions.\n"
         "- Do not add error handling for impossible cases. Trust the data model.\n"
@@ -203,6 +205,7 @@ def _split_code_context(
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     if agentic_context:
         prior_failure_section += f"{agentic_context}\n\n"
+    edit_source_manifest = build_patch_edit_source_manifest(context)
 
     user_prompt = (
         f"{prior_failure_section}"
@@ -210,6 +213,7 @@ def _split_code_context(
         f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{solver_design_api_manifest_section}"
         f"## Approved Target File Full Current Content\n{D['target_file_code']}\n\n"
+        f"## Patch Edit Source Digests\n{edit_source_manifest}\n\n"
         f"{solver_design_integration_files_section}"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"
@@ -223,6 +227,14 @@ def _split_code_context(
         f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
         f"- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or the original if no valid move is found\n"
         f"- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds\n\n"
+        f"- Prefer `edit_intent: exact_replace` for small changes to existing files. "
+        f"Use the exact `source_digest` shown above plus exact `old_string`, "
+        f"`new_string`, and `replace_all`.\n"
+        f"- Use `edit_intent: full_file` with `content_after` for creates, deletes, "
+        f"or complex rewrites. Legacy `code_content` full-file output remains "
+        f"accepted as fallback.\n"
+        f"- Do not emit unified diffs. Scion derives the audit diff from host "
+        f"before/after content after validating the typed edit.\n"
         f"{solver_design_user_constraints}\n"
         f"Respond with a single JSON object (no markdown fences, no extra text):\n"
         f"{{\n"
@@ -230,10 +242,22 @@ def _split_code_context(
         f'  "premise_check_reason": "<brief reason when not supported, otherwise empty>",\n'
         f'  "file_path": "<relative path, e.g. operators/my_operator.py>",\n'
         f'  "action": "modify" | "create" | "delete",\n'
-        f'  "code_content": "<complete file contents>",\n'
+        f'  "edit_intent": "exact_replace" | "full_file",\n'
+        f'  "source_digest": "<sha256 digest for existing files, or null for create>",\n'
+        f'  "old_string": "<exact current text for exact_replace>",\n'
+        f'  "new_string": "<replacement text for exact_replace>",\n'
+        f'  "replace_all": false,\n'
+        f'  "content_after": "<complete file contents only for full_file>",\n'
+        f'  "evidence_refs": ["<observation/source ref>"],\n'
         f'  "additional_changes": [{{"file_path": "<relative path>", '
         f'"action": "modify" | "create" | "delete", '
-        f'"code_content": "<complete file contents>"}}],\n'
+        f'"edit_intent": "exact_replace" | "full_file", '
+        f'"source_digest": "<sha256 digest or null>", '
+        f'"old_string": "<exact current text>", '
+        f'"new_string": "<replacement text>", '
+        f'"replace_all": false, '
+        f'"content_after": "<complete file contents only for full_file>", '
+        f'"evidence_refs": ["<observation/source ref>"]}}],\n'
         f'  "test_hint": "<optional note, or null>"\n'
         f"}}\n"
     )

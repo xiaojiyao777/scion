@@ -17,7 +17,9 @@ TELEMETRY_DECISION_DETAIL_SCHEMA = "scion.telemetry_decision_detail.v1"
 _REPAIRABLE_TELEMETRY_CODES = frozenset(
     {
         "TELEMETRY_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_EFFECT_NOT_OBSERVED",
         "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
     }
 )
 
@@ -136,7 +138,7 @@ def telemetry_decision_details(
 def is_repairable_telemetry_validation_failure(
     protocol_result: ProtocolResult | None,
 ) -> bool:
-    """True when formal telemetry failed because activation was not observed."""
+    """True when formal telemetry failed with a branch-local diagnostic signal."""
     if protocol_result is None:
         return False
     if protocol_result.stage not in (

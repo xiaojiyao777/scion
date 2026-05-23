@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from scion.proposal.edit_protocol import build_patch_edit_source_manifest
+
 from .prompt_common import _CACHE_5M, _DefaultDict
 
 
@@ -49,12 +51,18 @@ def _split_fix_context(
 
     user_prompt = (
         f"## Original Code That Failed\n{D['original_code']}\n\n"
+        f"## Patch Edit Source Digests\n"
+        f"{build_patch_edit_source_manifest(context)}\n\n"
         f"## Verification Failure Details\n{D['failure_detail']}\n\n"
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
         f"- Frozen (DO NOT MODIFY): {D['frozen_patterns']}\n"
         f"- Preserve the research-surface interface described above exactly\n"
         f"- Make only the minimal changes needed to fix the reported failure\n"
+        f"- Prefer `edit_intent: exact_replace` for small fixes. Use the "
+        f"source_digest shown above and exact old/new strings.\n"
+        f"- Use `edit_intent: full_file` with `content_after` only when the "
+        f"repair is a broader rewrite; do not emit unified diffs.\n"
         f"- If the failure is a telemetry guard or algorithm smoke failure, keep "
         f"the declared mechanism id stable and add the missing activation/effect "
         f"runtime record on the active path. Do not edit objectives, constraints, "

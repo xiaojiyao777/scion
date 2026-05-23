@@ -75,14 +75,14 @@ class AgenticProposalPhase(str, Enum):
 class AgenticToolLoopConfig:
     """Deterministic limits for one proposal-session tool loop."""
 
-    max_steps: int = 30
-    max_tool_calls: int = 24
-    max_observation_chars: int = 192000
-    max_wall_time_sec: float = 240.0
+    max_steps: int = 44
+    max_tool_calls: int = 36
+    max_observation_chars: int = 384000
+    max_wall_time_sec: float = 420.0
     max_repeated_tool_calls: int = 2
-    max_code_tool_calls: int = 6
-    max_code_repair_attempts: int = 2
-    max_code_generation_timeout_retries: int = 1
+    max_code_tool_calls: int = 10
+    max_code_repair_attempts: int = 3
+    max_code_generation_timeout_retries: int = 2
 
 
 @dataclass(frozen=True)

@@ -11,8 +11,12 @@ from scion.core.branch_lifecycle_policy import (
     SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE,
     SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN,
     SCREENING_STALE_RESCREEN_FAIL,
+    SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     SCREENING_WEAK_SIGNAL_CONTINUE,
     SCREENING_ZERO_WIN_STREAK_EXHAUSTED,
+    TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
+    TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
+    VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,
 )
 from scion.core.models import DecisionFeatures
 
@@ -193,3 +197,73 @@ def test_low_mid_candidate_runtime_failures_soft_abandon() -> None:
     assert decision.reason_codes == (
         SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     )
+
+
+def test_screening_telemetry_diagnostic_retries_before_streak_limit() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+        ),
+        current_telemetry_diagnostic_streak=1,
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,)
+    assert decision.next_telemetry_diagnostic_streak == 2
+
+
+def test_telemetry_diagnostic_streak_exhaustion_soft_abandons() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+        ),
+        current_telemetry_diagnostic_streak=2,
+    )
+
+    assert decision.action == "soft_abandon"
+    assert decision.reason_codes == (TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,)
+    assert decision.next_telemetry_diagnostic_streak == 3
+
+
+def test_telemetry_diagnostic_obvious_quality_regression_soft_abandons() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            wins=2,
+            losses=4,
+            ties=2,
+            win_rate=0.25,
+            median_delta=-1.0,
+        ),
+    )
+
+    assert decision.action == "soft_abandon"
+    assert decision.reason_codes == (TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,)
+
+
+def test_validation_telemetry_diagnostic_uses_stage_retry_reason() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            stage="validation",
+            telemetry_validation_repairable=True,
+            telemetry_guard_failed=True,
+            wins=0,
+            losses=0,
+            ties=8,
+            win_rate=0.0,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY,)

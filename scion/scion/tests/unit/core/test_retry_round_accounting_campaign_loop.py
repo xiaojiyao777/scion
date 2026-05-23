@@ -358,11 +358,11 @@ def test_campaign_loop_default_three_round_quality_limit_allows_five_blocks() ->
     assert calls == 8
     assert "proposal_quality_loop" not in stopped_reasons
     assert "max_rounds_exhausted" in stopped_reasons
-    assert loop_statuses[-1]["proposal_quality_limit"] == 6
+    assert loop_statuses[-1]["proposal_quality_limit"] == 9
     assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 5
 
 
-def test_campaign_loop_default_three_round_quality_limit_stops_on_sixth_block() -> None:
+def test_campaign_loop_default_three_round_quality_limit_stops_on_ninth_block() -> None:
     results = [
         StepResult(
             action="explore",
@@ -371,7 +371,7 @@ def test_campaign_loop_default_three_round_quality_limit_stops_on_sixth_block() 
             counts_toward_max_rounds=False,
             attempt_kind="proposal_block",
         )
-        for _ in range(8)
+        for _ in range(11)
     ]
     calls = 0
     stopped_reasons: list[str | None] = []
@@ -414,11 +414,11 @@ def test_campaign_loop_default_three_round_quality_limit_stops_on_sixth_block() 
 
     loop.run(max_rounds=3)
 
-    assert calls == 6
+    assert calls == 9
     assert last_results[-1].stopped is True
     assert "proposal_quality_loop" in stopped_reasons
-    assert loop_statuses[-1]["proposal_quality_limit"] == 6
-    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 6
+    assert loop_statuses[-1]["proposal_quality_limit"] == 9
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 9
 
 
 def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_attempts() -> None:

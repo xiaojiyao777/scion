@@ -368,11 +368,11 @@ class AgenticSessionCodeToolsMixin:
                 if self._code_phase_budget_reserved(state):
                     state.note(
                         AgenticProposalPhase.INSPECT_INTERFACE,
-                        "Skipped code-phase required fallback tools to preserve final preview reserve.",
+                        "Code-phase budget reserve active; running mandatory target context fallback only.",
                         metadata={
-                            "status": "skipped",
+                            "status": "reserved",
                             "selection_source": "code_phase_required",
-                            "skip_reason": "code_self_check_budget_reserved",
+                            "reserve_reason": "code_self_check_budget_reserved",
                             "remaining_tool_calls": self._remaining_tool_calls(state),
                             "remaining_steps": self._remaining_tool_steps(state),
                             "remaining_observation_chars": self._remaining_observation_chars(
@@ -383,16 +383,15 @@ class AgenticSessionCodeToolsMixin:
                             ),
                         },
                     )
-                else:
-                    observations.extend(
-                        self._run_code_context_fixed_tools(
-                            context,
-                            state,
-                            hypothesis,
-                            combined,
-                            selection_source="code_phase_required",
-                        )
+                observations.extend(
+                    self._run_code_context_fixed_tools(
+                        context,
+                        state,
+                        hypothesis,
+                        combined,
+                        selection_source="code_phase_required",
                     )
+                )
             state.note(
                 AgenticProposalPhase.INSPECT_INTERFACE,
                 "Collected code-phase proposal tool observations.",
@@ -496,6 +495,27 @@ class AgenticSessionCodeToolsMixin:
                 if mandatory_surface_read or mandatory_target_read:
                     preserve_observation_chars = self._minimum_budgeted_observation_chars()
                     remaining_chars = self._remaining_observation_chars(state)
+                    if remaining_chars <= preserve_observation_chars:
+                        if (
+                            mandatory_target_read
+                            and remaining_chars
+                            >= self._minimum_budgeted_observation_chars()
+                        ):
+                            preserve_observation_chars = 0
+                        else:
+                            state.note(
+                                AgenticProposalPhase.INSPECT_INTERFACE,
+                                "Skipped mandatory code-phase context read to preserve patch self-check observation budget.",
+                                metadata={
+                                    "tool_name": name,
+                                    "status": "skipped",
+                                    "selection_source": selection_source,
+                                    "skip_reason": "code_self_check_observation_budget_reserved",
+                                    "remaining_observation_chars": remaining_chars,
+                                    "preserved_observation_chars": preserve_observation_chars,
+                                },
+                            )
+                            continue
                     if remaining_chars <= preserve_observation_chars:
                         state.note(
                             AgenticProposalPhase.INSPECT_INTERFACE,

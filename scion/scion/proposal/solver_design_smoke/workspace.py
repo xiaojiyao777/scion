@@ -18,6 +18,11 @@ else:
 
 
 def _runtime_smoke_base_workspace(context: ProposalToolContext) -> Path | None:
+    branch_workspace = _attr(context, "branch_workspace")
+    if branch_workspace:
+        path = Path(str(branch_workspace)).expanduser().resolve(strict=False)
+        if path.is_dir() and (path / "solver.py").is_file():
+            return path
     champion_path = _attr(context.champion, "code_snapshot_path")
     if champion_path:
         path = Path(str(champion_path)).expanduser().resolve(strict=False)

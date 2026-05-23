@@ -271,11 +271,11 @@ def test_hypothesis_semantic_retry_manifest_records_feedback_section(
 
     assert retry_manifests
     retry_manifest = retry_manifests[0]
-    assert "agentic_hypothesis_semantic_rejections" in retry_manifest[
+    assert "hypothesis_semantic_retry_feedback" in retry_manifest[
         "section_names"
     ]
     assert retry_manifest["section_statuses"][
-        "agentic_hypothesis_semantic_rejections"
+        "hypothesis_semantic_retry_feedback"
     ]["status"] == "included"
 
 

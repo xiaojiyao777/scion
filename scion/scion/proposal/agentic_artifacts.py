@@ -48,6 +48,10 @@ from scion.proposal.agentic_artifact_payloads import (
 from scion.proposal.agentic_observation_ledger import (
     compact_observation_ledger_for_resume,
 )
+from scion.proposal.agentic_resume_projection import (
+    build_agentic_resume_model_projection,
+    compact_failure_ledger_for_resume,
+)
 
 _RAW_REF_MARKERS = (
     "raw_metrics_ref",
@@ -704,7 +708,12 @@ def resume_from_artifact(
     *,
     max_chars: int = 4000,
 ) -> dict[str, Any]:
-    """Build sanitized compact APS context for a follow-up session prompt."""
+    """Build sanitized APS resume context.
+
+    The returned mapping still carries a compact observation ledger for internal
+    read-reuse checks.  Prompt renderers must use ``model_facing_projection``
+    rather than dumping the ledger into the model prompt.
+    """
     payload = _load_artifact_payload(artifact)
     validation = validate_agentic_session_artifact(payload)
     if not validation.ok:
@@ -728,11 +737,12 @@ def resume_from_artifact(
                 ),
             }
         )
-    failure_ledger = (
+    raw_failure_ledger = (
         payload.get("failure_ledger", {})
         if isinstance(payload.get("failure_ledger"), Mapping)
         else {}
     )
+    failure_ledger = compact_failure_ledger_for_resume(raw_failure_ledger)
     raw_budget = (
         payload.get("tool_budget_used", {})
         if isinstance(payload.get("tool_budget_used"), Mapping)
@@ -799,6 +809,14 @@ def resume_from_artifact(
             }.items()
             if value
         }
+    context["model_facing_projection"] = build_agentic_resume_model_projection(
+        payload=payload,
+        compact_budget=compact_budget,
+        failure_ledger=failure_ledger,
+        observation_ledger=observation_ledger,
+        tool_steps=tool_steps,
+        max_chars=max_chars,
+    )
     if int(failure_ledger.get("entry_count") or 0) > 0:
         context["failure_ledger"] = failure_ledger
     if observation_ledger:

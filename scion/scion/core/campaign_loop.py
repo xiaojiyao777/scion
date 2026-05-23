@@ -203,7 +203,7 @@ def _proposal_quality_loop_limit(
                 raw,
             )
     rounds = max(1, int(requested_rounds))
-    return rounds + max(3, rounds)
+    return rounds + max(6, rounds * 2)
 
 
 def _campaign_loop_status(

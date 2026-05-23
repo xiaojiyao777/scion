@@ -64,7 +64,7 @@ class CreativeLayer:
             system_blocks=system_blocks,
             context=context,
         )
-        return _parse_patch(raw)
+        return _parse_patch(raw, context=context)
 
     def fix_code(self, context: Dict[str, Any]) -> PatchProposal:
         """Generate a corrected PatchProposal after a light verification failure.
@@ -80,7 +80,7 @@ class CreativeLayer:
             system_blocks=system_blocks,
             context=context,
         )
-        return _parse_patch(raw)
+        return _parse_patch(raw, context=context)
 
     def plan_tool_call(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Ask the model to choose the next APS proposal tool.

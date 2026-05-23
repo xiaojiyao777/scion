@@ -64,6 +64,9 @@ class EvaluationOrchestrator:
     increment_telemetry_failed_count: Callable[[], None] = lambda: None
     frozen_budget_ledger: Any | None = None
     branch_zero_win_streaks: MutableMapping[str, int] = field(default_factory=dict)
+    branch_telemetry_diagnostic_streaks: MutableMapping[str, int] = field(
+        default_factory=dict
+    )
     branch_lifecycle_policy: BranchLifecyclePolicy = field(
         default_factory=BranchLifecyclePolicy
     )
@@ -166,6 +169,45 @@ class EvaluationOrchestrator:
         )
 
         decision = coordinated.decision
+        if features.telemetry_validation_repairable and decision in (
+            Decision.CONTINUE_EXPLORE,
+            Decision.VALIDATION_REPAIR_REQUIRED,
+        ):
+            lifecycle = self.branch_lifecycle_policy.decide(
+                features,
+                current_telemetry_diagnostic_streak=(
+                    self.branch_telemetry_diagnostic_streaks.get(bid, 0)
+                ),
+            )
+            if lifecycle.reason_codes:
+                self.decision_reason_codes[bid] = _merge_reason_codes(
+                    coordinated.reason_codes,
+                    lifecycle.reason_codes,
+                )
+            self.branch_telemetry_diagnostic_streaks[bid] = (
+                lifecycle.next_telemetry_diagnostic_streak
+            )
+            if lifecycle.soft_abandon:
+                logger.info(
+                    "Branch %s: telemetry diagnostic lifecycle=%s -> soft_abandon",
+                    bid,
+                    lifecycle.reason_codes,
+                )
+                self._record_soft_abandon_event(
+                    bid,
+                    features.win_rate or 0.0,
+                    lifecycle.reason_codes,
+                )
+                self.increment_soft_abandon_streak()
+                self.apply_soft_abandon(
+                    bid,
+                    branch,
+                    self.branch_current_hypothesis.get(bid),
+                )
+                return Decision.ABANDON, protocol_result, canary_result
+        elif screened_experiment_effective(protocol_result):
+            self.branch_telemetry_diagnostic_streaks.pop(bid, None)
+
         if (
             decision == Decision.CONTINUE_EXPLORE
             and features.win_rate is not None
@@ -228,6 +270,7 @@ class EvaluationOrchestrator:
                 pass
 
         self.branch_hypotheses.pop(branch_id, None)
+        self.branch_telemetry_diagnostic_streaks.pop(branch_id, None)
         if h_record is not None:
             self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
             self.branch_current_hypothesis.pop(branch_id, None)

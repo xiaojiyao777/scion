@@ -63,7 +63,7 @@ _ACTIVE_SOLVER_READ_DEFAULT_MAX_CHARS = 12000
 _APS_SURFACE_READ_CODE_CHARS = 800
 _APS_CODE_SURFACE_READ_CODE_CHARS = 12000
 _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS = 6000
-_CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT = 3
+_CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT = 5
 
 
 def _filter_model_facing_tool_names(
@@ -340,10 +340,7 @@ def _solver_design_code_algorithm_file_read_budget_exhausted(
     )
     if len(current_paths) < _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT:
         return False
-    hard_limit = max(
-        _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT + 2,
-        _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT,
-    )
+    hard_limit = _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT + 4
     if priority in {"primary_entrypoint", "integration_neighbor", "integration_role"}:
         return len(current_paths) >= hard_limit
     return True

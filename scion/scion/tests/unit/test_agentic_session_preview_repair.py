@@ -111,6 +111,82 @@ def test_agentic_session_writes_api_visible_prompt_manifest_artifacts(
     assert "code_content" not in rendered
 
 
+def test_prompt_manifest_counts_rendered_provider_prompt_not_raw_context(
+    tmp_path: Path,
+) -> None:
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
+    trace_dir = tmp_path / "llm-traces"
+    client = CapturingToolClient()
+    creative = CreativeLayer(client, trace_dir=str(trace_dir))
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    raw_only_blob = "RAW_CONTEXT_ONLY_NOT_RENDERED" * 2000
+
+    output = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+    ).run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={
+                "problem_summary": "Synthetic problem.",
+                "research_surfaces": "surface: search_policy",
+                "objective_policy_guidance": "Minimize cost.",
+                "champion_operators_code": "def baseline_time_fraction(): pass",
+                "champion_stats": "champion v1",
+                "raw_prompt_context_only": raw_only_blob,
+            },
+            build_code_context=lambda _hypothesis: {
+                "kind": "code",
+                "problem_summary": "Synthetic problem.",
+                "target_file_code": "def mutate(x):\n    return x\n",
+                "raw_prompt_context_only": raw_only_blob,
+            },
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in ref
+    ]
+    traces = {
+        payload["request_kind"]: payload
+        for payload in (
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in trace_dir.glob("*.json")
+        )
+    }
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert {"hypothesis", "code"}.issubset(traces)
+    for manifest in manifests:
+        trace = traces[manifest["call_kind"]]
+        system_chars = sum(len(block["text"]) for block in trace["system_blocks"])
+        user_chars = len(trace["user_prompt"])
+        assert manifest["rendered_prompt_available"] is True
+        assert manifest["char_budget"]["user_prompt_chars"] == user_chars
+        assert manifest["char_budget"]["provider_visible_total_chars"] == (
+            system_chars + user_chars
+        )
+        assert manifest["prompt_hash"] == trace["prompt_hash"]
+        assert "raw_prompt_context_only" not in manifest["section_names"]
+        assert "raw_prompt_context_only" in manifest["raw_context_audit"][
+            "top_level_keys"
+        ]
+        assert manifest["raw_context_audit"]["api_visible_prompt"] is False
+        assert manifest["raw_context_audit"]["json_char_count"] > manifest[
+            "char_budget"
+        ]["provider_visible_total_chars"]
+
+
 def test_repeated_tool_call_returns_already_read_ref_without_hiding_required_reads(
     tmp_path: Path,
 ) -> None:

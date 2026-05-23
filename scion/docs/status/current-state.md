@@ -79,6 +79,63 @@ packages still supply active object facts and manifests through adapter/provider
 hooks. Full unit regression for this pass is `1022 passed`; live validation is
 pending.
 
+The 2026-05-23 branch-lifecycle/diagnostic pass changes formal telemetry guard
+activation/effect misses from one-shot abandon triggers into branch-local
+diagnostic repair signals. `SCREENING_TELEMETRY_FAILED` remains available for
+non-repairable guard failures, but activation-missing and effect-zero/missing
+codes now route through `CONTINUE_EXPLORE` or
+`VALIDATION_REPAIR_REQUIRED` with telemetry-diagnostic lifecycle reasons. The
+lifecycle policy can still soft-abandon after repeated identical diagnostics or
+when the candidate also shows clear runtime/quality regression, candidate
+runtime failure, frozen/protected telemetry failure, schema/contract failure, or
+other severe constraint risk. This keeps Scion core problem-agnostic: the guard
+only consumes adapter/provider-declared telemetry roles and never reads CVRP
+solver semantics directly. APS development budgets were also relaxed without
+removing audit boundaries: default tool/observation/time/code-attempt caps are
+higher, proposal-quality attempts now allow deeper pre-screen repair, and
+mandatory target/surface reads can borrow observation reserve so read receipts
+or necessary target inspection do not prematurely exhaust the code phase.
+
+The 2026-05-23 APS integration repair closes the short-experiment P0 where
+contract preview validated a follow-up branch patch against the original CVRP
+package instead of the branch-current workspace. Problem preview hooks now
+receive a generic `base_workspace`; the CVRP provider materializes a temporary
+candidate policy workspace from the current branch, applies the primary patch
+plus same-patch `additional_changes`, and imports through the runtime-style
+top-level `policies.*` module graph. `proposal.algorithm_smoke` also prefers
+the branch workspace before falling back to champion/root snapshots. Regression
+tests cover a branch-local `_noise_greedy_repair` imported by a later
+`scheduler.py` patch and a same-patch helper module import.
+
+The same repair pass also turns prompt accounting from raw-context accounting
+into provider-visible prompt accounting. Prompt manifests now record rendered
+`system_blocks + user_prompt` character counts, section projection, and prompt
+hash; raw `prompt_context` is retained only as an audit digest and is not
+reported as API-visible text. `agentic_resume_context` is now rendered as a
+bounded model-facing handoff with previous failure summary, active-fact digest,
+read receipts, file digests, tool-step summary, and patch summary. Raw active
+facts are deduplicated from tool observations so the model sees the full active
+fact packet once, before lower-priority observations.
+
+`06-code-edit-protocol-reference-claude-code.md` is now partially implemented
+in the live code path. Code generation still normalizes into canonical
+full-file `PatchProposal` content before Contract, Verification, Workspace, and
+Decision, but the model-facing protocol can submit typed edits. The first
+supported intents are `exact_replace` and `full_file`; `exact_replace` requires
+the source digest and exact replacement strings, while Scion host derives the
+`content_after` body and compact audit diff metadata. Full-file output remains
+as a compatibility fallback for creates, deletes, and complex rewrites.
+Unified diff input is still deferred; host-generated diffs remain the canonical
+audit direction.
+
+As part of this repair, `scion.proposal.schemas` was split from a single
+near-1000-line module into a package facade with focused hypothesis, patch,
+tool, shared, and normalization modules. The public import path
+`from scion.proposal.schemas import ...` remains compatible. Post-repair
+validation passed `python -m compileall -q scion/scion`, full unit regression
+`1039 passed in 208.79s`, and the proposal/CVRP preview non-unit suite
+`105 passed in 0.95s`. Live short-experiment validation is still pending.
+
 The 2026-05-20 active-algorithm-facts repair closes the P0 gap exposed by the
 latest 4-round branch-lifecycle experiment. `active_solver_snapshot.py` is now
 a generic facade over adapter-provided snapshots; the CVRP active solver facts

@@ -131,6 +131,8 @@ class CvrpAdapter:
         *,
         patch: Any,
         surface: Any | None = None,
+        base_workspace: str | None = None,
+        branch_workspace: str | None = None,
     ) -> Mapping[str, Any]:
         _preview_common._POLICY_PREVIEW_TIME_LIMIT_SEC = (
             _POLICY_PREVIEW_TIME_LIMIT_SEC
@@ -141,7 +143,17 @@ class CvrpAdapter:
         _preview_synthetic._POLICY_PREVIEW_TIME_LIMIT_SEC = (
             _POLICY_PREVIEW_TIME_LIMIT_SEC
         )
-        return _preview_research_surface_patch(patch=patch, surface=surface)
+        preview_base_workspace = (
+            str(branch_workspace or "").strip()
+            or str(base_workspace or "").strip()
+            or str(getattr(self._spec, "root_dir", "") or "").strip()
+            or None
+        )
+        return _preview_research_surface_patch(
+            patch=patch,
+            surface=surface,
+            base_workspace=preview_base_workspace,
+        )
 
     def load_instance(self, instance_path: str) -> Any:
         suffix = Path(instance_path).suffix.lower()

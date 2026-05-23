@@ -38,6 +38,10 @@ class DecisionEngine:
         if not features.canary_passed:
             return self._out(features, Decision.ABANDON, ["CANARY_FAILED"])
 
+        runtime_veto = self._runtime_veto(features)
+        if runtime_veto is not None:
+            return runtime_veto
+
         if features.telemetry_validation_repairable:
             if features.stage == "validation":
                 return self._out(
@@ -71,10 +75,6 @@ class DecisionEngine:
                 Decision.ABANDON,
                 [_telemetry_failed_reason_code(features.stage)],
             )
-
-        runtime_veto = self._runtime_veto(features)
-        if runtime_veto is not None:
-            return runtime_veto
 
         stage = features.stage
         if stage == "screening":

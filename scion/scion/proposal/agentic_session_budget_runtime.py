@@ -351,6 +351,16 @@ class AgenticSessionBudgetRuntimeMixin:
             observations: list[ProposalObservation],
         ) -> None:
             call_index = _next_prompt_manifest_index(state)
+            system_blocks: list[Mapping[str, Any]] | None = None
+            user_prompt: str | None = None
+            render_error: str | None = None
+            try:
+                system_blocks, user_prompt = _render_prompt_for_manifest(
+                    call_kind,
+                    prompt_context,
+                )
+            except Exception as exc:
+                render_error = f"{type(exc).__name__}: {exc}"
             manifest = build_api_visible_prompt_manifest(
                 session_id=state.session_id,
                 phase=state.phase.value,
@@ -358,6 +368,9 @@ class AgenticSessionBudgetRuntimeMixin:
                 prompt_context=prompt_context,
                 observations=tuple(observations),
                 call_index=call_index,
+                system_blocks=system_blocks,
+                user_prompt=user_prompt,
+                render_error=render_error,
             )
             artifact_ref: str | None = None
             if self._artifact_store is not None:
@@ -376,7 +389,33 @@ class AgenticSessionBudgetRuntimeMixin:
                     "call_index": call_index,
                     "section_names": manifest["section_names"],
                     "prompt_hash": manifest["prompt_hash"],
+                    "provider_visible_total_chars": manifest["char_budget"][
+                        "provider_visible_total_chars"
+                    ],
+                    "rendered_prompt_available": manifest[
+                        "rendered_prompt_available"
+                    ],
                     "manifest_artifact_ref": artifact_ref,
                     "raw_prompt_saved": False,
                 },
             )
+
+
+def _render_prompt_for_manifest(
+    call_kind: str,
+    prompt_context: Mapping[str, Any],
+) -> tuple[list[Mapping[str, Any]], str]:
+    """Render with the same prompt splitter used by the CreativeLayer."""
+    if str(call_kind).startswith("hypothesis"):
+        from scion.proposal.engine import _split_hypothesis_context
+
+        return _split_hypothesis_context(dict(prompt_context))
+    if str(call_kind) == "code":
+        from scion.proposal.engine import _split_code_context
+
+        return _split_code_context(dict(prompt_context))
+    if str(call_kind) == "fix":
+        from scion.proposal.engine import _split_fix_context
+
+        return _split_fix_context(dict(prompt_context))
+    raise ValueError(f"unsupported prompt manifest call_kind: {call_kind}")

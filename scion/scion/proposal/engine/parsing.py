@@ -17,6 +17,10 @@ from scion.proposal.schemas import (
     PatchProposalInput,
     normalize_patch_output_with_repair_attribution,
 )
+from scion.proposal.edit_protocol import (
+    PatchEditProtocolError,
+    normalize_patch_typed_edits,
+)
 
 from .exceptions import ProposalValidationError
 
@@ -53,11 +57,23 @@ def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     )
 
 
-def _parse_patch(raw: Dict[str, Any]) -> PatchProposal:
+def _parse_patch(
+    raw: Dict[str, Any],
+    *,
+    context: Dict[str, Any] | None = None,
+) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
     normalized_raw, repair_attribution = normalize_patch_output_with_repair_attribution(
         raw
     )
+    try:
+        normalized_raw, edit_attribution = normalize_patch_typed_edits(
+            normalized_raw,
+            context=context,
+        )
+    except PatchEditProtocolError as exc:
+        raise ProposalValidationError(str(exc)) from exc
+    repair_attribution = (*repair_attribution, *edit_attribution)
     try:
         validated = PatchProposalInput(**normalized_raw)
     except ValidationError as exc:

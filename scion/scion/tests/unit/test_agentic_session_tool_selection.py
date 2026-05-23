@@ -288,7 +288,9 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
         for path in (
             "policies/baseline_algorithm.py",
             "policies/baseline_modules/scheduler.py",
+            "policies/baseline_modules/construction.py",
             "policies/baseline_modules/local_search.py",
+            "policies/baseline_modules/destroy_repair.py",
         )
     ]
 
@@ -298,7 +300,7 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
         hypothesis=hypothesis,
         next_args={
             "surface": "solver_design",
-            "file_path": "policies/baseline_modules/destroy_repair.py",
+            "file_path": "policies/baseline_modules/config.py",
         },
     )
     assert not agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(

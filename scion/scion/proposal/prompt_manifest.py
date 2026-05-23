@@ -1,15 +1,22 @@
-"""API-visible prompt manifests without storing raw prompts."""
+"""Provider-visible prompt manifests without storing raw prompts.
+
+The manifest records the prompt after normal proposal-engine rendering.  Raw
+``prompt_context`` is kept only as an audit digest; it is not counted as
+provider-visible prompt text.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Mapping
 
 from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
 
 
-MANIFEST_SCHEMA_VERSION = "api-visible-prompt-manifest.v1"
+MANIFEST_SCHEMA_VERSION = "api-visible-prompt-manifest.v2"
+_SECTION_HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
 def stable_digest(value: Any, *, length: int = 16) -> str:
@@ -30,18 +37,40 @@ def build_api_visible_prompt_manifest(
     prompt_context: Mapping[str, Any],
     observations: tuple[Any, ...] | list[Any],
     call_index: int,
+    system_blocks: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] | None = None,
+    user_prompt: str | None = None,
+    render_error: str | None = None,
 ) -> dict[str, Any]:
+    """Build an audit manifest for the rendered provider-visible prompt.
+
+    ``prompt_context`` is the pre-render structured context.  It can contain
+    live handles, large reusable ledgers, and helper-only fields, so it is never
+    treated as the API-visible prompt.  Pass the exact ``system_blocks`` and
+    ``user_prompt`` sent to the LLM client to populate the section projection.
+    """
     safe_context = _sanitize_agentic_value(dict(prompt_context))
-    section_names = list(safe_context)
-    section_records = [
-        _section_record(name, safe_context.get(name)) for name in section_names
-    ]
+    rendered_system_blocks = tuple(system_blocks or ())
+    rendered_user_prompt = "" if user_prompt is None else str(user_prompt)
+    rendered_available = user_prompt is not None and render_error is None
+    section_records = (
+        _provider_visible_section_records(
+            system_blocks=rendered_system_blocks,
+            user_prompt=rendered_user_prompt,
+        )
+        if rendered_available
+        else []
+    )
+    section_names = [record["name"] for record in section_records]
     section_statuses = {
         record["name"]: _section_status_record(record) for record in section_records
     }
     included_observations = [
         _observation_manifest_item(observation) for observation in observations
     ]
+    system_chars = _system_text_chars(rendered_system_blocks)
+    user_chars = len(rendered_user_prompt) if rendered_available else 0
+    total_chars = system_chars + user_chars
+    raw_context_digest = stable_digest(safe_context, length=64)
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "artifact_kind": "api_visible_prompt_manifest",
@@ -49,12 +78,43 @@ def build_api_visible_prompt_manifest(
         "phase": phase,
         "call_kind": call_kind,
         "call_index": call_index,
+        "projection_source": (
+            "rendered_provider_prompt" if rendered_available else "render_failed"
+        ),
+        "rendered_prompt_available": rendered_available,
+        "render_error": str(render_error or "")[:500],
         "section_names": section_names,
         "char_budget": {
-            "total_chars": _json_chars(safe_context),
+            "total_chars": total_chars,
+            "provider_visible_total_chars": total_chars,
+            "system_prompt_chars": system_chars,
+            "user_prompt_chars": user_chars,
+            "raw_context_json_chars_audit_only": _json_chars(safe_context),
             "sections": {
                 record["name"]: record["char_count"] for record in section_records
             },
+        },
+        "provider_visible_prompt": {
+            "system_block_count": len(rendered_system_blocks),
+            "system_text_chars": system_chars,
+            "user_prompt_chars": user_chars,
+            "total_chars": total_chars,
+            "section_count": len(section_records),
+            "prompt_hash": (
+                _provider_prompt_hash(rendered_system_blocks, rendered_user_prompt)
+                if rendered_available
+                else ""
+            ),
+        },
+        "raw_context_audit": {
+            "context_digest": raw_context_digest,
+            "json_char_count": _json_chars(safe_context),
+            "top_level_keys": list(safe_context),
+            "api_visible_prompt": False,
+            "note": (
+                "Pre-render context digest for audit only; not counted as the "
+                "provider-visible prompt projection."
+            ),
         },
         "sections": section_records,
         "section_statuses": section_statuses,
@@ -75,21 +135,111 @@ def build_api_visible_prompt_manifest(
         "truncated_sections": [
             record["name"] for record in section_records if record["truncated"]
         ],
-        "prompt_hash": stable_digest(safe_context, length=64),
+        "prompt_hash": (
+            _provider_prompt_hash(rendered_system_blocks, rendered_user_prompt)
+            if rendered_available
+            else ""
+        ),
         "raw_prompt_saved": False,
     }
 
 
-def _section_record(name: str, value: Any) -> dict[str, Any]:
+def _provider_visible_section_records(
+    *,
+    system_blocks: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]],
+    user_prompt: str,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    seen_names: dict[str, int] = {}
+    for index, block in enumerate(system_blocks, start=1):
+        text = str(block.get("text", "")) if isinstance(block, Mapping) else str(block)
+        records.extend(
+            _section_records_from_text(
+                text,
+                prompt_part="system",
+                block_index=index,
+                seen_names=seen_names,
+            )
+        )
+    records.extend(
+        _section_records_from_text(
+            user_prompt,
+            prompt_part="user",
+            block_index=None,
+            seen_names=seen_names,
+        )
+    )
+    return records
+
+
+def _section_records_from_text(
+    text: str,
+    *,
+    prompt_part: str,
+    block_index: int | None,
+    seen_names: dict[str, int],
+) -> list[dict[str, Any]]:
+    if not text:
+        return []
+    matches = list(_SECTION_HEADING.finditer(text))
+    chunks: list[tuple[str, str]] = []
+    if not matches:
+        label = (
+            f"system_{block_index}_preamble"
+            if block_index is not None
+            else "user_preamble"
+        )
+        chunks.append((label, text))
+    else:
+        if matches[0].start() > 0 and text[: matches[0].start()].strip():
+            label = (
+                f"system_{block_index}_preamble"
+                if block_index is not None
+                else "user_preamble"
+            )
+            chunks.append((label, text[: matches[0].start()]))
+        for offset, match in enumerate(matches):
+            start = match.start()
+            end = matches[offset + 1].start() if offset + 1 < len(matches) else len(text)
+            chunks.append((match.group(1), text[start:end]))
+    records: list[dict[str, Any]] = []
+    for heading, chunk in chunks:
+        if not chunk:
+            continue
+        base_name = _section_name(heading)
+        name = _unique_section_name(base_name, seen_names)
+        records.append(
+            _section_record(
+                name,
+                chunk,
+                heading=heading,
+                prompt_part=prompt_part,
+                block_index=block_index,
+            )
+        )
+    return records
+
+
+def _section_record(
+    name: str,
+    text: str,
+    *,
+    heading: str,
+    prompt_part: str,
+    block_index: int | None,
+) -> dict[str, Any]:
     return {
         "name": name,
-        "char_count": _json_chars(value),
-        "content_hash": stable_digest(value, length=16),
-        "fact_packet_digest": _section_fact_packet_digest(value),
-        "observation_ids": _section_observation_ids(value),
-        "observation_digests": _section_observation_digests(value),
-        "omitted": _contains_key_fragment(value, "omitted"),
-        "truncated": _contains_key_fragment(value, "truncated"),
+        "heading": heading,
+        "prompt_part": prompt_part,
+        "block_index": block_index,
+        "char_count": len(text),
+        "content_hash": _text_digest(text, length=16),
+        "fact_packet_digest": _section_fact_packet_digest_from_text(text),
+        "observation_ids": _section_observation_ids_from_text(text),
+        "observation_digests": _section_observation_digests_from_text(text),
+        "omitted": _text_has_marker(text, "omitted"),
+        "truncated": _text_has_marker(text, "truncated"),
     }
 
 
@@ -105,6 +255,9 @@ def _section_status_record(section: Mapping[str, Any]) -> dict[str, Any]:
         "present": True,
         "char_count": section.get("char_count", 0),
         "content_hash": section.get("content_hash", ""),
+        "heading": section.get("heading", ""),
+        "prompt_part": section.get("prompt_part", ""),
+        "block_index": section.get("block_index"),
         "fact_packet_digest": section.get("fact_packet_digest", ""),
         "observation_id_count": len(section.get("observation_ids") or ()),
         "observation_digest_count": len(section.get("observation_digests") or ()),
@@ -162,58 +315,80 @@ def _provenance_payload(value: Any) -> dict[str, Any]:
     return found
 
 
-def _section_observation_ids(value: Any) -> list[str]:
-    ids: list[str] = []
-    for item in _iter_mappings(value):
-        observation_id = item.get("observation_id")
-        if observation_id:
-            ids.append(str(observation_id))
-    return list(dict.fromkeys(ids))
+def _section_fact_packet_digest_from_text(text: str) -> str:
+    match = re.search(r'"fact_packet_digest"\s*:\s*"([^"]+)"', text)
+    return match.group(1) if match else ""
 
 
-def _section_observation_digests(value: Any) -> list[str]:
-    digests: list[str] = []
-    for item in _iter_mappings(value):
-        digest = item.get("digest") or item.get("payload_digest")
-        if digest:
-            digests.append(str(digest))
-    return list(dict.fromkeys(digests))
+def _section_observation_ids_from_text(text: str) -> list[str]:
+    return list(
+        dict.fromkeys(
+            match.group(1)
+            for match in re.finditer(r'"observation_id"\s*:\s*"([^"]+)"', text)
+        )
+    )
 
 
-def _section_fact_packet_digest(value: Any) -> str:
-    for item in _iter_mappings(value):
-        digest = item.get("fact_packet_digest")
-        if digest:
-            return str(digest)
-    return ""
-
-
-def _iter_mappings(value: Any) -> list[Mapping[str, Any]]:
-    mappings: list[Mapping[str, Any]] = []
-    if isinstance(value, Mapping):
-        mappings.append(value)
-        for child in value.values():
-            mappings.extend(_iter_mappings(child))
-    elif isinstance(value, (list, tuple)):
-        for child in value:
-            mappings.extend(_iter_mappings(child))
-    return mappings
-
-
-def _contains_key_fragment(value: Any, fragment: str) -> bool:
-    if isinstance(value, Mapping):
-        for key, child in value.items():
-            if fragment in str(key):
-                return True
-            if _contains_key_fragment(child, fragment):
-                return True
-    elif isinstance(value, (list, tuple)):
-        return any(_contains_key_fragment(child, fragment) for child in value)
-    return False
+def _section_observation_digests_from_text(text: str) -> list[str]:
+    return list(
+        dict.fromkeys(
+            match.group(1)
+            for match in re.finditer(
+                r'"(?:digest|payload_digest)"\s*:\s*"([^"]+)"',
+                text,
+            )
+        )
+    )
 
 
 def _json_chars(value: Any) -> int:
     return len(json.dumps(value, sort_keys=True, default=str))
+
+
+def _system_text_chars(system_blocks: tuple[Mapping[str, Any], ...]) -> int:
+    total = 0
+    for block in system_blocks:
+        if isinstance(block, Mapping):
+            total += len(str(block.get("text", "")))
+        else:
+            total += len(str(block))
+    return total
+
+
+def _provider_prompt_hash(
+    system_blocks: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]],
+    user_prompt: str,
+) -> str:
+    blob = json.dumps(
+        {"system_blocks": list(system_blocks), "user_prompt": user_prompt},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _text_digest(value: str, *, length: int = 16) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:length]
+
+
+def _section_name(heading: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", str(heading).strip().lower()).strip("_")
+    return cleaned or "unnamed_section"
+
+
+def _unique_section_name(base_name: str, seen_names: dict[str, int]) -> str:
+    count = seen_names.get(base_name, 0) + 1
+    seen_names[base_name] = count
+    return base_name if count == 1 else f"{base_name}_{count}"
+
+
+def _text_has_marker(text: str, marker: str) -> bool:
+    lowered = text.lower()
+    if marker == "truncated":
+        return "truncated" in lowered or "<truncated" in lowered
+    if marker == "omitted":
+        return "omitted" in lowered or "<omitted" in lowered
+    return marker.lower() in lowered
 
 
 __all__ = ["MANIFEST_SCHEMA_VERSION", "build_api_visible_prompt_manifest", "stable_digest"]

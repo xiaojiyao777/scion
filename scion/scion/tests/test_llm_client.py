@@ -151,7 +151,7 @@ class TestLLMClientParse:
 
     def test_missing_required_field_raises(self):
         client = self._client()
-        raw = json.dumps({"file_path": "x.py", "action": "modify"})  # missing code_content
+        raw = json.dumps({"file_path": "x.py"})  # missing action
         with pytest.raises(LLMFormatError, match="missing required"):
             client._parse_and_validate(raw, PATCH_PROPOSAL_SCHEMA)
 

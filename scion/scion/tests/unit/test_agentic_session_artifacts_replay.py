@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.proposal.engine import _split_hypothesis_context
 from scion.tests.unit.agentic_session_test_support import *
 
 def test_agentic_session_does_not_emit_raw_refs_in_artifacts(tmp_path: Path) -> None:
@@ -509,6 +510,9 @@ def test_resume_from_artifact_returns_sanitized_length_bounded_context(
     assert artifact["observation_ledger"]["read_receipts"]
     assert full_resume_context["observation_ledger"]["observations"]
     assert full_resume_context["read_receipts"]
+    assert full_resume_context["model_facing_projection"]["schema_version"] == (
+        "agentic-resume-model-projection.v1"
+    )
     assert len(resume_context["summary"]) <= 600
     assert resume_context["session_id"] == output.session_id
     assert resume_context["transcript_digest"] == output.transcript_digest
@@ -524,6 +528,26 @@ def test_resume_from_artifact_returns_sanitized_length_bounded_context(
     assert "raw_metrics_ref" not in rendered
     assert "SECRET_VALIDATION" not in rendered
     assert "code_content" not in rendered
+
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Synthetic problem.",
+            "research_surfaces": "surface: search_policy",
+            "objective_policy_guidance": "Minimize cost.",
+            "champion_operators_code": "def champion(): pass",
+            "champion_stats": "champion v1",
+            "agentic_resume_context": {
+                "source": "agentic_session_store",
+                "resume": full_resume_context,
+            },
+        }
+    )
+    model_visible = json.dumps(system_blocks, sort_keys=True) + user_prompt
+    assert "## Agentic Resume Context" in model_visible
+    assert "bounded_model_facing_handoff_no_raw_observation_ledger" in model_visible
+    assert "content_preview" not in model_visible
+    assert "structured_payload" not in model_visible
+    assert '"observation_ledger":' not in model_visible
 
 
 def test_agentic_session_tool_errors_are_controlled_or_fail_closed(

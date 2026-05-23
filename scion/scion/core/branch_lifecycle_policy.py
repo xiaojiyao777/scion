@@ -25,6 +25,21 @@ SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE = (
     "SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE"
 )
 SCREENING_STALE_RESCREEN_FAIL = "SCREENING_STALE_RESCREEN_FAIL"
+SCREENING_TELEMETRY_DIAGNOSTIC_RETRY = "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY"
+VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY = "VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY"
+TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED = (
+    "TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED"
+)
+TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA = "TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA"
+TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN = (
+    "TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN"
+)
+TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE = (
+    "TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE"
+)
+TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE = (
+    "TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE"
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +47,7 @@ class BranchLifecycleDecision:
     action: BranchLifecycleAction
     reason_codes: tuple[str, ...]
     next_zero_win_streak: int
+    next_telemetry_diagnostic_streak: int = 0
 
     @property
     def soft_abandon(self) -> bool:
@@ -46,18 +62,29 @@ class BranchLifecyclePolicy:
     zero_win_streak_limit: int = 3
     soft_runtime_ratio_threshold: float = 1.10
     high_runtime_regression_rate: float = 0.90
+    telemetry_diagnostic_streak_limit: int = 3
 
     def decide(
         self,
         features: DecisionFeatures,
         *,
         current_zero_win_streak: int = 0,
+        current_telemetry_diagnostic_streak: int = 0,
     ) -> BranchLifecycleDecision:
+        if features.telemetry_validation_repairable:
+            return self._decide_telemetry_diagnostic(
+                features,
+                current_telemetry_diagnostic_streak=(
+                    current_telemetry_diagnostic_streak
+                ),
+            )
+
         if not self._eligible_low_win_screening(features):
             return BranchLifecycleDecision(
                 action="keep_exploring",
                 reason_codes=(),
                 next_zero_win_streak=current_zero_win_streak,
+                next_telemetry_diagnostic_streak=0,
             )
 
         wins = max(0, int(features.wins or 0))
@@ -70,6 +97,7 @@ class BranchLifecyclePolicy:
                 action="soft_abandon",
                 reason_codes=(SCREENING_STALE_RESCREEN_FAIL,),
                 next_zero_win_streak=next_zero_win_streak,
+                next_telemetry_diagnostic_streak=0,
             )
 
         soft_reasons = self._soft_abandon_reasons(features, wins=wins, losses=losses)
@@ -78,6 +106,7 @@ class BranchLifecyclePolicy:
                 action="soft_abandon",
                 reason_codes=soft_reasons,
                 next_zero_win_streak=next_zero_win_streak,
+                next_telemetry_diagnostic_streak=0,
             )
 
         if wins == 0 and next_zero_win_streak >= self.zero_win_streak_limit:
@@ -85,6 +114,7 @@ class BranchLifecyclePolicy:
                 action="soft_abandon",
                 reason_codes=(SCREENING_ZERO_WIN_STREAK_EXHAUSTED,),
                 next_zero_win_streak=next_zero_win_streak,
+                next_telemetry_diagnostic_streak=0,
             )
 
         if wins > 0:
@@ -92,6 +122,7 @@ class BranchLifecyclePolicy:
                 action="keep_exploring",
                 reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
                 next_zero_win_streak=0,
+                next_telemetry_diagnostic_streak=0,
             )
 
         reason = (
@@ -103,6 +134,41 @@ class BranchLifecyclePolicy:
             action="keep_exploring",
             reason_codes=(reason,),
             next_zero_win_streak=next_zero_win_streak,
+            next_telemetry_diagnostic_streak=0,
+        )
+
+    def _decide_telemetry_diagnostic(
+        self,
+        features: DecisionFeatures,
+        *,
+        current_telemetry_diagnostic_streak: int,
+    ) -> BranchLifecycleDecision:
+        next_streak = max(0, current_telemetry_diagnostic_streak) + 1
+        severe_reasons = self._telemetry_diagnostic_abandon_reasons(features)
+        if severe_reasons:
+            return BranchLifecycleDecision(
+                action="soft_abandon",
+                reason_codes=severe_reasons,
+                next_zero_win_streak=0,
+                next_telemetry_diagnostic_streak=next_streak,
+            )
+        if next_streak >= self.telemetry_diagnostic_streak_limit:
+            return BranchLifecycleDecision(
+                action="soft_abandon",
+                reason_codes=(TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,),
+                next_zero_win_streak=0,
+                next_telemetry_diagnostic_streak=next_streak,
+            )
+        reason = (
+            VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY
+            if features.stage == "validation"
+            else SCREENING_TELEMETRY_DIAGNOSTIC_RETRY
+        )
+        return BranchLifecycleDecision(
+            action="keep_exploring",
+            reason_codes=(reason,),
+            next_zero_win_streak=0,
+            next_telemetry_diagnostic_streak=next_streak,
         )
 
     def _eligible_low_win_screening(self, features: DecisionFeatures) -> bool:
@@ -139,6 +205,27 @@ class BranchLifecyclePolicy:
             reasons.append(SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE)
         return tuple(dict.fromkeys(reasons))
 
+    def _telemetry_diagnostic_abandon_reasons(
+        self,
+        features: DecisionFeatures,
+    ) -> tuple[str, ...]:
+        reasons: list[str] = []
+        if features.candidate_failed_pairs > 0:
+            reasons.append(TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE)
+        if features.median_delta is not None and features.median_delta < 0:
+            reasons.append(TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA)
+        if (
+            features.runtime_ratio_median is not None
+            and features.runtime_ratio_median > self.soft_runtime_ratio_threshold
+        ):
+            reasons.append(TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN)
+        if (
+            features.runtime_regression_rate is not None
+            and features.runtime_regression_rate >= self.high_runtime_regression_rate
+        ):
+            reasons.append(TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE)
+        return tuple(dict.fromkeys(reasons))
+
     @staticmethod
     def _mostly_ties(
         features: DecisionFeatures,
@@ -164,7 +251,14 @@ __all__ = [
     "SCREENING_SOFT_ABANDON_RUNTIME_REGRESSION_RATE",
     "SCREENING_SOFT_ABANDON_RUNTIME_SLOWDOWN",
     "SCREENING_STALE_RESCREEN_FAIL",
+    "SCREENING_TELEMETRY_DIAGNOSTIC_RETRY",
     "SCREENING_WEAK_SIGNAL_CONTINUE",
     "SCREENING_ZERO_WIN_STREAK_CONTINUE",
     "SCREENING_ZERO_WIN_STREAK_EXHAUSTED",
+    "TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE",
+    "TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA",
+    "TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE",
+    "TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN",
+    "TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED",
+    "VALIDATION_TELEMETRY_DIAGNOSTIC_RETRY",
 ]

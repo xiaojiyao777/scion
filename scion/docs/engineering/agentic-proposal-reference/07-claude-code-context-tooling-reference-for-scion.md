@@ -254,6 +254,18 @@ The host can still allow a targeted re-read when code asks for a symbol or a
 larger slice. The important change is that repeated reads become intentional,
 not accidental.
 
+Implementation status as of 2026-05-23:
+
+- APS now persists a source-digested observation ledger and returns compact
+  `already_observed` receipts for unchanged reusable reads.
+- Code prompts render a bounded `Agentic Resume Context` instead of injecting
+  raw resume ledgers.
+- Prompt manifests now account for the rendered provider-visible prompt, while
+  raw `prompt_context` is preserved only as an audit digest.
+- The active fact packet remains the primary model-facing mechanism context;
+  duplicate active-fact payloads are omitted from lower-priority raw tool
+  observations.
+
 ### 3. Replace Fixed File Count Truncation With Manifest-First Budgeting
 
 Active algorithm context should start with an adapter-owned manifest, not with

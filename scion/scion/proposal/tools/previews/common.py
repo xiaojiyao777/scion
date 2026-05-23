@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import inspect
 import json
+from pathlib import Path
 import uuid
 from typing import Any, Mapping
 
@@ -202,7 +204,12 @@ def _problem_surface_preview(
     if not callable(preview):
         return None
     try:
-        payload = preview(patch=patch, surface=surface)
+        payload = _call_problem_surface_preview(
+            preview,
+            context=context,
+            patch=patch,
+            surface=surface,
+        )
     except Exception as exc:
         return {
             "passed": False,
@@ -222,6 +229,46 @@ def _problem_surface_preview(
     normalized.setdefault("workspace_materialized", False)
     normalized.setdefault("verification_run", False)
     return normalized
+
+
+def _call_problem_surface_preview(
+    preview: Any,
+    *,
+    context: ProposalToolContext,
+    patch: PatchProposal,
+    surface: Any | None,
+) -> Any:
+    kwargs: dict[str, Any] = {"patch": patch, "surface": surface}
+    base_workspace = _problem_preview_base_workspace(context)
+    if base_workspace and _callable_accepts_keyword(preview, "base_workspace"):
+        kwargs["base_workspace"] = base_workspace
+    return preview(**kwargs)
+
+
+def _problem_preview_base_workspace(context: ProposalToolContext) -> str | None:
+    for raw in (
+        getattr(context, "branch_workspace", None),
+        _attr(context.champion, "code_snapshot_path"),
+    ):
+        value = str(raw or "").strip()
+        if not value:
+            continue
+        path = Path(value).expanduser().resolve(strict=False)
+        if path.is_dir():
+            return str(path)
+    return None
+
+
+def _callable_accepts_keyword(func: Any, keyword: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    return keyword in signature.parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
 
 def _module_level_functions(code_content: str) -> list[str]:
     import ast

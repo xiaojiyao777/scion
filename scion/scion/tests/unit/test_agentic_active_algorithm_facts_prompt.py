@@ -141,6 +141,7 @@ def test_prompt_manifest_marks_large_observations_truncated_but_facts_included()
         ],
     }
 
+    system_blocks, user_prompt = _split_hypothesis_context(prompt_context)
     manifest = build_api_visible_prompt_manifest(
         session_id="session-facts",
         phase="draft_hypothesis",
@@ -148,16 +149,66 @@ def test_prompt_manifest_marks_large_observations_truncated_but_facts_included()
         prompt_context=prompt_context,
         observations=[],
         call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
     )
 
-    facts_status = manifest["section_statuses"]["agentic_active_algorithm_facts"]
-    observations_status = manifest["section_statuses"]["agentic_tool_observations"]
+    facts_status = manifest["section_statuses"]["active_algorithm_facts"]
+    observations_status = manifest["section_statuses"][
+        "agentic_proposal_tool_observations"
+    ]
     assert facts_status["status"] == "included"
     assert facts_status["content_hash"]
     assert facts_status["fact_packet_digest"] == "packet-digest-123"
     assert observations_status["status"] == "truncated"
-    assert "agentic_tool_observations" in manifest["truncated_sections"]
-    assert "agentic_active_algorithm_facts" not in manifest["truncated_sections"]
+    assert "agentic_proposal_tool_observations" in manifest["truncated_sections"]
+    assert "active_algorithm_facts" not in manifest["truncated_sections"]
+
+
+def test_raw_tool_observations_reference_duplicate_active_facts_by_digest() -> None:
+    active_facts = {
+        "source": "context.read_active_solver_design",
+        "snapshot_digest": "snapshot-digest-1",
+        "fact_packet_digest": "packet-digest-1",
+        "active_algorithm_facts": {
+            "packet_id": "packet-1",
+            "snapshot_digest": "snapshot-digest-1",
+            "fact_packet_digest": "packet-digest-1",
+            "fact_ids": ["fact.unique"],
+            "facts": [
+                {
+                    "fact_id": "fact.unique",
+                    "claim": "UNIQUE_ACTIVE_FACT_CLAIM",
+                    "evidence": ["source evidence"],
+                }
+            ],
+        },
+    }
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "problem",
+            "research_surfaces": "surface",
+            "champion_operators_code": "code",
+            "champion_stats": "stats",
+            "agentic_active_algorithm_facts": active_facts,
+            "agentic_tool_observations": [
+                {
+                    "observation_id": "obs-active",
+                    "tool_name": "context.read_active_solver_design",
+                    "structured_payload": {
+                        "active_algorithm_facts": active_facts[
+                            "active_algorithm_facts"
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    rendered = json.dumps(system_blocks, sort_keys=True) + user_prompt
+
+    assert rendered.count("UNIQUE_ACTIVE_FACT_CLAIM") == 1
+    assert "active_algorithm_facts_ref" in rendered
+    assert "deduplicated; see Active Algorithm Facts" in rendered
 
 
 def test_negative_fact_block_renders_before_hypothesis_task_without_domain_terms() -> None:

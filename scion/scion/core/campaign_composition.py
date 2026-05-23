@@ -230,6 +230,7 @@ def compose_campaign_services(
     owner._hard_abandon_counted_branches = set()
     owner._soft_abandon_streak = 0
     owner._branch_zero_win_streaks = {}
+    owner._branch_telemetry_diagnostic_streaks = {}
     owner._start_time = datetime.now()
     owner._hard_stagnation_escape_used = False
 
@@ -373,6 +374,9 @@ def compose_campaign_services(
         decision_coordinator=owner._decision_coordinator,
         decision_reason_codes=owner._decision_reason_codes,
         branch_zero_win_streaks=owner._branch_zero_win_streaks,
+        branch_telemetry_diagnostic_streaks=(
+            owner._branch_telemetry_diagnostic_streaks
+        ),
         campaign_id=owner._campaign_id,
         registry=owner._registry,
         materializer=owner._materializer,
