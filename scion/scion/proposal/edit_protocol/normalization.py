@@ -6,6 +6,8 @@ import difflib
 import hashlib
 import json
 import re
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 
@@ -21,6 +23,24 @@ _SOURCE_FILE_RE = re.compile(
 
 class PatchEditProtocolError(ValueError):
     """Raised when a typed edit cannot be safely normalized."""
+
+
+@dataclass
+class _ChangeSlot:
+    pointer: str
+    raw: Mapping[str, Any]
+    is_primary: bool
+    additional_index: int | None = None
+
+
+@dataclass
+class _ComposedChange:
+    path: str
+    canonical_slot: _ChangeSlot
+    change: dict[str, Any]
+    json_pointers: list[str] = field(default_factory=list)
+    intents: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
 
 
 def normalize_patch_typed_edits(
@@ -42,30 +62,10 @@ def normalize_patch_typed_edits(
         return normalized, ()
 
     source_files = _source_files_from_context(context)
-    metadata: list[dict[str, Any]] = []
-    primary, primary_metadata = _normalize_change(
+    normalized, metadata = _normalize_patch_set_changes(
         normalized,
         source_files=source_files,
-        change_pointer="/",
     )
-    normalized.update(primary)
-    metadata.extend(primary_metadata)
-
-    additional = normalized.get("additional_changes")
-    if isinstance(additional, list):
-        normalized_additional: list[Any] = []
-        for index, item in enumerate(additional):
-            if not isinstance(item, Mapping):
-                normalized_additional.append(item)
-                continue
-            change, change_metadata = _normalize_change(
-                item,
-                source_files=source_files,
-                change_pointer=f"/additional_changes/{index}",
-            )
-            normalized_additional.append(change)
-            metadata.extend(change_metadata)
-        normalized["additional_changes"] = normalized_additional
 
     return normalized, tuple(metadata)
 
@@ -97,7 +97,12 @@ def _normalize_change(
     raw_change: Mapping[str, Any],
     *,
     source_files: Mapping[str, str],
+    original_source_files: Mapping[str, str] | None = None,
     change_pointer: str,
+    allow_original_source_digest: bool = False,
+    composing_same_file: bool = False,
+    prior_change_pointers: tuple[str, ...] = (),
+    has_source_context: bool | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     change = dict(raw_change)
     explicit_intent = _edit_intent(change)
@@ -107,7 +112,10 @@ def _normalize_change(
         edit_intent = "full_file" if _has_full_file_content(change) else ""
     if not edit_intent:
         return change, []
-    if not explicit_intent and not has_content_after and not source_files:
+    source_context_available = (
+        bool(source_files) if has_source_context is None else has_source_context
+    )
+    if not explicit_intent and not has_content_after and not source_context_available:
         return change, []
     if edit_intent not in {"exact_replace", "full_file"}:
         raise PatchEditProtocolError(
@@ -117,13 +125,20 @@ def _normalize_change(
     file_path = _normalize_path(change.get("file_path"))
     action = str(change.get("action") or "modify").strip()
     before = source_files.get(file_path)
+    original_before = (
+        original_source_files.get(file_path) if original_source_files else None
+    )
     if edit_intent == "exact_replace":
         content_after = _apply_exact_replace(
             change,
             file_path=file_path,
             action=action,
             before=before,
+            original_before=original_before,
             change_pointer=change_pointer,
+            allow_original_source_digest=allow_original_source_digest,
+            composing_same_file=composing_same_file,
+            prior_change_pointers=prior_change_pointers,
         )
     else:
         content_after = _full_file_content_after(change)
@@ -133,7 +148,9 @@ def _normalize_change(
             change,
             file_path=file_path,
             before=before,
+            original_before=original_before,
             change_pointer=change_pointer,
+            allow_original_source_digest=allow_original_source_digest,
         )
 
     if edit_intent == "full_file" and "content_after" in change:
@@ -154,13 +171,322 @@ def _normalize_change(
     return change, [metadata]
 
 
+def _normalize_patch_set_changes(
+    normalized: dict[str, Any],
+    *,
+    source_files: Mapping[str, str],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    slots = _patch_set_slots(normalized)
+    path_counts = Counter(
+        _normalize_path(slot.raw.get("file_path"))
+        for slot in slots
+        if _normalize_path(slot.raw.get("file_path"))
+    )
+    source_state = dict(source_files)
+    slot_results: dict[str, dict[str, Any]] = {}
+    composed_by_path: dict[str, _ComposedChange] = {}
+    metadata: list[dict[str, Any]] = []
+
+    for slot in slots:
+        path = _normalize_path(slot.raw.get("file_path"))
+        repeated_path = bool(path and path_counts[path] > 1)
+        prior = composed_by_path.get(path) if repeated_path else None
+        if prior is not None:
+            _validate_same_file_action_sequence(
+                prior,
+                slot=slot,
+                file_path=path,
+            )
+            _validate_same_file_full_file_sequence(
+                slot,
+                file_path=path,
+                current_content=source_state.get(path),
+                prior_change_pointers=tuple(prior.json_pointers),
+            )
+
+        change, change_metadata = _normalize_change(
+            slot.raw,
+            source_files=source_state,
+            original_source_files=source_files,
+            change_pointer=slot.pointer,
+            allow_original_source_digest=(
+                prior is not None and _prior_intents_are_exact_replace(prior)
+            ),
+            composing_same_file=prior is not None,
+            prior_change_pointers=tuple(prior.json_pointers) if prior else (),
+            has_source_context=bool(source_files),
+        )
+        slot_results[slot.pointer] = change
+        metadata.extend(change_metadata)
+
+        if not path:
+            continue
+        content_after = _change_content_after(change)
+        if content_after is not None:
+            source_state[path] = content_after
+        if not repeated_path:
+            continue
+
+        intent = _effective_edit_intent(change)
+        action = str(change.get("action") or "modify").strip()
+        if prior is None:
+            composed_by_path[path] = _ComposedChange(
+                path=path,
+                canonical_slot=slot,
+                change=change,
+                json_pointers=[slot.pointer],
+                intents=[intent],
+                actions=[action],
+            )
+            continue
+
+        prior.json_pointers.append(slot.pointer)
+        prior.intents.append(intent)
+        prior.actions.append(action)
+        prior.change = _canonical_composed_change(
+            prior.change,
+            final_change=change,
+        )
+
+    metadata.extend(_composition_metadata(composed_by_path))
+    return (
+        _rebuild_normalized_patch_set(
+            normalized,
+            slot_results=slot_results,
+            composed_by_path=composed_by_path,
+        ),
+        metadata,
+    )
+
+
+def _patch_set_slots(normalized: Mapping[str, Any]) -> list[_ChangeSlot]:
+    slots = [_ChangeSlot(pointer="/", raw=normalized, is_primary=True)]
+    additional = normalized.get("additional_changes")
+    if not isinstance(additional, list):
+        return slots
+    for index, item in enumerate(additional):
+        if isinstance(item, Mapping):
+            slots.append(
+                _ChangeSlot(
+                    pointer=f"/additional_changes/{index}",
+                    raw=item,
+                    is_primary=False,
+                    additional_index=index,
+                )
+            )
+    return slots
+
+
+def _rebuild_normalized_patch_set(
+    normalized: Mapping[str, Any],
+    *,
+    slot_results: Mapping[str, dict[str, Any]],
+    composed_by_path: Mapping[str, _ComposedChange],
+) -> dict[str, Any]:
+    rebuilt = dict(normalized)
+    primary_path = _normalize_path(normalized.get("file_path"))
+    primary_record = composed_by_path.get(primary_path)
+    if primary_record is not None and primary_record.canonical_slot.is_primary:
+        rebuilt.update(primary_record.change)
+    elif "/" in slot_results:
+        rebuilt.update(slot_results["/"])
+
+    additional = normalized.get("additional_changes")
+    if not isinstance(additional, list):
+        return rebuilt
+
+    rebuilt_additional: list[Any] = []
+    for index, item in enumerate(additional):
+        if not isinstance(item, Mapping):
+            rebuilt_additional.append(item)
+            continue
+        pointer = f"/additional_changes/{index}"
+        path = _normalize_path(item.get("file_path"))
+        record = composed_by_path.get(path)
+        if record is not None:
+            if (
+                not record.canonical_slot.is_primary
+                and record.canonical_slot.additional_index == index
+            ):
+                rebuilt_additional.append(record.change)
+            continue
+        rebuilt_additional.append(slot_results.get(pointer, dict(item)))
+    rebuilt["additional_changes"] = rebuilt_additional
+    return rebuilt
+
+
+def _validate_same_file_action_sequence(
+    prior: _ComposedChange,
+    *,
+    slot: _ChangeSlot,
+    file_path: str,
+) -> None:
+    next_action = str(slot.raw.get("action") or "modify").strip()
+    actions = {action for action in [*prior.actions, next_action] if action}
+    if "delete" in actions and len(actions) > 1:
+        _raise_duplicate_file_error(
+            reason="mixed_delete_create_or_modify",
+            file_path=file_path,
+            change_pointer=slot.pointer,
+            prior_change_pointers=tuple(prior.json_pointers),
+            detail="delete mixed with create/modify cannot be safely composed",
+        )
+    if "create" in actions and len(actions) > 1:
+        _raise_duplicate_file_error(
+            reason="mixed_create_modify",
+            file_path=file_path,
+            change_pointer=slot.pointer,
+            prior_change_pointers=tuple(prior.json_pointers),
+            detail="create mixed with modify/delete cannot be safely composed",
+        )
+
+
+def _validate_same_file_full_file_sequence(
+    slot: _ChangeSlot,
+    *,
+    file_path: str,
+    current_content: str | None,
+    prior_change_pointers: tuple[str, ...],
+) -> None:
+    if _effective_edit_intent(slot.raw) != "full_file":
+        return
+    next_content = _raw_change_content_after(slot.raw)
+    if current_content is None or next_content == current_content:
+        return
+    _raise_duplicate_file_error(
+        reason="full_file_conflict",
+        file_path=file_path,
+        change_pointer=slot.pointer,
+        prior_change_pointers=prior_change_pointers,
+        detail="full_file content_after conflicts with prior same-file edits",
+    )
+
+
+def _canonical_composed_change(
+    canonical_change: Mapping[str, Any],
+    *,
+    final_change: Mapping[str, Any],
+) -> dict[str, Any]:
+    composed = dict(canonical_change)
+    action = str(
+        final_change.get("action") or composed.get("action") or "modify"
+    ).strip()
+    content_after = _change_content_after(final_change)
+    composed["action"] = action
+    if content_after is not None:
+        composed["edit_intent"] = "full_file"
+        composed["content_after"] = content_after
+        composed["code_content"] = content_after
+        composed.pop("old_string", None)
+        composed.pop("new_string", None)
+        composed.pop("source_digest", None)
+        composed.pop("replace_all", None)
+    if final_change.get("test_hint"):
+        composed["test_hint"] = final_change.get("test_hint")
+    evidence_refs = [
+        *(_string_list(composed.get("evidence_refs"))),
+        *(_string_list(final_change.get("evidence_refs"))),
+    ]
+    if evidence_refs:
+        composed["evidence_refs"] = list(dict.fromkeys(evidence_refs))
+    return composed
+
+
+def _composition_metadata(
+    composed_by_path: Mapping[str, _ComposedChange],
+) -> list[dict[str, Any]]:
+    metadata: list[dict[str, Any]] = []
+    for record in composed_by_path.values():
+        if len(record.json_pointers) < 2:
+            continue
+        metadata.append(
+            {
+                "field": "patch_set_change",
+                "repair_kind": "patch_set_composition",
+                "root_cause": "duplicate_file_path",
+                "action": "composed_duplicate_file_changes",
+                "file_path": record.path,
+                "canonical_json_pointer": record.json_pointers[0],
+                "source_json_pointers": list(record.json_pointers),
+                "merged_change_count": len(record.json_pointers),
+            }
+        )
+    return metadata
+
+
+def _prior_intents_are_exact_replace(record: _ComposedChange) -> bool:
+    return bool(record.intents) and all(
+        intent == "exact_replace" for intent in record.intents
+    )
+
+
+def _raw_change_content_after(change: Mapping[str, Any]) -> str:
+    action = str(change.get("action") or "modify").strip()
+    if action == "delete":
+        return ""
+    return _full_file_content_after(change)
+
+
+def _change_content_after(change: Mapping[str, Any]) -> str | None:
+    action = str(change.get("action") or "modify").strip()
+    if action == "delete":
+        return ""
+    content = change.get("content_after")
+    if isinstance(content, str):
+        return content
+    content = change.get("code_content")
+    if isinstance(content, str):
+        return content
+    return None
+
+
+def _effective_edit_intent(change: Mapping[str, Any]) -> str:
+    edit_intent = _edit_intent(change)
+    if edit_intent:
+        return edit_intent
+    return "full_file" if _change_content_after(change) is not None else ""
+
+
+def _raise_duplicate_file_error(
+    *,
+    reason: str,
+    file_path: str,
+    change_pointer: str,
+    prior_change_pointers: tuple[str, ...],
+    detail: str,
+) -> None:
+    raise PatchEditProtocolError(
+        json.dumps(
+            {
+                "error": "patch_edit_protocol",
+                "reason": reason,
+                "file_path": file_path,
+                "json_pointer": change_pointer,
+                "prior_json_pointers": list(prior_change_pointers),
+                "detail": detail,
+                "guidance": (
+                    "Use one file change for this file or serializable "
+                    "exact_replace edits whose old_string values match the "
+                    "content after earlier same-file edits."
+                ),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+
+
 def _apply_exact_replace(
     change: Mapping[str, Any],
     *,
     file_path: str,
     action: str,
     before: str | None,
+    original_before: str | None,
     change_pointer: str,
+    allow_original_source_digest: bool = False,
+    composing_same_file: bool = False,
+    prior_change_pointers: tuple[str, ...] = (),
 ) -> str:
     if action != "modify":
         raise PatchEditProtocolError(
@@ -176,7 +502,14 @@ def _apply_exact_replace(
             f"{change_pointer}: exact_replace requires source_digest"
         )
     actual_digest = source_digest_for_content(before)
-    if expected_digest != actual_digest:
+    original_digest = (
+        source_digest_for_content(original_before)
+        if original_before is not None
+        else ""
+    )
+    if expected_digest != actual_digest and not (
+        allow_original_source_digest and expected_digest == original_digest
+    ):
         raise PatchEditProtocolError(
             f"{change_pointer}: stale_source for {file_path}: "
             f"expected {expected_digest}, current {actual_digest}"
@@ -194,6 +527,17 @@ def _apply_exact_replace(
         )
     occurrences = before.count(old_string)
     if occurrences == 0:
+        if composing_same_file:
+            _raise_duplicate_file_error(
+                reason="exact_replace_not_serializable",
+                file_path=file_path,
+                change_pointer=change_pointer,
+                prior_change_pointers=prior_change_pointers,
+                detail=(
+                    "exact_replace old_string does not match the content "
+                    "after prior same-file edits"
+                ),
+            )
         raise PatchEditProtocolError(
             f"{change_pointer}: old_string_not_found in {file_path}"
         )
@@ -213,13 +557,22 @@ def _validate_optional_source_digest(
     *,
     file_path: str,
     before: str | None,
+    original_before: str | None = None,
     change_pointer: str,
+    allow_original_source_digest: bool = False,
 ) -> None:
     expected_digest = _digest_text(change.get("source_digest"))
     if not expected_digest or before is None:
         return
     actual_digest = source_digest_for_content(before)
-    if expected_digest != actual_digest:
+    original_digest = (
+        source_digest_for_content(original_before)
+        if original_before is not None
+        else ""
+    )
+    if expected_digest != actual_digest and not (
+        allow_original_source_digest and expected_digest == original_digest
+    ):
         raise PatchEditProtocolError(
             f"{change_pointer}: stale_source for {file_path}: "
             f"expected {expected_digest}, current {actual_digest}"

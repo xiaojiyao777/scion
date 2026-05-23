@@ -132,6 +132,16 @@ as a compatibility fallback for creates, deletes, and complex rewrites.
 Unified diff input is still deferred; host-generated diffs remain the canonical
 audit direction.
 
+The 2026-05-23 APS code-edit host repair canonicalizes repeated file paths
+inside one patch set before schema validation. Multiple same-file
+`exact_replace` typed edits are applied in order against the evolving host
+source and collapsed into one canonical file change with `repair_attribution`
+composition metadata, including the case where the top-level target and
+`additional_changes` touch the same file. Conflicting repeated `full_file`
+entries, mixed create/delete sequences, or non-serializable `exact_replace`
+edits now fail with a short structured protocol error instead of falling into
+the old duplicate-file-path schema retry loop.
+
 As part of this repair, `scion.proposal.schemas` was split from a single
 near-1000-line module into a package facade with focused hypothesis, patch,
 tool, shared, and normalization modules. The public import path

@@ -220,7 +220,10 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "for the approved algorithm change to be executable. Use this for "
                 "solver_design module additions that also need scheduler or "
                 "entrypoint integration. Each change is independently checked "
-                "by Contract and applied in the same tainted candidate workspace."
+                "by Contract and applied in the same tainted candidate workspace. "
+                "For multiple edits to one file, prefer one file change, or use "
+                "serializable exact_replace typed edits for that same file_path. "
+                "Do not emit conflicting full_file entries for the same file."
             ),
             "items": {
                 "type": "object",
@@ -308,6 +311,10 @@ Produce a typed edit set that implements the hypothesis.
 - If the approved algorithm change requires extra files to be executable, put
   them in `additional_changes`; each item may be exact_replace or full_file and
   will be independently checked.
+- When one file needs multiple small edits, prefer a single file change or
+  serializable `exact_replace` edits for the same `file_path`; each later
+  `old_string` must match the content after earlier same-file edits. Do not
+  emit conflicting `full_file` entries for the same file.
 - Echo the approved hypothesis `mechanism_changes` ids exactly. Do not add or
   drop mechanism ids in the patch response.
 

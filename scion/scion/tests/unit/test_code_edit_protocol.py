@@ -100,6 +100,129 @@ def test_additional_changes_accept_typed_exact_replace() -> None:
     )
 
 
+def test_duplicate_additional_exact_replace_changes_are_composed() -> None:
+    scheduler_before = "def schedule():\n    window = 4\n    penalty = 1\n"
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    digest = source_digest_for_content(scheduler_before)
+    raw = {
+        "file_path": "policies/main.py",
+        "action": "modify",
+        "code_content": "def solve():\n    return None\n",
+        "additional_changes": [
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "window = 4",
+                "new_string": "window = 5",
+                "evidence_refs": ["scheduler-window"],
+            },
+            {
+                "file_path": scheduler_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "penalty = 1",
+                "new_string": "penalty = 2",
+                "evidence_refs": ["scheduler-penalty"],
+            },
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={"patch_source_files": {scheduler_path: scheduler_before}},
+    )
+
+    assert len(patch.additional_changes) == 1
+    assert patch.additional_changes[0].file_path == scheduler_path
+    assert patch.additional_changes[0].code_content == (
+        "def schedule():\n    window = 5\n    penalty = 2\n"
+    )
+    assert any(
+        item.get("repair_kind") == "patch_set_composition"
+        and item.get("file_path") == scheduler_path
+        and item.get("source_json_pointers")
+        == ["/additional_changes/0", "/additional_changes/1"]
+        for item in patch.repair_attribution
+    )
+
+
+def test_duplicate_full_file_conflict_is_rejected_before_schema_loop() -> None:
+    helper_path = "policies/baseline_modules/helper.py"
+    raw = {
+        "file_path": "policies/main.py",
+        "action": "modify",
+        "code_content": "def solve():\n    return None\n",
+        "additional_changes": [
+            {
+                "file_path": helper_path,
+                "action": "modify",
+                "edit_intent": "full_file",
+                "content_after": "VALUE = 1\n",
+            },
+            {
+                "file_path": helper_path,
+                "action": "modify",
+                "edit_intent": "full_file",
+                "content_after": "VALUE = 2\n",
+            },
+        ],
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "patch_edit_protocol" in message
+    assert "full_file_conflict" in message
+    assert "/additional_changes/1" in message
+    assert "additional_changes must not repeat file_path" not in message
+
+
+def test_primary_and_additional_same_file_exact_replace_are_composed() -> None:
+    target_before = "VALUE = 1\nLIMIT = 3\n"
+    digest = source_digest_for_content(target_before)
+    target_path = "policies/baseline_modules/scheduler.py"
+    raw = {
+        "file_path": target_path,
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": digest,
+        "old_string": "VALUE = 1",
+        "new_string": "VALUE = 2",
+        "additional_changes": [
+            {
+                "file_path": target_path,
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": digest,
+                "old_string": "LIMIT = 3",
+                "new_string": "LIMIT = 4",
+            }
+        ],
+    }
+
+    patch = _parse_patch(
+        raw,
+        context={
+            "target_file": target_path,
+            "target_file_code": target_before,
+        },
+    )
+
+    assert patch.file_path == target_path
+    assert patch.additional_changes == ()
+    assert patch.code_content == "VALUE = 2\nLIMIT = 4\n"
+    assert any(
+        item.get("repair_kind") == "patch_set_composition"
+        and item.get("canonical_json_pointer") == "/"
+        and item.get("source_json_pointers") == ["/", "/additional_changes/0"]
+        for item in patch.repair_attribution
+    )
+
+
 def test_full_file_fallback_remains_compatible() -> None:
     legacy = _parse_patch(
         {
