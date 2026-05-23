@@ -151,7 +151,7 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "For targets under `policies/baseline_modules/`, implement the "
-                "complete contents of that branch-owned algorithm module and "
+                "branch-owned algorithm-module change with typed edits and "
                 "integrate with the existing entrypoint; do not add a top-level "
                 "`solve` unless the target module already owns one."
             ),
@@ -163,7 +163,7 @@ class CvrpSolverDesignProvider:
                 "change."
             ),
             (
-                "Default to a compact replacement file: one coherent construction "
+                "Default to a compact target-file change: one coherent construction "
                 "or seeding path, one bounded improvement/search loop, no more "
                 "than two move families, and only the helper functions needed for "
                 "that path."
@@ -346,7 +346,7 @@ class CvrpSolverDesignProvider:
                 "`additional_changes`."
             ),
             (
-                "Hard size target: keep the replacement file around 180 lines "
+                "Hard size target: keep the target-file change around 180 lines "
                 "or less and around six helper functions or fewer unless "
                 "correctness clearly requires slightly more."
             ),
@@ -472,8 +472,9 @@ class CvrpSolverDesignProvider:
     def solver_design_user_constraints(self, context: Any) -> Sequence[str]:
         return (
             (
-                "For solver-design surfaces, return the complete contents of the "
-                "target algorithm module. The active research object is "
+                "For solver-design surfaces, keep the primary patch on the "
+                "target algorithm module and default existing-file changes to "
+                "typed `exact_replace` edits. The active research object is "
                 f"{ACTIVE_SOLVER_DESIGN_PACKAGE}: use focused modules under "
                 "`policies/baseline_modules/` for construction, destroy/repair, "
                 "local search, acceptance, scheduler/runtime allocation, and "

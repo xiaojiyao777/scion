@@ -140,7 +140,7 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     )
     assert "target file should own the mechanism" in rendered_system
     assert "stable runtime contract" in rendered_system
-    assert "Approved Target File Full Current Content" in rendered_prompt
+    assert "Approved Target File Current Content" in rendered_prompt
     assert "Branch-Current Integration Files" in rendered_prompt
     assert "branch_workspace" in rendered_prompt
     assert "smallest necessary wiring edits" in rendered_prompt
@@ -167,7 +167,10 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "from_cvrp_solution" in rendered_system
     assert "context.make_solution(solution.routes_as_tuples())" in rendered_system
     assert "Do not edit `policies/baseline_modules/state.py`" in rendered_prompt
-    assert "complete contents of the target algorithm module" in rendered_prompt
+    assert "return complete contents" not in rendered_prompt
+    assert "complete contents of the target algorithm module" not in rendered_prompt
+    assert "default existing-file changes to typed `exact_replace` edits" in rendered_prompt
+    assert "Do not use `full_file` just because" in rendered_prompt
     assert "Solver-Design Module API Manifest" in rendered_prompt
     assert "_clarke_wright_savings" in rendered_prompt
     assert "may only import exact new symbols from .destroy_repair" in rendered_prompt

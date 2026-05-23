@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from scion.contract.gate import ContractGate
 from scion.proposal.edit_protocol import (
+    build_patch_edit_source_manifest,
     normalize_patch_typed_edits,
     source_digest_for_content,
 )
 from scion.proposal.engine import ProposalValidationError, _parse_patch
 from scion.proposal.engine.code_prompts import _split_code_context
+from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA
+from scion.tests.contract_test_support import make_spec
 
 
 def test_exact_replace_normalizes_to_content_after_and_patch_content() -> None:
@@ -39,6 +45,99 @@ def test_exact_replace_normalizes_to_content_after_and_patch_content() -> None:
     assert attribution[0]["edit_intent"] == "exact_replace"
     assert attribution[0]["derived_diff_ref"].startswith("typed-edit-diff:")
     assert attribution[0]["evidence_refs"] == ["obs-target"]
+
+
+def test_markdown_wrapped_target_file_code_uses_raw_source_digest() -> None:
+    raw_source = "VALUE = 1\n"
+    wrapped_source = f"File: policies/example.py\n```python\n{raw_source}```"
+    manifest = build_patch_edit_source_manifest(
+        {
+            "target_file": "policies/example.py",
+            "target_file_code": wrapped_source,
+        }
+    )
+
+    assert source_digest_for_content(raw_source) in manifest
+    assert source_digest_for_content(wrapped_source) not in manifest
+
+
+def test_parse_patch_exact_replace_with_wrapped_target_uses_raw_code() -> None:
+    raw_source = "VALUE = 1\n"
+    wrapped_source = f"File: policies/example.py\n```python\n{raw_source}```"
+    raw_digest = source_digest_for_content(raw_source)
+
+    patch = _parse_patch(
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": raw_digest,
+            "old_string": "VALUE = 1",
+            "new_string": "VALUE = 2",
+        },
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": wrapped_source,
+        },
+    )
+    result = ContractGate(
+        make_spec(editable=("policies/*.py",), import_whitelist=())
+    ).validate_patch(patch)
+    c6 = next(check for check in result.checks if check.name == "C6_ast_syntax")
+
+    assert patch.code_content == "VALUE = 2\n"
+    assert "```python" not in patch.code_content
+    assert c6.passed
+
+
+def test_wrapped_source_fallbacks_accept_malformed_and_raw_text() -> None:
+    raw_source = "VALUE = 1\n"
+    raw_digest = source_digest_for_content(raw_source)
+    malformed = "File: policies/example.py\n```python\nVALUE = 1\n"
+
+    malformed_manifest = build_patch_edit_source_manifest(
+        {
+            "target_file": "policies/example.py",
+            "target_file_code": malformed,
+        }
+    )
+    raw_manifest = build_patch_edit_source_manifest(
+        {
+            "target_file": "policies/example.py",
+            "target_file_code": raw_source,
+        }
+    )
+
+    assert raw_digest in malformed_manifest
+    assert source_digest_for_content(malformed) not in malformed_manifest
+    assert raw_digest in raw_manifest
+
+
+def test_prompt_manifest_digest_matches_displayed_target_raw_content() -> None:
+    raw_source = "VALUE = 1\n"
+    wrapped_source = f"File: policies/example.py\n```python\n{raw_source}```"
+    _, prompt = _split_code_context(
+        {
+            "problem_summary": "Example problem",
+            "hypothesis_detail": "Change one constant.",
+            "target_file": "policies/example.py",
+            "target_file_code": wrapped_source,
+            "operator_interface_spec": "Expose module constants.",
+            "import_whitelist": "- math",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "data/**",
+        }
+    )
+    displayed = re.search(
+        r"File: policies/example.py\n```python\n(?P<source>.*?)```",
+        prompt,
+        re.DOTALL,
+    )
+
+    assert displayed is not None
+    displayed_source = displayed.group("source")
+    assert source_digest_for_content(displayed_source) in prompt
+    assert source_digest_for_content(wrapped_source) not in prompt
 
 
 def test_exact_replace_rejects_stale_source_digest() -> None:
@@ -259,7 +358,98 @@ def test_rendered_code_prompt_prefers_typed_edits_not_mandatory_full_file() -> N
         }
     )
 
-    assert "Prefer `edit_intent: exact_replace`" in prompt
+    assert "default to `edit_intent: exact_replace`" in prompt
     assert "Do not emit unified diffs" in prompt
     assert '"code_content": "<complete file contents>"' not in prompt
     assert "code_content" not in prompt or "Legacy `code_content`" in prompt
+
+
+def test_previous_patch_retry_context_omits_full_file_bodies() -> None:
+    previous_body = (
+        "def apply(context):\n"
+        "    context.record_iteration('mechanism_x', 1)\n"
+        + "    value += 1\n" * 1400
+    )
+    old_text = "def apply(context):\n    return 1\n" + "# old\n" * 300
+    new_text = (
+        "def apply(context):\n"
+        "    context.record_iteration('mechanism_x', 1)\n"
+        "    return 2\n"
+        + "# new\n" * 300
+    )
+
+    _, prompt = _split_code_context(
+        {
+            "problem_summary": "Example problem",
+            "hypothesis_detail": "Repair telemetry.",
+            "target_file": "policies/example.py",
+            "target_file_code": "def apply(context):\n    return 1\n",
+            "operator_interface_spec": "Expose apply(context).",
+            "import_whitelist": "- math",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "data/**",
+            "prior_code_failure": "algorithm smoke telemetry failure",
+            "previous_patch": {
+                "file_path": "policies/example.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(
+                    "def apply(context):\n    return 1\n"
+                ),
+                "old_string": old_text,
+                "new_string": new_text,
+                "content_after": previous_body,
+                "code_content": previous_body,
+                "derived_diff_ref": "typed-edit-diff:abc123",
+                "additional_changes": [
+                    {
+                        "file_path": "policies/helper.py",
+                        "action": "modify",
+                        "edit_intent": "full_file",
+                        "content_after": "VALUE = 1\n" * 2000,
+                        "full_file_reason": "helper module rewrite",
+                    }
+                ],
+            },
+        }
+    )
+    previous_section = prompt.split("## Hypothesis to Implement", maxsplit=1)[0]
+
+    assert "Previous Patch Attempt" in previous_section
+    assert '"code_content"' not in previous_section
+    assert '"content_after"' not in previous_section
+    assert "    value += 1\n" * 20 not in previous_section
+    assert "legacy_full_file_sha256" in previous_section
+    assert "result_content_sha256" in previous_section
+    assert "old_string_snippet" in previous_section
+    assert "new_string_snippet" in previous_section
+    assert "typed-edit-diff:abc123" in previous_section
+    assert "context.record_iteration('mechanism_x', ...)" in previous_section
+    assert len(previous_section) < 8000
+
+
+def test_patch_schema_keeps_legacy_code_content_supported_without_encouraging_it() -> None:
+    properties = PATCH_PROPOSAL_SCHEMA["properties"]
+
+    assert "code_content" in properties
+    assert "full_file_reason" in properties
+    code_content_description = properties["code_content"]["description"].lower()
+    assert "compatibility" in code_content_description
+    assert "exact_replace" in code_content_description
+
+    _, prompt = _split_code_context(
+        {
+            "problem_summary": "Example problem",
+            "hypothesis_detail": "Change one constant.",
+            "target_file": "policies/example.py",
+            "target_file_code": "VALUE = 1\n",
+            "operator_interface_spec": "Expose module constants.",
+            "import_whitelist": "- math",
+            "editable_patterns": "policies/*.py",
+            "frozen_patterns": "data/**",
+        }
+    )
+
+    assert '"code_content":' not in prompt
+    assert "compatibility fallback" in prompt
+    assert '"full_file_reason"' in prompt

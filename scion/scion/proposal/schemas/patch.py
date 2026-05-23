@@ -27,6 +27,7 @@ class PatchFileChangeInput(BaseModel):
     new_string: Optional[str] = None
     replace_all: bool = False
     content_after: Optional[str] = None
+    full_file_reason: Optional[str] = None
     derived_diff_ref: Optional[str] = None
     evidence_refs: list[str] = Field(default_factory=list)
     test_hint: Optional[str] = None
@@ -68,6 +69,7 @@ class PatchProposalInput(BaseModel):
     new_string: Optional[str] = None
     replace_all: bool = False
     content_after: Optional[str] = None
+    full_file_reason: Optional[str] = None
     derived_diff_ref: Optional[str] = None
     evidence_refs: list[str] = Field(default_factory=list)
     test_hint: Optional[str] = None
@@ -157,9 +159,10 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "enum": ["exact_replace", "full_file"],
             "description": (
-                "Use exact_replace for small edits to an existing file. Use "
-                "full_file for creates, deletes, or complex rewrites. Omit for "
-                "legacy full-file code_content responses."
+                "Default to exact_replace for action=modify on an existing "
+                "file. Use full_file only for creates, deletes, or explicitly "
+                "justified larger rewrites. Omit for legacy full-file "
+                "code_content responses."
             ),
         },
         "source_digest": {
@@ -194,11 +197,19 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "fills this for exact_replace before Contract/Workspace."
             ),
         },
+        "full_file_reason": {
+            "type": ["string", "null"],
+            "description": (
+                "Brief justification when edit_intent=full_file. Omit or leave "
+                "empty for exact_replace."
+            ),
+        },
         "code_content": {
             "type": "string",
             "description": (
-                "Legacy complete file content. For new full_file responses, "
-                "prefer content_after; code_content remains supported."
+                "Legacy complete file content. Supported for compatibility, "
+                "but new responses should use typed exact_replace for modify "
+                "actions or content_after for justified full_file changes."
             ),
         },
         "derived_diff_ref": {
@@ -246,6 +257,7 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                     "new_string": {"type": ["string", "null"]},
                     "replace_all": {"type": "boolean"},
                     "content_after": {"type": ["string", "null"]},
+                    "full_file_reason": {"type": ["string", "null"]},
                     "code_content": {"type": "string"},
                     "derived_diff_ref": {"type": ["string", "null"]},
                     "evidence_refs": {
@@ -304,8 +316,8 @@ Produce a typed edit set that implements the hypothesis.
 - Preserve all feasibility, consistency, and determinism invariants described there
 - For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or original if no valid move found
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
-- Prefer `edit_intent="exact_replace"` for small changes to existing files. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
-- Use `edit_intent="full_file"` with `content_after` only for creates, deletes, or complex rewrites. Legacy `code_content` full-file output is still accepted as fallback.
+- For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
+- Use `edit_intent="full_file"` with `content_after` only for creates, deletes, or explicitly justified larger rewrites. Include `full_file_reason` when using full_file. Legacy `code_content` full-file output is still accepted only as a compatibility fallback.
 - Do not emit unified diffs; Scion derives audit diffs from host before/after content.
 - If action is "delete", use `edit_intent="full_file"` and set `content_after` to an empty string ""
 - If the approved algorithm change requires extra files to be executable, put
@@ -330,6 +342,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
   "new_string": "<replacement text for exact_replace>",
   "replace_all": false,
   "content_after": "<complete file contents for full_file, otherwise omit>",
+  "full_file_reason": "<required when edit_intent is full_file, otherwise empty>",
   "evidence_refs": ["<observation/source ref>"],
   "additional_changes": [
     {{
@@ -341,6 +354,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
       "new_string": "<replacement text>",
       "replace_all": false,
       "content_after": "<complete file contents only for full_file>",
+      "full_file_reason": "<required when edit_intent is full_file>",
       "evidence_refs": ["<observation/source ref>"]
     }}
   ],
@@ -355,7 +369,7 @@ FIX_PROMPT_TEMPLATE = """\
 You are a software engineer fixing an optimisation research-surface file that failed verification.
 Correct the code so it passes, while preserving the intended logic. Prefer a
 small typed exact_replace edit when possible; use full_file only when the
-repair is a larger rewrite.
+repair is a larger rewrite and include full_file_reason.
 
 ## Problem Summary
 {problem_summary}
@@ -395,6 +409,7 @@ Respond with a single JSON object (no markdown fences, no extra text):
   "new_string": "<replacement text for exact_replace>",
   "replace_all": false,
   "content_after": "<complete corrected file contents only for full_file>",
+  "full_file_reason": "<required when edit_intent is full_file, otherwise empty>",
   "additional_changes": [],
   "test_hint": "<optional note, or null>"
 }}

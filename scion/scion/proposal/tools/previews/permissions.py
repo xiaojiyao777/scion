@@ -167,7 +167,7 @@ class InterfacePreviewTool(_BaseReadOnlyTool):
         }
         from scion.proposal.tools.previews.schema import _schema_preview_patch_payload
 
-        patch_preview = _schema_preview_patch_payload(patch_payload)
+        patch_preview = _schema_preview_patch_payload(patch_payload, context)
         if not patch_preview["passed"]:
             payload = {
                 "passed": False,

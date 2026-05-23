@@ -76,8 +76,9 @@ def _solver_design_code_rules_section(
     if not lines:
         lines = [
             (
-                "Implement a complete solver-design algorithm body for the "
-                "approved target rather than a lifecycle/config dictionary."
+                "Implement the approved solver-design algorithm-body change "
+                "with typed edits to the approved target rather than a "
+                "lifecycle/config dictionary."
             ),
             (
                 "Keep the patch to one executable algorithm slice with explicit "
@@ -108,8 +109,9 @@ def _solver_design_user_constraints(
     if not lines:
         lines = [
             (
-                "For solver-design surfaces, return the complete contents of the "
-                "approved target algorithm module."
+                "For solver-design surfaces, keep the top-level patch on the "
+                "approved target algorithm module and default existing-file "
+                "changes to typed `exact_replace` edits."
             ),
             (
                 "If the approved solver-design change requires more than one file "
@@ -178,7 +180,7 @@ def _solver_design_scope_control_section(
     if not lines:
         lines = [
             "Scion controls the research boundary; the code agent should still write a real algorithm, but this patch must be small enough to generate, review, preview, and screen.",
-            "Implement one primary mechanism now and keep the replacement file compact.",
+            "Implement one primary mechanism now and keep the target-file change compact.",
             "If the approved solver-design change needs more than one file, keep the top-level `file_path` on the approved target and put minimal executable wiring in `additional_changes`.",
             "Every search loop must have explicit finite bounds and should use the provided context time-budget helpers where available.",
             "Record movement evidence through the selected surface telemetry helpers where the interface supports them.",

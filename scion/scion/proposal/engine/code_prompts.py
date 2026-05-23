@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Dict
 
@@ -170,8 +171,9 @@ def _split_code_context(
     if is_solver_design_surface:
         champion_text = (
             "## Current Champion Research Code\n"
-            "The approved solver-design target file is provided in full in the "
-            "`Target File` section below. Legacy component policies may be "
+            "The approved solver-design target file is provided as current "
+            "source in the `Target File` section below so typed edits can cite "
+            "exact source text and digests. Legacy component policies may be "
             "implementation context, but they are not the research object for "
             "this patch; follow the problem object, interface specification, "
             "and target file instead of copying lifecycle/config tables."
@@ -212,7 +214,7 @@ def _split_code_context(
         f"{previous_patch_section}"
         f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
         f"{solver_design_api_manifest_section}"
-        f"## Approved Target File Full Current Content\n{D['target_file_code']}\n\n"
+        f"## Approved Target File Current Content\n{D['target_file_code']}\n\n"
         f"## Patch Edit Source Digests\n{edit_source_manifest}\n\n"
         f"{solver_design_integration_files_section}"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
@@ -227,12 +229,15 @@ def _split_code_context(
         f"- Preserve all feasibility, consistency, and determinism invariants described there\n"
         f"- For operator surfaces, use the provided `rng` argument for all randomness and return the new solution/artifact, or the original if no valid move is found\n"
         f"- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds\n\n"
-        f"- Prefer `edit_intent: exact_replace` for small changes to existing files. "
-        f"Use the exact `source_digest` shown above plus exact `old_string`, "
-        f"`new_string`, and `replace_all`.\n"
-        f"- Use `edit_intent: full_file` with `content_after` for creates, deletes, "
-        f"or complex rewrites. Legacy `code_content` full-file output remains "
-        f"accepted as fallback.\n"
+        f"- For existing `action: modify` files, default to "
+        f"`edit_intent: exact_replace`. Use the exact `source_digest` shown "
+        f"above plus exact `old_string`, `new_string`, and `replace_all`.\n"
+        f"- Use `edit_intent: full_file` with `content_after` only for "
+        f"creates, deletes, or an explicitly justified larger rewrite. Include "
+        f"`full_file_reason` when using `full_file`. Legacy `code_content` "
+        f"full-file output remains accepted only as a compatibility fallback.\n"
+        f"- Do not use `full_file` just because the current target source is "
+        f"shown in the prompt.\n"
         f"- When one file needs multiple small edits, prefer one file change or "
         f"serializable `exact_replace` edits for that same `file_path`; each "
         f"later `old_string` must match the content after earlier same-file "
@@ -252,6 +257,7 @@ def _split_code_context(
         f'  "new_string": "<replacement text for exact_replace>",\n'
         f'  "replace_all": false,\n'
         f'  "content_after": "<complete file contents only for full_file>",\n'
+        f'  "full_file_reason": "<required when edit_intent is full_file, otherwise empty>",\n'
         f'  "evidence_refs": ["<observation/source ref>"],\n'
         f'  "additional_changes": [{{"file_path": "<relative path>", '
         f'"action": "modify" | "create" | "delete", '
@@ -261,6 +267,7 @@ def _split_code_context(
         f'"new_string": "<replacement text>", '
         f'"replace_all": false, '
         f'"content_after": "<complete file contents only for full_file>", '
+        f'"full_file_reason": "<required when edit_intent is full_file>", '
         f'"evidence_refs": ["<observation/source ref>"]}}],\n'
         f'  "test_hint": "<optional note, or null>"\n'
         f"}}\n"
@@ -286,6 +293,7 @@ def _previous_patch_prompt_section(value: Any) -> str:
         if telemetry_summary
         else ""
     )
+    compact_previous = _compact_previous_patch_attempt(value, digest_string=True)
     return (
         "## Previous Patch Attempt\n"
         "This is the immediately previous generated patch attempt. Repair it "
@@ -293,8 +301,83 @@ def _previous_patch_prompt_section(value: Any) -> str:
         "mechanism ids, and telemetry records that already addressed earlier "
         "feedback, unless the current failure explicitly says they are wrong.\n\n"
         f"{telemetry_section}"
-        f"{_bounded_json(value, 32000)}\n\n"
+        f"{_bounded_json(compact_previous, 6000)}\n\n"
     )
+
+
+def _compact_previous_patch_attempt(value: Any, *, digest_string: bool = False) -> Any:
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in {"code_content", "content_after"}:
+                digest_prefix = (
+                    "legacy_full_file" if key == "code_content" else "result_content"
+                )
+                compact.update(_content_digest_fields(digest_prefix, item))
+                continue
+            if key in {"old_string", "new_string"}:
+                compact[f"{key}_snippet"] = _snippet_text(item)
+                compact.update(_content_digest_fields(key, item))
+                continue
+            if key == "additional_changes" and isinstance(item, list):
+                compact[key] = [
+                    _compact_previous_patch_attempt(change)
+                    for change in item[:6]
+                    if isinstance(change, dict)
+                ]
+                if len(item) > 6:
+                    compact["additional_changes_omitted"] = len(item) - 6
+                continue
+            if key == "mechanism_changes" and isinstance(item, list):
+                compact[key] = item[:8]
+                if len(item) > 8:
+                    compact["mechanism_changes_omitted"] = len(item) - 8
+                continue
+            if key == "repair_attribution" and isinstance(item, list):
+                compact[key] = [
+                    _compact_previous_patch_attempt(entry)
+                    for entry in item[:8]
+                    if isinstance(entry, dict)
+                ]
+                if len(item) > 8:
+                    compact["repair_attribution_omitted"] = len(item) - 8
+                continue
+            compact[key] = _compact_previous_patch_attempt(item)
+        return compact
+    if isinstance(value, list):
+        compact_items = [
+            _compact_previous_patch_attempt(item, digest_string=digest_string)
+            for item in value[:8]
+        ]
+        if len(value) > 8:
+            compact_items.append({"items_omitted": len(value) - 8})
+        return compact_items
+    if isinstance(value, str):
+        if not digest_string:
+            return _snippet_text(value)
+        return {
+            "text_snippet": _snippet_text(value),
+            **_content_digest_fields("text", value),
+        }
+    return value
+
+
+def _content_digest_fields(prefix: str, value: Any) -> dict[str, Any]:
+    if not isinstance(value, str):
+        return {}
+    return {
+        f"{prefix}_char_count": len(value),
+        f"{prefix}_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+        f"{prefix}_raw_omitted": True,
+    }
+
+
+def _snippet_text(value: Any, max_chars: int = 600) -> str:
+    text = str(value or "")
+    if len(text) <= max_chars:
+        return text
+    suffix = "\n... <truncated previous patch snippet>"
+    return text[: max(0, max_chars - len(suffix))] + suffix
 
 
 def _previous_patch_telemetry_summary(value: Any) -> str:
@@ -327,15 +410,23 @@ def _previous_patch_text(value: Any) -> str:
         return value
     if isinstance(value, dict):
         chunks: list[str] = []
-        for key in ("code_content", "file_path", "action"):
+        for key in (
+            "code_content",
+            "content_after",
+            "old_string",
+            "new_string",
+            "file_path",
+            "action",
+        ):
             item = value.get(key)
             if item:
                 chunks.append(str(item))
         for item in value.get("additional_changes") or []:
             if isinstance(item, dict):
-                code = item.get("code_content")
-                if code:
-                    chunks.append(str(code))
+                for key in ("code_content", "content_after", "old_string", "new_string"):
+                    code = item.get(key)
+                    if code:
+                        chunks.append(str(code))
         return "\n".join(chunks)
     if isinstance(value, list):
         return "\n".join(_previous_patch_text(item) for item in value)

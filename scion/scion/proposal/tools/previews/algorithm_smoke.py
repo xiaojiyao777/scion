@@ -148,7 +148,7 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             payload["passed"] = payload["passed"] and bool(hypothesis_preview["passed"])
 
         if args.patch is not None:
-            patch_preview = _schema_preview_patch_payload(args.patch)
+            patch_preview = _schema_preview_patch_payload(args.patch, context)
             if patch_preview["passed"]:
                 result = gate.validate_patch(
                     patch_preview["patch_object"],

@@ -1,5 +1,7 @@
 """Focused tests split from test_agentic_proposal_tools_schema.py."""
 
+from scion.proposal.edit_protocol import source_digest_for_content
+
 from .agentic_schema_test_support import *  # noqa: F401,F403
 
 def test_draft_patch_returns_artifact_without_workspace_write(tmp_path: Path) -> None:
@@ -148,6 +150,42 @@ def test_contract_preview_is_static_and_does_not_materialize_workspace(
     assert observation.structured_payload["protocol_run"] is False
     assert observation.structured_payload["decision_run"] is False
     assert after == before
+
+
+def test_contract_preview_expands_typed_exact_replace_to_raw_code_content(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    source_path = tmp_path / "champion" / "policies" / "search_policy.py"
+    raw_source = source_path.read_text(encoding="utf-8")
+    patch_payload = {
+        "file_path": "policies/search_policy.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(raw_source),
+        "old_string": "return 0.50",
+        "new_string": "return 0.35",
+    }
+
+    observation = registry.call(
+        "proposal.contract_preview",
+        {
+            "hypothesis": _valid_hypothesis_payload(),
+            "patch": patch_payload,
+        },
+        context,
+    )
+    patch_preview = observation.structured_payload["patch"]["patch"]
+
+    assert observation.is_error is False
+    assert patch_preview["code_digest"] == source_digest_for_content(
+        raw_source.replace("return 0.50", "return 0.35", 1)
+    )
+    assert all(
+        check["name"] != "C6_ast_syntax" or check["passed"]
+        for check in observation.structured_payload["patch"]["checks"]
+    )
 
 
 def test_contract_preview_patch_payload_is_compact_without_code_content(

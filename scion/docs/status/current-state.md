@@ -52,17 +52,14 @@ the provider still returned 403 balance errors, but Scion stopped after one
 proposal attempt with `circuit_breaker_tripped=false`, confirming the fatal-stop
 behavior.
 
-Deferred code-phase protocol item: the current `generate_patch` path still
-expects full replacement file content for modified files. This is compatible
-with Sonnet but expensive and poorly suited to DeepSeek V4 Pro under
-non-streaming tool-call code generation. After the current validation round,
-design a v3-compatible patch-edit protocol: models may submit a typed edit set
-or unified diff for branch-owned files, while Scion applies edits
-deterministically, records the patch artifact, runs the same Contract,
-Verification, Protocol, and Decision chain, and keeps full-file output as a
-fallback for file creation or failed structured edits. This must remain
-problem-agnostic in core; problem packages may only validate problem-specific
-patch semantics through declared hooks.
+The former code-phase protocol gap is now partially closed: model-facing code
+generation can submit typed `exact_replace` edits for existing files while Scion
+still canonicalizes to full after-content before Contract, Verification,
+Protocol, Workspace, and Decision. Unified diff input remains deferred, and
+full-file output remains a compatibility fallback for creates, deletes, or
+explicitly justified larger rewrites. This stays problem-agnostic in core;
+problem packages may only validate problem-specific patch semantics through
+declared hooks.
 
 The 2026-05-23 APS context/tooling repair addresses the two deferred issues from
 the current-resume Sonnet validation. The active-solver file-read guard is no
@@ -141,6 +138,25 @@ composition metadata, including the case where the top-level target and
 entries, mixed create/delete sequences, or non-serializable `exact_replace`
 edits now fail with a short structured protocol error instead of falling into
 the old duplicate-file-path schema retry loop.
+
+The follow-up 2026-05-23 P0 repair separates markdown display blocks from the
+patch/edit raw-source map. `target_file_code`, `original_code`, integration
+file blocks, and preview source reads now feed raw Python content into
+`build_patch_edit_source_manifest`, `_parse_patch`, contract preview, and
+algorithm smoke typed-edit expansion; markdown wrappers such as
+`File: path` plus a Python code fence are no longer hashed or written to canonical
+`code_content`. C6 syntax failures now include a compact `source_excerpt` so a
+future wrapper regression is visible to the code agent without exposing large
+file bodies.
+
+The same-day APS prompt repair reduces solver-design full-file pressure without
+changing the host normalizer. Solver-design code prompts no longer ask agents to
+return complete target-module contents; existing `modify` actions now default to
+typed `exact_replace`, while `full_file` is framed as create/delete or a
+justified larger rewrite with `full_file_reason`. Retry prompts now render a
+compact previous-patch summary: file/action/intent metadata, old/new snippets,
+audit refs, and content digests/lengths, with host-normalized `code_content` and
+`content_after` bodies omitted from the model-facing retry context.
 
 As part of this repair, `scion.proposal.schemas` was split from a single
 near-1000-line module into a package facade with focused hypothesis, patch,
@@ -884,11 +900,11 @@ single static code response. Treat this as an APS code-generation scope
 failure, not a reason to return to component-policy exposure.
 
 Current repair: solver-design code generation now defaults to a compact
-whole-algorithm implementation shape. The prompt asks for one construction or
-seeding path plus one bounded improvement/search loop, discourages preserving
-or expanding the branch-owned ALNS/VNS-style algorithm body unless the change
-is material, and explicitly allows the replacement file to be much shorter
-than the current implementation.
+target-file change shape. The prompt asks for one construction or seeding path
+plus one bounded improvement/search loop, discourages preserving or expanding
+the branch-owned ALNS/VNS-style algorithm body unless the change is material,
+and allows the target-file change to be much shorter than the current
+implementation.
 When final patch generation times out, APS performs one semantic retry inside
 the same session with `code_generation_mode=compact_timeout_retry`, injects
 `prior_code_failure=code_generation_timeout`, tightens problem/interface/

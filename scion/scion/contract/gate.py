@@ -70,6 +70,22 @@ _LEGACY_PROBLEM_SCALE_NAMES = frozenset(
     }
 )
 
+
+def _syntax_source_excerpt(source: str, *, max_lines: int = 5) -> str:
+    lines = str(source or "").splitlines()
+    if not lines:
+        return "<empty>"
+    excerpt: list[str] = []
+    for index, line in enumerate(lines[:max_lines], start=1):
+        compact = line[:120]
+        if len(line) > 120:
+            compact += "..."
+        excerpt.append(f"{index}: {compact!r}")
+    if len(lines) > max_lines:
+        excerpt.append("...")
+    return " | ".join(excerpt)
+
+
 class ContractGate:
     """Static gate that validates proposals before any code is executed."""
 
@@ -343,7 +359,11 @@ class ContractGate:
             compile(tree, filename, "exec")
             return _cr("C6_ast_syntax", True, "light", "syntax ok", t0)
         except SyntaxError as e:
-            return _cr("C6_ast_syntax", False, "light", f"SyntaxError: {e}", t0)
+            detail = (
+                f"SyntaxError: {e}; "
+                f"source_excerpt={_syntax_source_excerpt(patch.code_content)}"
+            )
+            return _cr("C6_ast_syntax", False, "light", detail, t0)
 
     # ------------------------------------------------------------------
     # C7: Interface signature — validate the active research-surface interface.

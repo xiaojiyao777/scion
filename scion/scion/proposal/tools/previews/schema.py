@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
 
 from pydantic import ValidationError
@@ -15,7 +16,15 @@ from scion.core.models import (
     mechanism_changes,
     patch_file_changes,
 )
-from scion.proposal.schemas import HypothesisProposalInput, PatchProposalInput
+from scion.proposal.edit_protocol import (
+    PatchEditProtocolError,
+    normalize_patch_typed_edits,
+)
+from scion.proposal.schemas import (
+    HypothesisProposalInput,
+    PatchProposalInput,
+    normalize_patch_output_with_repair_attribution,
+)
 from scion.proposal.tools.base import _BaseReadOnlyTool
 from scion.proposal.tools.models import (
     DraftHypothesisInput,
@@ -193,7 +202,7 @@ class SchemaPreviewTool(_BaseReadOnlyTool):
                 payload["hypothesis"]["passed"]
             )
         if args.patch is not None:
-            payload["patch"] = _schema_preview_patch_payload(args.patch)
+            payload["patch"] = _schema_preview_patch_payload(args.patch, context)
             payload["passed"] = payload["passed"] and bool(payload["patch"]["passed"])
         payload = _drop_internal_preview_objects(payload)
         summary = _schema_preview_summary(payload)
@@ -348,15 +357,23 @@ def _hypothesis_preview_summary(
         }
     )
 
-def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
+def _schema_preview_patch_payload(
+    raw: Mapping[str, Any],
+    context: ProposalToolContext | None = None,
+) -> dict[str, Any]:
     try:
-        payload = dict(raw)
+        payload = _normalized_patch_payload_for_preview(raw, context)
         payload.pop("repair_attribution", None)
         validated = DraftPatchInput.model_validate(payload)
     except ValidationError as exc:
         return {
             "passed": False,
             "errors": exc.errors(include_url=False),
+        }
+    except PatchEditProtocolError as exc:
+        return {
+            "passed": False,
+            "errors": [{"loc": ("patch_edit_protocol",), "msg": str(exc)}],
         }
     patch = _patch_from_input(validated)
     path_errors = []
@@ -382,6 +399,78 @@ def _schema_preview_patch_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
         "patch": patch_summary,
         "patch_object": patch,
     }
+
+
+def _normalized_patch_payload_for_preview(
+    raw: Mapping[str, Any],
+    context: ProposalToolContext | None,
+) -> dict[str, Any]:
+    payload, _ = normalize_patch_output_with_repair_attribution(dict(raw))
+    payload, _ = normalize_patch_typed_edits(
+        payload,
+        context=_patch_edit_context_for_preview(payload, context),
+    )
+    return payload
+
+
+def _patch_edit_context_for_preview(
+    raw: Mapping[str, Any],
+    context: ProposalToolContext | None,
+) -> dict[str, Any]:
+    if context is None:
+        return {}
+    source_files: dict[str, str] = {}
+    for path in _patch_payload_paths(raw):
+        content = _read_preview_source_file(context, path)
+        if content is not None:
+            source_files[path] = content
+    return {"patch_source_files": source_files} if source_files else {}
+
+
+def _patch_payload_paths(raw: Mapping[str, Any]) -> list[str]:
+    paths: list[str] = []
+    primary = (
+        str(raw.get("file_path") or "")
+        .replace("\\", "/")
+        .lstrip("/")
+        .strip()
+    )
+    if primary:
+        paths.append(primary)
+    additional = raw.get("additional_changes")
+    if isinstance(additional, list):
+        for item in additional:
+            if not isinstance(item, Mapping):
+                continue
+            path = (
+                str(item.get("file_path") or "")
+                .replace("\\", "/")
+                .lstrip("/")
+                .strip()
+            )
+            if path and path not in paths:
+                paths.append(path)
+    return paths
+
+
+def _read_preview_source_file(
+    context: ProposalToolContext,
+    file_path: str,
+) -> str | None:
+    for root in (
+        getattr(context, "branch_workspace", None),
+        _attr(context.champion, "code_snapshot_path"),
+    ):
+        root_text = str(root or "").strip()
+        if not root_text:
+            continue
+        candidate = Path(root_text).expanduser() / file_path
+        try:
+            if candidate.is_file() and not candidate.is_symlink():
+                return candidate.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return None
 
 def _hypothesis_schema_preview(
     context: ProposalToolContext,

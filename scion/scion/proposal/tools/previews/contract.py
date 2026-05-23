@@ -82,7 +82,7 @@ class ContractPreviewTool(_BaseReadOnlyTool):
             payload["hypothesis"] = hypothesis_preview
             payload["passed"] = payload["passed"] and bool(hypothesis_preview["passed"])
         if args.patch is not None:
-            patch_preview = _schema_preview_patch_payload(args.patch)
+            patch_preview = _schema_preview_patch_payload(args.patch, context)
             if patch_preview["passed"]:
                 hypothesis_object = None
                 if (

@@ -12,12 +12,23 @@ from typing import Any, Mapping
 
 
 _SOURCE_FILE_RE = re.compile(
-    r"^### (?P<path>[^\n]+)\n"
+    r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
+    r"(?:\s+\([^\n]*\))?\n"
     r"(?:[^\n]*\n)*?"
-    r"```(?:python)?\n"
+    r"```(?:python|py)?\n"
     r"(?P<content>.*?)"
-    r"\n```",
+    r"(?P<terminal_newline>\n)```",
     re.DOTALL | re.MULTILINE,
+)
+
+_FENCED_SOURCE_RE = re.compile(
+    r"^\s*```(?:python|py)?\n(?P<content>.*?)(?P<terminal_newline>\n)```\s*$",
+    re.DOTALL,
+)
+
+_LOOSE_FILE_SOURCE_RE = re.compile(
+    r"^\s*File:\s*(?P<path>[^\n]+?)\n```(?:python|py)?\n(?P<content>.*)\Z",
+    re.DOTALL,
 )
 
 
@@ -672,12 +683,21 @@ def _source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, s
         value = context.get(key)
         if isinstance(value, Mapping):
             for path, content in value.items():
-                if isinstance(content, str):
-                    source_files[_normalize_path(path)] = content
+                normalized_path = _normalize_path(path)
+                source = _source_text_from_context_value(
+                    content,
+                    expected_path=normalized_path,
+                )
+                if normalized_path and source is not None:
+                    source_files[normalized_path] = source
     target_file = _normalize_path(context.get("target_file"))
     target_content = context.get("target_file_code")
-    if target_file and _is_existing_source_text(target_content):
-        source_files[target_file] = str(target_content)
+    target_source = _source_text_from_context_value(
+        target_content,
+        expected_path=target_file,
+    )
+    if target_file and target_source is not None:
+        source_files[target_file] = target_source
     original_code = context.get("original_code")
     if isinstance(original_code, str):
         source_files.update(_parse_original_code_source(original_code))
@@ -691,28 +711,51 @@ def _parse_markdown_source_files(rendered: str) -> dict[str, str]:
     files: dict[str, str] = {}
     for match in _SOURCE_FILE_RE.finditer(rendered):
         path = _normalize_path(match.group("path"))
-        content = match.group("content")
+        content = match.group("content") + match.group("terminal_newline")
         if path:
             files[path] = content
     return files
 
 
 def _parse_original_code_source(rendered: str) -> dict[str, str]:
-    match = re.search(
-        r"^File:\s*(?P<path>[^\n]+)\n"
-        r"(?:[^\n]*\n)*?"
-        r"```(?:python)?\n"
-        r"(?P<content>.*?)"
-        r"\n```",
-        rendered,
-        re.DOTALL | re.MULTILINE,
-    )
-    if not match:
-        return {}
-    path = _normalize_path(match.group("path"))
-    if not path:
-        return {}
-    return {path: match.group("content")}
+    return _parse_markdown_source_files(rendered)
+
+
+def _source_text_from_context_value(
+    value: Any,
+    *,
+    expected_path: str = "",
+) -> str | None:
+    if not _is_existing_source_text(value):
+        return None
+    text = str(value)
+    markdown_sources = _parse_markdown_source_files(text)
+    normalized_expected = _normalize_path(expected_path)
+    if normalized_expected and normalized_expected in markdown_sources:
+        return markdown_sources[normalized_expected]
+    if not normalized_expected and len(markdown_sources) == 1:
+        return next(iter(markdown_sources.values()))
+
+    fenced = _FENCED_SOURCE_RE.match(text)
+    if fenced:
+        return fenced.group("content") + fenced.group("terminal_newline")
+
+    loose = _LOOSE_FILE_SOURCE_RE.match(text)
+    if loose:
+        path = _normalize_path(loose.group("path"))
+        if not normalized_expected or path == normalized_expected:
+            return _strip_trailing_fence(loose.group("content"))
+
+    return text
+
+
+def _strip_trailing_fence(value: str) -> str:
+    text = str(value)
+    stripped = text.rstrip()
+    if stripped.endswith("```"):
+        stripped = stripped[:-3].rstrip()
+        return stripped + ("\n" if text.endswith("\n") else "")
+    return text
 
 
 def _is_existing_source_text(value: Any) -> bool:
