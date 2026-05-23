@@ -80,21 +80,25 @@ hooks. Full unit regression for this pass is `1022 passed`; live validation is
 pending.
 
 The 2026-05-23 branch-lifecycle/diagnostic pass changes formal telemetry guard
-activation/effect misses from one-shot abandon triggers into branch-local
-diagnostic repair signals. `SCREENING_TELEMETRY_FAILED` remains available for
-non-repairable guard failures, but activation-missing and effect-zero/missing
-codes now route through `CONTINUE_EXPLORE` or
-`VALIDATION_REPAIR_REQUIRED` with telemetry-diagnostic lifecycle reasons. The
-lifecycle policy can still soft-abandon after repeated identical diagnostics or
-when the candidate also shows clear runtime/quality regression, candidate
-runtime failure, frozen/protected telemetry failure, schema/contract failure, or
-other severe constraint risk. This keeps Scion core problem-agnostic: the guard
-only consumes adapter/provider-declared telemetry roles and never reads CVRP
-solver semantics directly. APS development budgets were also relaxed without
-removing audit boundaries: default tool/observation/time/code-attempt caps are
-higher, proposal-quality attempts now allow deeper pre-screen repair, and
-mandatory target/surface reads can borrow observation reserve so read receipts
-or necessary target inspection do not prematurely exhaust the code phase.
+activation/effect misses and branch-local activity all-zero failures from
+one-shot abandon triggers into diagnostic repair signals.
+`SCREENING_TELEMETRY_FAILED` remains available for non-repairable guard
+failures, but activation-missing, effect-zero/missing, and
+`TELEMETRY_ACTIVITY_FIELD_ALL_ZERO` codes now route through
+`CONTINUE_EXPLORE` or `VALIDATION_REPAIR_REQUIRED` with
+telemetry-diagnostic lifecycle reasons. The lifecycle policy can still
+soft-abandon after repeated identical diagnostics or when the candidate also
+shows clear runtime/quality regression, candidate runtime failure,
+frozen/protected telemetry failure, schema/contract failure, or other severe
+constraint risk. Mixed guard failures are repairable only when every failing
+detail is branch-local diagnostic, so protected/objective/budget telemetry still
+fails closed. This keeps Scion core problem-agnostic: the guard only consumes
+adapter/provider-declared telemetry roles and never reads CVRP solver semantics
+directly. APS development budgets were also relaxed without removing audit
+boundaries: default tool/observation/time/code-attempt caps are higher,
+proposal-quality attempts now allow deeper pre-screen repair, and mandatory
+target/surface reads can borrow observation reserve so read receipts or
+necessary target inspection do not prematurely exhaust the code phase.
 
 The 2026-05-23 APS integration repair closes the short-experiment P0 where
 contract preview validated a follow-up branch patch against the original CVRP

@@ -18,8 +18,23 @@ _REPAIRABLE_TELEMETRY_CODES = frozenset(
     {
         "TELEMETRY_ACTIVATION_NOT_OBSERVED",
         "TELEMETRY_EFFECT_NOT_OBSERVED",
+        "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+        "TELEMETRY_ACTIVITY_ZERO",
         "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
         "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+    }
+)
+_ACTIVITY_ALL_ZERO_TELEMETRY_CODES = frozenset(
+    {
+        "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+        "TELEMETRY_ACTIVITY_ZERO",
+    }
+)
+_BRANCH_LOCAL_ACTIVITY_ROLES = frozenset(
+    {
+        "activity",
+        "aggregate_activity",
+        "mechanism_activity",
     }
 )
 
@@ -149,11 +164,18 @@ def is_repairable_telemetry_validation_failure(
     guard = telemetry_guard_summary(protocol_result)
     if guard is None or bool(guard.get("passed", True)):
         return False
-    return any(_is_repairable_failure(item) for item in _failure_items(guard))
+    failures = tuple(
+        item
+        for item in _failure_items(guard)
+        if str(item.get("severity") or "").strip().lower() == "fail"
+    )
+    if not failures:
+        return False
+    return all(_is_repairable_failure(item) for item in failures)
 
 
 def telemetry_repairable_stage(protocol_result: ProtocolResult | None) -> str | None:
-    """Return the protocol stage for repairable activation telemetry failures."""
+    """Return the protocol stage for repairable diagnostic telemetry failures."""
     if not is_repairable_telemetry_validation_failure(protocol_result):
         return None
     if protocol_result is None:
@@ -265,9 +287,31 @@ def _stage_value(stage: Any) -> str:
 
 
 def _is_repairable_failure(item: Mapping[str, Any]) -> bool:
-    code = str(item.get("code") or "").strip()
+    code = str(item.get("code") or "").strip().upper()
     severity = str(item.get("severity") or "").strip().lower()
-    return severity == "fail" and code in _REPAIRABLE_TELEMETRY_CODES
+    if severity != "fail" or code not in _REPAIRABLE_TELEMETRY_CODES:
+        return False
+    if code in _ACTIVITY_ALL_ZERO_TELEMETRY_CODES:
+        return _is_branch_local_activity_all_zero(item)
+    return True
+
+
+def _is_branch_local_activity_all_zero(item: Mapping[str, Any]) -> bool:
+    if _normal_failure_category(item) != "activity":
+        return False
+    runtime_role = str(
+        item.get("runtime_role")
+        or item.get("role")
+        or item.get("category")
+        or ""
+    ).strip().lower()
+    if runtime_role and runtime_role not in _BRANCH_LOCAL_ACTIVITY_ROLES:
+        return False
+    counters = _issue_counters(item)
+    return (
+        counters.get("candidate_present", 0) > 0
+        and counters.get("candidate_positive", 0) == 0
+    )
 
 
 def _issue_counters(issue: Mapping[str, Any]) -> dict[str, int]:
@@ -387,6 +431,12 @@ def _repair_guidance_for_issue(
         return [
             "Add positive runtime/budget telemetry on the declared mechanism "
             "path before treating runtime evidence as validated."
+        ]
+    if category == "activity":
+        return [
+            "Declared activity telemetry was present but never positive. Repair "
+            "the branch-local trigger path, runtime attribution, or selected "
+            "activity field before treating screening evidence as validated."
         ]
     return [
         "Add direct positive activation telemetry on the declared mechanism path "

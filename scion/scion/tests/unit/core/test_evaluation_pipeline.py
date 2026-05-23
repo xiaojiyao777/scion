@@ -402,6 +402,142 @@ def test_telemetry_activation_failure_is_marked_repairable() -> None:
     assert "candidate_missing=16" in outcome.protocol_result.exposed_summary
 
 
+def test_activity_all_zero_failure_is_marked_repairable() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+                "severity": "fail",
+                "category": "activity",
+                "runtime_role": "activity",
+                "mechanism": "branch_local_activity_probe",
+                "field": "solver_algorithm_neutral_accepted_moves",
+                "candidate_missing": 0,
+                "candidate_present": 16,
+                "candidate_positive": 0,
+                "champion_positive": 16,
+            }
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.SCREENING,
+            exposed_summary="screening activity all-zero",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.telemetry_validation_repairable is True
+    assert outcome.decision_features.telemetry_guard_failed is True
+    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO" in outcome.protocol_result.reason_codes
+    assert "candidate_present=16" in outcome.protocol_result.exposed_summary
+    assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
+
+
+def test_mixed_activity_and_protected_telemetry_failure_is_not_repairable() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+                "severity": "fail",
+                "category": "activity",
+                "runtime_role": "activity",
+                "field": "solver_algorithm_neutral_accepted_moves",
+                "candidate_missing": 0,
+                "candidate_present": 16,
+                "candidate_positive": 0,
+                "champion_positive": 16,
+            },
+            {
+                "code": "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED",
+                "severity": "fail",
+                "category": "effect",
+                "runtime_role": "protected_outcome",
+                "field": "solver_algorithm_feasibility_violation",
+                "candidate_missing": 16,
+                "candidate_present": 0,
+                "candidate_positive": 0,
+                "champion_positive": 16,
+            },
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.SCREENING,
+            exposed_summary="screening mixed telemetry failure",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.telemetry_validation_repairable is False
+    assert outcome.decision_features.telemetry_guard_failed is True
+    assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
+    assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
+
+
+def test_frozen_activity_all_zero_failure_is_not_repairable() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_ACTIVITY_FIELD_ALL_ZERO",
+                "severity": "fail",
+                "category": "activity",
+                "runtime_role": "activity",
+                "field": "solver_algorithm_neutral_accepted_moves",
+                "candidate_missing": 0,
+                "candidate_present": 16,
+                "candidate_positive": 0,
+                "champion_positive": 16,
+            }
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.FROZEN,
+            exposed_summary="frozen activity all-zero",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.FROZEN_TESTING))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.stage == "frozen"
+    assert outcome.decision_features.telemetry_validation_repairable is False
+    assert outcome.decision_features.telemetry_guard_failed is True
+    assert TELEMETRY_VALIDATION_REPAIRABLE not in outcome.protocol_result.reason_codes
+    assert SCREENING_TELEMETRY_REPAIRABLE not in outcome.protocol_result.reason_codes
+
+
 def test_validation_telemetry_activation_failure_has_stage_specific_reason() -> None:
     guard = {
         "schema": "scion.telemetry_guard.v1",
