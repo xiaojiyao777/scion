@@ -338,11 +338,19 @@ def _solver_design_code_algorithm_file_read_budget_exhausted(
         requested_path,
         target_path=target_path,
     )
+    hard_limit = _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT + 4
+    if priority in {
+        "target",
+        "primary_entrypoint",
+        "integration_neighbor",
+        "integration_role",
+        "active_manifest",
+    }:
+        return False
+    if priority == "manifest":
+        return len(current_paths) >= hard_limit
     if len(current_paths) < _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT:
         return False
-    hard_limit = _CODE_PHASE_SOLVER_DESIGN_FILE_READ_LIMIT + 4
-    if priority in {"primary_entrypoint", "integration_neighbor", "integration_role"}:
-        return len(current_paths) >= hard_limit
     return True
 
 
@@ -688,7 +696,10 @@ def _solver_design_algorithm_read_priority(
         break
     if "entrypoint" in role or "primary" in role:
         return "primary_entrypoint"
-    if any(token in role for token in ("integration", "scheduler", "caller", "callee")):
+    if any(
+        token in role
+        for token in ("integration", "scheduler", "caller", "callee", "state", "config")
+    ):
         return "integration_role"
     if target_path and _solver_design_call_graph_neighbors(
         context,

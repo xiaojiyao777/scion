@@ -16,6 +16,7 @@ def test_run_help_exposes_agentic_proposal_options() -> None:
     assert "--agentic-proposal" in result.output
     assert "--agentic-artifact-dir" in result.output
     assert "--agentic-session-timeout-sec" in result.output
+    assert "--proposal-attempt-limit" in result.output
 
 
 def test_run_help_exposes_force_surface_options() -> None:
@@ -70,6 +71,8 @@ def test_run_agentic_proposal_threads_config_to_campaign_manager(
             str(artifact_dir),
             "--agentic-session-timeout-sec",
             "7.5",
+            "--proposal-attempt-limit",
+            "4",
         ],
     )
 
@@ -78,6 +81,7 @@ def test_run_agentic_proposal_threads_config_to_campaign_manager(
     assert kwargs["use_agentic_proposal"] is True
     assert kwargs["agentic_artifact_dir"] == str(artifact_dir.resolve())
     assert kwargs["agentic_session_timeout_sec"] == 7.5
+    assert kwargs["proposal_attempt_limit"] == 4
     assert kwargs["max_rounds"] == 1
 
 

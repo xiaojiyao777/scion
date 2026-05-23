@@ -231,7 +231,7 @@ class TestContractFailure:
                 self.hyp_calls = 0
             def call(self, prompt, schema, model=None, system_blocks=None):
                 call_count[0] += 1
-                if "code_content" in schema.get("required", []):
+                if _schema_requests_patch(schema):
                     # patch call — step 1 returns bad (→ contract fail), step 2 returns good
                     if call_count[0] <= 2:
                         return dict(bad_patch)

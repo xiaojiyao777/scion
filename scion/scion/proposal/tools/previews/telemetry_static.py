@@ -14,6 +14,7 @@ from scion.core.models import (
 from scion.proposal.tools.models import ProposalToolContext
 from scion.proposal.tools.previews.common import _contract_problem_spec
 from scion.proposal.tools.surface import _drop_empty_items
+from scion.proposal.tools.utils import _limit_text
 from scion.runtime.audit import normalize_surface_name
 from scion.runtime.telemetry_guard import (
     declared_mechanism_runtime_probes,
@@ -76,6 +77,7 @@ def _mechanism_telemetry_static_preview(
     required_calls: dict[str, list[str]] = {}
     helper_evidence: dict[str, dict[str, bool]] = {}
     issue_codes: list[str] = []
+    actionable_feedback: list[dict[str, Any]] = []
     for mechanism in mechanisms:
         code_text = code_by_mechanism.get(mechanism, "")
         calls = _mechanism_call_evidence(code_text, mechanism)
@@ -198,11 +200,14 @@ def _mechanism_telemetry_static_preview(
             _add_required_call(
                 required_calls,
                 mechanism,
-                (
-                    f"context.record_move('{mechanism}', attempted=1, "
-                    "accepted=accepted_flag, delta=positive_objective_delta, "
-                    "best_improved=best_improved_flag)"
-                ),
+                _delta_effect_record_move_pattern(mechanism),
+            )
+            actionable_feedback.append(
+                _delta_effect_repair_feedback(
+                    patch=patch,
+                    mechanism=mechanism,
+                    fields=list(dict.fromkeys(mechanism_delta_value_fields)),
+                )
             )
     if not checked_fields and not issues:
         return None
@@ -217,6 +222,7 @@ def _mechanism_telemetry_static_preview(
                 for mechanism, calls in required_calls.items()
                 if calls
             },
+            "actionable_telemetry_feedback": actionable_feedback,
             "helper_evidence": helper_evidence,
             "issues": list(dict.fromkeys(issues)),
             "warnings": list(dict.fromkeys(warnings)),
@@ -291,6 +297,51 @@ def _context_helper_signature_issues(patch: PatchProposal) -> list[str]:
 def _field_requires_positive_delta(field: str) -> bool:
     normalized = str(field or "").strip().lower()
     return "best_delta" in normalized or "delta_sum" in normalized
+
+
+def _delta_effect_record_move_pattern(mechanism: str) -> str:
+    return (
+        f"context.record_move('{mechanism}', attempted=1, accepted=1, "
+        "delta=<positive_improvement_delta>, best_improved=True)"
+    )
+
+
+def _delta_effect_repair_feedback(
+    *,
+    patch: PatchProposal,
+    mechanism: str,
+    fields: list[str],
+) -> dict[str, Any]:
+    invalid_calls = _invalid_record_move_call_summaries(patch, mechanism)
+    if not invalid_calls:
+        invalid_calls = [
+            {
+                "mechanism_id": mechanism,
+                "helper": "context.record_move",
+                "reason": (
+                    "No context.record_move call with a usable positive delta "
+                    "was found for this mechanism."
+                ),
+            }
+        ]
+    return _drop_empty_items(
+        {
+            "failure_code": _ISSUE_MISSING_DELTA_EVIDENCE,
+            "failure_mechanism_id": mechanism,
+            "mechanism_id": mechanism,
+            "category": "effect",
+            "delta_valued_fields": fields,
+            "expected_call_pattern": _delta_effect_record_move_pattern(mechanism),
+            "invalid_call_summaries": invalid_calls,
+            "declaration_alternative": (
+                "If this mechanism is intended to prove only activity or "
+                "activation, repair the hypothesis expected_telemetry or "
+                "mechanism declaration to use activity/activation fields "
+                "instead of a delta-valued effect field. Do not emit fake "
+                "positive deltas for a non-effect mechanism."
+            ),
+        }
+    )
 
 
 def _add_required_call(
@@ -470,6 +521,100 @@ def _literal_number(node: ast.AST | None) -> float | None:
         value = float(node.operand.value)
         return -value if isinstance(node.op, ast.USub) else value
     return None
+
+
+def _invalid_record_move_call_summaries(
+    patch: PatchProposal,
+    mechanism: str,
+) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for change in patch_file_changes(patch):
+        code = str(change.code_content or "")
+        if not code.strip() or mechanism not in code:
+            continue
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if _context_helper_call_name(node) != "record_move":
+                continue
+            if not _call_uses_declared_mechanism(node, "record_move", mechanism):
+                continue
+            delta = _record_move_delta_argument(node)
+            delta_status = _record_move_delta_status(delta)
+            if delta_status == "usable":
+                continue
+            summaries.append(
+                _drop_empty_items(
+                    {
+                        "file_path": change.file_path,
+                        "mechanism_id": mechanism,
+                        "helper": "context.record_move",
+                        "call": _limited_ast_unparse(node, max_chars=360),
+                        "delta_status": delta_status,
+                        "delta_argument": _limited_ast_unparse(
+                            delta,
+                            max_chars=120,
+                        ),
+                        "accepted_argument": _limited_ast_unparse(
+                            _record_move_argument(node, "accepted", position=2),
+                            max_chars=120,
+                        ),
+                        "best_improved_argument": _limited_ast_unparse(
+                            _record_move_argument(node, "best_improved"),
+                            max_chars=120,
+                        ),
+                        "reason": _record_move_delta_status_reason(delta_status),
+                    }
+                )
+            )
+    return summaries[:6]
+
+
+def _record_move_argument(
+    node: ast.Call,
+    name: str,
+    *,
+    position: int | None = None,
+) -> ast.AST | None:
+    for keyword in node.keywords:
+        if keyword.arg == name:
+            return keyword.value
+    if position is not None and len(node.args) > position:
+        return node.args[position]
+    return None
+
+
+def _record_move_delta_status_reason(status: str) -> str:
+    if status == "missing":
+        return (
+            "delta is missing; delta-valued effect telemetry requires a "
+            "positive improvement delta."
+        )
+    if status == "none":
+        return (
+            "delta=None does not populate delta-valued effect telemetry; pass "
+            "a positive improvement delta when the move improves the objective."
+        )
+    if status == "nonpositive_literal":
+        return (
+            "delta is a literal non-positive value; delta-valued effect "
+            "telemetry requires a positive improvement delta."
+        )
+    return "record_move does not provide usable positive delta evidence."
+
+
+def _limited_ast_unparse(node: ast.AST | None, *, max_chars: int) -> str:
+    if node is None:
+        return ""
+    try:
+        text = ast.unparse(node)
+    except Exception:
+        text = type(node).__name__
+    return _limit_text(text, max_chars)
 
 
 __all__ = [

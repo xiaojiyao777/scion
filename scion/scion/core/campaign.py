@@ -93,6 +93,7 @@ class CampaignManager:
         force_action: Optional[str] = None,
         force_target_file: Optional[str] = None,
         proposal_quality_loop_limit: Optional[int] = None,
+        proposal_attempt_limit: Optional[int] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
         from scion.core.forced_surface import validate_forced_surface_request
@@ -135,6 +136,7 @@ class CampaignManager:
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,
             proposal_quality_loop_limit=proposal_quality_loop_limit,
+            proposal_attempt_limit=proposal_attempt_limit,
         )
 
     # ------------------------------------------------------------------

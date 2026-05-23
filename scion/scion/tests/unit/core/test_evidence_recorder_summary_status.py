@@ -360,6 +360,8 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     )
     loop_status = {
         "requested_rounds": 3,
+        "attempt_limit": 3,
+        "effective_rounds_completed": 0,
         "proposal_quality_limit": 6,
         "proposal_quality_loop_limit": 6,
         "proposal_quality_blocks_consumed": 4,
@@ -373,6 +375,9 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
         champion=_champion(),
     )
 
+    assert status["campaign_loop"]["requested_rounds"] == 3
+    assert status["campaign_loop"]["attempt_limit"] == 3
+    assert status["campaign_loop"]["effective_rounds_completed"] == 0
     assert status["campaign_loop"]["proposal_quality_limit"] == 6
     assert status["campaign_loop"]["proposal_quality_blocks_consumed"] == 4
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2

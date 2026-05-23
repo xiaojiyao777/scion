@@ -107,6 +107,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "rounds + max(6, rounds * 2), or SCION_PROPOSAL_QUALITY_LOOP_LIMIT"
             ),
         ),
+        proposal_attempt_limit: Optional[int] = typer.Option(
+            None,
+            "--proposal-attempt-limit",
+            help=(
+                "Maximum user-visible LLM proposal attempts before stopping; "
+                "defaults to --rounds, or SCION_PROPOSAL_ATTEMPT_LIMIT"
+            ),
+        ),
         campaign_dir: str = typer.Option(
             "campaign_out",
             "--campaign-dir",
@@ -435,6 +443,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
             force_action=forced_request.action if forced_request else None,
             force_target_file=forced_request.target_file if forced_request else None,
             proposal_quality_loop_limit=proposal_quality_loop_limit,
+            proposal_attempt_limit=proposal_attempt_limit,
         )
 
         forced_surface_note = (

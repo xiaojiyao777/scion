@@ -159,6 +159,17 @@ def test_static_preview_rejects_best_delta_record_move_with_none_delta(tmp_path)
     rendered = " ".join(preview["issues"])
     assert "best_delta" in rendered
     assert "delta=None" in rendered
+    action = preview["actionable_telemetry_feedback"][0]
+    assert action["failure_code"] == "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"
+    assert action["failure_mechanism_id"] == "tail_swap_probe"
+    assert action["expected_call_pattern"] == (
+        "context.record_move('tail_swap_probe', attempted=1, accepted=1, "
+        "delta=<positive_improvement_delta>, best_improved=True)"
+    )
+    invalid_call = action["invalid_call_summaries"][0]
+    assert "delta=None" in invalid_call["call"]
+    assert invalid_call["delta_status"] == "none"
+    assert "expected_telemetry" in action["declaration_alternative"]
     assert preview["helper_evidence"]["tail_swap_probe"][
         "record_move_delta_none_literal"
     ] is True

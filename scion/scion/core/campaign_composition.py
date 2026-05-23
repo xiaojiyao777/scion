@@ -97,6 +97,7 @@ def compose_campaign_services(
     force_action: str | None = None,
     force_target_file: str | None = None,
     proposal_quality_loop_limit: int | None = None,
+    proposal_attempt_limit: int | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     owner._problem_runtime = ProblemRuntime(
@@ -583,6 +584,8 @@ def compose_campaign_services(
             timeout=timeout
         ),
         proposal_quality_loop_limit=proposal_quality_loop_limit,
+        proposal_attempt_limit=proposal_attempt_limit,
+        get_proposal_attempts=lambda: owner._round_num,
     )
 
 

@@ -263,7 +263,7 @@ def test_algorithm_file_truncated_or_short_preview_is_not_reused() -> None:
     )
 
 
-def test_code_phase_solver_design_file_read_budget_keeps_target_available(
+def test_code_phase_solver_design_file_read_budget_keeps_active_manifest_available(
     tmp_path: Path,
 ) -> None:
     context = _cvrp_context_with_champion(tmp_path)
@@ -294,7 +294,7 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
         )
     ]
 
-    assert agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(
+    assert not agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(
         context,
         observations,
         hypothesis=hypothesis,
@@ -309,12 +309,30 @@ def test_code_phase_solver_design_file_read_budget_keeps_target_available(
         hypothesis=hypothesis,
         next_args={
             "surface": "solver_design",
+            "file_path": "policies/baseline_modules/state.py",
+        },
+    )
+    assert not agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(
+        context,
+        observations,
+        hypothesis=hypothesis,
+        next_args={
+            "surface": "solver_design",
             "file_path": target_file,
+        },
+    )
+    assert agentic_session_module._solver_design_code_algorithm_file_read_budget_exhausted(
+        context,
+        observations,
+        hypothesis=hypothesis,
+        next_args={
+            "surface": "solver_design",
+            "file_path": "policies/experimental_solver.py",
         },
     )
 
 
-def test_planner_solver_design_file_read_budget_keeps_target_available_after_non_targets(
+def test_planner_solver_design_file_read_budget_keeps_target_and_dependencies_available(
     tmp_path: Path,
 ) -> None:
     target_file = "policies/baseline_modules/acceptance.py"
@@ -335,21 +353,37 @@ def test_planner_solver_design_file_read_budget_keeps_target_available_after_non
             ),
         )
         for path in (
-            "policies/baseline_algorithm.py",
-            "policies/baseline_modules/scheduler.py",
-            "policies/baseline_modules/construction.py",
             "policies/baseline_modules/local_search.py",
             "policies/baseline_modules/destroy_repair.py",
+            "policies/baseline_modules/acceptance.py",
+            "policies/baseline_modules/config.py",
+            "policies/baseline_modules/construction.py",
+            "policies/baseline_algorithm.py",
         )
     ]
 
-    assert not agentic_session_module._solver_design_planner_algorithm_file_read_budget_exhausted(
+    for file_path in (
+        target_file,
+        "policies/baseline_modules/scheduler.py",
+        "policies/baseline_modules/state.py",
+    ):
+        assert not agentic_session_module._solver_design_planner_algorithm_file_read_budget_exhausted(
+            context,
+            observations,
+            next_tool_name="context.read_algorithm_file",
+            next_args={
+                "surface": "solver_design",
+                "file_path": file_path,
+                "max_chars": 24000,
+            },
+        )
+    assert agentic_session_module._solver_design_planner_algorithm_file_read_budget_exhausted(
         context,
         observations,
         next_tool_name="context.read_algorithm_file",
         next_args={
             "surface": "solver_design",
-            "file_path": target_file,
+            "file_path": "policies/experimental_solver.py",
             "max_chars": 24000,
         },
     )
@@ -605,7 +639,7 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
     assert not already_succeeded_file_skips
 
 
-def test_solver_design_planner_does_not_default_read_full_algorithm_object(
+def test_solver_design_planner_can_read_full_active_algorithm_manifest(
     tmp_path: Path,
 ) -> None:
     files = [
@@ -615,6 +649,8 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
         "policies/baseline_modules/local_search.py",
         "policies/baseline_modules/destroy_repair.py",
         "policies/baseline_modules/acceptance.py",
+        "policies/baseline_modules/config.py",
+        "policies/baseline_modules/state.py",
     ]
     context = replace(
         _cvrp_context_with_champion(tmp_path),
@@ -688,9 +724,9 @@ def test_solver_design_planner_does_not_default_read_full_algorithm_object(
     ]
 
     assert output.status == AgenticProposalStatus.COMPLETED
-    assert len(file_read_events) == 5
+    assert len(file_read_events) == len(files)
     assert {event["status"] for event in file_read_events} == {"ok"}
-    assert cap_events
+    assert not cap_events
 
 
 def test_solver_design_file_reads_cannot_starve_required_surface_inventory(

@@ -52,6 +52,16 @@ _VALID_PATCH = {
 }
 
 
+def _schema_requests_patch(schema: dict[str, Any]) -> bool:
+    """Return true for current or legacy patch proposal schemas."""
+    required = set(schema.get("required", []))
+    properties = set((schema.get("properties") or {}).keys())
+    return (
+        "code_content" in required
+        or {"file_path", "action"}.issubset(properties)
+    )
+
+
 def _make_problem_spec(root_dir: str) -> ProblemSpec:
     return ProblemSpec(
         name="test_vrp",

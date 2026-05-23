@@ -480,7 +480,15 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "code must include those mechanism-specific helper calls on the "
             "path where the mechanism actually runs. Preserve any previously "
             "passing record_phase, record_iteration, or record_move calls "
-            "while adding the missing category.\n\n"
+            "while adding the missing category. For delta-valued effect "
+            "failures, follow actionable_telemetry_feedback."
+            "expected_call_pattern exactly: "
+            "context.record_move('<mechanism>', attempted=1, accepted=1, "
+            "delta=<positive_improvement_delta>, best_improved=True). If the "
+            "mechanism only intended activity/activation, do not fabricate a "
+            "positive delta; return a contradicted premise explaining that the "
+            "hypothesis expected_telemetry or mechanism declaration should be "
+            "changed away from delta-valued effect telemetry.\n\n"
         )
     if "code_generation_failed" in lowered:
         if "telemetry" in lowered or "algorithm_smoke" in lowered:
@@ -498,7 +506,16 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
                 "code must include those mechanism-specific helper calls on the "
                 "path where the mechanism actually runs. Preserve any previously "
                 "passing record_phase, record_iteration, or record_move calls "
-                "while adding the missing category.\n\n"
+                "while adding the missing category. For delta-valued effect "
+                "failures, follow actionable_telemetry_feedback."
+                "expected_call_pattern exactly: "
+                "context.record_move('<mechanism>', attempted=1, accepted=1, "
+                "delta=<positive_improvement_delta>, best_improved=True). If "
+                "the mechanism only intended activity/activation, do not "
+                "fabricate a positive delta; return a contradicted premise "
+                "explaining that the hypothesis expected_telemetry or "
+                "mechanism declaration should be changed away from "
+                "delta-valued effect telemetry.\n\n"
             )
         return (
             "## Previous Attempt Failed\n"

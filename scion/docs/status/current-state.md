@@ -158,6 +158,22 @@ compact previous-patch summary: file/action/intent metadata, old/new snippets,
 audit refs, and content digests/lengths, with host-normalized `code_content` and
 `content_after` bodies omitted from the model-facing retry context.
 
+The immediate typed-edit validation run
+`v04-v3-typed-source-prompt-sonnet-3r-20260523T112046Z` was stopped manually
+after it reached the configured short-run boundary. It confirmed the P0 C6
+wrapper failure was gone and all observed code responses used typed
+`exact_replace` rather than model-emitted full files. The run exposed three
+follow-up framework issues now repaired generically: `--rounds N` now acts as a
+hard user-visible proposal-attempt cap unless `--proposal-attempt-limit` or
+`SCION_PROPOSAL_ATTEMPT_LIMIT` explicitly expands it; solver-design
+`context.read_algorithm_file` budgeting is active-object/target/role aware
+instead of a fixed file-count cutoff, so scheduler/state/config and manifest
+files are not blocked before the agent understands the algorithm object; and
+algorithm-smoke telemetry failures now carry actionable repair payloads with
+the failing mechanism id, exact `context.record_move(..., delta=..., best_improved=...)`
+effect pattern, invalid-call summaries, and the alternative of correcting the
+telemetry declaration when a mechanism only intends activity/activation.
+
 As part of this repair, `scion.proposal.schemas` was split from a single
 near-1000-line module into a package facade with focused hypothesis, patch,
 tool, shared, and normalization modules. The public import path

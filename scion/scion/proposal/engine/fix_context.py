@@ -68,7 +68,13 @@ def _split_fix_context(
         f"- If the failure is a telemetry guard or algorithm smoke failure, keep "
         f"the declared mechanism id stable and add the missing activation/effect "
         f"runtime record on the active path. Do not edit objectives, constraints, "
-        f"or expected telemetry just to pass the guard.\n"
+        f"or expected telemetry just to pass the guard. For delta-valued effect "
+        f"failures, use "
+        f"`context.record_move('<mechanism>', attempted=1, accepted=1, "
+        f"delta=<positive_improvement_delta>, best_improved=True)` only when "
+        f"the mechanism truly produces positive improvement. If the mechanism "
+        f"is activity/activation-only, report the telemetry declaration mismatch "
+        f"instead of fabricating effect evidence.\n"
     )
 
     return system_blocks, user_prompt

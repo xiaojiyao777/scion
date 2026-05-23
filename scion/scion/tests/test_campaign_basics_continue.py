@@ -182,7 +182,7 @@ class TestContinueExplore:
                 self.hyp_calls = 0
                 self.patch_calls = 0
             def call(self, prompt, schema, model=None, system_blocks=None):
-                if "code_content" in schema.get("required", []):
+                if _schema_requests_patch(schema):
                     self.patch_calls += 1
                     return patch1 if self.patch_calls == 1 else patch2
                 self.hyp_calls += 1
@@ -218,7 +218,7 @@ class TestContinueExplore:
                 self.hyp_calls = 0
                 self.patch_calls = 0
             def call(self, prompt, schema, model=None, system_blocks=None):
-                if "code_content" in schema.get("required", []):
+                if _schema_requests_patch(schema):
                     self.patch_calls += 1
                     return patch1 if self.patch_calls == 1 else patch2
                 self.hyp_calls += 1

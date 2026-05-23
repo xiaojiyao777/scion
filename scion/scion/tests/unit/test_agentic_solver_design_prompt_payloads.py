@@ -529,6 +529,111 @@ def test_algorithm_smoke_failure_detail_includes_repair_guidance() -> None:
     assert "solution.instance" in detail
 
 
+def test_code_retry_prompt_keeps_actionable_delta_telemetry_feedback() -> None:
+    expected_pattern = (
+        "context.record_move('best_delta_probe', attempted=1, accepted=1, "
+        "delta=<positive_improvement_delta>, best_improved=True)"
+    )
+    action = {
+        "failure_code": "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING",
+        "failure_mechanism_id": "best_delta_probe",
+        "mechanism_id": "best_delta_probe",
+        "category": "effect",
+        "delta_valued_fields": [
+            "solver_algorithm_phase_best_delta.best_delta_probe"
+        ],
+        "expected_call_pattern": expected_pattern,
+        "invalid_call_summaries": [
+            {
+                "file_path": "policies/baseline_algorithm.py",
+                "mechanism_id": "best_delta_probe",
+                "helper": "context.record_move",
+                "call": (
+                    "context.record_move('best_delta_probe', attempted=1, "
+                    "accepted=1, delta=None, best_improved=1)"
+                ),
+                "delta_status": "none",
+                "reason": "delta=None does not populate delta-valued effect telemetry.",
+            }
+        ],
+        "declaration_alternative": (
+            "If this mechanism is intended to prove only activity or activation, "
+            "repair the hypothesis expected_telemetry or mechanism declaration."
+        ),
+    }
+    observation = ProposalObservation(
+        observation_id="smoke-delta",
+        session_id="session-1",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="tool-13",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload={
+            "passed": False,
+            "actionable_telemetry_feedback": [action],
+            "telemetry_static_preview": {
+                "passed": False,
+                "issue_codes": ["DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"],
+                "actionable_telemetry_feedback": [action],
+            },
+            "runtime_smoke": {
+                "passed": False,
+                "issues": ["x" * 20000],
+            },
+        },
+    )
+
+    compact = _compact_algorithm_smoke_observation(observation)
+    assert compact is not None
+    assert _json_size(_observation_prompt_payload(compact)) < _json_size(
+        _observation_prompt_payload(observation)
+    )
+    compact_payload = compact.structured_payload
+    assert compact_payload["actionable_telemetry_feedback"][0][
+        "expected_call_pattern"
+    ] == expected_pattern
+    assert "delta=None" in compact_payload["actionable_telemetry_feedback"][0][
+        "invalid_call_summaries"
+    ][0]["call"]
+
+    prior_failure = _algorithm_smoke_failure_detail([compact])
+    prompt_context = {
+        "problem_summary": "Synthetic problem.",
+        "solver_mechanics": "Use bounded solver-design smoke.",
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "operator_interface_spec": "def solve(instance, rng, time_limit_sec, context)",
+        "import_whitelist": "math, time",
+        "hypothesis_detail": "Add best_delta_probe.",
+        "target_file": "policies/baseline_algorithm.py",
+        "target_file_code": "def solve(instance, rng, time_limit_sec, context): pass",
+        "reference_operators": "",
+        "editable_patterns": "policies/*.py",
+        "frozen_patterns": "vrp/",
+        "prior_code_failure": prior_failure,
+        "previous_patch": {
+            "file_path": "policies/baseline_algorithm.py",
+            "action": "modify",
+            "code_content": (
+                "def solve(instance, rng, time_limit_sec, context):\n"
+                "    context.record_move('best_delta_probe', attempted=1, "
+                "accepted=1, delta=None, best_improved=1)\n"
+            ),
+        },
+        "agentic_preview_feedback": _observation_prompt_payload(compact),
+        "agentic_tool_observations": [_code_observation_prompt_payload(compact)],
+    }
+
+    _system_blocks, user_prompt = _split_code_context(prompt_context)
+
+    assert "Latest Preview Repair Feedback" in user_prompt
+    assert expected_pattern in user_prompt
+    assert "delta=None" in user_prompt
+    assert "expected_telemetry" in user_prompt
+    assert "not fabricate" in user_prompt
+
+
 def test_algorithm_smoke_compacts_to_fit_remaining_observation_budget(
     tmp_path: Path,
 ) -> None:

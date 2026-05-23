@@ -28,7 +28,10 @@ _EXPECTED_TELEMETRY_DESCRIPTION = (
     "mechanism id; the whole map field alone is not activation evidence. If a "
     "proposal modifies an existing phase or component, name the modified lever "
     "as a mechanism id in mechanism_changes and use that same id in "
-    "expected_telemetry paths."
+    "expected_telemetry paths. Declare delta-valued effect fields such as "
+    "best_delta or delta_sum only when the mechanism can emit "
+    "context.record_move with a positive improvement delta; activity-only or "
+    "activation-only mechanisms must use activity/activation telemetry instead."
 )
 
 MechanismChangeType = Literal["add", "modify", "replace", "remove", "integrate"]

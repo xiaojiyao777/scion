@@ -30,12 +30,14 @@ class CampaignLoop:
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
     proposal_quality_loop_limit: int | None = None
+    proposal_attempt_limit: int | None = None
+    get_proposal_attempts: Callable[[], int] | None = None
 
     def run(self, max_rounds: int = 1000) -> None:
         """Run the campaign until a termination condition is met."""
         final_reason: str | None = None
         counted_rounds = 0
-        attempts = 0
+        loop_steps = 0
         bad_proposal_attempts = 0
         proposal_quality_blocked_attempts = 0
         telemetry_repairable_attempts = 0
@@ -46,15 +48,19 @@ class CampaignLoop:
             requested_rounds,
             configured=self.proposal_quality_loop_limit,
         )
+        attempt_limit = _proposal_attempt_limit(
+            requested_rounds,
+            configured=self.proposal_attempt_limit,
+        )
         bad_proposal_limit = requested_rounds * 5 + 10
         telemetry_repairable_limit = requested_rounds * 2 + 4
         validation_repair_required_limit = requested_rounds + 2
         same_family_retry_limit = requested_rounds + 4
         # Non-round steps such as proposal blocks and telemetry-repairable
-        # formal runs do not consume the screened-round budget.  The separate
-        # caps below keep bad proposal loops bounded without ending a campaign
-        # before it reaches the requested number of effective screened rounds.
-        attempt_limit = (
+        # formal runs do not consume the screened-round budget.  Proposal
+        # attempts still spend user-visible LLM budget, so they have a hard
+        # cap independent of category-specific loop limits.
+        loop_step_limit = (
             requested_rounds
             + proposal_quality_loop_limit
             + bad_proposal_limit
@@ -63,19 +69,45 @@ class CampaignLoop:
             + same_family_retry_limit
         )
 
+        def proposal_attempts_consumed() -> int:
+            if self.get_proposal_attempts is None:
+                return max(0, int(loop_steps))
+            try:
+                return max(0, int(self.get_proposal_attempts()))
+            except Exception as exc:  # pragma: no cover - defensive status path
+                logger.debug("Failed to read proposal attempt count: %s", exc)
+                return max(0, int(loop_steps))
+
         def loop_status() -> dict[str, int]:
             return _campaign_loop_status(
                 requested_rounds=requested_rounds,
                 attempt_limit=attempt_limit,
-                attempts=attempts,
+                attempts=proposal_attempts_consumed(),
+                loop_steps=loop_steps,
+                loop_step_limit=loop_step_limit,
                 counted_rounds=counted_rounds,
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
             )
 
         self.write_status(loop_status=loop_status())
-        while counted_rounds < max_rounds and attempts < attempt_limit:
-            attempts += 1
+        while counted_rounds < requested_rounds:
+            if proposal_attempts_consumed() >= attempt_limit:
+                final_reason = "proposal_attempt_limit_exhausted"
+                self.write_status(
+                    stopped_reason=final_reason,
+                    loop_status=loop_status(),
+                )
+                break
+            if loop_steps >= loop_step_limit:
+                final_reason = "attempt_limit_exhausted"
+                self.write_status(
+                    stopped_reason=final_reason,
+                    loop_status=loop_status(),
+                )
+                break
+
+            loop_steps += 1
             self.drain_weight_opt_events()
             if self.should_stop():
                 final_reason = self.get_last_stop_reason() or "termination condition met"
@@ -135,6 +167,12 @@ class CampaignLoop:
                         final_reason = "bad_proposal_budget_exhausted"
             if final_reason == "proposal_quality_loop":
                 result.stopped = True
+            if (
+                final_reason is None
+                and counted_rounds < requested_rounds
+                and proposal_attempts_consumed() >= attempt_limit
+            ):
+                final_reason = "proposal_attempt_limit_exhausted"
             self.write_status(
                 last_result=result,
                 loop_status=loop_status(),
@@ -147,7 +185,7 @@ class CampaignLoop:
 
             self.run_stagnation_check()
             self.check_soft_stagnation()
-        if final_reason is None and counted_rounds >= max_rounds:
+        if final_reason is None and counted_rounds >= requested_rounds:
             final_reason = "max_rounds_exhausted"
         elif final_reason is None and counted_rounds == 0:
             final_reason = "no_effective_round_loop"
@@ -206,11 +244,33 @@ def _proposal_quality_loop_limit(
     return rounds + max(6, rounds * 2)
 
 
+def _proposal_attempt_limit(
+    requested_rounds: int,
+    *,
+    configured: int | None,
+) -> int:
+    """Return the user-visible LLM proposal attempt cap."""
+    if configured is not None:
+        return max(1, int(configured))
+    raw = os.environ.get("SCION_PROPOSAL_ATTEMPT_LIMIT")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid SCION_PROPOSAL_ATTEMPT_LIMIT=%r",
+                raw,
+            )
+    return max(1, int(requested_rounds))
+
+
 def _campaign_loop_status(
     *,
     requested_rounds: int,
     attempt_limit: int,
     attempts: int,
+    loop_steps: int,
+    loop_step_limit: int,
     counted_rounds: int,
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
@@ -218,7 +278,11 @@ def _campaign_loop_status(
     return {
         "requested_rounds": max(1, int(requested_rounds)),
         "attempt_limit": max(0, int(attempt_limit)),
+        "proposal_attempt_limit": max(0, int(attempt_limit)),
         "attempts": max(0, int(attempts)),
+        "proposal_attempts_consumed": max(0, int(attempts)),
+        "loop_steps": max(0, int(loop_steps)),
+        "loop_step_limit": max(0, int(loop_step_limit)),
         "effective_rounds_completed": max(0, int(counted_rounds)),
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),

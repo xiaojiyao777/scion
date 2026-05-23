@@ -70,6 +70,9 @@ def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
+            "actionable_telemetry_feedback": _compact_actionable_telemetry_feedback(
+                value.get("actionable_telemetry_feedback")
+            ),
             "case": value.get("case"),
             "case_count": value.get("case_count"),
             "issues": _bounded_string_list(value.get("issues"), limit=2),
@@ -91,6 +94,9 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
     compact = _drop_empty_mapping(
         {
             "passed": value.get("passed"),
+            "actionable_telemetry_feedback": _compact_actionable_telemetry_feedback(
+                value.get("actionable_telemetry_feedback")
+            ),
             "runtime_smoke_run": value.get("runtime_smoke_run"),
             "workspace_materialized": value.get("workspace_materialized"),
             "case": value.get("case"),
@@ -113,6 +119,78 @@ def _compact_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
         }
     )
     return compact or None
+
+def _compact_actionable_telemetry_feedback(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    actions: list[dict[str, Any]] = []
+    for item in value[:4]:
+        if not isinstance(item, Mapping):
+            continue
+        actions.append(
+            _drop_empty_mapping(
+                {
+                    "failure_code": item.get("failure_code"),
+                    "failure_mechanism_id": (
+                        item.get("failure_mechanism_id")
+                        or item.get("mechanism_id")
+                    ),
+                    "mechanism_id": item.get("mechanism_id"),
+                    "category": item.get("category"),
+                    "delta_valued_fields": _bounded_string_list(
+                        item.get("delta_valued_fields"),
+                        limit=4,
+                    ),
+                    "expected_call_pattern": _limit_string(
+                        item.get("expected_call_pattern"),
+                        300,
+                    ),
+                    "invalid_call_summaries": _compact_invalid_call_summaries(
+                        item.get("invalid_call_summaries")
+                    ),
+                    "declaration_alternative": _limit_string(
+                        item.get("declaration_alternative"),
+                        420,
+                    ),
+                }
+            )
+        )
+    return [action for action in actions if action]
+
+
+def _compact_invalid_call_summaries(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in value[:4]:
+        if not isinstance(item, Mapping):
+            continue
+        summaries.append(
+            _drop_empty_mapping(
+                {
+                    "file_path": item.get("file_path"),
+                    "mechanism_id": item.get("mechanism_id"),
+                    "helper": item.get("helper"),
+                    "call": _limit_string(item.get("call"), 320),
+                    "delta_status": item.get("delta_status"),
+                    "delta_argument": _limit_string(
+                        item.get("delta_argument"),
+                        120,
+                    ),
+                    "accepted_argument": _limit_string(
+                        item.get("accepted_argument"),
+                        120,
+                    ),
+                    "best_improved_argument": _limit_string(
+                        item.get("best_improved_argument"),
+                        120,
+                    ),
+                    "reason": _limit_string(item.get("reason"), 300),
+                }
+            )
+        )
+    return [summary for summary in summaries if summary]
+
 
 def _compact_runtime_audit_failure_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):

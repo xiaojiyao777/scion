@@ -3,8 +3,8 @@
 from .campaign_test_support import *  # noqa: F401,F403
 
 class TestScreeningFail:
-    def test_screening_fail_low_winrate_continue_explore(self, tmp_path):
-        """win_rate=0.3 → CONTINUE_EXPLORE (re-propose, not abandon)."""
+    def test_screening_fail_low_winrate_soft_abandons_regressive_branch(self, tmp_path):
+        """win_rate=0.3 with negative delta is a clear regression and is abandoned."""
         protocol = MockExperimentProtocol(results=[
             _make_protocol_result(
                 ExperimentStage.SCREENING, gate_outcome="fail",
@@ -13,8 +13,8 @@ class TestScreeningFail:
         ])
         cm = _campaign(tmp_path, experiment_protocol=protocol)
         result = cm.run_one_step()
-        # win_rate < 0.5 → CONTINUE_EXPLORE (not ABANDON)
-        assert result.decision == Decision.CONTINUE_EXPLORE
+        assert result.decision == Decision.ABANDON
+        assert "SCREENING_FAIL_WIN_RATE" in result.reason
 
 
 class TestCanaryFail:
@@ -133,7 +133,7 @@ class TestVerificationGate:
 
         class FixSuccessClient:
             def call(self, prompt, schema, model=None, system_blocks=None):
-                if "code_content" in schema.get("required", []):
+                if _schema_requests_patch(schema):
                     fix_call_count[0] += 1
                     return dict(_VALID_PATCH)
                 return dict(_VALID_HYPOTHESIS)

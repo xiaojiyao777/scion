@@ -21,6 +21,7 @@ _AGENTIC_RESUME_CONTEXT_CHARS = 3600
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 24000
 _AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 6000
 _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 6000
+_AGENTIC_CODE_PREVIEW_FEEDBACK_CHARS = 5000
 
 
 def _agentic_research_context_block(
@@ -105,6 +106,22 @@ def _agentic_research_context_block(
             "Algorithm Facts.\n\n"
             f"{_bounded_json(active_solver_mechanisms, _AGENTIC_ACTIVE_SOLVER_MECHANISMS_CHARS)}"
         )
+    preview_feedback = context.get("agentic_preview_feedback")
+    if preview_feedback:
+        heading = (
+            "## Latest Preview Repair Feedback"
+            if code_phase
+            else "## Latest Preview Feedback"
+        )
+        parts.append(
+            f"{heading}\n"
+            "This is the structured failing preview that triggered the retry. "
+            "Treat actionable_telemetry_feedback as executable repair input: "
+            "preserve the declared mechanism id, use the expected call pattern "
+            "when repairing code, and report a telemetry declaration mismatch "
+            "instead of fabricating effect evidence.\n\n"
+            f"{_bounded_json(preview_feedback, _preview_feedback_chars(code_phase))}"
+        )
     observations = context.get("agentic_tool_observations")
     if observations:
         observations = _dedupe_tool_observations(
@@ -149,6 +166,14 @@ def _agentic_research_diagnosis_chars(code_phase: bool) -> int:
 def _agentic_observation_chars(code_phase: bool) -> int:
     return (
         _AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS
+        if code_phase
+        else _AGENTIC_TOOL_OBSERVATIONS_CHARS
+    )
+
+
+def _preview_feedback_chars(code_phase: bool) -> int:
+    return (
+        _AGENTIC_CODE_PREVIEW_FEEDBACK_CHARS
         if code_phase
         else _AGENTIC_TOOL_OBSERVATIONS_CHARS
     )

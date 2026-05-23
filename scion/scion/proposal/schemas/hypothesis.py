@@ -210,7 +210,7 @@ Propose ONE hypothesis for improving a declared research surface.
 - Set `complexity_claim` to the expected complexity, candidate scale, or loop bounds
 - Set `runtime_budget_strategy` to how the operator or solver body will cap solve time (top-k, sampling, early exit, bounded neighborhood, time-polling, etc.)
 - If the selected surface declares mechanism telemetry, set `mechanism_changes` to the mechanism id(s) touched by this hypothesis. Ids must match ^[a-z][a-z0-9_]{0,63}$ and use change_type add/modify/replace/remove/integrate.
-- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific activity evidence, not objective/outcome fields. Aggregate outcome or activity fields show effect or activity, not activation. If you modify an existing phase or component, declare the changed lever as its own mechanism id and use that same id in expected telemetry.
+- Set `expected_telemetry` to declared runtime keys that should prove activity, activation, effect, or budget allocation for this hypothesis. Activation must use mechanism-specific activity evidence, not objective/outcome fields. Aggregate outcome or activity fields show effect or activity, not activation. Declare best_delta/delta_sum effect fields only when the mechanism can emit a positive improvement delta through record_move; if it only proves activity or activation, use activity/activation telemetry instead. If you modify an existing phase or component, declare the changed lever as its own mechanism id and use that same id in expected telemetry.
 
 Respond with a single JSON object (no markdown fences, no extra text) matching this schema:
 {{

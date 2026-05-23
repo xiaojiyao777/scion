@@ -467,6 +467,14 @@ def test_algorithm_smoke_rejects_declared_best_delta_with_none_delta(
     assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in rendered
     assert "best_delta_probe" in rendered
     assert "delta=None" in rendered
+    action = payload["actionable_telemetry_feedback"][0]
+    assert action["failure_mechanism_id"] == "best_delta_probe"
+    assert action["expected_call_pattern"] == (
+        "context.record_move('best_delta_probe', attempted=1, accepted=1, "
+        "delta=<positive_improvement_delta>, best_improved=True)"
+    )
+    assert "delta=None" in action["invalid_call_summaries"][0]["call"]
+    assert "expected_telemetry" in action["declaration_alternative"]
 
 
 def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too_large(

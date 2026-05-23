@@ -133,17 +133,24 @@ def _solver_design_planner_algorithm_file_read_budget_exhausted(
     target_path = _normalized_algorithm_read_path(context.forced_target_file)
     if target_path and requested_path == target_path:
         return False
-    read_count = _successful_planner_algorithm_file_read_count(observations)
-    if read_count < _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT:
-        return False
     priority = _planner_algorithm_read_priority(
         context,
         requested_path,
         target_path=target_path,
     )
+    if priority in {
+        "primary_entrypoint",
+        "integration_role",
+        "integration_neighbor",
+        "active_manifest",
+    }:
+        return False
+    read_count = _successful_planner_algorithm_file_read_count(observations)
     hard_limit = _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT + 4
-    if priority in {"primary_entrypoint", "integration_role", "integration_neighbor"}:
+    if priority == "manifest":
         return read_count >= hard_limit
+    if read_count < _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT:
+        return False
     return True
 
 
@@ -190,6 +197,7 @@ def _planner_algorithm_read_priority(
     target_path: str,
 ) -> str:
     role = ""
+    active = False
     try:
         from scion.proposal.active_solver_snapshot import (
             list_algorithm_files_payload,
@@ -201,6 +209,7 @@ def _planner_algorithm_read_priority(
             if _normalized_algorithm_read_path(item.get("file_path")) != requested_path:
                 continue
             role = str(item.get("role") or "").lower()
+            active = bool(item.get("active"))
             break
         if target_path:
             graph = solver_call_graph_payload(context)
@@ -219,8 +228,15 @@ def _planner_algorithm_read_priority(
         pass
     if "entrypoint" in role or "primary" in role:
         return "primary_entrypoint"
-    if any(token in role for token in ("integration", "scheduler", "caller", "callee")):
+    if any(
+        token in role
+        for token in ("integration", "scheduler", "caller", "callee", "state", "config")
+    ):
         return "integration_role"
+    if active:
+        return "active_manifest"
+    if role:
+        return "manifest"
     return ""
 
 

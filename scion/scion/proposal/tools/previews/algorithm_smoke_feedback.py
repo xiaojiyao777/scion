@@ -125,6 +125,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         primary_issue=primary_issue,
         failure_class=failure_class,
     )
+    actionable_telemetry_feedback = _actionable_telemetry_feedback(
+        raw_payload,
+        telemetry_guard=telemetry_guard,
+    )
     selected_surface = _algorithm_smoke_selected_surface(raw_payload, runtime_smoke)
     case_count = _algorithm_smoke_case_count(runtime_smoke)
     non_promotional = raw_payload.get("non_promotional", True)
@@ -144,6 +148,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     compact_payload = _drop_empty_items(
         {
             "schema": _ALGORITHM_SMOKE_AGENT_SCHEMA,
+            "actionable_telemetry_feedback": actionable_telemetry_feedback,
             "passed": passed,
             "status": status,
             "failure_class": failure_class,
@@ -215,6 +220,113 @@ def _agent_audit(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
         "full_runtime_payload_omitted": True,
         "raw_payload_omitted_from_agent": True,
     }
+
+
+def _actionable_telemetry_feedback(
+    raw_payload: Mapping[str, Any],
+    *,
+    telemetry_guard: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
+    if telemetry_static is not None:
+        actions.extend(
+            _mapping_items(telemetry_static.get("actionable_telemetry_feedback"))
+        )
+    actions.extend(
+        _runtime_delta_effect_actions(
+            telemetry_guard,
+            existing_actions=actions,
+        )
+    )
+    return actions[:6]
+
+
+def _runtime_delta_effect_actions(
+    telemetry_guard: Mapping[str, Any] | None,
+    *,
+    existing_actions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if telemetry_guard is None:
+        return []
+    existing_keys = {
+        (
+            str(item.get("failure_code") or ""),
+            str(item.get("failure_mechanism_id") or item.get("mechanism_id") or ""),
+        )
+        for item in existing_actions
+    }
+    actions: list[dict[str, Any]] = []
+    for issue in _mapping_items(telemetry_guard.get("failures")):
+        category = str(issue.get("category") or "").strip().lower()
+        field = str(issue.get("field") or "").strip()
+        mechanism = str(issue.get("mechanism") or "").strip()
+        code = str(issue.get("code") or "").strip()
+        if category != "effect" or not _delta_effect_field(field):
+            continue
+        if (code, mechanism) in existing_keys:
+            continue
+        actions.append(
+            _drop_empty_items(
+                {
+                    "failure_code": code or "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                    "failure_mechanism_id": mechanism,
+                    "mechanism_id": mechanism,
+                    "category": "effect",
+                    "delta_valued_fields": [field] if field else [],
+                    "expected_call_pattern": (
+                        f"context.record_move('{mechanism}', attempted=1, "
+                        "accepted=1, delta=<positive_improvement_delta>, "
+                        "best_improved=True)"
+                        if mechanism
+                        else (
+                            "context.record_move('<mechanism>', attempted=1, "
+                            "accepted=1, delta=<positive_improvement_delta>, "
+                            "best_improved=True)"
+                        )
+                    ),
+                    "invalid_call_summaries": _invalid_calls_from_existing_actions(
+                        existing_actions,
+                        mechanism,
+                    ),
+                    "declaration_alternative": (
+                        "If this mechanism is intended to prove only activity "
+                        "or activation, repair the hypothesis expected_telemetry "
+                        "or mechanism declaration to use activity/activation "
+                        "fields instead of a delta-valued effect field. Do not "
+                        "emit fake positive deltas for a non-effect mechanism."
+                    ),
+                }
+            )
+        )
+    return actions
+
+
+def _invalid_calls_from_existing_actions(
+    actions: list[dict[str, Any]],
+    mechanism: str,
+) -> list[dict[str, Any]]:
+    for item in actions:
+        item_mechanism = str(
+            item.get("failure_mechanism_id") or item.get("mechanism_id") or ""
+        ).strip()
+        if mechanism and item_mechanism != mechanism:
+            continue
+        invalid = item.get("invalid_call_summaries")
+        if isinstance(invalid, list):
+            return [entry for entry in invalid if isinstance(entry, Mapping)][:4]
+    return []
+
+
+def _mapping_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _delta_effect_field(field: str) -> bool:
+    lowered = str(field or "").lower()
+    return "best_delta" in lowered or "delta_sum" in lowered
 
 
 __all__ = [

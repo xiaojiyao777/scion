@@ -13,6 +13,7 @@ from scion.proposal.agentic_utils import (
     _limit_string,
 )
 from scion.proposal.agentic_preview_compaction import (
+    _compact_actionable_telemetry_feedback,
     _compact_algorithm_smoke_section,
     _compact_contract_mapping,
     _compact_contract_preview_section,
@@ -345,6 +346,7 @@ def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:
     if not isinstance(value, Mapping):
         return None
     candidates: list[Any] = []
+    candidates.append(_algorithm_smoke_actionable_telemetry_text(value))
     diagnostic = value.get("activation_diagnostic")
     if isinstance(diagnostic, Mapping):
         candidates.append(_algorithm_smoke_activation_diagnostic_text(diagnostic))
@@ -393,6 +395,57 @@ def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:
     if guidance:
         return _limit_string(f"repair guidance: {guidance}", 1200)
     return None
+
+
+def _algorithm_smoke_actionable_telemetry_text(value: Mapping[str, Any]) -> str | None:
+    actions = value.get("actionable_telemetry_feedback")
+    if not isinstance(actions, (list, tuple)) or not actions:
+        telemetry_static = value.get("telemetry_static_preview")
+        if isinstance(telemetry_static, Mapping):
+            actions = telemetry_static.get("actionable_telemetry_feedback")
+    action = _first_mapping(actions)
+    if action is None:
+        return None
+    mechanism = _limit_string(
+        action.get("failure_mechanism_id") or action.get("mechanism_id"),
+        120,
+    )
+    code = _limit_string(action.get("failure_code"), 160)
+    pattern = _limit_string(action.get("expected_call_pattern"), 360)
+    invalid = _algorithm_smoke_invalid_call_text(
+        action.get("invalid_call_summaries")
+    )
+    alternative = _limit_string(action.get("declaration_alternative"), 320)
+    parts = []
+    if code:
+        parts.append(f"failure_code={code}")
+    if mechanism:
+        parts.append(f"mechanism={mechanism}")
+    if pattern:
+        parts.append(f"expected_call_pattern={pattern}")
+    if invalid:
+        parts.append(f"invalid_call={invalid}")
+    if alternative:
+        parts.append(f"declaration_alternative={alternative}")
+    text = "; ".join(parts)
+    return f"actionable telemetry repair: {text}" if text else None
+
+
+def _algorithm_smoke_invalid_call_text(value: Any) -> str:
+    item = _first_mapping(value)
+    if item is None:
+        return ""
+    call = _limit_string(item.get("call"), 260)
+    delta_status = _limit_string(item.get("delta_status"), 80)
+    reason = _limit_string(item.get("reason"), 220)
+    parts = []
+    if call:
+        parts.append(call)
+    if delta_status:
+        parts.append(f"delta_status={delta_status}")
+    if reason:
+        parts.append(f"reason={reason}")
+    return "; ".join(parts)
 
 
 def _algorithm_smoke_activation_diagnostic_text(
@@ -588,6 +641,11 @@ def _compact_algorithm_smoke_observation(
     compact_payload = _drop_empty_mapping(
         {
             "passed": bool(payload.get("passed")),
+            "actionable_telemetry_feedback": (
+                _compact_actionable_telemetry_feedback(
+                    payload.get("actionable_telemetry_feedback")
+                )
+            ),
             "non_promotional": payload.get("non_promotional"),
             "tainted_debug": payload.get("tainted_debug"),
             "workspace_materialized": payload.get("workspace_materialized"),
@@ -603,6 +661,9 @@ def _compact_algorithm_smoke_observation(
             "problem_preview": _compact_problem_preview_mapping(
                 payload.get("problem_preview")
             ),
+            "telemetry_static_preview": _compact_telemetry_static_preview_for_budget(
+                payload.get("telemetry_static_preview")
+            ),
             "runtime_smoke": _compact_algorithm_smoke_section(
                 payload.get("runtime_smoke")
             ),
@@ -615,6 +676,32 @@ def _compact_algorithm_smoke_observation(
         structured_payload=compact_payload,
         repair_hint=None,
     )
+
+
+def _compact_telemetry_static_preview_for_budget(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    compact = _drop_empty_mapping(
+        {
+            "passed": value.get("passed"),
+            "issue_codes": _bounded_string_list(value.get("issue_codes"), limit=6),
+            "declared_mechanisms": _bounded_string_list(
+                value.get("declared_mechanisms"),
+                limit=6,
+            ),
+            "checked_fields": _bounded_string_list(
+                value.get("checked_fields"),
+                limit=6,
+            ),
+            "actionable_telemetry_feedback": (
+                _compact_actionable_telemetry_feedback(
+                    value.get("actionable_telemetry_feedback")
+                )
+            ),
+            "required_calls": _json_ready(value.get("required_calls")),
+        }
+    )
+    return compact or None
 
 
 def _compact_self_check_preview_observation(
@@ -662,8 +749,18 @@ def _minimal_self_check_preview_observation(
         compact_payload = _drop_empty_mapping(
             {
                 "passed": bool(payload.get("passed")),
+                "actionable_telemetry_feedback": (
+                    _compact_actionable_telemetry_feedback(
+                        payload.get("actionable_telemetry_feedback")
+                    )
+                ),
                 "issue_summary": _limit_string(payload.get("issue_summary"), 160),
                 "patch": _minimal_contract_preview_section(payload.get("patch")),
+                "telemetry_static_preview": (
+                    _compact_telemetry_static_preview_for_budget(
+                        payload.get("telemetry_static_preview")
+                    )
+                ),
                 "runtime_smoke": _minimal_algorithm_smoke_section(
                     payload.get("runtime_smoke")
                 ),

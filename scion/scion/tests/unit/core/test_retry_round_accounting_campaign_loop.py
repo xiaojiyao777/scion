@@ -49,6 +49,7 @@ def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None
         terminalize_active_branches=lambda reason: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=2,
     )
 
     loop.run(max_rounds=1)
@@ -104,6 +105,7 @@ def test_campaign_loop_does_not_count_proposal_only_blocks_against_max_rounds() 
         terminalize_active_branches=lambda reason: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=3,
     )
 
     loop.run(max_rounds=1)
@@ -301,7 +303,7 @@ def test_campaign_loop_counts_generic_proposal_blocks_in_quality_ceiling() -> No
     assert "proposal_quality_loop" in stopped_reasons
 
 
-def test_campaign_loop_default_three_round_quality_limit_allows_five_blocks() -> None:
+def test_campaign_loop_explicit_attempt_limit_allows_bounded_quality_overflow() -> None:
     results = [
         *[
             StepResult(
@@ -351,6 +353,7 @@ def test_campaign_loop_default_three_round_quality_limit_allows_five_blocks() ->
         terminalize_active_branches=lambda reason: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=8,
     )
 
     loop.run(max_rounds=3)
@@ -358,11 +361,12 @@ def test_campaign_loop_default_three_round_quality_limit_allows_five_blocks() ->
     assert calls == 8
     assert "proposal_quality_loop" not in stopped_reasons
     assert "max_rounds_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["attempt_limit"] == 8
     assert loop_statuses[-1]["proposal_quality_limit"] == 9
     assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 5
 
 
-def test_campaign_loop_default_three_round_quality_limit_stops_on_ninth_block() -> None:
+def test_campaign_loop_default_three_round_attempt_limit_stops_on_third_block() -> None:
     results = [
         StepResult(
             action="explore",
@@ -414,11 +418,54 @@ def test_campaign_loop_default_three_round_quality_limit_stops_on_ninth_block() 
 
     loop.run(max_rounds=3)
 
-    assert calls == 9
-    assert last_results[-1].stopped is True
-    assert "proposal_quality_loop" in stopped_reasons
+    assert calls == 3
+    assert last_results[-1].stopped is False
+    assert "proposal_attempt_limit_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["attempt_limit"] == 3
     assert loop_statuses[-1]["proposal_quality_limit"] == 9
-    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 9
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 3
+
+
+def test_campaign_loop_does_not_start_step_when_proposal_attempts_are_exhausted() -> None:
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=lambda: (_ for _ in ()).throw(
+            AssertionError("proposal cap should stop before launching a new step")
+        ),
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+        get_proposal_attempts=lambda: 3,
+    )
+
+    loop.run(max_rounds=3)
+
+    assert "proposal_attempt_limit_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["requested_rounds"] == 3
+    assert loop_statuses[-1]["attempt_limit"] == 3
+    assert loop_statuses[-1]["proposal_attempts_consumed"] == 3
+    assert loop_statuses[-1]["effective_rounds_completed"] == 0
 
 
 def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_attempts() -> None:
@@ -483,6 +530,7 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
         terminalize_active_branches=lambda reason: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
+        proposal_attempt_limit=5,
     )
 
     loop.run(max_rounds=2)
