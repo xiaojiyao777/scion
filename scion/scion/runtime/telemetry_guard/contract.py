@@ -112,6 +112,7 @@ def validate_expected_telemetry_contract(
                 allowed_fields=allowed,
                 role_map=role_map,
                 category=category,
+                declared_mechanisms=mechanisms,
             )
         ]
         if unknown:
@@ -166,12 +167,13 @@ def _is_allowed_declared_runtime_subfield(
     allowed_fields: set[str],
     role_map: dict[str, frozenset[str]] | None,
     category: str,
+    declared_mechanisms: tuple[str, ...] = (),
 ) -> bool:
     """Allow adapter-declared runtime map children without hard-coding keys.
 
     Problem adapters often expose telemetry maps such as
-    ``solver_algorithm_phase_runtime_ms`` whose concrete children are created
-    by algorithm phases or newly declared mechanisms.  The generic Scion
+    ``surface_phase_runtime_ms`` whose concrete children are created
+    by algorithm phases or newly declared mechanisms. The generic Scion
     contract should verify that the container is adapter-declared and has a
     compatible role, but it should not require every child key to be known
     before the agent writes the mechanism.
@@ -189,12 +191,33 @@ def _is_allowed_declared_runtime_subfield(
     if roles & _SUBFIELD_FORBIDDEN_CONTAINER_ROLES:
         return False
     if category == "activation":
-        return bool(roles & _ACTIVATION_COMPATIBLE_CONTAINER_ROLES)
+        if roles & _ACTIVATION_ALLOWED_ROLES:
+            return True
+        if not (roles & _ACTIVATION_COMPATIBLE_CONTAINER_ROLES):
+            return False
+        return _subfield_child_matches_declared_mechanism(
+            child,
+            declared_mechanisms,
+        )
     return True
 
 
 def _runtime_subfield_key_is_safe(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", str(value or "")))
+
+
+def _subfield_child_matches_declared_mechanism(
+    child: str,
+    declared_mechanisms: tuple[str, ...],
+) -> bool:
+    child_text = str(child or "").strip()
+    if not child_text:
+        return False
+    return any(
+        child_text == str(mechanism or "").strip()
+        for mechanism in declared_mechanisms
+        if str(mechanism or "").strip()
+    )
 
 
 def _category_field_semantic_errors(

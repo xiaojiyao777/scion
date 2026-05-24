@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from scion.proposal.tools.models import ProposalObservation
 from scion.proposal.tools.previews.algorithm_smoke_activation_diagnostic import (
     _proposal_smoke_activation_diagnostic,
+    _proposal_smoke_telemetry_diagnostics,
 )
 from scion.proposal.tools.previews.algorithm_smoke_feedback_diagnostics import (
     _algorithm_smoke_case_count,
@@ -97,6 +98,12 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         raw_payload,
         runtime_smoke=runtime_smoke,
         telemetry_guard=telemetry_guard,
+    )
+    telemetry_diagnostics = _proposal_smoke_telemetry_diagnostics(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        telemetry_guard=telemetry_guard,
+        activation_diagnostic=activation_diagnostic,
     )
     runtime_counters = _compact_algorithm_smoke_runtime_counters(runtime)
     subprocess_tail = _compact_algorithm_smoke_subprocess(run)
@@ -238,6 +245,10 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "repair_hints": repair_hints,
             "failed_checks": failed_checks,
             "activation_diagnostic": activation_diagnostic,
+            "telemetry_diagnostics": telemetry_diagnostics,
+            "smoke_telemetry_diagnostic_kind": _primary_telemetry_diagnostic_kind(
+                telemetry_diagnostics
+            ),
             "telemetry_guard": telemetry_guard,
             "runtime_comparison": runtime_comparison,
             "subprocess": subprocess_tail,
@@ -279,6 +290,16 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         f"{_algorithm_smoke_digest(compact_payload.get('agent_summary'))}"
     )
     return compact_payload
+
+
+def _primary_telemetry_diagnostic_kind(
+    diagnostics: list[dict[str, Any]],
+) -> str | None:
+    for diagnostic in diagnostics:
+        kind = str(diagnostic.get("diagnostic_type") or "").strip()
+        if kind:
+            return kind
+    return None
 
 
 def _hard_smoke_failure_present(

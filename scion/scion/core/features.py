@@ -98,6 +98,9 @@ class SafeFeatureExtractor:
         failed_pairs = 0
         candidate_failed_pairs = 0
         champion_failed_pairs = 0
+        pair_wins = 0
+        pair_losses = 0
+        pair_ties = 0
         n_cases = 0
         wins = 0
         losses = 0
@@ -126,6 +129,16 @@ class SafeFeatureExtractor:
             failed_pairs = stats.failed_pairs
             candidate_failed_pairs = stats.candidate_failed_pairs
             champion_failed_pairs = stats.champion_failed_pairs
+            pair_feedback = list(getattr(protocol, "pair_feedback", ()) or ())
+            pair_wins = sum(
+                1 for item in pair_feedback if getattr(item, "comparison", None) == "win"
+            )
+            pair_losses = sum(
+                1
+                for item in pair_feedback
+                if getattr(item, "comparison", None) == "loss"
+            )
+            pair_ties = len(pair_feedback) - pair_wins - pair_losses
 
         recent_failure_codes: Tuple[str, ...] = tuple(
             c for c in branch.failure_codes if c in KNOWN_FAILURE_CODES
@@ -172,6 +185,9 @@ class SafeFeatureExtractor:
             failed_pairs=failed_pairs,
             candidate_failed_pairs=candidate_failed_pairs,
             champion_failed_pairs=champion_failed_pairs,
+            pair_wins=pair_wins,
+            pair_losses=pair_losses,
+            pair_ties=pair_ties,
             telemetry_validation_repairable=(
                 is_repairable_telemetry_validation_failure(protocol)
             ),
@@ -259,6 +275,9 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         "failed_pairs",
         "candidate_failed_pairs",
         "champion_failed_pairs",
+        "pair_wins",
+        "pair_losses",
+        "pair_ties",
         "wins",
         "losses",
         "ties",

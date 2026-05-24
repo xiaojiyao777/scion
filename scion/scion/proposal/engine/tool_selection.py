@@ -77,6 +77,7 @@ _TOOL_SELECTION_CACHEABLE_CONTEXT_KEYS = frozenset(
     {
         "active_algorithm_facts_anchor",
         "hypothesis_constraints",
+        "mandatory_visible_source_context",
         "reserved_for_self_check",
         "tool_arg_guidance",
     }
@@ -143,7 +144,12 @@ def _build_tool_selection_prompt(context: Dict[str, Any]) -> str:
         return (
             f"{system_text}\n\n"
             "Code-phase note: a hypothesis has already been approved; inspect "
-            "only what is needed before writing the final patch.\n\n"
+            "only what is needed before writing the final patch. The approved "
+            "target file and integration files listed in "
+            "mandatory_visible_source_context will be rendered as mandatory "
+            "full-source sections in the final code prompt; use read receipts "
+            "instead of repeating identical file reads. If you need branch/diff "
+            "state, call the branch-state tool instead of rereading source.\n\n"
             f"{user_prompt}"
         )
     return f"{system_text}\n\n{user_prompt}"

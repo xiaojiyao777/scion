@@ -4,6 +4,7 @@ import uuid
 
 from scion.core.branch_lifecycle_policy import (
     BranchLifecyclePolicy,
+    SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE,
     SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN,
@@ -65,6 +66,25 @@ def test_loss_without_wins_soft_abandons_low_signal_branch() -> None:
 
     assert decision.action == "soft_abandon"
     assert SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN in decision.reason_codes
+
+
+def test_pair_level_wins_without_case_gate_keep_branch_as_weak_positive() -> None:
+    decision = BranchLifecyclePolicy().decide(
+        _features(
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            pair_wins=5,
+            pair_losses=3,
+            pair_ties=8,
+            valid_pairs=16,
+        ),
+    )
+
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,)
+    assert decision.next_zero_win_streak == 0
 
 
 def test_negative_delta_and_runtime_slowdown_soft_abandon() -> None:

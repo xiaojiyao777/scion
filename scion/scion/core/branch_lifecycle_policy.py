@@ -10,6 +10,9 @@ from scion.core.models import DecisionFeatures
 BranchLifecycleAction = Literal["keep_exploring", "soft_abandon"]
 
 SCREENING_WEAK_SIGNAL_CONTINUE = "SCREENING_WEAK_SIGNAL_CONTINUE"
+SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL = (
+    "SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL"
+)
 SCREENING_NEUTRAL_SIGNAL_CONTINUE = "SCREENING_NEUTRAL_SIGNAL_CONTINUE"
 SCREENING_ZERO_WIN_STREAK_CONTINUE = "SCREENING_ZERO_WIN_STREAK_CONTINUE"
 SCREENING_ZERO_WIN_STREAK_EXHAUSTED = "SCREENING_ZERO_WIN_STREAK_EXHAUSTED"
@@ -90,6 +93,7 @@ class BranchLifecyclePolicy:
         wins = max(0, int(features.wins or 0))
         losses = max(0, int(features.losses or 0))
         ties = max(0, int(features.ties or 0))
+        pair_wins = max(0, int(getattr(features, "pair_wins", 0) or 0))
         next_zero_win_streak = 0 if wins > 0 else current_zero_win_streak + 1
 
         if features.stale:
@@ -121,6 +125,14 @@ class BranchLifecyclePolicy:
             return BranchLifecycleDecision(
                 action="keep_exploring",
                 reason_codes=(SCREENING_WEAK_SIGNAL_CONTINUE,),
+                next_zero_win_streak=0,
+                next_telemetry_diagnostic_streak=0,
+            )
+
+        if pair_wins > 0:
+            return BranchLifecycleDecision(
+                action="keep_exploring",
+                reason_codes=(SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL,),
                 next_zero_win_streak=0,
                 next_telemetry_diagnostic_streak=0,
             )
@@ -232,6 +244,7 @@ class BranchLifecyclePolicy:
 __all__ = [
     "BranchLifecycleDecision",
     "BranchLifecyclePolicy",
+    "SCREENING_ACTIVE_PAIR_WINS_BUT_CASE_FAIL",
     "SCREENING_NEUTRAL_SIGNAL_CONTINUE",
     "SCREENING_SOFT_ABANDON_CANDIDATE_RUNTIME_FAILURE",
     "SCREENING_SOFT_ABANDON_LOSS_WITHOUT_WIN",

@@ -105,6 +105,9 @@ def _compact_algorithm_smoke_repair_feedback(
     failure = _first_mapping_item(guard.get("failures"))
     diagnostic = payload.get("activation_diagnostic")
     activation_diagnostic = diagnostic if isinstance(diagnostic, Mapping) else {}
+    telemetry_diagnostics = _compact_telemetry_diagnostics(
+        payload.get("telemetry_diagnostics")
+    )
     mechanism = str(
         (actionable or {}).get("mechanism_id")
         or (actionable or {}).get("failure_mechanism_id")
@@ -165,6 +168,7 @@ def _compact_algorithm_smoke_repair_feedback(
             "activation_diagnostic": _compact_activation_diagnostic(
                 activation_diagnostic
             ),
+            "telemetry_diagnostics": telemetry_diagnostics,
         }
     )
 
@@ -180,6 +184,7 @@ def _compact_activation_diagnostic(
             "mechanism_id": diagnostic.get("mechanism_id")
             or diagnostic.get("telemetry_failure_mechanism"),
             "kind": diagnostic.get("activation_diagnostic_kind"),
+            "diagnostic_type": diagnostic.get("diagnostic_type"),
             "layer": diagnostic.get("layer") or diagnostic.get("source"),
             "missing_fields": _compact_string_list(diagnostic.get("missing_fields")),
             "detected_records": _compact_code_prompt_value(
@@ -193,6 +198,29 @@ def _compact_activation_diagnostic(
             ),
         }
     )
+
+
+def _compact_telemetry_diagnostics(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    diagnostics: list[dict[str, Any]] = []
+    for item in value[:4]:
+        if not isinstance(item, Mapping):
+            continue
+        diagnostics.append(
+            _drop_empty_dict(
+                {
+                    "diagnostic_type": item.get("diagnostic_type"),
+                    "mechanism_id": item.get("mechanism_id"),
+                    "category": item.get("category"),
+                    "field": item.get("field"),
+                    "activation_status": item.get("activation_status"),
+                    "effect_status": item.get("effect_status"),
+                    "allowed_repair": _limit_string(item.get("allowed_repair"), 220),
+                }
+            )
+        )
+    return diagnostics
 
 
 def _allowed_repair_shape(

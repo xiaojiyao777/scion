@@ -4,6 +4,7 @@ from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.proposal.agentic_session_hypothesis import (
     _mechanism_novelty_gate_prompt_parity_feedback,
 )
+from scion.proposal.negative_facts import render_negative_fact_block
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
 
@@ -687,3 +688,78 @@ def test_negative_fact_block_renders_before_hypothesis_task_without_domain_terms
     assert "cvrp" not in lowered
     assert "alns" not in lowered
     assert "vns" not in lowered
+
+
+def test_negative_fact_block_includes_telemetry_and_weak_positive_memory() -> None:
+    block = render_negative_fact_block(
+        prior_quality_blocks=(
+            {
+                "mechanism": "same_route_or_opt",
+                "target_file": "policies/baseline_modules/local_search.py",
+                "failure_code": "telemetry_validation_repairable",
+                "diagnostic_type": "effect_missing_observed_activation",
+                "activation_status": "observed",
+                "effect_status": "zero",
+                "why_not_promoted": "active_no_case_level_gate",
+                "screening_pair_case_split": (
+                    "pair_wins=5,pair_losses=3,pair_ties=8,"
+                    "case_win_rate=0.25"
+                ),
+                "allowed_variant_guidance": (
+                    "adjust trigger, schedule, or combine with another bounded "
+                    "mechanism; do not repeat unchanged mechanism"
+                ),
+            },
+        )
+    )
+
+    _blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Synthetic planner problem.",
+            "research_surfaces": "planner_policy",
+            "champion_operators_code": "def solve():\n    pass\n",
+            "champion_stats": "{}",
+            "operator_categories": "planner_policy",
+            "agentic_negative_fact_block": block,
+        }
+    )
+
+    assert "same_route_or_opt" in user_prompt
+    assert "effect_missing_observed_activation" in user_prompt
+    assert "active_no_case_level_gate" in user_prompt
+    assert "pair_wins=5" in user_prompt
+    assert "repeat_unchanged_mechanism=false" in user_prompt
+    assert user_prompt.index("same_route_or_opt") < user_prompt.index("## Task")
+
+
+def test_hypothesis_prompt_renders_expected_telemetry_schema_examples() -> None:
+    _blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "Synthetic planner problem.",
+            "research_surfaces": "planner_policy",
+            "champion_operators_code": "def solve():\n    pass\n",
+            "champion_stats": "{}",
+            "operator_categories": "planner_policy",
+            "agentic_expected_telemetry_guidance": {
+                "schema_version": "agentic-expected-telemetry-guidance.v1",
+                "templates_by_surface": {
+                    "planner_policy": {
+                        "expected_telemetry": {
+                            "activation": [
+                                "planner_stage_runtime_ms.<mechanism_id>"
+                            ],
+                            "effect": [
+                                "planner_best_delta.<mechanism_id>"
+                            ],
+                        }
+                    }
+                },
+            },
+        }
+    )
+
+    assert "## Expected Telemetry Schema Examples" in user_prompt
+    assert "planner_stage_runtime_ms.<mechanism_id>" in user_prompt
+    assert user_prompt.index("Expected Telemetry Schema Examples") < user_prompt.index(
+        "Telemetry contract:"
+    )

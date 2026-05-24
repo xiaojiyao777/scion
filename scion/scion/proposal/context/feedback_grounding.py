@@ -42,6 +42,12 @@ def _build_feedback_grounding_summary(
     ):
         lines.append("- Low-value/no-effect mechanisms:")
         lines.extend(f"  - {line}" for line in mechanism_lines[:4])
+    if weak_lines := _weak_positive_mechanism_lines(
+        screening_steps,
+        taxonomy=taxonomy,
+    ):
+        lines.append("- Weak-positive / non-promoting mechanisms:")
+        lines.extend(f"  - {line}" for line in weak_lines[:4])
     if len(lines) == 1:
         return ""
     lines.append(
@@ -209,6 +215,45 @@ def _recent_no_effect_mechanism_lines(
             pieces.append(f"primary_reason={reason}")
         pieces.append(
             "repeat only with new evidence or a materially different mechanism"
+        )
+        lines.append("; ".join(pieces) + ".")
+    return lines
+
+
+def _weak_positive_mechanism_lines(
+    screening_steps: list[StepRecord],
+    taxonomy: Optional[list] = None,
+) -> list[str]:
+    lines: list[str] = []
+    for step in reversed(screening_steps):
+        protocol = step.protocol_result
+        if protocol is None:
+            continue
+        pairs = list(protocol.pair_feedback or ())
+        if not pairs:
+            continue
+        pair_wins = sum(
+            1 for item in pairs if getattr(item, "comparison", None) == "win"
+        )
+        pair_losses = sum(
+            1 for item in pairs if getattr(item, "comparison", None) == "loss"
+        )
+        pair_ties = len(pairs) - pair_wins - pair_losses
+        if pair_wins <= 0 or _safe_float(protocol.stats.win_rate) >= 0.5:
+            continue
+        pieces = [
+            f"{_mechanism_label_for_feedback(step, taxonomy=taxonomy)} "
+            f"(round {step.round_num})",
+            "valid_active_weak_positive",
+            f"pair_wins={pair_wins}",
+            f"pair_losses={pair_losses}",
+            f"pair_ties={pair_ties}",
+            f"case_win_rate={protocol.stats.win_rate:.2f}",
+        ]
+        if reason := _primary_screening_reason(step):
+            pieces.append(f"why_not_promoted={reason}")
+        pieces.append(
+            "allowed_follow_up=adjust trigger/schedule/composition; do not repeat unchanged mechanism"
         )
         lines.append("; ".join(pieces) + ".")
     return lines

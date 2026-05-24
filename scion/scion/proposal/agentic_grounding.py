@@ -152,6 +152,34 @@ def _solver_design_target_file_read_args(
     }
 
 
+def _forced_solver_design_target_file_read_args(
+    context: ProposalToolContext | None,
+    *,
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation] = (),
+) -> dict[str, Any] | None:
+    if context is None or not _context_requires_solver_design_grounding(context):
+        return None
+    target_file = _normalize_solver_design_target_file(context.forced_target_file)
+    if not _is_solver_design_algorithm_target(target_file):
+        return None
+    existing_paths = _existing_algorithm_file_paths(
+        context=context,
+        observations=observations,
+    )
+    if existing_paths and target_file not in set(existing_paths):
+        return None
+    if not existing_paths and not _target_declared_for_solver_design_surface(
+        context,
+        target_file,
+    ):
+        return None
+    return {
+        "surface": "solver_design",
+        "file_path": target_file,
+        "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
+    }
+
+
 def _solver_design_target_boundary_error(
     hypothesis: HypothesisProposal,
     *,
@@ -301,6 +329,9 @@ def _run_required_context_preface(
                 ),
             ]
         )
+        forced_target_read_args = _forced_solver_design_target_file_read_args(context)
+        if forced_target_read_args is not None:
+            calls.append(("context.read_algorithm_file", forced_target_read_args))
 
     observations: list[ProposalObservation] = []
     for name, args in calls:

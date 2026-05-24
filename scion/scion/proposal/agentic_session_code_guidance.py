@@ -58,6 +58,7 @@ class AgenticSessionCodeGuidanceMixin:
             context: ProposalToolContext,
             hypothesis: HypothesisProposal,
             observations: list[ProposalObservation],
+            code_context: Mapping[str, Any] | None = None,
         ) -> dict[str, Any]:
             feedback_args = _feedback_query_args(context)
             if hypothesis.change_locus and "surface" not in feedback_args:
@@ -118,6 +119,11 @@ class AgenticSessionCodeGuidanceMixin:
                     context,
                     observations,
                 )
+                visibility_context = _code_phase_source_visibility_context(
+                    hypothesis,
+                    observations,
+                    code_context=code_context,
+                )
                 recommended_file_path = _recommended_algorithm_file_path(
                     algorithm_file_guidance,
                     hypothesis.target_file,
@@ -163,6 +169,7 @@ class AgenticSessionCodeGuidanceMixin:
                 }
                 guidance["context.read_algorithm_file"] = {
                     **algorithm_file_guidance,
+                    **visibility_context,
                     "recommended_args": {
                         "surface": "solver_design",
                         "file_path": recommended_file_path,
@@ -174,9 +181,16 @@ class AgenticSessionCodeGuidanceMixin:
                         "use context.read_algorithm_symbol for extra symbols after "
                         "the approved target and owning integration files are clear."
                     ),
+                    "duplicate_read_rule": (
+                        "If file_read_receipts or mandatory_visible_files already "
+                        "show the same file as full-source visible, do not read it "
+                        "again. Use context.read_branch_state for branch/diff state "
+                        "or context.read_algorithm_symbol for a different symbol."
+                    ),
                 }
                 guidance["context.read_algorithm_symbol"] = {
                     **algorithm_file_guidance,
+                    **visibility_context,
                     "recommended_args": {
                         "surface": "solver_design",
                         "file_path": recommended_file_path,
@@ -186,3 +200,109 @@ class AgenticSessionCodeGuidanceMixin:
                     "purpose": "Read one symbol from an allowlisted active solver file.",
                 }
             return guidance
+
+    def _code_phase_source_visibility_context(
+            self,
+            hypothesis: HypothesisProposal,
+            observations: list[ProposalObservation],
+            *,
+            code_context: Mapping[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            return _code_phase_source_visibility_context(
+                hypothesis,
+                observations,
+                code_context=code_context,
+            )
+
+
+def _code_phase_source_visibility_context(
+    hypothesis: HypothesisProposal,
+    observations: list[ProposalObservation],
+    *,
+    code_context: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    target = str(getattr(hypothesis, "target_file", "") or "").strip()
+    integration_paths = _integration_file_paths_from_code_context(code_context or {})
+    mandatory_files: list[dict[str, Any]] = []
+    if target:
+        mandatory_files.append(
+            {
+                "file_path": target,
+                "role": "approved_hypothesis_target",
+                "visibility": "mandatory_visible_in_final_code_prompt",
+            }
+        )
+    for path in integration_paths:
+        if path == target:
+            continue
+        mandatory_files.append(
+            {
+                "file_path": path,
+                "role": "solver_design_integration",
+                "visibility": "mandatory_visible_in_final_code_prompt",
+            }
+        )
+    receipts = _code_phase_file_read_receipts(observations)
+    ordered_priority = [item["file_path"] for item in mandatory_files]
+    for path in receipts:
+        if path not in ordered_priority:
+            ordered_priority.append(path)
+    return _drop_empty_dict(
+        {
+            "mandatory_visible_files": mandatory_files,
+            "already_visible_file_receipts": [
+                {
+                    "file_path": path,
+                    "visibility": "already_read_or_visible",
+                    "guidance": (
+                        "Do not re-read this file unless exact source coverage is "
+                        "insufficient for a specific symbol or branch-state check."
+                    ),
+                }
+                for path in receipts
+            ],
+            "target_aware_read_priority": ordered_priority,
+            "target_aware_policy": (
+                "Prefer approved target_file, declared additional_changes, "
+                "integration files, branch current files, and recent failure files "
+                "before unrelated algorithm files. Reading other allowlisted files "
+                "remains allowed when the mechanism needs them."
+            ),
+        }
+    )
+
+
+def _code_phase_file_read_receipts(
+    observations: list[ProposalObservation],
+) -> list[str]:
+    paths: list[str] = []
+    for observation in observations:
+        if observation.is_error or observation.tool_name not in {
+            "context.read_algorithm_file",
+            "context.read_surface",
+        }:
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        path = str(
+            payload.get("file_path") or payload.get("target_file") or ""
+        ).strip()
+        if path and path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _integration_file_paths_from_code_context(
+    code_context: Mapping[str, Any],
+) -> list[str]:
+    text = str(code_context.get("solver_design_branch_current_integration_files") or "")
+    paths: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("### "):
+            continue
+        path = stripped[4:].strip().strip("`")
+        if path and path.endswith(".py") and "/" in path and path not in paths:
+            paths.append(path)
+    return paths

@@ -6,6 +6,7 @@ from typing import Mapping
 
 from scion.proposal.agentic_session_common import *
 from scion.proposal.negative_facts import render_negative_fact_block
+from scion.runtime.telemetry_guard import expected_telemetry_template
 
 
 class AgenticSessionHypothesisMixin:
@@ -381,6 +382,13 @@ class AgenticSessionHypothesisMixin:
             if constraints:
                 hypothesis_context["agentic_hypothesis_constraints"] = (
                     _sanitize_agentic_value(constraints)
+                )
+            telemetry_guidance = _expected_telemetry_guidance_for_hypothesis(
+                tool_context,
+            )
+            if telemetry_guidance:
+                hypothesis_context["agentic_expected_telemetry_guidance"] = (
+                    telemetry_guidance
                 )
             if semantic_rejections:
                 hypothesis_context["agentic_hypothesis_semantic_rejections"] = [
@@ -881,6 +889,52 @@ class AgenticSessionHypothesisMixin:
                 },
             )
             return self._persist(output, state)
+
+
+def _expected_telemetry_guidance_for_hypothesis(
+    context: ProposalToolContext | None,
+) -> dict[str, Any]:
+    if context is None:
+        return {}
+    surfaces: list[str] = []
+    forced = str(getattr(context, "forced_surface", "") or "").strip()
+    if forced:
+        surfaces.append(forced)
+    for surface in getattr(context, "active_problem_boundary_surfaces", ()) or ():
+        text = str(surface or "").strip()
+        if text and text not in surfaces:
+            surfaces.append(text)
+    if not surfaces:
+        return {}
+    templates: dict[str, Any] = {}
+    for surface in surfaces[:4]:
+        template = expected_telemetry_template(
+            problem_spec=getattr(context, "problem_spec", None),
+            selected_surface=surface,
+            declared_mechanisms=("<mechanism_id>",),
+            max_fields_per_category=4,
+        )
+        if template:
+            templates[surface] = template
+    if not templates:
+        return {}
+    return _drop_empty_dict(
+        {
+            "schema_version": "agentic-expected-telemetry-guidance.v1",
+            "source": "adapter_declared_runtime_fields",
+            "templates_by_surface": templates,
+            "rule": (
+                "Use only these top-level categories: activity, activation, "
+                "effect, budget. Replace <mechanism_id> or {mechanism} with the "
+                "exact mechanism_changes id before finalizing the hypothesis."
+            ),
+            "preview_helper": (
+                "Use proposal.schema_preview if unsure; it returns the exact "
+                "C11_expected_telemetry repair template without lowering schema "
+                "strictness."
+            ),
+        }
+    )
 
 
 def _mechanism_novelty_gate_prompt_parity_feedback(

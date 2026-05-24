@@ -37,10 +37,12 @@ def render_negative_fact_block(
     deduped = list(dict.fromkeys(entries))
     return "\n".join(
         [
-            "## Do Not Claim Missing / Known Existing Mechanisms",
+            "## Do Not Claim Missing / Near-Field Mechanism Memory",
             (
                 "Provider-owned facts and prior structured rejections below are "
-                "hard grounding constraints for this hypothesis."
+                "near-field grounding constraints for this hypothesis. Treat "
+                "contradicted premises as blacklisted, but use allowed variant "
+                "guidance to preserve legitimate follow-up variants."
             ),
             *deduped,
         ]
@@ -51,21 +53,49 @@ def _entry_from_rejection(payload: Mapping[str, Any]) -> str:
     if not isinstance(payload, Mapping):
         return ""
     fact_ids = _fact_ids(payload)
-    if not fact_ids:
+    mechanism = _text(payload.get("mechanism")) or (fact_ids[0] if fact_ids else "")
+    failure_code = _text(payload.get("failure_code"))
+    premise_check = _text(payload.get("premise_check"))
+    if not fact_ids and not _near_field_memory_worthy(payload, mechanism):
         return ""
-    mechanism = _text(payload.get("mechanism")) or fact_ids[0]
     guidance = (
         _text(payload.get("allowed_variant_guidance"))
         or _text(payload.get("retry_constraint"))
         or _text(payload.get("reason"))
     )
     parts = [
-        f"- fact_id={','.join(fact_ids[:3])}",
+        (
+            f"- fact_id={','.join(fact_ids[:3])}"
+            if fact_ids
+            else "- fact_id=unstructured_prior_feedback"
+        ),
         f"mechanism={mechanism}",
-        "do_not_claim_missing=true",
     ]
+    if _blacklists_missing_premise(payload):
+        parts.append("do_not_claim_missing=true")
+    else:
+        parts.append("repeat_unchanged_mechanism=false")
+    target = _text(payload.get("target_file"))
+    if target:
+        parts.append(f"target_file={target}")
+    if premise_check:
+        parts.append(f"premise_check={premise_check}")
+    if failure_code:
+        parts.append(f"failure_code={failure_code}")
     if guidance:
         parts.append(f"allowed_variant_guidance={guidance}")
+    for key in (
+        "contradicted_premise",
+        "active_fact_digest",
+        "diagnostic_type",
+        "activation_status",
+        "effect_status",
+        "why_not_promoted",
+        "screening_pair_case_split",
+    ):
+        value = _text(payload.get(key))
+        if value:
+            parts.append(f"{key}={value}")
     fact_packet_digest = _text(
         payload.get("fact_packet_digest")
         or payload.get("source_fact_digest")
@@ -76,6 +106,34 @@ def _entry_from_rejection(payload: Mapping[str, Any]) -> str:
     if snapshot_digest:
         parts.append(f"snapshot_digest={snapshot_digest}")
     return "; ".join(parts)
+
+
+def _near_field_memory_worthy(payload: Mapping[str, Any], mechanism: str) -> bool:
+    if mechanism:
+        return True
+    failure_code = _text(payload.get("failure_code")).lower()
+    premise_check = _text(payload.get("premise_check")).lower()
+    diagnostic_type = _text(payload.get("diagnostic_type")).lower()
+    return any(
+        marker
+        for marker in (
+            failure_code,
+            premise_check,
+            diagnostic_type,
+        )
+        if marker
+    )
+
+
+def _blacklists_missing_premise(payload: Mapping[str, Any]) -> bool:
+    failure_code = _text(payload.get("failure_code"))
+    premise_check = _text(payload.get("premise_check"))
+    category = _text(payload.get("failure_category"))
+    return (
+        failure_code == "proposal_premise_contradicted"
+        or premise_check == "contradicted"
+        or category == "agent_grounding_failure"
+    )
 
 
 def _entries_from_active_facts(value: Mapping[str, Any] | None) -> list[str]:

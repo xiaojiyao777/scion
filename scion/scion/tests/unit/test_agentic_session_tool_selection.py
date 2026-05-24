@@ -80,6 +80,63 @@ def test_feedback_query_args_use_single_active_boundary_without_forcing(
     }
 
 
+def test_code_phase_planner_receives_target_aware_visible_file_receipts(
+    tmp_path: Path,
+) -> None:
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    target_file = "policies/baseline_modules/local_search.py"
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file=target_file,
+            mechanism_changes=[
+                {"id": "same_route_reinsertion", "change_type": "add"}
+            ],
+        )
+    )
+    code_context = {
+        "research_surface_name": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": target_file,
+        "target_file_code": "def local_search():\n    pass\n",
+        "solver_design_branch_current_integration_files": (
+            "### policies/baseline_algorithm.py\n```python\n"
+            "def solve():\n    pass\n```\n"
+            "### policies/baseline_modules/scheduler.py\n```python\n"
+            "class _Scheduler:\n    pass\n```"
+        ),
+    }
+    session = AgenticProposalSession(
+        FakeCreative(hypothesis=hypothesis),
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    source_context = session._code_phase_source_visibility_context(
+        hypothesis,
+        [],
+        code_context=code_context,
+    )
+    mandatory_paths = {
+        item["file_path"] for item in source_context["mandatory_visible_files"]
+    }
+    assert target_file in mandatory_paths
+    assert "policies/baseline_algorithm.py" in mandatory_paths
+    assert "policies/baseline_modules/scheduler.py" in mandatory_paths
+    guidance = session._code_tool_arg_guidance(
+        context,
+        hypothesis,
+        [],
+        code_context,
+    )
+    read_guidance = guidance["context.read_algorithm_file"]
+    assert read_guidance["recommended_args"]["file_path"] == target_file
+    assert target_file in read_guidance["target_aware_read_priority"]
+    assert "duplicate_read_rule" in read_guidance
+
+
 def test_tool_selection_helpers_filter_model_and_code_phase_allowlists(
     tmp_path: Path,
 ) -> None:

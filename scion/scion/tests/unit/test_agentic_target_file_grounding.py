@@ -171,6 +171,60 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     )
 
 
+def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
+    tmp_path: Path,
+) -> None:
+    hypothesis = _scheduler_hypothesis(
+        "Modify the forced scheduler target after reading its source."
+    )
+    creative = SequentialHypothesisCreative([hypothesis])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file="policies/baseline_modules/scheduler.py",
+        active_problem_boundary_surfaces=("solver_design",),
+    )
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "artifacts-forced")
+    session = AgenticProposalSession(
+        creative,
+        artifact_store=artifact_store,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-forced-target-grounding",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert len(creative.hypothesis_contexts) == 1
+    first_context = creative.hypothesis_contexts[0]
+    assert "agentic_hypothesis_grounding_rejections" not in first_context
+    assert "agentic_expected_telemetry_guidance" in first_context
+    target_reads = [
+        observation
+        for observation in first_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_file"
+        and observation["structured_payload"]["file_path"]
+        == "policies/baseline_modules/scheduler.py"
+    ]
+    assert target_reads
+    assert target_reads[0]["structured_payload"]["truncated"] is False
+    assert "class _ALNSVNSSolver" in target_reads[0]["structured_payload"][
+        "content_preview"
+    ]
+
+
 def test_read_receipt_is_not_prompt_inclusion_but_manifest_is() -> None:
     observation = _algorithm_read_observation(
         "context.read_algorithm_file",

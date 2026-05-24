@@ -313,6 +313,9 @@ def _build_experiment_history(
                 f"  median_delta={st.median_delta:.4f}"
                 f"  outcome={pr.gate_outcome}"
             )
+            pair_split = _screening_pair_case_split(pr)
+            if pair_split:
+                line += f"\n    pair_case_split: {pair_split}"
             if primary_reason:
                 line += f"\n    decision_primary_reason: {primary_reason}"
             if auxiliary_reasons:
@@ -336,6 +339,30 @@ def _build_experiment_history(
         lines.append(diagnosis)
 
     return "\n".join(lines)
+
+
+def _screening_pair_case_split(protocol) -> str:
+    pairs = list(getattr(protocol, "pair_feedback", ()) or ())
+    if not pairs:
+        return ""
+    pair_wins = sum(1 for item in pairs if getattr(item, "comparison", None) == "win")
+    pair_losses = sum(
+        1 for item in pairs if getattr(item, "comparison", None) == "loss"
+    )
+    pair_ties = len(pairs) - pair_wins - pair_losses
+    stats = protocol.stats
+    parts = [
+        f"pair_wins={pair_wins}",
+        f"pair_losses={pair_losses}",
+        f"pair_ties={pair_ties}",
+        f"pair_total={len(pairs)}",
+        f"case_wins={getattr(stats, 'wins', 0)}",
+        f"case_losses={getattr(stats, 'losses', 0)}",
+        f"case_ties={getattr(stats, 'ties', 0)}",
+    ]
+    if pair_wins > 0 and getattr(stats, "win_rate", 0.0) < 0.5:
+        parts.append("diagnostic=active_pair_wins_but_case_fail")
+    return ", ".join(parts)
 
 
 def _pre_protocol_failure_detail_for_history(step: StepRecord) -> str:

@@ -339,6 +339,9 @@ class DecisionFeatures:
     failed_pairs: int = 0
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
+    pair_wins: int = 0
+    pair_losses: int = 0
+    pair_ties: int = 0
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
     telemetry_validation_repairable: bool = False

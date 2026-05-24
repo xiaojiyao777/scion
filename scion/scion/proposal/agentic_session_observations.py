@@ -142,7 +142,9 @@ def _deduplicate_observation_if_already_read(
             observation_type="already_read_ref",
             summary=(
                 "Repeated proposal tool call returned an already-read reference "
-                "instead of duplicating the full payload."
+                "instead of duplicating the full payload. Do not read this same "
+                "source again; call branch-state for branch/diff state or a "
+                "symbol read for a narrower different detail."
             ),
             structured_payload=_already_read_payload(
                 observation,
@@ -208,6 +210,12 @@ def _already_read_payload(
             "symbol": payload.get("symbol") if isinstance(payload, Mapping) else None,
             "readable": payload.get("readable") if isinstance(payload, Mapping) else None,
             "source": payload.get("source") if isinstance(payload, Mapping) else None,
+            "next_step_hint": (
+                "Same-source reread is unnecessary. Use existing mandatory-visible "
+                "source sections/read receipts, or call context.read_branch_state "
+                "for branch status and context.read_algorithm_symbol for a "
+                "specific different symbol."
+            ),
         }
     )
 

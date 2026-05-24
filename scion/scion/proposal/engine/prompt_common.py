@@ -140,6 +140,16 @@ def _agentic_research_context_block(
             "Algorithm Facts.\n\n"
             f"{_bounded_json(active_solver_mechanisms, _AGENTIC_ACTIVE_SOLVER_MECHANISMS_CHARS)}"
         )
+    telemetry_guidance = context.get("agentic_expected_telemetry_guidance")
+    if telemetry_guidance:
+        parts.append(
+            "## Expected Telemetry Schema Examples\n"
+            "Adapter-declared legal expected_telemetry patterns for the active "
+            "research boundary. Use these examples when filling the final "
+            "hypothesis; they are guidance for schema correctness, not a "
+            "relaxed contract.\n\n"
+            f"{_bounded_json(telemetry_guidance, 6000)}"
+        )
     preview_feedback = context.get("agentic_preview_feedback")
     if preview_feedback:
         heading = (

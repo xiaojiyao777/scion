@@ -281,6 +281,11 @@ def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
     assert diagnostic["code"] == "proposal_activation_diagnostic"
     assert diagnostic["category"] == "proposal_activation_diagnostic"
     assert diagnostic["activation_diagnostic_kind"] == "not_connected"
+    assert diagnostic["diagnostic_type"] == "activation_unobserved_wiring_suspect"
+    assert diagnostic["lifecycle_signal"] == "inactive_or_wiring_suspect"
+    assert payload["smoke_telemetry_diagnostic_kind"] == (
+        "activation_unobserved_wiring_suspect"
+    )
     assert diagnostic["telemetry_failure_code"] == (
         "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
     )
@@ -667,3 +672,139 @@ def test_algorithm_smoke_activation_missing_without_static_instrumentation_is_di
     assert payload["activation_diagnostic"]["activation_diagnostic_kind"] == (
         "instrumentation_missing"
     )
+    assert payload["activation_diagnostic"]["diagnostic_type"] == (
+        "activation_unobserved_wiring_suspect"
+    )
+    assert payload["activation_diagnostic"]["lifecycle_signal"] == (
+        "inactive_or_wiring_suspect"
+    )
+
+
+def test_algorithm_smoke_conditional_activation_diagnostic_is_not_hard_fail() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "telemetry_static_preview": {
+                "passed": True,
+                "declared_mechanisms": ["rare_probe"],
+                "checked_fields": ["mechanism_activation.rare_probe"],
+                "helper_evidence": {
+                    "rare_probe": {"record_iteration": True}
+                },
+            },
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 1,
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 1,
+                    "declared_mechanisms": ["rare_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "rare_probe",
+                            "activation_status": "missing",
+                            "activation": {
+                                "status": "missing",
+                                "fields": ["mechanism_activation.rare_probe"],
+                                "candidate_positive": 0,
+                                "candidate_present": 0,
+                                "candidate_missing": 1,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "rare_probe",
+                            "category": "activation",
+                            "field": "mechanism_activation.rare_probe",
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 1,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["diagnostic_passed"] is True
+    assert payload["activation_diagnostic"]["diagnostic_type"] == (
+        "activation_unobserved_conditional"
+    )
+    assert payload["activation_diagnostic"]["lifecycle_signal"] == (
+        "active_no_case_level_gate"
+    )
+
+
+def test_algorithm_smoke_observed_activation_missing_effect_is_weak_signal() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "expected_telemetry_present": True,
+                    "effect_observation_required": True,
+                    "declared_mechanisms": ["active_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "active_probe",
+                            "activation_status": "observed",
+                            "effect_status": "zero",
+                            "activation": {
+                                "status": "observed",
+                                "fields": ["mechanism_activation.active_probe"],
+                                "candidate_positive": 2,
+                                "candidate_present": 2,
+                            },
+                            "effect": {
+                                "status": "zero",
+                                "fields": ["mechanism_best_delta.active_probe"],
+                                "candidate_positive": 0,
+                                "candidate_present": 2,
+                                "candidate_zero": 2,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "active_probe",
+                            "category": "effect",
+                            "field": "mechanism_best_delta.active_probe",
+                            "candidate_positive": 0,
+                            "candidate_present": 2,
+                            "candidate_zero": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    kinds = {item["diagnostic_type"] for item in payload["telemetry_diagnostics"]}
+    assert "effect_missing_observed_activation" in kinds
+    effect_diag = next(
+        item
+        for item in payload["telemetry_diagnostics"]
+        if item["diagnostic_type"] == "effect_missing_observed_activation"
+    )
+    assert effect_diag["mechanism_id"] == "active_probe"
+    assert effect_diag["lifecycle_signal"] == "valid_active_weak_positive"
+    assert "weak signal" in effect_diag["screening_policy"]

@@ -13,6 +13,17 @@ from scion.proposal.tools.surface import _drop_empty_items
 
 PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE = "proposal_activation_diagnostic"
 
+OBSERVED_ACTIVATION = "observed_activation"
+ACTIVATION_UNOBSERVED_CONDITIONAL = "activation_unobserved_conditional"
+ACTIVATION_UNOBSERVED_WIRING_SUSPECT = "activation_unobserved_wiring_suspect"
+EFFECT_MISSING_OBSERVED_ACTIVATION = "effect_missing_observed_activation"
+TELEMETRY_FIELD_MISSING_OR_MISDECLARED = "telemetry_field_missing_or_misdeclared"
+
+VALID_ACTIVE_WEAK_POSITIVE = "valid_active_weak_positive"
+ACTIVE_NO_CASE_LEVEL_GATE = "active_no_case_level_gate"
+ACTIVE_PAIR_WINS_BUT_CASE_FAIL = "active_pair_wins_but_case_fail"
+INACTIVE_OR_WIRING_SUSPECT = "inactive_or_wiring_suspect"
+
 _ACTIVATION_FAILURE_CODES = frozenset(
     {
         "TELEMETRY_ACTIVATION_NOT_OBSERVED",
@@ -80,6 +91,122 @@ def _proposal_smoke_activation_diagnostic(
         telemetry_guard=telemetry_guard,
         diagnostic=diagnostic,
     )
+
+
+def _proposal_smoke_telemetry_diagnostics(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    telemetry_guard: Mapping[str, Any] | None,
+    activation_diagnostic: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return stable proposal-smoke telemetry diagnoses for lifecycle feedback."""
+    diagnostics: list[dict[str, Any]] = []
+    if activation_diagnostic is None:
+        activation_diagnostic = _proposal_smoke_activation_diagnostic(
+            raw_payload,
+            runtime_smoke=runtime_smoke,
+            telemetry_guard=telemetry_guard,
+        )
+    if isinstance(activation_diagnostic, Mapping):
+        diagnostics.append(_telemetry_diagnostic_public_payload(activation_diagnostic))
+
+    guard = telemetry_guard if isinstance(telemetry_guard, Mapping) else {}
+    for mechanism_diagnostic in _mechanism_diagnostic_items(guard):
+        mechanism = str(mechanism_diagnostic.get("mechanism") or "").strip()
+        activation = _status_block(mechanism_diagnostic, "activation")
+        effect = _status_block(mechanism_diagnostic, "effect")
+        activation_positive = _status_positive(activation)
+        effect_status = _status_value(effect)
+        if activation_positive:
+            effect_issue = _effect_issue_for_mechanism(guard, mechanism)
+            if effect_issue is not None or effect_status in {"missing", "zero"}:
+                diagnostics.append(
+                    _drop_empty_items(
+                        {
+                            "diagnostic_type": EFFECT_MISSING_OBSERVED_ACTIVATION,
+                            "lifecycle_signal": _diagnostic_lifecycle_signal(
+                                EFFECT_MISSING_OBSERVED_ACTIVATION
+                            ),
+                            "mechanism_id": mechanism,
+                            "category": "effect",
+                            "source": "runtime_smoke.telemetry_guard",
+                            "activation_status": _status_value(activation)
+                            or mechanism_diagnostic.get("activation_status"),
+                            "effect_status": effect_status
+                            or mechanism_diagnostic.get("effect_status"),
+                            "field": (
+                                str((effect_issue or {}).get("field") or "").strip()
+                                or _first_field(effect)
+                            ),
+                            "counters": _counters_from_status_block(effect),
+                            "diagnosis": (
+                                "Declared mechanism activated in proposal smoke, "
+                                "but no positive effect telemetry was observed."
+                            ),
+                            "screening_policy": (
+                                "Allow formal screening when static/runtime checks "
+                                "are otherwise clean; treat as weak signal, not a "
+                                "plain win-rate failure."
+                            ),
+                        }
+                    )
+                )
+            else:
+                diagnostics.append(
+                    _drop_empty_items(
+                        {
+                            "diagnostic_type": OBSERVED_ACTIVATION,
+                            "lifecycle_signal": _diagnostic_lifecycle_signal(
+                                OBSERVED_ACTIVATION
+                            ),
+                            "mechanism_id": mechanism,
+                            "category": "activation",
+                            "source": "runtime_smoke.telemetry_guard",
+                            "activation_status": _status_value(activation)
+                            or mechanism_diagnostic.get("activation_status"),
+                            "runtime_status": mechanism_diagnostic.get(
+                                "runtime_status"
+                            ),
+                            "effect_status": effect_status
+                            or mechanism_diagnostic.get("effect_status"),
+                            "counters": _counters_from_status_block(activation),
+                            "diagnosis": (
+                                "Declared mechanism activation was observed in "
+                                "proposal smoke."
+                            ),
+                        }
+                    )
+                )
+
+    static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
+    if static is not None and _static_activation_mismatch(static) is not None:
+        if not any(
+            item.get("diagnostic_type") == TELEMETRY_FIELD_MISSING_OR_MISDECLARED
+            for item in diagnostics
+        ):
+            diagnostics.append(
+                _drop_empty_items(
+                    {
+                        "diagnostic_type": TELEMETRY_FIELD_MISSING_OR_MISDECLARED,
+                        "lifecycle_signal": _diagnostic_lifecycle_signal(
+                            TELEMETRY_FIELD_MISSING_OR_MISDECLARED
+                        ),
+                        "category": "activation",
+                        "source": "telemetry_static_preview",
+                        "issue_codes": list(static.get("issue_codes") or ())[:4],
+                        "fields": _compact_agent_text_list(
+                            static.get("checked_fields"), limit=4
+                        ),
+                        "diagnosis": (
+                            "Declared expected_telemetry fields do not match the "
+                            "runtime telemetry contract."
+                        ),
+                    }
+                )
+            )
+
+    return _dedupe_diagnostics(diagnostics)
 
 
 def _static_activation_mismatch(value: Any) -> dict[str, Any] | None:
@@ -196,6 +323,10 @@ def _diagnostic_payload(
             "failure_code": guard_failure_code,
             "mechanism_id": mechanism,
             "activation_diagnostic_kind": subtype_text,
+            "diagnostic_type": _public_diagnostic_type(subtype_text),
+            "lifecycle_signal": _diagnostic_lifecycle_signal(
+                _public_diagnostic_type(subtype_text)
+            ),
             "source": source,
             "layer": source,
             "telemetry_failure_code": guard_failure_code,
@@ -226,6 +357,60 @@ def _diagnostic_payload(
             "repair_guidance": repair_guidance,
         }
     )
+
+
+def _telemetry_diagnostic_public_payload(
+    diagnostic: Mapping[str, Any],
+) -> dict[str, Any]:
+    kind = str(diagnostic.get("activation_diagnostic_kind") or "").strip()
+    diagnostic_type = diagnostic.get("diagnostic_type") or _public_diagnostic_type(kind)
+    return _drop_empty_items(
+        {
+            "diagnostic_type": diagnostic_type,
+            "lifecycle_signal": diagnostic.get("lifecycle_signal")
+            or _diagnostic_lifecycle_signal(str(diagnostic_type or "")),
+            "activation_diagnostic_kind": kind,
+            "mechanism_id": diagnostic.get("mechanism_id")
+            or diagnostic.get("telemetry_failure_mechanism"),
+            "category": diagnostic.get("telemetry_failure_category")
+            or diagnostic.get("category"),
+            "field": diagnostic.get("telemetry_failure_field"),
+            "source": diagnostic.get("source"),
+            "failure_code": diagnostic.get("failure_code")
+            or diagnostic.get("telemetry_failure_code"),
+            "activation_status": diagnostic.get("activation_status"),
+            "runtime_status": diagnostic.get("runtime_status"),
+            "effect_status": diagnostic.get("effect_status"),
+            "counters": diagnostic.get("counters"),
+            "diagnosis": diagnostic.get("diagnosis"),
+            "allowed_repair": diagnostic.get("allowed_repair"),
+            "forbidden_repair": diagnostic.get("forbidden_repair"),
+        }
+    )
+
+
+def _public_diagnostic_type(subtype: str) -> str:
+    if subtype == "expected_telemetry_mismatch":
+        return TELEMETRY_FIELD_MISSING_OR_MISDECLARED
+    if subtype in {"not_connected", "instrumentation_missing"}:
+        return ACTIVATION_UNOBSERVED_WIRING_SUSPECT
+    if subtype in {
+        "path_not_reached",
+        "trigger_not_reached",
+        "smoke_budget_or_case_insufficient",
+    }:
+        return ACTIVATION_UNOBSERVED_CONDITIONAL
+    return ACTIVATION_UNOBSERVED_CONDITIONAL
+
+
+def _diagnostic_lifecycle_signal(diagnostic_type: str) -> str:
+    if diagnostic_type in {OBSERVED_ACTIVATION, EFFECT_MISSING_OBSERVED_ACTIVATION}:
+        return VALID_ACTIVE_WEAK_POSITIVE
+    if diagnostic_type == ACTIVATION_UNOBSERVED_WIRING_SUSPECT:
+        return INACTIVE_OR_WIRING_SUSPECT
+    if diagnostic_type == ACTIVATION_UNOBSERVED_CONDITIONAL:
+        return ACTIVE_NO_CASE_LEVEL_GATE
+    return str(diagnostic_type or "").strip()
 
 
 def _detected_records(diagnostic: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -264,6 +449,36 @@ def _diagnostic_for_mechanism(
     return None
 
 
+def _mechanism_diagnostic_items(
+    telemetry_guard: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    diagnostics = telemetry_guard.get("mechanism_diagnostics")
+    if not isinstance(diagnostics, (list, tuple)):
+        return []
+    return [item for item in diagnostics if isinstance(item, Mapping)]
+
+
+def _effect_issue_for_mechanism(
+    telemetry_guard: Mapping[str, Any],
+    mechanism: str,
+) -> Mapping[str, Any] | None:
+    for section in ("failures", "warnings"):
+        items = telemetry_guard.get(section)
+        if not isinstance(items, (list, tuple)):
+            continue
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            category = str(item.get("category") or "").strip().lower()
+            item_mechanism = str(item.get("mechanism") or "").strip()
+            if category != "effect":
+                continue
+            if mechanism and item_mechanism and item_mechanism != mechanism:
+                continue
+            return item
+    return None
+
+
 def _status_block(
     diagnostic: Mapping[str, Any] | None,
     name: str,
@@ -276,6 +491,21 @@ def _status_block(
 
 def _status_value(block: Mapping[str, Any] | None) -> str:
     return str((block or {}).get("status") or "").strip().lower()
+
+
+def _status_positive(block: Mapping[str, Any] | None) -> bool:
+    counters = _counters_from_status_block(block)
+    if int(counters.get("candidate_positive", 0) or 0) > 0:
+        return True
+    return _status_value(block) in {"observed", "positive"}
+
+
+def _first_field(block: Mapping[str, Any] | None) -> str:
+    fields = (block or {}).get("fields")
+    if isinstance(fields, (list, tuple)) and fields:
+        return str(fields[0] or "").strip()
+    field = (block or {}).get("field")
+    return str(field or "").strip()
 
 
 def _counters_from_status_block(block: Mapping[str, Any] | None) -> dict[str, int]:
@@ -424,7 +654,33 @@ def _static_has_activation_helper(
     return bool(evidence.get("record_iteration") or evidence.get("record_phase"))
 
 
+def _dedupe_diagnostics(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in items:
+        key = (
+            str(item.get("diagnostic_type") or ""),
+            str(item.get("mechanism_id") or ""),
+            str(item.get("field") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
 __all__ = [
+    "ACTIVATION_UNOBSERVED_CONDITIONAL",
+    "ACTIVATION_UNOBSERVED_WIRING_SUSPECT",
+    "ACTIVE_NO_CASE_LEVEL_GATE",
+    "ACTIVE_PAIR_WINS_BUT_CASE_FAIL",
+    "EFFECT_MISSING_OBSERVED_ACTIVATION",
+    "INACTIVE_OR_WIRING_SUSPECT",
+    "OBSERVED_ACTIVATION",
     "PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE",
+    "TELEMETRY_FIELD_MISSING_OR_MISDECLARED",
+    "VALID_ACTIVE_WEAK_POSITIVE",
     "_proposal_smoke_activation_diagnostic",
+    "_proposal_smoke_telemetry_diagnostics",
 ]

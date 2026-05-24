@@ -156,6 +156,14 @@ class AgenticSessionCodeToolsMixin:
                         context,
                         hypothesis,
                         all_observations,
+                        code_context,
+                    ),
+                    "mandatory_visible_source_context": (
+                        self._code_phase_source_visibility_context(
+                            hypothesis,
+                            all_observations,
+                            code_context=code_context,
+                        )
                     ),
                     "active_algorithm_facts_anchor": (
                         self._planner_active_algorithm_facts_anchor(all_observations)

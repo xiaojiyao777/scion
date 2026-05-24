@@ -95,9 +95,57 @@ def test_activation_accepts_mechanism_specific_runtime_map_path() -> None:
     assert errors == ()
 
 
-def test_activation_accepts_declared_phase_runtime_subpath_as_diagnostic_evidence() -> None:
+def test_activation_rejects_unbound_phase_runtime_subpath_for_new_mechanism() -> None:
     errors = validate_expected_telemetry_contract(
         problem_spec=_surface_spec(),
+        selected_surface="solver_design",
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_phase_runtime_ms.vns_initial",
+                "solver_algorithm_phase_runtime_ms.vns_embedded",
+            ],
+        },
+        declared_mechanisms=[
+            MechanismChange(id="intra_reinsertion_vns", change_type="add")
+        ],
+    )
+
+    assert errors[0] == (
+        "expected_telemetry.activation references undeclared runtime field(s): "
+        "solver_algorithm_phase_runtime_ms.vns_embedded, "
+        "solver_algorithm_phase_runtime_ms.vns_initial"
+    )
+    assert "Legal expected_telemetry template" in errors[1]
+    assert "solver_algorithm_phase_runtime_ms.intra_reinsertion_vns" in errors[1]
+
+
+def test_activation_accepts_adapter_declared_phase_subpath_evidence() -> None:
+    spec = SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver_design",
+                evidence=SimpleNamespace(
+                    required_runtime_fields=["solver_algorithm_phase_runtime_ms"],
+                    activation_runtime_fields={
+                        "existing_vns_phase": [
+                            "solver_algorithm_phase_runtime_ms.vns_initial",
+                            "solver_algorithm_phase_runtime_ms.vns_embedded",
+                        ]
+                    },
+                    runtime_field_roles={
+                        "mechanism_activation": [
+                            "solver_algorithm_phase_runtime_ms.vns_initial",
+                            "solver_algorithm_phase_runtime_ms.vns_embedded",
+                        ],
+                        "budget": ["solver_algorithm_phase_runtime_ms"],
+                    },
+                ),
+            )
+        ]
+    )
+
+    errors = validate_expected_telemetry_contract(
+        problem_spec=spec,
         selected_surface="solver_design",
         expected_telemetry={
             "activation": [

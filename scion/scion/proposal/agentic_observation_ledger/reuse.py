@@ -138,7 +138,9 @@ def _already_observed_observation(
         observation_type="already_observed",
         summary=(
             "Already observed unchanged source in an inherited APS phase ledger; "
-            "returning compact read receipt instead of duplicating the payload."
+            "returning compact read receipt instead of duplicating the payload. "
+            "Do not read this same file again for source; call branch-state or "
+            "symbol tools only if that different information is needed."
         ),
         structured_payload=_sanitize_agentic_value(payload),
         artifact_ref=str(entry.get("artifact_ref") or "") or None,
