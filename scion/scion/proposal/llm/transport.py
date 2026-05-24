@@ -5,7 +5,12 @@ import json
 import logging
 from typing import Any, Dict
 
-from .config import _is_deepseek_model, _is_openai_model, _normalize_request_kind
+from .config import (
+    _is_deepseek_model,
+    _is_gpt_codex_model,
+    _is_openai_model,
+    _normalize_request_kind,
+)
 from .errors import (
     LLMBalanceError,
     LLMError,
@@ -321,19 +326,24 @@ class TransportMixin:
         return kwargs
 
     def _openai_reasoning_effort(self, model: str) -> str:
-        if not _is_deepseek_model(str(model or "")):
-            return ""
         effort = self.reasoning_effort
         if not effort:
             return ""
         normalized = effort.lower()
-        if normalized == "xhigh":
-            normalized = "max"
-        elif normalized in {"low", "medium"}:
-            normalized = "high"
-        if normalized not in {"high", "max"}:
-            return ""
-        return normalized
+        model_id = str(model or "")
+        if _is_deepseek_model(model_id):
+            if normalized == "xhigh":
+                normalized = "max"
+            elif normalized in {"low", "medium"}:
+                normalized = "high"
+            if normalized not in {"high", "max"}:
+                return ""
+            return normalized
+        if _is_gpt_codex_model(model_id):
+            if normalized not in {"low", "medium", "high", "xhigh"}:
+                return ""
+            return normalized
+        return ""
 
     def _openai_extra_body(self, model: str) -> Dict[str, Any]:
         if not _is_deepseek_model(str(model or "")):
@@ -344,9 +354,39 @@ class TransportMixin:
 
     @staticmethod
     def _openai_cache_usage(usage: Any) -> tuple[int, int]:
-        cache_read = int(getattr(usage, "prompt_cache_hit_tokens", 0) or 0)
-        cache_miss = int(getattr(usage, "prompt_cache_miss_tokens", 0) or 0)
+        cache_read = TransportMixin._get_usage_int(usage, "prompt_cache_hit_tokens")
+        cache_miss = TransportMixin._get_usage_int(usage, "prompt_cache_miss_tokens")
+        nested_cached = TransportMixin._get_usage_int(
+            usage,
+            "cached_tokens",
+            parent="prompt_tokens_details",
+        )
+        if nested_cached and not cache_read:
+            cache_read = nested_cached
+        if cache_read and not cache_miss:
+            prompt_tokens = TransportMixin._get_usage_int(usage, "prompt_tokens")
+            if prompt_tokens > cache_read:
+                cache_miss = prompt_tokens - cache_read
         return cache_read, cache_miss
+
+    @staticmethod
+    def _get_usage_int(usage: Any, key: str, *, parent: str | None = None) -> int:
+        source = usage
+        if parent:
+            if isinstance(source, dict):
+                source = source.get(parent)
+            else:
+                source = getattr(source, parent, None)
+        if source is None:
+            return 0
+        if isinstance(source, dict):
+            value = source.get(key, 0)
+        else:
+            value = getattr(source, key, 0)
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
     def _record_anthropic_usage(
         self,
@@ -377,12 +417,18 @@ class TransportMixin:
         request_kind: str,
     ) -> None:
         cache_read, cache_miss = self._openai_cache_usage(usage)
+        reasoning_tokens = self._get_usage_int(
+            usage,
+            "reasoning_tokens",
+            parent="completion_tokens_details",
+        )
         self._last_usage_metadata = {
             "provider": "openai_compatible",
             "model": model,
             "request_kind": request_kind,
             "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
             "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+            "reasoning_output_tokens": reasoning_tokens,
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": cache_read,
             "prompt_cache_hit": bool(cache_read),

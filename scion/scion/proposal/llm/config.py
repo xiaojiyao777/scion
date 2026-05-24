@@ -27,6 +27,7 @@ LLM_TRANSIENT_API_ERROR_CATEGORY = "llm_transient_api_error"
 
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _DEEPSEEK_MODEL_PREFIXES = ("deepseek-",)
+_GPT_CODEX_MODEL_PREFIXES = ("gpt-", "codex-")
 _DEEPSEEK_MAX_ALIASES = {"v4pro-max", "deepseek-v4-pro-max"}
 _CODE_REQUEST_KINDS = {"code", "fix"}
 _TOOL_REQUEST_KIND_BY_NAME = {
@@ -44,6 +45,11 @@ def _is_openai_model(model: str) -> bool:
 
 def _is_deepseek_model(model: str) -> bool:
     return any(model.startswith(p) for p in _DEEPSEEK_MODEL_PREFIXES)
+
+
+def _is_gpt_codex_model(model: str) -> bool:
+    value = str(model or "").strip().lower()
+    return any(value.startswith(p) for p in _GPT_CODEX_MODEL_PREFIXES)
 
 
 def _normalize_model_alias(model: str) -> tuple[str, str]:

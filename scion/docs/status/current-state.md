@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-23*
+*Last updated: 2026-05-24*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -15,6 +15,19 @@ framework: generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
 domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
+
+The 2026-05-24 LLM transport repair enables local Codex subscription-backed
+experiments through `codex-proxy` without changing Scion's proposal/session
+boundary. OpenAI-compatible GPT/Codex models now receive
+`SCION_REASONING_EFFORT` (`low`, `medium`, `high`, or `xhigh`) through the chat
+transport, while DeepSeek keeps its existing `xhigh -> max` normalization and
+`extra_body.thinking` behavior. Scion also records codex-proxy/OpenAI-compatible
+usage fields from `prompt_tokens_details.cached_tokens` and
+`completion_tokens_details.reasoning_tokens`, exposing reasoning output tokens
+in normalized LLM usage metadata. Local validation confirmed
+`gpt-5.5 + tools + reasoning_effort=xhigh` works through codex-proxy's chat
+compatibility route and records `reasoning_output_tokens`; the direct
+`/v1/responses` route remains a future opt-in transport, not the default.
 
 The 2026-05-22 stopped-run analysis is
 [`v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md`](../experiments/v0.4/v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md).

@@ -328,6 +328,25 @@ def test_deepseek_reasoning_effort_env_is_normalized(monkeypatch):
     assert client._openai_reasoning_effort(client.model) == "max"
 
 
+def test_gpt_codex_reasoning_effort_env_is_forwarded(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "gpt-5.5")
+    monkeypatch.setenv("SCION_REASONING_EFFORT", "xhigh")
+
+    client = LLMClient()
+
+    assert client._openai_reasoning_effort(client.model) == "xhigh"
+    assert client._openai_extra_body(client.model) == {}
+
+
+def test_gpt_codex_reasoning_effort_rejects_unknown_values(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "gpt-5.3-codex")
+    monkeypatch.setenv("SCION_REASONING_EFFORT", "max")
+
+    client = LLMClient()
+
+    assert client._openai_reasoning_effort(client.model) == ""
+
+
 def test_deepseek_openai_base_url_does_not_append_v1(monkeypatch):
     monkeypatch.setenv("SCION_MODEL", "deepseek-v4-pro")
     monkeypatch.setenv("SCION_BASE_URL", "https://api.deepseek.com")
@@ -469,6 +488,24 @@ def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
     assert LLMClient._openai_cache_usage(usage) == (25, 75)
 
 
+def test_openai_cache_usage_reads_codex_proxy_nested_cache_fields() -> None:
+    usage = SimpleNamespace(
+        prompt_tokens=120,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=80),
+    )
+
+    assert LLMClient._openai_cache_usage(usage) == (80, 40)
+
+
+def test_openai_cache_usage_reads_dict_nested_cache_fields() -> None:
+    usage = {
+        "prompt_tokens": 90,
+        "prompt_tokens_details": {"cached_tokens": 30},
+    }
+
+    assert LLMClient._openai_cache_usage(usage) == (30, 60)
+
+
 def test_anthropic_tool_call_records_last_usage_metadata() -> None:
     client = LLMClient(timeout_sec=60, max_retries=0)
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
@@ -538,6 +575,38 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
     assert usage["prompt_cache_miss"] is True
     assert usage["prompt_cache_hit_tokens"] == 80
     assert usage["prompt_cache_miss_tokens"] == 40
+
+
+def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:
+    client = LLMClient(model="gpt-5.5", timeout_sec=60, max_retries=0)
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+    )
+    response = SimpleNamespace(
+        usage=SimpleNamespace(
+            prompt_tokens=120,
+            completion_tokens=44,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=80),
+            completion_tokens_details=SimpleNamespace(reasoning_tokens=32),
+        ),
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        client.call_with_tool("prompt", tool, model="gpt-5.5")
+
+    usage = client.get_last_usage_metadata()
+    assert usage["cache_read_input_tokens"] == 80
+    assert usage["prompt_cache_miss_tokens"] == 40
+    assert usage["reasoning_output_tokens"] == 32
 
 
 def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):
