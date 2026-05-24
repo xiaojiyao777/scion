@@ -50,6 +50,9 @@ class SolverDesignPromptProvider(Protocol):
     def solver_design_target_api_guidance(self, target_file: str) -> str:
         """Return problem-owned target-specific code-stage API guidance."""
 
+    def solver_design_expected_telemetry_preview(self, hypothesis: Any) -> Any:
+        """Return optional problem-owned pre-code telemetry preview guidance."""
+
 
 class SolverDesignSmokeProvider(Protocol):
     """Optional problem-owned solver-design smoke interpretation."""

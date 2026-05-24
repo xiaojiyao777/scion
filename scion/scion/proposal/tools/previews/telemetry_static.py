@@ -253,12 +253,30 @@ def _explicit_and_declared_mechanism_fields(
             surface=surface,
             declared_mechanisms=mechanisms,
         ):
+            if probe.category == "effect" and not _mechanism_declares_effect_field(
+                claims,
+                probe.mechanism,
+            ):
+                continue
             fields.setdefault(probe.category, []).append(probe.field)
     return {
         category: tuple(dict.fromkeys(str(field) for field in values if str(field)))
         for category, values in fields.items()
         if values
     }
+
+
+def _mechanism_declares_effect_field(
+    claims: Mapping[str, tuple[str, ...]],
+    mechanism: str,
+) -> bool:
+    mechanism_text = str(mechanism or "").strip()
+    if not mechanism_text:
+        return False
+    return any(
+        mechanism_text in str(field or "")
+        for field in claims.get("effect", ())
+    )
 
 
 def _context_helper_signature_issues(patch: PatchProposal) -> list[str]:
@@ -365,7 +383,16 @@ def _telemetry_repair_hints() -> list[str]:
     return [
         (
             "Add the missing telemetry record call using the exact declared "
-            "mechanism id before rerunning algorithm smoke."
+            "mechanism id before rerunning algorithm smoke; do not "
+            "unconditionally trigger the mechanism, emit fake activation, or "
+            "add a guarantee-positive fallback such as max(iterations, 1) only "
+            "to satisfy telemetry."
+        ),
+        (
+            "For rare-trigger or conditional mechanisms, instrument the natural "
+            "condition/evaluation path with decision counters, budget counters, "
+            "diagnostic skipped status, or a canary-targeted threshold; do not "
+            "change algorithm behavior only to manufacture telemetry."
         ),
         (
             "Preserve records that already satisfied activation/effect/budget; "
@@ -419,13 +446,16 @@ def _mechanism_call_evidence(code_text: str, mechanism: str) -> dict[str, bool]:
         tree = ast.parse(code_text)
     except SyntaxError:
         return evidence
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
+    for node, aliases in _iter_context_helper_calls(tree):
         helper_name = _context_helper_call_name(node)
         if helper_name is None:
             continue
-        if not _call_uses_declared_mechanism(node, helper_name, mechanism):
+        if not _call_uses_declared_mechanism(
+            node,
+            helper_name,
+            mechanism,
+            aliases=aliases,
+        ):
             continue
         evidence[helper_name] = True
         if helper_name == "record_phase":
@@ -452,20 +482,111 @@ def _mechanism_call_evidence(code_text: str, mechanism: str) -> dict[str, bool]:
     return evidence
 
 
+def _iter_context_helper_calls(
+    tree: ast.AST,
+) -> list[tuple[ast.Call, dict[str, str]]]:
+    calls: list[tuple[ast.Call, dict[str, str]]] = []
+
+    def visit_block(statements: list[ast.stmt], aliases: dict[str, str]) -> None:
+        for statement in statements:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit_block(statement.body, _local_string_aliases(statement.body))
+                continue
+            if isinstance(statement, ast.ClassDef):
+                continue
+            for node in _walk_without_nested_scopes(statement):
+                if isinstance(node, ast.Call) and _context_helper_call_name(node):
+                    calls.append((node, aliases))
+
+    if isinstance(tree, ast.Module):
+        visit_block(tree.body, {})
+    else:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and _context_helper_call_name(node):
+                calls.append((node, {}))
+    return calls
+
+
+def _walk_without_nested_scopes(node: ast.AST) -> list[ast.AST]:
+    nodes: list[ast.AST] = []
+
+    def visit(current: ast.AST) -> None:
+        if current is not node and isinstance(
+            current,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
+            return
+        nodes.append(current)
+        for child in ast.iter_child_nodes(current):
+            visit(child)
+
+    visit(node)
+    return nodes
+
+
+def _local_string_aliases(statements: list[ast.stmt]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    invalid: set[str] = set()
+    for statement in statements:
+        for node in _walk_without_nested_scopes(statement):
+            targets: list[ast.expr] = []
+            value: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                targets.extend(node.targets)
+                value = node.value
+            elif isinstance(node, ast.AnnAssign):
+                targets.append(node.target)
+                value = node.value
+            else:
+                continue
+            literal = _literal_string(value) if value is not None else None
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                name = target.id
+                if literal is None:
+                    invalid.add(name)
+                    aliases.pop(name, None)
+                    continue
+                if name in aliases and aliases[name] != literal:
+                    invalid.add(name)
+                    aliases.pop(name, None)
+                    continue
+                if name not in invalid:
+                    aliases[name] = literal
+    for name in invalid:
+        aliases.pop(name, None)
+    return aliases
+
+
 def _call_uses_declared_mechanism(
     node: ast.Call,
     helper_name: str,
     mechanism: str,
+    *,
+    aliases: Mapping[str, str] | None = None,
 ) -> bool:
     mechanism_text = str(mechanism or "").strip()
     if not mechanism_text:
         return False
-    if node.args and _literal_string(node.args[0]) == mechanism_text:
+    if node.args and _string_arg_matches(node.args[0], mechanism_text, aliases):
         return True
     for keyword in node.keywords:
         if keyword.arg in _ACTIVATION_KEYWORDS.get(helper_name, ()):
-            if _literal_string(keyword.value) == mechanism_text:
+            if _string_arg_matches(keyword.value, mechanism_text, aliases):
                 return True
+    return False
+
+
+def _string_arg_matches(
+    node: ast.AST,
+    mechanism: str,
+    aliases: Mapping[str, str] | None,
+) -> bool:
+    if _literal_string(node) == mechanism:
+        return True
+    if isinstance(node, ast.Name) and aliases is not None:
+        return aliases.get(node.id) == mechanism
     return False
 
 

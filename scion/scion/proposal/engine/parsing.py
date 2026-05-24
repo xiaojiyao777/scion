@@ -24,6 +24,45 @@ from scion.proposal.edit_protocol import (
 
 from .exceptions import ProposalValidationError
 
+_PATCH_TOP_LEVEL_FIELDS = frozenset(
+    {
+        "premise_check",
+        "premise_check_reason",
+        "file_path",
+        "action",
+        "code_content",
+        "edit_intent",
+        "source_digest",
+        "old_string",
+        "new_string",
+        "replace_all",
+        "content_after",
+        "full_file_reason",
+        "derived_diff_ref",
+        "evidence_refs",
+        "test_hint",
+        "additional_changes",
+        "mechanism_changes",
+    }
+)
+_PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
+    {
+        "file_path",
+        "action",
+        "code_content",
+        "edit_intent",
+        "source_digest",
+        "old_string",
+        "new_string",
+        "replace_all",
+        "content_after",
+        "full_file_reason",
+        "derived_diff_ref",
+        "evidence_refs",
+        "test_hint",
+    }
+)
+
 
 def _parse_hypothesis(raw: Dict[str, Any]) -> HypothesisProposal:
     """Convert a validated LLM response dict into a HypothesisProposal."""
@@ -63,6 +102,7 @@ def _parse_patch(
     context: Dict[str, Any] | None = None,
 ) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
+    _preflight_patch_output_shape(raw)
     normalized_raw, repair_attribution = normalize_patch_output_with_repair_attribution(
         raw
     )
@@ -111,3 +151,45 @@ def _to_float_or_none(v: Any) -> "float | None":
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _preflight_patch_output_shape(raw: Dict[str, Any]) -> None:
+    unknown_top = sorted(set(raw) - _PATCH_TOP_LEVEL_FIELDS)
+    if unknown_top:
+        raise ProposalValidationError(_unknown_patch_fields_message(unknown_top))
+    additional_changes = raw.get("additional_changes")
+    if isinstance(additional_changes, str) and additional_changes.strip():
+        raise ProposalValidationError(
+            "additional_changes must be a JSON array, not a JSON-encoded string. "
+            "Shape-only retry: preserve the same hypothesis, target_file, "
+            "mechanism_changes ids, and patch intent; emit additional_changes "
+            "as an array of edit objects instead of a string."
+        )
+    if isinstance(additional_changes, list):
+        for index, item in enumerate(additional_changes):
+            if not isinstance(item, dict):
+                continue
+            unknown = sorted(set(item) - _PATCH_ADDITIONAL_CHANGE_FIELDS)
+            if unknown:
+                raise ProposalValidationError(
+                    _unknown_patch_fields_message(
+                        unknown,
+                        pointer=f"/additional_changes/{index}",
+                    )
+                )
+
+
+def _unknown_patch_fields_message(
+    fields: list[str],
+    *,
+    pointer: str = "/",
+) -> str:
+    rendered = ", ".join(fields)
+    return (
+        f"Unsupported patch field(s) at {pointer}: {rendered}. "
+        "Do not emit ad hoc edit fields such as old_string2/new_string2. "
+        "For extra file edits, put each edit object in additional_changes[]. "
+        "For multiple edits to the same file, either compose them into one "
+        "serializable exact_replace edit or put serializable exact_replace "
+        "objects in additional_changes[] for the same file."
+    )

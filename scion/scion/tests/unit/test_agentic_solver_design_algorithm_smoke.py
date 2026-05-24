@@ -437,7 +437,9 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
     payload = observation.structured_payload
     rendered = json.dumps(payload, sort_keys=True)
     assert observation.is_error is False
-    assert payload["passed"] is False
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_class"] == "activation_not_observed_diagnostic"
     assert "runtime_smoke" not in payload
     assert "telemetry_static_preview" in payload
     assert "vns_local_search" in rendered
@@ -651,7 +653,7 @@ def test_algorithm_smoke_agent_payload_compacts_large_runtime_without_result_too
     assert payload["agent_summary"]["primary_issue"] == (
         "NameError: DESTROY_RATIO_LOW is not defined"
     )
-    assert payload["failure_class"] == "proposal_activation_diagnostic"
+    assert payload["failure_class"] == "runtime_audit_failure"
     assert payload["activation_diagnostic"]["activation_diagnostic_kind"] == (
         "expected_telemetry_mismatch"
     )

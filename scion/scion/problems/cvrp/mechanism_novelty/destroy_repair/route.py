@@ -20,6 +20,8 @@ def _missing_route_removal_span(text: str) -> str:
         or _targets_perturbation_or_restart_not_removal_family(text)
     ):
         return ""
+    if _acknowledges_existing_route_removal_variant(text):
+        return ""
     if _describes_existing_route_removal_improvement(text):
         return ""
     return _first_regex_span(
@@ -43,6 +45,8 @@ def _duplicates_route_removal(text: str) -> bool:
         _targets_contiguous_segment_destroy_not_whole_route_removal(text)
         or _targets_perturbation_or_restart_not_removal_family(text)
     ):
+        return False
+    if _acknowledges_existing_route_removal_variant(text):
         return False
     if _describes_existing_route_removal_improvement(text):
         return False
@@ -91,5 +95,89 @@ def _describes_existing_route_removal_improvement(text: str) -> bool:
             "trigger",
             "budget",
             "candidate",
+        ),
+    )
+
+
+def _acknowledges_existing_route_removal_variant(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "existing route removal",
+            "current route removal",
+            "active route removal",
+            "_route_removal",
+            "uses route removal",
+            "uses route-removal",
+            "route-removal operators",
+            "route removal operators",
+            "already has route removal",
+            "already includes route removal",
+            "route removal already",
+        ),
+    ):
+        return False
+    if not _has_any(
+        text,
+        (
+            "variant",
+            "zone",
+            "zonal",
+            "cluster",
+            "clustered",
+            "spatial",
+            "geographic",
+            "filter",
+            "filtered",
+            "candidate",
+            "schedule",
+            "scheduler",
+            "trigger",
+            "parameter",
+            "bounded",
+            "sampling",
+            "but",
+            "however",
+            "while",
+            "distinct from",
+            "different from",
+        ),
+    ):
+        return False
+    span = _missing_route_removal_span_without_variant_allowance(text)
+    if not span:
+        return True
+    return _has_any(
+        span,
+        (
+            "variant",
+            "zone",
+            "zonal",
+            "cluster",
+            "clustered",
+            "spatial",
+            "geographic",
+            "filter",
+            "candidate",
+            "schedule",
+            "trigger",
+            "parameter",
+            "bounded",
+        ),
+    )
+
+
+def _missing_route_removal_span_without_variant_allowance(text: str) -> str:
+    return _first_regex_span(
+        text,
+        (
+            r"\b(?:missing|lacks?|absent|without|no|does not have|does not include|"
+            r"doesn't have|doesn't include)\b.{0,100}\b(?:whole route|"
+            r"entire route|route level|route removal|route destroy)"
+            r"\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)\b",
+            r"\b(?:whole route|entire route|route level|route removal|"
+            r"route destroy)\b.{0,60}\b(?:destroy|remov(?:al|e)|operator)"
+            r"\b.{0,100}\b(?:missing|lacks?|absent|without|no|does not have|"
+            r"does not include|doesn't have|doesn't include)\b",
         ),
     )

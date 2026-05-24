@@ -42,6 +42,12 @@ class _TraceWriter:
             "model": model,
             "tool_name": tool.get("name"),
             "prompt_hash": digest,
+            "prompt_cache_audit": _prompt_cache_audit(
+                system_blocks=system_blocks,
+                user_prompt=prompt,
+                tool_schema=tool.get("input_schema")
+                or tool.get("function", {}).get("parameters"),
+            ),
             "created_at": datetime.now().isoformat(),
             "branch_id": context.get("branch_id"),
             "champion_version": context.get("champion_version"),
@@ -63,6 +69,7 @@ class _TraceWriter:
         ok: bool,
         response: Dict[str, Any] | None = None,
         error: str | None = None,
+        llm_usage: Dict[str, Any] | None = None,
     ) -> None:
         if not path:
             return
@@ -81,6 +88,8 @@ class _TraceWriter:
             payload["response"] = response
         if error is not None:
             payload["error"] = error
+        if llm_usage is not None:
+            payload["llm_usage"] = llm_usage
         _write_json(path, payload)
 
 
@@ -91,6 +100,63 @@ def _prompt_hash(system_blocks: "list[dict]", prompt: str) -> str:
         default=str,
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _prompt_cache_audit(
+    *,
+    system_blocks: "list[dict]",
+    user_prompt: str,
+    tool_schema: Any,
+) -> Dict[str, Any]:
+    schema_blob = json.dumps(tool_schema or {}, sort_keys=True, default=str)
+    block_records: list[dict[str, Any]] = []
+    cacheable_chars = 0
+    for index, block in enumerate(system_blocks or [], start=1):
+        text = block.get("text", "") if isinstance(block, Mapping) else str(block)
+        cache_control = (
+            dict(block.get("cache_control") or {})
+            if isinstance(block, Mapping)
+            else {}
+        )
+        cacheable = bool(cache_control)
+        if cacheable:
+            cacheable_chars += len(text)
+        block_records.append(
+            {
+                "block_index": index,
+                "chars": len(text),
+                "hash": _short_hash(text),
+                "cacheable": cacheable,
+                "cache_control": cache_control,
+            }
+        )
+    cacheable_blocks = [record for record in block_records if record["cacheable"]]
+    return {
+        "system_block_count": len(block_records),
+        "cache_control_block_count": len(cacheable_blocks),
+        "cacheable_system_chars": cacheable_chars,
+        "system_blocks": block_records,
+        "cacheable_system_blocks_hash": _short_hash(
+            json.dumps(cacheable_blocks, sort_keys=True, default=str)
+        ),
+        "system_blocks_hash": _short_hash(
+            json.dumps(block_records, sort_keys=True, default=str)
+        ),
+        "tool_schema_chars": len(schema_blob),
+        "tool_schema_hash": _short_hash(schema_blob),
+        "user_prompt_chars": len(user_prompt or ""),
+        "user_prompt_hash": _short_hash(user_prompt or ""),
+        "cache_prefix_order": "tools -> system -> messages",
+        "cache_strategy_note": (
+            "Anthropic prompt caching matches the stable prefix through explicit "
+            "cache_control breakpoints; dynamic user prompt content is outside "
+            "the cacheable system blocks."
+        ),
+    }
+
+
+def _short_hash(text: str) -> str:
+    return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()[:16]
 
 
 def _write_json(path: str, payload: Dict[str, Any]) -> None:

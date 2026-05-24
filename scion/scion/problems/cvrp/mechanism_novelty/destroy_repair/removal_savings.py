@@ -5,6 +5,7 @@ import re
 from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_any
 from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
     _explicit_removal_savings_claim,
+    _is_insertion_aware_variant_acknowledging_removal_savings,
     _is_pure_geographic_cluster_variant_acknowledging_removal_savings,
     _is_random_or_noise_removal_variant,
     _is_removal_savings_contrast_or_negated_addition,
@@ -18,6 +19,8 @@ def _missing_removal_savings_destroy_span(text: str) -> str:
     if not _mentions_removal_savings_destroy(text):
         return ""
     if _is_pure_geographic_cluster_variant_acknowledging_removal_savings(text):
+        return ""
+    if _is_insertion_aware_variant_acknowledging_removal_savings(text):
         return ""
     if _describes_existing_removal_savings_improvement(text):
         return ""
@@ -37,6 +40,8 @@ def _duplicates_removal_savings_destroy(text: str) -> bool:
     if not _mentions_removal_savings_destroy(text):
         return False
     if _is_pure_geographic_cluster_variant_acknowledging_removal_savings(text):
+        return False
+    if _is_insertion_aware_variant_acknowledging_removal_savings(text):
         return False
     if (
         _is_random_or_noise_removal_variant(text)

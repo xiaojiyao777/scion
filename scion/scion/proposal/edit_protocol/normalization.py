@@ -31,6 +31,9 @@ _LOOSE_FILE_SOURCE_RE = re.compile(
     re.DOTALL,
 )
 
+_NEAR_WHOLE_FILE_EXACT_REPLACE_MIN_CHARS = 2000
+_NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE = 0.85
+
 
 class PatchEditProtocolError(ValueError):
     """Raised when a typed edit cannot be safely normalized."""
@@ -606,30 +609,26 @@ def _apply_exact_replace(
             f"{change_pointer}: exact_replace requires new_string"
         )
     if old_string == before:
-        raise PatchEditProtocolError(
-            json.dumps(
-                {
-                    "error": "patch_edit_protocol",
-                    "reason": "existing_file_whole_file_exact_replace_rejected",
-                    "file_path": file_path,
-                    "json_pointer": change_pointer,
-                    "source_digest": actual_digest,
-                    "detail": (
-                        "exact_replace old_string is the complete existing file; "
-                        "whole-file rewrites of host-visible files are disabled "
-                        "by default."
-                    ),
-                    "guidance": (
-                        "Split the change into one or more smaller exact_replace "
-                        "edits. Each old_string should identify only the function, "
-                        "import block, registration entry, or local code block that "
-                        "actually changes."
-                    ),
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            )
+        _raise_exact_replace_granularity_error(
+            reason="existing_file_whole_file_exact_replace_rejected",
+            file_path=file_path,
+            change_pointer=change_pointer,
+            source_digest=actual_digest,
+            old_string_chars=len(old_string),
+            file_chars=len(before),
+            coverage_ratio=1.0,
+            detail=(
+                "exact_replace old_string is the complete existing file; "
+                "whole-file rewrites of host-visible files are disabled by default."
+            ),
         )
+    _validate_exact_replace_granularity(
+        file_path=file_path,
+        change_pointer=change_pointer,
+        source_digest=actual_digest,
+        before=before,
+        old_string=old_string,
+    )
     occurrences = before.count(old_string)
     if occurrences == 0:
         if composing_same_file:
@@ -655,6 +654,72 @@ def _apply_exact_replace(
     if replace_all:
         return before.replace(old_string, new_string)
     return before.replace(old_string, new_string, 1)
+
+
+def _validate_exact_replace_granularity(
+    *,
+    file_path: str,
+    change_pointer: str,
+    source_digest: str,
+    before: str,
+    old_string: str,
+) -> None:
+    file_chars = len(before)
+    if file_chars <= _NEAR_WHOLE_FILE_EXACT_REPLACE_MIN_CHARS:
+        return
+    coverage_ratio = len(old_string) / max(1, file_chars)
+    if coverage_ratio < _NEAR_WHOLE_FILE_EXACT_REPLACE_MAX_COVERAGE:
+        return
+    _raise_exact_replace_granularity_error(
+        reason="existing_file_near_whole_file_exact_replace_rejected",
+        file_path=file_path,
+        change_pointer=change_pointer,
+        source_digest=source_digest,
+        old_string_chars=len(old_string),
+        file_chars=file_chars,
+        coverage_ratio=coverage_ratio,
+        detail=(
+            "exact_replace old_string covers most of an existing host-visible "
+            "file; near-whole-file rewrites are disabled by default."
+        ),
+    )
+
+
+def _raise_exact_replace_granularity_error(
+    *,
+    reason: str,
+    file_path: str,
+    change_pointer: str,
+    source_digest: str,
+    old_string_chars: int,
+    file_chars: int,
+    coverage_ratio: float,
+    detail: str,
+) -> None:
+    raise PatchEditProtocolError(
+        json.dumps(
+            {
+                "error": "patch_edit_protocol",
+                "reason": reason,
+                "file_path": file_path,
+                "json_pointer": change_pointer,
+                "source_digest": source_digest,
+                "old_string_chars": old_string_chars,
+                "file_chars": file_chars,
+                "coverage_ratio": round(coverage_ratio, 4),
+                "detail": detail,
+                "guidance": (
+                    "Split the change into smaller exact_replace edits for a "
+                    "function/block, or create a helper file and add a small "
+                    "integration edit. Each old_string should identify only the "
+                    "function, import block, registration entry, or local code "
+                    "block that actually changes."
+                ),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
 
 
 def _validate_optional_source_digest(

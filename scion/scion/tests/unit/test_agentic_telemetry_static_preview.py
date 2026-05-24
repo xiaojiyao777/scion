@@ -63,6 +63,19 @@ def test_static_preview_expands_adapter_declared_mechanism_probes(tmp_path) -> N
         preview["required_calls"]["vns_local_search"]
     )
     assert any("record_move alone" in issue for issue in preview["issues"])
+    assert any(
+        "do not unconditionally trigger" in hint.lower()
+        for hint in preview["repair_hints"]
+    )
+    assert any(
+        "guarantee-positive fallback" in hint.lower()
+        for hint in preview["repair_hints"]
+    )
+    assert any("max(iterations, 1)" in hint for hint in preview["repair_hints"])
+    assert any(
+        "natural condition" in hint.lower()
+        for hint in preview["repair_hints"]
+    )
 
 
 def test_static_preview_accepts_direct_iteration_activation(tmp_path) -> None:
@@ -82,6 +95,64 @@ def test_static_preview_accepts_direct_iteration_activation(tmp_path) -> None:
     assert preview.get("issues", []) == []
 
 
+def test_static_preview_accepts_local_mechanism_alias(tmp_path) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(expected_telemetry={}),
+        _patch(
+            "def apply(context, before, after):\n"
+            "    mech_id = 'tail_swap_probe'\n"
+            "    objective_delta = max(0.0, before - after)\n"
+            "    context.record_iteration(mech_id, 1)\n"
+            "    context.record_phase(mech_id, 2)\n"
+            "    context.record_move(mech_id, attempted=1, accepted=1, "
+            "delta=objective_delta, best_improved=objective_delta > 0)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is True
+    assert preview.get("issues", []) == []
+    assert preview["helper_evidence"]["tail_swap_probe"]["record_iteration"] is True
+    assert preview["helper_evidence"]["tail_swap_probe"]["record_phase"] is True
+    assert preview["helper_evidence"]["tail_swap_probe"]["record_move"] is True
+
+
+def test_static_preview_rejects_unknown_mechanism_alias(tmp_path) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(expected_telemetry={}),
+        _patch(
+            "def apply(context, mech_id):\n"
+            "    context.record_iteration(mech_id, 1)\n"
+            "    context.record_move('tail_swap_probe', attempted=1, "
+            "accepted=1, delta=1.0, best_improved=1)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is False
+    assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in preview["issue_codes"]
+
+
+def test_static_preview_rejects_dynamic_mechanism_alias(tmp_path) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(expected_telemetry={}),
+        _patch(
+            "def apply(context, suffix):\n"
+            "    mech_id = f'tail_{suffix}'\n"
+            "    context.record_iteration(mech_id, 1)\n"
+            "    context.record_move('tail_swap_probe', attempted=1, "
+            "accepted=1, delta=1.0, best_improved=1)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is False
+    assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in preview["issue_codes"]
+
+
 def test_static_preview_accepts_direct_phase_activation(tmp_path) -> None:
     preview = _mechanism_telemetry_static_preview(
         _cvrp_context(tmp_path),
@@ -97,6 +168,35 @@ def test_static_preview_accepts_direct_phase_activation(tmp_path) -> None:
     assert preview is not None
     assert preview["passed"] is True
     assert preview.get("issues", []) == []
+
+
+def test_static_preview_allows_cache_mechanism_without_direct_effect(
+    tmp_path,
+) -> None:
+    preview = _mechanism_telemetry_static_preview(
+        _cvrp_context(tmp_path),
+        _solver_design_hypothesis(
+            mechanism_id="neighbor_list_cache",
+            expected_telemetry={
+                "activation": [
+                    "solver_algorithm_context_records.neighbor_list_cache_iterations",
+                ],
+                "budget": [
+                    "solver_algorithm_phase_runtime_ms.neighbor_list_cache",
+                ],
+            },
+        ),
+        _patch(
+            "def apply(context):\n"
+            "    context.record_iteration('neighbor_list_cache', 1)\n"
+            "    context.record_phase('neighbor_list_cache', 2)\n"
+        ),
+    )
+
+    assert preview is not None
+    assert preview["passed"] is True
+    assert preview.get("issues", []) == []
+    assert "neighbor_list_cache" not in preview.get("required_calls", {})
 
 
 def test_static_preview_rejects_literal_zero_phase_runtime(tmp_path) -> None:

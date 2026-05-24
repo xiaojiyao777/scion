@@ -172,3 +172,38 @@ def test_shared_broad_algorithm_family_does_not_block_distinct_mechanism_ids() -
     )
 
     assert result is None
+
+
+def test_registry_wiring_id_does_not_block_distinct_primary_mechanism() -> None:
+    previous = _hypothesis(
+        "vns_operator_registry",
+        text="Modify VNS operator registry wiring for a failed local-search attempt.",
+    )
+    candidate = HypothesisProposal(
+        hypothesis_text=(
+            "Add knn_candidate_list local-search filtering and wire it through "
+            "the existing VNS operator registry."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness="Local search scans too many route positions.",
+        expected_effect="Improve total_distance with bounded candidate lists.",
+        mechanism_changes=(
+            MechanismChange(id="knn_candidate_list", change_type="add"),
+            MechanismChange(id="vns_operator_registry", change_type="modify"),
+        ),
+        novelty_signature={
+            "algorithm_family": "ALNS+VNS",
+            "improvement_strategy": "knn_candidate_list_filtering",
+            "acceptance_strategy": "preserve_existing_acceptance",
+            "runtime_budget_strategy": "bounded_knn_candidates",
+        },
+    )
+
+    result = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous)),
+    )
+
+    assert result is None

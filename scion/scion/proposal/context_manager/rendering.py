@@ -69,3 +69,21 @@ def _format_hypothesis(hypothesis: HypothesisProposal) -> str:
     if hypothesis.risk_to_higher_priority:
         lines.append(f"risk_to_higher_priority: {hypothesis.risk_to_higher_priority}")
     return "\n".join(lines)
+
+
+def _hypothesis_implementation_brief(hypothesis: HypothesisProposal) -> dict:
+    """Return a compact structured code-generation brief for audit prompts."""
+
+    return {
+        "hypothesis_text": hypothesis.hypothesis_text,
+        "change_locus": hypothesis.change_locus,
+        "action": hypothesis.action,
+        "target_file": hypothesis.target_file,
+        "mechanism_changes": mechanism_change_dicts(hypothesis),
+        "target_objectives": list(hypothesis.target_objectives or ()),
+        "protected_objectives": list(hypothesis.protected_objectives or ()),
+        "expected_telemetry": dict(hypothesis.expected_telemetry or {}),
+        "target_runtime_effect": hypothesis.target_runtime_effect,
+        "no_op_condition": hypothesis.no_op_condition,
+        "risk_to_higher_priority": hypothesis.risk_to_higher_priority,
+    }

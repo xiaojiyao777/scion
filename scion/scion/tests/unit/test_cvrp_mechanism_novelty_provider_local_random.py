@@ -438,6 +438,280 @@ def test_cvrp_provider_allows_position_diversity_repair_near_regret_terms() -> N
     assert result is None
 
 
+def test_cvrp_provider_allows_acknowledged_knn_regret_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already includes _regret2_insertion and "
+            "_regret3_insertion. Add a bounded KNN insertion repair variant "
+            "that filters candidate insertion routes to nearest-neighbor "
+            "customers before applying regret scoring."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing regret repair evaluates too broad a candidate set when "
+            "nearby routes should dominate insertion quality."
+        ),
+        expected_effect=(
+            "Improve total_distance by adding a neighbor-limited regret variant."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="knn_insertion_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "hypothesis",
+    (
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add cluster_removal as a pure geographic customer-cluster "
+                "destroy. The active destroy portfolio already uses random, "
+                "worst, Shaw, and route removal; this cluster variant is "
+                "distinct from existing Shaw related removal because it ignores "
+                "demand and original-route relatedness."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            target_weakness=(
+                "Existing destroy choices lack a pure geographic cluster variant."
+            ),
+            expected_effect="Improve total_distance by perturbing spatial clusters.",
+            mechanism_changes=(
+                MechanismChange(id="cluster_removal", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add zone_clustered_removal. The current destroy scheduler uses "
+                "route-removal operators, but it lacks a bounded zone-clustered "
+                "removal variant that removes nearby customers across multiple "
+                "routes rather than deleting an entire selected route."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            target_weakness=(
+                "Existing whole-route removal does not target spatial zones."
+            ),
+            expected_effect="Improve total_distance by perturbing cross-route zones.",
+            mechanism_changes=(
+                MechanismChange(id="zone_clustered_removal", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add adaptive_vns_operator_schedule for VNS operator ordering. "
+                "The local-search operator weights are uniform at initialization "
+                "and the current VNS ordering is fixed; this is not an ALNS "
+                "destroy/repair adaptive-weight claim."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="VNS operator order is fixed rather than success-adaptive.",
+            expected_effect="Improve total_distance by reordering VNS operators.",
+            mechanism_changes=(
+                MechanismChange(id="adaptive_vns_operator_schedule", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add nn_filtered_repair. The existing repair portfolio has "
+                "greedy insertion and regret-2/regret-3 exist, but candidate-list "
+                "filtering is absent; the new mechanism restricts insertion "
+                "routes to nearest-neighbor candidates before using the existing "
+                "repair scoring."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/destroy_repair.py",
+            target_weakness=(
+                "Existing repair evaluates too many nonlocal insertion candidates."
+            ),
+            expected_effect="Improve total_distance within the same repair budget.",
+            mechanism_changes=(
+                MechanismChange(id="nn_filtered_repair", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Add adaptive_vns_selector to optimize VNS operator selection "
+                "policy. It observes which existing productive operator, e.g. "
+                "_or_opt_1, recently improved distance and reorders the existing "
+                "operator list without adding a new Or-opt-1 relocation."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing VNS selector uses a fixed operator order.",
+            expected_effect="Improve total_distance by prioritizing productive moves.",
+            mechanism_changes=(
+                MechanismChange(id="adaptive_vns_selector", change_type="add"),
+            ),
+        ),
+    ),
+)
+def test_cvrp_provider_allows_acknowledged_material_variants_from_sessions(
+    hypothesis: HypothesisProposal,
+) -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None, hypothesis.hypothesis_text
+
+
+def test_cvrp_provider_allows_three_opt_star_after_acknowledging_or_opt() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active bottleneck identified from screening evidence is late "
+            "local-search stagnation after the current VNS operator list has "
+            "already applied _or_opt_1/_2/_3 segment moves and _two_opt_star "
+            "tail exchange. The solver currently lacks a Lin-Kernighan-style "
+            "3-opt* inter-route move; add a bounded three-route / triple-edge "
+            "chain reconnection that is materially different from 2-opt* "
+            "tail swap, Or-opt segment moves, or single-customer relocate."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness=(
+            "The VNS operator portfolio lacks multi-route 3-opt* chain "
+            "reconnection: existing cross-route operators only do 2-opt* tail "
+            "exchange and Or-opt segment relocation."
+        ),
+        expected_effect=(
+            "Improve total_distance by escaping route-pair local minima with a "
+            "bounded three-way chain exchange."
+        ),
+        no_op_condition=(
+            "Skip the operator when fewer than three non-empty routes are "
+            "available or no improving reconnection is found under the budget."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="three_opt_star", change_type="add"),
+            MechanismChange(id="vns_operator_registry", change_type="modify"),
+        ),
+        novelty_signature={
+            "algorithm_family": "vns_local_search",
+            "improvement_strategy": (
+                "three_opt_star_multi_route_triple_edge_reconnect"
+            ),
+            "runtime_budget_strategy": "bounded_route_triplets",
+        },
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+@pytest.mark.parametrize(
+    "hypothesis",
+    (
+        HypothesisProposal(
+            hypothesis_text=(
+                "The existing local-search portfolio already contains "
+                "_or_opt_1/_or_opt_2/_or_opt_3. Add nblist_or_opt1 to apply "
+                "nearest-neighbor candidate filtering before the existing "
+                "single-customer Or-opt move, without adding a new relocation "
+                "operator."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing Or-opt scans too many nonlocal destinations.",
+            expected_effect="Improve total_distance by pruning low-value destinations.",
+            mechanism_changes=(
+                MechanismChange(id="nblist_or_opt1", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "The current VNS has _or_opt_1 cross-route relocation. Add an "
+                "intra-route Or-opt sweep variant that tries same-route "
+                "single-customer shifts as a bounded intensification step; this "
+                "does not claim that cross-route Or-opt is missing."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing VNS lacks a same-route Or-opt intensifier.",
+            expected_effect="Improve total_distance inside each route.",
+            mechanism_changes=(
+                MechanismChange(id="intra_or_opt_sweep", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "Existing _or_opt_1/_2/_3 segment moves are available, but they "
+                "operate on one segment relocation at a time. Add a three-route "
+                "chain reconnection that composes a bounded 3-opt* exchange "
+                "across route triples."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing local search lacks route-triple chain moves.",
+            expected_effect="Improve total_distance by escaping route-pair minima.",
+            mechanism_changes=(
+                MechanismChange(id="three_route_chain_reconnect", change_type="add"),
+            ),
+        ),
+    ),
+)
+def test_cvrp_provider_allows_existing_or_opt_material_variants(
+    hypothesis: HypothesisProposal,
+) -> None:
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_provider_still_blocks_explicit_missing_or_opt_claim() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active VNS has no Or-opt cross-route relocation operator, so "
+            "add a new cross-route Or-opt-1 move."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        target_weakness="VNS lacks Or-opt relocation.",
+        expected_effect="Improve total_distance with a new relocate operator.",
+        mechanism_changes=(
+            MechanismChange(id="or_opt1_relocation", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is not None
+    assert result.failure_category == "premise_contradicted"
+    assert result.mechanism in {"or_opt_1_relocation", "cross_route_or_opt_2_3"}
+
+
 def test_cvrp_provider_blocks_duplicate_random_removal_near_cluster_terms() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

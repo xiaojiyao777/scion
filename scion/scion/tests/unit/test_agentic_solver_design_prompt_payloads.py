@@ -59,8 +59,9 @@ def test_solver_design_code_prompt_omits_duplicate_champion_policy_bundle() -> N
     rendered_prompt = "\n".join(client.prompts)
 
     assert "baseline_time_fraction" not in rendered_system
-    assert "Target File" in rendered_prompt
-    assert "def solve(instance, rng, time_limit_sec, context):" in rendered_prompt
+    assert "Approved Target File Current Content" in rendered_system
+    assert "def solve(instance, rng, time_limit_sec, context):" in rendered_system
+    assert "def solve(instance, rng, time_limit_sec, context):" not in rendered_prompt
 
 
 def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> None:
@@ -140,10 +141,10 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     )
     assert "target file should own the mechanism" in rendered_system
     assert "stable runtime contract" in rendered_system
-    assert "Approved Target File Current Content" in rendered_prompt
-    assert "Branch-Current Integration Files" in rendered_prompt
-    assert "branch_workspace" in rendered_prompt
-    assert "smallest necessary wiring edits" in rendered_prompt
+    assert "Approved Target File Current Content" in rendered_system
+    assert "Branch-Current Integration Files" in rendered_system
+    assert "branch_workspace" in rendered_system
+    assert "smallest necessary wiring edits" in rendered_system
     assert "_ALNSVNSSolver(...).solve(instance, rng)" in rendered_system
     assert "scheduler as orchestration" in rendered_system
     assert "_ALNSVNSSolver.__init__(self, *" in rendered_system
@@ -171,9 +172,9 @@ def test_solver_design_code_prompt_enforces_compact_single_mechanism_scope() -> 
     assert "complete contents of the target algorithm module" not in rendered_prompt
     assert "default existing-file changes to typed `exact_replace` edits" in rendered_prompt
     assert "Do not use `full_file` just because" in rendered_prompt
-    assert "Solver-Design Module API Manifest" in rendered_prompt
-    assert "_clarke_wright_savings" in rendered_prompt
-    assert "may only import exact new symbols from .destroy_repair" in rendered_prompt
+    assert "Solver-Design Module API Manifest" in rendered_system
+    assert "_clarke_wright_savings" in rendered_system
+    assert "may only import exact new symbols from .destroy_repair" in rendered_system
 
 
 def test_solver_design_code_prompt_default_stays_problem_agnostic() -> None:

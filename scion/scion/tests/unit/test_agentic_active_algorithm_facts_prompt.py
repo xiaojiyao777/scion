@@ -92,15 +92,35 @@ def test_hypothesis_and_code_context_include_active_algorithm_facts(
         code_context
     ).index("agentic_tool_observations")
 
-    hypothesis_blocks, _ = _split_hypothesis_context(hypothesis_context)
-    _, code_prompt = _split_code_context(code_context)
-    rendered_hypothesis = "\n".join(block["text"] for block in hypothesis_blocks)
+    hypothesis_blocks, hypothesis_prompt = _split_hypothesis_context(hypothesis_context)
+    code_blocks, code_prompt = _split_code_context(code_context)
+    rendered_hypothesis = (
+        "\n".join(block["text"] for block in hypothesis_blocks)
+        + "\n"
+        + hypothesis_prompt
+    )
     assert rendered_hypothesis.index("## Active Algorithm Facts") < rendered_hypothesis.index(
         "## Agentic Proposal Tool Observations"
     )
-    assert code_prompt.index("## Active Algorithm Facts") < code_prompt.index(
+    active_fact_blocks = [
+        block
+        for block in hypothesis_blocks
+        if "## Active Algorithm Facts" in str(block.get("text", ""))
+    ]
+    assert active_fact_blocks
+    assert all(block.get("cache_control") for block in active_fact_blocks)
+    assert "## Agentic Proposal Tool Observations" in hypothesis_prompt
+    rendered_code = "\n".join(block["text"] for block in code_blocks) + "\n" + code_prompt
+    assert rendered_code.index("## Active Algorithm Facts") < rendered_code.index(
         "## Agentic Proposal Tool Observations"
     )
+    code_active_fact_blocks = [
+        block
+        for block in code_blocks
+        if "## Active Algorithm Facts" in str(block.get("text", ""))
+    ]
+    assert code_active_fact_blocks
+    assert all(block.get("cache_control") for block in code_active_fact_blocks)
 
 
 def test_prompt_manifest_marks_large_observations_truncated_but_facts_included() -> None:
@@ -158,11 +178,53 @@ def test_prompt_manifest_marks_large_observations_truncated_but_facts_included()
         "agentic_proposal_tool_observations"
     ]
     assert facts_status["status"] == "included"
+    assert facts_status["prompt_part"] == "system"
+    assert facts_status["cacheable"] is True
     assert facts_status["content_hash"]
     assert facts_status["fact_packet_digest"] == "packet-digest-123"
+    assert observations_status["status"] == "included"
+    assert observations_status["prompt_part"] == "user"
+    assert observations_status["cacheable"] is False
+    assert "agentic_proposal_tool_observations" not in manifest["truncated_sections"]
+    assert "active_algorithm_facts" not in manifest["truncated_sections"]
+    cacheability = manifest["provider_visible_prompt"]["cacheability"]
+    assert cacheability["estimated_cacheable_chars"] > 0
+    assert cacheability["estimated_non_cache_chars"] >= manifest[
+        "char_budget"
+    ]["user_prompt_chars"]
+
+
+def test_prompt_manifest_marks_actual_section_truncation_only() -> None:
+    prompt_context = {
+        "seed": "manifest-section-truncation",
+        "agentic_tool_observations": [
+            {
+                "tool_name": "context.read_active_solver_design",
+                "structured_payload": {
+                    "content_preview": "x" * 200000,
+                    "truncated": False,
+                },
+            }
+        ],
+    }
+
+    system_blocks, user_prompt = _split_hypothesis_context(prompt_context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-section-truncation",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    observations_status = manifest["section_statuses"][
+        "agentic_proposal_tool_observations"
+    ]
     assert observations_status["status"] == "truncated"
     assert "agentic_proposal_tool_observations" in manifest["truncated_sections"]
-    assert "active_algorithm_facts" not in manifest["truncated_sections"]
 
 
 def test_raw_tool_observations_reference_duplicate_active_facts_by_digest() -> None:
@@ -209,6 +271,299 @@ def test_raw_tool_observations_reference_duplicate_active_facts_by_digest() -> N
     assert rendered.count("UNIQUE_ACTIVE_FACT_CLAIM") == 1
     assert "active_algorithm_facts_ref" in rendered
     assert "deduplicated; see Active Algorithm Facts" in rendered
+
+
+def test_static_solver_tool_observations_render_compact_receipts() -> None:
+    active_facts = {
+        "source": "context.read_active_solver_design",
+        "snapshot_digest": "snapshot-digest-static",
+        "fact_packet_digest": "packet-digest-static",
+        "active_algorithm_facts": {
+            "packet_id": "packet-static",
+            "snapshot_digest": "snapshot-digest-static",
+            "fact_packet_digest": "packet-digest-static",
+            "fact_ids": ["fact.static"],
+            "facts": [
+                {
+                    "fact_id": "fact.static",
+                    "claim": "UNIQUE_STATIC_FACT_CLAIM",
+                    "evidence": ["static evidence"],
+                }
+            ],
+        },
+    }
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "problem",
+            "research_surfaces": "surface",
+            "champion_operators_code": "code",
+            "champion_stats": "stats",
+            "agentic_active_algorithm_facts": active_facts,
+            "agentic_tool_observations": [
+                {
+                    "observation_id": "obs-files",
+                    "tool_name": "context.list_algorithm_files",
+                    "structured_payload": {
+                        "files": [
+                            {
+                                "file_path": "policies/a.py",
+                                "description": "HUGE_FILE_MANIFEST_DETAIL",
+                            }
+                        ],
+                        "surface": "solver_design",
+                    },
+                },
+                {
+                    "observation_id": "obs-design",
+                    "tool_name": "context.read_active_solver_design",
+                    "structured_payload": {
+                        "active_algorithm_facts": active_facts[
+                            "active_algorithm_facts"
+                        ],
+                        "mechanisms": [{"description": "HUGE_MECHANISM_DETAIL"}],
+                        "source_digest": {
+                            "algorithm": "sha256",
+                            "snapshot_digest": "snapshot-digest-static",
+                            "files": {"policies/a.py": "abc"},
+                        },
+                        "surface": "solver_design",
+                    },
+                },
+                {
+                    "observation_id": "obs-graph",
+                    "tool_name": "context.read_solver_call_graph",
+                    "structured_payload": {
+                        "edges": [
+                            {
+                                "from": "a",
+                                "to": "b",
+                                "evidence": ["HUGE_CALL_GRAPH_EDGE_DETAIL"],
+                            }
+                        ],
+                        "source_digest": {
+                            "algorithm": "sha256",
+                            "snapshot_digest": "snapshot-digest-static",
+                        },
+                        "surface": "solver_design",
+                    },
+                },
+            ],
+        }
+    )
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    observation_section = user_prompt.split(
+        "## Agentic Proposal Tool Observations",
+        maxsplit=1,
+    )[1]
+
+    assert "UNIQUE_STATIC_FACT_CLAIM" in rendered_system
+    assert "HUGE_FILE_MANIFEST_DETAIL" not in observation_section
+    assert "HUGE_MECHANISM_DETAIL" not in observation_section
+    assert "HUGE_CALL_GRAPH_EDGE_DETAIL" not in observation_section
+    assert '"edges"' not in observation_section
+    assert '"mechanisms"' not in observation_section
+    assert '"files"' not in observation_section
+    assert observation_section.count("static_solver_context_receipt.v1") == 3
+    assert "active_algorithm_facts_ref" in observation_section
+    assert "file_paths" in observation_section
+    assert "edge_count" in observation_section
+
+
+def test_surface_read_observation_renders_compact_receipt_with_dedicated_context() -> None:
+    active_facts = {
+        "source": "context.read_active_solver_design",
+        "snapshot_digest": "snapshot-digest-surface",
+        "fact_packet_digest": "packet-digest-surface",
+        "active_algorithm_facts": {
+            "packet_id": "packet-surface",
+            "snapshot_digest": "snapshot-digest-surface",
+            "fact_packet_digest": "packet-digest-surface",
+            "fact_ids": ["fact.surface"],
+            "facts": [
+                {
+                    "fact_id": "fact.surface",
+                    "claim": "UNIQUE_SURFACE_FACT_CLAIM",
+                    "evidence": ["surface evidence"],
+                }
+            ],
+        },
+    }
+    prompt_context = {
+        "problem_summary": "problem",
+        "research_surfaces": "surface",
+        "champion_operators_code": "code",
+        "champion_stats": "stats",
+        "agentic_active_algorithm_facts": active_facts,
+        "agentic_tool_observations": [
+            {
+                "observation_id": "obs-full-target",
+                "tool_name": "context.read_algorithm_file",
+                "structured_payload": {
+                    "active": True,
+                    "content_preview": "def target_full_source():\n    return 1\n",
+                    "digest": "target-digest",
+                    "file_path": "policies/baseline_modules/local_search.py",
+                    "max_chars": 64,
+                    "readable": True,
+                    "size_chars": 40,
+                    "source": "champion_snapshot",
+                    "truncated": False,
+                },
+            },
+            {
+                "observation_id": "obs-surface",
+                "tool_name": "context.read_surface",
+                "structured_payload": {
+                    "surface": {
+                        "name": "solver_design",
+                        "kind": "solver_design",
+                        "section": "all",
+                    },
+                    "target_file": "policies/baseline_modules/local_search.py",
+                    "declared_targets": [
+                        "policies/baseline_algorithm.py",
+                        "policies/baseline_modules/*.py",
+                    ],
+                    "current_artifact": {
+                        "file_path": "policies/baseline_modules/local_search.py",
+                        "content_preview": "HUGE_SURFACE_CURRENT_PREVIEW",
+                        "readable": True,
+                        "size_chars": 10000,
+                        "max_chars": 800,
+                        "truncated": True,
+                    },
+                    "support_artifacts": [
+                        {
+                            "file_path": "policies/baseline_modules/scheduler.py",
+                            "content_preview": "HUGE_SURFACE_SUPPORT_PREVIEW",
+                            "python_api_summary": "HUGE_SURFACE_API_SUMMARY",
+                            "readable": True,
+                            "size_chars": 9000,
+                            "max_chars": 800,
+                            "truncated": True,
+                        }
+                    ],
+                    "surface_contract": {
+                        "schema_version": "surface-contract.v1",
+                        "section": "all",
+                        "target_preview": {
+                            "file_path": "policies/baseline_modules/local_search.py",
+                            "content_preview_chars": 800,
+                            "readable": True,
+                            "size_chars": 10000,
+                            "max_chars": 800,
+                            "truncated": True,
+                        },
+                    },
+                },
+            },
+        ],
+    }
+
+    system_blocks, user_prompt = _split_hypothesis_context(prompt_context)
+    rendered_system = "\n".join(block["text"] for block in system_blocks)
+    observation_section = user_prompt.split(
+        "## Agentic Proposal Tool Observations",
+        maxsplit=1,
+    )[1]
+    manifest = build_api_visible_prompt_manifest(
+        session_id="surface-compact",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "UNIQUE_SURFACE_FACT_CLAIM" in rendered_system
+    assert "## Solver-Design Full Algorithm File Reads" in rendered_system
+    assert all(
+        block.get("cache_control")
+        for block in system_blocks
+        if "## Solver-Design Full Algorithm File Reads" in block["text"]
+    )
+    assert "surface_interface_receipt.v1" in observation_section
+    assert "HUGE_SURFACE_CURRENT_PREVIEW" not in observation_section
+    assert "HUGE_SURFACE_SUPPORT_PREVIEW" not in observation_section
+    assert "HUGE_SURFACE_API_SUMMARY" not in observation_section
+    assert '"content_preview"' not in observation_section
+    assert '"python_api_summary"' not in observation_section
+    assert "support_artifact_paths" in observation_section
+    assert "policies/baseline_modules/scheduler.py" in observation_section
+    assert manifest["section_statuses"]["agentic_proposal_tool_observations"][
+        "char_count"
+    ] == manifest["char_budget"]["sections"]["agentic_proposal_tool_observations"]
+    assert manifest["char_budget"]["sections"][
+        "agentic_proposal_tool_observations"
+    ] < 6000
+
+
+def test_preview_tool_observation_renders_compact_receipt() -> None:
+    huge_declared_fields = [f"solver_algorithm_field_{idx}" for idx in range(300)]
+    system_blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "problem",
+            "research_surfaces": "surface",
+            "champion_operators_code": "code",
+            "champion_stats": "stats",
+            "agentic_tool_observations": [
+                {
+                    "observation_id": "obs-schema",
+                    "tool_name": "proposal.schema_preview",
+                    "summary": "Schema preview found issues: C11_expected_telemetry",
+                    "structured_payload": {
+                        "passed": False,
+                        "hypothesis": {
+                            "checks": [
+                                {
+                                    "name": "C11_expected_telemetry",
+                                    "passed": False,
+                                    "detail": "HUGE_SCHEMA_DETAIL" * 200,
+                                }
+                            ],
+                            "expected_telemetry_contract": {
+                                "declared_runtime_fields": huge_declared_fields,
+                                "allowed_expected_telemetry_template": {
+                                    "expected_telemetry": {
+                                        "activation": [
+                                            "solver_algorithm_context_records.foo"
+                                        ]
+                                    }
+                                },
+                            },
+                        },
+                        "workspace_materialized": False,
+                    },
+                }
+            ],
+        }
+    )
+    observation_section = user_prompt.split(
+        "## Agentic Proposal Tool Observations",
+        maxsplit=1,
+    )[1]
+    manifest = build_api_visible_prompt_manifest(
+        session_id="preview-compact",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    assert "preview_tool_receipt.v1" in observation_section
+    assert "C11_expected_telemetry" in observation_section
+    assert "HUGE_SCHEMA_DETAIL" not in observation_section
+    assert "declared_runtime_fields" not in observation_section
+    assert "allowed_expected_telemetry_template" not in observation_section
+    assert "hypothesis_schema_telemetry_retry_feedback" in observation_section
+    assert manifest["char_budget"]["sections"][
+        "agentic_proposal_tool_observations"
+    ] < 2500
 
 
 def test_negative_fact_block_renders_before_hypothesis_task_without_domain_terms() -> None:

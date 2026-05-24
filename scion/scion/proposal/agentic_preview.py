@@ -152,9 +152,15 @@ def _self_check_failure_detail(
 
 
 def _preview_observation_passed(observation: ProposalObservation) -> bool:
+    payload = observation.structured_payload
     return (
         not observation.is_error
-        and bool(observation.structured_payload.get("passed"))
+        and (
+            bool(payload.get("passed"))
+            or bool(payload.get("diagnostic_passed"))
+            or str(payload.get("failure_class") or "")
+            == "activation_not_observed_diagnostic"
+        )
     )
 
 
@@ -184,7 +190,7 @@ def _algorithm_smoke_failure_detail(
         )
         suffix = f" ({codes})" if codes else ""
         return f"algorithm smoke did not run{suffix}"
-    if bool(latest.structured_payload.get("passed")):
+    if _preview_observation_passed(latest):
         return None
     codes = ", ".join(_preview_codes(latest.structured_payload))
     suffix = f" ({codes})" if codes else ""
@@ -349,7 +355,17 @@ def _algorithm_smoke_agent_failure_text(value: Any) -> str | None:
     candidates.append(_algorithm_smoke_actionable_telemetry_text(value))
     diagnostic = value.get("activation_diagnostic")
     if isinstance(diagnostic, Mapping):
-        candidates.append(_algorithm_smoke_activation_diagnostic_text(diagnostic))
+        diagnostic_text = _algorithm_smoke_activation_diagnostic_text(diagnostic)
+        if diagnostic_text:
+            guidance = "; ".join(
+                _bounded_string_list(diagnostic.get("repair_guidance"), limit=2)
+            )
+            if guidance:
+                return _limit_string(
+                    f"{diagnostic_text}; repair guidance: {guidance}",
+                    720,
+                )
+            return diagnostic_text
     agent_summary = value.get("agent_summary")
     if isinstance(agent_summary, Mapping):
         candidates.extend(
@@ -451,25 +467,38 @@ def _algorithm_smoke_invalid_call_text(value: Any) -> str:
 def _algorithm_smoke_activation_diagnostic_text(
     value: Mapping[str, Any],
 ) -> str | None:
-    code = _limit_string(value.get("code"), 120)
+    code = _limit_string(value.get("failure_code") or value.get("code"), 120)
     kind = _limit_string(value.get("activation_diagnostic_kind"), 120)
-    telemetry_code = _limit_string(value.get("telemetry_failure_code"), 160)
-    mechanism = _limit_string(value.get("telemetry_failure_mechanism"), 120)
+    mechanism = _limit_string(
+        value.get("mechanism_id") or value.get("telemetry_failure_mechanism"),
+        120,
+    )
     category = _limit_string(value.get("telemetry_failure_category"), 120)
-    field = _limit_string(value.get("telemetry_failure_field"), 240)
-    parts = [f"code={code}" if code else ""]
+    field = _limit_string(
+        value.get("telemetry_failure_field")
+        or ", ".join(str(item) for item in value.get("missing_fields") or ()),
+        240,
+    )
+    layer = _limit_string(value.get("layer") or value.get("source"), 120)
+    allowed = _limit_string(value.get("allowed_repair"), 220)
+    forbidden = _limit_string(value.get("forbidden_repair"), 220)
+    parts = [f"failure_code={code}" if code else ""]
     if kind:
         parts.append(f"activation_diagnostic_kind={kind}")
-    if telemetry_code:
-        parts.append(f"telemetry_failure_code={telemetry_code}")
     if mechanism:
-        parts.append(f"mechanism={mechanism}")
+        parts.append(f"mechanism_id={mechanism}")
     if category:
         parts.append(f"category={category}")
     if field:
-        parts.append(f"field={field}")
+        parts.append(f"missing_fields={field}")
+    if layer:
+        parts.append(f"layer={layer}")
+    if allowed:
+        parts.append(f"allowed_repair={allowed}")
+    if forbidden:
+        parts.append(f"forbidden_repair={forbidden}")
     text = "; ".join(part for part in parts if part)
-    return f"proposal activation diagnostic: {text}" if text else None
+    return f"proposal_activation_diagnostic: {text}" if text else None
 
 
 def _algorithm_smoke_telemetry_failure_text(value: Mapping[str, Any]) -> str | None:

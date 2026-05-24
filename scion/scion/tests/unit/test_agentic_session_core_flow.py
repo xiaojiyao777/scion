@@ -2,6 +2,22 @@ from __future__ import annotations
 
 from scion.tests.unit.agentic_session_test_support import *
 
+class AdditionalChangesShapeRetryCreative(FakeCreative):
+    def __init__(self, patch: PatchProposal) -> None:
+        super().__init__(patch=patch)
+        self.calls = 0
+
+    def generate_code(self, context):
+        self.code_contexts.append(dict(context))
+        self.calls += 1
+        if self.calls == 1:
+            raise ProposalValidationError(
+                "additional_changes must be a JSON array, not a "
+                "JSON-encoded string. Shape-only retry: preserve mechanism_changes ids."
+            )
+        return self.patch
+
+
 def test_agentic_session_records_tool_observations_in_evidence_and_transcript(
     tmp_path: Path,
 ) -> None:
@@ -108,6 +124,48 @@ def test_agentic_session_invalid_expected_telemetry_fails_before_code(
     assert output.failure_detail is not None
     assert "C11_expected_telemetry" in output.failure_detail
     assert "attribution" in output.failure_detail
+
+
+def test_agentic_session_retries_code_output_shape_only_for_additional_changes(
+    tmp_path: Path,
+) -> None:
+    patch = PatchProposal(**_valid_policy_patch_payload())
+    creative = AdditionalChangesShapeRetryCreative(patch)
+    context = _context(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_loop_config=AgenticToolLoopConfig(max_code_repair_attempts=1),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-1",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.COMPLETED
+    assert output.patch == patch
+    assert len(creative.code_contexts) == 2
+    retry_context = creative.code_contexts[1]
+    assert "agentic_code_schema_shape_retry_feedback" in retry_context
+    assert retry_context["agentic_code_schema_shape_retry_feedback"]["field"] == (
+        "additional_changes"
+    )
+    assert "Repair only the JSON shape" in retry_context["prior_code_failure"]
+    assert any(
+        event.metadata.get("failure_code") == "code_output_shape_retry"
+        for event in output.transcript
+    )
 
 
 def test_creative_layer_renders_agentic_observations_and_research_diagnosis() -> None:

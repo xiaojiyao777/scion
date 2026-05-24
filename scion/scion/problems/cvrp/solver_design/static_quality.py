@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from typing import Any
 
@@ -17,9 +18,35 @@ def static_smoke_issue(
     text = _hypothesis_text(hypothesis)
     changes = _patch_contents_by_path(patch)
     return (
-        _double_bridge_semantic_drift_issue(text, changes)
+        _unknown_context_helper_issue(changes)
+        or _double_bridge_semantic_drift_issue(text, changes)
         or _destroy_effect_attribution_issue(hypothesis, changes)
         or _acceptance_effect_attribution_issue(hypothesis, changes)
+    )
+
+
+def _unknown_context_helper_issue(changes: dict[str, str]) -> str | None:
+    code = "\n".join(changes.values())
+    match = re.search(
+        r"(?:context|self\.context)\.record_context\s*\(\s*['\"]"
+        r"([A-Za-z][A-Za-z0-9_]{1,63})_iterations['\"]",
+        code,
+    )
+    if not match and not re.search(
+        r"(?:context|self\.context)\.record_context\s*\(",
+        code,
+    ):
+        return None
+    example_mechanism = match.group(1) if match else "<mechanism>"
+    return (
+        "solver_design static smoke rejected unknown telemetry helper "
+        "`context.record_context(...)`. The active solver context exposes "
+        "`context.record_phase(name, elapsed_ms)`, "
+        "`context.record_iteration(phase, count)`, and "
+        "`context.record_move(phase, attempted=..., accepted=..., delta=..., "
+        "best_improved=...)`. To populate "
+        "`solver_algorithm_context_records.<mechanism>_iterations`, call "
+        f"`context.record_iteration('{example_mechanism}', count)`."
     )
 
 
@@ -122,7 +149,107 @@ def _records_move_effect(code: str, mechanism: str) -> bool:
         + re.escape(mechanism)
         + r"['\"][^)]*(?:delta\s*=|best_improved\s*=\s*1|best_improved\s*=\s*true)"
     )
-    return bool(re.search(pattern, code, flags=re.IGNORECASE | re.DOTALL))
+    if re.search(pattern, code, flags=re.IGNORECASE | re.DOTALL):
+        return True
+    return _records_move_effect_via_local_alias(code, mechanism)
+
+
+def _records_move_effect_via_local_alias(code: str, mechanism: str) -> bool:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+
+    def visit_block(statements: list[ast.stmt]) -> bool:
+        aliases = _local_string_aliases(statements)
+        for statement in statements:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if visit_block(statement.body):
+                    return True
+                continue
+            if isinstance(statement, ast.ClassDef):
+                continue
+            for node in _walk_without_nested_scopes(statement):
+                if not isinstance(node, ast.Call):
+                    continue
+                if _call_name(node) != "record_move":
+                    continue
+                if not _first_arg_matches(node, mechanism, aliases):
+                    continue
+                call = ast.unparse(node)
+                if re.search(
+                    r"(?:delta\s*=|best_improved\s*=\s*1|best_improved\s*=\s*true)",
+                    call,
+                    flags=re.IGNORECASE | re.DOTALL,
+                ):
+                    return True
+        return False
+
+    return isinstance(tree, ast.Module) and visit_block(tree.body)
+
+
+def _call_name(node: ast.Call) -> str | None:
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return None
+
+
+def _first_arg_matches(
+    node: ast.Call,
+    mechanism: str,
+    aliases: dict[str, str],
+) -> bool:
+    if not node.args:
+        return False
+    first = node.args[0]
+    if isinstance(first, ast.Constant) and first.value == mechanism:
+        return True
+    if isinstance(first, ast.Name) and aliases.get(first.id) == mechanism:
+        return True
+    return False
+
+
+def _local_string_aliases(statements: list[ast.stmt]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    invalid: set[str] = set()
+    for statement in statements:
+        for node in _walk_without_nested_scopes(statement):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = list(getattr(node, "targets", ())) or [getattr(node, "target", None)]
+            value = getattr(node, "value", None)
+            literal = value.value if isinstance(value, ast.Constant) and isinstance(value.value, str) else None
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                if literal is None:
+                    invalid.add(target.id)
+                    aliases.pop(target.id, None)
+                elif target.id not in invalid:
+                    aliases[target.id] = literal
+    for name in invalid:
+        aliases.pop(name, None)
+    return aliases
+
+
+def _walk_without_nested_scopes(node: ast.AST) -> list[ast.AST]:
+    nodes: list[ast.AST] = []
+
+    def visit(current: ast.AST) -> None:
+        if current is not node and isinstance(
+            current,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
+            return
+        nodes.append(current)
+        for child in ast.iter_child_nodes(current):
+            visit(child)
+
+    visit(node)
+    return nodes
 
 
 def _hypothesis_text(hypothesis: HypothesisProposal | None) -> str:

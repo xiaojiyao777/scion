@@ -305,6 +305,32 @@ def test_cvrp_route_limit_gate_allows_feasible_route_merge_quality_variant() -> 
     assert result is None
 
 
+def test_cvrp_route_limit_gate_allows_feasibility_filter_variant_text() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a route-limit-aware feasibility filter for candidate merges: "
+            "reject route-cap violating candidates and skip moves that would "
+            "produce more routes than route_limit. This targets total_distance "
+            "quality while preserving the existing feasibility guard."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/construction.py",
+        target_weakness="Seed quality leaves avoidable distance.",
+        expected_effect="Improve total_distance without changing route-limit guards.",
+        mechanism_changes=(
+            MechanismChange(id="route_limit_feasibility_filter", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None
+
+
 def test_cvrp_route_limit_gate_ignores_risk_mitigation_text() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

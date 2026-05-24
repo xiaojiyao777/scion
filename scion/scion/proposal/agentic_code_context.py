@@ -80,6 +80,219 @@ def _code_observation_prompt_payload(
     return _drop_empty_dict(payload)
 
 
+def _preview_repair_feedback_prompt_payload(
+    observation: ProposalObservation,
+) -> dict[str, Any]:
+    payload = _observation_prompt_payload(observation)
+    if observation.tool_name == "proposal.algorithm_smoke" and isinstance(
+        payload.get("structured_payload"),
+        Mapping,
+    ):
+        payload["structured_payload"] = _compact_algorithm_smoke_repair_feedback(
+            payload["structured_payload"]
+        )
+    return _drop_empty_dict(payload)
+
+
+def _compact_algorithm_smoke_repair_feedback(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    actionable = _first_mapping_item(payload.get("actionable_telemetry_feedback"))
+    static_preview = payload.get("telemetry_static_preview")
+    static = static_preview if isinstance(static_preview, Mapping) else {}
+    telemetry_guard = payload.get("telemetry_guard")
+    guard = telemetry_guard if isinstance(telemetry_guard, Mapping) else {}
+    failure = _first_mapping_item(guard.get("failures"))
+    diagnostic = payload.get("activation_diagnostic")
+    activation_diagnostic = diagnostic if isinstance(diagnostic, Mapping) else {}
+    mechanism = str(
+        (actionable or {}).get("mechanism_id")
+        or (actionable or {}).get("failure_mechanism_id")
+        or activation_diagnostic.get("mechanism_id")
+        or activation_diagnostic.get("telemetry_failure_mechanism")
+        or (failure or {}).get("mechanism")
+        or ""
+    ).strip()
+    offending_fields = _compact_string_list(
+        (actionable or {}).get("delta_valued_fields")
+        or activation_diagnostic.get("missing_fields")
+        or activation_diagnostic.get("telemetry_failure_field")
+        or (failure or {}).get("field")
+        or static.get("checked_fields")
+    )
+    failure_code = str(
+        (actionable or {}).get("failure_code")
+        or activation_diagnostic.get("failure_code")
+        or activation_diagnostic.get("code")
+        or (failure or {}).get("code")
+        or _first_text(static.get("issue_codes"))
+        or payload.get("failure_class")
+        or "algorithm_smoke_failure"
+    ).strip()
+    if failure_code == "algorithm_smoke_failure:algorithm_smoke_failure":
+        failure_code = "algorithm_smoke_failure"
+    required_calls = _compact_repair_required_calls(static.get("required_calls"))
+    return _drop_empty_dict(
+        {
+            "passed": payload.get("passed"),
+            "failure_code": failure_code,
+            "mechanism_id": mechanism,
+            "primary_issue": _compact_failure_text(payload.get("primary_issue"), 420),
+            "agent_summary": _drop_empty_dict(
+                {
+                    "primary_issue": _compact_failure_text(
+                        payload.get("primary_issue"), 420
+                    ),
+                    "failure_class": payload.get("failure_class"),
+                }
+            ),
+            "offending_fields": offending_fields,
+            "required_calls": required_calls,
+            "allowed_repair_shape": _allowed_repair_shape(actionable, required_calls),
+            "forbidden_repair_shape": (
+                "Do not rename the mechanism id, weaken expected_telemetry, "
+                "fabricate positive deltas, force unconditional activation, use "
+                "max(..., 1), or add guarantee-positive fallback behavior just "
+                "to satisfy smoke."
+            ),
+            "conditional_activation_guidance": (
+                "For rare-trigger mechanisms, instrument the natural condition, "
+                "decision/context counters, budget counters, diagnostic skipped "
+                "status, or a canary-targeted threshold. Do not change algorithm "
+                "behavior only to manufacture telemetry."
+            ),
+            "actionable_telemetry_feedback": _compact_actionable_feedback(actionable),
+            "activation_diagnostic": _compact_activation_diagnostic(
+                activation_diagnostic
+            ),
+        }
+    )
+
+
+def _compact_activation_diagnostic(
+    diagnostic: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    if not diagnostic:
+        return None
+    return _drop_empty_dict(
+        {
+            "failure_code": diagnostic.get("failure_code") or diagnostic.get("code"),
+            "mechanism_id": diagnostic.get("mechanism_id")
+            or diagnostic.get("telemetry_failure_mechanism"),
+            "kind": diagnostic.get("activation_diagnostic_kind"),
+            "layer": diagnostic.get("layer") or diagnostic.get("source"),
+            "missing_fields": _compact_string_list(diagnostic.get("missing_fields")),
+            "detected_records": _compact_code_prompt_value(
+                diagnostic.get("detected_records"),
+                depth=0,
+            ),
+            "allowed_repair": _limit_string(diagnostic.get("allowed_repair"), 280),
+            "forbidden_repair": _limit_string(
+                diagnostic.get("forbidden_repair"),
+                280,
+            ),
+        }
+    )
+
+
+def _allowed_repair_shape(
+    actionable: Mapping[str, Any] | None,
+    required_calls: list[str],
+) -> str:
+    declaration_alternative = str(
+        (actionable or {}).get("declaration_alternative") or ""
+    ).strip()
+    if declaration_alternative:
+        return _limit_string(declaration_alternative, 360)
+    if required_calls:
+        return "Add the required mechanism-specific telemetry call(s) on the natural active path while preserving existing passed records."
+    return "Repair only the specific runtime/API/telemetry issue reported here while preserving the same hypothesis and integration wiring."
+
+
+def _compact_actionable_feedback(
+    actionable: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not actionable:
+        return None
+    return _drop_empty_dict(
+        {
+            "failure_code": actionable.get("failure_code"),
+            "mechanism_id": actionable.get("mechanism_id")
+            or actionable.get("failure_mechanism_id"),
+            "category": actionable.get("category"),
+            "delta_valued_fields": _compact_string_list(
+                actionable.get("delta_valued_fields")
+            ),
+            "expected_call_pattern": _limit_string(
+                actionable.get("expected_call_pattern"),
+                220,
+            ),
+            "declaration_alternative": _limit_string(
+                actionable.get("declaration_alternative"),
+                360,
+            ),
+        }
+    )
+
+
+def _compact_repair_required_calls(value: Any) -> list[str]:
+    if not isinstance(value, Mapping):
+        return []
+    calls: list[str] = []
+    for item in value.values():
+        calls.extend(_compact_string_list(item, limit=3))
+        if len(calls) >= 4:
+            break
+    return calls[:4]
+
+
+def _first_mapping_item(value: Any) -> Mapping[str, Any] | None:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, Mapping):
+                return item
+    return None
+
+
+def _compact_string_list(value: Any, *, limit: int = 4) -> list[str]:
+    if value in (None, "", [], {}, ()):
+        return []
+    if isinstance(value, str):
+        raw_values = [value]
+    elif isinstance(value, Mapping):
+        raw_values = [json.dumps(value, sort_keys=True, default=str)]
+    else:
+        try:
+            raw_values = list(value)
+        except TypeError:
+            raw_values = [value]
+    result: list[str] = []
+    for item in raw_values:
+        text = _limit_string(item, 240)
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _first_text(value: Any) -> str:
+    items = _compact_string_list(value, limit=1)
+    return items[0] if items else ""
+
+
+def _compact_failure_text(value: Any, max_chars: int) -> str:
+    text = str(_limit_string(value, max_chars) or "")
+    while "algorithm_smoke_failure:algorithm_smoke_failure" in text:
+        text = text.replace(
+            "algorithm_smoke_failure:algorithm_smoke_failure",
+            "algorithm_smoke_failure",
+        )
+    return text
+
+
 def _with_code_scope_control(
     code_context: Mapping[str, Any],
     hypothesis: HypothesisProposal,

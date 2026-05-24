@@ -84,6 +84,65 @@ def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None
     assert summary_step["protocol_result"]["runtime_pairs"] == 4
 
 
+def test_campaign_summary_uses_llm_trace_cache_stats_when_present(
+    tmp_path: Path,
+) -> None:
+    trace_dir = tmp_path / "llm_traces"
+    trace_dir.mkdir()
+    trace_a = {
+        "request_kind": "code",
+        "model": "claude-sonnet-4-6",
+        "llm_usage": {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-6",
+            "request_kind": "code",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cache_creation_input_tokens": 200,
+            "cache_read_input_tokens": 0,
+        },
+        "prompt_cache_audit": {
+            "cacheable_system_blocks_hash": "same-cache-key",
+            "tool_schema_hash": "schema-a",
+            "cacheable_system_chars": 1000,
+        },
+    }
+    trace_b = {
+        **trace_a,
+        "llm_usage": {
+            **trace_a["llm_usage"],
+            "input_tokens": 120,
+            "output_tokens": 25,
+            "cache_creation_input_tokens": 200,
+        },
+    }
+    (trace_dir / "0001_code.json").write_text(json.dumps(trace_a))
+    (trace_dir / "0002_code.json").write_text(json.dumps(trace_b))
+
+    recorder = EvidenceRecorder(
+        campaign_id="camp-cache",
+        campaign_dir=tmp_path,
+    )
+    summary = recorder.write_campaign_summary(
+        step_history=[_step("/tmp/metrics-round-3.json")],
+        round_num=1,
+        champion=_champion(),
+    )
+
+    cache_stats = summary["cache_stats"]
+    assert cache_stats["source"] == "llm_traces"
+    assert cache_stats["calls"] == 2
+    assert cache_stats["total_tokens"] == 620
+    assert cache_stats["output_tokens"] == 45
+    assert cache_stats["cache_create_tokens"] == 400
+    assert cache_stats["cache_read_tokens"] == 0
+    repeated = cache_stats["repeated_cache_create_groups"]
+    assert repeated[0]["request_kind"] == "code"
+    assert repeated[0]["cache_create_calls"] == 2
+    assert repeated[0]["cache_read_calls"] == 0
+    assert "multiple cache writes without a read" in repeated[0]["diagnosis"]
+
+
 def test_campaign_summary_marks_agent_quality_block_contract_not_run(
     tmp_path: Path,
 ) -> None:

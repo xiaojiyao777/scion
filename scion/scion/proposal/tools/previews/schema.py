@@ -16,6 +16,10 @@ from scion.core.models import (
     mechanism_changes,
     patch_file_changes,
 )
+from scion.problem.providers import (
+    ProblemProviderError,
+    resolve_solver_design_prompt_provider,
+)
 from scion.proposal.edit_protocol import (
     PatchEditProtocolError,
     normalize_patch_typed_edits,
@@ -496,16 +500,39 @@ def _hypothesis_schema_preview(
         (check for check in result.checks if check.name == "C12_mechanism_binding"),
         None,
     )
+    problem_telemetry_preview = _problem_expected_telemetry_preview(context, hypothesis)
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
     if forced_violation is not None:
+        passed = False
+    if (
+        isinstance(problem_telemetry_preview, Mapping)
+        and problem_telemetry_preview.get("passed") is False
+    ):
         passed = False
     if novelty_guidance.get("required") and (
         novelty_guidance.get("missing_fields")
         or novelty_guidance.get("invalid_fields")
     ):
         passed = False
+    problem_telemetry_failed = (
+        isinstance(problem_telemetry_preview, Mapping)
+        and problem_telemetry_preview.get("passed") is False
+    )
+    if forced_violation is not None:
+        failure_reason = forced_violation
+    elif problem_telemetry_failed:
+        failure_reason = str(problem_telemetry_preview.get("reason") or "")
+    elif (
+        novelty_guidance.get("missing_fields")
+        or novelty_guidance.get("invalid_fields")
+    ):
+        failure_reason = str(novelty_guidance.get("detail") or "")
+    else:
+        failure_reason = _limit_text(
+            _first_failure(c1_checks) or "", _PREVIEW_FAILURE_REASON_CHARS
+        )
     return {
         "passed": passed,
         "checks": _checks_payload(
@@ -513,33 +540,37 @@ def _hypothesis_schema_preview(
             detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
             max_checks=4,
         ),
-        "failure_reason": (
-            None
-            if passed
-            else (
-                forced_violation
-                if forced_violation is not None
-                else (
-                    novelty_guidance.get("detail")
-                    if (
-                        novelty_guidance.get("missing_fields")
-                        or novelty_guidance.get("invalid_fields")
-                    )
-                    else _limit_text(
-                        _first_failure(c1_checks) or "", _PREVIEW_FAILURE_REASON_CHARS
-                    )
-                )
-            )
-        ),
+        "failure_reason": None if passed else failure_reason,
         "expected_telemetry_contract": _expected_telemetry_contract_preview(
             context,
             hypothesis,
             c11_check,
         ),
+        "problem_expected_telemetry_preview": problem_telemetry_preview,
         "mechanism_binding": _mechanism_binding_preview(hypothesis, c12_check),
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
         "novelty_signature_guidance": novelty_guidance,
     }
+
+def _problem_expected_telemetry_preview(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> Mapping[str, Any] | None:
+    try:
+        provider = resolve_solver_design_prompt_provider(
+            problem_spec=context.problem_spec,
+            adapter=context.adapter,
+        )
+    except ProblemProviderError:
+        return None
+    hook = getattr(provider, "solver_design_expected_telemetry_preview", None)
+    if not callable(hook):
+        return None
+    preview = hook(hypothesis)
+    if not isinstance(preview, Mapping):
+        return None
+    return _drop_empty_items(dict(preview)) or None
+
 
 def _expected_telemetry_contract_preview(
     context: ProposalToolContext,

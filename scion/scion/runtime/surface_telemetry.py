@@ -166,16 +166,14 @@ def declared_error_runtime_fields(
     problem_spec: Any | None = None,
 ) -> tuple[str, ...]:
     role_map = declared_runtime_field_roles(surface, problem_spec=problem_spec)
+    if not role_map:
+        return ()
     fields = declared_surface_telemetry_fields(surface, problem_spec=problem_spec)
     result = [
         field
         for field in sorted(fields)
         if _is_error_count_field(field)
-        and (
-            not role_map
-            or runtime_field_roles_for(field, role_map)
-            or _looks_diagnostic_field(field)
-        )
+        and "diagnostic" in runtime_field_roles_for(field, role_map)
     ]
     return tuple(dict.fromkeys(result))
 

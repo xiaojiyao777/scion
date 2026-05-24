@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from scion.proposal.engine import _split_tool_selection_context
 from scion.tests.unit.agentic_session_test_support import *
 
@@ -141,13 +143,70 @@ def test_tool_selection_prompt_splits_cacheable_catalog_from_dynamic_context() -
         }
     )
 
-    assert len(system_blocks) == 2
+    assert len(system_blocks) == 1
     assert all(block.get("cache_control") for block in system_blocks)
-    assert "Tool Selection Catalog" in system_blocks[1]["text"]
-    assert "context.read_surface" in system_blocks[1]["text"]
+    assert "Tool Selection Catalog" in system_blocks[0]["text"]
+    assert "context.read_surface" in system_blocks[0]["text"]
     assert "allowed_tool_specs" not in user_prompt
     assert "remaining_tool_calls" in user_prompt
     assert "context.list_surfaces" in user_prompt
+
+
+def test_tool_selection_prompt_caches_stable_planner_context() -> None:
+    base_context = {
+        "phase": "inspect",
+        "allowed_tools": ["context.read_active_solver_design"],
+        "allowed_tool_specs": {
+            "context.read_active_solver_design": {
+                "description": "Read active solver facts."
+            }
+        },
+        "active_algorithm_facts_anchor": {
+            "fact_ids": ["cvrp.destroy_repair.random_removal_destroy"],
+            "source_observation_id": "obs-a",
+            "source_tool_call_id": "tool-a",
+            "snapshot_digest": "solver-digest",
+        },
+        "hypothesis_constraints": {"forced_surface": "solver_design"},
+        "tool_arg_guidance": {
+            "context.read_algorithm_file": {
+                "allowed_paths": ["policies/baseline_modules/scheduler.py"]
+            }
+        },
+        "remaining_tool_calls": 3,
+        "observations": [{"tool_name": "context.list_surfaces"}],
+    }
+    later_context = {
+        **base_context,
+        "remaining_tool_calls": 2,
+        "observations": [
+            {"tool_name": "context.list_surfaces"},
+            {"tool_name": "context.read_active_solver_design"},
+        ],
+    }
+
+    first_blocks, first_prompt = _split_tool_selection_context(base_context)
+    later_blocks, later_prompt = _split_tool_selection_context(later_context)
+    stable_json = first_blocks[0]["text"]
+    stable_payload_start = stable_json.index(
+        "{", stable_json.index("## Stable Tool Selection Context")
+    )
+    stable_payload = json.loads(
+        stable_json[stable_payload_start:]
+    )
+
+    assert first_blocks[0]["text"] == later_blocks[0]["text"]
+    assert "Stable Tool Selection Context" in first_blocks[0]["text"]
+    assert "active_algorithm_facts_anchor" in first_blocks[0]["text"]
+    assert "tool_arg_guidance" in first_blocks[0]["text"]
+    assert "source_observation_id" not in first_blocks[0]["text"]
+    assert stable_payload["active_algorithm_facts_anchor"]["snapshot_digest"] == (
+        "solver-digest"
+    )
+    assert "active_algorithm_facts_anchor" not in first_prompt
+    assert "tool_arg_guidance" not in first_prompt
+    assert "remaining_tool_calls" in first_prompt
+    assert "context.read_active_solver_design" in later_prompt
 
 
 def test_algorithm_file_reusable_observations_are_scoped_by_path_and_budget() -> None:

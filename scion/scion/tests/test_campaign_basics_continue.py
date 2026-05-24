@@ -28,7 +28,7 @@ class TestCampaignBasics:
         assert status["total_rounds"] >= 1
         assert "last_result" in status
 
-    def test_max_rounds_exhausted_terminalizes_active_branches(self, tmp_path):
+    def test_max_rounds_exhausted_preserves_active_branches_for_resume(self, tmp_path):
         cm = _campaign(
             tmp_path,
             experiment_protocol=MockExperimentProtocol([
@@ -40,18 +40,29 @@ class TestCampaignBasics:
         cm.run(max_rounds=1)
 
         state = cm.get_state()
-        assert state["n_active_branches"] == 0
+        assert state["n_active_branches"] == 1
         assert cm._last_stop_reason == "max_rounds_exhausted"
         branch = next(iter(cm._branch_ctrl._branches.values()))
-        assert branch.state == BranchState.ABANDONED
-        assert "MAX_ROUNDS_EXHAUSTED" in branch.failure_codes
+        assert branch.state != BranchState.ABANDONED
+        assert "MAX_ROUNDS_EXHAUSTED" not in branch.failure_codes
 
         status = json.loads((tmp_path / "campaign" / "status.json").read_text())
         summary = json.loads((tmp_path / "campaign" / "campaign_summary.json").read_text())
         assert status["stopped_reason"] == "max_rounds_exhausted"
-        assert status["n_active_branches"] == 0
+        assert status["n_active_branches"] == 1
+        assert status["branches"][0]["state"] == branch.state.value
         assert summary["stopped_reason"] == "max_rounds_exhausted"
-        assert summary["n_active_branches"] == 0
+        assert summary["n_active_branches"] == 1
+        assert summary["branches"][0]["state"] == branch.state.value
+        with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
+            row = conn.execute(
+                "SELECT state, failure_codes FROM branches WHERE branch_id = ?",
+                (branch.branch_id,),
+            ).fetchone()
+        assert row is not None
+        assert row[0] == branch.state.value
+        assert row[0] != BranchState.ABANDONED.value
+        assert "MAX_ROUNDS_EXHAUSTED" not in (row[1] or "")
         assert summary["final_evidence_refs"]["status"] == (
             FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED
         )
@@ -171,11 +182,17 @@ class TestContinueExplore:
         hyp1 = dict(_VALID_HYPOTHESIS)
         hyp1["target_file"] = "operators/local_search.py"
         hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["action"] = "create_new"
         hyp2["target_file"] = "operators/other_op.py"
         patch1 = dict(_VALID_PATCH)
         patch1["file_path"] = "operators/local_search.py"
-        patch2 = dict(_VALID_PATCH)
-        patch2["file_path"] = "operators/other_op.py"
+        patch2 = {
+            "file_path": "operators/other_op.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "content_after": _VALID_CODE,
+            "test_hint": None,
+        }
 
         class SequencedLLM:
             def __init__(self):
@@ -191,8 +208,6 @@ class TestContinueExplore:
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
-        # _campaign seeds champion_code/operators/local_search.py; seed other_op.py for step 2
-        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
         r1 = cm.run_one_step()
         r2 = cm.run_one_step()
         # Both steps should be on the same branch
@@ -207,11 +222,17 @@ class TestContinueExplore:
         hyp1 = dict(_VALID_HYPOTHESIS)
         hyp1["target_file"] = "operators/local_search.py"
         hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["action"] = "create_new"
         hyp2["target_file"] = "operators/other_op.py"
         patch1 = dict(_VALID_PATCH)
         patch1["file_path"] = "operators/local_search.py"
-        patch2 = dict(_VALID_PATCH)
-        patch2["file_path"] = "operators/other_op.py"
+        patch2 = {
+            "file_path": "operators/other_op.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "content_after": _VALID_CODE,
+            "test_hint": None,
+        }
 
         class SequencedLLM:
             def __init__(self):
@@ -227,7 +248,6 @@ class TestContinueExplore:
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
         cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
-        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
 
         # First step: first hypothesis — counters start at 0
         r1 = cm.run_one_step()

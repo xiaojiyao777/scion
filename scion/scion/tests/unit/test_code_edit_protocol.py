@@ -231,6 +231,79 @@ def test_existing_modify_whole_file_exact_replace_is_rejected_with_guidance() ->
     assert "function, import block, registration entry, or local code block" in message
 
 
+def test_existing_modify_near_whole_file_exact_replace_is_rejected() -> None:
+    head = "def target():\n"
+    body = "".join(f"    value_{idx} = {idx}\n" for idx in range(180))
+    tail = "def untouched():\n    return 1\n"
+    before = head + body + tail
+    old_string = head + body
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            {
+                "file_path": "policies/example.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "source_digest": source_digest_for_content(before),
+                "old_string": old_string,
+                "new_string": head + "    return 2\n",
+            },
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "existing_file_near_whole_file_exact_replace_rejected" in message
+    assert "coverage_ratio" in message
+    assert "create a helper file and add a small integration edit" in message
+
+
+def test_existing_modify_block_exact_replace_in_large_file_is_allowed() -> None:
+    before = (
+        "def prefix():\n    return 0\n\n"
+        + "# filler\n" * 400
+        + "def target():\n    return 1\n"
+    )
+    patch = _parse_patch(
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": source_digest_for_content(before),
+            "old_string": "def target():\n    return 1",
+            "new_string": "def target():\n    return 2",
+        },
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+    )
+
+    assert "def target():\n    return 2\n" in patch.code_content
+
+
+def test_existing_modify_large_fraction_small_file_exact_replace_is_allowed() -> None:
+    before = "def value():\n    return 1\n"
+    patch = _parse_patch(
+        {
+            "file_path": "policies/example.py",
+            "action": "modify",
+            "edit_intent": "exact_replace",
+            "source_digest": source_digest_for_content(before),
+            "old_string": "def value():\n    return 1",
+            "new_string": "def value():\n    return 2",
+        },
+        context={
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+    )
+
+    assert patch.code_content == "def value():\n    return 2\n"
+
+
 def test_create_new_file_full_file_content_after_remains_allowed() -> None:
     patch = _parse_patch(
         {

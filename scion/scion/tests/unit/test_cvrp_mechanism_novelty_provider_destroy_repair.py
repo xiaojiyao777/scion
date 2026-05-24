@@ -94,6 +94,163 @@ def test_cvrp_regret_gate_allows_new_destroy_using_existing_regret_repair() -> N
     assert result is None
 
 
+def test_cvrp_regret_gate_allows_cluster_destroy_acknowledging_regret_repair() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add proximity_cluster_destroy. The baseline already has greedy, "
+            "regret-2, and regret-3 repair operators; this change only removes "
+            "spatially nearby customers before calling the existing regret "
+            "repair path. It is not a claim that regret insertion is absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Destroy selection lacks a proximity-cluster removal variant, while "
+            "existing repair operators insert independently."
+        ),
+        expected_effect="Improve total_distance by perturbing spatial clusters.",
+        mechanism_changes=(
+            MechanismChange(id="proximity_cluster_destroy", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_random_gate_allows_cluster_destroy_contrast_with_random_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver uses all four destroy operators (random, worst, "
+            "shaw, route) but lacks a cluster-based removal that removes "
+            "geographically concentrated customer groups. The new cluster "
+            "operator differs from random removal by being spatially contiguous "
+            "and from Shaw removal by using pure Euclidean distance rank with "
+            "no demand or route-membership weighting."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "The existing destroy operators (random, worst, shaw, route) do not "
+            "produce tight geographic clusters of removed customers."
+        ),
+        expected_effect=(
+            "Adding cluster removal to the ALNS destroy portfolio gives the "
+            "adaptive weight system a new spatially compact removal option."
+        ),
+        mechanism_changes=(
+            MechanismChange(id="cluster_removal_destroy", change_type="add"),
+        ),
+        novelty_signature={
+            "algorithm_family": "ALNS+VNS with expanded destroy portfolio",
+            "improvement_strategy": (
+                "add pure-distance cluster removal destroy: seed + top-q "
+                "nearest customers by Euclidean distance"
+            ),
+        },
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.mechanism != "random_removal_destroy"
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_regret_gate_allows_nn_repair_variant_acknowledging_regret() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add nn_filtered_repair as a candidate-list variant of repair. "
+            "The current solver already includes _regret2_insertion and "
+            "_regret3_insertion; the new mechanism filters insertion positions "
+            "to nearest-neighbor candidate lists before evaluating regret."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Existing regret repair lacks nearest-neighbor filtering.",
+        expected_effect="Reduce repair time while preserving distance quality.",
+        mechanism_changes=(
+            MechanismChange(id="nn_filtered_repair", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_regret_gate_allows_post_repair_merge_compaction_variant() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current ALNS repair operators (_greedy_insertion, "
+            "_regret2_insertion, _regret3_insertion) already exist and always "
+            "insert unrouted customers into existing routes without considering "
+            "whether merging a small route into another would reduce total "
+            "distance. Add alns_merge_small_routes as a post-repair compaction "
+            "step that relocates all customers from near-empty routes when "
+            "capacity feasibility holds."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness=(
+            "ALNS lacks post-repair small-route merge compaction."
+        ),
+        expected_effect="Improve total_distance by eliminating near-empty routes.",
+        mechanism_changes=(
+            MechanismChange(id="alns_merge_small_routes", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
+def test_cvrp_regret_gate_allows_stagnation_restart_using_existing_regret() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add stagnation_restart as a large perturbation escape when ALNS "
+            "plateaus, then use the existing regret-3 repair path to reinsert "
+            "removed customers. This leverages existing regret repair after "
+            "perturbation and does not claim regret insertion is absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        target_weakness=(
+            "Search can stagnate without escaping the local basin after many "
+            "non-improving iterations."
+        ),
+        expected_effect="Improve total_distance after stagnation.",
+        mechanism_changes=(
+            MechanismChange(id="stagnation_restart", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_mechanism_novelty_provider_blocks_removal_savings_duplicate_precisely() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -241,6 +398,39 @@ def test_cvrp_provider_rejects_missing_removal_savings_claim_with_worst_reason()
     assert "_shaw_removal" not in result.reason
 
 
+def test_cvrp_provider_allows_position_cost_variant_acknowledging_worst_removal() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The current destroy portfolio lacks a mechanism that targets "
+            "customers whose current position creates high insertion cost "
+            "relative to their best alternative location. It already includes "
+            "_worst_removal, which ranks customers by removal saving using "
+            "cost_of_remove. "
+            "However, it does not account for whether a cheaper best "
+            "alternative insertion exists elsewhere. Add costly_position_removal "
+            "that scores customers by insertion opportunity: best reinsertion "
+            "cost in another route minus the removal saving, then repairs with "
+            "existing regret insertion. This is an insertion-aware variant, not "
+            "a claim that removal-savings removal is absent."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness="Destroy selection misses badly placed customers.",
+        expected_effect="Improve total_distance by removing costly positions.",
+        mechanism_changes=(
+            MechanismChange(id="costly_position_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_provider_rejects_repeated_worst_removal_with_precise_reason() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(
@@ -267,4 +457,3 @@ def test_cvrp_provider_rejects_repeated_worst_removal_with_precise_reason() -> N
     assert "removal-savings or detour-cost destroy operator" in result.reason
     assert "_worst_removal" in " ".join([result.reason, *result.evidence])
     assert "_shaw_removal" not in result.reason
-

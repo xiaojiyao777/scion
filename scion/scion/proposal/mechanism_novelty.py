@@ -161,7 +161,7 @@ def _recent_repeated_mechanism_result(
     if not recent_steps:
         return None
 
-    candidate_ids = _mechanism_ids(hypothesis)
+    candidate_ids = _mechanism_ids(hypothesis, primary_only=True)
     candidate_signature = _novelty_signature_key(hypothesis)
     candidate_family = _mechanism_family(hypothesis, context=context)
     candidate_target = str(hypothesis.target_file or "").strip()
@@ -174,7 +174,8 @@ def _recent_repeated_mechanism_result(
         if not failure_code:
             continue
 
-        overlap = sorted(candidate_ids & _mechanism_ids(step_hypothesis))
+        step_ids = _mechanism_ids(step_hypothesis, primary_only=True)
+        overlap = sorted(candidate_ids & step_ids)
         if overlap:
             mechanism = overlap[0]
             return MechanismNoveltyResult(
@@ -209,7 +210,6 @@ def _recent_repeated_mechanism_result(
 
         step_family = _mechanism_family(step_hypothesis, context=context)
         step_target = str(getattr(step_hypothesis, "target_file", "") or "").strip()
-        step_ids = _mechanism_ids(step_hypothesis)
         if candidate_ids or step_ids:
             continue
         if (
@@ -235,7 +235,11 @@ def _recent_repeated_mechanism_result(
     return None
 
 
-def _mechanism_ids(hypothesis: HypothesisProposal) -> set[str]:
+def _mechanism_ids(
+    hypothesis: HypothesisProposal,
+    *,
+    primary_only: bool = False,
+) -> set[str]:
     ids: set[str] = set()
     for change in getattr(hypothesis, "mechanism_changes", ()) or ():
         value = (
@@ -246,15 +250,41 @@ def _mechanism_ids(hypothesis: HypothesisProposal) -> set[str]:
         text = _normalize_token(value)
         if text:
             ids.add(text)
+    if primary_only:
+        primary_ids = {
+            item for item in ids if not _is_secondary_integration_mechanism_id(item)
+        }
+        if primary_ids:
+            ids = primary_ids
     signature = getattr(hypothesis, "novelty_signature", None)
     if isinstance(signature, Mapping):
         for key in ("mechanism_id", "improvement_strategy"):
             value = signature.get(key)
             if isinstance(value, str):
                 text = _normalize_token(value)
-                if text and text not in {"preserve_existing_acceptance", "preserve"}:
+                if (
+                    text
+                    and text not in {"preserve_existing_acceptance", "preserve"}
+                    and (
+                        not primary_only
+                        or not _is_secondary_integration_mechanism_id(text)
+                    )
+                ):
                     ids.add(text)
     return ids
+
+
+def _is_secondary_integration_mechanism_id(value: str) -> bool:
+    text = _normalize_token(value)
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"(?:^|_)(?:registry|registration|register|wiring|wire|"
+            r"integration|integrate|operator_registry)(?:_|$)",
+            text,
+        )
+    )
 
 
 def _novelty_signature_key(hypothesis: HypothesisProposal) -> str:

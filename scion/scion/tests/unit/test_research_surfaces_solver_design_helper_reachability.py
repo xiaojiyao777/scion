@@ -249,3 +249,7 @@ def test_contract_gate_rejects_solver_design_helper_only_called_from_detached_cl
     )
     assert not c9e.passed
     assert "_detached_pool" in c9e.detail
+    assert "missing_integration_edges" in c9e.detail
+    assert "recognized_roots=" not in c9e.detail
+    assert "recognized_root_sample" not in c9e.detail
+    assert "recognized_root_count" not in c9e.detail

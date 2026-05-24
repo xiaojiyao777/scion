@@ -155,8 +155,6 @@ def _algorithm_smoke_failure_class(
 ) -> str:
     if passed:
         return "passed"
-    if telemetry_guard is not None and telemetry_guard.get("triggered"):
-        return "telemetry_guard_failure"
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
     if telemetry_static is not None and telemetry_static.get("passed") is False:
         return "telemetry_static_preview_failure"
@@ -168,6 +166,8 @@ def _algorithm_smoke_failure_class(
             return "runtime_execution_failure"
     if subprocess_tail is not None and subprocess_tail.get("error_category"):
         return "runtime_execution_failure"
+    if telemetry_guard is not None and telemetry_guard.get("triggered"):
+        return "telemetry_guard_failure"
     lowered = primary_issue.lower()
     if "zero active search" in lowered:
         return "zero_search_effort"

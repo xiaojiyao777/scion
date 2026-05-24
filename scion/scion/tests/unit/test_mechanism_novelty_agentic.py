@@ -127,7 +127,7 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
     accepted = _solver_design_hypothesis(
         "Improve existing cross-route Or-opt candidate ordering and delta scoring."
     )
-    creative = SequentialHypothesisCreative([rejected, accepted])
+    creative = SequentialHypothesisCreative([rejected, rejected, accepted])
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -150,7 +150,7 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
         )
     )
 
-    retry_context = creative.hypothesis_contexts[1]
+    retry_context = creative.hypothesis_contexts[2]
     retry_feedback = retry_context["agentic_hypothesis_semantic_rejections"][0]
 
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
@@ -158,7 +158,7 @@ def test_novelty_gate_rejection_triggers_hypothesis_semantic_retry(
         AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
     )
     assert output.hypothesis == accepted
-    assert len(creative.hypothesis_contexts) == 2
+    assert len(creative.hypothesis_contexts) == 3
     assert retry_feedback["source"] == "mechanism_novelty_gate"
     assert retry_feedback["premise_check"] == "contradicted"
     assert retry_feedback["failure_code"] == "proposal_premise_contradicted"
@@ -233,7 +233,7 @@ def test_hypothesis_semantic_retry_manifest_records_feedback_section(
     accepted = _solver_design_hypothesis(
         "Improve existing cross-route Or-opt candidate ordering and delta scoring."
     )
-    creative = SequentialHypothesisCreative([rejected, accepted])
+    creative = SequentialHypothesisCreative([rejected, rejected, accepted])
     artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
     session = AgenticProposalSession(
         creative,
@@ -310,7 +310,7 @@ def test_repeated_novelty_gate_rejection_fails_after_semantic_retry(
         )
     )
 
-    assert len(creative.hypothesis_contexts) == 2
+    assert len(creative.hypothesis_contexts) == 3
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
     assert output.termination_reason == AgenticTerminationReason.PREMISE_CONTRADICTED
     assert output.failure_category == "agent_grounding_failure"

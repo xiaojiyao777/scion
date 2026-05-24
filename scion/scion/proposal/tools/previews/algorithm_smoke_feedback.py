@@ -97,10 +97,22 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         primary_issue=primary_issue,
         subprocess_tail=subprocess_tail,
     )
-    if activation_diagnostic is not None:
+    hard_smoke_failure = _hard_smoke_failure_present(
+        raw_payload,
+        runtime_smoke=runtime_smoke,
+        subprocess_tail=subprocess_tail,
+    )
+    if activation_diagnostic is not None and not hard_smoke_failure:
         failure_class = str(
             activation_diagnostic.get("code") or "proposal_activation_diagnostic"
         )
+    non_blocking_activation_diagnostic = _non_blocking_activation_diagnostic(
+        activation_diagnostic
+    )
+    if non_blocking_activation_diagnostic and not hard_smoke_failure:
+        passed = True
+        status = "diagnostic"
+        failure_class = "activation_not_observed_diagnostic"
     repair_hints = _algorithm_smoke_repair_hints(
         raw_payload,
         runtime_smoke=runtime_smoke,
@@ -152,6 +164,7 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "passed": passed,
             "status": status,
             "failure_class": failure_class,
+            "diagnostic_passed": non_blocking_activation_diagnostic or None,
             "primary_issue": primary_issue,
             "selected_surface": selected_surface,
             "case_count": case_count,
@@ -206,6 +219,59 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         f"{_algorithm_smoke_digest(compact_payload.get('agent_summary'))}"
     )
     return compact_payload
+
+
+def _hard_smoke_failure_present(
+    raw_payload: Mapping[str, Any],
+    *,
+    runtime_smoke: Mapping[str, Any] | None,
+    subprocess_tail: Mapping[str, Any] | None,
+) -> bool:
+    telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
+    if telemetry_static is not None and telemetry_static.get("passed") is False:
+        issue_codes = {
+            str(code or "").strip()
+            for code in telemetry_static.get("issue_codes") or ()
+            if str(code or "").strip()
+        }
+        if issue_codes - {"DECLARED_MECHANISM_ACTIVATION_MISSING"}:
+            return True
+    if runtime_smoke is not None:
+        if runtime_smoke.get("runtime_audit_failure") not in (None, "", {}, []):
+            return True
+        run = _mapping_or_none(runtime_smoke.get("run"))
+        if run is not None and run.get("success") is False:
+            return True
+    if subprocess_tail is not None and subprocess_tail.get("error_category"):
+        return True
+    return False
+
+
+def _non_blocking_activation_diagnostic(
+    activation_diagnostic: Mapping[str, Any] | None,
+) -> bool:
+    if activation_diagnostic is None:
+        return False
+    failure_code = str(
+        activation_diagnostic.get("failure_code")
+        or activation_diagnostic.get("telemetry_failure_code")
+        or ""
+    ).strip()
+    if failure_code == "DECLARED_MECHANISM_ACTIVATION_MISSING":
+        return True
+    if str(activation_diagnostic.get("source") or "") != "runtime_smoke.telemetry_guard":
+        return False
+    if failure_code in {
+        "TELEMETRY_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+    }:
+        return True
+    kind = str(activation_diagnostic.get("activation_diagnostic_kind") or "").strip()
+    return kind in {
+        "path_not_reached",
+        "trigger_not_reached",
+        "smoke_budget_or_case_insufficient",
+    }
 
 
 def _agent_summary(**values: Any) -> dict[str, Any]:

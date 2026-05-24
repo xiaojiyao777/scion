@@ -99,11 +99,6 @@ class ReachabilityState:
         inert = sorted(self.new_functions - reachable)
         if not inert:
             return None
-        inert_by_file = {
-            path: sorted(names & set(inert))
-            for path, names in sorted(self.new_functions_by_file.items())
-            if names & set(inert)
-        }
         guidance = (
             "Solver-design helper functions must be reachable from an existing "
             "module function, baseline_algorithm.py::solve, "
@@ -113,9 +108,28 @@ class ReachabilityState:
             "additional_changes. Do not add a legacy top-level run(...) entrypoint "
             "unless the current target already uses that entrypoint."
         )
+        missing_edges = [
+            {
+                "helper": helper,
+                "file": next(
+                    (
+                        path
+                        for path, names in sorted(self.new_functions_by_file.items())
+                        if helper in names
+                    ),
+                    None,
+                ),
+                "required_action": (
+                    "preserve or add the import, operator registration, and "
+                    "call-site wiring that invokes this helper from the existing "
+                    "_ALNSVNSSolver.solve/baseline_algorithm.py::solve call chain"
+                ),
+            }
+            for helper in inert
+        ]
         return (
             "new solver_design helper functions are not integrated. "
-            f"inert_helpers={inert}; changed_files={self.changed_paths}; "
-            f"recognized_roots={sorted(self.root_calls)}; inert_helpers_by_file={inert_by_file}. "
+            f"inert_helpers={inert}; missing_integration_edges={missing_edges}; "
+            f"changed_files={self.changed_paths}. "
             + guidance
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Mapping
 
 from .prompt_common import (
@@ -120,21 +121,25 @@ def _split_hypothesis_context(
             f"## Agent Quality Feedback\n{D['agent_quality_feedback']}"
         )
     agentic_context = _agentic_research_context_block(D)
+    cacheable_agentic_context = ""
+    dynamic_agentic_context = ""
     if agentic_context:
-        branch_context_parts.append(agentic_context)
+        cacheable_agentic_context, dynamic_agentic_context = (
+            _split_agentic_context_for_hypothesis_cache(agentic_context)
+        )
     negative_fact_block = str(D["agentic_negative_fact_block"]).strip()
 
+    stable_prefix_parts = [static_text, champion_text]
+    if cacheable_agentic_context:
+        stable_prefix_parts.append(cacheable_agentic_context)
     system_blocks = [
         {
             "type": "text",
-            "text": static_text,
+            "text": "\n\n".join(
+                part for part in stable_prefix_parts if str(part).strip()
+            ),
             "cache_control": _CACHE_5M,
-        },
-        {
-            "type": "text",
-            "text": champion_text,
-            "cache_control": _CACHE_5M,
-        },
+        }
     ]
     if branch_context_parts:
         system_blocks.append(
@@ -144,7 +149,11 @@ def _split_hypothesis_context(
             }
         )
 
+    dynamic_agentic_prefix = (
+        f"{dynamic_agentic_context}\n\n" if dynamic_agentic_context else ""
+    )
     user_prompt = (
+        f"{dynamic_agentic_prefix}"
         f"## Experiment History — This Branch\n{D['experiment_history']}\n\n"
         f"## Globally Failed / Blacklisted Approaches\n{D['blacklist_summary']}\n\n"
         f"## Currently Occupied (C10 will auto-reject duplicates)\n{D['active_hyp_summary']}\n\n"
@@ -186,6 +195,48 @@ def _split_hypothesis_context(
     )
 
     return system_blocks, user_prompt
+
+
+_AGENTIC_CONTEXT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+_CACHEABLE_AGENTIC_CONTEXT_HEADINGS = frozenset(
+    {
+        "active algorithm facts",
+        "active solver mechanism digest",
+        "solver-design full algorithm file reads",
+    }
+)
+
+
+def _split_agentic_context_for_hypothesis_cache(
+    text: str,
+) -> tuple[str, str]:
+    """Split stable active-solver context from dynamic session feedback.
+
+    Generic Scion owns the cache boundary only: stable active fact/source
+    projections may be cached, while tool observations, retry feedback, runtime
+    feedback, and session ids stay uncached. The section names are generic APS
+    prompt sections, not problem-domain semantics.
+    """
+    text = str(text or "")
+    if not text.strip():
+        return "", ""
+    matches = list(_AGENTIC_CONTEXT_HEADING_RE.finditer(text))
+    if not matches:
+        return "", text
+    cacheable: list[str] = []
+    dynamic: list[str] = []
+    if matches[0].start() > 0 and text[: matches[0].start()].strip():
+        dynamic.append(text[: matches[0].start()].strip())
+    for offset, match in enumerate(matches):
+        start = match.start()
+        end = matches[offset + 1].start() if offset + 1 < len(matches) else len(text)
+        section = text[start:end].strip()
+        heading = re.sub(r"\s+", " ", match.group(1).strip().lower())
+        if heading in _CACHEABLE_AGENTIC_CONTEXT_HEADINGS:
+            cacheable.append(section)
+        else:
+            dynamic.append(section)
+    return "\n\n".join(cacheable), "\n\n".join(dynamic)
 
 
 def _hypothesis_task_prompt(context: Mapping[str, Any]) -> str:

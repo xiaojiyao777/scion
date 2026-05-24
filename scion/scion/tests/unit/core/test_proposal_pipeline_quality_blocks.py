@@ -277,6 +277,50 @@ def test_agentic_activation_diagnostic_is_quality_block_not_proposal_streak() ->
     ]["detail"]
 
 
+def test_agentic_activation_not_observed_diagnostic_is_not_quality_block() -> None:
+    creative = FakeCreative()
+    output = AgenticProposalOutput(
+        status=AgenticProposalStatus.FAILED,
+        session_id="activation-diagnostic-session",
+        campaign_id="camp-1",
+        branch_id="branch-1",
+        champion_version=1,
+        champion_weight_revision=0,
+        problem_id="toy",
+        problem_spec_hash="spec-hash",
+        hypothesis=creative.hypothesis,
+        termination_reason=AgenticTerminationReason.CODE_GENERATION_FAILED,
+        failure_detail=(
+            "activation_not_observed_diagnostic: proposal_activation_diagnostic; "
+            "activation_diagnostic_kind=path_not_reached"
+        ),
+        failure_category="activation_not_observed_diagnostic",
+        self_check=AgenticSelfCheck(
+            schema_valid=True,
+            contract_preview_passed=True,
+        ),
+    )
+    pipeline, branch, _, circuit, failures, _ = _pipeline(
+        creative=creative,
+        agentic_session=AgenticProposalSession(injected_output=output),
+    )
+
+    patch = pipeline.generate_code(branch, creative.hypothesis)
+    detail = pipeline.pop_hypothesis_failure_detail(branch.branch_id)
+    session_ref = pipeline.pop_agentic_session_ref(branch.branch_id)
+
+    assert patch is None
+    assert detail is not None
+    assert "agent_quality_blocked" not in detail
+    assert failures and failures[-1][1].category == "proposal"
+    assert circuit.failures
+    assert session_ref is not None
+    assert session_ref["agent_block_reason"] == ""
+    assert session_ref["primary_failure"]["category"] == (
+        "activation_not_observed_diagnostic"
+    )
+
+
 def test_agentic_activation_diagnostic_enters_next_hypothesis_context_with_facts() -> None:
     creative = FakeCreative()
     creative.hypothesis = HypothesisProposal(

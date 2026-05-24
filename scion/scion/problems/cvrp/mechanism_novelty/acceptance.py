@@ -18,10 +18,10 @@ def _claims_weights_non_adaptive(text: str) -> bool:
         return False
     if _claims_alns_weights_non_adaptive(text):
         return True
-    if _claims_global_weights_non_adaptive(text):
-        return True
     if _is_vns_neighborhood_weight_scope(text):
         return False
+    if _claims_global_weights_non_adaptive(text):
+        return True
     return _claims_unscoped_operator_weights_non_adaptive(text)
 
 
@@ -49,9 +49,17 @@ def _is_vns_neighborhood_weight_scope(text: str) -> bool:
         (
             " vns ",
             " variable neighborhood ",
-            " local search ",
             " neighborhood ",
             " neighbourhood ",
+            " neighborhood order",
+            " neighborhood ordering",
+            " neighborhood scheduling",
+            " operator order",
+            " operator ordering",
+            " operator selection",
+            " selector",
+            " scheduler",
+            " schedule",
         ),
     )
 

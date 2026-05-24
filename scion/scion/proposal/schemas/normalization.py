@@ -32,23 +32,7 @@ def normalize_patch_output_with_repair_attribution(
         return normalized, tuple(repairs)
 
     if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return normalized, ()
-        if isinstance(parsed, list):
-            normalized["additional_changes"] = parsed
-            value = parsed
-            repairs.append(
-                {
-                    "field": "additional_changes",
-                    "repair_kind": "host_mechanical_normalization",
-                    "root_cause": "json_string_array",
-                    "action": "parsed_json_string_to_array",
-                }
-            )
-        else:
-            return normalized, tuple(repairs)
+        return normalized, tuple(repairs)
 
     if isinstance(value, list):
         compacted: list[Any] = []

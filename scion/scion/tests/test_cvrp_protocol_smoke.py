@@ -16,6 +16,7 @@ from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -23,6 +24,23 @@ from scion.verification.gate import VerificationGate
 
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
+
+
+def _baseline_algorithm_solve_patch(new_solve: str) -> dict:
+    source = (CVRP_DIR / "policies" / "baseline_algorithm.py").read_text(
+        encoding="utf-8"
+    )
+    old_solve = source[source.index("def solve(") :]
+    return {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "source_digest": source_digest_for_content(source + "\n"),
+        "old_string": old_solve,
+        "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
+        "replace_all": False,
+        "test_hint": None,
+    }
 
 
 def _problem_v1() -> ProblemSpecV1:
@@ -262,18 +280,15 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
                 "runtime_budget_strategy": "constant_probe",
             },
         },
-        patch_response={
-            "file_path": "policies/baseline_algorithm.py",
-            "action": "modify",
-            "code_content": (
+        patch_response=_baseline_algorithm_solve_patch(
+            (
                 "def solve(instance, rng, time_limit_sec, context):\n"
                 "    solution = context.nearest_neighbor()\n"
                 "    context.record_iteration('smoke_probe', 1)\n"
                 "    context.record_move('smoke_probe', attempted=1, accepted=0)\n"
                 "    return solution\n"
-            ),
-            "test_hint": None,
-        },
+            )
+        ),
     )
     gate = VerificationGate(
         problem_spec=problem_spec,

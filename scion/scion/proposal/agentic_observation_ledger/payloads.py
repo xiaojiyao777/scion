@@ -94,6 +94,9 @@ def read_receipt_from_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
             "coverage_status": coverage.get("coverage_status"),
             "artifact_ref": entry.get("artifact_ref"),
             "evidence_ref": entry.get("evidence_ref"),
+            "included_in_prompt_for_call": False,
+            "full_content_included_in_prompt": False,
+            "prompt_inclusion_status": "not_asserted_by_read_receipt",
         }
     )
 

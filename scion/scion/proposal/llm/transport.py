@@ -72,10 +72,25 @@ class TransportMixin:
             cache_create = getattr(usage, "cache_creation_input_tokens", 0)
             cache_read = getattr(usage, "cache_read_input_tokens", 0)
             input_tokens = getattr(usage, "input_tokens", 0)
+            output_tokens = getattr(usage, "output_tokens", 0)
             self._cache_stats["calls"] += 1
             self._cache_stats["cache_read_tokens"] += cache_read
             self._cache_stats["cache_create_tokens"] += cache_create
             self._cache_stats["uncached_tokens"] += input_tokens
+            self._record_anthropic_usage(
+                usage,
+                model=model,
+                request_kind=_normalize_request_kind(tool=tool) or "tool_call",
+            )
+            if self._token_tracker is not None:
+                self._token_tracker.record(
+                    request_kind=_normalize_request_kind(tool=tool) or "tool_call",
+                    model_id=model,
+                    prompt_tokens=input_tokens,
+                    completion_tokens=output_tokens,
+                    cache_read_tokens=cache_read,
+                    cache_create_tokens=cache_create,
+                )
 
         stop_reason = getattr(response, "stop_reason", None)
         if stop_reason in ("max_tokens", "length"):
@@ -135,6 +150,11 @@ class TransportMixin:
             self._cache_stats["calls"] += 1
             self._cache_stats["cache_read_tokens"] += cache_read
             self._cache_stats["uncached_tokens"] += uncached
+            self._record_openai_usage(
+                usage,
+                model=model,
+                request_kind=_normalize_request_kind(tool=tool) or "tool_call",
+            )
             if self._token_tracker is not None:
                 self._token_tracker.record(
                     request_kind=_normalize_request_kind(tool=tool) or "llm_call",
@@ -197,6 +217,11 @@ class TransportMixin:
                 cache_read = getattr(usage, "cache_read_input_tokens", 0)
                 input_tokens = getattr(usage, "input_tokens", 0)
                 output_tokens = getattr(usage, "output_tokens", 0)
+                self._record_anthropic_usage(
+                    usage,
+                    model=model,
+                    request_kind="llm_call",
+                )
                 if cache_create or cache_read:
                     logger.info(
                         "Cache: created=%d read=%d uncached=%d",
@@ -249,6 +274,11 @@ class TransportMixin:
                 self._cache_stats["calls"] += 1
                 self._cache_stats["cache_read_tokens"] += cache_read
                 self._cache_stats["uncached_tokens"] += input_tokens
+                self._record_openai_usage(
+                    usage,
+                    model=model,
+                    request_kind="llm_call",
+                )
                 if self._token_tracker is not None:
                     self._token_tracker.record(
                         request_kind="llm_call",
@@ -317,6 +347,49 @@ class TransportMixin:
         cache_read = int(getattr(usage, "prompt_cache_hit_tokens", 0) or 0)
         cache_miss = int(getattr(usage, "prompt_cache_miss_tokens", 0) or 0)
         return cache_read, cache_miss
+
+    def _record_anthropic_usage(
+        self,
+        usage: Any,
+        *,
+        model: str,
+        request_kind: str,
+    ) -> None:
+        self._last_usage_metadata = {
+            "provider": "anthropic",
+            "model": model,
+            "request_kind": request_kind,
+            "input_tokens": int(getattr(usage, "input_tokens", 0) or 0),
+            "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
+            "cache_creation_input_tokens": int(
+                getattr(usage, "cache_creation_input_tokens", 0) or 0
+            ),
+            "cache_read_input_tokens": int(
+                getattr(usage, "cache_read_input_tokens", 0) or 0
+            ),
+        }
+
+    def _record_openai_usage(
+        self,
+        usage: Any,
+        *,
+        model: str,
+        request_kind: str,
+    ) -> None:
+        cache_read, cache_miss = self._openai_cache_usage(usage)
+        self._last_usage_metadata = {
+            "provider": "openai_compatible",
+            "model": model,
+            "request_kind": request_kind,
+            "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+            "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": cache_read,
+            "prompt_cache_hit": bool(cache_read),
+            "prompt_cache_miss": bool(cache_miss),
+            "prompt_cache_hit_tokens": cache_read,
+            "prompt_cache_miss_tokens": cache_miss,
+        }
 
     @staticmethod
     def _raise_classified(exc: Exception) -> None:

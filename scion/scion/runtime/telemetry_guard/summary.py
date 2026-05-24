@@ -630,7 +630,11 @@ def _mechanism_repair_guidance(
         guidance.append(
             "Add direct activation telemetry for declared mechanism "
             f"{mechanism}: context.record_iteration('{mechanism}', positive_count) "
-            f"or context.record_phase('{mechanism}', positive_elapsed_ms)."
+            f"or context.record_phase('{mechanism}', positive_elapsed_ms). "
+            "Do not unconditionally trigger the mechanism only to satisfy "
+            "telemetry; instrument its natural trigger/evaluation path, use a "
+            "canary-scoped threshold, or revise expected telemetry for a "
+            "conditional mechanism."
         )
     if runtime_status in {"missing", "zero"}:
         detail = "missing" if runtime_status == "missing" else "zero-valued"
@@ -638,7 +642,8 @@ def _mechanism_repair_guidance(
             "Add positive phase/runtime telemetry for declared mechanism "
             f"{mechanism}; current runtime evidence is {detail}. Use "
             f"context.record_phase('{mechanism}', elapsed_ms_delta) on the "
-            "mechanism path."
+            "mechanism path. Do not add unconditional mechanism execution only "
+            "to make runtime telemetry positive."
         )
     if effect_status == "missing":
         guidance.append(

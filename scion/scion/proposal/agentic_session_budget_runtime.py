@@ -372,6 +372,8 @@ class AgenticSessionBudgetRuntimeMixin:
                 user_prompt=user_prompt,
                 render_error=render_error,
             )
+            if call_kind == "code":
+                setattr(state, "_latest_code_prompt_manifest", manifest)
             artifact_ref: str | None = None
             if self._artifact_store is not None:
                 artifact_ref = self._artifact_store.write_scratch(

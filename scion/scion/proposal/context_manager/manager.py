@@ -76,7 +76,7 @@ from .io import (
     _read_branch_code,
     _read_target_file_from_root,
 )
-from .rendering import _format_hypothesis
+from .rendering import _format_hypothesis, _hypothesis_implementation_brief
 from .runtime import _build_runtime_feedback, _build_runtime_failure_guidance
 
 class ContextManager:
@@ -479,6 +479,9 @@ class ContextManager:
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "hypothesis_detail": hypothesis_detail,
+            "hypothesis_implementation_brief": _hypothesis_implementation_brief(
+                hypothesis
+            ),
             "target_file": hypothesis.target_file,
             "target_file_code": target_file_code,
             "champion_operators_code": champion_operators_code,

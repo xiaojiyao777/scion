@@ -9,6 +9,7 @@ from scion.proposal.agentic_session import (
 )
 
 from .constants import (
+    ACTIVATION_NOT_OBSERVED_DIAGNOSTIC,
     AGENT_GROUNDING_FAILURE,
     AGENT_QUALITY_BLOCKED,
     AGENTIC_BUDGET_CONTROL,
@@ -68,6 +69,12 @@ def _agentic_quality_block_classification(
     failure_code = str(structured.get("failure_code") or "")
     premise_check = str(structured.get("premise_check") or "")
     detail = str(output.failure_detail or "").lower()
+    if (
+        failure_category == ACTIVATION_NOT_OBSERVED_DIAGNOSTIC
+        or failure_code == ACTIVATION_NOT_OBSERVED_DIAGNOSTIC
+        or ACTIVATION_NOT_OBSERVED_DIAGNOSTIC in detail
+    ):
+        return None
     if (
         failure_category == PROPOSAL_ACTIVATION_DIAGNOSTIC
         or failure_code == PROPOSAL_ACTIVATION_DIAGNOSTIC

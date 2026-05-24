@@ -1,6 +1,7 @@
 """AgenticSessionRepair mixin."""
 from __future__ import annotations
 
+from scion.core.models import mechanism_changes
 from scion.proposal.agentic_session_common import *
 
 
@@ -36,6 +37,10 @@ class AgenticSessionRepairMixin:
             repair_context["agentic_preview_feedback"] = _observation_prompt_payload(
                 failed_preview
             )
+            if failed_preview.tool_name == "proposal.algorithm_smoke":
+                repair_context["agentic_preview_feedback"] = (
+                    _preview_repair_feedback_prompt_payload(failed_preview)
+                )
             research_diagnosis = _research_diagnosis_from_observations(observations)
             if research_diagnosis:
                 repair_context["agentic_research_diagnosis"] = research_diagnosis
@@ -142,52 +147,135 @@ class AgenticSessionRepairMixin:
             code_context: Mapping[str, Any],
             observations: list[ProposalObservation],
         ) -> PatchProposal:
-            assert self._creative is not None
-            max_retries = max(
-                0,
-                int(self._tool_loop_config.max_code_generation_timeout_retries),
-            )
-            attempt_context: Mapping[str, Any] = code_context
-            for attempt in range(max_retries + 1):
-                try:
-                    self._record_prompt_manifest(
-                        state,
-                        call_kind="code",
-                        prompt_context=attempt_context,
-                        observations=observations,
-                    )
-                    return self._creative.generate_code(attempt_context)
-                except self._SESSION_ERROR_TYPES as exc:
-                    category = _structured_output_failure_category(exc)
-                    _record_failure_ledger_entry(
-                        state,
-                        phase=AgenticProposalPhase.DRAFT_PATCH,
-                        category=category,
-                        detail=str(exc),
-                        source="code_generation_exception",
-                        attempt=attempt + 1,
-                    )
-                    if (
-                        attempt >= max_retries
-                        or self._session_timeout_reached(state)
-                        or not _is_code_generation_timeout(exc)
-                    ):
-                        raise
-                    attempt_context = _code_timeout_retry_context(
+        assert self._creative is not None
+        max_retries = max(
+            0,
+            int(self._tool_loop_config.max_code_generation_timeout_retries),
+        )
+        attempt_context: Mapping[str, Any] = code_context
+        timeout_attempt = 0
+        generation_attempt = 0
+        shape_retry_used = False
+        while True:
+            generation_attempt += 1
+            try:
+                self._record_prompt_manifest(
+                    state,
+                    call_kind="code",
+                    prompt_context=attempt_context,
+                    observations=observations,
+                )
+                return self._creative.generate_code(attempt_context)
+            except self._SESSION_ERROR_TYPES as exc:
+                category = _structured_output_failure_category(exc)
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_PATCH,
+                    category=category,
+                    detail=str(exc),
+                    source="code_generation_exception",
+                    attempt=generation_attempt,
+                )
+                if (
+                    not shape_retry_used
+                    and _is_code_schema_shape_retryable(exc)
+                    and not self._session_timeout_reached(state)
+                ):
+                    shape_retry_used = True
+                    attempt_context = _code_schema_shape_retry_context(
                         attempt_context,
                         hypothesis,
                         exc,
-                        observations,
                     )
                     state.note(
                         AgenticProposalPhase.DRAFT_PATCH,
-                        "Retrying patch generation with compact timeout scope.",
+                        "Retrying patch generation with shape-only schema feedback.",
                         metadata={
                             "selected_surface": hypothesis.change_locus,
                             "target_file": hypothesis.target_file,
-                            "retry_attempt": attempt + 1,
-                            "max_timeout_retries": max_retries,
+                            "retry_attempt": generation_attempt,
                             "error": type(exc).__name__,
+                            "failure_code": "code_output_shape_retry",
                         },
                     )
-            raise RuntimeError("unreachable code-generation timeout retry state")
+                    continue
+                if (
+                    timeout_attempt >= max_retries
+                    or self._session_timeout_reached(state)
+                    or not _is_code_generation_timeout(exc)
+                ):
+                    raise
+                timeout_attempt += 1
+                attempt_context = _code_timeout_retry_context(
+                    attempt_context,
+                    hypothesis,
+                    exc,
+                    observations,
+                )
+                state.note(
+                    AgenticProposalPhase.DRAFT_PATCH,
+                    "Retrying patch generation with compact timeout scope.",
+                    metadata={
+                        "selected_surface": hypothesis.change_locus,
+                        "target_file": hypothesis.target_file,
+                        "retry_attempt": timeout_attempt,
+                        "max_timeout_retries": max_retries,
+                        "error": type(exc).__name__,
+                    },
+                )
+                continue
+
+
+def _is_code_schema_shape_retryable(exc: BaseException) -> bool:
+    if not isinstance(exc, ProposalValidationError):
+        return False
+    text = str(exc).lower()
+    return (
+        "additional_changes" in text
+        and "json-encoded string" in text
+        and "shape-only retry" in text
+    )
+
+
+def _code_schema_shape_retry_context(
+    context: Mapping[str, Any],
+    hypothesis: HypothesisProposal,
+    exc: BaseException,
+) -> dict[str, Any]:
+    retry_context = dict(context)
+    message = str(exc)
+    protected_ids = [
+        str(change.id)
+        for change in mechanism_changes(hypothesis)
+        if str(change.id).strip()
+    ]
+    retry_context["prior_code_failure"] = (
+        "Patch structured output shape failure: "
+        f"{message} Repair only the JSON shape. Preserve the same hypothesis, "
+        f"target_file={hypothesis.target_file!r}, action={hypothesis.action!r}, "
+        f"and mechanism_changes ids={protected_ids!r}; do not change the "
+        "research mechanism or patch intent."
+    )
+    retry_context["agentic_code_schema_shape_retry_feedback"] = _drop_empty_dict(
+        {
+            "failure_code": "code_output_shape_retry",
+            "field": "additional_changes",
+            "reason": message,
+            "final_task": (
+                "Return the same patch as valid JSON shape: additional_changes "
+                "must be an array of edit objects, not a string."
+            ),
+            "protected_identity": _drop_empty_dict(
+                {
+                    "action": hypothesis.action,
+                    "target_file": hypothesis.target_file,
+                    "mechanism_change_ids": protected_ids,
+                }
+            ),
+            "retry_constraint": (
+                "Shape-only retry. Do not rename, retarget, add, or drop "
+                "mechanism ids."
+            ),
+        }
+    )
+    return retry_context

@@ -146,8 +146,10 @@ class TestContractFailure:
         """When patch contract fails, workspace is not retained."""
         bad_patch = {
             "file_path": "solver.py",  # frozen file — C5 will fail
-            "action": "modify",
-            "code_content": _VALID_CODE,
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": _VALID_CODE,
             "test_hint": None,
         }
         llm = MockLLMClient(
@@ -164,8 +166,10 @@ class TestContractFailure:
         """After contract failure, branch remains in EXPLORE for retry."""
         bad_patch = {
             "file_path": "solver.py",  # frozen file
-            "action": "modify",
-            "code_content": _VALID_CODE,
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": _VALID_CODE,
             "test_hint": None,
         }
         llm = MockLLMClient(hypothesis_response=_VALID_HYPOTHESIS, patch_response=bad_patch)
@@ -214,15 +218,24 @@ class TestContractFailure:
         """
         bad_patch = {
             "file_path": "solver.py",  # frozen file
-            "action": "modify",
-            "code_content": _VALID_CODE,
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": _VALID_CODE,
             "test_hint": None,
         }
         hyp1 = dict(_VALID_HYPOTHESIS)  # target_file=operators/local_search.py
         hyp2 = dict(_VALID_HYPOTHESIS)
+        hyp2["action"] = "create_new"
         hyp2["target_file"] = "operators/other_op.py"
-        good_patch2 = dict(_VALID_PATCH)
-        good_patch2["file_path"] = "operators/other_op.py"
+        good_patch2 = {
+            "file_path": "operators/other_op.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": _VALID_CODE,
+            "test_hint": None,
+        }
 
         call_count = [0]
 
@@ -249,8 +262,6 @@ class TestContractFailure:
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
         )
-        # Seed operators/other_op.py for step 2
-        (tmp_path / "champion_code" / "operators" / "other_op.py").write_text(_VALID_CODE)
         # Step 1: contract fails
         r1 = cm.run_one_step()
         assert r1.decision is None

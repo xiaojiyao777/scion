@@ -257,6 +257,39 @@ def _is_pure_geographic_cluster_variant_acknowledging_removal_savings(
         text
     ) or _is_removal_savings_contrast_or_negated_addition(text)
 
+def _is_insertion_aware_variant_acknowledging_removal_savings(text: str) -> bool:
+    if not _proposes_insertion_aware_position_cost_destroy_variant(text):
+        return False
+    return _acknowledges_existing_removal_savings_destroy(text)
+
+def _proposes_insertion_aware_position_cost_destroy_variant(text: str) -> bool:
+    if not _has_any(text, ("destroy", "removal", "remove")):
+        return False
+    return _has_any(
+        text,
+        (
+            "position-cost",
+            "position cost",
+            "position-aware",
+            "position aware",
+            "costly position",
+            "costly-position",
+            "insertion opportunity",
+            "reinsertion-aware",
+            "reinsertion aware",
+            "best alternative insertion",
+            "alternative insertion",
+            "best insertion",
+            "insertion cost",
+            "reinsert",
+            "reinsertion",
+            "regret-1",
+            "regret 1",
+            "current position",
+            "badly placed",
+        ),
+    )
+
 def _is_pure_geographic_cluster_variant_acknowledging_shaw(text: str) -> bool:
     if not _proposes_pure_geographic_cluster_destroy_variant(text):
         return False
@@ -274,8 +307,14 @@ def _proposes_pure_geographic_cluster_destroy_variant(text: str) -> bool:
             "cluster destroy",
             "clustered removal",
             "clustered destroy",
+            "zone removal",
+            "zone destroy",
+            "zone clustered removal",
+            "zone-clustered removal",
             "geographic cluster",
             "spatial cluster",
+            "geographic zone",
+            "spatial zone",
             "proximity variant",
             "nearby customer",
             "nearest customer",
@@ -289,6 +328,8 @@ def _proposes_pure_geographic_cluster_destroy_variant(text: str) -> bool:
             "pure geographic",
             "geographic",
             "spatial",
+            "zone",
+            "zonal",
             "euclidean",
             "coordinate",
             "coordinates",
@@ -304,6 +345,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
     if not _has_any(
         text,
         (
+            "_worst_removal",
             "worst removal",
             "existing removal savings",
             "current removal savings",
@@ -322,7 +364,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
     return bool(
         re.search(
             r"\b(?:existing|current|active|baseline|already)?\b.{0,80}"
-            r"\bworst removal\b.{0,140}"
+            r"\b(?:_worst_removal|worst removal)\b.{0,140}"
             r"\b(?:already|uses?|ranks?|seeds?|sorts?|orders?|targets?|"
             r"based|by|with)\b.{0,100}\b"
             + savings
@@ -333,7 +375,7 @@ def _acknowledges_existing_removal_savings_destroy(text: str) -> bool:
             r"\b"
             + savings
             + r"\b.{0,140}\b(?:existing|current|active|baseline|already)?"
-            r".{0,80}\bworst removal\b",
+            r".{0,80}\b(?:_worst_removal|worst removal)\b",
             text,
         )
     )
@@ -342,6 +384,8 @@ def _acknowledges_existing_shaw_related_removal(text: str) -> bool:
     if not _has_any(
         text,
         (
+            "_shaw_removal",
+            "shaw",
             "shaw removal",
             "existing related removal",
             "current related removal",
@@ -360,6 +404,21 @@ def _acknowledges_existing_shaw_related_removal(text: str) -> bool:
         or re.search(
             r"\b(?:distance|demand|route|relatedness|proximity)\b.{0,140}"
             r"\bshaw removal\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:existing|current|active|baseline|already|uses?|includes?|"
+            r"contains?|portfolio|phase)\b.{0,140}\b(?:_shaw_removal|shaw)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:_shaw_removal|shaw)\b.{0,140}\b(?:exists?|existing|current|"
+            r"active|already|available|included|contains?|uses?)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:random|worst|route)\b.{0,80}\bshaw\b.{0,80}"
+            r"\b(?:random|worst|route)\b",
             text,
         )
     )

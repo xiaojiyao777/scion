@@ -118,6 +118,7 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
             _DEFAULT_SDK_MAX_RETRIES if sdk_max_retries is None else sdk_max_retries,
         )
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
+        self._last_usage_metadata: dict[str, Any] | None = None
         self._anthropic_client: Any = None
         self._openai_client: Any = None
         self._token_tracker: Any = None  # W13: set via set_token_tracker()
@@ -125,6 +126,12 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
     def set_token_tracker(self, tracker) -> None:
         """W13: Attach a TokenUsageTracker for per-call recording."""
         self._token_tracker = tracker
+
+    def get_last_usage_metadata(self) -> dict[str, Any] | None:
+        """Return normalized provider usage for the most recent SDK response."""
+        if self._last_usage_metadata is None:
+            return None
+        return dict(self._last_usage_metadata)
 
     # ------------------------------------------------------------------
     # Public API
@@ -419,4 +426,3 @@ class LLMClient(ParsingMixin, PolicyMixin, TransportMixin):
             last_error=last_error,
             failure_category=_retry_exhausted_failure_category(last_error),
         ) from last_error
-

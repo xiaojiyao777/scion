@@ -188,16 +188,21 @@ def _diagnostic_payload(
     static_issues: list[str] | None = None,
 ) -> dict[str, Any]:
     subtype_text = subtype or "unknown"
+    repair_guidance = _diagnostic_repair_guidance(subtype_text, mechanism)
     return _drop_empty_items(
         {
             "category": PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE,
             "code": PROPOSAL_ACTIVATION_DIAGNOSTIC_CODE,
+            "failure_code": guard_failure_code,
+            "mechanism_id": mechanism,
             "activation_diagnostic_kind": subtype_text,
             "source": source,
+            "layer": source,
             "telemetry_failure_code": guard_failure_code,
             "telemetry_failure_mechanism": mechanism,
             "telemetry_failure_category": category,
             "telemetry_failure_field": field,
+            "missing_fields": [field] if field else None,
             "counters": dict(counters or {}),
             "candidate_runs": (
                 telemetry_guard.get("candidate_runs") if telemetry_guard else None
@@ -210,11 +215,37 @@ def _diagnostic_payload(
             ),
             "runtime_status": diagnostic.get("runtime_status") if diagnostic else None,
             "effect_status": diagnostic.get("effect_status") if diagnostic else None,
+            "detected_records": _detected_records(diagnostic),
             "static_issues": static_issues or None,
             "diagnosis": _diagnosis_text(subtype_text),
-            "repair_guidance": _diagnostic_repair_guidance(subtype_text, mechanism),
+            "allowed_repair": repair_guidance[0] if repair_guidance else None,
+            "forbidden_repair": (
+                "Do not force activation, emit fake activation, use max(..., 1), "
+                "or add guarantee-positive fallback behavior only to satisfy telemetry."
+            ),
+            "repair_guidance": repair_guidance,
         }
     )
+
+
+def _detected_records(diagnostic: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if diagnostic is None:
+        return None
+    result: dict[str, Any] = {}
+    for key in ("activation", "runtime", "effect"):
+        block = _status_block(diagnostic, key)
+        if block is None:
+            continue
+        result[key] = _drop_empty_items(
+            {
+                "status": block.get("status"),
+                "candidate_positive": block.get("candidate_positive"),
+                "candidate_present": block.get("candidate_present"),
+                "candidate_zero": block.get("candidate_zero"),
+                "candidate_missing": block.get("candidate_missing"),
+            }
+        )
+    return result or None
 
 
 def _diagnostic_for_mechanism(
@@ -349,12 +380,13 @@ def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
         ]
     if subtype == "path_not_reached":
         return [
-            f"Adjust {mech} trigger conditions or provide a smoke-observable activation path.",
-            "The patch already contains a record helper for this mechanism; do not only add another record call inside the same unreachable branch.",
+            f"Instrument {mech} on its natural trigger/evaluation path; if the trigger is rare, use a canary-scoped threshold for proposal smoke.",
+            "Do not unconditionally trigger the mechanism or add another record call inside the same unreachable branch only to satisfy telemetry.",
         ]
     if subtype == "trigger_not_reached":
         return [
-            f"Lower {mech} trigger conditions for smoke-visible cases or emit a no-op activation record when the mechanism is evaluated.",
+            f"Use {mech}'s existing condition: lower only canary/test thresholds or record a diagnostic/budget counter when the condition is evaluated.",
+            "Do not force activation, emit fake activation, or change algorithm behavior just to pass telemetry.",
             "Keep the declared mechanism id unchanged.",
         ]
     if subtype == "instrumentation_missing":
@@ -369,11 +401,11 @@ def _diagnostic_repair_guidance(subtype: str, mechanism: str) -> list[str]:
         ]
     if subtype == "smoke_budget_or_case_insufficient":
         return [
-            f"Make {mech} smoke-visible by lowering thresholds or recording no-op activation when the dormant mechanism is checked.",
-            "Keep the algorithm valid for full screening; this is proposal-smoke diagnostics only.",
+            f"Treat {mech} as conditional in proposal smoke: add natural condition instrumentation, a canary-targeted threshold, or diagnostic status.",
+            "Keep the algorithm valid for full screening; do not add unconditional fallback activation for telemetry.",
         ]
     return [
-        "Inspect the active path and expected_telemetry fields; add exact mechanism activation telemetry where the mechanism can run."
+        "Inspect the active path and expected_telemetry fields; add exact mechanism activation telemetry where the mechanism naturally runs."
     ]
 
 

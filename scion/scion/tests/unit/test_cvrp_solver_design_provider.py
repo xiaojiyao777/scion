@@ -13,6 +13,8 @@ from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
     validate_expected_telemetry_contract,
 )
+from scion.proposal.tools.previews.schema import _hypothesis_schema_preview
+from scion.tests.unit.test_agentic_proposal_tools_helpers import _cvrp_context
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
@@ -58,6 +60,174 @@ def test_cvrp_prompt_provider_owns_solver_design_specific_terms() -> None:
     assert "_Solution" in rendered
     assert "solver_algorithm_search_iterations=0" in rendered
     assert "policies/baseline_modules/" in rendered
+    assert "context.record_iteration" in rendered
+    assert "context.record_context('<mechanism>" not in rendered
+    assert "no `context.record_context` API" in rendered
+
+
+def test_cvrp_hypothesis_guidance_defaults_policy_telemetry_to_indirect_evidence() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_prompt_provider()
+
+    rendered = "\n".join(provider.solver_design_hypothesis_guidance({}))
+
+    assert "by default: activation includes" in rendered
+    assert "Declare effect fields" in rendered
+    assert "only when `m` directly records" in rendered
+    assert "do not claim ordinary ALNS best-improvement bookkeeping" in rendered
+
+
+def test_cvrp_schema_preview_rejects_reheat_broad_loop_effect_before_code(
+    tmp_path,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a stagnation-triggered simulated annealing reheat policy in "
+            "the scheduler."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+        mechanism_changes=(
+            SimpleNamespace(id="sa_reheat_on_stagnation", change_type="add"),
+        ),
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_context_records.sa_reheat_on_stagnation_iterations",
+                "solver_algorithm_phase_runtime_ms.sa_reheat_on_stagnation",
+            ],
+            "effect": [
+                "solver_algorithm_phase_best_delta.sa_reheat_on_stagnation",
+                "solver_algorithm_phase_improvement_counts.sa_reheat_on_stagnation",
+            ],
+        },
+    )
+
+    preview = _hypothesis_schema_preview(context, hypothesis)
+
+    problem_preview = preview["problem_expected_telemetry_preview"]
+    assert preview["passed"] is False
+    assert problem_preview["failure_code"] == "C11_expected_telemetry"
+    assert problem_preview["mechanism_id"] == "sa_reheat_on_stagnation"
+    assert "solver_algorithm_phase_best_delta.sa_reheat_on_stagnation" in (
+        problem_preview["offending_fields"]
+    )
+    assert "decision/context" in problem_preview["allowed_repair_shape"]
+
+
+def test_cvrp_schema_preview_allows_direct_effect_for_operator_mechanism(
+    tmp_path,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add a nearest-neighbor limited relocate operator.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+        mechanism_changes=(
+            SimpleNamespace(id="nn_relocate_operator", change_type="add"),
+        ),
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_context_records.nn_relocate_operator_iterations",
+                "solver_algorithm_phase_runtime_ms.nn_relocate_operator",
+            ],
+            "effect": [
+                "solver_algorithm_phase_best_delta.nn_relocate_operator",
+                "solver_algorithm_phase_improvement_counts.nn_relocate_operator",
+            ],
+        },
+    )
+
+    preview = _hypothesis_schema_preview(context, hypothesis)
+
+    assert preview["problem_expected_telemetry_preview"] is None
+
+
+def test_cvrp_schema_preview_does_not_classify_local_search_text_as_policy(
+    tmp_path,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "After stagnation, add a cross-route string exchange local-search "
+            "operator. This is a VNS move operator, not an acceptance policy."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+        mechanism_changes=(
+            SimpleNamespace(id="string_exchange_intensification", change_type="add"),
+        ),
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_context_records.string_exchange_intensification_iterations",
+                "solver_algorithm_phase_runtime_ms.string_exchange_intensification",
+            ],
+            "effect": [
+                "solver_algorithm_phase_best_delta.string_exchange_intensification",
+                "solver_algorithm_phase_improvement_counts.string_exchange_intensification",
+            ],
+        },
+    )
+
+    preview = _hypothesis_schema_preview(context, hypothesis)
+
+    assert preview["problem_expected_telemetry_preview"] is None
+
+
+def test_cvrp_schema_preview_does_not_treat_preserve_acceptance_as_policy(
+    tmp_path,
+) -> None:
+    context = _cvrp_context(tmp_path)
+    mechanism_id = "stagnation_repair_scheduler"
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add a bounded stagnation repair-ordering scheduler while keeping "
+            "the existing acceptance rule unchanged."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        predicted_direction="improve",
+        target_objectives=("total_distance",),
+        protected_objectives=("fleet_violation",),
+        target_weakness=(
+            "The active scheduler keeps the same repair ordering during "
+            "distance stagnation."
+        ),
+        mechanism_changes=(SimpleNamespace(id=mechanism_id, change_type="add"),),
+        novelty_signature={
+            "algorithm_family": "alns_vns_scheduler",
+            "improvement_strategy": "stagnation_triggered_repair_ordering",
+            "acceptance_strategy": "preserve_existing_acceptance",
+            "runtime_budget_strategy": "bounded_scheduler_checks",
+        },
+        expected_telemetry={
+            "activation": [
+                f"solver_algorithm_context_records.{mechanism_id}_iterations",
+                f"solver_algorithm_phase_runtime_ms.{mechanism_id}",
+            ],
+            "effect": [
+                f"solver_algorithm_phase_improvement_counts.{mechanism_id}"
+            ],
+        },
+    )
+
+    preview = _hypothesis_schema_preview(context, hypothesis)
+
+    assert preview["problem_expected_telemetry_preview"] is None
 
 
 def test_cvrp_prompt_provider_demotes_legacy_surfaces() -> None:
@@ -268,3 +438,128 @@ def test_cvrp_smoke_provider_rejects_destroy_helper_effect_telemetry() -> None:
 
     assert issue is not None
     assert "non-causal destroy telemetry" in issue
+
+
+def test_cvrp_smoke_provider_rejects_destroy_effect_via_local_alias() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add spatial_cluster_removal destroy.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        mechanism_changes=(SimpleNamespace(id="spatial_cluster_removal"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/destroy_repair.py",
+        action="modify",
+        code_content=(
+            "def _spatial_cluster_removal(solution, q, rng, context=None):\n"
+            "    mechanism = 'spatial_cluster_removal'\n"
+            "    if context:\n"
+            "        context.record_move(mechanism, attempted=1, accepted=1, "
+            "delta=5, best_improved=1)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "non-causal destroy telemetry" in issue
+
+
+def test_cvrp_smoke_provider_allows_acceptance_decision_counters() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "Add sa_reheat acceptance-temperature policy with decision counters "
+            "and phase-budget telemetry."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        mechanism_changes=(SimpleNamespace(id="sa_reheat"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content=(
+            "def solve(self, instance, rng):\n"
+            "    phase_start = self.context.elapsed_ms()\n"
+            "    self.context.record_iteration('sa_reheat', 1)\n"
+            "    self.context.record_phase('sa_reheat', self.context.elapsed_ms() - phase_start)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is None
+
+
+def test_cvrp_smoke_provider_rejects_unknown_record_context_helper() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add sa_reheat acceptance-temperature policy.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        mechanism_changes=(SimpleNamespace(id="sa_reheat"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content=(
+            "def solve(self, instance, rng):\n"
+            "    self.context.record_context('sa_reheat_iterations', 1)\n"
+            "    self.context.record_phase('sa_reheat', 1)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "unknown telemetry helper" in issue
+    assert "record_iteration('sa_reheat'" in issue
+
+
+def test_cvrp_smoke_provider_rejects_acceptance_broad_loop_effect() -> None:
+    provider = CvrpAdapter(
+        load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    ).solver_design_smoke_provider()
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Add sa_reheat acceptance-temperature policy.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/scheduler.py",
+        mechanism_changes=(SimpleNamespace(id="sa_reheat"),),
+    )
+    patch = PatchProposal(
+        file_path="policies/baseline_modules/scheduler.py",
+        action="modify",
+        code_content=(
+            "def solve(self, instance, rng):\n"
+            "    self.context.record_move('sa_reheat', attempted=1, accepted=1, delta=-1, best_improved=1)\n"
+        ),
+    )
+
+    issue = provider.solver_design_static_smoke_issue(
+        patch=patch,
+        hypothesis=hypothesis,
+    )
+
+    assert issue is not None
+    assert "broad-loop acceptance telemetry" in issue

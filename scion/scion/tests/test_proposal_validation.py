@@ -317,8 +317,8 @@ def test_patch_mechanism_changes_reject_bad_id():
         _parse_patch(raw)
 
 
-def test_patch_parses_additional_changes_json_string():
-    """Model responses sometimes return additional_changes as a JSON string."""
+def test_patch_rejects_additional_changes_json_string_for_shape_retry():
+    """Model responses must repair additional_changes shape instead of host parsing."""
     raw = {
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
@@ -329,19 +329,13 @@ def test_patch_parses_additional_changes_json_string():
             '"code_content": "def helper():\\n    return 1\\n"}]'
         ),
     }
-    result = _parse_patch(raw)
-    assert len(result.additional_changes) == 1
-    assert result.additional_changes[0].file_path == (
-        "policies/baseline_modules/helper.py"
-    )
-    assert result.repair_attribution == (
-        {
-            "field": "additional_changes",
-            "repair_kind": "host_mechanical_normalization",
-            "root_cause": "json_string_array",
-            "action": "parsed_json_string_to_array",
-        },
-    )
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "additional_changes must be a JSON array" in message
+    assert "Shape-only retry" in message
+    assert "mechanism_changes ids" in message
 
 
 def test_patch_rejects_unparseable_additional_changes_string():
@@ -353,3 +347,22 @@ def test_patch_rejects_unparseable_additional_changes_string():
     }
     with pytest.raises(ProposalValidationError, match="additional_changes"):
         _parse_patch(raw)
+
+
+def test_patch_rejects_unknown_edit_fields_with_additional_changes_guidance():
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "old_string2": "return None",
+        "new_string2": "return context.nearest_neighbor()",
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "Unsupported patch field" in message
+    assert "old_string2" in message
+    assert "new_string2" in message
+    assert "additional_changes[]" in message

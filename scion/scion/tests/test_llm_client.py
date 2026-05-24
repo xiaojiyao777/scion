@@ -45,7 +45,10 @@ class TestMockLLMClient:
         result = client.call("test prompt", PATCH_PROPOSAL_SCHEMA)
         assert "file_path" in result
         assert "action" in result
-        assert "code_content" in result
+        assert result["edit_intent"] == "exact_replace"
+        assert "source_digest" in result
+        assert "old_string" in result
+        assert "new_string" in result
 
     def test_success_picks_hypothesis_schema(self):
         client = MockLLMClient(mode="success")
@@ -466,6 +469,77 @@ def test_openai_cache_usage_reads_deepseek_cache_fields() -> None:
     assert LLMClient._openai_cache_usage(usage) == (25, 75)
 
 
+def test_anthropic_tool_call_records_last_usage_metadata() -> None:
+    client = LLMClient(timeout_sec=60, max_retries=0)
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.name = "generate_patch"
+    tool_block.input = {"file_path": "policies/baseline_algorithm.py"}
+    response = MagicMock()
+    response.stop_reason = "tool_use"
+    response.content = [tool_block]
+    response.usage = SimpleNamespace(
+        input_tokens=100,
+        output_tokens=20,
+        cache_creation_input_tokens=70,
+        cache_read_input_tokens=30,
+    )
+    fake_anthropic_client = MagicMock()
+    fake_anthropic_client.messages.create.return_value = response
+
+    with patch.object(client, "_get_anthropic_client", return_value=fake_anthropic_client):
+        client.call_with_tool("prompt", tool, model="claude-test")
+
+    usage = client.get_last_usage_metadata()
+    assert usage == {
+        "provider": "anthropic",
+        "model": "claude-test",
+        "request_kind": "code",
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cache_creation_input_tokens": 70,
+        "cache_read_input_tokens": 30,
+    }
+
+
+def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
+    client = LLMClient(model="gpt-test", timeout_sec=60, max_retries=0)
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+    )
+    response = SimpleNamespace(
+        usage=SimpleNamespace(
+            prompt_tokens=120,
+            completion_tokens=12,
+            prompt_cache_hit_tokens=80,
+            prompt_cache_miss_tokens=40,
+        ),
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        client.call_with_tool("prompt", tool, model="gpt-test")
+
+    usage = client.get_last_usage_metadata()
+    assert usage["provider"] == "openai_compatible"
+    assert usage["input_tokens"] == 120
+    assert usage["output_tokens"] == 12
+    assert usage["cache_read_input_tokens"] == 80
+    assert usage["prompt_cache_hit"] is True
+    assert usage["prompt_cache_miss"] is True
+    assert usage["prompt_cache_hit_tokens"] == 80
+    assert usage["prompt_cache_miss_tokens"] == 40
+
+
 def test_code_tool_policy_defaults_to_long_timeout_without_internal_retry(monkeypatch):
     monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
     monkeypatch.delenv("SCION_LLM_MAX_RETRIES", raising=False)
@@ -617,6 +691,15 @@ def test_creative_trace_records_llm_request_policy(tmp_path):
                 "code_content": "def solve(instance, rng, time_limit_sec, context):\n    return []\n",
             }
 
+        def get_last_usage_metadata(self):
+            return {
+                "provider": "anthropic",
+                "input_tokens": 11,
+                "output_tokens": 7,
+                "cache_creation_input_tokens": 5,
+                "cache_read_input_tokens": 3,
+            }
+
     creative = CreativeLayer(
         PolicyClient(),
         model="claude-test",
@@ -631,3 +714,11 @@ def test_creative_trace_records_llm_request_policy(tmp_path):
     assert payload["request_kind"] == "code"
     assert payload["request_policy"]["timeout_sec"] == 180.0
     assert payload["request_policy"]["max_retries"] == 0
+    assert payload["llm_usage"]["cache_creation_input_tokens"] == 5
+    assert payload["llm_usage"]["cache_read_input_tokens"] == 3
+    assert payload["prompt_cache_audit"]["user_prompt_chars"] > 0
+    assert payload["prompt_cache_audit"]["tool_schema_hash"]
+    assert payload["prompt_cache_audit"]["system_blocks"]
+    assert payload["prompt_cache_audit"]["cache_prefix_order"] == (
+        "tools -> system -> messages"
+    )

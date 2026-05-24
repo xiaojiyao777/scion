@@ -47,6 +47,8 @@ _ROUTE_LIMIT_CONTRADICTION_PATTERNS = (
 
 
 def _claims_unproven_route_limit_or_fleet_repair(text: str) -> bool:
+    if _route_limit_or_feasibility_guard_variant(text):
+        return False
     if (
         _protects_route_limit_as_constraint(text)
         and not _has_explicit_positive_route_limit_premise(text)
@@ -65,11 +67,32 @@ def _protects_route_limit_as_constraint(text: str) -> bool:
         r"\bfleet violation\b.{0,80}\b(?:remain|remains|stays|stay)\b.{0,20}\bzero\b",
         r"\bwithout increasing\b.{0,60}\bfleet violation\b",
         r"\b(?:capacity|route) feasibility guard\b",
+        r"\bfeasibility (?:guard|filter|check|constraint)\b",
+        r"\broute[- ]?limit[- ]?aware\b",
+        r"\broute[- ]?cap\b.{0,60}\b(?:guard|filter|reject|skip|avoid|prevent)\b",
         r"\brepair ordering\b",
         r"\broute count\b.{0,80}\bprotected constraint\b",
         r"\bfleet violation\b.{0,80}\bprotected objective\b",
     )
     return any(re.search(pattern, text) for pattern in protective_patterns)
+
+
+def _route_limit_or_feasibility_guard_variant(text: str) -> bool:
+    guarded_patterns = (
+        r"\b(?:avoid|prevent|reject|skip|guard against|filter out)\b.{0,100}"
+        r"\b(?:more routes than|route limit excess|excess routes|route[- ]?cap violating|positive fleet violation|nonzero fleet violation)\b",
+        r"\b(?:more routes than|route limit excess|excess routes|route[- ]?cap violating|positive fleet violation|nonzero fleet violation)\b.{0,100}"
+        r"\b(?:avoid|prevent|reject|skip|guard|filter|not produce|without producing|without increasing)\b",
+        r"\b(?:feasible|feasibility|capacity-compatible|route[- ]?limit[- ]?aware)\b.{0,120}"
+        r"\b(?:variant|filter|guard|check|merge|repair|destroy|operator)\b",
+    )
+    if not any(re.search(pattern, text) for pattern in guarded_patterns):
+        return False
+    return not re.search(
+        r"\b(?:current|baseline|default|active|existing)\b.{0,100}"
+        r"\b(?:positive fleet violation|nonzero fleet violation|route limit excess|excess routes|more routes than)\b",
+        text,
+    )
 
 
 def _has_explicit_positive_route_limit_premise(text: str) -> bool:

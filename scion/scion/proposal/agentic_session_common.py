@@ -62,6 +62,7 @@ from scion.proposal.agentic_code_context import (
     _code_timeout_retry_context,
     _is_code_generation_timeout,
     _observation_prompt_payload,
+    _preview_repair_feedback_prompt_payload,
     _with_code_scope_control,
 )
 from scion.proposal.agentic_diagnostics import _research_diagnosis_from_observations
@@ -207,6 +208,7 @@ from scion.proposal.agentic_session_timeouts import (
 
 _MAX_HYPOTHESIS_SEMANTIC_RETRIES = 1
 _MAX_HYPOTHESIS_PREVIEW_RETRIES = 1
+_MAX_HYPOTHESIS_GROUNDING_RETRIES = 1
 _APS_TARGET_ALGORITHM_FILE_READ_CHARS = 24000
 _SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS = 24000
 _MECHANISM_NOVELTY_GATE = MechanismNoveltyGate()
@@ -262,6 +264,7 @@ __all__ = (
     "_FINAL_PREVIEW_WALL_TIME_RESERVE_SEC",
     "_MAX_HYPOTHESIS_SEMANTIC_RETRIES",
     "_MAX_HYPOTHESIS_PREVIEW_RETRIES",
+    "_MAX_HYPOTHESIS_GROUNDING_RETRIES",
     "_MECHANISM_NOVELTY_GATE",
     "_ProposalToolTimeout",
     "_SELF_CHECK_PREVIEW_OBSERVATION_BUDGET_CHARS",
@@ -346,6 +349,7 @@ __all__ = (
     "_pop_deferred_code_phase_tool_call",
     "_preview_failure_category",
     "_preview_observation_passed",
+    "_preview_repair_feedback_prompt_payload",
     "_preview_skip_is_agentic_budget_control",
     "_preview_tool_timeout_sec",
     "_proposal_payload",

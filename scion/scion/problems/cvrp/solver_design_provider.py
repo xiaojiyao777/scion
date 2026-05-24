@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping, Sequence
 
 from scion.core.models import HypothesisProposal, PatchProposal
@@ -85,12 +86,27 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "When declaring mechanism id `m`, use these concrete telemetry "
-                "templates with `m` substituted: activation includes "
+                "templates with `m` substituted by default: activation includes "
                 "`solver_algorithm_context_records.m_iterations` and "
-                "`solver_algorithm_phase_runtime_ms.m`; effect includes "
-                "`solver_algorithm_phase_improvement_counts.m` and "
-                "`solver_algorithm_phase_best_delta.m`; budget may include "
-                "`solver_algorithm_phase_runtime_ms.m`."
+                "`solver_algorithm_phase_runtime_ms.m`; budget may include "
+                "`solver_algorithm_phase_runtime_ms.m`; activity/context "
+                "evidence may use the same mechanism-specific context record. "
+                "Declare effect fields such as "
+                "`solver_algorithm_phase_improvement_counts.m` or "
+                "`solver_algorithm_phase_best_delta.m` only when `m` directly "
+                "records an accepted or improving move. In code, create "
+                "`solver_algorithm_context_records.m_iterations` with "
+                "`context.record_iteration('m', count)`, not a "
+                "`record_context` helper."
+            ),
+            (
+                "For scheduler-policy or acceptance-temperature mechanisms, "
+                "do not claim ordinary ALNS best-improvement bookkeeping as a "
+                "direct mechanism effect. Prefer activation/budget/decision "
+                "evidence under the declared mechanism id, such as a mechanism "
+                "context-record counter and phase runtime, and declare "
+                "delta-valued effect fields only when the mechanism records a "
+                "directly attributable accepted or improving decision."
             ),
             (
                 "If the hypothesis modifies an existing ALNS/VNS phase rather "
@@ -136,6 +152,75 @@ class CvrpSolverDesignProvider:
             ),
         )
 
+    def solver_design_expected_telemetry_preview(
+        self,
+        hypothesis: HypothesisProposal,
+    ) -> Mapping[str, Any] | None:
+        """Return CVRP-specific expected-telemetry preview guidance."""
+        mechanisms = _mechanism_ids(hypothesis)
+        if not mechanisms:
+            return None
+        expected = getattr(hypothesis, "expected_telemetry", {}) or {}
+        if not isinstance(expected, Mapping):
+            return None
+        effect_fields = tuple(
+            str(field or "").strip()
+            for field in expected.get("effect", ()) or ()
+            if str(field or "").strip()
+        )
+        if not effect_fields:
+            return None
+        issues: list[Mapping[str, Any]] = []
+        for mechanism in mechanisms:
+            if not _is_indirect_policy_mechanism(hypothesis, mechanism):
+                continue
+            offending = [
+                field
+                for field in effect_fields
+                if mechanism in field and _is_broad_loop_objective_effect_field(field)
+            ]
+            if not offending:
+                continue
+            issues.append(
+                {
+                    "failure_code": "C11_expected_telemetry",
+                    "mechanism_id": mechanism,
+                    "offending_fields": offending[:4],
+                    "allowed_repair_shape": (
+                        "Declare activation, budget, or decision/context "
+                        "evidence under the same mechanism id."
+                    ),
+                    "forbidden_repair_shape": (
+                        "Do not claim ordinary ALNS best-improvement, "
+                        "best_delta, or improvement_counts bookkeeping as a "
+                        "direct effect of this policy mechanism."
+                    ),
+                }
+            )
+        if not issues:
+            return None
+        first = issues[0]
+        return {
+            "passed": False,
+            "failure_code": "C11_expected_telemetry",
+            "reason": (
+                "C11_expected_telemetry: indirect acceptance/temperature/"
+                "stagnation policy telemetry must use decision, activation, "
+                "or budget evidence instead of broad-loop objective effect."
+            ),
+            "issues": issues,
+            "repair_hint": (
+                "Redraft the same hypothesis before code: keep target_file and "
+                "mechanism_changes ids unchanged, remove the offending effect "
+                "field(s), and use mechanism-specific decision/context, "
+                "activation, or budget telemetry."
+            ),
+            "mechanism_id": first.get("mechanism_id"),
+            "offending_fields": first.get("offending_fields"),
+            "allowed_repair_shape": first.get("allowed_repair_shape"),
+            "forbidden_repair_shape": first.get("forbidden_repair_shape"),
+        }
+
     def solver_design_code_rules(self, context: Any) -> Sequence[str]:
         return (
             (
@@ -167,6 +252,12 @@ class CvrpSolverDesignProvider:
                 "or seeding path, one bounded improvement/search loop, no more "
                 "than two move families, and only the helper functions needed for "
                 "that path."
+            ),
+            (
+                "Typed edit advisory: for existing files, prefer function-level "
+                "or small block `exact_replace` edits. If a broad change is "
+                "needed, create focused helpers and wire them with small "
+                "integration edits instead of replacing most of a source file."
             ),
             (
                 "Do not preserve the inactive template merely to edit a few "
@@ -273,6 +364,19 @@ class CvrpSolverDesignProvider:
                 "that same mechanism when it improves the objective. Do not "
                 "rename the mechanism or edit the hypothesis telemetry contract "
                 "to silence algorithm smoke."
+            ),
+            (
+                "For scheduler-policy and acceptance-temperature mechanisms, "
+                "record decision/activation counters with "
+                "`context.record_iteration('<mechanism>', count)` plus "
+                "`context.record_phase('<mechanism>', elapsed_ms)`. These calls "
+                "populate `solver_algorithm_context_records.<mechanism>_iterations` "
+                "and `solver_algorithm_phase_runtime_ms.<mechanism>`; there is "
+                "no `context.record_context` API. Only call "
+                "`context.record_move('<mechanism>', delta=..., best_improved=1)` "
+                "when that mechanism directly caused an accepted or improving "
+                "candidate; ordinary scheduler best-improvement bookkeeping is "
+                "not causal acceptance effect evidence."
             ),
             (
                 "For ALNS/VNS phase modifications, instrument the declared "
@@ -615,6 +719,132 @@ class CvrpSolverDesignProvider:
             runtime=runtime,
             run_payload=run_payload,
         )
+
+
+def _mechanism_ids(hypothesis: HypothesisProposal | None) -> tuple[str, ...]:
+    if hypothesis is None:
+        return ()
+    result: list[str] = []
+    for change in getattr(hypothesis, "mechanism_changes", ()) or ():
+        value = str(getattr(change, "id", "") or "").strip()
+        if value:
+            result.append(value)
+    return tuple(dict.fromkeys(result))
+
+
+def _is_indirect_policy_mechanism(
+    hypothesis: HypothesisProposal,
+    mechanism: str,
+) -> bool:
+    mechanism_text = _normalize_text(mechanism)
+    target = str(getattr(hypothesis, "target_file", "") or "").replace("\\", "/")
+    if target.endswith(
+        (
+            "policies/baseline_modules/local_search.py",
+            "policies/baseline_modules/destroy_repair.py",
+        )
+    ) and not _has_any(
+        mechanism_text,
+        (
+            " accept ",
+            " acceptance ",
+            " temperature ",
+            " anneal ",
+            " simulated annealing ",
+            " reheat ",
+            " cooling ",
+        ),
+    ):
+        return False
+    novelty_signature = getattr(hypothesis, "novelty_signature", {}) or {}
+    acceptance_strategy = ""
+    if isinstance(novelty_signature, Mapping):
+        acceptance_strategy = str(novelty_signature.get("acceptance_strategy") or "")
+    if _is_preserve_existing_strategy(acceptance_strategy):
+        acceptance_strategy = ""
+    text = _normalize_text(
+        " ".join(
+            (
+                mechanism,
+                str(getattr(hypothesis, "target_file", "") or ""),
+                str(getattr(hypothesis, "target_weakness", "") or ""),
+                str(getattr(hypothesis, "target_runtime_effect", "") or ""),
+                str(getattr(hypothesis, "runtime_budget_strategy", "") or ""),
+                acceptance_strategy,
+            )
+        )
+    )
+    if _has_any(
+        text,
+        (
+            " accept ",
+            " acceptance ",
+            " temperature ",
+            " anneal ",
+            " simulated annealing ",
+            " reheat ",
+            " cooling ",
+        ),
+    ):
+        return True
+    return _has_any(
+        text,
+        (
+            " conditional policy ",
+            " condition policy ",
+            " stagnation policy ",
+            " triggered policy ",
+        ),
+    )
+
+
+def _is_preserve_existing_strategy(value: str) -> bool:
+    text = _normalize_text(value)
+    if not text:
+        return True
+    preserve_tokens = (
+        " preserve ",
+        " existing ",
+        " unchanged ",
+        " no change ",
+        " keep ",
+        " reuse ",
+    )
+    return _has_any(text, preserve_tokens) and not _has_any(
+        text,
+        (
+            " reheat ",
+            " cooling ",
+            " temperature ",
+            " anneal ",
+            " simulated annealing ",
+        ),
+    )
+
+
+def _is_broad_loop_objective_effect_field(field: str) -> bool:
+    text = _normalize_text(field)
+    return _has_any(
+        text,
+        (
+            " best delta ",
+            " phase best delta ",
+            " improvement counts ",
+            " delta sum ",
+            " objective delta ",
+        ),
+    )
+
+
+def _has_any(text: str, needles: tuple[str, ...]) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def _normalize_text(value: Any) -> str:
+    text = str(value or "").lower().replace("_", " ")
+    text = re.sub(r"[-./]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return f" {text} "
 
 
 __all__ = ["CvrpSolverDesignProvider"]

@@ -193,8 +193,10 @@ class CampaignLoop:
             final_reason = "attempt_limit_exhausted"
 
         self.set_last_stop_reason(final_reason)
-        if final_reason == "max_rounds_exhausted":
-            self.terminalize_active_branches("MAX_ROUNDS_EXHAUSTED")
+        # A max-rounds stop closes this campaign invocation, not the research
+        # branch lifecycle.  Keep active continue_explore/validation branches
+        # resumable; status.json/campaign_summary carry the invocation stop
+        # reason for audit.
         self.write_campaign_summary()
         final_wait_timeout = self.get_final_wait_timeout()
         self.wait_weight_opt_all(final_wait_timeout)

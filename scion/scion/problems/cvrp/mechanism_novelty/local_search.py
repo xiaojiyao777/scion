@@ -10,6 +10,8 @@ from scion.problems.cvrp.mechanism_novelty.text import _first_regex_span, _has_a
 def _claims_missing_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
         return False
+    if _is_three_opt_chain_variant_scope(text):
+        return False
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return False
     if _claims_unsystematic_cross_route_segment_relocation_gap(text):
@@ -21,6 +23,8 @@ def _claims_missing_or_opt_2_3(text: str) -> bool:
 
 def _missing_or_opt_2_3_span(text: str) -> str:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
+        return ""
+    if _is_three_opt_chain_variant_scope(text):
         return ""
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return ""
@@ -47,6 +51,8 @@ _MISSING_OR_OPT_2_3_PATTERNS = (
 
 def _duplicates_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
+        return False
+    if _is_three_opt_chain_variant_scope(text):
         return False
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return False
@@ -81,6 +87,8 @@ def _duplicates_or_opt_2_3(text: str) -> bool:
 def _claims_missing_or_opt_1(text: str) -> bool:
     if not _mentions_or_opt_1(text):
         return False
+    if _is_adaptive_vns_operator_selection_scope(text):
+        return False
     explicit = bool(_missing_or_opt_1_span(text))
     if explicit:
         return True
@@ -91,6 +99,8 @@ def _claims_missing_or_opt_1(text: str) -> bool:
 
 def _missing_or_opt_1_span(text: str) -> str:
     if not _mentions_or_opt_1(text):
+        return ""
+    if _is_adaptive_vns_operator_selection_scope(text):
         return ""
     if _describes_existing_or_opt_improvement(text):
         return ""
@@ -115,6 +125,8 @@ def _missing_or_opt_1_span(text: str) -> str:
 
 def _duplicates_or_opt_1(text: str) -> bool:
     if not _mentions_or_opt_1(text):
+        return False
+    if _is_adaptive_vns_operator_selection_scope(text):
         return False
     explicit = bool(
         re.search(
@@ -464,6 +476,83 @@ def _mentions_cross_route_or_opt_segment_relocation(text: str) -> bool:
     return _mentions_or_opt_family(text) or _mentions_segment_relocation(text)
 
 
+def _is_three_opt_chain_variant_scope(text: str) -> bool:
+    """Return true when Or-opt is contextual evidence for a 3-opt* variant.
+
+    The active Or-opt fact proves length-1/2/3 cross-route segment relocation.
+    It does not by itself prove a three-route / triple-edge 3-opt* chain
+    reconnection neighborhood. Treat hypotheses that acknowledge or contrast
+    existing Or-opt while proposing that 3-opt* family as variants, not missing
+    Or-opt premises.
+    """
+    if not _mentions_three_opt_chain_exchange(text):
+        return False
+    return (
+        _acknowledges_existing_or_opt(text)
+        or _contrasts_three_opt_against_or_opt(text)
+        or _existing_cross_route_operator_context_mentions_or_opt(text)
+    )
+
+
+def _mentions_three_opt_chain_exchange(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "3 opt",
+            "3-opt",
+            "three opt",
+            "three-opt",
+            "three_opt",
+            "3opt",
+            "three way",
+            "three-way",
+            "three route",
+            "three-route",
+            "triple edge",
+            "triple-edge",
+            "triple route",
+            "triple-route",
+            "multi route chain",
+            "multi-route chain",
+            "chain reconnection",
+            "lin-kernighan",
+            "lin kernighan",
+        ),
+    )
+
+
+def _contrasts_three_opt_against_or_opt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:different|distinct|separate|not achievable|not covered|"
+            r"not reachable|beyond)\b.{0,120}\b(?:or opt|oropt|_or_opt_[123])\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:or opt|oropt|_or_opt_[123])\b.{0,120}\b(?:different|distinct|"
+            r"separate|not achievable|not covered|not reachable|beyond)\b",
+            text,
+        )
+    )
+
+
+def _existing_cross_route_operator_context_mentions_or_opt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\bexisting\b.{0,80}\b(?:cross route|cross-route|inter route|"
+            r"inter-route|between route|across routes)\b.{0,160}"
+            r"\b(?:or opt|oropt|_or_opt_[123])\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:or opt|oropt|_or_opt_[123])\b.{0,160}\bexisting\b.{0,80}"
+            r"\b(?:cross route|cross-route|inter route|inter-route|between route|"
+            r"across routes)\b",
+            text,
+        )
+    )
+
+
 def _mentions_or_opt_family(text: str) -> bool:
     return _has_any(text, ("or opt", "oropt"))
 
@@ -802,3 +891,28 @@ def _is_adaptive_vns_neighborhood_ordering_scope(text: str) -> bool:
         )
     )
     return not explicit_missing_operator
+
+
+def _is_adaptive_vns_operator_selection_scope(text: str) -> bool:
+    if not _is_adaptive_vns_neighborhood_ordering_scope(text):
+        return False
+    return _has_any(
+        text,
+        (
+            "operator selection",
+            "operator selector",
+            "operator ordering",
+            "operator order",
+            "operator schedule",
+            "operator scheduling",
+            "neighborhood selection",
+            "neighborhood ordering",
+            "neighborhood order",
+            "productive operator",
+            "success feedback",
+            "success counter",
+            "recent improvement",
+            "fixed sequence",
+            "fixed order",
+        ),
+    )

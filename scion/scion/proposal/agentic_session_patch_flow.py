@@ -2,7 +2,33 @@
 """Code-generation, patch validation, preview, and finalization phases."""
 from __future__ import annotations
 
+from collections import Counter
+import re
+
+from scion.core.models import mechanism_changes, patch_file_changes
+from scion.core.paths import normalize_relative_patch_path
 from scion.proposal.agentic_session_common import *
+
+_SOURCE_FILE_RE = re.compile(
+    r"^(?:###\s+|File:\s*)(?P<path>[^\n]+?)"
+    r"(?:\s+\([^\n]*\))?\n"
+    r"(?:[^\n]*\n)*?"
+    r"```(?:python|py)?\n"
+    r"(?P<content>.*?)"
+    r"(?P<terminal_newline>\n)```",
+    re.DOTALL | re.MULTILINE,
+)
+_GENERIC_TELEMETRY_PHASES = frozenset(
+    {
+        "search",
+        "local_search",
+        "solver_algorithm",
+        "construction",
+        "destroy",
+        "repair",
+        "acceptance",
+    }
+)
 
 
 class AgenticSessionPatchFlowMixin:
@@ -178,6 +204,102 @@ class AgenticSessionPatchFlowMixin:
         if output is not None:
             return None, code_repair_attempts_used, output
 
+        invariant_issue = _code_stage_identity_issue(
+            hypothesis,
+            patch,
+            code_context=code_context,
+        )
+        if invariant_issue is not None:
+            patch, code_repair_attempts_used, output = self._repair_code_invariant_or_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                hypothesis=hypothesis,
+                patch=patch,
+                code_context=code_context,
+                observations=observations,
+                evidence=evidence,
+                code_repair_attempts_used=code_repair_attempts_used,
+                issue_detail=invariant_issue,
+                note=(
+                    "Patch generation violated code-stage mechanism identity "
+                    "preservation."
+                ),
+            )
+            if output is not None or patch is None:
+                return patch, code_repair_attempts_used, output
+            invariant_issue = _code_stage_identity_issue(
+                hypothesis,
+                patch,
+                code_context=code_context,
+            )
+            if invariant_issue is not None:
+                output = self._self_reported_issue_output(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    hypothesis=hypothesis,
+                    observations=observations,
+                    evidence=evidence,
+                    issue_detail=invariant_issue,
+                    source="code_stage_identity_repair_failed",
+                    note=(
+                        "Patch repair still violated code-stage mechanism "
+                        "identity preservation."
+                    ),
+                    repair_attempt=code_repair_attempts_used,
+                )
+                return None, code_repair_attempts_used, output
+
+        visibility_issue = _code_integration_visibility_issue(
+            patch,
+            getattr(state, "_latest_code_prompt_manifest", None),
+        )
+        if visibility_issue is not None:
+            repair_context = _code_context_with_required_full_integration_files(
+                code_context,
+                visibility_issue.get("paths", ()),
+            )
+            patch, code_repair_attempts_used, output = self._repair_code_invariant_or_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                hypothesis=hypothesis,
+                patch=patch,
+                code_context=repair_context,
+                observations=observations,
+                evidence=evidence,
+                code_repair_attempts_used=code_repair_attempts_used,
+                issue_detail=str(visibility_issue["detail"]),
+                note=(
+                    "Patch generation attempted integration edits without "
+                    "full API-visible integration file source."
+                ),
+            )
+            if output is not None or patch is None:
+                return patch, code_repair_attempts_used, output
+            visibility_issue = _code_integration_visibility_issue(
+                patch,
+                getattr(state, "_latest_code_prompt_manifest", None),
+            )
+            if visibility_issue is not None:
+                output = self._self_reported_issue_output(
+                    request=request,
+                    session_id=session_id,
+                    state=state,
+                    hypothesis=hypothesis,
+                    observations=observations,
+                    evidence=evidence,
+                    issue_detail=str(visibility_issue["detail"]),
+                    source="code_integration_visibility_repair_failed",
+                    note=(
+                        "Patch repair still attempted integration edits without "
+                        "full API-visible integration source."
+                    ),
+                    repair_attempt=code_repair_attempts_used,
+                )
+                return None, code_repair_attempts_used, output
+
         self_reported_issue = _patch_self_reported_unresolved_issue(patch)
         if (
             self_reported_issue is not None
@@ -231,6 +353,66 @@ class AgenticSessionPatchFlowMixin:
             repair_attempt=None,
         )
         return None, code_repair_attempts_used, output
+
+    def _repair_code_invariant_or_output(
+        self,
+        *,
+        request: AgenticProposalRequest,
+        session_id: str,
+        state: AgenticProposalSessionState,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal,
+        code_context: Mapping[str, Any],
+        observations: list[ProposalObservation],
+        evidence: list[AgenticEvidenceRef],
+        code_repair_attempts_used: int,
+        issue_detail: str,
+        note: str,
+    ) -> tuple[PatchProposal | None, int, AgenticProposalOutput | None]:
+        if (
+            code_repair_attempts_used
+            >= self._tool_loop_config.max_code_repair_attempts
+            or self._session_timeout_reached(state)
+        ):
+            output = self._self_reported_issue_output(
+                request=request,
+                session_id=session_id,
+                state=state,
+                hypothesis=hypothesis,
+                observations=observations,
+                evidence=evidence,
+                issue_detail=issue_detail,
+                source="code_stage_invariant",
+                note=note,
+                repair_attempt=code_repair_attempts_used or None,
+            )
+            return None, code_repair_attempts_used, output
+        patch = self._repair_patch_after_code_self_check(
+            request=request,
+            state=state,
+            hypothesis=hypothesis,
+            patch=patch,
+            code_context=code_context,
+            observations=observations,
+            issue_detail=issue_detail,
+            repair_attempt=code_repair_attempts_used + 1,
+        )
+        code_repair_attempts_used += 1
+        output = self._premise_rejection_output_if_needed(
+            request=request,
+            session_id=session_id,
+            state=state,
+            hypothesis=hypothesis,
+            patch=patch,
+            evidence=evidence,
+            observations=observations,
+            source="premise_check",
+            note="Patch invariant repair rejected the approved hypothesis after premise check.",
+            repair_attempt=code_repair_attempts_used,
+        )
+        if output is not None:
+            return None, code_repair_attempts_used, output
+        return patch, code_repair_attempts_used, None
 
     def _run_patch_preview_repair_loop(
         self,
@@ -630,3 +812,196 @@ class AgenticSessionPatchFlowMixin:
         state.status = output.status
         state.note(AgenticProposalPhase.FINALIZE, "Session completed.")
         return self._persist(output, state)
+
+
+def _code_stage_identity_issue(
+    hypothesis: HypothesisProposal,
+    patch: PatchProposal,
+    *,
+    code_context: Mapping[str, Any] | None = None,
+) -> str | None:
+    expected_ids = _mechanism_id_set(hypothesis)
+    patch_ids = _mechanism_id_set(patch)
+    if expected_ids or patch_ids:
+        if expected_ids != patch_ids:
+            return (
+                "code_stage_identity_mismatch: patch mechanism_changes ids must "
+                "exactly match the approved hypothesis. "
+                f"expected={sorted(expected_ids)!r}; observed={sorted(patch_ids)!r}. "
+                "Retry the same patch mechanism identity; do not add, drop, or "
+                "rename mechanism ids."
+            )
+    telemetry_ids = _new_telemetry_mechanism_ids_from_patch(
+        patch,
+        code_context=code_context,
+    )
+    unexpected_telemetry_ids = sorted(
+        telemetry_ids - expected_ids - _GENERIC_TELEMETRY_PHASES
+    )
+    if expected_ids and unexpected_telemetry_ids:
+        return (
+            "code_stage_telemetry_identity_mismatch: patch records telemetry "
+            "for mechanism id(s) not declared by the approved hypothesis: "
+            f"{unexpected_telemetry_ids!r}. Use the protected mechanism id(s) "
+            f"{sorted(expected_ids)!r} or remove unrelated telemetry."
+        )
+    return None
+
+
+def _mechanism_id_set(proposal: HypothesisProposal | PatchProposal) -> set[str]:
+    return {
+        str(change.id).strip()
+        for change in mechanism_changes(proposal)
+        if str(change.id).strip()
+    }
+
+
+_TELEMETRY_CALL_RE = re.compile(
+    r"(?:context|self\.context)\.record_(?:phase|iteration|move)\(\s*"
+    r"['\"]([A-Za-z][A-Za-z0-9_]{1,63})['\"]"
+)
+
+
+def _new_telemetry_mechanism_ids_from_patch(
+    patch: PatchProposal,
+    *,
+    code_context: Mapping[str, Any] | None = None,
+) -> set[str]:
+    before_sources = _code_context_source_by_path(code_context)
+    ids: set[str] = set()
+    for change in patch_file_changes(patch):
+        after_counts = _telemetry_mechanism_counts(change.code_content)
+        if not before_sources or change.action == "create":
+            ids.update(after_counts)
+            continue
+        path = _normalize_patch_path(change.file_path)
+        before_counts = _telemetry_mechanism_counts(before_sources.get(path, ""))
+        for mechanism_id, after_count in after_counts.items():
+            if after_count > before_counts.get(mechanism_id, 0):
+                ids.add(mechanism_id)
+    return ids
+
+
+def _telemetry_mechanism_counts(source: Any) -> Counter[str]:
+    return Counter(
+        match.group(1)
+        for match in _TELEMETRY_CALL_RE.finditer(str(source or ""))
+    )
+
+
+def _code_context_source_by_path(
+    code_context: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    if not isinstance(code_context, Mapping):
+        return {}
+    result: dict[str, str] = {}
+    target_path = _normalize_patch_path(code_context.get("target_file"))
+    target_source = code_context.get("target_file_code")
+    if target_path and isinstance(target_source, str) and target_source.strip():
+        parsed = _parse_markdown_source_files(target_source)
+        result[target_path] = parsed.get(target_path, target_source)
+    for key in (
+        "agentic_required_full_integration_files",
+        "solver_design_branch_current_integration_files",
+    ):
+        result.update(_parse_markdown_source_files(code_context.get(key)))
+    return result
+
+
+def _code_integration_visibility_issue(
+    patch: PatchProposal,
+    manifest: Any,
+) -> dict[str, Any] | None:
+    changed_paths = [
+        _normalize_patch_path(change.file_path)
+        for change in patch.additional_changes or ()
+        if getattr(change, "action", None) != "create"
+    ]
+    changed_paths = [path for path in changed_paths if path]
+    if not changed_paths:
+        return None
+    visible_paths = _full_visible_code_prompt_paths(manifest)
+    missing = sorted(path for path in dict.fromkeys(changed_paths) if path not in visible_paths)
+    if not missing:
+        return None
+    return {
+        "paths": tuple(missing),
+        "detail": (
+            "code_integration_file_visibility_missing: additional_changes "
+            "modify integration file(s) whose full current source was not "
+            f"API-visible in the code prompt: {missing!r}. Retry with the same "
+            "hypothesis and patch intent after projecting those files in full."
+        ),
+    }
+
+
+def _full_visible_code_prompt_paths(manifest: Any) -> set[str]:
+    if not isinstance(manifest, Mapping):
+        return set()
+    ledger = manifest.get("code_file_visibility_ledger")
+    if not isinstance(ledger, Mapping):
+        return set()
+    paths: set[str] = set()
+    target = ledger.get("target_file")
+    if isinstance(target, Mapping) and target.get("full_content_visible_in_rendered_prompt"):
+        path = _normalize_patch_path(target.get("file_path"))
+        if path:
+            paths.add(path)
+    for record in ledger.get("integration_files") or ():
+        if not isinstance(record, Mapping):
+            continue
+        if not record.get("full_content_visible_in_rendered_prompt"):
+            continue
+        path = _normalize_patch_path(record.get("file_path"))
+        if path:
+            paths.add(path)
+    return paths
+
+
+def _code_context_with_required_full_integration_files(
+    code_context: Mapping[str, Any],
+    paths: Any,
+) -> dict[str, Any]:
+    retry_context = dict(code_context)
+    source_files = _parse_markdown_source_files(
+        retry_context.get("solver_design_branch_current_integration_files")
+    )
+    required_sections: list[str] = []
+    for path in paths or ():
+        normalized = _normalize_patch_path(path)
+        content = source_files.get(normalized)
+        if not normalized or content is None:
+            continue
+        required_sections.append(
+            f"### {normalized}\n"
+            "Provenance: branch-current integration source required after "
+            "code visibility invariant failure\n"
+            f"```python\n{content}```"
+        )
+    if required_sections:
+        retry_context["agentic_required_full_integration_files"] = "\n\n".join(
+            required_sections
+        )
+    return retry_context
+
+
+def _parse_markdown_source_files(value: Any) -> dict[str, str]:
+    if not isinstance(value, str):
+        return {}
+    files: dict[str, str] = {}
+    for match in _SOURCE_FILE_RE.finditer(value):
+        path = _normalize_patch_path(match.group("path"))
+        content = match.group("content") + match.group("terminal_newline")
+        if path:
+            files[path] = content
+    return files
+
+
+def _normalize_patch_path(value: Any) -> str:
+    try:
+        return normalize_relative_patch_path(str(value or ""))
+    except ValueError:
+        text = str(value or "").replace("\\", "/").strip()
+        while text.startswith("./"):
+            text = text[2:]
+        return text.lstrip("/")

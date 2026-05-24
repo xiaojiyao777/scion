@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .shared import (
     _empty_mechanism_changes_to_list,
@@ -18,6 +18,8 @@ PremiseCheck = Literal["supported", "contradicted", "duplicate", "wrong_owner"]
 
 
 class PatchFileChangeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     file_path: str
     action: str
     code_content: str = ""
@@ -58,6 +60,8 @@ class PatchFileChangeInput(BaseModel):
 
 
 class PatchProposalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     premise_check: PremiseCheck = "supported"
     premise_check_reason: str = ""
     file_path: str = ""
@@ -88,19 +92,10 @@ class PatchProposalInput(BaseModel):
             return []
         if not isinstance(value, str):
             return value
-        import json
-
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                "additional_changes must be a JSON array, not an unparseable string"
-            ) from exc
-        if not isinstance(parsed, list):
-            raise ValueError(
-                "additional_changes JSON string must decode to an array"
-            )
-        return parsed
+        raise ValueError(
+            "additional_changes must be a JSON array, not a JSON-encoded string; "
+            "retry by emitting the same edits as an array of objects."
+        )
 
     @model_validator(mode="after")
     def validate_supported_patch_fields(self) -> "PatchProposalInput":
@@ -138,6 +133,7 @@ class PatchProposalInput(BaseModel):
 PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "required": ["file_path", "action"],
+    "additionalProperties": False,
     "properties": {
         "premise_check": {
             "type": "string",

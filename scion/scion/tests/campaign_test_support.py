@@ -20,6 +20,7 @@ from scion.evidence.final_evidence_refs import (
     FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
     FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
 )
+from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -47,7 +48,27 @@ _VALID_HYPOTHESIS = {
 _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": _VALID_CODE,
+    "edit_intent": "exact_replace",
+    "source_digest": source_digest_for_content(_VALID_CODE + "\n"),
+    "old_string": "        return solution\n",
+    "new_string": "        candidate = solution\n        return candidate\n",
+    "replace_all": False,
+    "test_hint": None,
+}
+
+_VALID_CODE_AFTER_PATCH = _VALID_CODE.replace(
+    "        return solution\n",
+    "        candidate = solution\n        return candidate\n",
+)
+
+_VALID_PATCH_REPAIR = {
+    "file_path": "operators/local_search.py",
+    "action": "modify",
+    "edit_intent": "exact_replace",
+    "source_digest": source_digest_for_content(_VALID_CODE_AFTER_PATCH + "\n\n"),
+    "old_string": "        return candidate\n",
+    "new_string": "        return candidate\n",
+    "replace_all": False,
     "test_hint": None,
 }
 
@@ -199,6 +220,7 @@ def _campaign(
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
     (code_dir / "operators" / "local_search.py").write_text(_VALID_CODE)
+    (code_dir / "solver.py").write_text(_VALID_CODE)
 
     campaign_dir = str(tmp_path / "campaign")
     spec = _make_problem_spec(str(code_dir))

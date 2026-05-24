@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from scion.core.models import Decision, EvalStats, ExperimentStage, ProtocolResult, StepRecord
+from scion.core.models import (
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    MechanismChange,
+    ProtocolResult,
+    StepRecord,
+)
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -203,10 +210,12 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
 ) -> None:
     bad = _vns_hypothesis(_bad_vns_phase_telemetry())
     good = _vns_hypothesis(_good_vns_mechanism_telemetry())
-    creative = SequentialHypothesisCreative([bad, good])
+    creative = SequentialHypothesisCreative([bad, bad, good])
     context = _cvrp_context_with_champion(tmp_path)
+    artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
     session = AgenticProposalSession(
         creative,
+        artifact_store=artifact_store,
         tool_registry=ProposalToolRegistry.default_read_only(),
     )
 
@@ -231,24 +240,299 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     )
     assert output.hypothesis == good
     assert output.self_check.schema_valid is True
-    assert len(creative.hypothesis_contexts) == 2
-    retry_context = creative.hypothesis_contexts[1]
+    assert len(creative.hypothesis_contexts) == 3
+    assert "agentic_hypothesis_grounding_rejections" in creative.hypothesis_contexts[1]
+    retry_context = creative.hypothesis_contexts[2]
     retry_feedback = retry_context["agentic_hypothesis_preview_rejections"][0]
     assert retry_feedback["failure_code"] == "C11_expected_telemetry"
     assert "solver_algorithm_phase_runtime_ms.vns" in json.dumps(retry_feedback)
-    assert "Do not use existing phase names" in retry_feedback["retry_constraint"]
-    assert "declared mechanism runtime fields" in retry_feedback["retry_constraint"]
-    assert "declared_mechanism_runtime_fields" in retry_feedback
+    assert "Repair only expected_telemetry/schema fields" in retry_feedback[
+        "retry_constraint"
+    ]
+    assert "switch mechanisms or targets" in retry_feedback["retry_constraint"]
+    assert "declared_runtime_fields" not in retry_feedback
+    assert "declared_mechanism_runtime_fields" not in retry_feedback
     assert retry_feedback["allowed_expected_telemetry_template"][
         "expected_telemetry"
     ]["activation"] == [
         "solver_algorithm_context_records.adaptive_vns_operator_weights_iterations",
         "solver_algorithm_phase_runtime_ms.adaptive_vns_operator_weights",
     ]
+    assert retry_feedback["preserve_hypothesis"]["target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
+    assert retry_feedback["preserve_hypothesis"]["mechanism_changes"] == [
+        {"id": "adaptive_vns_operator_weights", "change_type": "add"}
+    ]
     assert any(
         event.metadata.get("failure_code") == "C11_expected_telemetry"
         for event in output.transcript
     )
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in ref
+    ]
+    retry_manifests = [
+        manifest
+        for manifest in manifests
+        if manifest.get("call_kind") == "hypothesis_preview_retry"
+    ]
+    assert retry_manifests
+    retry_manifest = retry_manifests[0]
+    feedback_status = retry_manifest["section_statuses"][
+        "hypothesis_schema_telemetry_retry_feedback"
+    ]
+    assert feedback_status["status"] == "included"
+    assert "hypothesis_schema_telemetry_retry_feedback" not in retry_manifest[
+        "truncated_sections"
+    ]
+
+
+def test_hypothesis_preview_c11_retry_allows_runtime_free_text_rewrite(
+    tmp_path: Path,
+) -> None:
+    bad = _vns_hypothesis(_bad_vns_phase_telemetry())
+    good = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    rewritten = replace(
+        good,
+        hypothesis_text=(
+            good.hypothesis_text
+            + " The schema retry restates the runtime expectation more compactly."
+        ),
+        expected_effect=(
+            "Improve total_distance by using the same adaptive VNS mechanism "
+            "with clearer telemetry declarations."
+        ),
+        target_runtime_effect=(
+            "Shift VNS time toward recently productive existing neighborhoods "
+            "within the same bounded local-search budget."
+        ),
+        novelty_signature={
+            **dict(good.novelty_signature or {}),
+            "algorithm_family": (
+                "adaptive neighborhood policy for the same VNS operator set"
+            ),
+            "construction_strategy": (
+                "leave construction unchanged while restating the schema repair"
+            ),
+            "improvement_strategy": (
+                "sliding-window success-rate reordering of neighborhood "
+                "operators per pass"
+            ),
+            "acceptance_strategy": (
+                "keep the incumbent acceptance rule unchanged"
+            ),
+            "runtime_budget_strategy": (
+                "bounded_existing_vns_operator_reordering_with_schema_valid_telemetry"
+            ),
+        },
+    )
+    creative = SequentialHypothesisCreative([bad, bad, rewritten])
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-c11-free-text-allowed",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "preview-retry-free-text"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == rewritten
+    assert output.self_check.schema_valid is True
+    assert not any(
+        event.metadata.get("failure_code") == "schema_retry_drift"
+        for event in output.transcript
+    )
+
+
+def test_hypothesis_preview_c11_retry_blocks_mechanism_target_drift(
+    tmp_path: Path,
+) -> None:
+    bad = _vns_hypothesis(_bad_vns_phase_telemetry())
+    drifted = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/scheduler.py",
+            hypothesis_text=(
+                "After schema retry, switch to a scheduler restart mechanism "
+                "instead of repairing the prior VNS telemetry declaration."
+            ),
+            target_weakness="Scheduler restart cadence is fixed.",
+            expected_effect="Improve total_distance through restart perturbations.",
+            no_op_condition="Keep the existing scheduler when no restart evidence appears.",
+            mechanism_changes=[
+                {
+                    "id": "adaptive_scheduler_restart",
+                    "change_type": "add",
+                }
+            ],
+            novelty_signature={
+                "algorithm_family": "adaptive_scheduler_restart",
+                "construction_strategy": "preserve_existing_construction",
+                "improvement_strategy": "restart_after_stagnation",
+                "acceptance_strategy": "preserve_existing_acceptance",
+                "runtime_budget_strategy": "bounded_restart_checks",
+            },
+            expected_telemetry=_good_vns_mechanism_telemetry(),
+        )
+    )
+    creative = SequentialHypothesisCreative([bad, bad, drifted])
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-c11-drift-block",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "preview-retry-drift"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert creative.code_contexts == []
+    assert len(creative.hypothesis_contexts) == 4
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.failure_detail is not None
+    assert "schema_retry_drift" in output.failure_detail
+    assert "target_file" in output.failure_detail
+    assert "mechanism_changes" in output.failure_detail
+    assert output.failure_ledger["entries"][-1]["failure_code"] == "schema_retry_drift"
+    assert any(
+        event.metadata.get("failure_code") == "schema_retry_drift"
+        and event.metadata.get("corrective_retry") is True
+        for event in output.transcript
+    )
+
+
+def test_hypothesis_preview_c11_retry_corrects_identity_drift(
+    tmp_path: Path,
+) -> None:
+    bad = _vns_hypothesis(_bad_vns_phase_telemetry())
+    drifted = replace(
+        _vns_hypothesis(_good_vns_mechanism_telemetry()),
+        target_file="policies/baseline_modules/scheduler.py",
+        mechanism_changes=(
+            MechanismChange(id="or_opt1_nn", change_type="add"),
+        ),
+    )
+    restored = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    creative = SequentialHypothesisCreative([bad, bad, drifted, restored])
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-c11-drift-corrective-retry",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "preview-retry-drift-corrective"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=None,
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
+    assert output.hypothesis == restored
+    assert len(creative.hypothesis_contexts) == 4
+    corrective_context = creative.hypothesis_contexts[3]
+    drift_feedback = corrective_context["agentic_hypothesis_preview_rejections"][-1]
+    assert drift_feedback["failure_code"] == "schema_retry_drift"
+    assert drift_feedback["corrective_retry"] is True
+    assert drift_feedback["protected_identity"]["target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
+    assert drift_feedback["protected_identity"]["protected_mechanism_ids"] == [
+        "adaptive_vns_operator_weights"
+    ]
+    assert output.failure_detail == "hypothesis awaits ContractGate approval"
+    assert any(
+        event.metadata.get("failure_code") == "schema_retry_drift"
+        and event.metadata.get("corrective_retry") is True
+        for event in output.transcript
+    )
+
+
+def test_hypothesis_preview_c11_retry_blocks_activation_mechanism_drift(
+    tmp_path: Path,
+) -> None:
+    bad = _vns_hypothesis(_bad_vns_phase_telemetry())
+    drifted_telemetry = _good_vns_mechanism_telemetry()
+    drifted_telemetry["activation"] = [
+        "solver_algorithm_context_records.nn_relocate_iterations",
+        "solver_algorithm_phase_runtime_ms.nn_relocate",
+    ]
+    drifted = replace(
+        _vns_hypothesis(drifted_telemetry),
+        target_runtime_effect=(
+            "Keep the same prose, but incorrectly point activation telemetry "
+            "at a different mechanism."
+        ),
+    )
+    creative = SequentialHypothesisCreative([bad, bad, drifted])
+    context = _cvrp_context_with_champion(tmp_path)
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+    )
+
+    output = session.run(
+        AgenticProposalRequest(
+            campaign_id="camp-c11-activation-drift",
+            branch=context.branch,
+            champion=context.champion,
+            hypothesis_context={"seed": "preview-retry-activation-drift"},
+            build_code_context=lambda _hypothesis: {"kind": "code"},
+            approve_hypothesis=lambda _hypothesis: SimpleNamespace(
+                passed=True,
+                failure_reason=None,
+            ),
+            problem_id=context.problem_id,
+            problem_spec_hash=context.problem_spec_hash,
+            tool_context=context,
+        )
+    )
+
+    assert output.status == AgenticProposalStatus.FAILED
+    assert output.patch is None
+    assert creative.code_contexts == []
+    assert len(creative.hypothesis_contexts) == 4
+    assert output.failure_category == "contract_boundary_failure"
+    assert output.failure_detail is not None
+    assert "schema_retry_drift" in output.failure_detail
+    assert "expected_telemetry.activation" in output.failure_detail
+    assert output.failure_ledger["entries"][-1]["failure_code"] == "schema_retry_drift"
 
 
 def test_hypothesis_text_survives_preview_failure_artifact_serialization(
@@ -290,7 +574,9 @@ def test_hypothesis_text_survives_preview_failure_artifact_serialization(
             "budget": ["solver_algorithm_elapsed_ms"],
         },
     )
-    client = SequentialHypothesisToolClient([bad_payload, dict(bad_payload)])
+    client = SequentialHypothesisToolClient(
+        [bad_payload, dict(bad_payload), dict(bad_payload)]
+    )
     creative = CreativeLayer(client, model="test-model")
     context = _cvrp_context_with_champion(tmp_path)
     artifact_store = FileAgenticSessionArtifactStore(tmp_path / "aps-artifacts")
@@ -339,7 +625,7 @@ def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
     duplicate = _duplicate_or_opt_hypothesis()
     bad = _vns_hypothesis(_bad_vns_phase_telemetry())
     good = _vns_hypothesis(_good_vns_mechanism_telemetry())
-    creative = SequentialHypothesisCreative([duplicate, bad, good])
+    creative = SequentialHypothesisCreative([duplicate, duplicate, bad, good])
     context = _cvrp_context_with_champion(tmp_path)
     session = AgenticProposalSession(
         creative,
@@ -367,14 +653,14 @@ def test_semantic_retry_then_self_check_c11_retry_reaches_approval(
     )
     assert output.hypothesis == good
     assert output.self_check.schema_valid is True
-    assert len(creative.hypothesis_contexts) == 3
+    assert len(creative.hypothesis_contexts) == 4
     assert (
-        creative.hypothesis_contexts[1]["agentic_hypothesis_semantic_rejections"][0][
+        creative.hypothesis_contexts[2]["agentic_hypothesis_semantic_rejections"][0][
             "mechanism"
         ]
         == "cross_route_or_opt_2_3"
     )
-    preview_feedback = creative.hypothesis_contexts[2][
+    preview_feedback = creative.hypothesis_contexts[3][
         "agentic_hypothesis_preview_rejections"
     ][0]
     assert preview_feedback["failure_code"] == "C11_expected_telemetry"
@@ -403,7 +689,7 @@ def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
 ) -> None:
     repeat = _targeted_multi_relocate_hypothesis()
     good = _vns_hypothesis(_good_vns_mechanism_telemetry())
-    creative = SequentialHypothesisCreative([repeat, good])
+    creative = SequentialHypothesisCreative([repeat, repeat, good])
     context = _cvrp_context_with_champion(tmp_path)
     context = replace(
         context,
@@ -430,8 +716,8 @@ def test_repeated_mechanism_semantic_retry_feedback_enters_hypothesis_context(
 
     assert output.status == AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY
     assert output.hypothesis == good
-    assert len(creative.hypothesis_contexts) == 2
-    retry_feedback = creative.hypothesis_contexts[1][
+    assert len(creative.hypothesis_contexts) == 3
+    retry_feedback = creative.hypothesis_contexts[2][
         "agentic_hypothesis_semantic_rejections"
     ][0]
     assert retry_feedback["failure_category"] == "repeated_mechanism"
@@ -470,7 +756,7 @@ def test_hypothesis_preview_c11_retry_exhaustion_fails_with_clear_detail(
     assert output.status == AgenticProposalStatus.FAILED
     assert output.patch is None
     assert creative.code_contexts == []
-    assert len(creative.hypothesis_contexts) == 2
+    assert len(creative.hypothesis_contexts) == 3
     assert output.failure_category == "contract_boundary_failure"
     assert output.failure_detail is not None
     assert "C11_expected_telemetry" in output.failure_detail

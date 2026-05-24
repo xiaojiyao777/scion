@@ -18,6 +18,8 @@ def _missing_random_removal_destroy_span(text: str) -> str:
     if _describes_existing_random_removal_contrast_variant(text):
         return ""
     span = _first_regex_span(text, _MISSING_RANDOM_REMOVAL_DESTROY_PATTERNS)
+    if _span_is_random_removal_contrast_not_missing(span):
+        return ""
     if _span_is_random_exploration_weakness_not_missing_removal(span):
         return ""
     if _span_is_noop_condition_not_missing_random_removal(span):
@@ -67,6 +69,28 @@ def _span_is_noop_condition_not_missing_random_removal(span: str) -> bool:
     if not span:
         return False
     return _has_any(span, ("no-op", "no op", "noop", "no-op condition"))
+
+
+def _span_is_random_removal_contrast_not_missing(span: str) -> bool:
+    if not span:
+        return False
+    return _has_any(
+        span,
+        (
+            "from random removal",
+            "than random removal",
+            "unlike random removal",
+            "different from random removal",
+            "differs from random removal",
+            "distinct from random removal",
+            "not random removal",
+            "not a random removal",
+            "random removal by",
+            "random removal which",
+            "random removal (which",
+            "random removal with",
+        ),
+    )
 
 def _describes_existing_random_removal_variant(text: str) -> bool:
     if not _mentions_random_removal_destroy(text):
@@ -138,10 +162,15 @@ def _describes_existing_random_removal_contrast_variant(text: str) -> bool:
         (
             "distinct from random",
             "different from random",
+            "differs from random",
             "unlike random",
             "rather than random",
             "not random removal",
             "not a random removal",
+            "from random removal",
+            "than random removal",
+            "random_removal by",
+            "random removal by",
             "random removal (uniform",
             "uniform random",
             "uniform sampling",

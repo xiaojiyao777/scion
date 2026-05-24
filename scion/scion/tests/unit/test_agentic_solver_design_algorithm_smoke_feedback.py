@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import json
+
 from scion.proposal.tools.previews.algorithm_smoke_feedback import (
     _algorithm_smoke_agent_payload,
 )
+from scion.proposal.agentic_preview import (
+    _algorithm_smoke_failure_detail,
+    _preview_observation_passed,
+)
+from scion.proposal.agentic_code_context import (
+    _preview_repair_feedback_prompt_payload,
+)
+from scion.proposal.tools import ProposalObservation
 from scion.tests.unit.agentic_solver_design_test_support import *
 
 
@@ -142,6 +152,66 @@ def test_algorithm_smoke_feedback_separates_mechanism_telemetry_statuses() -> No
     assert "Add direct activation telemetry" in payload["repair_hints"][0]
 
 
+def test_algorithm_smoke_preview_repair_feedback_is_short_and_actionable() -> None:
+    smoke_payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "telemetry_static_preview": {
+                "passed": False,
+                "issue_codes": ["DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"],
+                "checked_fields": [
+                    "solver_algorithm_phase_best_delta.sa_reheat_on_stagnation"
+                ],
+                "required_calls": {
+                    "sa_reheat_on_stagnation": [
+                        "context.record_move('sa_reheat_on_stagnation', attempted=1, accepted=1, delta=<positive_improvement_delta>, best_improved=True)"
+                    ]
+                },
+                "actionable_telemetry_feedback": [
+                    {
+                        "failure_code": "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING",
+                        "mechanism_id": "sa_reheat_on_stagnation",
+                        "category": "effect",
+                        "delta_valued_fields": [
+                            "solver_algorithm_phase_best_delta.sa_reheat_on_stagnation"
+                        ],
+                        "declaration_alternative": (
+                            "If this mechanism is intended to prove only "
+                            "activity or activation, repair expected_telemetry."
+                        ),
+                    }
+                ],
+                "issues": [
+                    "algorithm_smoke_failure:algorithm_smoke_failure should not be repeated"
+                ],
+            },
+            "primary_issue": "telemetry_static_preview rejected effect telemetry",
+        }
+    )
+    observation = ProposalObservation(
+        observation_id="obs-smoke",
+        session_id="session",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="call",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke found issues.",
+        structured_payload=smoke_payload,
+    )
+
+    feedback = _preview_repair_feedback_prompt_payload(observation)
+    structured = feedback["structured_payload"]
+    rendered = json.dumps(structured, sort_keys=True)
+
+    assert structured["failure_code"] == "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"
+    assert structured["mechanism_id"] == "sa_reheat_on_stagnation"
+    assert "offending_fields" in structured
+    assert "allowed_repair_shape" in structured
+    assert "forbidden_repair_shape" in structured
+    assert "guarantee-positive fallback" in structured["forbidden_repair_shape"]
+    assert "algorithm_smoke_failure:algorithm_smoke_failure" not in rendered
+    assert len(rendered) < 2600
+
+
 def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
     payload = _algorithm_smoke_agent_payload(
         {
@@ -204,7 +274,10 @@ def test_algorithm_smoke_activation_missing_emits_proposal_diagnostic() -> None:
 
     diagnostic = payload["activation_diagnostic"]
 
-    assert payload["failure_class"] == "proposal_activation_diagnostic"
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_class"] == "activation_not_observed_diagnostic"
+    assert payload["diagnostic_passed"] is True
     assert diagnostic["code"] == "proposal_activation_diagnostic"
     assert diagnostic["category"] == "proposal_activation_diagnostic"
     assert diagnostic["activation_diagnostic_kind"] == "not_connected"
@@ -472,7 +545,83 @@ def test_algorithm_smoke_feedback_guides_unreached_activation_helper() -> None:
 
     diagnostic = payload["activation_diagnostic"]
 
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_class"] == "activation_not_observed_diagnostic"
+    assert payload["diagnostic_passed"] is True
     assert diagnostic["activation_diagnostic_kind"] == "path_not_reached"
+    assert diagnostic["failure_code"] == "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED"
+    assert diagnostic["mechanism_id"] == "late_probe"
     hints = " ".join(payload["repair_hints"])
-    assert "trigger conditions" in hints
-    assert "smoke-observable activation path" in hints
+    assert "canary-scoped threshold" in hints
+    assert "Do not unconditionally trigger" in hints
+    assert "no-op activation" not in hints
+
+    observation = ProposalObservation(
+        observation_id="obs-diagnostic",
+        session_id="session",
+        tool_name="proposal.algorithm_smoke",
+        tool_call_id="call",
+        observation_type="algorithm_smoke",
+        summary="Algorithm smoke diagnostic.",
+        structured_payload=payload,
+    )
+    assert _preview_observation_passed(observation) is True
+    assert _algorithm_smoke_failure_detail([observation]) is None
+
+
+def test_algorithm_smoke_activation_missing_without_static_instrumentation_is_diagnostic() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "runtime": {
+                    "solver_algorithm_search_iterations": 10,
+                    "solver_algorithm_move_attempts": 2,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "declared_mechanisms": ["late_probe"],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "late_probe",
+                            "activation_status": "missing",
+                            "runtime_status": "observed",
+                            "effect_status": "not_declared",
+                            "runtime": {
+                                "status": "observed",
+                                "candidate_positive": 2,
+                                "candidate_present": 2,
+                            },
+                        }
+                    ],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "late_probe",
+                            "category": "activation",
+                            "field": "mechanism_activation.late_probe",
+                            "candidate_positive": 0,
+                            "candidate_present": 0,
+                            "candidate_missing": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_class"] == "activation_not_observed_diagnostic"
+    assert payload["diagnostic_passed"] is True
+    assert payload["activation_diagnostic"]["activation_diagnostic_kind"] == (
+        "instrumentation_missing"
+    )

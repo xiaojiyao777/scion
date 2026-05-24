@@ -185,18 +185,7 @@ def _split_code_context(
             f"{D['champion_operators_code']}"
         )
 
-    system_blocks = [
-        {
-            "type": "text",
-            "text": static_text,
-            "cache_control": _CACHE_5M,
-        },
-        {
-            "type": "text",
-            "text": champion_text,
-            "cache_control": _CACHE_5M,
-        },
-    ]
+    stable_system_parts = [static_text, champion_text]
 
     prior_failure_section = ""
     if D["prior_code_failure"]:
@@ -205,18 +194,94 @@ def _split_code_context(
         )
     previous_patch_section = _previous_patch_prompt_section(D["previous_patch"])
     agentic_context = _agentic_research_context_block(D, code_phase=True)
+    cacheable_agentic_context = ""
+    dynamic_agentic_context = ""
     if agentic_context:
-        prior_failure_section += f"{agentic_context}\n\n"
+        cacheable_agentic_context, dynamic_agentic_context = (
+            _split_agentic_context_for_code_cache(agentic_context)
+        )
+        if dynamic_agentic_context:
+            prior_failure_section += f"{dynamic_agentic_context}\n\n"
     edit_source_manifest = build_patch_edit_source_manifest(context)
+    required_full_integration_files = str(
+        D["agentic_required_full_integration_files"]
+    ).strip()
+    required_full_integration_section = (
+        "## Required Full Integration Edit Sources\n"
+        "The previous patch attempted to edit these integration files before "
+        "their full current source was visible in the API prompt. Treat this "
+        "section as the current source of truth for any `additional_changes` "
+        "against these paths.\n"
+        f"{required_full_integration_files}\n\n"
+        if required_full_integration_files
+        else ""
+    )
+
+    source_context_section = ""
+    if is_solver_design_surface:
+        source_context_parts = []
+        if cacheable_agentic_context:
+            source_context_parts.append(cacheable_agentic_context)
+        source_context_parts.append(
+            "## Code Source Visibility Ledger\n"
+            "The stable source sections in this cacheable block are the "
+            "provider-visible source of truth for typed edits. Dynamic retry "
+            "feedback and previous patches are intentionally outside this "
+            "cacheable block."
+        )
+        if solver_design_api_manifest_section:
+            source_context_parts.append(solver_design_api_manifest_section.strip())
+        if str(D["target_file_code"]).strip():
+            source_context_parts.append(
+                f"## Approved Target File Current Content\n{D['target_file_code']}"
+            )
+        if edit_source_manifest:
+            source_context_parts.append(
+                f"## Patch Edit Source Digests\n{edit_source_manifest}"
+            )
+        if solver_design_integration_files_section:
+            source_context_parts.append(solver_design_integration_files_section.strip())
+        source_context_section = "\n\n".join(
+            part for part in source_context_parts if str(part).strip()
+        )
+    if source_context_section:
+        stable_system_parts.append(source_context_section)
+    system_blocks = [
+        {
+            "type": "text",
+            "text": "\n\n".join(
+                part for part in stable_system_parts if str(part).strip()
+            ),
+            "cache_control": _CACHE_5M,
+        }
+    ]
+    dynamic_solver_design_api_manifest_section = (
+        "" if is_solver_design_surface else solver_design_api_manifest_section
+    )
+    dynamic_target_file_section = (
+        ""
+        if is_solver_design_surface
+        else f"## Approved Target File Current Content\n{D['target_file_code']}\n\n"
+    )
+    dynamic_edit_source_section = (
+        ""
+        if is_solver_design_surface
+        else f"## Patch Edit Source Digests\n{edit_source_manifest}\n\n"
+    )
+    dynamic_integration_files_section = (
+        "" if is_solver_design_surface else solver_design_integration_files_section
+    )
 
     user_prompt = (
         f"{prior_failure_section}"
         f"{previous_patch_section}"
-        f"## Hypothesis to Implement\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
-        f"{solver_design_api_manifest_section}"
-        f"## Approved Target File Current Content\n{D['target_file_code']}\n\n"
-        f"## Patch Edit Source Digests\n{edit_source_manifest}\n\n"
-        f"{solver_design_integration_files_section}"
+        f"## Hypothesis to Implement\n{_code_implementation_brief(D)}\n\n"
+        f"## Hypothesis Detail Audit\n{_code_hypothesis_detail(D, is_solver_design_surface)}\n\n"
+        f"{required_full_integration_section}"
+        f"{dynamic_solver_design_api_manifest_section}"
+        f"{dynamic_target_file_section}"
+        f"{dynamic_edit_source_section}"
+        f"{dynamic_integration_files_section}"
         f"## Reference Surface Files\n{D['reference_operators']}\n\n"
         f"## Constraints\n"
         f"- Editable files: {D['editable_patterns']}\n"
@@ -231,7 +296,9 @@ def _split_code_context(
         f"- For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds\n\n"
         f"- For existing `action: modify` files, default to "
         f"`edit_intent: exact_replace`. Use the exact `source_digest` shown "
-        f"above plus exact `old_string`, `new_string`, and `replace_all`.\n"
+        f"above plus exact `old_string`, `new_string`, and `replace_all`. "
+        f"Prefer function-level or small block replacements; avoid using one "
+        f"huge `exact_replace` as a near-full-file modify.\n"
         f"- Use `edit_intent: full_file` with `content_after` only for "
         f"creates or deletes. Host-visible existing-file modifies that emit "
         f"`full_file`/`content_after` are rejected by default; "
@@ -275,6 +342,102 @@ def _split_code_context(
     )
 
     return system_blocks, user_prompt
+
+
+def _code_implementation_brief(context: Dict[str, Any]) -> str:
+    brief = context.get("hypothesis_implementation_brief")
+    if isinstance(brief, dict):
+        payload = _compact_implementation_brief(brief)
+    else:
+        payload = _compact_implementation_brief(
+            {
+                "action": context.get("action"),
+                "target_file": context.get("target_file"),
+                "hypothesis_text": context.get("hypothesis_text"),
+                "expected_telemetry": context.get("expected_telemetry"),
+                "mechanism_changes": context.get("mechanism_changes"),
+                "target_runtime_effect": context.get("target_runtime_effect"),
+                "no_op_condition": context.get("no_op_condition"),
+                "risk_to_higher_priority": context.get("risk_to_higher_priority"),
+            }
+        )
+    return (
+        "Use this short structured implementation brief as the complete "
+        "source of truth for target_file, mechanism ids, telemetry, risk, and "
+        "no-op behavior. The detail-audit section below is explanatory only.\n"
+        f"{_bounded_json(payload, 12000)}"
+    )
+
+
+_AGENTIC_CONTEXT_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+_CACHEABLE_CODE_AGENTIC_CONTEXT_HEADINGS = frozenset(
+    {
+        "active algorithm facts",
+        "active solver mechanism digest",
+        "solver-design full algorithm file reads",
+    }
+)
+
+
+def _split_agentic_context_for_code_cache(text: str) -> tuple[str, str]:
+    """Split stable active-source context from dynamic code retry context."""
+    text = str(text or "")
+    if not text.strip():
+        return "", ""
+    matches = list(_AGENTIC_CONTEXT_HEADING_RE.finditer(text))
+    if not matches:
+        return "", text
+    cacheable: list[str] = []
+    dynamic: list[str] = []
+    if matches[0].start() > 0 and text[: matches[0].start()].strip():
+        dynamic.append(text[: matches[0].start()].strip())
+    for offset, match in enumerate(matches):
+        start = match.start()
+        end = matches[offset + 1].start() if offset + 1 < len(matches) else len(text)
+        section = text[start:end].strip()
+        heading = re.sub(r"\s+", " ", match.group(1).strip().lower())
+        if heading in _CACHEABLE_CODE_AGENTIC_CONTEXT_HEADINGS:
+            cacheable.append(section)
+        else:
+            dynamic.append(section)
+    return "\n\n".join(cacheable), "\n\n".join(dynamic)
+
+
+def _compact_implementation_brief(value: Dict[str, Any]) -> Dict[str, Any]:
+    mechanism_changes = value.get("mechanism_changes")
+    if not isinstance(mechanism_changes, (list, tuple)):
+        mechanism_changes = []
+    mechanisms = []
+    for change in mechanism_changes:
+        if isinstance(change, dict):
+            mechanisms.append(
+                {
+                    key: change.get(key)
+                    for key in ("id", "change_type", "name", "action", "target", "module")
+                    if change.get(key) not in (None, "", [], {}, ())
+                }
+            )
+    return {
+        key: item
+        for key, item in {
+            "hypothesis_text": value.get("hypothesis_text"),
+            "change_locus": value.get("change_locus"),
+            "action": value.get("action"),
+            "target_file": value.get("target_file"),
+            "mechanism_changes": mechanisms,
+            "expected_telemetry": value.get("expected_telemetry"),
+            "target_objectives": value.get("target_objectives"),
+            "protected_objectives": value.get("protected_objectives"),
+            "target_runtime_effect": value.get("target_runtime_effect"),
+            "no_op_condition": value.get("no_op_condition"),
+            "risk_to_higher_priority": value.get("risk_to_higher_priority"),
+            "typed_edit_requirement": (
+                "Modify existing files with exact_replace typed edits; do not "
+                "emit full-file content for existing-file modifications."
+            ),
+        }.items()
+        if item not in (None, "", [], {}, ())
+    }
 
 
 def _is_timeout_failure(text: str) -> bool:
@@ -476,7 +639,11 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "activation/effect/budget feedback. Use the selected surface runtime "
             "telemetry helpers on the active code path; do not rename the "
             "mechanism, remove expected_telemetry, or change problem "
-            "objectives/constraints to silence the guard. If the feedback "
+            "objectives/constraints to silence the guard. Preserve previously "
+            "successful integration edits from `additional_changes` such as "
+            "imports, operator registration, and call-site dispatch unless the "
+            "failure specifically says that integration edge is wrong. Do not "
+            "drop wiring while repairing API/schema/telemetry shape. If the feedback "
             "contains telemetry_static_preview.required_calls, the corrected "
             "code must include those mechanism-specific helper calls on the "
             "path where the mechanism actually runs. Preserve any previously "
@@ -489,7 +656,11 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "mechanism only intended activity/activation, do not fabricate a "
             "positive delta; return a contradicted premise explaining that the "
             "hypothesis expected_telemetry or mechanism declaration should be "
-            "changed away from delta-valued effect telemetry.\n\n"
+            "changed away from delta-valued effect telemetry. For conditional "
+            "or rare-trigger mechanisms, instrument the natural condition, "
+            "decision/budget counters, diagnostic skipped status, or a "
+            "canary-targeted threshold; do not force unconditional activation "
+            "or guarantee positive telemetry only to pass smoke.\n\n"
         )
     if "code_generation_failed" in lowered:
         if "telemetry" in lowered or "algorithm_smoke" in lowered:
@@ -502,7 +673,11 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
                 "declared mechanism id. Use the selected surface runtime "
                 "telemetry helpers on the active code path; do not rename the "
                 "mechanism, remove expected_telemetry, or change problem "
-                "objectives/constraints to silence the guard. If the feedback "
+                "objectives/constraints to silence the guard. Preserve previously "
+                "successful integration edits from `additional_changes` such as "
+                "imports, operator registration, and call-site dispatch unless the "
+                "failure specifically says that integration edge is wrong. Do not "
+                "drop wiring while repairing API/schema/telemetry shape. If the feedback "
                 "contains telemetry_static_preview.required_calls, the corrected "
                 "code must include those mechanism-specific helper calls on the "
                 "path where the mechanism actually runs. Preserve any previously "
@@ -516,7 +691,11 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
                 "fabricate a positive delta; return a contradicted premise "
                 "explaining that the hypothesis expected_telemetry or "
                 "mechanism declaration should be changed away from "
-                "delta-valued effect telemetry.\n\n"
+                "delta-valued effect telemetry. For conditional or rare-trigger "
+                "mechanisms, instrument the natural condition, decision/budget "
+                "counters, diagnostic skipped status, or a canary-targeted "
+                "threshold; do not force unconditional activation or guarantee "
+                "positive telemetry only to pass smoke.\n\n"
             )
         return (
             "## Previous Attempt Failed\n"

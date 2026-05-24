@@ -135,6 +135,8 @@ class TestVerificationGate:
             def call(self, prompt, schema, model=None, system_blocks=None):
                 if _schema_requests_patch(schema):
                     fix_call_count[0] += 1
+                    if fix_call_count[0] > 1:
+                        return dict(_VALID_PATCH_REPAIR)
                     return dict(_VALID_PATCH)
                 return dict(_VALID_HYPOTHESIS)
             def call_with_tool(self, prompt, tool, model=None, system_blocks=None):

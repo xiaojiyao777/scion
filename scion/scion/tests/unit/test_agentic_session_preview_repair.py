@@ -440,10 +440,11 @@ def test_algorithm_smoke_non_activation_failure_keeps_algorithm_smoke_category()
     assert "proposal_activation_diagnostic" not in detail
 
 
-def test_algorithm_smoke_activation_diagnostic_reaches_failure_ledger() -> None:
+def test_algorithm_smoke_activation_diagnostic_is_non_blocking() -> None:
     payload = {
         "passed": False,
-        "failure_class": "proposal_activation_diagnostic",
+        "failure_class": "activation_not_observed_diagnostic",
+        "diagnostic_passed": True,
         "primary_issue": "telemetry guard failed",
         "activation_diagnostic": {
             "category": "proposal_activation_diagnostic",
@@ -484,25 +485,13 @@ def test_algorithm_smoke_activation_diagnostic_reaches_failure_ledger() -> None:
 
     category = agentic_session_module._preview_failure_category([observation])
     detail = agentic_session_module._latest_preview_failure_detail([observation])
-    agentic_session_module._record_failure_ledger_entry(
-        state,
-        phase=AgenticProposalPhase.SELF_CHECK,
-        category=category,
-        detail=detail,
-        source="preview_failure",
-        observation=observation,
-    )
 
-    assert category == "proposal_activation_diagnostic"
-    assert detail is not None
-    assert "proposal_activation_diagnostic" in detail
-    assert "activation_diagnostic_kind=instrumentation_missing" in detail
-    assert state.failure_ledger[-1]["category"] == (
-        "proposal_activation_diagnostic"
+    assert (
+        category
+        == agentic_session_module.AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE
     )
-    assert state.failure_ledger[-1]["failure_code"] == (
-        "proposal_activation_diagnostic"
-    )
+    assert detail is None
+    assert state.failure_ledger == []
 
 
 def test_contract_preview_session_timeout_is_budget_skip_not_runtime_exception(

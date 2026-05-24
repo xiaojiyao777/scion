@@ -141,7 +141,28 @@ class CreativeLayer:
                     system_blocks=system_blocks,
                 )
         except Exception as exc:
-            trace.write_finish(trace_path, ok=False, error=str(exc))
+            trace.write_finish(
+                trace_path,
+                ok=False,
+                error=str(exc),
+                llm_usage=_client_usage_metadata(self._client),
+            )
             raise
-        trace.write_finish(trace_path, ok=True, response=raw)
+        trace.write_finish(
+            trace_path,
+            ok=True,
+            response=raw,
+            llm_usage=_client_usage_metadata(self._client),
+        )
         return raw
+
+
+def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:
+    getter = getattr(client, "get_last_usage_metadata", None)
+    if getter is None:
+        return None
+    try:
+        usage = getter()
+    except Exception:
+        return None
+    return dict(usage) if isinstance(usage, dict) else None

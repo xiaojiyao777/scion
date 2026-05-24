@@ -57,16 +57,9 @@ class CampaignSummaryMixin:
     ) -> Dict[str, Any]:
         """Write ``campaign_summary.json`` with the current backward-compatible schema."""
         steps = list(step_history)
-        total_tokens = 0
-        cache_read_tokens = 0
-        cache_create_tokens = 0
-        for step in steps:
-            cs = step.cache_stats or {}
-            total_tokens += cs.get("total", 0)
-            cache_read_tokens += cs.get("cache_read", 0)
-            cache_create_tokens += cs.get("cache_create", 0)
-        cache_hit_rate = (
-            round(cache_read_tokens / total_tokens, 4) if total_tokens > 0 else 0.0
+        cache_stats = _campaign_cache_stats(
+            steps,
+            campaign_dir=self.campaign_dir,
         )
 
         vfail_counter: Dict[str, int] = {}
@@ -193,10 +186,30 @@ class CampaignSummaryMixin:
             "balance_exhausted": inferred_balance_exhausted,
             "circuit_breaker_tripped": circuit_breaker_tripped,
             "cache_stats": {
-                "total_tokens": total_tokens,
-                "cache_read_tokens": cache_read_tokens,
-                "cache_create_tokens": cache_create_tokens,
-                "cache_hit_rate": cache_hit_rate,
+                "total_tokens": cache_stats["total_tokens"],
+                "cache_read_tokens": cache_stats["cache_read_tokens"],
+                "cache_create_tokens": cache_stats["cache_create_tokens"],
+                "cache_hit_rate": cache_stats["cache_hit_rate"],
+                **(
+                    {"output_tokens": cache_stats["output_tokens"]}
+                    if cache_stats.get("output_tokens")
+                    else {}
+                ),
+                **(
+                    {"calls": cache_stats["calls"]}
+                    if cache_stats.get("calls")
+                    else {}
+                ),
+                "source": cache_stats["source"],
+                **(
+                    {
+                        "repeated_cache_create_groups": cache_stats[
+                            "repeated_cache_create_groups"
+                        ]
+                    }
+                    if cache_stats.get("repeated_cache_create_groups")
+                    else {}
+                ),
             },
             "verification_failure_breakdown": vfail_counter,
             "action_locus_coverage": action_locus_counter,
@@ -487,3 +500,171 @@ class CampaignSummaryMixin:
                     for cf in pr.case_feedback[:20]
                 ]
         return step_data
+
+
+def _campaign_cache_stats(
+    steps: Iterable[StepRecord],
+    *,
+    campaign_dir: Any,
+) -> dict[str, Any]:
+    """Return campaign-level prompt-cache statistics.
+
+    Legacy step records may contain coarse cache stats, but agentic LLM calls
+    write the authoritative per-call usage to ``llm_traces/*.json``. Prefer the
+    trace aggregate when present so campaign summaries reflect actual provider
+    cache reads/writes and can surface repeated cache creates for an unchanged
+    prompt-cache key.
+    """
+    step_stats = _step_cache_stats(steps)
+    trace_stats = _llm_trace_cache_stats(campaign_dir)
+    if trace_stats["calls"] > 0:
+        return trace_stats
+    return step_stats
+
+
+def _step_cache_stats(steps: Iterable[StepRecord]) -> dict[str, Any]:
+    total_tokens = 0
+    cache_read_tokens = 0
+    cache_create_tokens = 0
+    for step in steps:
+        cs = step.cache_stats or {}
+        total_tokens += _safe_int(cs.get("total", 0))
+        cache_read_tokens += _safe_int(cs.get("cache_read", 0))
+        cache_create_tokens += _safe_int(cs.get("cache_create", 0))
+    cache_hit_rate = (
+        round(cache_read_tokens / total_tokens, 4) if total_tokens > 0 else 0.0
+    )
+    return {
+        "total_tokens": total_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_create_tokens": cache_create_tokens,
+        "cache_hit_rate": cache_hit_rate,
+        "output_tokens": 0,
+        "calls": 0,
+        "source": "step_records",
+        "repeated_cache_create_groups": [],
+    }
+
+
+def _llm_trace_cache_stats(campaign_dir: Any) -> dict[str, Any]:
+    trace_dir = getattr(campaign_dir, "joinpath", None)
+    if callable(trace_dir):
+        llm_dir = campaign_dir.joinpath("llm_traces")
+    else:
+        from pathlib import Path
+
+        llm_dir = Path(campaign_dir) / "llm_traces"
+    total_tokens = 0
+    output_tokens = 0
+    cache_read_tokens = 0
+    cache_create_tokens = 0
+    calls = 0
+    groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    if not llm_dir.exists():
+        return {
+            "total_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_create_tokens": 0,
+            "cache_hit_rate": 0.0,
+            "output_tokens": 0,
+            "calls": 0,
+            "source": "llm_traces",
+            "repeated_cache_create_groups": [],
+        }
+    for trace_path in sorted(llm_dir.glob("*.json")):
+        try:
+            payload = json.loads(trace_path.read_text())
+        except Exception as exc:  # pragma: no cover - best-effort summary
+            logger.debug("failed to read llm trace cache stats %s: %s", trace_path, exc)
+            continue
+        usage = payload.get("llm_usage")
+        if not isinstance(usage, Mapping):
+            continue
+        prompt_tokens = _safe_int(usage.get("input_tokens"))
+        cache_create = _safe_int(usage.get("cache_creation_input_tokens"))
+        cache_read = _safe_int(usage.get("cache_read_input_tokens"))
+        completion_tokens = _safe_int(usage.get("output_tokens"))
+        calls += 1
+        total_tokens += prompt_tokens + cache_create + cache_read
+        output_tokens += completion_tokens
+        cache_create_tokens += cache_create
+        cache_read_tokens += cache_read
+        audit = payload.get("prompt_cache_audit")
+        if isinstance(audit, Mapping):
+            cache_hash = str(audit.get("cacheable_system_blocks_hash") or "")
+            tool_schema_hash = str(audit.get("tool_schema_hash") or "")
+            cacheable_chars = _safe_int(audit.get("cacheable_system_chars"))
+        else:
+            cache_hash = ""
+            tool_schema_hash = ""
+            cacheable_chars = 0
+        if cache_hash:
+            key = (
+                str(payload.get("request_kind") or usage.get("request_kind") or ""),
+                str(usage.get("model") or payload.get("model") or ""),
+                cache_hash,
+                tool_schema_hash,
+            )
+            group = groups.setdefault(
+                key,
+                {
+                    "request_kind": key[0],
+                    "model": key[1],
+                    "cacheable_system_blocks_hash": cache_hash,
+                    "tool_schema_hash": tool_schema_hash,
+                    "cacheable_system_chars": cacheable_chars,
+                    "calls": 0,
+                    "cache_create_calls": 0,
+                    "cache_read_calls": 0,
+                    "cache_create_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "first_trace": trace_path.name,
+                    "last_trace": trace_path.name,
+                },
+            )
+            group["calls"] += 1
+            group["last_trace"] = trace_path.name
+            if cache_create > 0:
+                group["cache_create_calls"] += 1
+                group["cache_create_tokens"] += cache_create
+            if cache_read > 0:
+                group["cache_read_calls"] += 1
+                group["cache_read_tokens"] += cache_read
+    cache_hit_rate = (
+        round(cache_read_tokens / total_tokens, 4) if total_tokens > 0 else 0.0
+    )
+    repeated = [
+        {
+            **group,
+            "diagnosis": (
+                "same cache key produced multiple cache writes without a read; "
+                "the provider likely has cache warmup/visibility delay, unless "
+                "the upstream service treats additional hidden request fields as "
+                "part of the cache key"
+            )
+            if group["cache_read_calls"] == 0
+            else (
+                "same cache key warmed before later reads; this is expected with "
+                "provider-side eventual cache visibility"
+            ),
+        }
+        for group in groups.values()
+        if group["cache_create_calls"] > 1
+    ]
+    return {
+        "total_tokens": total_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_create_tokens": cache_create_tokens,
+        "cache_hit_rate": cache_hit_rate,
+        "output_tokens": output_tokens,
+        "calls": calls,
+        "source": "llm_traces",
+        "repeated_cache_create_groups": repeated,
+    }
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0

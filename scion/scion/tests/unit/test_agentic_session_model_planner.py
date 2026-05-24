@@ -47,7 +47,8 @@ def test_model_side_tool_selection_adapter_executes_allowed_tool(
         "context.read_problem",
     ]
     assert client.tool_names[:2] == ["plan_proposal_tool_call"] * 2
-    assert "allowed_tool_specs" in client.system_blocks[0][1]["text"]
+    assert len(client.system_blocks[0]) == 1
+    assert "allowed_tool_specs" in client.system_blocks[0][0]["text"]
     assert all(block.get("cache_control") for block in client.system_blocks[0])
     assert "raw_metrics_ref" not in client.prompts[0]
 

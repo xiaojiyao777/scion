@@ -18,6 +18,7 @@ _PROPOSAL_PREMISE_CONTRADICTED = "proposal_premise_contradicted"
 _AGENT_GROUNDING_FAILURE = "agent_grounding_failure"
 _ALGORITHM_SMOKE_FAILURE = "algorithm_smoke_failure"
 _PROPOSAL_ACTIVATION_DIAGNOSTIC = "proposal_activation_diagnostic"
+_ACTIVATION_NOT_OBSERVED_DIAGNOSTIC = "activation_not_observed_diagnostic"
 _DUPLICATE_MECHANISM = "duplicate_mechanism"
 _MECHANISM_NOVELTY_REJECTED = "mechanism_novelty_rejected"
 _AGENTIC_BUDGET_CONTROL = "agentic_budget_control"
@@ -38,6 +39,9 @@ def _proposal_failure_hypothesis(detail: str) -> HypothesisProposal:
 
 def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
     text = str(detail or "")
+    text_lower = text.lower()
+    if _ACTIVATION_NOT_OBSERVED_DIAGNOSTIC in text_lower:
+        return False
     return (
         _AGENT_QUALITY_BLOCKED in text
         or _PROPOSAL_PREMISE_CONTRADICTED in text
@@ -48,8 +52,8 @@ def _is_agent_quality_blocked_detail(detail: str | None) -> bool:
         or _MECHANISM_NOVELTY_REJECTED in text
         or "premise_check=duplicate" in text
         or "premise_check=contradicted" in text
-        or "algorithm smoke did not pass" in text.lower()
-        or "runtime_smoke.telemetry_guard" in text.lower()
+        or "algorithm smoke did not pass" in text_lower
+        or "runtime_smoke.telemetry_guard" in text_lower
     )
 
 
