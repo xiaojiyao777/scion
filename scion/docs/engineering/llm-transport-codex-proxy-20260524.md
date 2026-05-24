@@ -13,6 +13,11 @@ codex-proxy translates the chat request to the Codex Responses backend while
 preserving function tools and usage metadata. This is enough for current Scion
 APS experiments and avoids changing the proposal/session contract.
 
+For routine short experiments in the current v0.4 framework-debug stage, do
+not set `SCION_REASONING_EFFORT`; use the provider/model default for faster
+iteration. Explicit `SCION_REASONING_EFFORT=xhigh` remains available only for
+targeted transport or model-quality diagnostics.
+
 Do not switch the default Scion transport to `/v1/responses` yet. Add Responses
 later as an opt-in wire API only when Scion needs native Codex turn state such
 as `previous_response_id`, prompt cache keys, Responses event metadata, or
@@ -49,7 +54,6 @@ Live local transport validation used:
 SCION_MODEL=gpt-5.5 \
 SCION_BASE_URL=http://127.0.0.1:8080 \
 SCION_API_KEY=pwd \
-SCION_REASONING_EFFORT=xhigh \
 python - <<'PY'
 from scion.proposal.llm_client import LLMClient
 
@@ -70,9 +74,11 @@ print(result, client.get_last_usage_metadata())
 PY
 ```
 
-Observed result: the tool call returned `{"answer": 420}` and Scion recorded
-non-zero `reasoning_output_tokens`, confirming that `gpt-5.5` can use tools and
-reasoning effort together through codex-proxy's chat compatibility route.
+Observed result: the tool call returned `{"answer": 420}`, confirming that
+`gpt-5.5` can use Scion's required structured tool path through codex-proxy's
+chat compatibility route. Separate targeted transport checks may set
+`SCION_REASONING_EFFORT=xhigh` to verify reasoning-token accounting, but that
+is not the routine short-experiment launch mode.
 
 ## Future Responses Transport
 

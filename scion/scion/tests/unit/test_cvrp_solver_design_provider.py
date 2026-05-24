@@ -78,7 +78,7 @@ def test_cvrp_hypothesis_guidance_defaults_policy_telemetry_to_indirect_evidence
     assert "do not claim ordinary ALNS best-improvement bookkeeping" in rendered
 
 
-def test_cvrp_schema_preview_rejects_reheat_broad_loop_effect_before_code(
+def test_cvrp_schema_preview_warns_reheat_broad_loop_effect_before_code(
     tmp_path,
 ) -> None:
     context = _cvrp_context(tmp_path)
@@ -96,6 +96,13 @@ def test_cvrp_schema_preview_rejects_reheat_broad_loop_effect_before_code(
         mechanism_changes=(
             SimpleNamespace(id="sa_reheat_on_stagnation", change_type="add"),
         ),
+        novelty_signature={
+            "algorithm_family": "ALNS+VNS",
+            "construction_strategy": "unchanged",
+            "improvement_strategy": "stagnation-triggered acceptance reheat",
+            "acceptance_strategy": "simulated annealing reheating",
+            "runtime_budget_strategy": "bounded reheat checks inside ALNS",
+        },
         expected_telemetry={
             "activation": [
                 "solver_algorithm_context_records.sa_reheat_on_stagnation_iterations",
@@ -111,8 +118,9 @@ def test_cvrp_schema_preview_rejects_reheat_broad_loop_effect_before_code(
     preview = _hypothesis_schema_preview(context, hypothesis)
 
     problem_preview = preview["problem_expected_telemetry_preview"]
-    assert preview["passed"] is False
-    assert problem_preview["failure_code"] == "C11_expected_telemetry"
+    assert preview["passed"] is True
+    assert problem_preview["status"] == "advisory"
+    assert problem_preview["advisory_code"] == "C11_expected_telemetry_advisory"
     assert problem_preview["mechanism_id"] == "sa_reheat_on_stagnation"
     assert "solver_algorithm_phase_best_delta.sa_reheat_on_stagnation" in (
         problem_preview["offending_fields"]

@@ -116,7 +116,12 @@ def test_solver_design_tool_selection_context_carries_active_fact_anchor(
             {"stop": True},
         ]
     )
-    context = _cvrp_context_with_champion(tmp_path)
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file="policies/baseline_modules/local_search.py",
+    )
     session = AgenticProposalSession(
         creative,
         tool_registry=ProposalToolRegistry.default_read_only(),
@@ -154,6 +159,59 @@ def test_solver_design_tool_selection_context_carries_active_fact_anchor(
         "cvrp.local_search.or_opt_1_relocation" in anchor.get("fact_ids", ())
         for anchor in anchors
     )
+
+
+def test_solver_design_planner_repeated_completed_required_tool_does_not_loop(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_active_solver_design",
+                "args": {
+                    "surface": "solver_design",
+                    "include_file_previews": False,
+                },
+            }
+        ]
+        * 12
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+        forced_target_file="policies/baseline_modules/local_search.py",
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=18, max_steps=24),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-solver-design-repeat",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+        tool_loop_config=session._tool_loop_config.__dict__,
+    )
+
+    observations = session._run_initial_tool_loop(context, state)
+
+    assert len(creative.planner_contexts) == 1
+    assert state.loop_stop_reason in {
+        "required_context_satisfied",
+        "planner_stop",
+    }
+    assert any(
+        event.metadata.get("tool_name") == "context.read_active_solver_design"
+        and event.metadata.get("skip_reason") == "already_succeeded"
+        for event in state.transcript
+    )
+    assert sum(
+        1
+        for observation in observations
+        if observation.tool_name == "context.read_active_solver_design"
+        and not observation.is_error
+    ) == 1
 
 
 def test_code_phase_targeted_read_context_carries_active_fact_anchor(

@@ -12,6 +12,8 @@ def _claims_missing_or_opt_2_3(text: str) -> bool:
         return False
     if _is_three_opt_chain_variant_scope(text):
         return False
+    if _is_ejection_chain_variant_scope(text):
+        return False
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return False
     if _claims_unsystematic_cross_route_segment_relocation_gap(text):
@@ -25,6 +27,8 @@ def _missing_or_opt_2_3_span(text: str) -> str:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
         return ""
     if _is_three_opt_chain_variant_scope(text):
+        return ""
+    if _is_ejection_chain_variant_scope(text):
         return ""
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return ""
@@ -53,6 +57,8 @@ def _duplicates_or_opt_2_3(text: str) -> bool:
     if not _mentions_cross_route_or_opt_segment_relocation(text):
         return False
     if _is_three_opt_chain_variant_scope(text):
+        return False
+    if _is_ejection_chain_variant_scope(text):
         return False
     if _mentions_intra_two_opt(text) and _acknowledges_existing_or_opt(text):
         return False
@@ -491,6 +497,62 @@ def _is_three_opt_chain_variant_scope(text: str) -> bool:
         _acknowledges_existing_or_opt(text)
         or _contrasts_three_opt_against_or_opt(text)
         or _existing_cross_route_operator_context_mentions_or_opt(text)
+    )
+
+
+def _is_ejection_chain_variant_scope(text: str) -> bool:
+    """Return true when Or-opt is context for a compound ejection-chain variant."""
+    if not _mentions_ejection_chain_variant(text):
+        return False
+    return (
+        _acknowledges_existing_or_opt(text)
+        or _contrasts_ejection_chain_against_or_opt(text)
+        or _existing_cross_route_operator_context_mentions_or_opt(text)
+    )
+
+
+def _mentions_ejection_chain_variant(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "ejection chain",
+            "ejection-chain",
+            "ejection_chain",
+            "chained displacement",
+            "compound displacement",
+            "compound relocation",
+            "compound relocate",
+            "chained relocate",
+            "chained relocation",
+            "displaced customer",
+            "displaced customers",
+            "ejects one",
+            "ejecting one",
+            "ejected customer",
+            "ejected customers",
+        ),
+    )
+
+
+def _contrasts_ejection_chain_against_or_opt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:or opt|oropt|_or_opt_[123])\b.{0,180}"
+            r"\b(?:but|while|although|whereas|rather than|distinct|different|"
+            r"beyond|not covered|not reachable)\b.{0,180}"
+            r"\b(?:ejection chain|ejection-chain|chained displacement|"
+            r"compound displacement|compound relocat(?:e|ion)|displaced "
+            r"customer|eject(?:s|ing|ed) customer)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:ejection chain|ejection-chain|chained displacement|"
+            r"compound displacement|compound relocat(?:e|ion)|displaced "
+            r"customer|eject(?:s|ing|ed) customer)\b.{0,180}"
+            r"\b(?:distinct|different|beyond|not covered|not reachable|rather "
+            r"than)\b.{0,180}\b(?:or opt|oropt|_or_opt_[123])\b",
+            text,
+        )
     )
 
 

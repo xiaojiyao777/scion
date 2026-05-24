@@ -43,13 +43,14 @@ def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
 
 def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
     stage = str(progress.get("stage") or "").strip()
+    phase = str(progress.get("phase") or "").strip()
     raw_metrics_ref = progress.get("raw_metrics_ref")
     target_file = progress.get("target_file")
     hypothesis_action = progress.get("hypothesis_action")
     mechanism_changes = progress.get("mechanism_changes")
     complete = bool(progress.get("complete", False))
     snapshot = {
-        "phase": f"formal_{stage}" if stage else "formal_protocol",
+        "phase": phase or (f"formal_{stage}" if stage else "formal_protocol"),
         "stage": stage or None,
         "branch_id": progress.get("branch_id"),
         "candidate": _drop_none(
@@ -84,6 +85,10 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
         "complete": complete,
         "decision_formed": False,
         "counts_toward_n_experiments": False,
+        "child_pid": _optional_int(progress.get("child_pid")),
+        "child_exit_code": _optional_int(progress.get("child_exit_code")),
+        "child_elapsed_ms": _optional_int(progress.get("child_elapsed_ms")),
+        "child_phase": progress.get("child_phase"),
         "last_case": progress.get("case"),
         "last_seed": progress.get("seed"),
         "step_started_at": progress.get("step_started_at"),
@@ -186,4 +191,3 @@ def _screening_rate_fields(
         "screening_win_rate_scope": "case_level_gate",
         **_screening_pair_counts(protocol_result),
     }
-

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
+from scion.proposal.agentic_session_hypothesis import (
+    _mechanism_novelty_gate_prompt_parity_feedback,
+)
 from scion.proposal.prompt_manifest import build_api_visible_prompt_manifest
 from scion.tests.unit.agentic_session_test_support import *
 
@@ -192,6 +195,55 @@ def test_prompt_manifest_marks_large_observations_truncated_but_facts_included()
     assert cacheability["estimated_non_cache_chars"] >= manifest[
         "char_budget"
     ]["user_prompt_chars"]
+
+
+def test_mechanism_gate_rejection_requires_visible_fact_packet() -> None:
+    result = SimpleNamespace(fact_packet_digest="packet-digest-123")
+
+    missing_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
+        result,
+        {
+            "section_statuses": {
+                "agentic_proposal_tool_observations": {"status": "included"}
+            }
+        },
+        attempt=1,
+    )
+    assert missing_feedback is not None
+    assert missing_feedback["failure_code"] == "gate_prompt_parity_retry_required"
+    assert missing_feedback["fact_packet_digest"] == "packet-digest-123"
+    assert missing_feedback["prompt_fact_status"] == "missing"
+
+    truncated_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
+        result,
+        {
+            "section_statuses": {
+                "active_algorithm_facts": {
+                    "status": "truncated",
+                    "fact_packet_digest": "packet-digest-123",
+                }
+            }
+        },
+        attempt=2,
+    )
+    assert truncated_feedback is not None
+    assert truncated_feedback["prompt_fact_status"] == "truncated"
+
+    assert (
+        _mechanism_novelty_gate_prompt_parity_feedback(
+            result,
+            {
+                "section_statuses": {
+                    "active_algorithm_facts": {
+                        "status": "included",
+                        "fact_packet_digest": "packet-digest-123",
+                    }
+                }
+            },
+            attempt=3,
+        )
+        is None
+    )
 
 
 def test_prompt_manifest_marks_actual_section_truncation_only() -> None:

@@ -673,6 +673,40 @@ def test_cvrp_provider_allows_three_opt_star_after_acknowledging_or_opt() -> Non
                 MechanismChange(id="three_route_chain_reconnect", change_type="add"),
             ),
         ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "The current VNS has intra 2-opt, relocate, swap, cross-route "
+                "Or-opt 1/2/3, and 2-opt*, but it lacks a chained displacement "
+                "move that can relocate a customer into a tight route by ejecting "
+                "one displaced customer into another compatible route."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing VNS lacks compound ejection-chain moves.",
+            expected_effect="Improve total_distance without changing fleet_violation.",
+            mechanism_changes=(
+                MechanismChange(id="ejection_chain_vns", change_type="add"),
+            ),
+        ),
+        HypothesisProposal(
+            hypothesis_text=(
+                "The active solver already has relocate, swap, Or-opt, intra "
+                "2-opt, and 2-opt* tail exchange, but it lacks a cyclic 3-route "
+                "customer reassignment that can move one customer out of each of "
+                "three routes simultaneously, enabling improvements blocked by "
+                "pairwise capacity constraints without claiming regret repair is "
+                "absent."
+            ),
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+            target_weakness="Existing VNS lacks cyclic three-route reassignment.",
+            expected_effect="Improve total_distance without changing fleet_violation.",
+            mechanism_changes=(
+                MechanismChange(id="three_route_ejection_chain", change_type="add"),
+            ),
+        ),
     ),
 )
 def test_cvrp_provider_allows_existing_or_opt_material_variants(
@@ -800,6 +834,45 @@ def test_cvrp_provider_allows_geographic_cluster_variant_after_uniform_random_co
     )
 
     assert result is None
+
+
+def test_cvrp_provider_ignores_random_removal_fallback_noop_text() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active destroy portfolio (random, worst, shaw, route_removal) "
+            "lacks a spatially-clustered destroy operator that removes a "
+            "contiguous geographic neighborhood of customers. The proposed "
+            "`cluster_removal` adds a new destroy operator that picks a random "
+            "seed customer, computes euclidean distances to all other customers, "
+            "and removes the q closest customers. This differs from "
+            "_shaw_removal and _random_removal because cluster_removal uses pure "
+            "geographic proximity as the sole criterion."
+        ),
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+        target_weakness=(
+            "Existing random removal is purely uniform and does not form "
+            "geographic customer clusters."
+        ),
+        no_op_condition=(
+            "If fewer than q customers exist or the selected cluster cannot be "
+            "removed without violating solution integrity, the operator falls "
+            "back to random_removal output."
+        ),
+        expected_effect="Improve total_distance by removing spatially coherent patches.",
+        mechanism_changes=(
+            MechanismChange(id="cluster_removal", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.mechanism != "random_removal_destroy"
+    assert result is None or result.failure_category != "premise_contradicted"
 
 
 def test_cvrp_provider_blocks_missing_random_removal_claim_with_span() -> None:

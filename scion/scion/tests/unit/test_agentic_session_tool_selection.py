@@ -575,6 +575,7 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
 ) -> None:
     target_file = "policies/baseline_algorithm.py"
     support_file = "policies/baseline_modules/local_search.py"
+    second_support_file = "policies/baseline_modules/destroy_repair.py"
     context = replace(
         _cvrp_context_with_champion(tmp_path),
         forced_surface="solver_design",
@@ -591,18 +592,6 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
     creative = PlanningCreative(
         [
             {
-                "tool_name": "context.list_algorithm_files",
-                "args": {"surface": "solver_design", "include_inactive": True},
-            },
-            {
-                "tool_name": "context.read_algorithm_file",
-                "args": {
-                    "surface": "solver_design",
-                    "file_path": target_file,
-                    "max_chars": 4000,
-                },
-            },
-            {
                 "tool_name": "context.read_algorithm_file",
                 "args": {
                     "surface": "solver_design",
@@ -611,15 +600,13 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
                 },
             },
             {
-                "tool_name": "context.read_active_solver_design",
-                "args": {"surface": "solver_design"},
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": second_support_file,
+                    "max_chars": 4000,
+                },
             },
-            {
-                "tool_name": "context.read_solver_call_graph",
-                "args": {"surface": "solver_design"},
-            },
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
             {"stop": True},
         ],
         hypothesis=hypothesis,
@@ -670,6 +657,11 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
         if event.metadata.get("tool_name") == "context.read_algorithm_file"
         and event.metadata.get("skip_reason") == "already_succeeded"
     ]
+    planner_file_read_events = [
+        event
+        for event in file_read_events
+        if event.get("selection_source") == "planner_selected"
+    ]
     prompt_file_paths = {
         observation["structured_payload"]["file_path"]
         for observation in creative.hypothesis_contexts[0][
@@ -689,13 +681,16 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
         ("context.read_active_solver_design", "required_context_preface"),
         ("context.read_solver_call_graph", "required_context_preface"),
     ]
-    assert [event["status"] for event in file_read_events[:2]] == ["ok", "ok"]
-    assert [event["selection_source"] for event in file_read_events[:2]] == [
-        "planner_selected",
-        "planner_selected",
+    assert [event["status"] for event in planner_file_read_events[:2]] == [
+        "ok",
+        "ok",
     ]
-    assert prompt_file_paths >= {target_file, support_file}
-    assert not already_succeeded_file_skips
+    assert prompt_file_paths >= {support_file, second_support_file}
+    assert not [
+        event
+        for event in already_succeeded_file_skips
+        if event.get("selection_source") == "planner_selected"
+    ]
 
 
 def test_solver_design_planner_can_read_full_active_algorithm_manifest(

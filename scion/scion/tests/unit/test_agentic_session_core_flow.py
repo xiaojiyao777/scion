@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scion.proposal.agentic_code_context import _with_code_scope_control
 from scion.tests.unit.agentic_session_test_support import *
 
 class AdditionalChangesShapeRetryCreative(FakeCreative):
@@ -16,6 +17,34 @@ class AdditionalChangesShapeRetryCreative(FakeCreative):
                 "JSON-encoded string. Shape-only retry: preserve mechanism_changes ids."
             )
         return self.patch
+
+
+def test_solver_design_telemetry_repair_rule_forbids_fake_activation() -> None:
+    hypothesis = HypothesisProposal(
+        **_valid_hypothesis_payload(
+            change_locus="solver_design",
+            target_file="policies/baseline_modules/scheduler.py",
+            mechanism_changes=[
+                {"id": "rare_large_neighborhood", "change_type": "modify"}
+            ],
+        )
+    )
+    scoped = _with_code_scope_control(
+        {
+            "research_surface_name": "solver_design",
+            "research_surface_kind": "solver_design",
+            "target_file": hypothesis.target_file,
+        },
+        hypothesis,
+        timeout_retry=False,
+    )
+
+    rule = scoped["agentic_code_scope_control"]["telemetry_repair_rule"]
+    assert "exact mechanism id" in rule
+    assert "real branch point" in rule
+    assert "Do not force rare branches to run" in rule
+    assert "max(..., 1)" in rule
+    assert "fabricate positive counters" in rule
 
 
 def test_agentic_session_records_tool_observations_in_evidence_and_transcript(

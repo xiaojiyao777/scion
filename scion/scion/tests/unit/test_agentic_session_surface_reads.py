@@ -130,8 +130,7 @@ def test_code_phase_solver_module_read_uses_target_preview_budget(
     )
     creative = PlanningCreative(
         [
-            {"tool_name": "context.list_surfaces", "args": {}},
-            {"tool_name": "context.read_problem", "args": {}},
+            {"stop": True},
             {
                 "tool_name": "context.read_surface",
                 "args": {
@@ -288,4 +287,3 @@ def test_planner_nonexistent_surface_falls_back_and_generates_patch(
     assert "SECRET_VALIDATION" not in rendered_artifact
     assert "SECRET_FROZEN" not in rendered
     assert "SECRET_FROZEN" not in rendered_artifact
-

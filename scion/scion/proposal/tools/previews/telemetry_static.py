@@ -40,6 +40,21 @@ _ISSUE_ZERO_PHASE_RUNTIME = "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO"
 _ISSUE_MISSING_RUNTIME = "DECLARED_MECHANISM_RUNTIME_MISSING"
 _ISSUE_MISSING_EFFECT = "DECLARED_MECHANISM_EFFECT_MISSING"
 _ISSUE_MISSING_DELTA_EVIDENCE = "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING"
+_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE = "CONTEXT_HELPER_SIGNATURE_INVALID"
+_TELEMETRY_STATIC_DIAGNOSTIC_ISSUES = frozenset(
+    {
+        _ISSUE_MISSING_ACTIVATION,
+        _ISSUE_MISSING_RUNTIME,
+        _ISSUE_MISSING_EFFECT,
+        _ISSUE_MISSING_DELTA_EVIDENCE,
+    }
+)
+_TELEMETRY_STATIC_HARD_ISSUES = frozenset(
+    {
+        _ISSUE_ZERO_PHASE_RUNTIME,
+        _ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE,
+    }
+)
 
 
 def _mechanism_telemetry_static_preview(
@@ -55,6 +70,10 @@ def _mechanism_telemetry_static_preview(
         return _drop_empty_items(
             {
                 "passed": False,
+                "status": "hard_failure",
+                "hard_failed": True,
+                "hard_issue_codes": [_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE],
+                "issue_codes": [_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE],
                 "issues": signature_issues,
                 "repair_hints": _telemetry_repair_hints(),
             }
@@ -76,7 +95,9 @@ def _mechanism_telemetry_static_preview(
     checked_fields: list[str] = []
     required_calls: dict[str, list[str]] = {}
     helper_evidence: dict[str, dict[str, bool]] = {}
-    issue_codes: list[str] = []
+    issue_codes: list[str] = (
+        [_ISSUE_INVALID_CONTEXT_HELPER_SIGNATURE] if signature_issues else []
+    )
     actionable_feedback: list[dict[str, Any]] = []
     for mechanism in mechanisms:
         code_text = code_by_mechanism.get(mechanism, "")
@@ -211,10 +232,33 @@ def _mechanism_telemetry_static_preview(
             )
     if not checked_fields and not issues:
         return None
+    unique_issue_codes = list(dict.fromkeys(issue_codes))
+    hard_issue_codes = [
+        code for code in unique_issue_codes if code in _TELEMETRY_STATIC_HARD_ISSUES
+    ]
+    diagnostic_issue_codes = [
+        code
+        for code in unique_issue_codes
+        if code in _TELEMETRY_STATIC_DIAGNOSTIC_ISSUES
+    ]
+    hard_failed = bool(hard_issue_codes)
+    diagnostic_passed = bool(diagnostic_issue_codes) and not hard_failed
+    status = (
+        "hard_failure"
+        if hard_failed
+        else "diagnostic"
+        if diagnostic_passed
+        else "passed"
+    )
     return _drop_empty_items(
         {
-            "passed": not issues,
-            "issue_codes": list(dict.fromkeys(issue_codes)),
+            "passed": not hard_failed,
+            "status": status,
+            "hard_failed": hard_failed,
+            "diagnostic_passed": diagnostic_passed,
+            "issue_codes": unique_issue_codes,
+            "hard_issue_codes": hard_issue_codes,
+            "diagnostic_issue_codes": diagnostic_issue_codes,
             "declared_mechanisms": mechanisms,
             "checked_fields": list(dict.fromkeys(checked_fields)),
             "required_calls": {
@@ -229,6 +273,47 @@ def _mechanism_telemetry_static_preview(
             "repair_hints": _telemetry_repair_hints() if issues else [],
         }
     )
+
+
+def _telemetry_static_hard_failed(preview: Mapping[str, Any] | None) -> bool:
+    """Return true only for static telemetry problems that must block code."""
+    if preview is None:
+        return False
+    if bool(preview.get("hard_failed")):
+        return True
+    status = str(preview.get("status") or "").strip()
+    if status == "hard_failure":
+        return True
+    codes = {
+        str(code or "").strip()
+        for code in preview.get("issue_codes") or ()
+        if str(code or "").strip()
+    }
+    if codes.intersection(_TELEMETRY_STATIC_HARD_ISSUES):
+        return True
+    if preview.get("passed") is False and not codes:
+        return True
+    return bool(
+        preview.get("passed") is False
+        and not codes.issubset(_TELEMETRY_STATIC_DIAGNOSTIC_ISSUES)
+    )
+
+
+def _telemetry_static_diagnostic_passed(preview: Mapping[str, Any] | None) -> bool:
+    """Return true for non-blocking static telemetry diagnostics."""
+    if preview is None or _telemetry_static_hard_failed(preview):
+        return False
+    if bool(preview.get("diagnostic_passed")):
+        return True
+    status = str(preview.get("status") or "").strip()
+    if status == "diagnostic":
+        return True
+    codes = {
+        str(code or "").strip()
+        for code in preview.get("issue_codes") or ()
+        if str(code or "").strip()
+    }
+    return bool(codes) and codes.issubset(_TELEMETRY_STATIC_DIAGNOSTIC_ISSUES)
 
 
 def _explicit_and_declared_mechanism_fields(
@@ -742,4 +827,6 @@ __all__ = [
     "_combined_patch_code_for_mechanism",
     "_mechanism_telemetry_static_preview",
     "_patch_records_mechanism_call",
+    "_telemetry_static_diagnostic_passed",
+    "_telemetry_static_hard_failed",
 ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
 from scion.core.models import (
@@ -84,6 +85,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = lambda _branch_id: None
     get_current_round: Optional[Callable[[], int]] = None
     persist_branch_state: Callable[[str], None] = lambda _branch_id: None
+    update_status_progress: Callable[[dict[str, Any] | None], None] = (
+        lambda _payload: None
+    )
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
@@ -109,6 +113,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 "Branch %s: retrying code gen for pending hypothesis (prior failure: %s)",
                 bid,
                 prior_failure[:80],
+            )
+            self._emit_status_progress(
+                branch,
+                phase="proposal_hypothesis_retry_contract",
+                round_num=rnum,
+                hypothesis=hypothesis,
+                retry_attempt=retry_attempt,
+                prior_failure=prior_failure,
             )
             c_result_pending = self._validate_hypothesis(hypothesis)
             if not c_result_pending.passed:
@@ -166,18 +178,26 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         proposal_session_ref=session_ref,
                     )
                 )
-                return StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=(
-                        _AGENT_QUALITY_BLOCKED
-                        if quality_blocked
-                        else "pending hypothesis re-failed contract gate"
-                    ),
-                    counts_toward_max_rounds=False,
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=(
+                            _AGENT_QUALITY_BLOCKED
+                            if quality_blocked
+                            else "pending hypothesis re-failed contract gate"
+                        ),
+                        counts_toward_max_rounds=False,
+                    )
                 )
             self.branch_hypotheses[bid] = hypothesis
         else:
+            self._emit_status_progress(
+                branch,
+                phase="proposal_hypothesis",
+                round_num=rnum,
+                retry_attempt=retry_attempt,
+            )
             hypothesis, h_record = self.generate_hypothesis(branch)
             if hypothesis is None:
                 failure_detail = (
@@ -211,14 +231,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         proposal_session_ref=session_ref,
                     )
                 )
-                return StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=_proposal_failure_reason(
-                        failure_detail,
-                        "hypothesis generation failed",
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=_proposal_failure_reason(
+                            failure_detail,
+                            "hypothesis generation failed",
+                        ),
+                        counts_toward_max_rounds=False,
                     ),
-                    counts_toward_max_rounds=False,
                 )
             if h_record is None:
                 raise RuntimeError(
@@ -233,6 +255,13 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 (hypothesis.hypothesis_text or "")[:200],
             )
 
+            self._emit_status_progress(
+                branch,
+                phase="hypothesis_contract",
+                round_num=rnum,
+                hypothesis=hypothesis,
+                retry_attempt=retry_attempt,
+            )
             c_result = self._validate_hypothesis(hypothesis)
             if not c_result.passed:
                 logger.info(
@@ -289,15 +318,17 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         proposal_session_ref=session_ref,
                     )
                 )
-                return StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=(
-                        _AGENT_QUALITY_BLOCKED
-                        if quality_blocked
-                        else "hypothesis contract failed"
-                    ),
-                    counts_toward_max_rounds=False,
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=(
+                            _AGENT_QUALITY_BLOCKED
+                            if quality_blocked
+                            else "hypothesis contract failed"
+                        ),
+                        counts_toward_max_rounds=False,
+                    )
                 )
 
             champion = self.get_champion()
@@ -305,6 +336,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             self.hypothesis_store.save(h_record)
             self.branch_hypotheses[bid] = hypothesis
 
+        self._emit_status_progress(
+            branch,
+            phase="proposal_code",
+            round_num=rnum,
+            hypothesis=hypothesis,
+            retry_attempt=retry_attempt,
+            prior_failure=prior_failure,
+        )
         patch = self.generate_code(branch, hypothesis, prior_failure=prior_failure)
         if patch is not None:
             logger.info(
@@ -379,16 +418,26 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     proposal_session_ref=session_ref,
                 )
             )
-            return StepResult(
-                action="explore",
-                branch_id=bid,
-                reason=_proposal_failure_reason(
-                    failure_detail,
-                    "code generation failed",
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason=_proposal_failure_reason(
+                        failure_detail,
+                        "code generation failed",
+                    ),
+                    counts_toward_max_rounds=False,
                 ),
-                counts_toward_max_rounds=False,
             )
 
+        self._emit_status_progress(
+            branch,
+            phase="patch_contract",
+            round_num=rnum,
+            hypothesis=hypothesis,
+            patch=patch,
+            retry_attempt=retry_attempt,
+        )
         p_result = self.contract_gate.validate_patch(
             patch,
             approved_hypothesis=hypothesis,
@@ -425,13 +474,23 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                 )
             )
-            return StepResult(
-                action="explore",
-                branch_id=bid,
-                reason="patch contract failed",
-                counts_toward_max_rounds=not retry_attempt,
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason="patch contract failed",
+                    counts_toward_max_rounds=not retry_attempt,
+                )
             )
 
+        self._emit_status_progress(
+            branch,
+            phase="workspace_setup",
+            round_num=rnum,
+            hypothesis=hypothesis,
+            patch=patch,
+            retry_attempt=retry_attempt,
+        )
         workspace = self.setup_workspace(branch)
         if workspace is None:
             self.handle_failure(
@@ -460,14 +519,24 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                 )
             )
-            return StepResult(
-                action="explore",
-                branch_id=bid,
-                reason="workspace setup failed",
-                counts_toward_max_rounds=not retry_attempt,
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason="workspace setup failed",
+                    counts_toward_max_rounds=not retry_attempt,
+                )
             )
 
         try:
+            self._emit_status_progress(
+                branch,
+                phase="apply_patch",
+                round_num=rnum,
+                hypothesis=hypothesis,
+                patch=patch,
+                retry_attempt=retry_attempt,
+            )
             applied = self.apply_patch(
                 branch,
                 workspace,
@@ -504,15 +573,25 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                 )
             )
-            return StepResult(
-                action="explore",
-                branch_id=bid,
-                reason="apply_patch failed",
-                counts_toward_max_rounds=not retry_attempt,
+            return self._finish_status_progress(
+                StepResult(
+                    action="explore",
+                    branch_id=bid,
+                    reason="apply_patch failed",
+                    counts_toward_max_rounds=not retry_attempt,
+                )
             )
 
         champion = self.get_champion()
         champ_ws = champion.code_snapshot_path if champion else ""
+        self._emit_status_progress(
+            branch,
+            phase="verification",
+            round_num=rnum,
+            hypothesis=hypothesis,
+            patch=patch,
+            retry_attempt=retry_attempt,
+        )
         vresult = run_verification_gate(
             self.verification_gate,
             workspace,
@@ -535,7 +614,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 prior_failure=prior_failure,
             )
             if verification_outcome.step_result is not None:
-                return verification_outcome.step_result
+                return self._finish_status_progress(
+                    verification_outcome.step_result
+                )
             code_hash = verification_outcome.code_hash
             vresult = verification_outcome.verification_result
 
@@ -549,14 +630,24 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 "Branch %s: marked stale by async weight-opt during explore - deferring",
                 bid,
             )
-            return StepResult(
-                action="skip",
-                branch_id=bid,
-                reason="stale_during_explore",
-                counts_toward_max_rounds=not retry_attempt,
+            return self._finish_status_progress(
+                StepResult(
+                    action="skip",
+                    branch_id=bid,
+                    reason="stale_during_explore",
+                    counts_toward_max_rounds=not retry_attempt,
+                )
             )
 
         self.branch_controller.next_stage(bid)
+        self._emit_status_progress(
+            branch,
+            phase="evaluation_dispatch",
+            round_num=rnum,
+            hypothesis=hypothesis,
+            patch=patch,
+            retry_attempt=retry_attempt,
+        )
         decision, protocol_result, canary_result = self.evaluate(
             branch,
             workspace,
@@ -605,4 +696,68 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         if retry_attempt:
             result.counts_toward_max_rounds = False
+        return self._finish_status_progress(result)
+
+    def _emit_status_progress(
+        self,
+        branch: Branch,
+        *,
+        phase: str,
+        round_num: int,
+        hypothesis: HypothesisProposal | None = None,
+        patch: PatchProposal | None = None,
+        retry_attempt: bool = False,
+        prior_failure: str | None = None,
+    ) -> None:
+        """Best-effort heartbeat for long pre-protocol steps."""
+        payload: dict[str, Any] = {
+            "branch_id": branch.branch_id,
+            "stage": "proposal",
+            "phase": phase,
+            "round_num": round_num,
+            "base_champion_id": branch.base_champion_id,
+            "branch_weight_revision": getattr(branch, "weight_revision", 0),
+            "retry_attempt": retry_attempt,
+            "step_started_at": datetime.now().isoformat(),
+            "complete": False,
+        }
+        if prior_failure:
+            payload["retry_prior_failure"] = prior_failure
+        if hypothesis is not None:
+            payload.update(
+                {
+                    "target_file": hypothesis.target_file,
+                    "hypothesis_action": hypothesis.action,
+                    "hypothesis_text": hypothesis.hypothesis_text,
+                    "mechanism_changes": [
+                        {
+                            "id": str(getattr(change, "id", "") or ""),
+                            "change_type": str(
+                                getattr(change, "change_type", "") or ""
+                            ),
+                        }
+                        for change in tuple(
+                            getattr(hypothesis, "mechanism_changes", ()) or ()
+                        )
+                        if str(getattr(change, "id", "") or "")
+                    ],
+                }
+            )
+        if patch is not None:
+            payload.update(
+                {
+                    "patch_action": patch.action,
+                    "patch_file": patch.file_path,
+                }
+            )
+        try:
+            self.update_status_progress(payload)
+        except Exception:  # pragma: no cover - heartbeat must never break research
+            logger.debug("Failed to emit explore status progress", exc_info=True)
+
+    def _finish_status_progress(self, result: StepResult) -> StepResult:
+        try:
+            self.update_status_progress(None)
+        except Exception:  # pragma: no cover - status cleanup must not affect result
+            logger.debug("Failed to clear explore status progress", exc_info=True)
         return result

@@ -729,6 +729,55 @@ class AgenticSessionHypothesisMixin:
             )
             if result is None:
                 return None
+            parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
+                result,
+                getattr(state, "_latest_hypothesis_prompt_manifest", None),
+                attempt=attempt,
+            )
+            if parity_feedback is not None:
+                if len(semantic_rejections) < _MAX_HYPOTHESIS_SEMANTIC_RETRIES:
+                    semantic_rejections.append(parity_feedback)
+                    state.note(
+                        AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                        "Mechanism novelty gate facts were not visible in the hypothesis prompt; retrying with gate/prompt parity feedback.",
+                        metadata={
+                            "attempt": attempt,
+                            "failure_code": parity_feedback.get("failure_code"),
+                            "fact_packet_digest": parity_feedback.get(
+                                "fact_packet_digest"
+                            ),
+                            "prompt_fact_packet_digest": parity_feedback.get(
+                                "prompt_fact_packet_digest"
+                            ),
+                        },
+                    )
+                    return None
+                detail = str(parity_feedback.get("reason") or "")
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                    detail=detail,
+                    source="mechanism_novelty_gate_prompt_parity",
+                    attempt=attempt,
+                    failure_code=str(parity_feedback.get("failure_code") or ""),
+                )
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=detail,
+                    evidence_used=tuple(evidence),
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Session failed closed because mechanism novelty gate facts were not API-visible to hypothesis generation.",
+                    metadata=parity_feedback,
+                )
+                return self._persist(output, state)
             if len(semantic_rejections) < _MAX_HYPOTHESIS_SEMANTIC_RETRIES:
                 rejection = result.to_rejection(hypothesis)
                 semantic_rejections.append(
@@ -774,6 +823,37 @@ class AgenticSessionHypothesisMixin:
             )
             if result is None:
                 return None
+            parity_feedback = _mechanism_novelty_gate_prompt_parity_feedback(
+                result,
+                getattr(state, "_latest_hypothesis_prompt_manifest", None),
+                attempt=None,
+            )
+            if parity_feedback is not None:
+                detail = str(parity_feedback.get("reason") or "")
+                _record_failure_ledger_entry(
+                    state,
+                    phase=AgenticProposalPhase.DRAFT_HYPOTHESIS,
+                    category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                    detail=detail,
+                    source="mechanism_novelty_gate_prompt_parity",
+                    failure_code=str(parity_feedback.get("failure_code") or ""),
+                )
+                output = self._failed_output(
+                    request=request,
+                    session_id=session_id,
+                    status=AgenticProposalStatus.FAILED,
+                    termination_reason=AgenticTerminationReason.HYPOTHESIS_GENERATION_FAILED,
+                    detail=detail,
+                    evidence_used=evidence_used,
+                    failure_category=AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE,
+                )
+                state.status = output.status
+                state.note(
+                    AgenticProposalPhase.FINALIZE,
+                    "Mechanism novelty rejection withheld because gate facts were not API-visible in the hypothesis prompt.",
+                    metadata=parity_feedback,
+                )
+                return self._persist(output, state)
             rejection = result.to_rejection(hypothesis)
             _record_failure_ledger_entry(
                 state,
@@ -801,6 +881,81 @@ class AgenticSessionHypothesisMixin:
                 },
             )
             return self._persist(output, state)
+
+
+def _mechanism_novelty_gate_prompt_parity_feedback(
+    result: Any,
+    manifest: Mapping[str, Any] | None,
+    *,
+    attempt: int | None,
+) -> dict[str, Any] | None:
+    """Return retry feedback when a gate rejection used non-visible facts."""
+    fact_packet_digest = str(getattr(result, "fact_packet_digest", "") or "").strip()
+    if not fact_packet_digest:
+        return None
+    manifest_map = manifest if isinstance(manifest, Mapping) else {}
+    statuses = manifest_map.get("section_statuses")
+    facts_status = (
+        statuses.get("active_algorithm_facts")
+        if isinstance(statuses, Mapping)
+        else None
+    )
+    if not isinstance(facts_status, Mapping):
+        return _gate_prompt_parity_payload(
+            fact_packet_digest=fact_packet_digest,
+            prompt_fact_packet_digest="",
+            prompt_status="missing",
+            attempt=attempt,
+        )
+    prompt_fact_packet_digest = str(
+        facts_status.get("fact_packet_digest") or ""
+    ).strip()
+    prompt_status = str(facts_status.get("status") or "").strip() or "missing"
+    if (
+        prompt_status == "included"
+        and prompt_fact_packet_digest
+        and prompt_fact_packet_digest == fact_packet_digest
+    ):
+        return None
+    return _gate_prompt_parity_payload(
+        fact_packet_digest=fact_packet_digest,
+        prompt_fact_packet_digest=prompt_fact_packet_digest,
+        prompt_status=prompt_status,
+        attempt=attempt,
+    )
+
+
+def _gate_prompt_parity_payload(
+    *,
+    fact_packet_digest: str,
+    prompt_fact_packet_digest: str,
+    prompt_status: str,
+    attempt: int | None,
+) -> dict[str, Any]:
+    return {
+        "source": "mechanism_novelty_gate_prompt_parity",
+        "failure_code": "gate_prompt_parity_retry_required",
+        "failure_category": "contract_boundary_failure",
+        "agent_block_reason": "framework_control",
+        "fact_packet_digest": fact_packet_digest,
+        "prompt_fact_packet_digest": prompt_fact_packet_digest,
+        "prompt_fact_status": prompt_status,
+        "attempt": attempt,
+        "reason": (
+            "Mechanism novelty gate prepared a rejection using active algorithm "
+            f"fact_packet_digest={fact_packet_digest}, but that exact fact packet "
+            f"was not included in the API-visible hypothesis prompt "
+            f"(prompt_status={prompt_status!r}, "
+            f"prompt_fact_packet_digest={prompt_fact_packet_digest!r}). Retry "
+            "only after the same adapter-owned active_algorithm_facts packet is "
+            "rendered to the agent before hypothesis generation; a gate must not "
+            "be better informed than the proposal agent."
+        ),
+        "retry_constraint": (
+            "Use the now-visible active_algorithm_facts packet to verify the "
+            "premise before restating the same novelty claim."
+        ),
+    }
 
 
 def _hypothesis_preview_retry_feedback(

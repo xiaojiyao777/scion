@@ -482,6 +482,48 @@ def test_algorithm_smoke_effect_warning_is_advisory_not_failure() -> None:
     )
 
 
+def test_algorithm_smoke_effect_failure_is_proposal_diagnostic() -> None:
+    payload = _algorithm_smoke_agent_payload(
+        {
+            "passed": False,
+            "runtime_smoke": {
+                "passed": False,
+                "runtime_smoke_run": True,
+                "selected_surface": "solver_design",
+                "case_count": 2,
+                "runtime": {
+                    "solver_algorithm_search_iterations": 10,
+                    "solver_algorithm_move_attempts": 4,
+                },
+                "telemetry_guard": {
+                    "passed": False,
+                    "selected_surface": "solver_design",
+                    "candidate_runs": 2,
+                    "expected_telemetry_present": True,
+                    "effect_observation_required": True,
+                    "declared_mechanisms": ["probe"],
+                    "failures": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                            "severity": "fail",
+                            "mechanism": "probe",
+                            "category": "effect",
+                            "field": "mechanism_best_delta.probe",
+                            "candidate_positive": 0,
+                            "candidate_present": 2,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["failure_class"] == "telemetry_not_observed_diagnostic"
+    assert payload["diagnostic_passed"] is True
+
+
 def test_algorithm_smoke_feedback_guides_unreached_activation_helper() -> None:
     payload = _algorithm_smoke_agent_payload(
         {

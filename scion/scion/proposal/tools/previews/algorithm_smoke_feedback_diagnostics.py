@@ -22,6 +22,10 @@ from scion.proposal.tools.previews.algorithm_smoke_feedback_text import (
 )
 from scion.proposal.tools.surface import _drop_empty_items
 from scion.proposal.tools.utils import _limit_text
+from scion.proposal.tools.previews.telemetry_static import (
+    _telemetry_static_diagnostic_passed,
+    _telemetry_static_hard_failed,
+)
 
 
 def _algorithm_smoke_selected_surface(
@@ -91,7 +95,11 @@ def _algorithm_smoke_primary_issue(
             ]
         )
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
-    if telemetry_static is not None and telemetry_static.get("passed") is False:
+    if telemetry_static is not None and (
+        telemetry_static.get("issues")
+        or telemetry_static.get("diagnostic_passed")
+        or telemetry_static.get("hard_failed")
+    ):
         candidates.extend(_compact_agent_text_list(telemetry_static.get("issues")))
     candidates.extend(
         [
@@ -156,8 +164,10 @@ def _algorithm_smoke_failure_class(
     if passed:
         return "passed"
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
-    if telemetry_static is not None and telemetry_static.get("passed") is False:
+    if _telemetry_static_hard_failed(telemetry_static):
         return "telemetry_static_preview_failure"
+    if _telemetry_static_diagnostic_passed(telemetry_static):
+        return "telemetry_static_diagnostic"
     if runtime_smoke is not None:
         if runtime_smoke.get("runtime_audit_failure") not in (None, "", {}, []):
             return "runtime_audit_failure"
@@ -201,7 +211,11 @@ def _algorithm_smoke_repair_hints(
         hints.extend(_compact_agent_text_list(section.get("repair_guidance")))
         hints.extend(_compact_agent_text_list(section.get("repair_hints")))
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
-    if telemetry_static is not None and telemetry_static.get("passed") is False:
+    if telemetry_static is not None and (
+        telemetry_static.get("issues")
+        or telemetry_static.get("diagnostic_passed")
+        or telemetry_static.get("hard_failed")
+    ):
         hints.extend(_compact_agent_text_list(telemetry_static.get("repair_hints")))
     if telemetry_guard is not None:
         diagnostics = telemetry_guard.get("mechanism_diagnostics")

@@ -12,7 +12,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from scion.core.models import RunResult, SolverOutput
 from scion.runtime.runner import ResourceLimits
@@ -88,6 +88,11 @@ class LocalSubprocessRunner:
 
     def __init__(self, limits: Optional[ResourceLimits] = None) -> None:
         self._limits = limits or ResourceLimits()
+        self._progress_callback: Callable[..., None] | None = None
+
+    def set_progress_callback(self, callback: Callable[..., None] | None) -> None:
+        """Register a best-effort subprocess lifecycle callback."""
+        self._progress_callback = callback
 
     def run_solver(
         self,
@@ -164,6 +169,13 @@ class LocalSubprocessRunner:
                 env=env,
                 preexec_fn=_make_preexec_fn(effective_limits),
             )
+            self._emit_progress(
+                child_pid=proc.pid,
+                child_phase="solver_subprocess",
+                case=instance_path,
+                seed=seed,
+                selected_surface=surface or None,
+            )
 
             try:
                 stdout_bytes, stderr_bytes = proc.communicate(
@@ -215,6 +227,15 @@ class LocalSubprocessRunner:
         stderr_str = self._maybe_offload(stderr_str, workdir, f"{run_id}_stderr")
 
         exit_code = proc.returncode
+        self._emit_progress(
+            child_pid=None,
+            child_exit_code=exit_code,
+            child_elapsed_ms=elapsed_ms,
+            child_phase="solver_subprocess_complete",
+            case=instance_path,
+            seed=seed,
+            selected_surface=surface or None,
+        )
 
         # Classify non-zero exits
         if error_category is None and exit_code != 0:
@@ -264,6 +285,14 @@ class LocalSubprocessRunner:
             output_path=out_path if success else None,
             error_category=error_category,
         )
+
+    def _emit_progress(self, **payload: Any) -> None:
+        if self._progress_callback is None:
+            return
+        try:
+            self._progress_callback(**payload)
+        except Exception:
+            logger.debug("Solver subprocess progress callback failed", exc_info=True)
 
 
     def _maybe_offload(self, output: str, workspace: str, run_id: str) -> str:

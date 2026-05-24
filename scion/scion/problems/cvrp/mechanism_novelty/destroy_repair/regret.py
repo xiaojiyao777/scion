@@ -11,6 +11,8 @@ from scion.problems.cvrp.mechanism_novelty.destroy_repair.shared import (
 def _claims_missing_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
         return False
+    if _negates_regret_absence_claim(text):
+        return False
     if _acknowledges_existing_regret_repair_variant(text):
         return False
     if _is_non_regret_repair_variant(text) and not _missing_regret_insertion_repair_span(
@@ -28,6 +30,8 @@ def _mischaracterizes_regret_insertion_repair(text: str) -> bool:
 
 def _duplicates_regret_insertion_repair(text: str) -> bool:
     if not _mentions_regret_insertion_repair(text):
+        return False
+    if _negates_regret_absence_claim(text):
         return False
     if _acknowledges_existing_regret_repair_variant(text):
         return False
@@ -72,6 +76,24 @@ def _missing_regret_insertion_repair_span(text: str) -> str:
         if _describes_route_merge_compaction_variant(text):
             return ""
     return span
+
+
+def _negates_regret_absence_claim(text: str) -> bool:
+    regret = r"(?:regret[- ]?[23k]?|regret insertion|regret repair)"
+    absence = r"(?:absent|missing|lacks?|does not have|doesn't have)"
+    return bool(
+        re.search(
+            r"\b(?:without|not|does not|doesn't)\s+"
+            r"(?:claim(?:ing)?|assert(?:ing)?|premis(?:e|ing))\b"
+            r".{0,120}\b" + regret + r"\b.{0,100}\b" + absence + r"\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:is not|isn't|not)\b.{0,40}\b(?:a\s+)?claim\b"
+            r".{0,120}\b" + regret + r"\b.{0,100}\b" + absence + r"\b",
+            text,
+        )
+    )
 
 
 def _absence_word_does_not_target_regret(span: str) -> bool:

@@ -374,6 +374,8 @@ class AgenticSessionBudgetRuntimeMixin:
             )
             if call_kind == "code":
                 setattr(state, "_latest_code_prompt_manifest", manifest)
+            elif str(call_kind).startswith("hypothesis"):
+                setattr(state, "_latest_hypothesis_prompt_manifest", manifest)
             artifact_ref: str | None = None
             if self._artifact_store is not None:
                 artifact_ref = self._artifact_store.write_scratch(

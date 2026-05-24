@@ -436,7 +436,13 @@ def _solver_design_code_scope_control(
                 "category. Add the missing activation/effect/budget evidence "
                 "through the telemetry helpers declared by the selected "
                 "surface; do not rename the mechanism id or weaken the "
-                "approved telemetry contract."
+                "approved telemetry contract. Use the exact mechanism id from "
+                "mechanism_changes. Activation should be recorded at the real "
+                "branch point where the mechanism is attempted or selected; "
+                "effect should be recorded from real objective/runtime deltas "
+                "when they exist. Do not force rare branches to run, fabricate "
+                "positive counters, wrap counters with max(..., 1), or add "
+                "fallback behavior whose only purpose is satisfying telemetry."
             ),
             "telemetry_obligation_rule": _solver_design_telemetry_obligation_rule(
                 mechanism_ids

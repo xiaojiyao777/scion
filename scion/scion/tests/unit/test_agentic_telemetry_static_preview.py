@@ -54,8 +54,13 @@ def test_static_preview_expands_adapter_declared_mechanism_probes(tmp_path) -> N
     )
 
     assert preview is not None
-    assert preview["passed"] is False
+    assert preview["passed"] is True
+    assert preview["status"] == "diagnostic"
+    assert preview["diagnostic_passed"] is True
     assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in preview["issue_codes"]
+    assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in (
+        preview["diagnostic_issue_codes"]
+    )
     assert "solver_algorithm_context_records.vns_local_search_iterations" in (
         preview["checked_fields"]
     )
@@ -131,7 +136,9 @@ def test_static_preview_rejects_unknown_mechanism_alias(tmp_path) -> None:
     )
 
     assert preview is not None
-    assert preview["passed"] is False
+    assert preview["passed"] is True
+    assert preview["status"] == "diagnostic"
+    assert preview["diagnostic_passed"] is True
     assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in preview["issue_codes"]
 
 
@@ -149,7 +156,9 @@ def test_static_preview_rejects_dynamic_mechanism_alias(tmp_path) -> None:
     )
 
     assert preview is not None
-    assert preview["passed"] is False
+    assert preview["passed"] is True
+    assert preview["status"] == "diagnostic"
+    assert preview["diagnostic_passed"] is True
     assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in preview["issue_codes"]
 
 
@@ -214,7 +223,10 @@ def test_static_preview_rejects_literal_zero_phase_runtime(tmp_path) -> None:
 
     assert preview is not None
     assert preview["passed"] is False
+    assert preview["status"] == "hard_failure"
+    assert preview["hard_failed"] is True
     assert "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO" in preview["issue_codes"]
+    assert "DECLARED_MECHANISM_PHASE_RUNTIME_ZERO" in preview["hard_issue_codes"]
     assert any("literal zero/non-positive" in issue for issue in preview["issues"])
 
 
@@ -233,6 +245,9 @@ def test_static_preview_rejects_unknown_context_helper_keywords(tmp_path) -> Non
 
     assert preview is not None
     assert preview["passed"] is False
+    assert preview["status"] == "hard_failure"
+    assert preview["hard_failed"] is True
+    assert "CONTEXT_HELPER_SIGNATURE_INVALID" in preview["hard_issue_codes"]
     assert any("does not accept keyword(s): extra" in issue for issue in preview["issues"])
 
 
@@ -254,8 +269,13 @@ def test_static_preview_rejects_best_delta_record_move_with_none_delta(tmp_path)
     )
 
     assert preview is not None
-    assert preview["passed"] is False
+    assert preview["passed"] is True
+    assert preview["status"] == "diagnostic"
+    assert preview["diagnostic_passed"] is True
     assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in preview["issue_codes"]
+    assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in (
+        preview["diagnostic_issue_codes"]
+    )
     rendered = " ".join(preview["issues"])
     assert "best_delta" in rendered
     assert "delta=None" in rendered

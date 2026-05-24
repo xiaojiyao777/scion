@@ -41,8 +41,28 @@ from scion.proposal.tools.previews.algorithm_smoke_feedback_text import (
     _algorithm_smoke_digest,
     _mapping_or_none,
 )
+from scion.proposal.tools.previews.telemetry_static import (
+    _telemetry_static_diagnostic_passed,
+    _telemetry_static_hard_failed,
+)
 from scion.proposal.tools.surface import _drop_empty_items
 from scion.proposal.tools.utils import _json_size, _limit_text
+
+_PROPOSAL_DIAGNOSTIC_TELEMETRY_CODES = frozenset(
+    {
+        "TELEMETRY_ACTIVITY_NOT_OBSERVED",
+        "TELEMETRY_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_EFFECT_NOT_OBSERVED",
+        "TELEMETRY_RUNTIME_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_ACTIVITY_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_RUNTIME_NOT_OBSERVED",
+    }
+)
+_PROPOSAL_DIAGNOSTIC_TELEMETRY_CATEGORIES = frozenset(
+    {"activity", "activation", "effect", "runtime"}
+)
 
 
 def compact_algorithm_smoke_observation_for_agent(
@@ -102,6 +122,17 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
         runtime_smoke=runtime_smoke,
         subprocess_tail=subprocess_tail,
     )
+    if hard_smoke_failure and passed:
+        passed = False
+        status = "failed"
+        failure_class = _algorithm_smoke_failure_class(
+            passed=False,
+            raw_payload=raw_payload,
+            runtime_smoke=runtime_smoke,
+            telemetry_guard=telemetry_guard,
+            primary_issue=primary_issue,
+            subprocess_tail=subprocess_tail,
+        )
     if activation_diagnostic is not None and not hard_smoke_failure:
         failure_class = str(
             activation_diagnostic.get("code") or "proposal_activation_diagnostic"
@@ -109,10 +140,34 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
     non_blocking_activation_diagnostic = _non_blocking_activation_diagnostic(
         activation_diagnostic
     )
-    if non_blocking_activation_diagnostic and not hard_smoke_failure:
+    non_blocking_telemetry_diagnostic = _non_blocking_runtime_telemetry_diagnostic(
+        telemetry_guard
+    )
+    telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
+    non_blocking_static_diagnostic = _telemetry_static_diagnostic_passed(
+        telemetry_static
+    )
+    activation_diagnostic_passed = (
+        non_blocking_activation_diagnostic and not hard_smoke_failure
+    )
+    telemetry_diagnostic_passed = (
+        non_blocking_telemetry_diagnostic and not hard_smoke_failure
+    )
+    static_diagnostic_passed = (
+        non_blocking_static_diagnostic and not hard_smoke_failure
+    )
+    if activation_diagnostic_passed:
         passed = True
         status = "diagnostic"
         failure_class = "activation_not_observed_diagnostic"
+    elif telemetry_diagnostic_passed:
+        passed = True
+        status = "diagnostic"
+        failure_class = "telemetry_not_observed_diagnostic"
+    elif static_diagnostic_passed:
+        passed = True
+        status = "diagnostic"
+        failure_class = "telemetry_static_diagnostic"
     repair_hints = _algorithm_smoke_repair_hints(
         raw_payload,
         runtime_smoke=runtime_smoke,
@@ -164,7 +219,12 @@ def _algorithm_smoke_agent_payload(raw_payload: Mapping[str, Any]) -> dict[str, 
             "passed": passed,
             "status": status,
             "failure_class": failure_class,
-            "diagnostic_passed": non_blocking_activation_diagnostic or None,
+            "diagnostic_passed": (
+                activation_diagnostic_passed
+                or telemetry_diagnostic_passed
+                or static_diagnostic_passed
+                or None
+            ),
             "primary_issue": primary_issue,
             "selected_surface": selected_surface,
             "case_count": case_count,
@@ -228,14 +288,8 @@ def _hard_smoke_failure_present(
     subprocess_tail: Mapping[str, Any] | None,
 ) -> bool:
     telemetry_static = _mapping_or_none(raw_payload.get("telemetry_static_preview"))
-    if telemetry_static is not None and telemetry_static.get("passed") is False:
-        issue_codes = {
-            str(code or "").strip()
-            for code in telemetry_static.get("issue_codes") or ()
-            if str(code or "").strip()
-        }
-        if issue_codes - {"DECLARED_MECHANISM_ACTIVATION_MISSING"}:
-            return True
+    if _telemetry_static_hard_failed(telemetry_static):
+        return True
     if runtime_smoke is not None:
         if runtime_smoke.get("runtime_audit_failure") not in (None, "", {}, []):
             return True
@@ -272,6 +326,30 @@ def _non_blocking_activation_diagnostic(
         "trigger_not_reached",
         "smoke_budget_or_case_insufficient",
     }
+
+
+def _non_blocking_runtime_telemetry_diagnostic(
+    telemetry_guard: Mapping[str, Any] | None,
+) -> bool:
+    """Return true when proposal-smoke telemetry misses are diagnostic only."""
+    if telemetry_guard is None or telemetry_guard.get("passed") is not False:
+        return False
+    failures = telemetry_guard.get("failures")
+    if not isinstance(failures, (list, tuple)) or not failures:
+        return False
+    for failure in failures:
+        if not isinstance(failure, Mapping):
+            return False
+        code = str(failure.get("code") or "").strip()
+        category = str(failure.get("category") or "").strip().lower()
+        if code.startswith("TELEMETRY_PROTECTED_"):
+            return False
+        if (
+            code not in _PROPOSAL_DIAGNOSTIC_TELEMETRY_CODES
+            and category not in _PROPOSAL_DIAGNOSTIC_TELEMETRY_CATEGORIES
+        ):
+            return False
+    return True
 
 
 def _agent_summary(**values: Any) -> dict[str, Any]:
@@ -398,4 +476,5 @@ def _delta_effect_field(field: str) -> bool:
 __all__ = [
     "compact_algorithm_smoke_observation_for_agent",
     "_algorithm_smoke_agent_payload",
+    "_non_blocking_runtime_telemetry_diagnostic",
 ]

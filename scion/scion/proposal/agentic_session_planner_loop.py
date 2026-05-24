@@ -280,8 +280,7 @@ class AgenticSessionPlannerLoopMixin:
                             AgenticProposalPhase.DIAGNOSE,
                             (
                                 "Planner selected a required proposal tool already "
-                                "completed by the deterministic preface; continuing "
-                                "with remaining planner context."
+                                "completed by the deterministic preface."
                             ),
                             metadata={
                                 "status": "skipped",
@@ -291,7 +290,24 @@ class AgenticSessionPlannerLoopMixin:
                                 "skip_reason": "already_succeeded",
                             },
                         )
-                        continue
+                        missing = self._missing_planner_context_error(
+                            context, observations
+                        )
+                        if missing is None:
+                            self._record_loop_stop(
+                                state,
+                                "required_context_satisfied",
+                                error_code="already_succeeded",
+                                tool_name=name,
+                            )
+                            break
+                        return self._fallback_after_planner_error(
+                            context,
+                            state,
+                            observations,
+                            error_code="already_succeeded",
+                            tool_name=name,
+                        )
                     state.note(
                         AgenticProposalPhase.DIAGNOSE,
                         (

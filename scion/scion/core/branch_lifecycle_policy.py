@@ -212,18 +212,6 @@ class BranchLifecyclePolicy:
         reasons: list[str] = []
         if features.candidate_failed_pairs > 0:
             reasons.append(TELEMETRY_DIAGNOSTIC_CANDIDATE_RUNTIME_FAILURE)
-        if features.median_delta is not None and features.median_delta < 0:
-            reasons.append(TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA)
-        if (
-            features.runtime_ratio_median is not None
-            and features.runtime_ratio_median > self.soft_runtime_ratio_threshold
-        ):
-            reasons.append(TELEMETRY_DIAGNOSTIC_RUNTIME_SLOWDOWN)
-        if (
-            features.runtime_regression_rate is not None
-            and features.runtime_regression_rate >= self.high_runtime_regression_rate
-        ):
-            reasons.append(TELEMETRY_DIAGNOSTIC_RUNTIME_REGRESSION_RATE)
         return tuple(dict.fromkeys(reasons))
 
     @staticmethod

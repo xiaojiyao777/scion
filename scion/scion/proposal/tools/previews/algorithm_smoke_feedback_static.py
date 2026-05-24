@@ -39,7 +39,16 @@ def _algorithm_smoke_telemetry_static_preview(value: Any) -> dict[str, Any] | No
     return _drop_empty_items(
         {
             "passed": preview.get("passed"),
+            "status": preview.get("status"),
+            "hard_failed": preview.get("hard_failed"),
+            "diagnostic_passed": preview.get("diagnostic_passed"),
             "issue_codes": _compact_agent_text_list(preview.get("issue_codes")),
+            "hard_issue_codes": _compact_agent_text_list(
+                preview.get("hard_issue_codes")
+            ),
+            "diagnostic_issue_codes": _compact_agent_text_list(
+                preview.get("diagnostic_issue_codes")
+            ),
             "issues": _compact_agent_text_list(preview.get("issues")),
             "warnings": _compact_agent_text_list(preview.get("warnings")),
             "repair_hints": _compact_agent_text_list(preview.get("repair_hints")),

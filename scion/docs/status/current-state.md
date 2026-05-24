@@ -18,16 +18,73 @@ domain logic into `core`, `proposal`, `contract`, `protocol`, or `runtime`.
 
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session
-boundary. OpenAI-compatible GPT/Codex models now receive
-`SCION_REASONING_EFFORT` (`low`, `medium`, `high`, or `xhigh`) through the chat
-transport, while DeepSeek keeps its existing `xhigh -> max` normalization and
-`extra_body.thinking` behavior. Scion also records codex-proxy/OpenAI-compatible
-usage fields from `prompt_tokens_details.cached_tokens` and
-`completion_tokens_details.reasoning_tokens`, exposing reasoning output tokens
-in normalized LLM usage metadata. Local validation confirmed
-`gpt-5.5 + tools + reasoning_effort=xhigh` works through codex-proxy's chat
-compatibility route and records `reasoning_output_tokens`; the direct
-`/v1/responses` route remains a future opt-in transport, not the default.
+boundary. Current real-cost experiments should be launched with explicit local
+environment variables: `SCION_MODEL=gpt-5.5`,
+`SCION_BASE_URL=http://127.0.0.1:8080`, and the local `SCION_API_KEY`. Do not
+set `SCION_REASONING_EFFORT` for routine short experiments; the current goal is
+fast framework feedback, not maximum model deliberation. The transport still
+supports explicit GPT/Codex reasoning efforts (`low`, `medium`, `high`,
+`xhigh`) for targeted diagnostics, while DeepSeek keeps its existing
+`xhigh -> max` normalization and `extra_body.thinking` behavior. Scion also
+records codex-proxy/OpenAI-compatible usage fields from
+`prompt_tokens_details.cached_tokens` and
+`completion_tokens_details.reasoning_tokens`. The direct `/v1/responses` route
+remains a future opt-in transport, not the default.
+
+The 2026-05-24 P0 APS control repair addresses the latest gate/budget audit
+without relaxing v3 boundary control. Default campaign proposal attempts now
+include repair headroom (`rounds + max(6, 2*rounds)`) instead of equaling the
+requested screened-round count, so pre-screen grounding or preview repairs no
+longer starve a short campaign immediately. `status.json` now receives
+best-effort pre-protocol progress for hypothesis generation, code generation,
+patch contract, workspace setup, patch apply, verification, and evaluation
+dispatch, and canary runs emit pair-level progress before formal screening.
+Proposal-time algorithm smoke now treats activation/effect/activity/runtime
+telemetry that is merely unobserved in the tiny smoke sample as a diagnostic
+signal rather than a hard code-generation failure; real runtime errors,
+runtime audit failures, protected telemetry failures, schema failures, and
+contract failures still fail closed. The same repair adds protocol heartbeat
+detail down to child process id, child phase, current case, and seed, and
+records those fields in `status.json` while preserving public-ref redaction.
+Heartbeat state is stage-scoped: canary/screening transitions refresh
+`complete` and pair counts from the current metrics snapshot, clear prior
+stage child-process fields, and remove `child_pid` once a protocol stage is
+complete so `status.json` does not report a dead solver subprocess as live.
+The solver-design planner loop now also stops or falls back when the model
+reselects a required context tool already completed by the deterministic
+preface; this prevents repeated `context.read_active_solver_design` tool
+selection from consuming dozens of LLM calls without new observations.
+Mechanism novelty/premise gates now enforce gate-prompt parity: if a gate would
+reject using an adapter-owned active fact packet that was not included in the
+API-visible hypothesis prompt with the same digest, Scion retries with that
+packet visible instead of blaming the agent. Telemetry repair guidance now
+explicitly directs code agents to record real branch-point activation and real
+effect/runtime deltas, while forbidding fake activation counters, forced rare
+branches, `max(..., 1)` counter padding, or telemetry-only fallback behavior.
+Follow-up validation found two remaining over-control risks and they are now
+covered by regression tests: CVRP random-removal premise checks must ignore
+no-op/fallback prose that merely says a new mechanism falls back to existing
+`_random_removal`, and CVRP acceptance/reheat broad-loop effect telemetry is
+now adapter advisory guidance rather than a hypothesis-stage hard rejection.
+Core schema/contract violations remain hard; this only downgrades the
+problem-adapter warning that an indirect policy should prefer decision,
+activation, or budget telemetry.
+The telemetry-diagnostic branch lifecycle is also stricter about preserving
+research continuity: branch-local activation/effect/activity diagnostics are
+kept as same-branch repair signals even when the first screened attempt also
+has poor win-rate, negative objective movement, or runtime slowdown. A branch
+can still be soft-abandoned after repeated identical telemetry diagnostics, or
+when the candidate has runtime/crash failures or non-repairable protected
+telemetry failures.
+The latest P0 follow-up closes the remaining static-smoke hard-block: static
+telemetry preview now separates hard failures from diagnostics. Invalid context
+telemetry helper signatures and literal zero/non-positive phase runtime records
+still fail closed, but missing activation/effect/runtime wiring or missing
+positive delta evidence is returned as `diagnostic` with precise required-call
+feedback. Algorithm smoke now continues to runtime smoke after such diagnostics
+so real crashes or illegal runtime behavior are still caught, while code
+generation is no longer forced through repeated LLM repair attempts just to
+manufacture telemetry.
 
 The 2026-05-22 stopped-run analysis is
 [`v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md`](../experiments/v0.4/v0.4-v3-static-smoke-line-split-sonnet-3r-stopped-analysis-20260522.md).
@@ -1019,11 +1076,14 @@ instead of producing baseline-wrapper post-processing solvers. The budget and
 Contract-preview control path is now healthy enough to support that deeper
 repair.
 
-Operational cost/control note: real-cost smoke and validation runs should use
-`SCION_MODEL=claude-sonnet-4-6` unless there is an explicit reason to spend an
-Opus round. Provider SDK retries are disabled by default in `LLMClient` so
-Scion's own traced retry loop is the single audited retry layer; tune with
-`SCION_LLM_MAX_RETRIES` and only opt into SDK retries with
+Operational cost/control note: for this development phase, all new real-cost
+short experiments should use local codex-proxy explicitly
+(`SCION_MODEL=gpt-5.5`, `SCION_BASE_URL=http://127.0.0.1:8080`,
+`SCION_API_KEY=...`) and should omit `SCION_REASONING_EFFORT` unless the run is
+specifically testing reasoning behavior. External Sonnet/Opus/DeepSeek runs are
+diagnostics, not the default path. Provider SDK retries are disabled by default
+in `LLMClient` so Scion's own traced retry loop is the single audited retry
+layer; tune with `SCION_LLM_MAX_RETRIES` and only opt into SDK retries with
 `SCION_SDK_MAX_RETRIES` deliberately. Code/fix tool calls are now treated as
 long non-streaming generation requests: by default they use
 `timeout_sec=max(SCION_LLM_TIMEOUT_SEC, 180)` and `max_retries=0`, with

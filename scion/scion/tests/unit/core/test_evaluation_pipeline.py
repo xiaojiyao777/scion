@@ -446,6 +446,51 @@ def test_activity_all_zero_failure_is_marked_repairable() -> None:
     assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
 
 
+def test_budget_starved_failure_is_marked_repairable() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_BUDGET_STARVED",
+                "severity": "fail",
+                "category": "budget",
+                "runtime_role": "budget",
+                "mechanism": "sa_reheat_on_stagnation",
+                "field": "solver_algorithm_phase_runtime_ms.sa_reheat_on_stagnation",
+                "candidate_missing": 13,
+                "candidate_present": 3,
+                "candidate_positive": 0,
+                "champion_positive": 0,
+            }
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.SCREENING,
+            exposed_summary="screening budget starved",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is not None
+    assert outcome.decision_features.telemetry_validation_repairable is True
+    assert outcome.decision_features.telemetry_guard_failed is True
+    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert SCREENING_TELEMETRY_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert "TELEMETRY_BUDGET_STARVED" in outcome.protocol_result.reason_codes
+    assert "sa_reheat_on_stagnation" in outcome.protocol_result.exposed_summary
+    assert "candidate_present=3" in outcome.protocol_result.exposed_summary
+    assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
+
+
 def test_mixed_activity_and_protected_telemetry_failure_is_not_repairable() -> None:
     guard = {
         "schema": "scion.telemetry_guard.v1",

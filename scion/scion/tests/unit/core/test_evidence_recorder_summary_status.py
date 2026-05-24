@@ -483,6 +483,10 @@ def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_in
             {"id": "random_segment_removal", "change_type": "add"}
         ],
         raw_metrics_ref=str(metrics_path),
+        child_pid=12345,
+        child_phase="solver_subprocess",
+        case="/tmp/private/s1.vrp",
+        seed=10,
     )
     recorder.current_status_progress = None
     status = recorder.write_status(
@@ -510,9 +514,128 @@ def test_sigterm_during_formal_screening_keeps_n_experiments_zero_and_reports_in
     assert inflight["valid_pairs"] == 3
     assert inflight["failed_pairs"] == 0
     assert inflight["complete"] is False
+    assert inflight["child_pid"] == 12345
+    assert inflight["child_phase"] == "solver_subprocess"
+    assert inflight["last_case"].startswith("case:s1.vrp#")
+    assert inflight["last_seed"] == 10
     assert inflight["decision_formed"] is False
     assert inflight["counts_toward_n_experiments"] is False
     assert status["last_completed_result"]["reason"] == "agent_quality_blocked"
+
+
+def test_protocol_progress_completion_clears_child_pid(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {"campaign_id": "camp-1", "screened_experiments": 0},
+    )
+
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        child_pid=12345,
+        child_phase="solver_subprocess",
+        case="/tmp/private/s1.vrp",
+        seed=10,
+    )
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        child_exit_code=0,
+        child_elapsed_ms=42,
+        case="/tmp/private/s1.vrp",
+        seed=10,
+    )
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        attempted_pairs=1,
+        valid_pairs=1,
+    )
+
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    progress = status["current_progress"]
+    inflight = status["in_flight_protocol"]
+    assert "child_pid" not in progress
+    assert "child_pid" not in inflight
+    assert progress["child_exit_code"] == 0
+    assert progress["child_phase"] == "solver_subprocess_complete"
+    assert inflight["child_exit_code"] == 0
+    assert inflight["child_phase"] == "solver_subprocess_complete"
+
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        child_pid=67890,
+        child_phase="solver_subprocess",
+        case="/tmp/private/s2.vrp",
+        seed=11,
+    )
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    progress = status["current_progress"]
+    assert progress["child_pid"] == 67890
+    assert progress["child_phase"] == "solver_subprocess"
+    assert "child_exit_code" not in progress
+    assert "child_elapsed_ms" not in progress
+
+
+def test_protocol_progress_stage_transition_does_not_retain_complete_or_child(
+    tmp_path: Path,
+) -> None:
+    metrics_dir = tmp_path / "metrics"
+    metrics_dir.mkdir()
+    screening_metrics = metrics_dir / "screening.json"
+    screening_metrics.write_text(
+        json.dumps(
+            {
+                "stage": "screening",
+                "complete": False,
+                "total_pairs": 16,
+                "attempted_pairs": 2,
+                "valid_pairs": 0,
+                "failed_pairs": 0,
+                "candidate_failed_pairs": 0,
+                "champion_failed_pairs": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {"campaign_id": "camp-1", "screened_experiments": 0},
+    )
+
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="canary",
+        complete=True,
+        attempted_pairs=1,
+        completed_pairs=1,
+        total_pairs=1,
+        child_pid=12345,
+        child_phase="solver_subprocess",
+    )
+    recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        case="/tmp/private/screening.vrp",
+        seed=29,
+        raw_metrics_ref=str(screening_metrics),
+    )
+
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    progress = status["current_progress"]
+    inflight = status["in_flight_protocol"]
+    assert progress["stage"] == "screening"
+    assert progress["complete"] is False
+    assert progress["attempted_pairs"] == 2
+    assert progress["total_pairs"] == 16
+    assert progress["valid_pairs"] == 0
+    assert "child_pid" not in progress
+    assert "child_pid" not in inflight
+    assert inflight["complete"] is False
+    assert inflight["attempted_pairs"] == 2
 
 
 def test_campaign_summary_separates_telemetry_failed_experiment(

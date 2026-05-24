@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 from scion.proposal import solver_design_smoke as _solver_design_smoke
 from scion.proposal.tools.base import _BaseReadOnlyTool
@@ -14,7 +14,10 @@ from scion.proposal.tools.models import (
     ProposalToolContext,
     ProposalToolPermission,
 )
-from scion.proposal.tools.previews.algorithm_smoke_feedback import _algorithm_smoke_agent_payload
+from scion.proposal.tools.previews.algorithm_smoke_feedback import (
+    _algorithm_smoke_agent_payload,
+    _non_blocking_runtime_telemetry_diagnostic,
+)
 from scion.proposal.tools.previews.common import (
     _PREVIEW_CHECK_DETAIL_CHARS,
     _PREVIEW_MAX_CHECKS,
@@ -36,7 +39,10 @@ from scion.proposal.tools.previews.schema import (
     _schema_preview_hypothesis_payload,
     _schema_preview_patch_payload,
 )
-from scion.proposal.tools.previews.telemetry_static import _mechanism_telemetry_static_preview
+from scion.proposal.tools.previews.telemetry_static import (
+    _mechanism_telemetry_static_preview,
+    _telemetry_static_hard_failed,
+)
 from scion.proposal.tools.surface import _surface_for_selected_or_patch_path
 
 _ALGORITHM_SMOKE_TIME_LIMIT_SEC = _solver_design_smoke._ALGORITHM_SMOKE_TIME_LIMIT_SEC
@@ -202,8 +208,10 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                             telemetry_static_preview
                         )
                         payload["telemetry_static_preview"] = telemetry_static_preview
-                        patch_preview["passed"] = bool(patch_preview["passed"]) and bool(
-                            telemetry_static_preview.get("passed")
+                        patch_preview["passed"] = bool(
+                            patch_preview["passed"]
+                        ) and not _telemetry_static_hard_failed(
+                            telemetry_static_preview
                         )
                     if patch_preview["passed"]:
                         smoke_preview = _runtime_algorithm_smoke_preview_for_tool(
@@ -218,9 +226,27 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
                             payload["workspace_materialized"] = bool(
                                 smoke_preview.get("workspace_materialized")
                             )
-                            patch_preview["passed"] = bool(
-                                patch_preview["passed"]
-                            ) and bool(smoke_preview.get("passed"))
+                            smoke_passed = bool(smoke_preview.get("passed"))
+                            telemetry_diagnostic = (
+                                _non_blocking_runtime_telemetry_diagnostic(
+                                    smoke_preview.get("telemetry_guard")
+                                )
+                                and smoke_preview.get("runtime_audit_failure")
+                                in (None, "", {}, [])
+                                and not _runtime_smoke_run_failed(smoke_preview)
+                            )
+                            if telemetry_diagnostic and not smoke_passed:
+                                smoke_preview["proposal_diagnostic"] = True
+                                smoke_preview["proposal_diagnostic_status"] = (
+                                    "telemetry_not_observed"
+                                )
+                                patch_preview["runtime_smoke_diagnostic"] = (
+                                    "telemetry_not_observed"
+                                )
+                            else:
+                                patch_preview["passed"] = bool(
+                                    patch_preview["passed"]
+                                ) and smoke_passed
                 elif result.passed:
                     patch_preview["passed"] = False
                     patch_preview["needs_hypothesis"] = True
@@ -254,6 +280,13 @@ class AlgorithmSmokeTool(_BaseReadOnlyTool):
             structured_payload=payload,
             exposure_level=ProposalExposureLevel.PUBLIC_SPEC,
         )
+
+
+def _runtime_smoke_run_failed(smoke_preview: Any) -> bool:
+    if not isinstance(smoke_preview, Mapping):
+        return False
+    run = smoke_preview.get("run")
+    return isinstance(run, Mapping) and run.get("success") is False
 
 
 

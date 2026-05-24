@@ -555,9 +555,13 @@ Important current interpretation:
   orchestrator that wraps focused checks into auditable `CheckResult`s. Use
   this pattern for future C7/C9b/C9c extraction instead of growing the
   monolithic gate file.
-- Real-cost validation should use Sonnet by default
-  (`SCION_MODEL=claude-sonnet-4-6`). Reserve Opus for explicitly chosen deep
-  research attempts after the framework path is stable.
+- During the current v0.4 experiment stage, real-cost Scion experiments should
+  be launched explicitly through the local codex-proxy path:
+  `SCION_MODEL=gpt-5.5`, `SCION_BASE_URL=http://127.0.0.1:8080`, and a local
+  `SCION_API_KEY`. Do not set `SCION_REASONING_EFFORT` for routine short
+  experiments; use the model/provider default for faster iteration. Sonnet,
+  Opus, DeepSeek, or explicit high-reasoning runs require an explicit
+  diagnostic reason in the launch note.
 - Provider SDK retries are disabled by default through `SCION_SDK_MAX_RETRIES=0`
   semantics in `LLMClient`; Scion's own `SCION_LLM_MAX_RETRIES` controls the
   audited retry count. Do not multiply hidden SDK retries by Scion retries in

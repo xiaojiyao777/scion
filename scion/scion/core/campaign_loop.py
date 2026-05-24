@@ -263,7 +263,8 @@ def _proposal_attempt_limit(
                 "Ignoring invalid SCION_PROPOSAL_ATTEMPT_LIMIT=%r",
                 raw,
             )
-    return max(1, int(requested_rounds))
+    rounds = max(1, int(requested_rounds))
+    return rounds + max(6, rounds * 2)
 
 
 def _campaign_loop_status(

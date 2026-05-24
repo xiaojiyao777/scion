@@ -143,6 +143,37 @@ def _make_proto(runner, config, manifest, ledger, tmp_path) -> ExperimentProtoco
     )
 
 
+def test_protocol_progress_callback_forwards_runner_child_process_updates(
+    minimal_config,
+    minimal_manifest,
+    minimal_ledger,
+    tmp_path,
+):
+    runner = MagicMock()
+    proto = _make_proto(runner, minimal_config, minimal_manifest, minimal_ledger, tmp_path)
+    events: list[dict] = []
+
+    proto.set_progress_callback(lambda **payload: events.append(dict(payload)))
+
+    runner.set_progress_callback.assert_called_once()
+    runner_callback = runner.set_progress_callback.call_args.args[0]
+    runner_callback(
+        stage="screening",
+        child_pid=12345,
+        child_phase="solver_subprocess",
+        case="s1",
+        seed=10,
+    )
+
+    assert events[-1]["child_pid"] == 12345
+    assert events[-1]["child_phase"] == "solver_subprocess"
+    assert events[-1]["case"] == "s1"
+    assert events[-1]["seed"] == 10
+
+    proto.set_progress_callback(None)
+    assert runner.set_progress_callback.call_args.args[0] is None
+
+
 # ---------------------------------------------------------------------------
 # T2: Case-level statistical unit
 # ---------------------------------------------------------------------------

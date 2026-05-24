@@ -40,8 +40,31 @@ def run_canary(
             "Add canary seeds to seed_ledger.yaml."
         )
 
+    total_pairs = len(canary_cases) * len(canary_seeds)
+    attempted_pairs = 0
+    protocol._emit_progress(
+        stage="canary",
+        phase="canary",
+        case=None,
+        seed=None,
+        attempted_pairs=attempted_pairs,
+        completed_pairs=0,
+        total_pairs=total_pairs,
+        complete=False,
+    )
     for case in canary_cases:
         for seed in canary_seeds:
+            attempted_pairs += 1
+            protocol._emit_progress(
+                stage="canary",
+                phase="canary",
+                case=case,
+                seed=seed,
+                attempted_pairs=attempted_pairs,
+                completed_pairs=attempted_pairs - 1,
+                total_pairs=total_pairs,
+                complete=False,
+            )
             cand_result = protocol.runner.run_solver(
                 workdir=candidate_ws,
                 instance_path=case,
@@ -51,6 +74,18 @@ def run_canary(
                 selected_surface=selected_surface,
             )
             if not cand_result.success:
+                protocol._emit_progress(
+                    stage="canary",
+                    phase="canary",
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=attempted_pairs - 1,
+                    total_pairs=total_pairs,
+                    candidate_failed_pairs=1,
+                    failed_pairs=1,
+                    complete=True,
+                )
                 return CanaryResult(
                     passed=False,
                     reason=f"Candidate solver failed on {case}: {cand_result.error_category}",
@@ -61,6 +96,18 @@ def run_canary(
                 selected_surface=selected_surface,
             )
             if cand_audit_failure is not None:
+                protocol._emit_progress(
+                    stage="canary",
+                    phase="canary",
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=attempted_pairs - 1,
+                    total_pairs=total_pairs,
+                    candidate_failed_pairs=1,
+                    failed_pairs=1,
+                    complete=True,
+                )
                 return CanaryResult(
                     passed=False,
                     reason=(
@@ -92,10 +139,33 @@ def run_canary(
                 and champ_result.output.feasible
                 and not cand_result.output.feasible
             ):
+                protocol._emit_progress(
+                    stage="canary",
+                    phase="canary",
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    completed_pairs=attempted_pairs,
+                    total_pairs=total_pairs,
+                    candidate_failed_pairs=1,
+                    failed_pairs=1,
+                    complete=True,
+                )
                 return CanaryResult(
                     passed=False,
                     reason=f"Candidate infeasible on {case} (champion was feasible)",
                 )
+
+            protocol._emit_progress(
+                stage="canary",
+                phase="canary",
+                case=case,
+                seed=seed,
+                attempted_pairs=attempted_pairs,
+                completed_pairs=attempted_pairs,
+                total_pairs=total_pairs,
+                complete=attempted_pairs >= total_pairs,
+            )
 
     return CanaryResult(passed=True, reason=None)
 

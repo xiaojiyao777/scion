@@ -377,6 +377,25 @@ class CampaignManager:
         self._current_status_progress = progress
         self._last_status_result = self._evidence_recorder.last_status_result
 
+    def _update_status_progress(self, payload: Dict[str, Any] | None) -> None:
+        """Progress hook used by pre-protocol proposal and verification phases."""
+        if payload is None:
+            self._end_status_progress()
+            return
+        from scion.core.evidence_recording.artifact_refs import (
+            _in_flight_protocol_snapshot,
+        )
+
+        progress = dict(self._current_status_progress or {})
+        progress.update(payload)
+        progress["last_progress_at"] = datetime.now().isoformat()
+        self._current_status_progress = progress
+        self._evidence_recorder.current_status_progress = progress
+        self._evidence_recorder.in_flight_protocol = _in_flight_protocol_snapshot(
+            progress
+        )
+        self._write_status()
+
     def _begin_status_progress(
         self,
         *,
@@ -389,6 +408,7 @@ class CampaignManager:
         self._current_status_progress = {
             "branch_id": branch.branch_id,
             "stage": stage.value,
+            "phase": f"{stage.value}_protocol",
             "target_file": hypothesis.target_file,
             "hypothesis_action": hypothesis.action,
             "hypothesis_text": hypothesis.hypothesis_text,
@@ -412,6 +432,13 @@ class CampaignManager:
             "last_progress_at": datetime.now().isoformat(),
         }
         self._evidence_recorder.current_status_progress = self._current_status_progress
+        from scion.core.evidence_recording.artifact_refs import (
+            _in_flight_protocol_snapshot,
+        )
+
+        self._evidence_recorder.in_flight_protocol = _in_flight_protocol_snapshot(
+            self._current_status_progress
+        )
         self._write_status()
 
     def _end_status_progress(self) -> None:

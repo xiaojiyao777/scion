@@ -221,6 +221,11 @@ class SchemaPreviewTool(_BaseReadOnlyTool):
 
 def _schema_preview_summary(payload: Mapping[str, Any]) -> str:
     if bool(payload.get("passed")):
+        advisory = _schema_preview_advisory(payload)
+        if advisory:
+            return "Schema preview passed with advisory: " + _limit_text(
+                advisory, 420
+            )
         return "Schema preview passed."
     details: list[str] = []
     for section_name in ("hypothesis", "patch"):
@@ -243,6 +248,26 @@ def _schema_preview_summary(payload: Mapping[str, Any]) -> str:
         return "Schema preview found issues."
     compact = "; ".join(dict.fromkeys(details))
     return "Schema preview found issues: " + _limit_text(compact, 420)
+
+
+def _schema_preview_advisory(payload: Mapping[str, Any]) -> str:
+    details: list[str] = []
+    for section_name in ("hypothesis", "patch"):
+        section = payload.get(section_name)
+        if not isinstance(section, Mapping):
+            continue
+        problem_preview = section.get("problem_expected_telemetry_preview")
+        if not isinstance(problem_preview, Mapping):
+            continue
+        if str(problem_preview.get("status") or "") != "advisory":
+            continue
+        reason = str(problem_preview.get("reason") or "").strip()
+        if reason:
+            details.append(reason)
+        repair_hint = str(problem_preview.get("repair_hint") or "").strip()
+        if repair_hint:
+            details.append(repair_hint)
+    return "; ".join(dict.fromkeys(details))
 
 def _hypothesis_from_input(value: HypothesisProposalInput) -> HypothesisProposal:
     return HypothesisProposal(

@@ -235,7 +235,7 @@ def test_telemetry_diagnostic_streak_exhaustion_soft_abandons() -> None:
     assert decision.next_telemetry_diagnostic_streak == 3
 
 
-def test_telemetry_diagnostic_obvious_quality_regression_soft_abandons() -> None:
+def test_telemetry_diagnostic_quality_regression_still_retries_before_streak_limit() -> None:
     decision = BranchLifecyclePolicy().decide(
         _features(
             telemetry_validation_repairable=True,
@@ -248,8 +248,9 @@ def test_telemetry_diagnostic_obvious_quality_regression_soft_abandons() -> None
         ),
     )
 
-    assert decision.action == "soft_abandon"
-    assert decision.reason_codes == (TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,)
+    assert decision.action == "keep_exploring"
+    assert decision.reason_codes == (SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,)
+    assert decision.next_telemetry_diagnostic_streak == 1
 
 
 def test_validation_telemetry_diagnostic_uses_stage_retry_reason() -> None:

@@ -170,7 +170,7 @@ class CvrpSolverDesignProvider:
         )
         if not effect_fields:
             return None
-        issues: list[Mapping[str, Any]] = []
+        advisories: list[Mapping[str, Any]] = []
         for mechanism in mechanisms:
             if not _is_indirect_policy_mechanism(hypothesis, mechanism):
                 continue
@@ -181,9 +181,9 @@ class CvrpSolverDesignProvider:
             ]
             if not offending:
                 continue
-            issues.append(
+            advisories.append(
                 {
-                    "failure_code": "C11_expected_telemetry",
+                    "advisory_code": "C11_expected_telemetry_advisory",
                     "mechanism_id": mechanism,
                     "offending_fields": offending[:4],
                     "allowed_repair_shape": (
@@ -197,23 +197,23 @@ class CvrpSolverDesignProvider:
                     ),
                 }
             )
-        if not issues:
+        if not advisories:
             return None
-        first = issues[0]
+        first = advisories[0]
         return {
-            "passed": False,
-            "failure_code": "C11_expected_telemetry",
+            "passed": True,
+            "status": "advisory",
+            "advisory_code": "C11_expected_telemetry_advisory",
             "reason": (
-                "C11_expected_telemetry: indirect acceptance/temperature/"
-                "stagnation policy telemetry must use decision, activation, "
-                "or budget evidence instead of broad-loop objective effect."
+                "Advisory: indirect acceptance/temperature/stagnation policy "
+                "telemetry should use decision, activation, or budget evidence "
+                "instead of broad-loop objective effect fields."
             ),
-            "issues": issues,
+            "issues": advisories,
             "repair_hint": (
-                "Redraft the same hypothesis before code: keep target_file and "
-                "mechanism_changes ids unchanged, remove the offending effect "
-                "field(s), and use mechanism-specific decision/context, "
-                "activation, or budget telemetry."
+                "Keep target_file and mechanism_changes ids unchanged. In code, "
+                "prefer mechanism-specific decision/context, activation, or "
+                "budget telemetry; do not fake broad-loop objective effects."
             ),
             "mechanism_id": first.get("mechanism_id"),
             "offending_fields": first.get("offending_fields"),

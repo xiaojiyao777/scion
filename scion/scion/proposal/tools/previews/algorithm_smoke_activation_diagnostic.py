@@ -84,7 +84,7 @@ def _proposal_smoke_activation_diagnostic(
 
 def _static_activation_mismatch(value: Any) -> dict[str, Any] | None:
     static = _mapping_or_none(value)
-    if static is None or static.get("passed") is not False:
+    if static is None:
         return None
     issue_codes = tuple(str(code or "").strip() for code in static.get("issue_codes") or ())
     issues = _compact_agent_text_list(static.get("issues"), limit=4)

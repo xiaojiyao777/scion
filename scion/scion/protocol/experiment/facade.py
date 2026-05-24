@@ -59,6 +59,12 @@ class ExperimentProtocol:
     def set_progress_callback(self, callback: Optional[Callable[..., None]]) -> None:
         """Register a lightweight progress hook for long validation/frozen runs."""
         self._progress_callback = callback
+        runner_hook = getattr(self.runner, "set_progress_callback", None)
+        if callable(runner_hook):
+            try:
+                runner_hook(self._emit_progress if callback is not None else None)
+            except Exception:
+                logger.debug("Runner progress callback registration failed", exc_info=True)
 
     def _emit_progress(self, **payload: object) -> None:
         if self._progress_callback is None:

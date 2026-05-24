@@ -79,6 +79,7 @@ def pipeline(
     evaluate=lambda branch, workspace, hypothesis: None,
     apply_decision_and_finalize=lambda **kwargs: None,
     persist_branch_state=lambda branch_id: None,
+    update_status_progress=lambda payload: None,
 ) -> ExploreStepPipeline:
     store = HypothesisStore()
     step_pipeline = ExploreStepPipeline(
@@ -113,6 +114,7 @@ def pipeline(
         proposal_session_ref_for=lambda branch_id: {"session_id": "s1"},
         get_current_round=get_current_round,
         persist_branch_state=persist_branch_state,
+        update_status_progress=update_status_progress,
     )
     step_pipeline._test_store = store
     return step_pipeline

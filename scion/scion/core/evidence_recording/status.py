@@ -12,6 +12,66 @@ from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_s
 
 logger = logging.getLogger(__name__)
 
+_PROTOCOL_STAGE_SCOPED_FIELDS = (
+    "complete",
+    "total_pairs",
+    "attempted_pairs",
+    "completed_pairs",
+    "valid_pairs",
+    "failed_pairs",
+    "candidate_failed_pairs",
+    "champion_failed_pairs",
+    "raw_metrics_ref",
+    "raw_metrics_ref_scope",
+    "raw_metrics_internal_only",
+    "child_pid",
+    "child_exit_code",
+    "child_elapsed_ms",
+    "child_phase",
+    "case",
+    "seed",
+    "selected_surface",
+)
+
+
+def _normalize_child_process_fields(
+    progress: Dict[str, Any], payload: Mapping[str, Any]
+) -> None:
+    """Keep child process lifecycle fields internally consistent.
+
+    Progress updates are merged across long protocol stages. A subprocess start
+    and completion can be separated by other stage updates, so stale child
+    fields must not be allowed to survive that merge and make ``status.json``
+    report a dead process as still running.
+    """
+
+    if payload.get("child_pid") is not None:
+        progress.pop("child_exit_code", None)
+        progress.pop("child_elapsed_ms", None)
+        progress["child_phase"] = payload.get("child_phase") or "solver_subprocess"
+        return
+
+    if "child_pid" in payload:
+        progress.pop("child_pid", None)
+
+    has_terminal_child_update = (
+        "child_exit_code" in payload
+        or "child_elapsed_ms" in payload
+        or progress.get("child_exit_code") is not None
+        or progress.get("child_elapsed_ms") is not None
+    )
+    if has_terminal_child_update:
+        progress.pop("child_pid", None)
+        if not progress.get("child_phase") or progress.get("child_phase") == (
+            "solver_subprocess"
+        ):
+            progress["child_phase"] = "solver_subprocess_complete"
+
+    if progress.get("complete") is True:
+        progress.pop("child_pid", None)
+        if progress.get("child_phase") == "solver_subprocess":
+            progress["child_phase"] = "solver_subprocess_complete"
+
 
 class StatusWriterMixin:
     def write_status(
@@ -73,7 +133,18 @@ class StatusWriterMixin:
         """Merge a protocol progress update and refresh ``status.json``."""
         metrics_snapshot = _read_partial_metrics_snapshot(payload.get("raw_metrics_ref"))
         progress = dict(self.current_status_progress or {})
+        previous_stage = str(progress.get("stage") or "").strip()
+        incoming_stage = str(payload.get("stage") or "").strip()
+        if incoming_stage and previous_stage and incoming_stage != previous_stage:
+            for key in _PROTOCOL_STAGE_SCOPED_FIELDS:
+                if key not in payload:
+                    progress.pop(key, None)
         progress.update(payload)
+        _normalize_child_process_fields(progress, payload)
+        if "phase" not in payload:
+            stage = str(progress.get("stage") or "").strip()
+            if stage:
+                progress["phase"] = f"formal_{stage}"
         for key in (
             "stage",
             "complete",
@@ -84,8 +155,9 @@ class StatusWriterMixin:
             "candidate_failed_pairs",
             "champion_failed_pairs",
         ):
-            if key not in progress and key in metrics_snapshot:
+            if key not in payload and key in metrics_snapshot:
                 progress[key] = metrics_snapshot[key]
+        _normalize_child_process_fields(progress, payload)
         if "valid_pairs" not in progress and "completed_pairs" in progress:
             progress["valid_pairs"] = progress["completed_pairs"]
         if progress.get("raw_metrics_ref"):

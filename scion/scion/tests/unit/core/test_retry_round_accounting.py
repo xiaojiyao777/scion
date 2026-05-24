@@ -190,6 +190,80 @@ def test_new_hypothesis_attempt_increments_exploration_round() -> None:
     assert pipeline._test_store.statuses == [("hyp-1", "code_failed")]
 
 
+def test_explore_pipeline_emits_pre_protocol_status_progress() -> None:
+    branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
+    hypothesis = _hypothesis()
+    record = _hypothesis_record(branch.branch_id)
+    patch = PatchProposal(
+        file_path="operators/local_search.py",
+        action="modify",
+        code_content="def solve():\n    return None\n",
+    )
+    progress_events: list[dict[str, object] | None] = []
+    steps: list[StepRecord] = []
+    verification_passes: list[tuple[str, str]] = []
+
+    class BranchController:
+        def get_branch(self, branch_id: str) -> Branch:
+            assert branch_id == branch.branch_id
+            return branch
+
+        def next_stage(self, branch_id: str) -> None:
+            assert branch_id == branch.branch_id
+
+    class VerificationGate:
+        def run(self, *_args, **_kwargs) -> VerificationResult:
+            return VerificationResult(
+                passed=True,
+                checks=(CheckResult("V", True, "light", "ok", 0),),
+            )
+
+    pipeline = _pipeline(
+        pending={},
+        increment_round=lambda: 3,
+        increment_rounds_since_last_promote=lambda: None,
+        generate_hypothesis=lambda branch: (hypothesis, record),
+        generate_code=lambda branch, hypothesis, prior_failure=None: patch,
+        record_step=steps.append,
+        branch_controller=BranchController(),
+        verification_gate=VerificationGate(),
+        setup_workspace=lambda branch: "/tmp/workspace",
+        apply_patch=lambda *args, **kwargs: SimpleNamespace(code_hash="code-hash"),
+        record_verification_pass=lambda branch, code_hash: verification_passes.append(
+            (branch.branch_id, code_hash)
+        ),
+        evaluate=lambda branch, workspace, hypothesis: (Decision.ABANDON, None, None),
+        apply_decision_and_finalize=lambda **kwargs: StepResult(
+            action="explore",
+            branch_id=kwargs["branch"].branch_id,
+            decision=kwargs["decision"],
+            reason="screening complete",
+        ),
+        update_status_progress=progress_events.append,
+    )
+
+    result = pipeline.run(branch)
+
+    assert result.reason == "screening complete"
+    phases = [event["phase"] for event in progress_events if event]
+    assert phases[:3] == [
+        "proposal_hypothesis",
+        "hypothesis_contract",
+        "proposal_code",
+    ]
+    assert "patch_contract" in phases
+    assert "verification" in phases
+    assert "evaluation_dispatch" in phases
+    code_event = next(
+        event
+        for event in progress_events
+        if event and event["phase"] == "proposal_code"
+    )
+    assert code_event["target_file"] == hypothesis.target_file
+    assert code_event["hypothesis_action"] == hypothesis.action
+    assert progress_events[-1] is None
+
+
 def test_agent_quality_blocked_code_failure_rejects_without_pending_retry() -> None:
     branch = Branch("b1", BranchState.EXPLORE, 1, "champ")
     hypothesis = _hypothesis()
@@ -316,5 +390,3 @@ def test_agentic_session_timeout_code_failure_does_not_stop_campaign() -> None:
     assert branch.pending_retry is False
     assert steps[0].failure_stage == "agentic_budget_control"
     assert pipeline._test_store.statuses == [("hyp-1", "code_failed")]
-
-

@@ -440,8 +440,8 @@ def test_algorithm_smoke_rejects_missing_declared_mechanism_evidence(
     assert payload["passed"] is True
     assert payload["status"] == "diagnostic"
     assert payload["failure_class"] == "activation_not_observed_diagnostic"
-    assert "runtime_smoke" not in payload
     assert "telemetry_static_preview" in payload
+    assert payload["telemetry_static_preview"]["status"] == "diagnostic"
     assert "vns_local_search" in rendered
     assert "DECLARED_MECHANISM_ACTIVATION_MISSING" in rendered
     assert "record_move alone" in rendered
@@ -492,9 +492,15 @@ def test_algorithm_smoke_rejects_declared_best_delta_with_none_delta(
     payload = observation.structured_payload
     rendered = json.dumps(payload, sort_keys=True)
     assert observation.is_error is False
-    assert payload["passed"] is False
-    assert "runtime_smoke" not in payload
+    assert payload["passed"] is True
+    assert payload["status"] == "diagnostic"
+    assert payload["diagnostic_passed"] is True
+    assert payload["failure_class"] in {
+        "telemetry_static_diagnostic",
+        "telemetry_not_observed_diagnostic",
+    }
     assert "telemetry_static_preview" in payload
+    assert payload["telemetry_static_preview"]["status"] == "diagnostic"
     assert "DECLARED_MECHANISM_DELTA_EVIDENCE_MISSING" in rendered
     assert "best_delta_probe" in rendered
     assert "delta=None" in rendered
