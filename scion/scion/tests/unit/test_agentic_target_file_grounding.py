@@ -423,3 +423,98 @@ def test_code_prompt_manifest_audits_target_and_integration_file_visibility() ->
     assert cacheability["estimated_cacheable_chars"] >= (
         target_status["char_count"] + integration_status["char_count"]
     )
+
+
+def test_code_prompt_keeps_normal_solver_design_handoff_sections_untruncated() -> None:
+    target_source = (
+        "File: policies/baseline_modules/local_search.py\n"
+        "```python\n"
+        "def local_search():\n"
+        "    return None\n"
+        "```\n"
+    )
+    prompt_context = {
+        "research_surface_name": "solver_design",
+        "research_surface_kind": "solver_design",
+        "change_locus": "solver_design",
+        "target_file": "policies/baseline_modules/local_search.py",
+        "target_file_code": target_source,
+        "solver_design_branch_current_integration_files": (
+            "### policies/baseline_algorithm.py\n"
+            "```python\n"
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return None\n"
+            "```\n"
+        ),
+        "solver_design_api_manifest": "module api\n" + ("api_entry\n" * 600),
+        "hypothesis_detail": "detail\n" + ("mechanism rationale\n" * 220),
+        "hypothesis_implementation_brief": {
+            "hypothesis_text": "Add a bounded same-route reinsertion mechanism.",
+            "change_locus": "solver_design",
+            "action": "modify",
+            "target_file": "policies/baseline_modules/local_search.py",
+            "mechanism_changes": [
+                {"id": "intra_reinsertion_vns", "change_type": "add"}
+            ],
+            "expected_telemetry": {
+                "activation": [
+                    "solver_algorithm_phase_runtime_ms.intra_reinsertion_vns"
+                ]
+            },
+        },
+        "problem_summary": "CVRP.",
+        "problem_object": "problem object\n" + ("objective and boundary\n" * 180),
+        "solver_mechanics": "solver mechanics\n" + ("call path and state flow\n" * 180),
+        "operator_interface_spec": "interface\n" + ("function and invariant\n" * 220),
+        "import_whitelist": "math, random",
+        "editable_patterns": "policies/baseline_algorithm.py, policies/baseline_modules/*.py",
+        "frozen_patterns": "adapter.py, solver.py",
+        "agentic_resume_context": {
+            "resume": {
+                "model_facing_projection": {
+                    "schema_version": "agentic-resume-model-projection.v1",
+                    "previous_session": {
+                        "termination_reason": "hypothesis_awaiting_approval"
+                    },
+                    "notes": "handoff\n" + ("read receipt and retry state\n" * 170),
+                }
+            }
+        },
+        "agentic_tool_observations": [
+            {
+                "observation_id": "obs-runtime",
+                "tool_name": "feedback.query_runtime",
+                "summary": "runtime feedback",
+                "structured_payload": {
+                    "rows": [
+                        {
+                            "case": f"case-{idx}",
+                            "summary": "runtime and screening observation",
+                        }
+                        for idx in range(220)
+                    ]
+                },
+            }
+        ],
+    }
+    system_blocks, user_prompt = _split_code_context(prompt_context)
+    manifest = build_api_visible_prompt_manifest(
+        session_id="session-code-section-budgets",
+        phase="draft_patch",
+        call_kind="code",
+        prompt_context=prompt_context,
+        observations=[],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt=user_prompt,
+    )
+
+    for section_name in (
+        "problem_object",
+        "solver_design_module_api_manifest",
+        "agentic_resume_context",
+        "agentic_proposal_tool_observations",
+        "hypothesis_detail_audit",
+    ):
+        assert section_name not in manifest["truncated_sections"]
+        assert manifest["section_statuses"][section_name]["status"] == "included"

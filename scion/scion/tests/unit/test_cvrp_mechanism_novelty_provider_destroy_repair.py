@@ -123,6 +123,36 @@ def test_cvrp_regret_gate_allows_cluster_destroy_acknowledging_regret_repair() -
     assert result is None or result.failure_category != "premise_contradicted"
 
 
+def test_cvrp_regret_gate_allows_route_pool_recombination_using_existing_regret() -> None:
+    hypothesis = HypothesisProposal(
+        hypothesis_text=(
+            "The active solver already has diverse feasible construction, ALNS "
+            "destroy/repair with regret insertion, and VNS relocate/swap/Or-opt "
+            "moves, but it lacks a whole-route recombination mechanism that "
+            "preserves high-quality route fragments from elite incumbent "
+            "snapshots and rebuilds only uncovered customers. Add a bounded "
+            "route-pool recombination phase, then repair uncovered customers "
+            "with existing capacity-safe regret insertion."
+        ),
+        change_locus="solver_design",
+        action="create_new",
+        target_file="policies/baseline_modules/route_pool_recombination.py",
+        target_weakness="Search lacks solution-level route-fragment recombination.",
+        expected_effect="Improve total_distance through elite route recombination.",
+        mechanism_changes=(
+            MechanismChange(id="route_pool_recombination", change_type="add"),
+            MechanismChange(id="elite_solution_pool", change_type="add"),
+        ),
+    )
+
+    result = CvrpMechanismNoveltyProvider().evaluate_mechanism_novelty(
+        hypothesis,
+        active_solver_snapshot=_active_capability_snapshot(),
+    )
+
+    assert result is None or result.failure_category != "premise_contradicted"
+
+
 def test_cvrp_random_gate_allows_cluster_destroy_contrast_with_random_removal() -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text=(

@@ -275,8 +275,53 @@ def test_prompt_manifest_marks_actual_section_truncation_only() -> None:
     observations_status = manifest["section_statuses"][
         "agentic_proposal_tool_observations"
     ]
-    assert observations_status["status"] == "truncated"
-    assert "agentic_proposal_tool_observations" in manifest["truncated_sections"]
+    assert observations_status["status"] == "included"
+    assert "agentic_proposal_tool_observations" not in manifest["truncated_sections"]
+    assert "agentic_tool_observations_projection.v1" in user_prompt
+    assert "x" * 200000 not in user_prompt
+
+
+def test_tool_observations_render_bounded_projection_not_raw_append_only() -> None:
+    observations = [
+        {
+            "observation_id": f"obs-{idx}",
+            "tool_name": "feedback.query_runtime",
+            "summary": "runtime feedback with screening_win_rate_failure",
+            "structured_payload": {
+                "research_diagnosis": {
+                    "schema_version": "research-diagnosis.v1",
+                    "screening_step_count": idx,
+                    "failure_mode_tags": ["screening_win_rate_failure"],
+                    "runtime_signal_rows": [
+                        {"round_num": row, "detail": "x" * 80}
+                        for row in range(50)
+                    ],
+                },
+                "raw_rows": [{"payload": "y" * 200} for _ in range(100)],
+            },
+        }
+        for idx in range(120)
+    ]
+
+    _blocks, user_prompt = _split_hypothesis_context(
+        {
+            "problem_summary": "problem",
+            "research_surfaces": "surface",
+            "champion_operators_code": "code",
+            "champion_stats": "stats",
+            "agentic_tool_observations": observations,
+        }
+    )
+    observation_section = user_prompt.split(
+        "## Agentic Proposal Tool Observations",
+        maxsplit=1,
+    )[1]
+
+    assert "agentic_tool_observations_projection.v1" in observation_section
+    assert '"observation_count": 120' in observation_section
+    assert '"omitted_older_count": 40' in observation_section
+    assert "screening_win_rate_failure" in observation_section
+    assert '"raw_rows"' not in observation_section
 
 
 def test_raw_tool_observations_reference_duplicate_active_facts_by_digest() -> None:

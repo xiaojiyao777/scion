@@ -1,6 +1,7 @@
 """Contract validation for proposal-declared runtime telemetry."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from scion.runtime.audit import normalize_surface_name
@@ -102,7 +103,17 @@ def validate_expected_telemetry_contract(
                 role_map=role_map,
             )
         )
-        unknown = [field for field in fields if field not in allowed]
+        unknown = [
+            field
+            for field in fields
+            if field not in allowed
+            and not _is_allowed_declared_runtime_subfield(
+                field,
+                allowed_fields=allowed,
+                role_map=role_map,
+                category=category,
+            )
+        ]
         if unknown:
             errors.append(
                 f"expected_telemetry.{category} references undeclared "
@@ -134,6 +145,56 @@ _ACTIVATION_AGGREGATE_ROLES = frozenset(
 _ACTIVATION_ALLOWED_ROLES = frozenset(
     {"mechanism_activity", "mechanism_activation"}
 )
+_ACTIVATION_COMPATIBLE_CONTAINER_ROLES = frozenset(
+    {"activity", "budget", "diagnostic", "mechanism_activity", "mechanism_activation"}
+)
+_SUBFIELD_FORBIDDEN_CONTAINER_ROLES = frozenset(
+    {
+        "aggregate_effect",
+        "effect",
+        "mechanism_effect",
+        "objective_outcome",
+        "outcome",
+        "protected_outcome",
+    }
+)
+
+
+def _is_allowed_declared_runtime_subfield(
+    field: str,
+    *,
+    allowed_fields: set[str],
+    role_map: dict[str, frozenset[str]] | None,
+    category: str,
+) -> bool:
+    """Allow adapter-declared runtime map children without hard-coding keys.
+
+    Problem adapters often expose telemetry maps such as
+    ``solver_algorithm_phase_runtime_ms`` whose concrete children are created
+    by algorithm phases or newly declared mechanisms.  The generic Scion
+    contract should verify that the container is adapter-declared and has a
+    compatible role, but it should not require every child key to be known
+    before the agent writes the mechanism.
+    """
+
+    field_text = str(field or "").strip()
+    if "." not in field_text:
+        return False
+    base, child = field_text.rsplit(".", 1)
+    if not base or not child or base not in allowed_fields:
+        return False
+    if not _runtime_subfield_key_is_safe(child):
+        return False
+    roles = runtime_field_roles_for(base, role_map or {})
+    if roles & _SUBFIELD_FORBIDDEN_CONTAINER_ROLES:
+        return False
+    if category == "activation":
+        return bool(roles & _ACTIVATION_COMPATIBLE_CONTAINER_ROLES)
+    return True
+
+
+def _runtime_subfield_key_is_safe(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", str(value or "")))
 
 
 def _category_field_semantic_errors(

@@ -18,13 +18,13 @@ _CACHE_5M = {"type": "ephemeral"}
 _AGENTIC_RESEARCH_DIAGNOSIS_CHARS = 12000
 _AGENTIC_ACTIVE_ALGORITHM_FACTS_CHARS = 16000
 _AGENTIC_ACTIVE_SOLVER_MECHANISMS_CHARS = 4000
-_AGENTIC_RESUME_CONTEXT_CHARS = 3600
+_AGENTIC_RESUME_CONTEXT_CHARS = 16000
 _AGENTIC_TOOL_OBSERVATIONS_CHARS = 96000
 _AGENTIC_FULL_ALGORITHM_FILE_READS_CHARS = 1_000_000
 _AGENTIC_CODE_FULL_ALGORITHM_FILE_READS_CHARS = 400_000
-_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 6000
-_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 6000
-_AGENTIC_CODE_PREVIEW_FEEDBACK_CHARS = 5000
+_AGENTIC_CODE_RESEARCH_DIAGNOSIS_CHARS = 16000
+_AGENTIC_CODE_TOOL_OBSERVATIONS_CHARS = 48000
+_AGENTIC_CODE_PREVIEW_FEEDBACK_CHARS = 16000
 _AGENTIC_SCHEMA_RETRY_FEEDBACK_CHARS = 12000
 _PREVIEW_TOOL_NAMES = frozenset(
     {
@@ -101,7 +101,10 @@ def _agentic_research_context_block(
             "section.\n\n"
             f"{_bounded_json(resume_context, _AGENTIC_RESUME_CONTEXT_CHARS)}"
         )
-    diagnosis = context.get("agentic_research_diagnosis")
+    diagnosis = _agentic_research_diagnosis_projection(
+        context.get("agentic_research_diagnosis"),
+        code_phase=code_phase,
+    )
     if diagnosis:
         heading = (
             "## Evidence Diagnosis Behind This Hypothesis"
@@ -197,12 +200,18 @@ def _agentic_research_context_block(
             resume_context=resume_context,
             full_read_observation_ids=full_algorithm_read_ids,
         )
+        observations = _tool_observations_model_projection(
+            observations,
+            code_phase=code_phase,
+        )
         parts.append(
             "## Agentic Proposal Tool Observations\n"
             "These are exposure-controlled tool observations gathered before "
-            "generation. Use screening/runtime feedback and selected-surface "
-            "metadata when forming the hypothesis or implementing the approved "
-            "change; do not treat raw refs or holdout detail as available.\n\n"
+            "generation. This section is a bounded semantic projection, not a "
+            "raw append-only transcript; full algorithm file reads, active "
+            "facts, and preview repair details are projected into dedicated "
+            "sections above. Use the receipts and digests to decide what to "
+            "reread through tools when exact detail is needed.\n\n"
             f"{_bounded_json(observations, _agentic_observation_chars(code_phase))}"
         )
     return "\n\n".join(parts)
@@ -263,6 +272,75 @@ def _bounded_json(value: Any, max_chars: int) -> str:
     if len(rendered) <= max_chars:
         return rendered
     return rendered[: max(0, max_chars - 80)] + "\n... <truncated agentic context>"
+
+
+def _agentic_research_diagnosis_projection(
+    value: Any,
+    *,
+    code_phase: bool,
+) -> Any:
+    if not isinstance(value, dict):
+        return value
+    projection = value.get("model_facing_projection")
+    if isinstance(projection, dict):
+        return projection
+    latest = value.get("latest_runtime_diagnosis")
+    aggregate = value.get("aggregate_runtime_diagnosis")
+    compact_latest = (
+        _compact_runtime_diagnosis(latest, row_limit=8)
+        if isinstance(latest, dict)
+        else latest
+    )
+    compact_aggregate = (
+        _compact_runtime_diagnosis(aggregate, row_limit=12)
+        if isinstance(aggregate, dict)
+        else aggregate
+    )
+    compact = _drop_empty(
+        {
+            "projection_kind": "agentic_research_diagnosis_projection.v1",
+            "source_schema_version": value.get("schema_version"),
+            "code_phase": code_phase,
+            "runtime_diagnosis_count": value.get("runtime_diagnosis_count"),
+            "runtime_diagnoses_with_signal": value.get(
+                "runtime_diagnoses_with_signal"
+            ),
+            "latest_runtime_diagnosis": compact_latest,
+            "aggregate_runtime_diagnosis": compact_aggregate,
+            "notes": _bounded_list(value.get("notes"), 12),
+            "repair_guidance": _bounded_list(value.get("repair_guidance"), 12),
+            "audit_digest": _stable_short_digest(value),
+            "projection_note": (
+                "Raw diagnosis rows are audit material. This projection keeps "
+                "latest/aggregate signals and bounded examples so long-running "
+                "campaigns do not accumulate unbounded prompt history."
+            ),
+        }
+    )
+    return compact
+
+
+def _compact_runtime_diagnosis(value: dict[str, Any], *, row_limit: int) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "schema_version": value.get("schema_version"),
+            "screening_step_count": value.get("screening_step_count"),
+            "reason_code_counts": value.get("reason_code_counts"),
+            "surface_counts": value.get("surface_counts"),
+            "gate_outcome_counts": value.get("gate_outcome_counts"),
+            "failure_mode_tags": _bounded_list(value.get("failure_mode_tags"), 16),
+            "runtime_signal_rows": _bounded_list(
+                value.get("runtime_signal_rows"),
+                row_limit,
+            ),
+            "telemetry_failure_tags": _bounded_list(
+                value.get("telemetry_failure_tags"),
+                16,
+            ),
+            "branch_states": value.get("branch_states"),
+            "audit_digest": _stable_short_digest(value),
+        }
+    )
 
 
 def _schema_retry_feedback_projection(
@@ -390,6 +468,177 @@ def _resume_context_projection(value: Any) -> dict[str, Any]:
         "structured_rejection": resume.get("structured_rejection"),
     }
     return _drop_empty(compact)
+
+
+def _tool_observations_model_projection(
+    observations: Any,
+    *,
+    code_phase: bool,
+) -> Any:
+    if not isinstance(observations, list):
+        return observations
+    max_items = 40 if code_phase else 80
+    compact_items = [_compact_tool_observation_for_model(item) for item in observations]
+    compact_items = [item for item in compact_items if item]
+    shown = compact_items[-max_items:]
+    return _drop_empty(
+        {
+            "projection_kind": "agentic_tool_observations_projection.v1",
+            "observation_count": len(compact_items),
+            "shown_latest_count": len(shown),
+            "omitted_older_count": max(0, len(compact_items) - len(shown)),
+            "tool_counts": _tool_counts(compact_items),
+            "file_read_receipts": _file_read_receipts(compact_items, limit=24),
+            "preview_receipts": _preview_receipts(compact_items, limit=12),
+            "observations": shown,
+            "projection_note": (
+                "This is a bounded model-facing projection. Exact source content "
+                "for full reads appears in dedicated source sections; older raw "
+                "observations remain in the audit ledger and should be queried "
+                "through tools or read receipts when needed."
+            ),
+        }
+    )
+
+
+def _compact_tool_observation_for_model(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"value": _limit_text(str(value), 500)}
+    payload = value.get("structured_payload")
+    compact_payload = (
+        _compact_payload_for_model(payload)
+        if isinstance(payload, dict)
+        else payload
+    )
+    return _drop_empty(
+        {
+            "observation_id": value.get("observation_id"),
+            "tool_name": value.get("tool_name"),
+            "phase": value.get("phase"),
+            "proposal_phase": value.get("proposal_phase"),
+            "status": value.get("status"),
+            "failure_code": value.get("failure_code"),
+            "summary": _limit_text(str(value.get("summary") or ""), 700),
+            "repair_hint": _limit_text(str(value.get("repair_hint") or ""), 700),
+            "file_path": value.get("file_path"),
+            "coverage": value.get("coverage"),
+            "digest": value.get("digest"),
+            "truncated": value.get("truncated"),
+            "structured_payload": compact_payload,
+        }
+    )
+
+
+def _compact_payload_for_model(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("projection_kind"):
+        return payload
+    keys_to_keep = (
+        "schema_version",
+        "projection_kind",
+        "tool_name",
+        "surface",
+        "surface_id",
+        "selected_surface",
+        "problem_id",
+        "problem_spec_hash",
+        "file_path",
+        "module",
+        "coverage_status",
+        "max_chars",
+        "size_chars",
+        "truncated",
+        "digest",
+        "sha256",
+        "passed",
+        "failure_code",
+        "reason",
+        "summary",
+        "research_diagnosis",
+        "runtime_feedback",
+        "screening_feedback",
+        "read_receipts",
+        "active_algorithm_facts_ref",
+        "content_preview_ref",
+        "content_preview_omitted_from_generic_observations",
+        "dedicated_context_sections",
+    )
+    compact = {key: payload.get(key) for key in keys_to_keep if key in payload}
+    if "research_diagnosis" in compact and isinstance(
+        compact["research_diagnosis"],
+        dict,
+    ):
+        compact["research_diagnosis"] = _agentic_research_diagnosis_projection(
+            compact["research_diagnosis"],
+            code_phase=False,
+        )
+    for key in ("runtime_feedback", "screening_feedback", "read_receipts"):
+        if isinstance(compact.get(key), list):
+            compact[key] = _bounded_list(compact[key], 16)
+    if not compact:
+        compact = {
+            "payload_digest": _stable_short_digest(payload),
+            "payload_keys": list(payload)[:24],
+        }
+    else:
+        compact["payload_digest"] = _stable_short_digest(payload)
+    return _drop_empty(compact)
+
+
+def _tool_counts(items: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        tool_name = str(item.get("tool_name") or "unknown")
+        counts[tool_name] = counts.get(tool_name, 0) + 1
+    return counts
+
+
+def _file_read_receipts(items: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    receipts: list[dict[str, Any]] = []
+    for item in items:
+        tool_name = str(item.get("tool_name") or "")
+        if tool_name not in {
+            "context.read_algorithm_file",
+            "context.list_algorithm_files",
+            "context.read_surface",
+            "context.read_active_solver_design",
+            "context.read_solver_call_graph",
+        }:
+            continue
+        receipts.append(
+            _drop_empty(
+                {
+                    "tool_name": tool_name,
+                    "file_path": item.get("file_path"),
+                    "coverage": item.get("coverage"),
+                    "digest": item.get("digest"),
+                    "summary": item.get("summary"),
+                }
+            )
+        )
+    return receipts[-limit:]
+
+
+def _preview_receipts(items: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    receipts: list[dict[str, Any]] = []
+    for item in items:
+        if str(item.get("tool_name") or "") not in _PREVIEW_TOOL_NAMES:
+            continue
+        payload = item.get("structured_payload")
+        payload_dict = payload if isinstance(payload, dict) else {}
+        receipts.append(
+            _drop_empty(
+                {
+                    "tool_name": item.get("tool_name"),
+                    "status": item.get("status"),
+                    "failure_code": item.get("failure_code")
+                    or payload_dict.get("failure_code"),
+                    "passed": payload_dict.get("passed"),
+                    "summary": item.get("summary"),
+                    "repair_hint": item.get("repair_hint"),
+                }
+            )
+        )
+    return receipts[-limit:]
 
 
 def _dedupe_tool_observations(

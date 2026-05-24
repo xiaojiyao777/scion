@@ -33,6 +33,7 @@ def _surface_spec() -> SimpleNamespace:
                             "solver_algorithm_phase_runtime_ms.{mechanism}",
                         ],
                         "budget": [
+                            "solver_algorithm_phase_runtime_ms",
                             "solver_algorithm_phase_runtime_ms.{mechanism}",
                         ],
                         "aggregate_effect": [
@@ -88,6 +89,24 @@ def test_activation_accepts_mechanism_specific_runtime_map_path() -> None:
         },
         declared_mechanisms=[
             MechanismChange(id="construction_route_merge", change_type="add")
+        ],
+    )
+
+    assert errors == ()
+
+
+def test_activation_accepts_declared_phase_runtime_subpath_as_diagnostic_evidence() -> None:
+    errors = validate_expected_telemetry_contract(
+        problem_spec=_surface_spec(),
+        selected_surface="solver_design",
+        expected_telemetry={
+            "activation": [
+                "solver_algorithm_phase_runtime_ms.vns_initial",
+                "solver_algorithm_phase_runtime_ms.vns_embedded",
+            ],
+        },
+        declared_mechanisms=[
+            MechanismChange(id="intra_reinsertion_vns", change_type="add")
         ],
     )
 

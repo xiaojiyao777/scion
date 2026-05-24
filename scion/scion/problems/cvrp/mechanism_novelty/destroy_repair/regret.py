@@ -67,6 +67,8 @@ def _missing_regret_insertion_repair_span(text: str) -> str:
     ):
         return ""
     if span and _acknowledges_existing_regret_repair(text):
+        if re.search(r"\bbut\b.{0,25}\blacks?\b", span):
+            return ""
         if re.search(r"\bnot\b.{0,30}\b(?:claim|premise|assert)", span):
             return ""
         if _uses_regret_after_stagnation_escape_variant(text):
@@ -165,6 +167,23 @@ def _span_targets_variant_not_regret(span: str) -> bool:
             "restart",
             "perturbation",
             "large perturbation",
+            "recombination",
+            "recombine",
+            "recombined",
+            "elite",
+            "elite pool",
+            "route pool",
+            "route-pool",
+            "route fragment",
+            "route-fragment",
+            "fragment",
+            "fragments",
+            "uncovered customer",
+            "uncovered customers",
+            "rebuild",
+            "rebuilds",
+            "stitch",
+            "stitching",
         ),
     )
 
@@ -435,6 +454,22 @@ def _acknowledges_existing_regret_repair_variant(text: str) -> bool:
         "near-empty route",
         "short route",
         "variant",
+        "recombination",
+        "recombine",
+        "route pool",
+        "route-pool",
+        "route fragment",
+        "route-fragment",
+        "fragment",
+        "fragments",
+        "uncovered customer",
+        "uncovered customers",
+        "rebuild",
+        "rebuilds",
+        "stitch",
+        "stitching",
+        "elite",
+        "elite pool",
     )
     if not _has_any(text, variant_terms):
         return False
