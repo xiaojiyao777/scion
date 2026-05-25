@@ -86,6 +86,10 @@ class CampaignLoop:
                 loop_steps=loop_steps,
                 loop_step_limit=loop_step_limit,
                 counted_rounds=counted_rounds,
+                telemetry_repairable_attempts=telemetry_repairable_attempts,
+                validation_repair_required_attempts=(
+                    validation_repair_required_attempts
+                ),
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
             )
@@ -251,7 +255,12 @@ def _proposal_attempt_limit(
     *,
     configured: int | None,
 ) -> int:
-    """Return the user-visible LLM proposal attempt cap."""
+    """Return the user-visible LLM proposal attempt cap.
+
+    ``--rounds`` is a controlled-run proposal attempt ceiling by default.  The
+    explicit CLI/env override remains available for deliberately wider repair
+    sweeps, but a short diagnostic run must not launch proposal round N+1.
+    """
     if configured is not None:
         return max(1, int(configured))
     raw = os.environ.get("SCION_PROPOSAL_ATTEMPT_LIMIT")
@@ -263,8 +272,7 @@ def _proposal_attempt_limit(
                 "Ignoring invalid SCION_PROPOSAL_ATTEMPT_LIMIT=%r",
                 raw,
             )
-    rounds = max(1, int(requested_rounds))
-    return rounds + max(6, rounds * 2)
+    return max(1, int(requested_rounds))
 
 
 def _campaign_loop_status(
@@ -275,24 +283,44 @@ def _campaign_loop_status(
     loop_steps: int,
     loop_step_limit: int,
     counted_rounds: int,
+    telemetry_repairable_attempts: int,
+    validation_repair_required_attempts: int,
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
 ) -> dict[str, int]:
+    attempts_value = max(0, int(attempts))
+    effective_rounds = max(0, int(counted_rounds))
+    telemetry_diagnostic_attempts = max(
+        0,
+        int(telemetry_repairable_attempts)
+        + int(validation_repair_required_attempts),
+    )
+    quality_blocks = max(0, int(proposal_quality_blocked_attempts))
     return {
         "requested_rounds": max(1, int(requested_rounds)),
         "attempt_limit": max(0, int(attempt_limit)),
         "proposal_attempt_limit": max(0, int(attempt_limit)),
-        "attempts": max(0, int(attempts)),
-        "proposal_attempts_consumed": max(0, int(attempts)),
+        "attempts": attempts_value,
+        "total_rounds": attempts_value,
+        "proposal_attempts": attempts_value,
+        "proposal_attempts_consumed": attempts_value,
         "loop_steps": max(0, int(loop_steps)),
         "loop_step_limit": max(0, int(loop_step_limit)),
-        "effective_rounds_completed": max(0, int(counted_rounds)),
+        "effective_rounds_completed": effective_rounds,
+        "telemetry_repairable_attempts": max(
+            0,
+            int(telemetry_repairable_attempts),
+        ),
+        "validation_repair_required_attempts": max(
+            0,
+            int(validation_repair_required_attempts),
+        ),
+        "telemetry_diagnostic_attempts": telemetry_diagnostic_attempts,
         "proposal_quality_loop_limit": max(1, int(proposal_quality_loop_limit)),
         "proposal_quality_limit": max(1, int(proposal_quality_loop_limit)),
-        "proposal_quality_blocks_consumed": max(
-            0,
-            int(proposal_quality_blocked_attempts),
-        ),
+        "proposal_quality_blocks_consumed": quality_blocks,
+        "quality_blocks": quality_blocks,
+        "blocked_attempts": quality_blocks,
         "proposal_quality_blocks_remaining": max(
             0,
             int(proposal_quality_loop_limit)

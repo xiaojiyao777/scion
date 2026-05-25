@@ -8,7 +8,7 @@ from scion.core.models import Decision
 from scion.core.step_result import StepResult
 
 
-def test_campaign_loop_default_proposal_attempt_limit_allows_repair_headroom() -> None:
+def test_campaign_loop_default_proposal_attempt_limit_matches_requested_rounds() -> None:
     statuses: list[dict[str, Any]] = []
 
     loop = CampaignLoop(
@@ -40,7 +40,8 @@ def test_campaign_loop_default_proposal_attempt_limit_allows_repair_headroom() -
     first_loop_status = next(
         item["loop_status"] for item in statuses if "loop_status" in item
     )
-    assert first_loop_status["proposal_attempt_limit"] == 12
+    assert first_loop_status["proposal_attempt_limit"] == 4
+    assert first_loop_status["requested_rounds"] == 4
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:
@@ -401,7 +402,7 @@ def test_campaign_loop_explicit_attempt_limit_allows_bounded_quality_overflow() 
     assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 5
 
 
-def test_campaign_loop_default_attempt_limit_leaves_quality_repair_headroom() -> None:
+def test_campaign_loop_default_attempt_limit_caps_quality_blocks_at_rounds() -> None:
     results = [
         StepResult(
             action="explore",
@@ -453,12 +454,13 @@ def test_campaign_loop_default_attempt_limit_leaves_quality_repair_headroom() ->
 
     loop.run(max_rounds=3)
 
-    assert calls == 9
-    assert last_results[-1].stopped is True
-    assert "proposal_quality_loop" in stopped_reasons
-    assert loop_statuses[-1]["attempt_limit"] == 9
+    assert calls == 3
+    assert last_results[-1].stopped is False
+    assert "proposal_attempt_limit_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["attempt_limit"] == 3
     assert loop_statuses[-1]["proposal_quality_limit"] == 9
-    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 9
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 3
+    assert loop_statuses[-1]["quality_blocks"] == 3
 
 
 def test_campaign_loop_does_not_start_step_when_proposal_attempts_are_exhausted() -> None:
@@ -578,6 +580,64 @@ def test_campaign_loop_continues_after_non_counting_and_telemetry_repairable_att
         "validation_repair_required",
     ]
     assert "max_rounds_exhausted" in stopped_reasons
+
+
+def test_campaign_loop_default_rounds_bound_telemetry_repairable_attempts() -> None:
+    results = [
+        StepResult(
+            action="explore",
+            branch_id="b1",
+            decision=Decision.CONTINUE_EXPLORE,
+            reason="TELEMETRY_VALIDATION_REPAIRABLE: repair declared telemetry",
+            counts_toward_max_rounds=False,
+            attempt_kind="telemetry_repairable",
+        )
+        for _ in range(5)
+    ]
+    calls = 0
+    stopped_reasons: list[str | None] = []
+    loop_statuses: list[dict[str, Any]] = []
+
+    def run_one_step() -> StepResult:
+        nonlocal calls
+        result = results[calls]
+        calls += 1
+        return result
+
+    def write_status(**kwargs: Any) -> None:
+        if "stopped_reason" in kwargs:
+            stopped_reasons.append(kwargs.get("stopped_reason"))
+        if "loop_status" in kwargs:
+            loop_statuses.append(dict(kwargs["loop_status"]))
+
+    loop = CampaignLoop(
+        write_status=write_status,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: False,
+        get_last_stop_reason=lambda: None,
+        set_last_stop_reason=lambda reason: stopped_reasons.append(reason),
+        get_circuit_breaker=lambda: SimpleNamespace(
+            is_tripped=False,
+            last_failure_detail=None,
+        ),
+        circuit_breaker_threshold=3,
+        run_one_step=run_one_step,
+        run_stagnation_check=lambda: None,
+        check_soft_stagnation=lambda: None,
+        write_campaign_summary=lambda: None,
+        terminalize_active_branches=lambda reason: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda timeout: None,
+    )
+
+    loop.run(max_rounds=4)
+
+    assert calls == 4
+    assert "proposal_attempt_limit_exhausted" in stopped_reasons
+    assert loop_statuses[-1]["requested_rounds"] == 4
+    assert loop_statuses[-1]["proposal_attempts"] == 4
+    assert loop_statuses[-1]["effective_rounds_completed"] == 0
+    assert loop_statuses[-1]["telemetry_diagnostic_attempts"] == 4
 
 
 def test_campaign_loop_writes_status_heartbeat_before_step_execution() -> None:

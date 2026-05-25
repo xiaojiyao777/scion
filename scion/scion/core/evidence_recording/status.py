@@ -73,6 +73,38 @@ def _normalize_child_process_fields(
             progress["child_phase"] = "solver_subprocess_complete"
 
 
+def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
+    """Mirror stable loop accounting fields at the status top level."""
+    loop = payload.get("campaign_loop")
+    if not isinstance(loop, Mapping):
+        return
+
+    aliases = {
+        "requested_rounds": "requested_rounds",
+        "total_rounds": "total_rounds",
+        "proposal_attempts": "proposal_attempts",
+        "effective_rounds_completed": "effective_rounds_completed",
+        "telemetry_diagnostic_attempts": "telemetry_diagnostic_attempts",
+        "quality_blocks": "quality_blocks",
+        "blocked_attempts": "blocked_attempts",
+    }
+    for top_key, loop_key in aliases.items():
+        value = loop.get(loop_key)
+        if value is None:
+            continue
+        if payload.get(top_key) is None:
+            payload[top_key] = value
+
+    if payload.get("quality_blocks") is None:
+        value = loop.get("proposal_quality_blocks_consumed")
+        if value is not None:
+            payload["quality_blocks"] = value
+    if payload.get("blocked_attempts") is None:
+        value = payload.get("quality_blocks")
+        if value is not None:
+            payload["blocked_attempts"] = value
+
+
 class StatusWriterMixin:
     def write_status(
         self,
@@ -89,6 +121,7 @@ class StatusWriterMixin:
             self.campaign_loop_status = dict(loop_status)
         if self.campaign_loop_status is not None:
             payload["campaign_loop"] = dict(self.campaign_loop_status)
+            _merge_campaign_loop_observability(payload)
         if last_result is not None:
             self.last_status_result = {
                 "action": last_result.action,

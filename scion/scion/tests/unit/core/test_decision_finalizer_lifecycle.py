@@ -138,6 +138,15 @@ def test_continue_explore_preserves_non_regressive_neutral_screening_workspace()
     assert discarded == []
     assert zero_win_streaks[branch.branch_id] == 1
     assert controller.get_branch(branch.branch_id).direction is not None
+    assert controller.get_branch(branch.branch_id).branch_code_status == (
+        "active_no_effect"
+    )
+    assert controller.get_branch(branch.branch_id).last_screening_feedback_tier == (
+        "no_effect"
+    )
+    assert controller.get_branch(branch.branch_id).last_telemetry_outcome == (
+        "no_objective_effect"
+    )
     assert hyp_store.statuses == [("h-1", "rejected")]
 
 
@@ -239,12 +248,13 @@ def test_continue_explore_discards_candidate_failed_screening_workspace() -> Non
     assert result.decision == Decision.CONTINUE_EXPLORE
     assert result.attempt_kind == "screening"
     assert discarded == [branch.branch_id]
+    assert controller.get_branch(branch.branch_id).branch_code_status == "discarded"
     assert branch.branch_id not in patches
     assert branch.branch_id in workspaces
     assert hyp_store.statuses == [("h-2", "rejected")]
 
 
-def test_validation_telemetry_repairable_preserves_workspace_with_stage_attempt_kind() -> None:
+def test_validation_telemetry_repairable_marks_wiring_suspect_without_reusing_workspace() -> None:
     controller = BranchController()
     branch = controller.create_branch(
         ChampionState(
@@ -344,8 +354,14 @@ def test_validation_telemetry_repairable_preserves_workspace_with_stage_attempt_
     assert result.counts_toward_max_rounds is False
     assert result.attempt_kind == "validation_repair_required"
     assert result.reason.startswith("VALIDATION_TELEMETRY_REPAIRABLE")
-    assert discarded == []
-    assert patches[branch.branch_id] is patch
+    assert discarded == [branch.branch_id]
+    assert branch.branch_id not in patches
     assert workspaces[branch.branch_id] == "/tmp/workspace"
+    assert controller.get_branch(branch.branch_id).branch_code_status == (
+        "telemetry_wiring_suspect"
+    )
+    assert controller.get_branch(branch.branch_id).last_telemetry_outcome == (
+        "activation_missing_or_wiring_suspect"
+    )
     assert hyp_store.statuses == [("h-3", "code_failed")]
     assert controller.get_branch(branch.branch_id).state == BranchState.EXPLORE

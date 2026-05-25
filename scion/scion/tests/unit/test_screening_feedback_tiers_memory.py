@@ -69,6 +69,7 @@ def _protocol(
     runtime_delta_median_ms: float | None = None,
     runtime_ratio_median: float | None = None,
     candidate_operator_attempts: int = 1,
+    candidate_surface_runtime_summary: dict | None = None,
 ) -> ProtocolResult:
     pair_wins = case_wins if pair_wins is None else pair_wins
     pair_losses = case_losses if pair_losses is None else pair_losses
@@ -89,6 +90,7 @@ def _protocol(
         raw_metrics_ref="/SECRET/raw/screening_metrics.json",
         pair_feedback=_pairs(pair_wins, pair_losses, pair_ties),
         candidate_operator_attempts=candidate_operator_attempts,
+        candidate_surface_runtime_summary=candidate_surface_runtime_summary or {},
     )
 
 
@@ -144,6 +146,50 @@ def test_screening_feedback_tiers_classify_external_aps_patterns() -> None:
             runtime_ratio_median=1.18,
         )
     ).tier == "runtime_regression"
+
+
+def test_screening_feedback_treats_observed_activation_zero_effect_as_no_effect() -> None:
+    summary = screening_feedback_summary(
+        _protocol(
+            case_wins=0,
+            case_losses=0,
+            case_ties=8,
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": {
+                    "passed": True,
+                    "warnings": [
+                        {
+                            "code": "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+                            "severity": "warn",
+                            "category": "effect",
+                            "diagnostic_type": (
+                                "mechanism_executed_no_improvement"
+                            ),
+                            "telemetry_outcome": "no_effect",
+                        }
+                    ],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "late_operator_trigger",
+                            "activation_status": "observed",
+                            "effect_status": "zero",
+                            "diagnostic_type": (
+                                "mechanism_executed_no_improvement"
+                            ),
+                            "telemetry_outcome": "no_effect",
+                            "activation_observed": True,
+                        }
+                    ],
+                },
+            },
+        )
+    )
+
+    assert summary.tier == "no_effect"
+    assert summary.activation_status == "observed"
+    assert summary.effect_status == "no_objective_effect"
+    assert summary.repeat_unchanged_allowed is False
 
 
 def test_experiment_history_renders_tier_pair_and_case_feedback() -> None:

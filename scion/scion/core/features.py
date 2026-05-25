@@ -9,8 +9,8 @@ from scion.core.models import (
     CanaryResult, ProtocolResult, DecisionFeatures,
 )
 from scion.core.telemetry_validation import (
+    formal_telemetry_guard_failed,
     is_repairable_telemetry_validation_failure,
-    telemetry_guard_summary,
 )
 
 
@@ -146,8 +146,6 @@ class SafeFeatureExtractor:
         runtime_guard_passed, runtime_guard_ratio, runtime_guard_timeout = (
             _extract_runtime_guard(verification)
         )
-        telemetry_guard = telemetry_guard_summary(protocol)
-
         features = DecisionFeatures(
             branch_id=branch.branch_id,
             hypothesis_action=hypothesis_action,  # type: ignore[arg-type]
@@ -191,9 +189,7 @@ class SafeFeatureExtractor:
             telemetry_validation_repairable=(
                 is_repairable_telemetry_validation_failure(protocol)
             ),
-            telemetry_guard_failed=(
-                telemetry_guard is not None and bool(telemetry_guard.get("passed")) is False
-            ),
+            telemetry_guard_failed=formal_telemetry_guard_failed(protocol),
         )
 
         _validate_no_free_text(features)

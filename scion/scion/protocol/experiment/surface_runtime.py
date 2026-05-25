@@ -112,6 +112,7 @@ def _finalize_surface_runtime_summary(summary: dict[str, Any]) -> dict[str, Any]
 def _surface_runtime_summary_with_guard(
     summary: dict[str, Any],
     telemetry_guard: Mapping[str, Any],
+    runtime_budget_diagnostic: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = _finalize_surface_runtime_summary(summary)
     if telemetry_guard and (
@@ -121,6 +122,8 @@ def _surface_runtime_summary_with_guard(
         or telemetry_guard.get("warnings")
     ):
         payload["telemetry_guard"] = dict(telemetry_guard)
+    if runtime_budget_diagnostic:
+        payload["runtime_budget_diagnostic"] = dict(runtime_budget_diagnostic)
     return payload
 
 

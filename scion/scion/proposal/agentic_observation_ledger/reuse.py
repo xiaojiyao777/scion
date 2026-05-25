@@ -108,6 +108,10 @@ def _already_observed_observation(
             "source_proposal_phase": entry.get("proposal_phase"),
             "tool_name": tool_name,
             "normalized_args": dict(normalized_args),
+            "target_id": entry.get("target_id"),
+            "registry_id": entry.get("registry_id")
+            or normalized_args.get("registry_id"),
+            "slice_id": entry.get("slice_id") or normalized_args.get("slice_id"),
             "file_path": entry.get("file_path") or normalized_args.get("file_path"),
             "symbol": entry.get("symbol") or normalized_args.get("symbol"),
             "digest": entry.get("digest"),
@@ -180,6 +184,24 @@ def _entry_matches_args(
             and str(entry.get("symbol") or "").strip()
             == str(normalized_args.get("symbol") or "").strip()
         )
+    if tool_name == "context.read_operator_registry":
+        observed = str(
+            entry.get("registry_id")
+            or entry.get("target_id")
+            or normalized_args.get("registry_id")
+            or ""
+        ).strip()
+        requested = str(normalized_args.get("registry_id") or "").strip()
+        return bool(requested and observed == requested)
+    if tool_name == "context.read_algorithm_slice":
+        observed = str(
+            entry.get("slice_id")
+            or entry.get("target_id")
+            or normalized_args.get("slice_id")
+            or ""
+        ).strip()
+        requested = str(normalized_args.get("slice_id") or "").strip()
+        return bool(requested and observed == requested)
     if tool_name == "context.read_surface":
         observed_args = entry.get("normalized_args")
         observed_args = observed_args if isinstance(observed_args, Mapping) else {}

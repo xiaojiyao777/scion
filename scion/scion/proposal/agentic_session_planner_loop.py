@@ -374,6 +374,24 @@ class AgenticSessionPlannerLoopMixin:
                         tool_name=name,
                     )
                     break
+                if (
+                    name == "context.read_algorithm_file"
+                    and _context_requires_solver_design_grounding(context)
+                ):
+                    followups = self._run_active_solver_map_followup_tools(
+                        context,
+                        state,
+                        observations,
+                        selection_source="planner_map_followup_required",
+                        target_file=args.get("file_path") or context.forced_target_file,
+                    )
+                    observations.extend(followups)
+                    if state.loop_stop_reason in {
+                        "session_timeout",
+                        "repeated_tool_call",
+                        "tool_loop_limit",
+                    }:
+                        break
                 if _solver_design_planner_algorithm_file_read_budget_exhausted(
                     context,
                     observations,
@@ -570,6 +588,18 @@ class AgenticSessionPlannerLoopMixin:
                 recommended_file_path = _recommended_algorithm_file_path(
                     algorithm_file_guidance
                 )
+                map_context = _active_solver_map_context(
+                    observations,
+                    target_file=context.forced_target_file,
+                )
+                recommended_registry_id = str(
+                    map_context.get("recommended_registry_id")
+                    or "<registry_id from context.read_active_solver_map.operator_registries>"
+                )
+                recommended_slice_id = str(
+                    map_context.get("recommended_slice_id")
+                    or "<slice_id from context.read_active_solver_map.algorithm_slices>"
+                )
                 guidance["context.read_active_solver_map"] = {
                     "recommended_args": {"surface": "solver_design"},
                     "purpose": (
@@ -581,36 +611,57 @@ class AgenticSessionPlannerLoopMixin:
                         "context.read_operator_registry",
                         "context.read_algorithm_slice",
                     ],
+                    "map_to_source_sequence": (
+                        "Default research path is map -> operator registry and/or "
+                        "algorithm slice -> targeted full file/symbol only if the "
+                        "bounded provider slice is insufficient."
+                    ),
                     "already_has_grounding": _has_successful_tool(
                         observations,
                         "context.read_active_solver_map",
                     ),
+                    "available_registry_ids": map_context.get("available_registry_ids"),
+                    "available_slice_ids": map_context.get("available_slice_ids"),
                 }
                 guidance["context.read_operator_registry"] = {
                     "recommended_args": {
                         "surface": "solver_design",
-                        "registry_id": (
-                            "<registry_id from "
-                            "context.read_active_solver_map.operator_registries>"
-                        ),
+                        "registry_id": recommended_registry_id,
                     },
                     "purpose": (
-                        "Read one operator registry after active solver map "
-                        "discovery."
+                        "Read the provider-declared owner registry after active "
+                        "solver map discovery, before broad full-file reads."
+                    ),
+                    "available_registry_ids": map_context.get("available_registry_ids"),
+                    "recommended_registry": map_context.get("recommended_registry"),
+                    "required_after_map_rule": (
+                        "If context.read_active_solver_map has succeeded and a "
+                        "registry_id is available, call this before drafting the "
+                        "final solver_design hypothesis and before broad "
+                        "full-file reads unless a narrower algorithm slice "
+                        "already proves the target owner."
                     ),
                 }
                 guidance["context.read_algorithm_slice"] = {
                     "recommended_args": {
                         "surface": "solver_design",
-                        "slice_id": (
-                            "<slice_id from "
-                            "context.read_active_solver_map.algorithm_slices>"
-                        ),
+                        "slice_id": recommended_slice_id,
                         "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
                     },
                     "purpose": (
-                        "Read one bounded algorithm slice after active solver map "
-                        "discovery."
+                        "Read a bounded provider-declared algorithm slice after "
+                        "active solver map discovery. Prefer this before broad "
+                        "full-file reads and before final hypothesis when the "
+                        "target or integration owner is known."
+                    ),
+                    "available_slice_ids": map_context.get("available_slice_ids"),
+                    "algorithm_slices": map_context.get("algorithm_slices"),
+                    "recommended_slice": map_context.get("recommended_slice"),
+                    "required_after_map_rule": (
+                        "If context.read_active_solver_map has succeeded and a "
+                        "slice_id is available, call a relevant slice before "
+                        "context.read_algorithm_file unless the exact target body "
+                        "is already visible."
                     ),
                 }
                 guidance["context.list_algorithm_files"] = {
@@ -639,9 +690,17 @@ class AgenticSessionPlannerLoopMixin:
                         "max_chars": _APS_TARGET_ALGORITHM_FILE_READ_CHARS,
                     },
                     "purpose": (
-                        "Read one allowlisted active solver file only after "
-                        "context.list_algorithm_files has provided the file_path."
+                        "Read one allowlisted active solver file after "
+                        "context.list_algorithm_files and after using the active "
+                        "solver map's registry/slice consumers when available."
                     ),
+                    "pre_full_read_rule": (
+                        "For solver_design research, do not jump from map to "
+                        "multiple broad full-file reads. Use read_operator_registry "
+                        "or read_algorithm_slice first, then read a target owner "
+                        "file only when exact source is needed."
+                    ),
+                    "active_solver_map_context": map_context,
                 }
                 guidance["context.read_algorithm_symbol"] = {
                     **algorithm_file_guidance,

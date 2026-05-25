@@ -85,6 +85,8 @@ def content_coverage_payload(
     requested_max: int | None,
 ) -> dict[str, Any]:
     content = payload.get("content_preview")
+    if content is None:
+        content = payload.get("content")
     preview_chars = len(str(content)) if content is not None else None
     size_chars = coerce_int(payload.get("size_chars"))
     max_chars = coerce_int(payload.get("max_chars"))

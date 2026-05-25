@@ -66,7 +66,9 @@ def formal_telemetry_guard_failed(
     if _stage_value(protocol_result.stage) not in {"screening", "validation", "frozen"}:
         return False
     guard = telemetry_guard_summary(protocol_result)
-    return guard is not None and bool(guard.get("passed", True)) is False
+    if guard is None or bool(guard.get("passed", True)) is not False:
+        return False
+    return any(_is_hard_formal_failure(guard, item) for item in _failure_items(guard))
 
 
 def telemetry_failure_categories(
@@ -79,6 +81,8 @@ def telemetry_failure_categories(
     categories: list[str] = []
     for item in _failure_items(guard):
         if str(item.get("severity") or "").strip().lower() != "fail":
+            continue
+        if not _is_hard_formal_failure(guard, item):
             continue
         category = _normal_failure_category(item)
         if category not in categories:
@@ -98,6 +102,8 @@ def telemetry_decision_details(
     details: list[dict[str, Any]] = []
     for item in _failure_items(guard):
         if str(item.get("severity") or "").strip().lower() != "fail":
+            continue
+        if not _is_hard_formal_failure(guard, item):
             continue
         field_ids = _field_ids(
             item.get("surface_field_ids")
@@ -169,6 +175,7 @@ def is_repairable_telemetry_validation_failure(
         item
         for item in _failure_items(guard)
         if str(item.get("severity") or "").strip().lower() == "fail"
+        and _is_hard_formal_failure(guard, item)
     )
     if not failures:
         return False
@@ -199,7 +206,7 @@ def telemetry_validation_failure_codes(
     codes = [
         str(item.get("code") or "").strip()
         for item in _failure_items(guard)
-        if _is_repairable_failure(item)
+        if _is_hard_formal_failure(guard, item) and _is_repairable_failure(item)
     ]
     stage_codes = (
         (VALIDATION_TELEMETRY_REPAIRABLE, TELEMETRY_VALIDATION_REPAIRABLE)
@@ -218,6 +225,14 @@ def screened_experiment_effective(
     )
 
 
+def formal_screening_attempted(protocol_result: ProtocolResult | None) -> bool:
+    """Whether a formal screening protocol result exists for observability."""
+    return (
+        protocol_result is not None
+        and _stage_value(protocol_result.stage) == "screening"
+    )
+
+
 def telemetry_validation_feedback(
     protocol_result: ProtocolResult | None,
 ) -> str:
@@ -227,7 +242,11 @@ def telemetry_validation_feedback(
     guard = telemetry_guard_summary(protocol_result)
     if guard is None:
         return ""
-    failures = [item for item in _failure_items(guard) if _is_repairable_failure(item)]
+    failures = [
+        item
+        for item in _failure_items(guard)
+        if _is_hard_formal_failure(guard, item) and _is_repairable_failure(item)
+    ]
     if not failures:
         return ""
     first = failures[0]
@@ -281,6 +300,63 @@ def _normal_failure_category(item: Mapping[str, Any]) -> str:
         if candidate in code:
             return candidate.lower()
     return "unknown"
+
+
+def _is_hard_formal_failure(
+    guard: Mapping[str, Any] | None,
+    item: Mapping[str, Any],
+) -> bool:
+    """Return whether a telemetry issue should block formal evaluation.
+
+    Effect telemetry with observed mechanism activation is an attribution or
+    no-effect outcome. It should remain visible as telemetry guidance, but it
+    must not create an endless diagnostic retry loop.
+    """
+    if str(item.get("severity") or "").strip().lower() != "fail":
+        return False
+    diagnostic_type = str(item.get("diagnostic_type") or "").strip()
+    if diagnostic_type in {
+        "mechanism_executed_no_improvement",
+        "effect_attribution_missing",
+    }:
+        return False
+    if _normal_failure_category(item) != "effect":
+        return True
+    code = str(item.get("code") or "").strip().upper()
+    if code == "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED":
+        return True
+    if code not in {
+        "TELEMETRY_EFFECT_NOT_OBSERVED",
+        "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
+    }:
+        return True
+    return not _effect_issue_has_observed_activation(guard, item)
+
+
+def _effect_issue_has_observed_activation(
+    guard: Mapping[str, Any] | None,
+    item: Mapping[str, Any],
+) -> bool:
+    if guard is None:
+        return False
+    mechanism = _issue_mechanism_id(guard, item)
+    diagnostics = guard.get("mechanism_diagnostics")
+    if not isinstance(diagnostics, Sequence) or isinstance(
+        diagnostics,
+        (str, bytes, bytearray),
+    ):
+        return False
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, Mapping):
+            continue
+        diagnostic_mechanism = _clean_optional_str(diagnostic.get("mechanism"))
+        if mechanism and diagnostic_mechanism != mechanism:
+            continue
+        if bool(diagnostic.get("activation_observed")):
+            return True
+        if str(diagnostic.get("activation_status") or "") == "observed":
+            return True
+    return False
 
 
 def _stage_value(stage: Any) -> str:
@@ -505,6 +581,7 @@ __all__ = [
     "TELEMETRY_DECISION_DETAIL_SCHEMA",
     "VALIDATION_TELEMETRY_FAILED",
     "VALIDATION_TELEMETRY_REPAIRABLE",
+    "formal_screening_attempted",
     "formal_telemetry_guard_failed",
     "is_repairable_telemetry_validation_failure",
     "screened_experiment_effective",

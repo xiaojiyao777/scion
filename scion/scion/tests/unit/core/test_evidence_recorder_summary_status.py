@@ -415,15 +415,20 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
-        state_provider=lambda: {"campaign_id": "camp-1"},
+        state_provider=lambda: {"campaign_id": "camp-1", "requested_rounds": None},
     )
     loop_status = {
         "requested_rounds": 3,
         "attempt_limit": 3,
+        "proposal_attempts": 2,
+        "total_rounds": 2,
         "effective_rounds_completed": 0,
+        "telemetry_diagnostic_attempts": 1,
         "proposal_quality_limit": 6,
         "proposal_quality_loop_limit": 6,
         "proposal_quality_blocks_consumed": 4,
+        "quality_blocks": 4,
+        "blocked_attempts": 4,
         "proposal_quality_blocks_remaining": 2,
     }
 
@@ -435,10 +440,19 @@ def test_status_and_summary_report_proposal_quality_loop_budget(tmp_path: Path) 
     )
 
     assert status["campaign_loop"]["requested_rounds"] == 3
+    assert status["requested_rounds"] == 3
+    assert status["total_rounds"] == 2
+    assert status["proposal_attempts"] == 2
+    assert status["effective_rounds_completed"] == 0
+    assert status["telemetry_diagnostic_attempts"] == 1
+    assert status["quality_blocks"] == 4
+    assert status["blocked_attempts"] == 4
     assert status["campaign_loop"]["attempt_limit"] == 3
     assert status["campaign_loop"]["effective_rounds_completed"] == 0
     assert status["campaign_loop"]["proposal_quality_limit"] == 6
     assert status["campaign_loop"]["proposal_quality_blocks_consumed"] == 4
+    assert summary["requested_rounds"] == 3
+    assert summary["telemetry_diagnostic_attempts"] == 1
     assert summary["campaign_loop"]["proposal_quality_blocks_remaining"] == 2
 
 
@@ -696,7 +710,8 @@ def test_campaign_summary_separates_telemetry_failed_experiment(
         stopped_reason="max_rounds_exhausted",
     )
 
-    assert summary["screened_experiments"] == 0
+    assert summary["screened_experiments"] == 1
+    assert summary["effective_rounds_completed"] == 0
     assert summary["telemetry_failed_experiments"] == 1
     assert summary["telemetry_failure_details"][0]["repairable"] is True
     summary_step = summary["steps"][0]

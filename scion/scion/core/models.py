@@ -399,6 +399,9 @@ class Branch:
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
     weight_revision: int = 0  # weight revision this branch was last evaluated against
+    branch_code_status: str = "clean"
+    last_screening_feedback_tier: Optional[str] = None
+    last_telemetry_outcome: Optional[str] = None
     # FailureRouter recovery fields
     pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
     blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3

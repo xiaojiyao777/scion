@@ -183,6 +183,15 @@ class AgenticSessionDiagnosisMixin:
                 "Creative layer has no tool-selection interface; using fixed APS-0 tool plan.",
                 metadata={"fallback": "fixed_tool_plan"},
             )
+            observations.extend(
+                self._run_active_solver_map_followup_tools(
+                    context,
+                    state,
+                    observations,
+                    selection_source="required_context_preface",
+                    target_file=context.forced_target_file,
+                )
+            )
             return observations + self._run_hypothesis_observation_tools(
                 context,
                 state,
@@ -218,6 +227,15 @@ class AgenticSessionDiagnosisMixin:
                     "fallback": "fixed_tool_plan",
                     "selection_source": "fallback_selected",
                 },
+            )
+            observations.extend(
+                self._run_active_solver_map_followup_tools(
+                    context,
+                    state,
+                    observations,
+                    selection_source="planner_map_followup_required",
+                    target_file=context.forced_target_file,
+                )
             )
             return observations + self._run_hypothesis_observation_tools(
                 context,
@@ -256,6 +274,63 @@ class AgenticSessionDiagnosisMixin:
                 context,
                 observations,
             )
+
+    def _run_active_solver_map_followup_tools(
+            self,
+            context: ProposalToolContext,
+            state: AgenticProposalSessionState,
+            observations: list[ProposalObservation],
+            *,
+            selection_source: str,
+            target_file: str | None = None,
+        ) -> list[ProposalObservation]:
+            if not _context_requires_solver_design_grounding(context):
+                return []
+            followup_observations: list[ProposalObservation] = []
+            calls = _active_solver_map_followup_calls(
+                observations,
+                target_file=target_file,
+                surface="solver_design",
+            )
+            for name, args in calls:
+                current = [*observations, *followup_observations]
+                if _has_successful_reusable_observation(
+                    current,
+                    name,
+                    args,
+                    forced_surface=context.forced_surface or "solver_design",
+                ):
+                    continue
+                if self._tool_loop_limit_reached(state):
+                    self._record_loop_stop(
+                        state,
+                        self._current_loop_stop_reason(state),
+                    )
+                    break
+                followup_observations.append(
+                    self._call_tool(
+                        context,
+                        state,
+                        AgenticProposalPhase.DIAGNOSE,
+                        name,
+                        args,
+                        selection_source=selection_source,
+                    )
+                )
+            if followup_observations:
+                state.note(
+                    AgenticProposalPhase.DIAGNOSE,
+                    "Collected active solver map follow-up observations.",
+                    metadata={
+                        "tool_names": [
+                            observation.tool_name
+                            for observation in followup_observations
+                        ],
+                        "selection_source": selection_source,
+                        "target_file": target_file,
+                    },
+                )
+            return followup_observations
 
     def _available_compact_feedback_tools(
             self,

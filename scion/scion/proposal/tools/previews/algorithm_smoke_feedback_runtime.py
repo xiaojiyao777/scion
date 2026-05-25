@@ -47,6 +47,9 @@ def _algorithm_smoke_runtime_agent_section(
             "runtime_audit_failure": _compact_runtime_audit_failure_for_agent(
                 runtime_smoke.get("runtime_audit_failure")
             ),
+            "runtime_budget_diagnostic": _compact_runtime_budget_diagnostic(
+                runtime_smoke.get("runtime_budget_diagnostic")
+            ),
             "telemetry_guard": telemetry_guard,
             "runtime_counters": runtime_counters,
             "subprocess": subprocess_tail,
@@ -69,6 +72,32 @@ def _compact_runtime_provenance(value: Any) -> dict[str, Any] | None:
             "absolute_paths_exposed": provenance.get("absolute_paths_exposed"),
         }
     )
+
+
+def _compact_runtime_budget_diagnostic(value: Any) -> dict[str, Any] | None:
+    diagnostic = _mapping_or_none(value)
+    if diagnostic is None:
+        return None
+    candidate = _mapping_or_none(diagnostic.get("candidate"))
+    champion = _mapping_or_none(diagnostic.get("champion"))
+    compact = _drop_empty_items(
+        {
+            "code": diagnostic.get("code"),
+            "severity": diagnostic.get("severity"),
+            "repairable": diagnostic.get("repairable"),
+            "total_pairs": diagnostic.get("total_pairs"),
+            "time_limit_ms": diagnostic.get("time_limit_ms"),
+            "saturation_ratio": diagnostic.get("saturation_ratio"),
+            "candidate_max_budget_ratio": (
+                candidate.get("max_budget_ratio") if candidate else None
+            ),
+            "champion_max_budget_ratio": (
+                champion.get("max_budget_ratio") if champion else None
+            ),
+            "guidance": _compact_agent_text(diagnostic.get("guidance")),
+        }
+    )
+    return compact or None
 
 
 def _compact_runtime_audit_failure_for_agent(value: Any) -> dict[str, Any] | None:
@@ -317,6 +346,8 @@ def _compact_telemetry_issues(value: Any, *, limit: int = 4) -> list[dict[str, A
                 {
                     "code": item.get("code"),
                     "severity": item.get("severity"),
+                    "diagnostic_type": item.get("diagnostic_type"),
+                    "telemetry_outcome": item.get("telemetry_outcome"),
                     "mechanism": item.get("mechanism"),
                     "category": item.get("category"),
                     "field": item.get("field"),
@@ -338,6 +369,8 @@ def _compact_mechanism_diagnostics(value: Any, *, limit: int = 6) -> list[dict[s
             _drop_empty_items(
                 {
                     "mechanism": item.get("mechanism"),
+                    "diagnostic_type": item.get("diagnostic_type"),
+                    "telemetry_outcome": item.get("telemetry_outcome"),
                     "activation_status": item.get("activation_status"),
                     "runtime_status": item.get("runtime_status"),
                     "effect_status": item.get("effect_status"),

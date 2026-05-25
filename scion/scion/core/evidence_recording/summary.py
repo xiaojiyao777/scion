@@ -15,6 +15,7 @@ from scion.core.status_reporter import (
 )
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
+    formal_screening_attempted,
     screened_experiment_effective,
     telemetry_decision_details,
     telemetry_failure_categories,
@@ -117,17 +118,17 @@ class CampaignSummaryMixin:
         )
         telemetry_failure_details = _telemetry_failed_experiment_details(steps)
         screened_experiments = sum(
-            1
-            for step in steps
-            if screened_experiment_effective(step.protocol_result)
+            1 for step in steps if formal_screening_attempted(step.protocol_result)
+        )
+        effective_rounds_completed = sum(
+            1 for step in steps if screened_experiment_effective(step.protocol_result)
         )
         state_screened_experiments: Any | None = None
         if self.state_provider is not None:
             try:
                 state_for_counts = dict(self.state_provider())
                 state_screened_experiments = state_for_counts.get(
-                    "screened_experiments",
-                    state_for_counts.get("n_experiments"),
+                    "screened_experiments"
                 )
                 state_telemetry_failed = state_for_counts.get(
                     "telemetry_failed_experiments"
@@ -173,6 +174,7 @@ class CampaignSummaryMixin:
             "campaign_id": self.campaign_id,
             "total_rounds": round_num,
             "proposal_attempts": round_num,
+            "effective_rounds_completed": effective_rounds_completed,
             "screened_experiments": screened_experiments,
             "telemetry_failed_experiments": telemetry_failed_experiments,
             "telemetry_failed_experiments_by_category": (
@@ -236,6 +238,16 @@ class CampaignSummaryMixin:
             summary["frozen_budget"] = dict(frozen_budget)
         if self.campaign_loop_status is not None:
             summary["campaign_loop"] = dict(self.campaign_loop_status)
+            for key in (
+                "requested_rounds",
+                "effective_rounds_completed",
+                "telemetry_diagnostic_attempts",
+                "quality_blocks",
+                "blocked_attempts",
+            ):
+                value = self.campaign_loop_status.get(key)
+                if value is not None:
+                    summary[key] = value
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))

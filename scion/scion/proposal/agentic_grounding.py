@@ -10,9 +10,11 @@ from scion.proposal.agentic_models import (
     AgenticProposalSessionState,
 )
 from scion.proposal.agentic_session_tools import (
+    _active_solver_map_followup_calls,
     _algorithm_file_path_guidance,
     _algorithm_file_paths_from_observations,
     _is_solver_design_algorithm_target,
+    _has_relevant_algorithm_slice_read,
     _has_successful_reusable_observation,
     _has_successful_tool,
 )
@@ -110,6 +112,9 @@ def _missing_solver_design_grounding_error(
         "context.read_algorithm_file",
         target_read_args,
         forced_surface=hypothesis.change_locus,
+    ) and not _has_relevant_algorithm_slice_read(
+        observations,
+        target_file=target_read_args.get("file_path"),
     ):
         missing.append(
             "context.read_algorithm_file"
@@ -262,6 +267,13 @@ def _solver_design_grounding_call_satisfied(
             args,
             forced_surface="solver_design",
         )
+    if name in {"context.read_operator_registry", "context.read_algorithm_slice"}:
+        return _has_successful_reusable_observation(
+            observations,
+            name,
+            args,
+            forced_surface="solver_design",
+        )
     return _has_successful_tool(observations, name)
 
 
@@ -329,12 +341,16 @@ def _run_required_context_preface(
                 ),
             ]
         )
+        calls.append(("context.read_active_solver_map", {"surface": "solver_design"}))
         forced_target_read_args = _forced_solver_design_target_file_read_args(context)
-        if forced_target_read_args is not None:
-            calls.append(("context.read_algorithm_file", forced_target_read_args))
+    else:
+        forced_target_read_args = None
 
     observations: list[ProposalObservation] = []
-    for name, args in calls:
+    index = 0
+    while index < len(calls):
+        name, args = calls[index]
+        index += 1
         if _has_successful_reusable_observation(
             observations,
             name,
@@ -357,6 +373,20 @@ def _run_required_context_preface(
         )
         if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
             break
+        if (
+            name == "context.read_active_solver_map"
+            and forced_target_read_args is not None
+        ):
+            current_observations = [*observations]
+            followups = _active_solver_map_followup_calls(
+                current_observations,
+                target_file=forced_target_read_args.get("file_path"),
+                surface="solver_design",
+            )
+            calls[index:index] = [
+                *followups,
+                ("context.read_algorithm_file", forced_target_read_args),
+            ]
 
     state.note(
         AgenticProposalPhase.DIAGNOSE,
@@ -391,21 +421,33 @@ def _run_solver_design_grounding_tools(
         ),
         ("context.read_active_solver_design", {"surface": "solver_design"}),
         ("context.read_solver_call_graph", {"surface": "solver_design"}),
+        ("context.read_active_solver_map", {"surface": "solver_design"}),
     ]
     target_read_args = _solver_design_target_file_read_args(
         hypothesis,
         context=context,
         observations=prior_observations,
     )
-    if target_read_args is not None:
-        calls.append(("context.read_algorithm_file", target_read_args))
-    for name, args in calls:
+    index = 0
+    while index < len(calls):
+        name, args = calls[index]
+        index += 1
         current_observations = [*prior_observations, *observations]
         if _solver_design_grounding_call_satisfied(
             current_observations,
             name,
             args,
         ):
+            if name == "context.read_active_solver_map" and target_read_args is not None:
+                followups = _active_solver_map_followup_calls(
+                    current_observations,
+                    target_file=target_read_args.get("file_path"),
+                    surface="solver_design",
+                )
+                calls[index:index] = [
+                    *followups,
+                    ("context.read_algorithm_file", target_read_args),
+                ]
             state.note(
                 AgenticProposalPhase.DIAGNOSE,
                 "Skipped solver_design grounding tool already completed successfully.",
@@ -444,6 +486,17 @@ def _run_solver_design_grounding_tools(
                 selection_source=selection_source,
             )
         )
+        if name == "context.read_active_solver_map" and target_read_args is not None:
+            current_observations = [*prior_observations, *observations]
+            followups = _active_solver_map_followup_calls(
+                current_observations,
+                target_file=target_read_args.get("file_path"),
+                surface="solver_design",
+            )
+            calls[index:index] = [
+                *followups,
+                ("context.read_algorithm_file", target_read_args),
+            ]
     return observations
 
 

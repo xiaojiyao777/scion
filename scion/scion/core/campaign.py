@@ -28,6 +28,7 @@ from scion.core.promotion_service import PromotionPlan
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import (
     formal_telemetry_guard_failed,
+    formal_screening_attempted,
     telemetry_decision_details,
     telemetry_failure_categories,
 )
@@ -287,6 +288,11 @@ class CampaignManager:
 
     def get_state(self) -> Dict[str, Any]:
         branches = self._branch_ctrl.get_active_branches()
+        screened_experiments = sum(
+            1
+            for step in self._step_history
+            if formal_screening_attempted(step.protocol_result)
+        )
         telemetry_failed_from_steps = sum(
             1
             for step in self._step_history
@@ -319,7 +325,7 @@ class CampaignManager:
         state = {
             "campaign_id": self._campaign_id,
             "n_experiments": self._n_experiments,
-            "screened_experiments": self._n_experiments,
+            "screened_experiments": screened_experiments,
             "telemetry_failed_experiments": telemetry_failed_experiments,
             "telemetry_failed_experiments_by_category": telemetry_failed_by_category,
             "telemetry_failure_details": telemetry_failure_details[-16:],
@@ -339,6 +345,21 @@ class CampaignManager:
                     "state": b.state.value,
                     "base_champion_id": b.base_champion_id,
                     "weight_revision": getattr(b, "weight_revision", 0),
+                    "branch_code_status": getattr(
+                        b,
+                        "branch_code_status",
+                        "clean",
+                    ),
+                    "last_screening_feedback_tier": getattr(
+                        b,
+                        "last_screening_feedback_tier",
+                        None,
+                    ),
+                    "last_telemetry_outcome": getattr(
+                        b,
+                        "last_telemetry_outcome",
+                        None,
+                    ),
                 }
                 for b in branches
             ],

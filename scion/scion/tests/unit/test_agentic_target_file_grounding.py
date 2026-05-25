@@ -218,11 +218,53 @@ def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
         and observation["structured_payload"]["file_path"]
         == "policies/baseline_modules/scheduler.py"
     ]
+    target_slices = [
+        observation
+        for observation in first_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_algorithm_slice"
+        and observation["structured_payload"]["file_path"]
+        == "policies/baseline_modules/scheduler.py"
+    ]
+    target_registries = [
+        observation
+        for observation in first_context["agentic_tool_observations"]
+        if observation["tool_name"] == "context.read_operator_registry"
+    ]
+    tool_names = [
+        observation["tool_name"]
+        for observation in first_context["agentic_tool_observations"]
+    ]
     assert target_reads
+    assert target_slices
+    assert target_registries
+    assert tool_names.index("context.read_algorithm_slice") < tool_names.index(
+        "context.read_algorithm_file"
+    )
     assert target_reads[0]["structured_payload"]["truncated"] is False
     assert "class _ALNSVNSSolver" in target_reads[0]["structured_payload"][
         "content_preview"
     ]
+    manifests = [
+        json.loads(Path(ref).read_text(encoding="utf-8"))
+        for ref in output.tainted_artifact_refs
+        if "api_visible_prompt_manifest" in str(ref)
+    ]
+    assert manifests
+    section_status = manifests[0]["section_statuses"]["active_solver_map_receipts"]
+    assert section_status["status"] == "included"
+    rendered_manifest = json.dumps(manifests[0], sort_keys=True)
+    assert "SECRET_VALIDATION" not in rendered_manifest
+    assert "SECRET_FROZEN" not in rendered_manifest
+    assert any(
+        receipt.get("tool_name") == "context.read_algorithm_slice"
+        and receipt.get("slice_id")
+        for receipt in output.observation_ledger["read_receipts"]
+    )
+    assert any(
+        receipt.get("tool_name") == "context.read_operator_registry"
+        and receipt.get("registry_id")
+        for receipt in output.observation_ledger["read_receipts"]
+    )
 
 
 def test_read_receipt_is_not_prompt_inclusion_but_manifest_is() -> None:

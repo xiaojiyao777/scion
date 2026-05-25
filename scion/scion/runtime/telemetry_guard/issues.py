@@ -13,6 +13,9 @@ def _guard_issue(
     severity: str,
     summary: Mapping[str, Any],
     mechanism: str | None = None,
+    diagnostic_type: str | None = None,
+    telemetry_outcome: str | None = None,
+    repairable: bool | None = None,
 ) -> dict[str, Any]:
     issue = {
         "code": code,
@@ -26,6 +29,12 @@ def _guard_issue(
     }
     if mechanism:
         issue["mechanism"] = mechanism
+    if diagnostic_type:
+        issue["diagnostic_type"] = diagnostic_type
+    if telemetry_outcome:
+        issue["telemetry_outcome"] = telemetry_outcome
+    if repairable is not None:
+        issue["repairable"] = bool(repairable)
     return issue
 
 

@@ -208,6 +208,9 @@ class TestBranchStore:
         b.validation_expand_count = 1
         b.direction = "local_search: try 2-opt"
         b.weight_revision = 3
+        b.branch_code_status = "active_no_effect"
+        b.last_screening_feedback_tier = "no_effect"
+        b.last_telemetry_outcome = "no_objective_effect"
         b.pending_retry = True
         b.blocked_rounds = 2
         b.consecutive_llm_retries = 1
@@ -221,6 +224,9 @@ class TestBranchStore:
         assert loaded.validation_expand_count == 1
         assert loaded.direction == "local_search: try 2-opt"
         assert loaded.weight_revision == 3
+        assert loaded.branch_code_status == "active_no_effect"
+        assert loaded.last_screening_feedback_tier == "no_effect"
+        assert loaded.last_telemetry_outcome == "no_objective_effect"
         assert loaded.pending_retry is True
         assert loaded.blocked_rounds == 2
         assert loaded.consecutive_llm_retries == 1

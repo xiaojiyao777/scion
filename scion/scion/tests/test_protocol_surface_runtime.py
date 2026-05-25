@@ -1,6 +1,39 @@
 """Focused tests split from test_protocol.py."""
 
+from scion.core.runtime_budget_diagnostics import TINY_RUNTIME_BUDGET_SATURATION
+
 from .protocol_test_support import *  # noqa: F401,F403
+
+
+def test_run_experiment_records_tiny_runtime_budget_saturation(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=900, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=8100, runtime={}),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert TINY_RUNTIME_BUDGET_SATURATION in result.reason_codes
+    diagnostic = result.candidate_surface_runtime_summary[
+        "runtime_budget_diagnostic"
+    ]
+    assert diagnostic["code"] == TINY_RUNTIME_BUDGET_SATURATION
+    assert diagnostic["repairable"] is True
+    assert "runtime_budget_diagnostic=TINY_RUNTIME_BUDGET_SATURATION" in (
+        result.exposed_summary
+    )
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"][
+        "runtime_budget_diagnostic"
+    ] == diagnostic
 
 def test_run_experiment_selected_surface_runtime_fields_fail_closed(tmp_path):
     runner = MagicMock()

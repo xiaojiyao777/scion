@@ -518,6 +518,9 @@ class AgenticSessionHypothesisMixin:
             if _prompt_observations_include_full_target_file(
                 prompt_observations,
                 target_read_args,
+            ) or _has_relevant_algorithm_slice_read(
+                prompt_observations,
+                target_file=target_read_args.get("file_path"),
             ):
                 return None
 
@@ -537,9 +540,15 @@ class AgenticSessionHypothesisMixin:
             )
             if (
                 grounding_error is None
-                and _observations_include_full_target_file(
-                    observations,
-                    target_read_args,
+                and (
+                    _observations_include_full_target_file(
+                        observations,
+                        target_read_args,
+                    )
+                    or _has_relevant_algorithm_slice_read(
+                        observations,
+                        target_file=target_read_args.get("file_path"),
+                    )
                 )
                 and len(grounding_rejections) < _MAX_HYPOTHESIS_GROUNDING_RETRIES
             ):

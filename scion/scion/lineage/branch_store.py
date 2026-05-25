@@ -63,9 +63,11 @@ class BranchStore:
                  current_code_hash, last_clean_code_hash, retry_count,
                  screening_expand_count, validation_expand_count,
                  failure_codes, created_at, updated_at, direction,
-                 weight_revision, pending_retry, blocked_rounds,
+                 weight_revision, branch_code_status,
+                 last_screening_feedback_tier, last_telemetry_outcome,
+                 pending_retry, blocked_rounds,
                  consecutive_llm_retries, infra_block_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     branch.branch_id,
@@ -82,6 +84,9 @@ class BranchStore:
                     branch.updated_at.isoformat(),
                     branch.direction,
                     branch.weight_revision,
+                    branch.branch_code_status,
+                    branch.last_screening_feedback_tier,
+                    branch.last_telemetry_outcome,
                     1 if branch.pending_retry else 0,
                     branch.blocked_rounds,
                     branch.consecutive_llm_retries,
@@ -128,6 +133,9 @@ class BranchStore:
             updated_at=datetime.fromisoformat(d["updated_at"]),
             direction=d.get("direction"),
             weight_revision=d.get("weight_revision") or 0,
+            branch_code_status=d.get("branch_code_status") or "clean",
+            last_screening_feedback_tier=d.get("last_screening_feedback_tier"),
+            last_telemetry_outcome=d.get("last_telemetry_outcome"),
             pending_retry=bool(d.get("pending_retry") or 0),
             blocked_rounds=d.get("blocked_rounds") or 0,
             consecutive_llm_retries=d.get("consecutive_llm_retries") or 0,

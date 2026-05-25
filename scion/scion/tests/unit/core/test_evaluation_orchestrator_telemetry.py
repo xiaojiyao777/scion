@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from scion.config.problem import ProtocolConfig
 from scion.core.branch_lifecycle_policy import (
+    SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
     TELEMETRY_DIAGNOSTIC_NEGATIVE_DELTA,
     TELEMETRY_DIAGNOSTIC_STREAK_EXHAUSTED,
@@ -219,8 +220,8 @@ class _EffectTelemetryZeroProtocol:
                 ci_high=0.0,
             ),
             gate_outcome="fail",
-            reason_codes=("TELEMETRY_GUARD_FAILED",),
-            exposed_summary="formal effect telemetry zero",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="formal effect telemetry zero with activation observed",
             raw_metrics_ref="/tmp/metrics.json",
             candidate_surface_runtime_summary={
                 "selected_surface": "solver_design",
@@ -234,9 +235,33 @@ class _EffectTelemetryZeroProtocol:
                             "category": "effect",
                             "mechanism": "iterated_local_search_perturbation",
                             "field": "solver_algorithm_best_delta.ils",
+                            "diagnostic_type": (
+                                "mechanism_executed_no_improvement"
+                            ),
+                            "telemetry_outcome": "no_effect",
+                            "repairable": False,
                             "candidate_missing": 0,
                             "candidate_present": 16,
                             "candidate_positive": 0,
+                        }
+                    ],
+                    "mechanism_diagnostics": [
+                        {
+                            "mechanism": "iterated_local_search_perturbation",
+                            "passed": True,
+                            "diagnostic_type": (
+                                "mechanism_executed_no_improvement"
+                            ),
+                            "telemetry_outcome": "no_effect",
+                            "activation_status": "observed",
+                            "runtime_status": "observed",
+                            "effect_status": "zero",
+                            "activation_observed": True,
+                            "runtime_observed": True,
+                            "effect_observed": False,
+                            "repair_guidance": [
+                                "Mechanism executed but declared effect stayed zero."
+                            ],
                         }
                     ],
                 },
@@ -643,7 +668,7 @@ def test_activity_all_zero_mixed_with_protected_failure_abandons_fail_closed() -
     assert decision_reason_codes[branch.branch_id] == ("SCREENING_TELEMETRY_FAILED",)
 
 
-def test_formal_effect_zero_is_branch_local_diagnostic_not_abandon() -> None:
+def test_formal_effect_zero_with_activation_counts_as_no_effect_not_telemetry_retry() -> None:
     branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
     branch_controller = _BranchController()
     experiment_count = 0
@@ -703,17 +728,16 @@ def test_formal_effect_zero_is_branch_local_diagnostic_not_abandon() -> None:
 
     assert decision == Decision.CONTINUE_EXPLORE
     assert protocol_result is not None
-    assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in protocol_result.reason_codes
+    assert protocol_result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
     assert decision_reason_codes[branch.branch_id] == (
-        "TELEMETRY_VALIDATION_REPAIRABLE",
-        "SCREENING_TELEMETRY_REPAIRABLE",
-        SCREENING_TELEMETRY_DIAGNOSTIC_RETRY,
+        "SCREENING_FAIL_WIN_RATE",
+        SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     )
     assert branch_controller.soft_abandoned is False
-    assert diagnostic_streaks[branch.branch_id] == 1
-    assert experiment_count == 0
-    assert telemetry_count == 1
-    assert budget_used == 0
+    assert branch.branch_id not in diagnostic_streaks
+    assert experiment_count == 1
+    assert telemetry_count == 0
+    assert budget_used == 1
 
 
 def test_formal_budget_starved_is_branch_local_diagnostic_not_abandon() -> None:
@@ -804,7 +828,7 @@ def test_repeated_telemetry_diagnostic_can_soft_abandon() -> None:
         branch_workspaces=workspaces,
         branch_hypotheses={},
         branch_current_hypothesis={},
-        experiment_protocol_provider=_EffectTelemetryZeroProtocol,
+        experiment_protocol_provider=_BudgetTelemetryStarvedProtocol,
         feature_extractor=SafeFeatureExtractor(),
         get_budget=lambda: BudgetState(total=4, used=0),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
 from scion.core.models import HypothesisProposal, PatchProposal, patch_file_changes
+from scion.core.runtime_budget_diagnostics import runtime_budget_diagnostic
 from scion.runtime.audit import format_runtime_audit_failure
 from scion.runtime.telemetry_guard import (
     build_telemetry_guard_summary,
@@ -165,7 +166,10 @@ def _runtime_algorithm_smoke_preview(
             micro_results: list[dict[str, Any]] = []
             candidate_guard_runtimes: list[Mapping[str, Any]] = []
             champion_guard_runtimes: list[Mapping[str, Any]] = []
+            candidate_elapsed_samples_ms: list[float] = []
+            champion_elapsed_samples_ms: list[float] = []
             telemetry_guard_summary: dict[str, Any] = {}
+            runtime_budget_diagnostic_summary: dict[str, Any] | None = None
             representative: dict[str, Any] | None = None
             issue: str | None = None
             audit_failure: Mapping[str, Any] | None = None
@@ -176,6 +180,7 @@ def _runtime_algorithm_smoke_preview(
                     registry_path=registry_path,
                     selected_surface=surface_name,
                 )
+                _append_smoke_elapsed(candidate_elapsed_samples_ms, run_payload)
                 if raw is None:
                     issue = str(run_payload.get("detail") or "solver run failed")
                     representative = {
@@ -239,6 +244,7 @@ def _runtime_algorithm_smoke_preview(
                     registry_path=champion_registry_path,
                     selected_surface=surface_name,
                 )
+                _append_smoke_elapsed(champion_elapsed_samples_ms, champion_run)
                 micro_result = _solver_design_micro_benchmark_result(
                     candidate_raw=raw,
                     candidate_run=run_payload,
@@ -295,6 +301,13 @@ def _runtime_algorithm_smoke_preview(
                 )
             if issue is None:
                 issue = _solver_design_micro_benchmark_issue(micro_results)
+            runtime_budget_diagnostic_summary = runtime_budget_diagnostic(
+                stage="proposal_smoke",
+                time_limit_sec=_ALGORITHM_SMOKE_TIME_LIMIT_SEC,
+                candidate_elapsed_ms=candidate_elapsed_samples_ms,
+                champion_elapsed_ms=champion_elapsed_samples_ms,
+                total_pairs=len(runs),
+            )
         except Exception as exc:
             return {
                 "passed": False,
@@ -352,6 +365,8 @@ def _runtime_algorithm_smoke_preview(
     }
     if telemetry_guard_summary:
         payload["telemetry_guard"] = telemetry_guard_summary
+    if runtime_budget_diagnostic_summary:
+        payload["runtime_budget_diagnostic"] = runtime_budget_diagnostic_summary
     if audit_failure is not None:
         payload["runtime_audit_failure"] = _compact_runtime_audit_failure(
             audit_failure
@@ -365,6 +380,15 @@ def _runtime_algorithm_smoke_preview(
         if repair_guidance:
             payload["repair_guidance"] = repair_guidance
     return payload
+
+
+def _append_smoke_elapsed(samples: list[float], run_payload: Mapping[str, Any]) -> None:
+    try:
+        elapsed = float(run_payload.get("elapsed_ms"))
+    except (TypeError, ValueError):
+        return
+    if elapsed >= 0:
+        samples.append(elapsed)
 
 
 def _smoke_effect_observation_required(

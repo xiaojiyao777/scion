@@ -17,6 +17,9 @@ from scion.proposal.tools import (
     ProposalToolContext,
     ProposalToolFailureCode,
 )
+from scion.proposal.agentic_session_tools import (
+    _missing_active_solver_map_followups,
+)
 
 _SOLVER_DESIGN_PLANNER_ALGORITHM_FILE_READ_LIMIT = 5
 
@@ -75,6 +78,18 @@ def _missing_planner_context_error(
         return "missing compact proposal feedback tools: " + ", ".join(
             missing_feedback
         )
+    if _context_requires_solver_design_grounding(context):
+        missing_map_followups = _missing_active_solver_map_followups(
+            observations,
+            target_file=context.forced_target_file,
+            surface="solver_design",
+        )
+        if missing_map_followups:
+            return (
+                "missing active solver map follow-up tools after "
+                "context.read_active_solver_map: "
+                + ", ".join(missing_map_followups)
+            )
     return None
 
 

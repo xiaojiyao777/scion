@@ -10,7 +10,11 @@ from scion.core.models import HypothesisProposal
 from scion.proposal.agentic_session_feedback import (
     _observation_satisfies_compact_requirement,
 )
-from scion.proposal.agentic_utils import _enum_value, _sanitize_agentic_value
+from scion.proposal.agentic_utils import (
+    _drop_empty_dict,
+    _enum_value,
+    _sanitize_agentic_value,
+)
 from scion.proposal.tools import ProposalObservation, ProposalToolContext
 
 _HOLDOUT_SUMMARY_TOOL = "feedback.query_holdout_summary"
@@ -272,6 +276,323 @@ def _algorithm_file_path_guidance(
         ),
     )
     return guidance
+
+
+def _active_solver_map_context(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    target_file: Any = None,
+) -> dict[str, Any]:
+    """Return planner-facing active-map ids from already collected observations."""
+
+    payload = _latest_active_solver_map_payload(observations)
+    if not payload:
+        return {}
+    target_path = _normalized_algorithm_read_path(target_file)
+    registries = _active_solver_map_items(payload.get("operator_registries"))
+    slices = _active_solver_map_items(payload.get("algorithm_slices"))
+    recommended_registry = _recommended_registry_from_map(
+        registries,
+        target_path=target_path,
+    )
+    recommended_slice = _recommended_slice_from_map(
+        slices,
+        target_path=target_path,
+    )
+    return _drop_empty_dict(
+        {
+            "available": bool(payload.get("available", True)),
+            "surface": payload.get("surface"),
+            "subject_id": payload.get("subject_id"),
+            "snapshot_digest": payload.get("snapshot_digest"),
+            "read_receipt": payload.get("read_receipt"),
+            "available_registry_ids": [
+                item["registry_id"]
+                for item in registries
+                if item.get("registry_id")
+            ],
+            "recommended_registry_id": recommended_registry.get("registry_id"),
+            "recommended_registry": recommended_registry,
+            "available_slice_ids": [
+                item["slice_id"]
+                for item in slices
+                if item.get("slice_id")
+            ],
+            "recommended_slice_id": recommended_slice.get("slice_id"),
+            "recommended_slice": recommended_slice,
+            "algorithm_slices": slices[:12],
+            "operator_registries": registries[:12],
+            "already_visible_source": _already_visible_solver_source(observations),
+        }
+    )
+
+
+def _active_solver_map_followup_calls(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    target_file: Any = None,
+    surface: Any = "solver_design",
+    require_registry: bool = True,
+    require_slice: bool = True,
+) -> list[tuple[str, Mapping[str, Any]]]:
+    """Return missing map-consumer calls that should precede broad source reads."""
+
+    map_context = _active_solver_map_context(
+        observations,
+        target_file=target_file,
+    )
+    if not map_context.get("available"):
+        return []
+    calls: list[tuple[str, Mapping[str, Any]]] = []
+    registry_id = str(map_context.get("recommended_registry_id") or "").strip()
+    if (
+        require_registry
+        and registry_id
+        and not _has_successful_reusable_observation(
+            observations,
+            "context.read_operator_registry",
+            {"surface": surface, "registry_id": registry_id},
+            forced_surface=str(surface or "solver_design"),
+        )
+    ):
+        calls.append(
+            (
+                "context.read_operator_registry",
+                {"surface": surface or "solver_design", "registry_id": registry_id},
+            )
+        )
+    slice_id = str(map_context.get("recommended_slice_id") or "").strip()
+    if (
+        require_slice
+        and slice_id
+        and not _has_successful_reusable_observation(
+            observations,
+            "context.read_algorithm_slice",
+            {"surface": surface, "slice_id": slice_id, "max_chars": 6000},
+            forced_surface=str(surface or "solver_design"),
+        )
+    ):
+        calls.append(
+            (
+                "context.read_algorithm_slice",
+                {
+                    "surface": surface or "solver_design",
+                    "slice_id": slice_id,
+                    "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                },
+            )
+        )
+    return calls
+
+
+def _missing_active_solver_map_followups(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    target_file: Any = None,
+    surface: Any = "solver_design",
+) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name, _args in _active_solver_map_followup_calls(
+            observations,
+            target_file=target_file,
+            surface=surface,
+        )
+    )
+
+
+def _has_relevant_algorithm_slice_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    *,
+    target_file: Any,
+) -> bool:
+    target_path = _normalized_algorithm_read_path(target_file)
+    if not target_path:
+        return False
+    for observation in observations:
+        if observation.is_error or observation.tool_name != "context.read_algorithm_slice":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if not payload.get("available", True):
+            continue
+        if _normalized_algorithm_read_path(payload.get("file_path")) != target_path:
+            continue
+        content = str(payload.get("content") or "")
+        if content or payload.get("content_digest"):
+            return True
+    return False
+
+
+def _latest_active_solver_map_payload(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> Mapping[str, Any]:
+    for observation in reversed(tuple(observations)):
+        if observation.is_error or observation.tool_name != "context.read_active_solver_map":
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if payload.get("available") is False:
+            continue
+        return payload
+    return {}
+
+
+def _active_solver_map_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    items: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            items.append(_sanitize_agentic_value(dict(item)))
+    return items
+
+
+def _recommended_registry_from_map(
+    registries: list[Mapping[str, Any]],
+    *,
+    target_path: str,
+) -> dict[str, Any]:
+    if not registries:
+        return {}
+    ranked = sorted(
+        registries,
+        key=lambda item: _registry_target_score(item, target_path=target_path),
+        reverse=True,
+    )
+    return dict(ranked[0])
+
+
+def _registry_target_score(
+    registry: Mapping[str, Any],
+    *,
+    target_path: str,
+) -> tuple[int, int, int]:
+    if not target_path:
+        return (0, _count_mapping_items(registry.get("operators")), 0)
+    owner = _normalized_algorithm_read_path(registry.get("owner_file"))
+    operator_paths = {
+        _normalized_algorithm_read_path(item.get("file_path"))
+        for item in _active_solver_map_items(registry.get("operators"))
+    }
+    integration_paths = {
+        _normalized_algorithm_read_path(item.get("file_path"))
+        for item in _active_solver_map_items(registry.get("integration_points"))
+    }
+    score = 0
+    if owner == target_path:
+        score += 100
+    if target_path in operator_paths:
+        score += 80
+    if target_path in integration_paths:
+        score += 70
+    target_leaf = target_path.rsplit("/", 1)[-1].removesuffix(".py")
+    text = " ".join(
+        str(registry.get(key) or "")
+        for key in ("registry_id", "registry_kind", "owner_symbol")
+    ).lower()
+    if target_leaf and target_leaf in text:
+        score += 20
+    return (score, _count_mapping_items(registry.get("operators")), 0)
+
+
+def _recommended_slice_from_map(
+    slices: list[Mapping[str, Any]],
+    *,
+    target_path: str,
+) -> dict[str, Any]:
+    if not slices:
+        return {}
+    ranked = sorted(
+        slices,
+        key=lambda item: _slice_target_score(item, target_path=target_path),
+        reverse=True,
+    )
+    return dict(ranked[0])
+
+
+def _slice_target_score(
+    slice_ref: Mapping[str, Any],
+    *,
+    target_path: str,
+) -> tuple[int, int, int]:
+    score = 0
+    file_path = _normalized_algorithm_read_path(slice_ref.get("file_path"))
+    if target_path and file_path == target_path:
+        score += 100
+    exposure = str(slice_ref.get("exposure_level") or slice_ref.get("slice_kind") or "")
+    if exposure in {"body", "symbol_body"}:
+        score += 20
+    elif exposure in {"excerpt", "symbol_excerpt", "registry_block", "integration_block"}:
+        score += 15
+    elif exposure == "signature":
+        score += 5
+    purpose = str(slice_ref.get("purpose") or "").lower()
+    if "integration" in purpose:
+        score += 6
+    if "registry" in purpose:
+        score += 5
+    token_estimate = _coerce_nonnegative_int(slice_ref.get("token_estimate")) or 0
+    return (score, -token_estimate, 0)
+
+
+def _already_visible_solver_source(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+) -> list[dict[str, Any]]:
+    visible: list[dict[str, Any]] = []
+    for observation in observations:
+        if observation.is_error:
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if observation.tool_name == "context.read_algorithm_file":
+            file_path = _normalized_algorithm_read_path(payload.get("file_path"))
+            if not file_path:
+                continue
+            visible.append(
+                _drop_empty_dict(
+                    {
+                        "tool_name": observation.tool_name,
+                        "observation_id": observation.observation_id,
+                        "file_path": file_path,
+                        "coverage": "full"
+                        if payload.get("truncated") is False
+                        else "truncated",
+                        "max_chars": payload.get("max_chars"),
+                        "digest": payload.get("digest") or payload.get("sha256"),
+                    }
+                )
+            )
+        elif observation.tool_name == "context.read_algorithm_slice":
+            file_path = _normalized_algorithm_read_path(payload.get("file_path"))
+            slice_id = str(payload.get("slice_id") or "").strip()
+            if not file_path and not slice_id:
+                continue
+            visible.append(
+                _drop_empty_dict(
+                    {
+                        "tool_name": observation.tool_name,
+                        "observation_id": observation.observation_id,
+                        "slice_id": slice_id,
+                        "file_path": file_path,
+                        "symbols": payload.get("symbols"),
+                        "line_start": payload.get("line_start"),
+                        "line_end": payload.get("line_end"),
+                        "content_digest": payload.get("content_digest"),
+                        "truncated": payload.get("truncated"),
+                    }
+                )
+            )
+    return visible[-16:]
+
+
+def _count_mapping_items(value: Any) -> int:
+    if isinstance(value, (list, tuple)):
+        return sum(1 for item in value if isinstance(item, Mapping))
+    return 0
 
 
 def _recommended_algorithm_file_path(

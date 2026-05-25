@@ -214,6 +214,124 @@ def test_solver_design_planner_repeated_completed_required_tool_does_not_loop(
     ) == 1
 
 
+def test_solver_design_planner_guidance_exposes_registry_and_slice_ids_after_map(
+    tmp_path: Path,
+) -> None:
+    creative = PlanningCreative([{"stop": True}])
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=16, max_steps=20),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-map-guidance",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+        tool_loop_config=session._tool_loop_config.__dict__,
+    )
+
+    session._run_initial_tool_loop(context, state)
+    guidance = creative.planner_contexts[0]["tool_arg_guidance"]
+
+    map_guidance = guidance["context.read_active_solver_map"]
+    registry_guidance = guidance["context.read_operator_registry"]
+    slice_guidance = guidance["context.read_algorithm_slice"]
+    file_guidance = guidance["context.read_algorithm_file"]
+    assert "cvrp.registry.local_search_vns" in map_guidance["available_registry_ids"]
+    assert "cvrp.slice.local_search.default_vns_operators" in (
+        map_guidance["available_slice_ids"]
+    )
+    assert registry_guidance["recommended_args"]["registry_id"].startswith(
+        "cvrp.registry."
+    )
+    assert slice_guidance["recommended_args"]["slice_id"].startswith("cvrp.slice.")
+    assert "before broad full-file reads" in registry_guidance[
+        "required_after_map_rule"
+    ]
+    assert "before context.read_algorithm_file" in slice_guidance[
+        "required_after_map_rule"
+    ]
+    assert "read_operator_registry" in file_guidance["pre_full_read_rule"]
+    assert "read_algorithm_slice" in file_guidance["pre_full_read_rule"]
+
+
+def test_solver_design_planner_reads_registry_slice_before_broad_file(
+    tmp_path: Path,
+) -> None:
+    target_file = "policies/baseline_modules/local_search.py"
+    creative = PlanningCreative(
+        [
+            {
+                "tool_name": "context.read_algorithm_file",
+                "args": {
+                    "surface": "solver_design",
+                    "file_path": target_file,
+                    "max_chars": 4000,
+                },
+            },
+            {"stop": True},
+        ]
+    )
+    context = replace(
+        _cvrp_context_with_champion(tmp_path),
+        forced_surface="solver_design",
+        forced_action="modify",
+    )
+    session = AgenticProposalSession(
+        creative,
+        tool_registry=ProposalToolRegistry.default_read_only(),
+        tool_loop_config=AgenticToolLoopConfig(max_tool_calls=16, max_steps=20),
+    )
+    state = AgenticProposalSessionState(
+        session_id="session-map-before-file",
+        campaign_id=context.campaign_id,
+        branch_id=context.branch_id or "branch-cvrp",
+        tool_loop_config=session._tool_loop_config.__dict__,
+    )
+
+    observations = session._run_initial_tool_loop(context, state)
+    step_events = [
+        event.metadata for event in state.transcript if event.metadata.get("step_id")
+    ]
+    tool_order = [event["tool_name"] for event in step_events]
+    file_index = next(
+        index
+        for index, event in enumerate(step_events)
+        if event["tool_name"] == "context.read_algorithm_file"
+        and event["selection_source"] == "planner_selected"
+    )
+    registry_index = next(
+        index
+        for index, event in enumerate(step_events)
+        if event["tool_name"] == "context.read_operator_registry"
+    )
+    slice_index = next(
+        index
+        for index, event in enumerate(step_events)
+        if event["tool_name"] == "context.read_algorithm_slice"
+    )
+
+    assert "context.read_active_solver_map" in tool_order
+    assert registry_index < file_index
+    assert slice_index < file_index
+    assert step_events[registry_index]["selection_source"] == (
+        "planner_map_followup_required"
+    )
+    assert step_events[slice_index]["selection_source"] == (
+        "planner_map_followup_required"
+    )
+    assert any(
+        observation.tool_name == "context.read_algorithm_slice"
+        and observation.structured_payload["file_path"] == target_file
+        for observation in observations
+    )
+
+
 def test_code_phase_targeted_read_context_carries_active_fact_anchor(
     tmp_path: Path,
 ) -> None:

@@ -202,6 +202,7 @@ _CACHEABLE_AGENTIC_CONTEXT_HEADINGS = frozenset(
     {
         "active algorithm facts",
         "active solver mechanism digest",
+        "active solver map receipts",
         "solver-design full algorithm file reads",
     }
 )

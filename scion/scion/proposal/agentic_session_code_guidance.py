@@ -128,6 +128,18 @@ class AgenticSessionCodeGuidanceMixin:
                     algorithm_file_guidance,
                     hypothesis.target_file,
                 )
+                map_context = _active_solver_map_context(
+                    observations,
+                    target_file=hypothesis.target_file,
+                )
+                recommended_registry_id = str(
+                    map_context.get("recommended_registry_id")
+                    or "<registry_id from context.read_active_solver_map.operator_registries>"
+                )
+                recommended_slice_id = str(
+                    map_context.get("recommended_slice_id")
+                    or "<slice_id from context.read_active_solver_map.algorithm_slices>"
+                )
                 guidance["context.read_active_solver_map"] = {
                     "recommended_args": {
                         "surface": hypothesis.change_locus,
@@ -137,37 +149,42 @@ class AgenticSessionCodeGuidanceMixin:
                         "operator registries, scheduler integrations, or "
                         "algorithm slice ids are needed."
                     ),
+                    "map_to_source_sequence": (
+                        "Default code-phase path is map -> registry/slice -> "
+                        "targeted full target/integration source only if needed."
+                    ),
                     "already_has_grounding": _has_successful_tool(
                         observations,
                         "context.read_active_solver_map",
                     ),
+                    "available_registry_ids": map_context.get("available_registry_ids"),
+                    "available_slice_ids": map_context.get("available_slice_ids"),
                 }
                 guidance["context.read_operator_registry"] = {
                     "recommended_args": {
                         "surface": hypothesis.change_locus,
-                        "registry_id": (
-                            "<registry_id from "
-                            "context.read_active_solver_map.operator_registries>"
-                        ),
+                        "registry_id": recommended_registry_id,
                     },
                     "purpose": (
                         "Read one provider-declared operator registry after the "
                         "active solver map exposes its registry_id."
                     ),
+                    "available_registry_ids": map_context.get("available_registry_ids"),
+                    "recommended_registry": map_context.get("recommended_registry"),
                 }
                 guidance["context.read_algorithm_slice"] = {
                     "recommended_args": {
                         "surface": hypothesis.change_locus,
-                        "slice_id": (
-                            "<slice_id from "
-                            "context.read_active_solver_map.algorithm_slices>"
-                        ),
+                        "slice_id": recommended_slice_id,
                         "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
                     },
                     "purpose": (
                         "Read one bounded algorithm slice after the active solver "
                         "map exposes its slice_id."
                     ),
+                    "available_slice_ids": map_context.get("available_slice_ids"),
+                    "algorithm_slices": map_context.get("algorithm_slices"),
+                    "recommended_slice": map_context.get("recommended_slice"),
                 }
                 guidance["context.read_active_solver_design"] = {
                     "recommended_args": {
@@ -221,6 +238,12 @@ class AgenticSessionCodeGuidanceMixin:
                         "is needed. Code phase has a small full-file read budget; "
                         "use context.read_algorithm_symbol for extra symbols after "
                         "the approved target and owning integration files are clear."
+                    ),
+                    "pre_full_read_rule": (
+                        "Prefer an active-map registry or algorithm slice before "
+                        "additional broad full-file reads. Full files remain "
+                        "allowed for the approved target/integration body when "
+                        "the bounded slice is insufficient."
                     ),
                     "duplicate_read_rule": (
                         "If file_read_receipts or mandatory_visible_files already "

@@ -33,6 +33,10 @@ from scion.runtime.telemetry_guard.runtime_paths import (
 )
 from scion.runtime.telemetry_guard.utils import _field
 
+MECHANISM_EXECUTED_NO_IMPROVEMENT = "mechanism_executed_no_improvement"
+EFFECT_ATTRIBUTION_MISSING = "effect_attribution_missing"
+ACTIVATION_MISSING_OR_WIRING_SUSPECT = "activation_missing_or_wiring_suspect"
+
 
 def build_telemetry_guard_summary(
     *,
@@ -66,6 +70,21 @@ def build_telemetry_guard_summary(
         mechanisms = tuple(mechanism_claims)
     expected_present = any(claims.values()) or bool(mechanisms)
     evidence = _field(surface, "evidence")
+    declared_probe_fields = tuple(
+        declared_mechanism_runtime_probes(
+            problem_spec=problem_spec,
+            surface=surface,
+            declared_mechanisms=mechanisms,
+        )
+    )
+    activation_probe_fields_by_mechanism: dict[str, list[str]] = {}
+    for probe in declared_probe_fields:
+        if probe.category != "activation":
+            continue
+        activation_probe_fields_by_mechanism.setdefault(probe.mechanism, [])
+        if probe.field not in activation_probe_fields_by_mechanism[probe.mechanism]:
+            activation_probe_fields_by_mechanism[probe.mechanism].append(probe.field)
+    expected_field_mechanisms = _expected_field_mechanisms(mechanism_claims)
 
     categories: dict[str, tuple[str, ...]] = {
         category: tuple(fields) for category, fields in claims.items() if fields
@@ -102,12 +121,21 @@ def build_telemetry_guard_summary(
                 role_map=role_map,
             ):
                 if summary["candidate_present"] == 0:
+                    protected_effect = _matches_protected_objective_field(
+                        field,
+                        protected_tokens,
+                    )
+                    activation_observed = _declared_effect_activation_observed(
+                        field,
+                        mechanisms=mechanisms,
+                        field_mechanisms=expected_field_mechanisms,
+                        activation_probe_fields=activation_probe_fields_by_mechanism,
+                        candidate_runtimes=candidate_runtimes,
+                        champion_runtimes=champion_runtimes,
+                    )
                     code = (
                         "TELEMETRY_PROTECTED_EFFECT_NOT_OBSERVED"
-                        if _matches_protected_objective_field(
-                            field,
-                            protected_tokens,
-                        )
+                        if protected_effect
                         else "TELEMETRY_EFFECT_NOT_OBSERVED"
                     )
                     issue = _guard_issue(
@@ -115,9 +143,25 @@ def build_telemetry_guard_summary(
                         category=category,
                         field=field,
                         severity=(
-                            "fail" if effect_observation_required else "warn"
+                            "fail"
+                            if protected_effect
+                            or (effect_observation_required and not activation_observed)
+                            else "warn"
                         ),
                         summary=summary,
+                        diagnostic_type=(
+                            EFFECT_ATTRIBUTION_MISSING
+                            if activation_observed and not protected_effect
+                            else None
+                        ),
+                        telemetry_outcome=(
+                            "effect_attribution_missing"
+                            if activation_observed and not protected_effect
+                            else None
+                        ),
+                        repairable=(
+                            True if activation_observed and not protected_effect else None
+                        ),
                     )
                     _record_declared_field_issue_for_mechanisms(
                         mechanism_summaries,
@@ -130,16 +174,50 @@ def build_telemetry_guard_summary(
                         issue
                     )
             elif summary["candidate_positive"] == 0:
+                activation_observed = category == "effect" and (
+                    _declared_effect_activation_observed(
+                        field,
+                        mechanisms=mechanisms,
+                        field_mechanisms=expected_field_mechanisms,
+                        activation_probe_fields=activation_probe_fields_by_mechanism,
+                        candidate_runtimes=candidate_runtimes,
+                        champion_runtimes=champion_runtimes,
+                    )
+                )
                 issue = _guard_issue(
                     _zero_activity_issue_code(category, summary),
                     category=category,
                     field=field,
                     severity=(
                         "warn"
-                        if category == "effect" and not effect_observation_required
+                        if category == "effect"
+                        and (not effect_observation_required or activation_observed)
                         else "fail"
                     ),
                     summary=summary,
+                    diagnostic_type=(
+                        (
+                            MECHANISM_EXECUTED_NO_IMPROVEMENT
+                            if int(summary.get("candidate_present", 0) or 0) > 0
+                            else EFFECT_ATTRIBUTION_MISSING
+                        )
+                        if activation_observed
+                        else None
+                    ),
+                    telemetry_outcome=(
+                        (
+                            "no_effect"
+                            if int(summary.get("candidate_present", 0) or 0) > 0
+                            else "effect_attribution_missing"
+                        )
+                        if activation_observed
+                        else None
+                    ),
+                    repairable=(
+                        int(summary.get("candidate_present", 0) or 0) == 0
+                        if activation_observed
+                        else None
+                    ),
                 )
                 _record_declared_field_issue_for_mechanisms(
                     mechanism_summaries,
@@ -179,11 +257,7 @@ def build_telemetry_guard_summary(
                     categories_for_mechanism[category].append(field)
                 explicit_fields_for_mechanism[category].add(field)
 
-    for probe in declared_mechanism_runtime_probes(
-        problem_spec=problem_spec,
-        surface=surface,
-        declared_mechanisms=mechanisms,
-    ):
+    for probe in declared_probe_fields:
         categories_for_mechanism = mechanism_probe_categories.setdefault(
             probe.mechanism,
             {category: [] for category in EXPECTED_TELEMETRY_CATEGORIES},
@@ -233,6 +307,9 @@ def build_telemetry_guard_summary(
                 else f"TELEMETRY_MECHANISM_{category.upper()}_NOT_OBSERVED"
             )
             severity = "fail"
+            diagnostic_type = None
+            telemetry_outcome = None
+            repairable: bool | None = None
             if category == "effect" and (
                 not effect_observation_required
                 or not _has_explicit_mechanism_field(
@@ -241,8 +318,27 @@ def build_telemetry_guard_summary(
                     category=category,
                     fields=fields,
                 )
+                or _mechanism_activation_observed(mechanism_summary)
             ):
                 severity = "warn"
+            if category == "activation":
+                diagnostic_type = ACTIVATION_MISSING_OR_WIRING_SUSPECT
+                telemetry_outcome = "activation_missing"
+                repairable = True
+            elif category == "effect" and _mechanism_activation_observed(
+                mechanism_summary
+            ):
+                diagnostic_type = (
+                    EFFECT_ATTRIBUTION_MISSING
+                    if category_present == 0
+                    else MECHANISM_EXECUTED_NO_IMPROVEMENT
+                )
+                telemetry_outcome = (
+                    "effect_attribution_missing"
+                    if category_present == 0
+                    else "no_effect"
+                )
+                repairable = category_present == 0
             issue = _guard_issue(
                 code,
                 category=category,
@@ -255,6 +351,9 @@ def build_telemetry_guard_summary(
                     "champion_positive": category_champion_positive,
                 },
                 mechanism=mechanism,
+                diagnostic_type=diagnostic_type,
+                telemetry_outcome=telemetry_outcome,
+                repairable=repairable,
             )
             if severity == "fail":
                 failures.append(issue)
@@ -371,6 +470,52 @@ _OBJECTIVE_OUTCOME_EFFECT_ROLES = frozenset(
 )
 
 
+def _expected_field_mechanisms(
+    mechanism_claims: Mapping[str, Mapping[str, Sequence[str]]],
+) -> dict[str, list[str]]:
+    field_mechanisms: dict[str, list[str]] = {}
+    for mechanism, category_claims in mechanism_claims.items():
+        for fields in category_claims.values():
+            for field in fields:
+                field_text = str(field or "").strip()
+                mechanism_text = str(mechanism or "").strip()
+                if not field_text or not mechanism_text:
+                    continue
+                field_mechanisms.setdefault(field_text, [])
+                if mechanism_text not in field_mechanisms[field_text]:
+                    field_mechanisms[field_text].append(mechanism_text)
+    return field_mechanisms
+
+
+def _declared_effect_activation_observed(
+    field: str,
+    *,
+    mechanisms: Sequence[str],
+    field_mechanisms: Mapping[str, Sequence[str]],
+    activation_probe_fields: Mapping[str, Sequence[str]],
+    candidate_runtimes: Sequence[Mapping[str, Any]],
+    champion_runtimes: Sequence[Mapping[str, Any]],
+) -> bool:
+    matched_mechanisms = list(field_mechanisms.get(field) or ())
+    if not matched_mechanisms:
+        matched_mechanisms = [
+            mechanism
+            for mechanism in mechanisms
+            if _field_mentions_mechanism(field, mechanism)
+        ]
+    for mechanism in matched_mechanisms:
+        for activation_field in activation_probe_fields.get(mechanism, ()):
+            summary = _runtime_field_summary(
+                activation_field,
+                candidate_runtimes=candidate_runtimes,
+                champion_runtimes=champion_runtimes,
+                mechanism=mechanism,
+            )
+            if int(summary.get("candidate_positive", 0) or 0) > 0:
+                return True
+    return False
+
+
 def _is_objective_outcome_effect_field(
     field: str,
     *,
@@ -404,6 +549,21 @@ def _has_explicit_mechanism_field(
 ) -> bool:
     category_fields = explicit_fields.get(mechanism, {}).get(category, set())
     return any(field in category_fields for field in fields)
+
+
+def _mechanism_activation_observed(
+    mechanism_summary: Mapping[str, Any],
+) -> bool:
+    categories = mechanism_summary.get("categories")
+    fields = mechanism_summary.get("fields")
+    if not isinstance(categories, Mapping) or not isinstance(fields, Mapping):
+        return False
+    activation = _observation_status(
+        fields,
+        _category_fields(categories, "activation"),
+        positive_label="observed",
+    )
+    return activation.get("status") == "observed"
 
 
 def _record_declared_field_issue_for_mechanisms(
@@ -485,6 +645,10 @@ def _mechanism_diagnostics(
             declared_field_failures,
             "effect",
         )
+        effect_declared_warnings = _declared_field_issues_for_category(
+            declared_field_warnings,
+            "effect",
+        )
         if effect_declared_failures and effect["status"] == "positive":
             effect = {
                 **effect,
@@ -492,10 +656,24 @@ def _mechanism_diagnostics(
                 "status": "declared_field_failed",
                 "declared_field_failures": effect_declared_failures,
             }
+        elif effect_declared_warnings and effect["status"] == "positive":
+            effect = {
+                **effect,
+                "aggregate_status": effect["status"],
+                "status": "declared_field_warning",
+                "declared_field_warnings": effect_declared_warnings,
+            }
+        diagnostic_type = _mechanism_diagnostic_type(
+            activation_status=activation["status"],
+            runtime_status=runtime["status"],
+            effect_status=effect["status"],
+        )
         diagnostics.append(
             {
                 "mechanism": mechanism,
                 "passed": bool(summary.get("passed", True)),
+                "diagnostic_type": diagnostic_type,
+                "telemetry_outcome": _mechanism_telemetry_outcome(diagnostic_type),
                 "activation_status": activation["status"],
                 "runtime_status": runtime["status"],
                 "effect_status": effect["status"],
@@ -512,7 +690,9 @@ def _mechanism_diagnostics(
                     activation_status=activation["status"],
                     runtime_status=runtime["status"],
                     effect_status=effect["status"],
-                    declared_field_failures=declared_field_failures,
+                    declared_field_failures=(
+                        declared_field_failures + declared_field_warnings
+                    ),
                 ),
             }
         )
@@ -580,6 +760,33 @@ def _observation_status(
     return {"status": status, "fields": list(fields)} | totals
 
 
+def _mechanism_diagnostic_type(
+    *,
+    activation_status: str,
+    runtime_status: str,
+    effect_status: str,
+) -> str | None:
+    if activation_status in {"missing", "zero"}:
+        return ACTIVATION_MISSING_OR_WIRING_SUSPECT
+    if effect_status in {"zero", "declared_field_warning"}:
+        return MECHANISM_EXECUTED_NO_IMPROVEMENT
+    if effect_status == "missing" and (
+        activation_status == "observed" or runtime_status == "observed"
+    ):
+        return EFFECT_ATTRIBUTION_MISSING
+    return None
+
+
+def _mechanism_telemetry_outcome(diagnostic_type: str | None) -> str | None:
+    if diagnostic_type == MECHANISM_EXECUTED_NO_IMPROVEMENT:
+        return "no_effect"
+    if diagnostic_type == EFFECT_ATTRIBUTION_MISSING:
+        return "effect_attribution_missing"
+    if diagnostic_type == ACTIVATION_MISSING_OR_WIRING_SUSPECT:
+        return "activation_missing"
+    return None
+
+
 def _declared_field_issues_for_category(
     issues: Sequence[Any],
     category: str,
@@ -645,9 +852,26 @@ def _mechanism_repair_guidance(
             "mechanism path. Do not add unconditional mechanism execution only "
             "to make runtime telemetry positive."
         )
-    if effect_status == "missing":
+    if (
+        effect_status == "zero"
+        and activation_status == "observed"
+        and not effect_field_failures
+    ):
         guidance.append(
-            "Add effect telemetry for declared mechanism "
+            "Mechanism executed but declared effect stayed zero. Treat this as "
+            "a no-effect performance outcome, not missing activation; use a "
+            "different trigger, schedule, threshold, composition, or mechanism "
+            "instead of repeating the unchanged change."
+        )
+    if effect_status == "missing":
+        prefix = (
+            "Activation was observed but effect attribution is missing. "
+            if activation_status == "observed" or runtime_status == "observed"
+            else ""
+        )
+        guidance.append(
+            prefix
+            + "Add effect telemetry for declared mechanism "
             f"{mechanism}: context.record_move('{mechanism}', attempted=1, "
             "accepted=accepted_flag, delta=objective_delta, "
             "best_improved=best_improved_flag)."

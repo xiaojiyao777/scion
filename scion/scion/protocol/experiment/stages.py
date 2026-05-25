@@ -15,6 +15,10 @@ from scion.core.models import (
     PairwiseCaseFeedback,
     ProtocolResult,
 )
+from scion.core.runtime_budget_diagnostics import (
+    format_runtime_budget_diagnostic,
+    runtime_budget_diagnostic,
+)
 from scion.protocol.gates import GateResult, frozen_gate, screening_gate, validation_gate
 from scion.protocol.stats import compute_eval_stats
 from scion.runtime.audit import (
@@ -111,6 +115,9 @@ def run_experiment(
     candidate_guard_runtimes: list[Mapping[str, Any]] = []
     champion_guard_runtimes: list[Mapping[str, Any]] = []
     candidate_telemetry_guard_summary: dict[str, Any] = {}
+    runtime_budget_diagnostic_summary: dict[str, Any] | None = None
+    candidate_elapsed_samples_ms: list[float] = []
+    champion_elapsed_samples_ms: list[float] = []
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     candidate_runtime_counters: dict[str, int] = _candidate_runtime_counter_template(
         problem_spec=protocol._problem_spec,
@@ -147,6 +154,7 @@ def run_experiment(
                         _surface_runtime_summary_with_guard(
                             candidate_surface_runtime_summary,
                             candidate_telemetry_guard_summary,
+                            runtime_budget_diagnostic_summary,
                         )
                     ),
                     "candidate_telemetry_guard_summary": (
@@ -199,6 +207,8 @@ def run_experiment(
                 registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 selected_surface=normalized_selected_surface,
             )
+            _append_elapsed_sample(champion_elapsed_samples_ms, champ_r.elapsed_ms)
+            _append_elapsed_sample(candidate_elapsed_samples_ms, cand_r.elapsed_ms)
             _record_surface_runtime_sample(
                 cand_r,
                 candidate_surface_runtime_summary,
@@ -635,6 +645,7 @@ def run_experiment(
         expected_telemetry=expected_telemetry,
         declared_mechanisms=mechanism_changes,
         protected_objectives=protected_objectives,
+        effect_observation_required=stage != ExperimentStage.SCREENING,
     )
     telemetry_guard_failures = candidate_telemetry_guard_summary.get("failures")
     if isinstance(telemetry_guard_failures, list) and telemetry_guard_failures:
@@ -651,6 +662,24 @@ def run_experiment(
                 *guard_codes[:3],
             ),
         )
+    runtime_budget_diagnostic_summary = runtime_budget_diagnostic(
+        stage=stage,
+        time_limit_sec=protocol.time_limit_sec,
+        candidate_elapsed_ms=candidate_elapsed_samples_ms,
+        champion_elapsed_ms=champion_elapsed_samples_ms,
+        total_pairs=total_pairs,
+    )
+    if runtime_budget_diagnostic_summary:
+        runtime_budget_code = str(
+            runtime_budget_diagnostic_summary.get("code") or ""
+        ).strip()
+        if runtime_budget_code:
+            gate = GateResult(
+                outcome=gate.outcome,
+                reason_codes=tuple(
+                    dict.fromkeys((*tuple(gate.reason_codes), runtime_budget_code))
+                ),
+            )
 
     # Persist final raw metrics snapshot.
     _write_metrics_snapshot(complete=True)
@@ -668,6 +697,9 @@ def run_experiment(
     telemetry_guard_summary = _format_telemetry_guard_summary(
         candidate_telemetry_guard_summary
     )
+    runtime_budget_summary = format_runtime_budget_diagnostic(
+        runtime_budget_diagnostic_summary
+    )
 
     # Exposure control
     if stage == ExperimentStage.SCREENING:
@@ -681,7 +713,7 @@ def run_experiment(
             f"median_delta={stats.median_delta:.4f} outcome={gate.outcome} "
             f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}"
+            f"{telemetry_guard_summary}{runtime_budget_summary}"
         )
     else:
         # Validation / Frozen: aggregate summary only, no per-case data
@@ -692,7 +724,7 @@ def run_experiment(
             f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
             f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
-            f"{telemetry_guard_summary}"
+            f"{telemetry_guard_summary}{runtime_budget_summary}"
         )
 
     # Build case-level feedback for screening only
@@ -718,6 +750,7 @@ def run_experiment(
         candidate_surface_runtime_summary=_surface_runtime_summary_with_guard(
             candidate_surface_runtime_summary,
             candidate_telemetry_guard_summary,
+            runtime_budget_diagnostic_summary,
         ),
         candidate_runtime_failure_categories=dict(candidate_runtime_categories),
         candidate_first_runtime_failure=candidate_first_runtime_failure,
@@ -734,6 +767,15 @@ def run_experiment(
         candidate_portfolio_errors=candidate_runtime_counters["portfolio_errors"],
         candidate_runtime_stop_reasons=dict(candidate_runtime_stop_reasons),
     )
+
+
+def _append_elapsed_sample(samples: list[float], value: Any) -> None:
+    try:
+        elapsed = float(value)
+    except (TypeError, ValueError):
+        return
+    if elapsed >= 0:
+        samples.append(elapsed)
 
 
 __all__ = ["run_experiment"]

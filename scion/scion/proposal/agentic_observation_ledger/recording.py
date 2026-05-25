@@ -100,12 +100,24 @@ def build_agentic_ledger_observation(
     active_facts = compact_active_algorithm_facts(
         payload.get("active_algorithm_facts")
     )
+    read_receipt = (
+        payload.get("read_receipt")
+        if isinstance(payload.get("read_receipt"), Mapping)
+        else {}
+    )
     entry = _drop_empty_dict(
         {
             "observation_id": observation.observation_id,
             "tool_name": observation.tool_name,
             "normalized_args": normalized_args,
             "args_hash": stable_digest(normalized_args, length=16),
+            "target_id": read_receipt.get("target_id")
+            or normalized_args.get("registry_id")
+            or normalized_args.get("slice_id"),
+            "registry_id": payload.get("registry_id")
+            or normalized_args.get("registry_id"),
+            "slice_id": payload.get("slice_id")
+            or normalized_args.get("slice_id"),
             "file_path": file_path_from_observation(payload, normalized_args),
             "symbol": symbol_from_observation(payload, normalized_args),
             "digest": digest,

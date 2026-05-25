@@ -217,11 +217,18 @@ class BranchController:
         Return the code-base identifier for the branch (§4.5):
         - "champion"          if branch is STALE, or current_code_hash is None,
                               or last_clean_code_hash is None (never passed verification)
+                              or the last verified branch code has telemetry wiring
+                              suspicion that should not seed the next proposal
         - "branch_workspace"  if both hashes are set — caller should reuse the
                               existing branch workspace rather than copying from champion
         """
         branch = self._get(branch_id)
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
+            return "champion"
+        if getattr(branch, "branch_code_status", "clean") in {
+            "telemetry_wiring_suspect",
+            "telemetry_invalid",
+        }:
             return "champion"
         if branch.current_code_hash is None:
             return "champion"
@@ -237,6 +244,7 @@ class BranchController:
         branch.current_code_hash = code_hash
         if passed:
             branch.last_clean_code_hash = code_hash
+            branch.branch_code_status = "clean"
         branch.updated_at = datetime.now()
 
     def record_candidate_code(self, branch_id: str, code_hash: str) -> None:
@@ -258,6 +266,7 @@ class BranchController:
         branch = self._get(branch_id)
         branch.current_code_hash = code_hash
         branch.last_clean_code_hash = code_hash
+        branch.branch_code_status = "clean"
         branch.updated_at = datetime.now()
 
     def next_stage(self, branch_id: str) -> ExperimentStage:

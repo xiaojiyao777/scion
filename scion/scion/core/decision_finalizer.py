@@ -33,6 +33,7 @@ from scion.core.telemetry_validation import (
     VALIDATION_TELEMETRY_REPAIRABLE,
     screened_experiment_effective,
 )
+from scion.proposal.screening_feedback import screening_feedback_summary
 
 logger = logging.getLogger(__name__)
 
@@ -311,10 +312,25 @@ class DecisionFinalizer:
             protocol_result,
             decision_reason_codes,
         )
-        preserve_workspace = verification_passed and (
-            telemetry_repairable
-            or preserve_low_signal_branch
+        screening_feedback = (
+            screening_feedback_summary(
+                protocol_result,
+                decision_reason_codes=tuple(decision_reason_codes or ()),
+            )
+            if protocol_result is not None
+            else None
         )
+        if screening_feedback is not None and screening_feedback.case_total:
+            branch.last_screening_feedback_tier = screening_feedback.tier
+        if telemetry_repairable:
+            branch.branch_code_status = "telemetry_wiring_suspect"
+            branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+        elif preserve_low_signal_branch and screening_feedback is not None:
+            branch.branch_code_status = f"active_{screening_feedback.tier}"
+            branch.last_telemetry_outcome = screening_feedback.effect_status
+        elif not preserve_low_signal_branch:
+            branch.branch_code_status = "discarded"
+        preserve_workspace = verification_passed and preserve_low_signal_branch
 
         if not preserve_workspace:
             self.discard_branch_workspace(bid)

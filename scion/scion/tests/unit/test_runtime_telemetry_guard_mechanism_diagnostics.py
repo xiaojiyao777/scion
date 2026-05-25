@@ -44,6 +44,10 @@ def test_auto_declared_mechanism_effect_probe_warns_when_activation_present() ->
     assert [warning["code"] for warning in summary["warnings"]] == [
         "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED",
     ]
+    assert summary["warnings"][0]["diagnostic_type"] == (
+        "mechanism_executed_no_improvement"
+    )
+    assert summary["mechanism_diagnostics"][0]["telemetry_outcome"] == "no_effect"
 
 
 def test_mechanism_diagnostics_separate_activation_runtime_and_zero_effect() -> None:
@@ -145,7 +149,7 @@ def test_mechanism_diagnostics_report_move_only_as_activation_missing() -> None:
     assert "direct activation telemetry" in diagnostic["repair_guidance"][0]
 
 
-def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None:
+def test_explicit_mechanism_effect_claim_is_no_effect_when_activation_observed() -> None:
     summary = build_telemetry_guard_summary(
         candidate_runtimes=[
             {
@@ -161,13 +165,18 @@ def test_explicit_mechanism_effect_claim_still_fails_when_not_observed() -> None
         ],
     )
 
-    assert summary["passed"] is False
+    assert summary["passed"] is True
+    assert summary["failures"] == []
     assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in [
-        failure["code"] for failure in summary["failures"]
+        warning["code"] for warning in summary["warnings"]
     ]
+    assert summary["mechanism_diagnostics"][0]["diagnostic_type"] == (
+        "mechanism_executed_no_improvement"
+    )
+    assert summary["mechanism_diagnostics"][0]["telemetry_outcome"] == "no_effect"
 
 
-def test_declared_field_failure_marks_matching_mechanism_diagnostic_failed() -> None:
+def test_declared_field_zero_with_activation_is_visible_as_no_effect_warning() -> None:
     spec = SimpleNamespace(
         research_surfaces=[
             SimpleNamespace(
@@ -206,18 +215,20 @@ def test_declared_field_failure_marks_matching_mechanism_diagnostic_failed() -> 
         ],
     )
 
-    assert summary["passed"] is False
+    assert summary["passed"] is True
     diagnostic = summary["mechanism_diagnostics"][0]
-    assert diagnostic["effect_status"] == "declared_field_failed"
-    assert diagnostic["passed"] is False
+    assert diagnostic["effect_status"] == "declared_field_warning"
+    assert diagnostic["passed"] is True
+    assert diagnostic["diagnostic_type"] == "mechanism_executed_no_improvement"
+    assert diagnostic["telemetry_outcome"] == "no_effect"
     assert diagnostic["effect_observed"] is False
     assert diagnostic["effect"]["aggregate_status"] == "positive"
-    assert diagnostic["declared_field_failures"] == [
+    assert diagnostic["declared_field_warnings"] == [
         {
             "category": "effect",
             "field": "mechanism_best_delta.target_probe",
             "code": "TELEMETRY_EFFECT_NOT_OBSERVED",
-            "severity": "fail",
+            "severity": "warn",
         }
     ]
     assert "Activation and runtime telemetry are observed" in (
@@ -250,6 +261,39 @@ def test_algorithm_smoke_can_treat_missing_effect_as_advisory() -> None:
     warning_codes = [warning["code"] for warning in summary["warnings"]]
     assert "TELEMETRY_EFFECT_NOT_OBSERVED" in warning_codes
     assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in warning_codes
+
+
+def test_missing_effect_attribution_with_activation_is_repairable_warning() -> None:
+    summary = build_telemetry_guard_summary(
+        candidate_runtimes=[
+            {
+                "mechanism_activation": {"target_probe": 1},
+            }
+        ],
+        problem_spec=_mechanism_probe_spec(),
+        selected_surface="solver",
+        expected_telemetry={"effect": {"target_probe": ["mechanism_effect"]}},
+        declared_mechanisms=[
+            MechanismChange(id="target_probe", change_type="modify")
+        ],
+    )
+
+    assert summary["passed"] is True
+    assert summary["failures"] == []
+    warning_codes = [warning["code"] for warning in summary["warnings"]]
+    assert "TELEMETRY_EFFECT_NOT_OBSERVED" in warning_codes
+    assert "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED" in warning_codes
+    assert {
+        warning["diagnostic_type"]
+        for warning in summary["warnings"]
+        if warning["code"] == "TELEMETRY_MECHANISM_EFFECT_NOT_OBSERVED"
+    } == {"effect_attribution_missing"}
+    diagnostic = summary["mechanism_diagnostics"][0]
+    assert diagnostic["activation_status"] == "observed"
+    assert diagnostic["effect_status"] == "missing"
+    assert diagnostic["diagnostic_type"] == "effect_attribution_missing"
+    assert diagnostic["telemetry_outcome"] == "effect_attribution_missing"
+    assert "Activation was observed" in diagnostic["repair_guidance"][-1]
 
 
 def test_activation_missing_still_blocks_when_effect_is_advisory() -> None:
