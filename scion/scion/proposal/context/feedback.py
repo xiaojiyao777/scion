@@ -20,6 +20,7 @@ from scion.proposal.context.feedback_grounding import (
     _telemetry_validation_feedback_line,
 )
 from scion.proposal.mechanism_labels import extract_mechanism_label
+from scion.proposal.screening_feedback import screening_feedback_summary
 
 _SAFE_PRE_PROTOCOL_FAILURE_STAGES = {
     "agent_quality_blocked",
@@ -307,12 +308,35 @@ def _build_experiment_history(
             st = pr.stats
             primary_reason = _primary_screening_reason(s)
             auxiliary_reasons = _auxiliary_screening_reasons(s, primary_reason)
+            tier_summary = screening_feedback_summary(
+                pr,
+                decision_reason_codes=tuple(
+                    getattr(s, "decision_reason_codes", ()) or ()
+                ),
+            )
             line += (
                 f"\n    screening: case_win_rate={st.win_rate:.2f}"
                 f"  gate_win_rate={st.win_rate:.2f}"
                 f"  median_delta={st.median_delta:.4f}"
                 f"  outcome={pr.gate_outcome}"
             )
+            line += (
+                f"\n    screening_feedback.tier={tier_summary.tier}"
+                f"  activation={tier_summary.activation_status}"
+                f"  effect={tier_summary.effect_status}"
+                f"  repeat_unchanged_allowed="
+                f"{str(tier_summary.repeat_unchanged_allowed).lower()}"
+            )
+            if tier_summary.allowed_followup_variants:
+                line += (
+                    "\n    allowed_followup_variants: "
+                    + ", ".join(tier_summary.allowed_followup_variants)
+                )
+            if tier_summary.why_not_promoted:
+                line += (
+                    "\n    why_not_promoted: "
+                    + tier_summary.why_not_promoted
+                )
             pair_split = _screening_pair_case_split(pr)
             if pair_split:
                 line += f"\n    pair_case_split: {pair_split}"
@@ -343,24 +367,21 @@ def _build_experiment_history(
 
 def _screening_pair_case_split(protocol) -> str:
     pairs = list(getattr(protocol, "pair_feedback", ()) or ())
-    if not pairs:
+    tier_summary = screening_feedback_summary(protocol)
+    if not pairs and not tier_summary.case_total:
         return ""
-    pair_wins = sum(1 for item in pairs if getattr(item, "comparison", None) == "win")
-    pair_losses = sum(
-        1 for item in pairs if getattr(item, "comparison", None) == "loss"
-    )
-    pair_ties = len(pairs) - pair_wins - pair_losses
     stats = protocol.stats
     parts = [
-        f"pair_wins={pair_wins}",
-        f"pair_losses={pair_losses}",
-        f"pair_ties={pair_ties}",
-        f"pair_total={len(pairs)}",
+        f"pair_wins={tier_summary.pair_wins}",
+        f"pair_losses={tier_summary.pair_losses}",
+        f"pair_ties={tier_summary.pair_ties}",
+        f"pair_total={tier_summary.pair_total}",
         f"case_wins={getattr(stats, 'wins', 0)}",
         f"case_losses={getattr(stats, 'losses', 0)}",
         f"case_ties={getattr(stats, 'ties', 0)}",
+        f"tier={tier_summary.tier}",
     ]
-    if pair_wins > 0 and getattr(stats, "win_rate", 0.0) < 0.5:
+    if tier_summary.tier == "weak_positive" and getattr(stats, "win_rate", 0.0) < 0.5:
         parts.append("diagnostic=active_pair_wins_but_case_fail")
     return ", ".join(parts)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from scion.core.models import CheckResult, ContractResult
 
@@ -12,6 +13,8 @@ def check_result(
     severity: str,
     detail: str,
     start_ns: int,
+    *,
+    metadata: dict[str, Any] | None = None,
 ) -> CheckResult:
     elapsed_ms = int((time.monotonic_ns() - start_ns) / 1_000_000)
     return CheckResult(
@@ -20,6 +23,7 @@ def check_result(
         severity=severity,  # type: ignore[arg-type]
         detail=detail,
         elapsed_ms=elapsed_ms,
+        metadata=dict(metadata or {}),
     )
 
 

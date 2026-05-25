@@ -159,6 +159,8 @@ class ContractGate:
             self._selected_surface_name(contract_hypothesis) or selected_surface
         )
         patch_graph = PatchSetGraph.from_patch(patch)
+        file_changes = patch_file_changes(patch)
+        additional_change_files = tuple(change.file_path for change in file_changes[1:])
         checks.append(
             self._c12_patch_mechanism_binding(
                 patch,
@@ -166,7 +168,7 @@ class ContractGate:
                 selected_surface=selected_surface_name,
             )
         )
-        for index, change in enumerate(patch_file_changes(patch)):
+        for index, change in enumerate(file_changes):
             is_primary = index == 0
             change_patch = PatchProposal(
                 file_path=change.file_path,
@@ -181,6 +183,7 @@ class ContractGate:
                 enforce_hypothesis_target=is_primary,
                 patch_graph=patch_graph,
                 base_file_content=base_file_content,
+                additional_change_files=additional_change_files if is_primary else (),
             )
             if is_primary:
                 checks.extend(change_checks)
@@ -209,6 +212,7 @@ class ContractGate:
         enforce_hypothesis_target: bool,
         patch_graph: PatchSetGraph | None,
         base_file_content: Callable[[str], str | None] | None = None,
+        additional_change_files: tuple[str, ...] = (),
     ) -> List[CheckResult]:
         checks: List[CheckResult] = []
         checks.append(self._c4_file_whitelist(patch))
@@ -219,6 +223,7 @@ class ContractGate:
                 hypothesis,
                 selected_surface=selected_surface,
                 enforce_hypothesis_target=enforce_hypothesis_target,
+                additional_change_files=additional_change_files,
             )
         )
         if not all(check.passed for check in checks[-3:]):
@@ -336,6 +341,7 @@ class ContractGate:
         *,
         selected_surface: str | None = None,
         enforce_hypothesis_target: bool = True,
+        additional_change_files: tuple[str, ...] = (),
     ) -> CheckResult:
         return check_patch_action_target(
             patch,
@@ -343,6 +349,7 @@ class ContractGate:
             surface_access=self._surface_access,
             selected_surface=selected_surface,
             enforce_hypothesis_target=enforce_hypothesis_target,
+            additional_change_files=additional_change_files,
         )
 
     # ------------------------------------------------------------------

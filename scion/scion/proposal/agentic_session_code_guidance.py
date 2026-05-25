@@ -128,6 +128,47 @@ class AgenticSessionCodeGuidanceMixin:
                     algorithm_file_guidance,
                     hypothesis.target_file,
                 )
+                guidance["context.read_active_solver_map"] = {
+                    "recommended_args": {
+                        "surface": hypothesis.change_locus,
+                    },
+                    "purpose": (
+                        "Read the provider-declared active solver map when "
+                        "operator registries, scheduler integrations, or "
+                        "algorithm slice ids are needed."
+                    ),
+                    "already_has_grounding": _has_successful_tool(
+                        observations,
+                        "context.read_active_solver_map",
+                    ),
+                }
+                guidance["context.read_operator_registry"] = {
+                    "recommended_args": {
+                        "surface": hypothesis.change_locus,
+                        "registry_id": (
+                            "<registry_id from "
+                            "context.read_active_solver_map.operator_registries>"
+                        ),
+                    },
+                    "purpose": (
+                        "Read one provider-declared operator registry after the "
+                        "active solver map exposes its registry_id."
+                    ),
+                }
+                guidance["context.read_algorithm_slice"] = {
+                    "recommended_args": {
+                        "surface": hypothesis.change_locus,
+                        "slice_id": (
+                            "<slice_id from "
+                            "context.read_active_solver_map.algorithm_slices>"
+                        ),
+                        "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                    },
+                    "purpose": (
+                        "Read one bounded algorithm slice after the active solver "
+                        "map exposes its slice_id."
+                    ),
+                }
                 guidance["context.read_active_solver_design"] = {
                     "recommended_args": {
                         "surface": "solver_design",

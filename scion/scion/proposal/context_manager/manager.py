@@ -312,7 +312,13 @@ class ContextManager:
         # J1: Render search memory (cross-branch search history)
         search_memory_block = ""
         if search_memory is not None:
-            search_memory_block = search_memory.render(view="hypothesis")
+            try:
+                search_memory_block = search_memory.render(
+                    view="hypothesis",
+                    branch_id=branch.branch_id,
+                )
+            except TypeError:
+                search_memory_block = search_memory.render(view="hypothesis")
 
         # J2: Render saturation signals
         saturation_block = ""

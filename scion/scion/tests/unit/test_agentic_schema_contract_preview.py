@@ -289,6 +289,59 @@ def test_contract_preview_patch_payload_is_compact_without_code_content(
     assert "return 0.35" not in rendered
 
 
+def test_contract_preview_c4b_primary_target_mismatch_returns_repair_template(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    patch_payload = {
+        "file_path": "operators/local_a.py",
+        "action": "modify",
+        "code_content": (
+            "class LocalA:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        ),
+        "additional_changes": [
+            _exact_replace_policy_patch(tmp_path),
+        ],
+    }
+
+    observation = registry.call(
+        "proposal.contract_preview",
+        {
+            "hypothesis": _valid_hypothesis_payload(),
+            "patch": patch_payload,
+        },
+        context,
+    )
+
+    patch = observation.structured_payload["patch"]
+    c4b = next(
+        check for check in patch["checks"] if check["name"] == "C4b_patch_action_target"
+    )
+    template = c4b["repair_template"]
+    rendered_template = json.dumps(template, sort_keys=True)
+
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert patch["repair_templates"][0]["repair_type"] == (
+        "patch_primary_target_mismatch"
+    )
+    assert c4b["passed"] is False
+    assert template["check"] == "C4b_patch_action_target"
+    assert template["observed"] == {
+        "hypothesis_target_file": "policies/search_policy.py",
+        "patch_primary_file": "operators/local_a.py",
+        "additional_change_files": ["policies/search_policy.py"],
+    }
+    assert "active algorithm body" in " ".join(template["reasoning"])
+    assert "additional_changes" in json.dumps(template["recommended_shape"])
+    assert "validation" not in rendered_template.lower()
+    assert "frozen" not in rendered_template.lower()
+    assert "raw_metrics" not in rendered_template.lower()
+
+
 def test_schema_and_contract_previews_stay_compact_for_large_inputs(
     tmp_path: Path,
 ) -> None:

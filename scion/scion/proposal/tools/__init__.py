@@ -6,6 +6,11 @@ while splitting tool implementations by responsibility.
 
 from __future__ import annotations
 
+from scion.proposal.tools.active_solver_map import (
+    ContextReadActiveSolverMapTool,
+    ContextReadAlgorithmSliceTool,
+    ContextReadOperatorRegistryTool,
+)
 from scion.proposal.tools.context import (
     ContextListSurfacesTool,
     ContextReadBranchStateTool,
@@ -50,9 +55,12 @@ __all__ = [
     "AlgorithmSmokeTool",
     "ContextExposurePolicy",
     "ContractPreviewTool",
+    "ContextReadActiveSolverMapTool",
+    "ContextReadAlgorithmSliceTool",
     "ContextReadBranchStateTool",
     "ContextReadChampionSummaryTool",
     "ContextReadObjectivePolicyTool",
+    "ContextReadOperatorRegistryTool",
     "ContextReadProblemTool",
     "ContextReadSurfaceTool",
     "ContextListSurfacesTool",

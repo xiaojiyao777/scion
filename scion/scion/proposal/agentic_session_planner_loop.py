@@ -570,6 +570,49 @@ class AgenticSessionPlannerLoopMixin:
                 recommended_file_path = _recommended_algorithm_file_path(
                     algorithm_file_guidance
                 )
+                guidance["context.read_active_solver_map"] = {
+                    "recommended_args": {"surface": "solver_design"},
+                    "purpose": (
+                        "Read the provider-declared active solver map for generic "
+                        "entrypoint, registry, integration, slice, telemetry, and "
+                        "mechanism-fact ids."
+                    ),
+                    "consumer_tools": [
+                        "context.read_operator_registry",
+                        "context.read_algorithm_slice",
+                    ],
+                    "already_has_grounding": _has_successful_tool(
+                        observations,
+                        "context.read_active_solver_map",
+                    ),
+                }
+                guidance["context.read_operator_registry"] = {
+                    "recommended_args": {
+                        "surface": "solver_design",
+                        "registry_id": (
+                            "<registry_id from "
+                            "context.read_active_solver_map.operator_registries>"
+                        ),
+                    },
+                    "purpose": (
+                        "Read one operator registry after active solver map "
+                        "discovery."
+                    ),
+                }
+                guidance["context.read_algorithm_slice"] = {
+                    "recommended_args": {
+                        "surface": "solver_design",
+                        "slice_id": (
+                            "<slice_id from "
+                            "context.read_active_solver_map.algorithm_slices>"
+                        ),
+                        "max_chars": _APS_CODE_MODULE_SURFACE_READ_CODE_CHARS,
+                    },
+                    "purpose": (
+                        "Read one bounded algorithm slice after active solver map "
+                        "discovery."
+                    ),
+                }
                 guidance["context.list_algorithm_files"] = {
                     "recommended_args": {
                         "surface": "solver_design",

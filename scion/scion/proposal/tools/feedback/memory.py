@@ -40,17 +40,23 @@ class MemoryQueryTool(_BaseReadOnlyTool):
                     ),
                 )
             try:
-                text = render(view="hypothesis")
-            except TypeError:
-                return self._error(
-                    context,
-                    failure_code=ProposalToolFailureCode.UNSUPPORTED,
-                    summary="Search memory does not support the safe hypothesis view.",
-                    repair_hint=(
-                        "Provide a render(view='hypothesis') implementation for "
-                        "proposal memory reads."
-                    ),
+                text = render(
+                    view="hypothesis",
+                    branch_id=getattr(context.branch, "branch_id", None),
                 )
+            except TypeError:
+                try:
+                    text = render(view="hypothesis")
+                except TypeError:
+                    return self._error(
+                        context,
+                        failure_code=ProposalToolFailureCode.UNSUPPORTED,
+                        summary="Search memory does not support the safe hypothesis view.",
+                        repair_hint=(
+                            "Provide a render(view='hypothesis') implementation for "
+                            "proposal memory reads."
+                        ),
+                    )
             if text:
                 sections.append(str(text))
         if context.research_log is not None:

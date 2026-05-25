@@ -801,6 +801,7 @@ def _compact_preview_tool_payload(
         "summary": _limit_text(observation_summary, 360),
         "failure_reason": _limit_text(failure_reason, 700),
         "failed_checks": failed_checks[:10],
+        "repair_templates": _preview_repair_templates(payload),
         "repair_hint": _limit_text(
             observation_repair_hint or str(payload.get("repair_hint") or ""),
             700,
@@ -1053,6 +1054,58 @@ def _preview_failed_checks(value: Any) -> list[str]:
 
     visit(value)
     return list(dict.fromkeys(item for item in failed if item))[:20]
+
+
+def _preview_repair_templates(value: Any) -> list[dict[str, Any]]:
+    templates: list[dict[str, Any]] = []
+
+    def visit(item: Any) -> None:
+        if len(templates) >= 4:
+            return
+        if isinstance(item, dict):
+            raw_templates = item.get("repair_templates")
+            if isinstance(raw_templates, list):
+                for template in raw_templates:
+                    if isinstance(template, dict):
+                        templates.append(_compact_preview_repair_template(template))
+                        if len(templates) >= 4:
+                            return
+            raw_template = item.get("repair_template")
+            if isinstance(raw_template, dict):
+                templates.append(_compact_preview_repair_template(raw_template))
+                if len(templates) >= 4:
+                    return
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, list):
+            for child in item[:40]:
+                visit(child)
+
+    visit(value)
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for template in templates:
+        key = json.dumps(template, sort_keys=True, default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(template)
+    return deduped[:4]
+
+
+def _compact_preview_repair_template(template: dict[str, Any]) -> dict[str, Any]:
+    return _drop_empty(
+        {
+            "repair_type": template.get("repair_type"),
+            "check": template.get("check"),
+            "severity": template.get("severity"),
+            "missing_fields": template.get("missing_fields"),
+            "observed": template.get("observed"),
+            "required_template": template.get("required_template"),
+            "recommended_shape": template.get("recommended_shape"),
+            "agent_instruction": template.get("agent_instruction"),
+        }
+    )
 
 
 def _preview_failure_reason(value: Any) -> str:

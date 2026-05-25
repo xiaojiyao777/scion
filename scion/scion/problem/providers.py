@@ -71,6 +71,54 @@ class ActiveSolverDesignProvider(Protocol):
         """Return problem-owned algorithm files and roles for active solver reads."""
 
 
+class ActiveSolverMapProvider(Protocol):
+    """Optional problem-owned active solver map for generic APS context tools."""
+
+    def read_active_solver_map(
+        self,
+        context: Any,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Any:
+        """Return a problem-generic active solver map payload."""
+
+    def read_operator_registry(
+        self,
+        context: Any,
+        *,
+        registry_id: str,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Any:
+        """Return a problem-generic operator registry read payload."""
+
+    def read_algorithm_slice(
+        self,
+        context: Any,
+        *,
+        slice_id: str,
+        surface: str | None = None,
+        subject_id: str | None = None,
+        max_chars: int | None = None,
+    ) -> Any:
+        """Return a bounded problem-generic algorithm slice payload."""
+
+
+def resolve_active_solver_map_provider(
+    *,
+    problem_spec: Any = None,
+    adapter: Any = None,
+) -> Any | None:
+    """Return an optional problem-owned active solver map provider."""
+
+    return _resolve_provider(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        factory_names=("active_solver_map_provider",),
+    )
+
+
 def resolve_active_solver_design_provider(
     *,
     problem_spec: Any = None,
@@ -197,10 +245,12 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
 
 
 __all__ = [
+    "ActiveSolverMapProvider",
     "ActiveSolverDesignProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
+    "resolve_active_solver_map_provider",
     "resolve_active_solver_design_provider",
     "resolve_solver_design_prompt_provider",
     "resolve_solver_design_smoke_provider",

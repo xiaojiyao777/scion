@@ -10,6 +10,7 @@ from scion.core.telemetry_validation import (
     telemetry_failure_categories,
 )
 from scion.core.models import StepRecord
+from scion.proposal.screening_feedback import screening_feedback_summary
 from scion.proposal.tools.feedback.attribution import _surface_runtime_attribution_payload
 from scion.proposal.tools.feedback.scope import _feedback_step_provenance
 from scion.proposal.tools.feedback.stats import _eval_stats_payload, _screening_pair_stats
@@ -25,6 +26,11 @@ def _screening_step_payload(
     protocol = step.protocol_result
     assert protocol is not None
     stats = protocol.stats
+    screening_feedback = screening_feedback_summary(
+        protocol,
+        decision_reason_codes=tuple(getattr(step, "decision_reason_codes", ()) or ()),
+    )
+    screening_feedback_payload = screening_feedback.to_payload()
     return {
         "round_num": step.round_num,
         "branch_id": step.branch_id,
@@ -38,6 +44,10 @@ def _screening_step_payload(
         "screening_case_win_rate": stats.win_rate,
         "screening_gate_win_rate": stats.win_rate,
         **_screening_pair_stats(protocol),
+        "screening_feedback": screening_feedback_payload,
+        "screening_feedback_tier": screening_feedback.tier,
+        "case_feedback_summary": screening_feedback_payload["case_summary"],
+        "pair_feedback_summary": screening_feedback_payload["pair_summary"],
         "candidate_runtime_failure_categories": dict(
             protocol.candidate_runtime_failure_categories or {}
         ),

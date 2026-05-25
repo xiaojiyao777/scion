@@ -10,6 +10,9 @@ LEDGER_SCHEMA_VERSION = "agentic-observation-ledger.v1"
 
 REUSABLE_CONTEXT_TOOLS = frozenset(
     {
+        "context.read_active_solver_map",
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
         "context.read_active_solver_design",
         "context.read_solver_call_graph",
         "context.list_algorithm_files",
@@ -20,6 +23,7 @@ REUSABLE_CONTEXT_TOOLS = frozenset(
 )
 ACTIVE_SOLVER_METADATA_TOOLS = frozenset(
     {
+        "context.read_active_solver_map",
         "context.read_active_solver_design",
         "context.read_solver_call_graph",
         "context.list_algorithm_files",

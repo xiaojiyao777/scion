@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from pydantic import ValidationError
 
 from scion.contract.gate import ContractGate
+from scion.contract.repair_guidance import novelty_signature_missing_fields_template
 from scion.core.models import (
     HypothesisProposal,
     MechanismChange,
@@ -809,6 +810,16 @@ def _semantic_signature_preview_guidance(
             ],
             "unsupported_fields": unsupported,
             "detail": detail,
+            "repair_template": (
+                novelty_signature_missing_fields_template(
+                    hypothesis,
+                    surface_name=hypothesis.change_locus,
+                    missing_fields=missing,
+                    required_fields=fields,
+                )
+                if missing
+                else {}
+            ),
         }
     )
 

@@ -11,6 +11,7 @@ from scion.core.telemetry_validation import (
     telemetry_validation_feedback,
 )
 from scion.proposal.mechanism_labels import extract_mechanism_label
+from scion.proposal.screening_feedback import screening_feedback_summary
 
 
 def _build_feedback_grounding_summary(
@@ -199,9 +200,16 @@ def _recent_no_effect_mechanism_lines(
         protocol = step.protocol_result
         if protocol is None:
             continue
+        tier_summary = screening_feedback_summary(
+            protocol,
+            decision_reason_codes=tuple(
+                getattr(step, "decision_reason_codes", ()) or ()
+            ),
+        )
         pieces = [
             f"{_mechanism_label_for_feedback(step, taxonomy=taxonomy)} "
             f"(round {step.round_num})",
+            f"tier={tier_summary.tier}",
             "no observed objective effect",
             f"case_win_rate={protocol.stats.win_rate:.2f}",
         ]
@@ -229,31 +237,29 @@ def _weak_positive_mechanism_lines(
         protocol = step.protocol_result
         if protocol is None:
             continue
-        pairs = list(protocol.pair_feedback or ())
-        if not pairs:
-            continue
-        pair_wins = sum(
-            1 for item in pairs if getattr(item, "comparison", None) == "win"
+        tier_summary = screening_feedback_summary(
+            protocol,
+            decision_reason_codes=tuple(
+                getattr(step, "decision_reason_codes", ()) or ()
+            ),
         )
-        pair_losses = sum(
-            1 for item in pairs if getattr(item, "comparison", None) == "loss"
-        )
-        pair_ties = len(pairs) - pair_wins - pair_losses
-        if pair_wins <= 0 or _safe_float(protocol.stats.win_rate) >= 0.5:
+        if tier_summary.tier != "weak_positive":
             continue
         pieces = [
             f"{_mechanism_label_for_feedback(step, taxonomy=taxonomy)} "
             f"(round {step.round_num})",
             "valid_active_weak_positive",
-            f"pair_wins={pair_wins}",
-            f"pair_losses={pair_losses}",
-            f"pair_ties={pair_ties}",
+            "not_promotable=true",
+            f"pair_wins={tier_summary.pair_wins}",
+            f"pair_losses={tier_summary.pair_losses}",
+            f"pair_ties={tier_summary.pair_ties}",
             f"case_win_rate={protocol.stats.win_rate:.2f}",
         ]
-        if reason := _primary_screening_reason(step):
-            pieces.append(f"why_not_promoted={reason}")
+        if tier_summary.why_not_promoted:
+            pieces.append(f"why_not_promoted={tier_summary.why_not_promoted}")
         pieces.append(
-            "allowed_follow_up=adjust trigger/schedule/composition; do not repeat unchanged mechanism"
+            "allowed_follow_up=adjust trigger/schedule/composition; "
+            "do not repeat unchanged mechanism"
         )
         lines.append("; ".join(pieces) + ".")
     return lines

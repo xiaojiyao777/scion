@@ -18,6 +18,7 @@ from scion.proposal.tools.previews.common import (
     _PREVIEW_FAILURE_REASON_CHARS,
     _PREVIEW_MAX_CHECKS,
     _compact_problem_preview,
+    _compact_preview_value,
     _contract_gate,
     _drop_internal_preview_objects,
     _champion_version,
@@ -78,6 +79,9 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                     detail_chars=_PREVIEW_CHECK_DETAIL_CHARS,
                     max_checks=_PREVIEW_MAX_CHECKS,
                 )
+                repair_templates = _repair_templates_payload(result.checks)
+                if repair_templates:
+                    hypothesis_preview["repair_templates"] = repair_templates
                 hypothesis_preview["passed"] = result.passed
             payload["hypothesis"] = hypothesis_preview
             payload["passed"] = payload["passed"] and bool(hypothesis_preview["passed"])
@@ -104,6 +108,10 @@ class ContractPreviewTool(_BaseReadOnlyTool):
                 )
                 patch_preview["contract"] = _contract_summary_payload(result)
                 patch_preview["checks"] = contract_payload["checks"]
+                if contract_payload.get("repair_templates"):
+                    patch_preview["repair_templates"] = contract_payload[
+                        "repair_templates"
+                    ]
                 patch_preview["passed"] = result.passed
                 if result.passed:
                     selected_surface = _hypothesis_selected_surface(hypothesis_object)
@@ -181,6 +189,7 @@ def _contract_result_payload(
             detail_chars=detail_chars,
             max_checks=max_checks,
         ),
+        "repair_templates": _repair_templates_payload(result.checks),
     }
 
 
@@ -207,6 +216,7 @@ def _contract_summary_payload(result: ContractResult) -> dict[str, Any]:
             ),
             "check_count": len(result.checks),
             "failed_checks": failed_checks[:_PREVIEW_MAX_CHECKS],
+            "repair_templates": _repair_templates_payload(result.checks),
         }
     )
 
@@ -280,16 +290,41 @@ def _checks_payload(
     check_list = list(checks)
     if max_checks is not None:
         check_list = check_list[:max_checks]
-    return [
-        {
+    payloads: list[dict[str, Any]] = []
+    for check in check_list:
+        metadata = _attr(check, "metadata", {}) or {}
+        repair_template = (
+            metadata.get("repair_template") if isinstance(metadata, Mapping) else None
+        )
+        payload = {
             "name": _attr(check, "name"),
             "passed": bool(_attr(check, "passed")),
             "severity": _attr(check, "severity"),
             "detail": _limit_text(str(_attr(check, "detail", "")), detail_chars),
             "elapsed_ms": _attr(check, "elapsed_ms"),
         }
-        for check in check_list
-    ]
+        if repair_template:
+            payload["repair_template"] = _compact_preview_value(
+                repair_template,
+                max_chars=360,
+            )
+        payloads.append(payload)
+    return payloads
+
+
+def _repair_templates_payload(checks: Any) -> list[dict[str, Any]]:
+    templates: list[dict[str, Any]] = []
+    for check in checks:
+        metadata = _attr(check, "metadata", {}) or {}
+        if not isinstance(metadata, Mapping):
+            continue
+        template = metadata.get("repair_template")
+        if not isinstance(template, Mapping):
+            continue
+        templates.append(_compact_preview_value(template, max_chars=360))
+        if len(templates) >= _PREVIEW_MAX_CHECKS:
+            break
+    return templates
 
 
 def _first_failure(checks: Any) -> str | None:
@@ -308,4 +343,5 @@ __all__ = [
     "_contract_summary_payload",
     "_first_failure",
     "_preview_max_checks_for_patch",
+    "_repair_templates_payload",
 ]

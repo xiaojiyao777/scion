@@ -15,6 +15,11 @@ from scion.proposal.tools.active_solver import (
     ContextReadSolverCallGraphTool,
     algorithm_file_path_guidance_for_tool,
 )
+from scion.proposal.tools.active_solver_map import (
+    ContextReadActiveSolverMapTool,
+    ContextReadAlgorithmSliceTool,
+    ContextReadOperatorRegistryTool,
+)
 from scion.proposal.tools.context import (
     ContextListSurfacesTool,
     ContextReadBranchStateTool,
@@ -210,6 +215,9 @@ class ProposalToolRegistry:
             [
                 ContextListSurfacesTool(),
                 ContextReadProblemTool(),
+                ContextReadActiveSolverMapTool(),
+                ContextReadOperatorRegistryTool(),
+                ContextReadAlgorithmSliceTool(),
                 ContextReadActiveSolverDesignTool(),
                 ContextReadSolverCallGraphTool(),
                 ContextListAlgorithmFilesTool(),

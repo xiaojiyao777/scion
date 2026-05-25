@@ -498,6 +498,9 @@ def _compact_active_solver_observation_for_budget(
     from dataclasses import replace
 
     if observation.is_error or observation.tool_name not in {
+        "context.read_active_solver_map",
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
         "context.read_active_solver_design",
         "context.read_solver_call_graph",
         "context.list_algorithm_files",
@@ -510,6 +513,12 @@ def _compact_active_solver_observation_for_budget(
         return None
     if observation.tool_name == "context.read_active_solver_design":
         compact_payload = _compact_active_solver_design_payload(payload)
+    elif observation.tool_name == "context.read_active_solver_map":
+        compact_payload = _compact_active_solver_map_payload(payload)
+    elif observation.tool_name == "context.read_operator_registry":
+        compact_payload = _compact_operator_registry_payload(payload)
+    elif observation.tool_name == "context.read_algorithm_slice":
+        compact_payload = _compact_algorithm_slice_payload(payload)
     elif observation.tool_name == "context.read_solver_call_graph":
         compact_payload = _compact_solver_call_graph_payload(payload)
     elif observation.tool_name == "context.list_algorithm_files":
@@ -552,6 +561,97 @@ def _compact_active_solver_design_payload(payload: Mapping[str, Any]) -> dict[st
             )
             if isinstance(payload.get("mechanism_summary"), Mapping)
             else None,
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_active_solver_map_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_dict(
+        {
+            "available": payload.get("available"),
+            "surface": payload.get("surface"),
+            "subject_id": payload.get("subject_id"),
+            "snapshot_digest": payload.get("snapshot_digest"),
+            "entrypoint_count": _count(payload.get("entrypoints")),
+            "editable_file_count": _count(payload.get("editable_files")),
+            "operator_registry_count": _count(payload.get("operator_registries")),
+            "scheduler_integration_count": _count(
+                payload.get("scheduler_integrations")
+            ),
+            "algorithm_slice_count": _count(payload.get("algorithm_slices")),
+            "telemetry_field_count": _count(payload.get("telemetry_fields")),
+            "known_mechanism_fact_count": _count(
+                payload.get("known_mechanism_facts")
+            ),
+            "entrypoints": _compact_map_items(
+                payload.get("entrypoints"),
+                ("id", "file_path", "symbol", "summary"),
+            ),
+            "operator_registries": _compact_map_items(
+                payload.get("operator_registries"),
+                ("registry_id", "owner_file", "owner_symbol", "registry_kind"),
+            ),
+            "algorithm_slices": _compact_map_items(
+                payload.get("algorithm_slices"),
+                ("slice_id", "file_path", "symbols", "purpose", "exposure_level"),
+            ),
+            "read_receipt": payload.get("read_receipt"),
+            "unavailable": payload.get("unavailable"),
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_operator_registry_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_dict(
+        {
+            "available": payload.get("available"),
+            "surface": payload.get("surface"),
+            "subject_id": payload.get("subject_id"),
+            "snapshot_digest": payload.get("snapshot_digest"),
+            "registry_id": payload.get("registry_id"),
+            "owner_file": payload.get("owner_file"),
+            "owner_symbol": payload.get("owner_symbol"),
+            "registry_kind": payload.get("registry_kind"),
+            "operator_count": _count(payload.get("operators")),
+            "operators": _compact_map_items(
+                payload.get("operators"),
+                ("id", "symbol", "file_path", "order", "role", "summary"),
+            ),
+            "integration_points": _compact_map_items(
+                payload.get("integration_points"),
+                ("file_path", "symbol", "insert_policy"),
+            ),
+            "read_receipt": payload.get("read_receipt"),
+            "unavailable": payload.get("unavailable"),
+            "compacted_for_agentic_budget": True,
+        }
+    )
+
+
+def _compact_algorithm_slice_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _drop_empty_dict(
+        {
+            "available": payload.get("available"),
+            "surface": payload.get("surface"),
+            "subject_id": payload.get("subject_id"),
+            "snapshot_digest": payload.get("snapshot_digest"),
+            "slice_id": payload.get("slice_id"),
+            "file_path": payload.get("file_path"),
+            "symbols": payload.get("symbols"),
+            "slice_kind": payload.get("slice_kind"),
+            "content_digest": payload.get("content_digest"),
+            "line_start": payload.get("line_start"),
+            "line_end": payload.get("line_end"),
+            "token_estimate": payload.get("token_estimate"),
+            "why_visible": _limit_string(payload.get("why_visible"), 260),
+            "source_policy_receipt": payload.get("source_policy_receipt"),
+            "truncated": payload.get("truncated"),
+            "max_chars": payload.get("max_chars"),
+            "content": _limit_string(payload.get("content"), 1600),
+            "read_receipt": payload.get("read_receipt"),
+            "unavailable": payload.get("unavailable"),
             "compacted_for_agentic_budget": True,
         }
     )
@@ -645,6 +745,29 @@ def _compact_algorithm_files(value: Any) -> list[dict[str, Any]]:
             )
         )
     return files
+
+
+def _compact_map_items(value: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value[:12]:
+        if not isinstance(item, Mapping):
+            continue
+        row: dict[str, Any] = {}
+        for key in keys:
+            cell = item.get(key)
+            if key in {"summary", "purpose"}:
+                cell = _limit_string(cell, 220)
+            row[key] = cell
+        rows.append(_drop_empty_dict(row))
+    return rows
+
+
+def _count(value: Any) -> int | None:
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    return None
 
 
 def _compact_source_digest(value: Any) -> dict[str, Any]:

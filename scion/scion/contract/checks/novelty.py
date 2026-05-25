@@ -7,6 +7,7 @@ from typing import Any
 
 from scion.config.problem import ProblemSpec
 from scion.contract.result_payload import check_result
+from scion.contract.repair_guidance import novelty_signature_missing_fields_template
 from scion.contract.schema import (
     WEAK_SIGNATURE_FIELDS,
     normalize_signature_field,
@@ -37,12 +38,14 @@ class NoveltyChecker:
             return check_result("C10_novelty", False, "light", novelty_error, t0)
         semantic_identity_error = self._semantic_signature_identity_error(h)
         if semantic_identity_error is not None:
+            semantic_identity_metadata = self._semantic_signature_identity_metadata(h)
             return check_result(
                 "C10_novelty",
                 False,
                 "light",
                 semantic_identity_error,
                 t0,
+                metadata=semantic_identity_metadata,
             )
         key = self._novelty_key(h)
         for existing in active_hypotheses + blacklist:
@@ -226,6 +229,31 @@ class NoveltyChecker:
                 "identity field beyond weak defaults such as predicted_direction"
             )
         return None
+
+    def _semantic_signature_identity_metadata(
+        self,
+        h: HypothesisProposal | HypothesisRecord,
+    ) -> dict[str, Any]:
+        surface = self._surface_access.surface_for_hypothesis(h)
+        if (
+            self._surface_access.surface_novelty_strategy(surface)
+            != "semantic_signature"
+        ):
+            return {}
+        fields = self._surface_access.surface_signature_fields(surface)
+        if not fields:
+            return {}
+        missing = self._missing_semantic_signature_fields(h, surface)
+        if not missing:
+            return {}
+        return {
+            "repair_template": novelty_signature_missing_fields_template(
+                h,
+                surface_name=str(getattr(surface, "name", h.change_locus) or ""),
+                missing_fields=missing,
+                required_fields=fields,
+            )
+        }
 
     def _semantic_signature_key(
         self,

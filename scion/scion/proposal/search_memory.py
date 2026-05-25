@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from scion.core.models import StepRecord, HypothesisProposal
 from scion.proposal.mechanism_labels import extract_mechanism_label
+from scion.proposal.screening_feedback import (
+    ScreeningFeedbackSummary,
+    screening_feedback_summary,
+)
 
 RenderView = Literal["hypothesis", "audit"]
 
@@ -91,6 +95,33 @@ class FamilyEntry:
 
 
 @dataclass
+class BranchMechanismMemoryEntry:
+    """Branch-local screening memory rendered as near-field proposal context."""
+
+    branch_id: str
+    round_num: int
+    mechanism_id: str
+    surface: str
+    target_file: str
+    tier: str
+    case_wins: int
+    case_losses: int
+    case_ties: int
+    pair_wins: int
+    pair_losses: int
+    pair_ties: int
+    median_delta: Optional[float]
+    runtime_summary: Dict[str, Any] = field(default_factory=dict)
+    activation_status: str = "unknown"
+    effect_status: str = "uncertain"
+    why_not_promoted: str = ""
+    allowed_followup_variants: tuple[str, ...] = ()
+    repeat_unchanged_allowed: bool = True
+    feedback_digest: str = ""
+    screening_ref: str = ""
+
+
+@dataclass
 class CampaignSearchMemory:
     """Cross-branch search memory for the entire campaign.
 
@@ -102,6 +133,9 @@ class CampaignSearchMemory:
     coverage_counts: Dict[str, int] = field(default_factory=dict)  # locus/action → count
     recent_hypotheses: List[str] = field(default_factory=list)     # last N hypothesis texts for loop detection
     agentic_grounding_blocks: List[str] = field(default_factory=list)
+    branch_mechanism_memory: Dict[str, List[BranchMechanismMemoryEntry]] = field(
+        default_factory=dict
+    )
     family_taxonomy: Any = None
 
     # ---------------------------------------------------------------
@@ -185,8 +219,44 @@ class CampaignSearchMemory:
                 if len(fam.recent_failure_details) > 3:
                     fam.recent_failure_details = fam.recent_failure_details[-3:]
 
+        if (
+            step.protocol_result is not None
+            and _stage_value(step.protocol_result.stage) == "screening"
+        ):
+            self._record_branch_mechanism_memory(
+                step,
+                mechanism_id=_mechanism_id_from_step(step, fallback=mechanism),
+            )
+
         # Exhaustion: total_attempts >= 5 AND best_wr < 0.35 (uniform for all families)
         fam.is_exhausted = (fam.total_attempts >= 5 and fam.best_wr < 0.35)
+
+    def _record_branch_mechanism_memory(
+        self,
+        step: StepRecord,
+        *,
+        mechanism_id: str,
+    ) -> None:
+        protocol = step.protocol_result
+        if protocol is None or _stage_value(protocol.stage) != "screening":
+            return
+        summary = screening_feedback_summary(
+            protocol,
+            decision_reason_codes=tuple(
+                getattr(step, "decision_reason_codes", ()) or ()
+            ),
+        )
+        if summary.tier == "promotable":
+            return
+        entry = _branch_memory_entry_from_summary(
+            step,
+            mechanism_id=mechanism_id,
+            summary=summary,
+        )
+        bucket = self.branch_mechanism_memory.setdefault(step.branch_id, [])
+        bucket.append(entry)
+        if len(bucket) > 12:
+            self.branch_mechanism_memory[step.branch_id] = bucket[-12:]
 
     def record_champion_promotion(
         self,
@@ -272,6 +342,7 @@ class CampaignSearchMemory:
         available_tokens: Optional[int] = None,
         *,
         view: RenderView = "hypothesis",
+        branch_id: Optional[str] = None,
     ) -> str:
         """Render search memory as text for LLM injection.
 
@@ -303,6 +374,10 @@ class CampaignSearchMemory:
                 "### Agentic Grounding Blocks (DO NOT REPEAT)\n"
                 + "\n".join(self.agentic_grounding_blocks[-6:])
             )
+
+        mechanism_memory = self._render_branch_mechanism_memory(branch_id=branch_id)
+        if mechanism_memory:
+            sections.append(mechanism_memory)
 
         # Loop detection (before AVOID)
         loop_warning = self._detect_hypothesis_loop()
@@ -393,6 +468,59 @@ class CampaignSearchMemory:
         text = "## Campaign Search Memory\n\n" + "\n\n".join(sections)
         return text
 
+    def _render_branch_mechanism_memory(
+        self,
+        *,
+        branch_id: Optional[str] = None,
+    ) -> str:
+        if not branch_id:
+            return ""
+        entries = self._branch_mechanism_entries(branch_id=branch_id)
+        if not entries:
+            return ""
+        lines = [
+            "### Near-Field Mechanism Memory (screening only)",
+            (
+                "These branch-local summaries guide proposals only. They do not "
+                "change promotion gates or DecisionFeatures."
+            ),
+        ]
+        for entry in entries[-6:]:
+            line = (
+                f"- ref={entry.screening_ref}; digest={entry.feedback_digest}; "
+                f"branch={entry.branch_id}; mechanism_id={entry.mechanism_id}; "
+                f"surface={entry.surface}; target={entry.target_file or 'n/a'}; "
+                f"tier={entry.tier}; "
+                f"case_wins={entry.case_wins}; case_losses={entry.case_losses}; "
+                f"case_ties={entry.case_ties}; "
+                f"pair_wins={entry.pair_wins}; pair_losses={entry.pair_losses}; "
+                f"pair_ties={entry.pair_ties}; "
+                f"median_delta={_format_optional_float(entry.median_delta)}; "
+                f"runtime_summary={_format_runtime_summary(entry.runtime_summary)}; "
+                f"activation={entry.activation_status}; "
+                f"effect={entry.effect_status}; "
+                f"why_not_promoted={entry.why_not_promoted}; "
+                f"allowed_followup_variants="
+                f"{','.join(entry.allowed_followup_variants) or 'none'}; "
+                f"repeat_unchanged_allowed="
+                f"{str(entry.repeat_unchanged_allowed).lower()}"
+            )
+            lines.append(line)
+        return "\n".join(lines)
+
+    def _branch_mechanism_entries(
+        self,
+        *,
+        branch_id: Optional[str] = None,
+    ) -> List[BranchMechanismMemoryEntry]:
+        if branch_id:
+            return list(self.branch_mechanism_memory.get(branch_id, ()))
+        entries: List[BranchMechanismMemoryEntry] = []
+        for branch_entries in self.branch_mechanism_memory.values():
+            entries.extend(branch_entries)
+        entries.sort(key=lambda item: item.round_num)
+        return entries
+
     def estimate_tokens(self, level: Literal["full", "compact", "minimal"] = "full") -> int:
         """Estimate token count for different compression levels."""
         if level == "minimal":
@@ -424,3 +552,80 @@ def _runtime_failure_reason(step: StepRecord) -> str:
     if not parts:
         return ""
     return "candidate_runtime=" + ",".join(parts[:4])
+
+
+def _mechanism_id_from_step(step: StepRecord, *, fallback: str) -> str:
+    values: list[str] = []
+    for change in getattr(step.hypothesis, "mechanism_changes", ()) or ():
+        if isinstance(change, Mapping):
+            value = change.get("id")
+        else:
+            value = getattr(change, "id", None)
+        text = str(value or "").strip()
+        if text:
+            values.append(text)
+    if values:
+        return ",".join(dict.fromkeys(values))
+    return fallback or "unknown_mechanism"
+
+
+def _branch_memory_entry_from_summary(
+    step: StepRecord,
+    *,
+    mechanism_id: str,
+    summary: ScreeningFeedbackSummary,
+) -> BranchMechanismMemoryEntry:
+    runtime_summary = {
+        key: value
+        for key, value in summary.runtime_summary_payload().items()
+        if value not in (None, "", {}, [])
+    }
+    return BranchMechanismMemoryEntry(
+        branch_id=step.branch_id,
+        round_num=step.round_num,
+        mechanism_id=mechanism_id,
+        surface=step.hypothesis.change_locus,
+        target_file=step.hypothesis.target_file or "",
+        tier=summary.tier,
+        case_wins=summary.case_wins,
+        case_losses=summary.case_losses,
+        case_ties=summary.case_ties,
+        pair_wins=summary.pair_wins,
+        pair_losses=summary.pair_losses,
+        pair_ties=summary.pair_ties,
+        median_delta=summary.median_delta,
+        runtime_summary=runtime_summary,
+        activation_status=summary.activation_status,
+        effect_status=summary.effect_status,
+        why_not_promoted=summary.why_not_promoted,
+        allowed_followup_variants=summary.allowed_followup_variants,
+        repeat_unchanged_allowed=summary.repeat_unchanged_allowed,
+        feedback_digest=summary.feedback_digest,
+        screening_ref=f"screening:R{step.round_num}",
+    )
+
+
+def _format_optional_float(value: Optional[float]) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.4f}"
+
+
+def _format_runtime_summary(summary: Mapping[str, Any]) -> str:
+    if not summary:
+        return "n/a"
+    parts = []
+    for key in (
+        "runtime_ratio_median",
+        "runtime_delta_median_ms",
+        "runtime_regression_rate",
+        "runtime_pairs",
+    ):
+        value = summary.get(key)
+        if value is None:
+            continue
+        if isinstance(value, float):
+            parts.append(f"{key}={value:.4f}")
+        else:
+            parts.append(f"{key}={value}")
+    return ",".join(parts) if parts else "n/a"

@@ -179,9 +179,20 @@ def test_cvrp_solver_design_schema_preview_rejects_empty_deep_identity(
     )
 
     guidance = preview.structured_payload["hypothesis"]["novelty_signature_guidance"]
+    template = guidance["repair_template"]
+    rendered_template = json.dumps(template, sort_keys=True)
+
     assert preview.structured_payload["passed"] is False
     assert "algorithm_family" in preview.summary
     assert guidance["missing_fields"] == ["algorithm_family"]
+    assert template["repair_type"] == "novelty_signature_missing_fields"
+    assert template["check"] == "C10_novelty"
+    assert template["missing_fields"] == ["algorithm_family"]
+    assert template["required_template"]["novelty_signature"]["mechanism_id"]
+    assert "active solver map" in " ".join(template["agent_instruction"])
+    assert "validation" not in rendered_template.lower()
+    assert "frozen" not in rendered_template.lower()
+    assert "raw_metrics" not in rendered_template.lower()
     assert "nonempty_sequence_fields" not in guidance
 
 

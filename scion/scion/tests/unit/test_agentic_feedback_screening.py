@@ -49,6 +49,24 @@ def test_feedback_query_screening_distinguishes_pair_and_case_win_rates(
     assert row["screening_pair_losses"] == 2
     assert row["screening_pair_ties"] == 12
     assert row["screening_pair_win_rate"] == 0.125
+    assert row["screening_feedback_tier"] == "weak_positive"
+    assert row["screening_feedback"]["tier"] == "weak_positive"
+    assert row["case_feedback_summary"] == {
+        "wins": 0,
+        "losses": 0,
+        "ties": 4,
+        "total": 4,
+    }
+    assert row["pair_feedback_summary"] == {
+        "wins": 2,
+        "losses": 2,
+        "ties": 12,
+        "total": 16,
+    }
+    assert row["screening_feedback"]["repeat_unchanged_allowed"] is False
+    assert "weak_positive is not promotable" in row["screening_feedback"][
+        "why_not_promoted"
+    ]
     assert "SECRET" not in rendered
     assert "raw_metrics_ref" not in rendered
 

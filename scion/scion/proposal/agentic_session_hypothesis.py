@@ -1031,6 +1031,14 @@ def _hypothesis_preview_retry_feedback(
     hypothesis = payload.get("hypothesis")
     if not isinstance(hypothesis, Mapping):
         return None
+    novelty_feedback = _novelty_signature_preview_retry_feedback(
+        hypothesis,
+        detail=detail,
+        attempt=attempt,
+        previous_hypothesis=previous_hypothesis,
+    )
+    if novelty_feedback is not None:
+        return novelty_feedback
     telemetry = hypothesis.get("expected_telemetry_contract")
     if not isinstance(telemetry, Mapping):
         return None
@@ -1100,6 +1108,61 @@ def _hypothesis_preview_retry_feedback(
                 "and telemetry activation mechanism refs; do not switch "
                 "mechanisms or targets for a C11/schema retry. Natural-language "
                 "hypothesis and novelty_signature wording may be clarified."
+            ),
+        }
+    )
+
+
+def _novelty_signature_preview_retry_feedback(
+    hypothesis: Mapping[str, Any],
+    *,
+    detail: str,
+    attempt: int,
+    previous_hypothesis: HypothesisProposal,
+) -> dict[str, Any] | None:
+    guidance = hypothesis.get("novelty_signature_guidance")
+    if not isinstance(guidance, Mapping):
+        return None
+    missing_fields = [
+        str(field).strip()
+        for field in guidance.get("missing_fields") or ()
+        if str(field).strip()
+    ]
+    if not missing_fields:
+        return None
+    repair_template = guidance.get("repair_template")
+    if not isinstance(repair_template, Mapping):
+        return None
+    anchor = _hypothesis_retry_anchor(previous_hypothesis)
+    return _drop_empty_dict(
+        {
+            "attempt": attempt,
+            "source": "hypothesis_preview_gate",
+            "gate_name": "proposal.schema_preview",
+            "failure_code": "novelty_signature_missing_fields",
+            "check": "C10_novelty",
+            "failure_category": AgenticFailureCategory.CONTRACT_BOUNDARY_FAILURE.value,
+            "reason": _limit_string(
+                str(guidance.get("detail") or "") or detail,
+                1000,
+            ),
+            "missing_fields": missing_fields,
+            "required_fields": list(guidance.get("signature_fields") or ()),
+            "repair_template": repair_template,
+            "required_template": repair_template.get("required_template"),
+            "mechanism_id_consistency": repair_template.get(
+                "mechanism_id_consistency"
+            ),
+            "preserve_hypothesis": anchor,
+            "protected_identity": _schema_retry_protected_identity(anchor),
+            "retry_constraint": (
+                "Repair only novelty_signature/schema fields named by the C10 "
+                "template. Preserve the prior action, target_file, "
+                "mechanism_changes ids/change_types, and telemetry activation "
+                "mechanism refs; do not switch mechanisms or targets for a "
+                "C10 missing-fields retry. If a strategy is unchanged, state "
+                "unchanged and name the active solver map or baseline component "
+                "used as the reference."
             ),
         }
     )
@@ -1198,6 +1261,7 @@ def _latest_schema_preservation_rejection(
     failure_code = str(rejection.get("failure_code") or "").strip()
     if failure_code not in {
         "C11_expected_telemetry",
+        "novelty_signature_missing_fields",
         "schema_retry_drift",
     }:
         return None
@@ -1252,8 +1316,8 @@ def _schema_retry_drift_failure_detail(drift: Mapping[str, Any]) -> str:
         800,
     )
     return (
-        "schema_retry_drift: C11/schema retry changed protected hypothesis "
-        f"identity fields ({fields or 'unknown'}). Schema/telemetry retries "
+        "schema_retry_drift: schema/novelty retry changed protected hypothesis "
+        f"identity fields ({fields or 'unknown'}). Schema/telemetry/novelty retries "
         "must preserve action, target_file, mechanism_changes ids/change_types, "
         "and telemetry activation mechanism refs; free-text hypothesis and "
         f"novelty_signature wording may change. expected={expected}; "

@@ -24,6 +24,9 @@ _PLANNER_HIDDEN_PREVIEW_TOOLS = frozenset(
 )
 _ACTIVE_SOLVER_TOOL_ALLOWLIST = frozenset(
     {
+        "context.read_active_solver_map",
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
         "context.read_active_solver_design",
         "context.read_solver_call_graph",
         "context.list_algorithm_files",
@@ -55,6 +58,7 @@ _SINGLE_SUCCESS_OBSERVATION_TOOLS = (
     "context.read_problem",
     "context.read_branch_state",
     "memory.query",
+    "context.read_active_solver_map",
     "context.read_active_solver_design",
     "context.read_solver_call_graph",
     "context.list_algorithm_files",
@@ -498,6 +502,20 @@ def _has_successful_reusable_observation(
         return _has_successful_algorithm_file_read(observations, args)
     if tool_name == "context.read_algorithm_symbol":
         return _has_successful_algorithm_symbol_read(observations, args)
+    if tool_name == "context.read_operator_registry":
+        return _has_successful_active_map_target_read(
+            observations,
+            tool_name,
+            args,
+            id_key="registry_id",
+        )
+    if tool_name == "context.read_algorithm_slice":
+        return _has_successful_active_map_target_read(
+            observations,
+            tool_name,
+            args,
+            id_key="slice_id",
+        )
     if tool_name in _SINGLE_SUCCESS_OBSERVATION_TOOLS:
         return any(
             observation.tool_name == tool_name and not observation.is_error
@@ -612,6 +630,27 @@ def _has_successful_algorithm_symbol_read(
             payload,
             requested_max_chars=requested_max_chars,
         ):
+            return True
+    return False
+
+
+def _has_successful_active_map_target_read(
+    observations: tuple[ProposalObservation, ...] | list[ProposalObservation],
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    id_key: str,
+) -> bool:
+    requested_id = str(args.get(id_key) or "").strip()
+    if not requested_id:
+        return False
+    for observation in observations:
+        if observation.is_error or observation.tool_name != tool_name:
+            continue
+        payload = observation.structured_payload
+        if not isinstance(payload, Mapping):
+            continue
+        if str(payload.get(id_key) or "").strip() == requested_id:
             return True
     return False
 

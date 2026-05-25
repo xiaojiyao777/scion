@@ -8,6 +8,10 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
+from scion.proposal.agentic_session_hypothesis import (
+    _hypothesis_preview_retry_feedback,
+)
+from scion.proposal.agentic_utils import _json_ready
 from scion.tests.unit.agentic_session_test_support import *
 
 
@@ -287,6 +291,57 @@ def test_hypothesis_preview_c11_feedback_retries_to_corrected_hypothesis(
     assert "hypothesis_schema_telemetry_retry_feedback" not in retry_manifest[
         "truncated_sections"
     ]
+
+
+def test_hypothesis_preview_c10_missing_fields_feedback_uses_repair_template(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _cvrp_context_with_champion(tmp_path)
+    bad = _vns_hypothesis(_good_vns_mechanism_telemetry())
+    bad = replace(
+        bad,
+        novelty_signature={
+            "algorithm_family": "adaptive_vns",
+            "improvement_strategy": "adaptive_vns_neighborhood_ordering",
+        },
+    )
+
+    preview = registry.call(
+        "proposal.schema_preview",
+        {"hypothesis": _json_ready(bad)},
+        context,
+    )
+    feedback = _hypothesis_preview_retry_feedback(
+        [preview],
+        detail="schema or target preview did not pass",
+        attempt=2,
+        previous_hypothesis=bad,
+    )
+
+    assert preview.structured_payload["passed"] is False
+    assert feedback is not None
+    assert feedback["failure_code"] == "novelty_signature_missing_fields"
+    assert feedback["check"] == "C10_novelty"
+    assert feedback["missing_fields"] == [
+        "construction_strategy",
+        "acceptance_strategy",
+        "runtime_budget_strategy",
+    ]
+    assert feedback["repair_template"]["repair_type"] == (
+        "novelty_signature_missing_fields"
+    )
+    assert feedback["required_template"]["novelty_signature"]["mechanism_id"] == (
+        "adaptive_vns_operator_weights"
+    )
+    assert "active solver map" in feedback["retry_constraint"]
+    assert feedback["protected_identity"]["target_file"] == (
+        "policies/baseline_modules/local_search.py"
+    )
+    rendered = json.dumps(feedback, sort_keys=True)
+    assert "raw_metrics" not in rendered
+    assert "validation" not in rendered.lower()
+    assert "frozen" not in rendered.lower()
 
 
 def test_hypothesis_preview_c11_retry_allows_runtime_free_text_rewrite(

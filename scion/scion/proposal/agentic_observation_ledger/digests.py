@@ -10,6 +10,11 @@ from scion.proposal.active_solver_snapshot import (
     read_algorithm_symbol_payload,
     solver_call_graph_payload,
 )
+from scion.proposal.active_solver_map import (
+    read_active_solver_map_payload,
+    read_algorithm_slice_payload,
+    read_operator_registry_payload,
+)
 from scion.proposal.agentic_utils import _drop_empty_dict, _sanitize_agentic_value
 from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.tools import ProposalToolContext
@@ -23,6 +28,9 @@ from scion.proposal.agentic_observation_ledger.utils import (
 def normalize_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, Any]:
     raw = dict(args or {})
     if tool_name in {
+        "context.read_active_solver_map",
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
         "context.read_active_solver_design",
         "context.read_solver_call_graph",
         "context.list_algorithm_files",
@@ -33,6 +41,13 @@ def normalize_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, An
     if tool_name == "context.read_active_solver_design":
         raw.setdefault("include_file_previews", False)
         raw.setdefault("max_file_chars", 6000)
+    elif tool_name == "context.read_active_solver_map":
+        raw.setdefault("surface", "solver_design")
+    elif tool_name == "context.read_operator_registry":
+        raw.setdefault("surface", "solver_design")
+    elif tool_name == "context.read_algorithm_slice":
+        raw.setdefault("surface", "solver_design")
+        raw.setdefault("max_chars", 12000)
     elif tool_name == "context.list_algorithm_files":
         raw.setdefault("include_inactive", True)
     elif tool_name in {"context.read_algorithm_file", "context.read_algorithm_symbol"}:
@@ -97,6 +112,16 @@ def content_coverage_payload(
 
 
 def source_digest_payload(tool_name: str, payload: Mapping[str, Any]) -> Any:
+    receipt = payload.get("read_receipt")
+    if isinstance(receipt, Mapping):
+        return _drop_empty_dict(
+            {
+                "digest": receipt.get("digest"),
+                "snapshot_digest": receipt.get("snapshot_digest"),
+                "content_digest": receipt.get("content_digest"),
+                "source": tool_name,
+            }
+        )
     source_digest = payload.get("source_digest")
     if isinstance(source_digest, Mapping):
         return _sanitize_agentic_value(dict(source_digest))
@@ -174,6 +199,30 @@ def current_source_digest(
     tool_name: str,
     normalized_args: Mapping[str, Any],
 ) -> Any:
+    if tool_name == "context.read_active_solver_map":
+        payload = read_active_solver_map_payload(
+            context,
+            surface=normalized_args.get("surface"),
+            subject_id=normalized_args.get("subject_id"),
+        )
+        return source_digest_payload(tool_name, payload)
+    if tool_name == "context.read_operator_registry":
+        payload = read_operator_registry_payload(
+            context,
+            registry_id=str(normalized_args.get("registry_id") or ""),
+            surface=normalized_args.get("surface"),
+            subject_id=normalized_args.get("subject_id"),
+        )
+        return source_digest_payload(tool_name, payload)
+    if tool_name == "context.read_algorithm_slice":
+        payload = read_algorithm_slice_payload(
+            context,
+            slice_id=str(normalized_args.get("slice_id") or ""),
+            surface=normalized_args.get("surface"),
+            subject_id=normalized_args.get("subject_id"),
+            max_chars=coerce_int(normalized_args.get("max_chars")) or 0,
+        )
+        return source_digest_payload(tool_name, payload)
     if tool_name == "context.read_active_solver_design":
         payload = build_active_solver_snapshot(context, include_file_previews=False)
         return source_digest_payload(tool_name, payload)

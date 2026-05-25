@@ -30,6 +30,9 @@ def _compact_contract_preview_section(value: Any) -> dict[str, Any] | None:
             "errors": _bounded_string_list(value.get("errors"), limit=4),
             "issues": _bounded_string_list(value.get("issues"), limit=4),
             "failed_checks": failed_checks,
+            "repair_templates": _compact_repair_templates(
+                value.get("repair_templates")
+            ),
             "problem_preview": _compact_problem_preview_mapping(
                 value.get("problem_preview")
             ),
@@ -53,9 +56,47 @@ def _minimal_contract_preview_section(value: Any) -> dict[str, Any] | None:
             "errors": _bounded_string_list(value.get("errors"), limit=2),
             "issues": _bounded_string_list(value.get("issues"), limit=2),
             "failed_checks": failed_checks[:3],
+            "repair_templates": _compact_repair_templates(
+                value.get("repair_templates"),
+                limit=2,
+            ),
         }
     )
     return compact or None
+
+
+def _compact_repair_templates(
+    value: Any,
+    *,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    templates: list[dict[str, Any]] = []
+    for item in value[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        templates.append(
+            _drop_empty_mapping(
+                {
+                    "repair_type": item.get("repair_type"),
+                    "check": item.get("check"),
+                    "severity": item.get("severity"),
+                    "missing_fields": _bounded_string_list(
+                        item.get("missing_fields"),
+                        limit=8,
+                    ),
+                    "observed": item.get("observed"),
+                    "recommended_shape": item.get("recommended_shape"),
+                    "required_template": item.get("required_template"),
+                    "agent_instruction": _bounded_string_list(
+                        item.get("agent_instruction"),
+                        limit=4,
+                    ),
+                }
+            )
+        )
+    return [template for template in templates if template]
 
 def _minimal_algorithm_smoke_section(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):

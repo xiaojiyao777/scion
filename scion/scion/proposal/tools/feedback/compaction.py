@@ -70,19 +70,23 @@ def _sanitize_memory_text(text: str) -> str:
     forbidden_terms = (
         "champion_evolution",
         "champion evolution",
-        "promotion",
-        "promoted",
-        "promote",
         "validation",
         "frozen",
         "holdout",
         "raw_metrics",
         "raw metrics",
     )
+    promotion_terms = ("promotion", "promoted", "promote")
     safe_lines = []
     for line in text.splitlines():
         lowered = line.lower()
         if any(term in lowered for term in forbidden_terms):
+            continue
+        if (
+            any(term in lowered for term in promotion_terms)
+            and "why_not_promoted" not in lowered
+            and "not_promotable" not in lowered
+        ):
             continue
         safe_lines.append(line)
     return "\n".join(safe_lines)
