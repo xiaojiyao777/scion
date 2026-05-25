@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Dict, List, Optional
 
+from scion.core.branch_hygiene import branch_hygiene_context
 from scion.core.models import (
     Branch,
     ExperimentStage,
@@ -184,11 +185,29 @@ def _summarise_blacklist(blacklist: List[HypothesisRecord]) -> str:
         )
     return "\n".join(lines)
 
+def _branch_hygiene_status_projection(branch: Branch) -> str:
+    context = branch_hygiene_context(branch)
+    last_telemetry_outcome = context.get("last_telemetry_outcome") or "none"
+    repair_focus_required = bool(context.get("repair_focus_required"))
+    parts = [
+        f"branch_code_status={context['branch_code_status']}",
+        f"last_telemetry_outcome={last_telemetry_outcome}",
+        f"repair_focus_required={str(repair_focus_required).lower()}",
+    ]
+    if repair_focus_required and context.get("repair_focus_reason"):
+        parts.append(f"repair_focus={context['repair_focus_reason']}")
+    if context.get("baseline_policy"):
+        parts.append(f"baseline_policy={context['baseline_policy']}")
+    return " ".join(parts)
+
+
 def _summarise_siblings(siblings: List[Branch]) -> str:
     if not siblings:
         return "(no active sibling branches)"
     lines = []
     for b in siblings[:5]:
-        lines.append(f"  - branch {b.branch_id[:8]} state={b.state.value}")
+        lines.append(
+            f"  - branch {b.branch_id[:8]} state={b.state.value} "
+            f"{_branch_hygiene_status_projection(b)}"
+        )
     return "\n".join(lines)
-
