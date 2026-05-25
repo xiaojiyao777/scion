@@ -76,6 +76,13 @@ class CvrpAdapter:
 
         return CvrpActiveSolverDesignProvider()
 
+    def active_solver_map_provider(self) -> Any:
+        from scion.problems.cvrp.active_solver_map_provider import (
+            CvrpActiveSolverMapProvider,
+        )
+
+        return CvrpActiveSolverMapProvider()
+
     def solver_design_smoke_provider(self) -> Any:
         from scion.problems.cvrp.solver_design_provider import (
             CvrpSolverDesignProvider,
