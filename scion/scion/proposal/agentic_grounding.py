@@ -320,9 +320,9 @@ def _run_required_context_preface(
     context: ProposalToolContext,
     state: AgenticProposalSessionState,
 ) -> list[ProposalObservation]:
-    calls: list[tuple[str, Mapping[str, Any]]] = [
-        ("context.list_surfaces", {}),
-        ("context.read_problem", {}),
+    calls: list[tuple[str, Mapping[str, Any], str]] = [
+        ("context.list_surfaces", {}, "required_context_preface"),
+        ("context.read_problem", {}, "required_context_preface"),
     ]
     if _context_requires_solver_design_grounding(context):
         calls.extend(
@@ -330,18 +330,27 @@ def _run_required_context_preface(
                 (
                     "context.list_algorithm_files",
                     {"surface": "solver_design", "include_inactive": True},
+                    "required_context_preface",
                 ),
                 (
                     "context.read_active_solver_design",
                     {"surface": "solver_design"},
+                    "required_context_preface",
                 ),
                 (
                     "context.read_solver_call_graph",
                     {"surface": "solver_design"},
+                    "required_context_preface",
                 ),
             ]
         )
-        calls.append(("context.read_active_solver_map", {"surface": "solver_design"}))
+        calls.append(
+            (
+                "context.read_active_solver_map",
+                {"surface": "solver_design"},
+                "required_context_preface",
+            )
+        )
         forced_target_read_args = _forced_solver_design_target_file_read_args(context)
     else:
         forced_target_read_args = None
@@ -349,7 +358,7 @@ def _run_required_context_preface(
     observations: list[ProposalObservation] = []
     index = 0
     while index < len(calls):
-        name, args = calls[index]
+        name, args, selection_source = calls[index]
         index += 1
         if _has_successful_reusable_observation(
             observations,
@@ -368,7 +377,13 @@ def _run_required_context_preface(
                 AgenticProposalPhase.DIAGNOSE,
                 name,
                 args,
-                selection_source="required_context_preface",
+                selection_source=selection_source,
+                preserve_observation_chars=(
+                    runner._self_check_observation_reserve_chars()
+                    + runner._minimum_budgeted_observation_chars()
+                    if selection_source == "planner_map_followup_required"
+                    else 0
+                ),
             )
         )
         if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
@@ -384,8 +399,15 @@ def _run_required_context_preface(
                 surface="solver_design",
             )
             calls[index:index] = [
-                *followups,
-                ("context.read_algorithm_file", forced_target_read_args),
+                *[
+                    (followup_name, followup_args, "planner_map_followup_required")
+                    for followup_name, followup_args in followups
+                ],
+                (
+                    "context.read_algorithm_file",
+                    forced_target_read_args,
+                    "required_context_preface",
+                ),
             ]
 
     state.note(

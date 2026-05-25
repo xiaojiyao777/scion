@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Callable, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
+from scion.core.branch_hygiene import WIRING_SUSPECT_REQUIRES_REPAIR
 from scion.core.branch_lifecycle_policy import (
     SCREENING_NEUTRAL_SIGNAL_CONTINUE,
     SCREENING_WEAK_SIGNAL_CONTINUE,
@@ -375,7 +376,12 @@ class DecisionFinalizer:
                 if telemetry_repair_stage == "validation"
                 else TELEMETRY_VALIDATION_REPAIRABLE
             )
-            reason = f"{reason_code}: repair declared mechanism telemetry on the same branch"
+            reason = (
+                f"{reason_code}: repair declared mechanism telemetry on the "
+                f"same branch; repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}; "
+                f"branch_code_status={branch.branch_code_status}; "
+                f"telemetry_outcome={branch.last_telemetry_outcome}"
+            )
             attempt_kind = (
                 "validation_repair_required"
                 if telemetry_repair_stage == "validation"

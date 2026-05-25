@@ -237,11 +237,44 @@ def test_solver_design_planner_guidance_exposes_registry_and_slice_ids_after_map
 
     session._run_initial_tool_loop(context, state)
     guidance = creative.planner_contexts[0]["tool_arg_guidance"]
+    step_events = [
+        event.metadata for event in state.transcript if event.metadata.get("step_id")
+    ]
+    map_followups = [
+        event
+        for event in step_events
+        if event["tool_name"]
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and event["selection_source"] == "planner_map_followup_required"
+    ]
+    required_preface_registry_or_slice = [
+        event
+        for event in step_events
+        if event["tool_name"]
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and event["selection_source"] == "required_context_preface"
+    ]
+    ledger_followups = [
+        entry
+        for entry in state.observation_ledger
+        if entry.get("tool_name")
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and entry.get("selection_source") == "planner_map_followup_required"
+    ]
 
     map_guidance = guidance["context.read_active_solver_map"]
     registry_guidance = guidance["context.read_operator_registry"]
     slice_guidance = guidance["context.read_algorithm_slice"]
     file_guidance = guidance["context.read_algorithm_file"]
+    assert {event["tool_name"] for event in map_followups} == {
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
+    }
+    assert not required_preface_registry_or_slice
+    assert {entry["tool_name"] for entry in ledger_followups} == {
+        "context.read_operator_registry",
+        "context.read_algorithm_slice",
+    }
     assert "cvrp.registry.local_search_vns" in map_guidance["available_registry_ids"]
     assert "cvrp.slice.local_search.default_vns_operators" in (
         map_guidance["available_slice_ids"]
@@ -324,6 +357,23 @@ def test_solver_design_planner_reads_registry_slice_before_broad_file(
     )
     assert step_events[slice_index]["selection_source"] == (
         "planner_map_followup_required"
+    )
+    assert not [
+        event
+        for event in step_events
+        if event["tool_name"]
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and event["selection_source"] == "required_context_preface"
+    ]
+    assert any(
+        entry.get("tool_name") == "context.read_operator_registry"
+        and entry.get("selection_source") == "planner_map_followup_required"
+        for entry in state.observation_ledger
+    )
+    assert any(
+        entry.get("tool_name") == "context.read_algorithm_slice"
+        and entry.get("selection_source") == "planner_map_followup_required"
+        for entry in state.observation_ledger
     )
     assert any(
         observation.tool_name == "context.read_algorithm_slice"

@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scion.core.branch_hygiene import WIRING_SUSPECT_REQUIRES_REPAIR
 from scion.core.models import ExperimentStage, ProtocolResult
 
 TELEMETRY_VALIDATION_REPAIRABLE = "TELEMETRY_VALIDATION_REPAIRABLE"
@@ -267,6 +268,17 @@ def telemetry_validation_feedback(
         value = str(first.get(key) or "").strip()
         if value:
             parts.append(f"{label}={value}")
+    categories = sorted(
+        {
+            _normal_failure_category(item)
+            for item in failures
+            if _normal_failure_category(item) != "unknown"
+        }
+    )
+    if len(categories) > 1:
+        parts.append("categories=" + ",".join(categories))
+    if any(category in {"activation", "budget"} for category in categories):
+        parts.append(f"repair_focus={WIRING_SUSPECT_REQUIRES_REPAIR}")
     counters = _issue_counters(first)
     if counters:
         parts.extend(f"{key}={counters[key]}" for key in sorted(counters))

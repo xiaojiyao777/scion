@@ -7,6 +7,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, MutableMapping, Protocol
 
+from scion.core.branch_hygiene import branch_requires_repair_focus
 from scion.core.models import Branch, ChampionState, HypothesisProposal, PatchProposal
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,13 @@ class WorkspaceLifecycleService:
     ) -> str | None:
         """Return a workspace for the branch, creating one from champion if needed."""
         bid = branch.branch_id
-        if not force_champion and self.branch_controller.get_code_base(bid) == "branch_workspace":
+        if branch_requires_repair_focus(branch):
+            self.discard_branch_workspace(bid)
+            force_champion = True
+        if (
+            not force_champion
+            and self.branch_controller.get_code_base(bid) == "branch_workspace"
+        ):
             existing = self.branch_workspaces.get(bid)
             if existing and os.path.isdir(existing):
                 return existing

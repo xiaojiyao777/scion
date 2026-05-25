@@ -738,6 +738,25 @@ def test_planner_reads_distinct_algorithm_files_without_already_succeeded_skip(
         ("context.read_active_solver_design", "required_context_preface"),
         ("context.read_solver_call_graph", "required_context_preface"),
     ]
+    assert any(
+        event["tool_name"] == "context.read_active_solver_map"
+        and event["selection_source"] == "required_context_preface"
+        for event in step_events
+    )
+    assert not [
+        event
+        for event in step_events
+        if event["tool_name"]
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and event["selection_source"] == "required_context_preface"
+    ]
+    assert {
+        event["tool_name"]
+        for event in step_events
+        if event["tool_name"]
+        in {"context.read_operator_registry", "context.read_algorithm_slice"}
+        and event["selection_source"] == "planner_map_followup_required"
+    } == {"context.read_operator_registry", "context.read_algorithm_slice"}
     assert [event["status"] for event in planner_file_read_events[:2]] == [
         "ok",
         "ok",

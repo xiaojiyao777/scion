@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from scion.core.branch_hygiene import SUSPECT_BRANCH_CODE_STATUSES
 from scion.core.models import (
     Branch, BranchState, ChampionState, Decision, ExperimentStage,
 )
@@ -225,10 +226,10 @@ class BranchController:
         branch = self._get(branch_id)
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return "champion"
-        if getattr(branch, "branch_code_status", "clean") in {
-            "telemetry_wiring_suspect",
-            "telemetry_invalid",
-        }:
+        if (
+            getattr(branch, "branch_code_status", "clean")
+            in SUSPECT_BRANCH_CODE_STATUSES
+        ):
             return "champion"
         if branch.current_code_hash is None:
             return "champion"

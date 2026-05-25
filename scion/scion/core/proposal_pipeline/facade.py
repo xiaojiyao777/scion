@@ -5,6 +5,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, MutableMapping
 
+from scion.core.branch_hygiene import (
+    branch_hygiene_context,
+    branch_hygiene_guidance,
+    branch_workspace_for_proposal,
+)
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -125,7 +130,10 @@ class ProposalPipeline(
             b for b in self.branch_controller.get_active_branches()
             if b.branch_id != bid
         ]
-        branch_workspace = self.branch_workspaces.get(bid)
+        branch_workspace = branch_workspace_for_proposal(
+            branch,
+            self.branch_workspaces,
+        )
         champ_snapshot = self._champion_snapshot()
         transient_forced_locus = self.consume_forced_locus()
         forced_locus = self.persistent_forced_locus or transient_forced_locus
@@ -161,6 +169,8 @@ class ProposalPipeline(
             weight_opt_result=self.get_latest_weight_opt_result(),
             research_log=self.research_log,
         )
+        context["branch_hygiene"] = branch_hygiene_context(branch)
+        context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
         quality_feedback = self._agentic_quality_feedback_for_context(bid)
         if quality_feedback:
             context["agentic_prior_quality_blocks"] = quality_feedback
@@ -281,8 +291,13 @@ class ProposalPipeline(
             hypothesis=hypothesis,
             champion=self._champion_snapshot(),
             prior_failure=prior_failure,
-            branch_workspace=self.branch_workspaces.get(branch.branch_id),
+            branch_workspace=branch_workspace_for_proposal(
+                branch,
+                self.branch_workspaces,
+            ),
         )
+        context["branch_hygiene"] = branch_hygiene_context(branch)
+        context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
         try:
             result = self.creative.generate_code(context)
             self.circuit_breaker.record_success()

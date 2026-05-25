@@ -491,6 +491,62 @@ def test_budget_starved_failure_is_marked_repairable() -> None:
     assert "candidate_positive=0" in outcome.protocol_result.exposed_summary
 
 
+def test_activation_and_budget_missing_repairable_feedback_marks_repair_focus() -> None:
+    guard = {
+        "schema": "scion.telemetry_guard.v1",
+        "passed": False,
+        "candidate_runs": 16,
+        "failures": [
+            {
+                "code": "TELEMETRY_MECHANISM_ACTIVATION_NOT_OBSERVED",
+                "severity": "fail",
+                "category": "activation",
+                "runtime_role": "activation",
+                "mechanism": "route_merge_probe",
+                "field": "solver_algorithm_activity.route_merge_probe",
+                "candidate_missing": 16,
+                "candidate_present": 0,
+                "candidate_positive": 0,
+                "champion_positive": 0,
+            },
+            {
+                "code": "TELEMETRY_BUDGET_STARVED",
+                "severity": "fail",
+                "category": "budget",
+                "runtime_role": "budget",
+                "mechanism": "route_merge_probe",
+                "field": "solver_algorithm_phase_runtime_ms.route_merge_probe",
+                "candidate_missing": 14,
+                "candidate_present": 2,
+                "candidate_positive": 0,
+                "champion_positive": 0,
+            },
+        ],
+    }
+    protocol = RecordingProtocol(
+        _protocol_result(
+            stage=ExperimentStage.SCREENING,
+            exposed_summary="screening activation budget diagnostic",
+            candidate_surface_runtime_summary={
+                "selected_surface": "solver_design",
+                "telemetry_guard": guard,
+            },
+        )
+    )
+    pipeline = EvaluationPipeline(experiment_protocol=protocol)
+
+    outcome = pipeline.evaluate(_request(state=BranchState.EXPLORE))
+
+    assert outcome.protocol_result is not None
+    assert TELEMETRY_VALIDATION_REPAIRABLE in outcome.protocol_result.reason_codes
+    assert "TELEMETRY_BUDGET_STARVED" in outcome.protocol_result.reason_codes
+    assert "categories=activation,budget" in outcome.protocol_result.exposed_summary
+    assert (
+        "repair_focus=wiring_suspect_requires_repair"
+        in outcome.protocol_result.exposed_summary
+    )
+
+
 def test_effect_zero_with_observed_activation_is_not_repairable_failure() -> None:
     guard = {
         "schema": "scion.telemetry_guard.v1",

@@ -193,6 +193,31 @@ def test_read_surface_prefers_branch_workspace_code_when_available(
     assert "CHAMPION_SCHEDULER_SENTINEL" not in artifact["content_preview"]
 
 
+def test_read_branch_state_includes_branch_hygiene_status(tmp_path: Path) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path)
+    branch = replace(
+        context.branch,
+        current_code_hash="candidate-hash",
+        last_clean_code_hash="candidate-hash",
+        branch_code_status="telemetry_wiring_suspect",
+        last_screening_feedback_tier="inactive",
+        last_telemetry_outcome="activation_missing_or_wiring_suspect",
+    )
+    context = replace(context, branch=branch)
+
+    observation = registry.call("context.read_branch_state", {}, context)
+
+    payload = observation.structured_payload
+    assert observation.is_error is False
+    assert payload["branch_code_status"] == "telemetry_wiring_suspect"
+    assert payload["last_telemetry_outcome"] == (
+        "activation_missing_or_wiring_suspect"
+    )
+    assert payload["repair_focus_required"] is True
+    assert payload["repair_focus_reason"] == "wiring_suspect_requires_repair"
+
+
 def test_read_solver_design_compact_payload_stays_below_session_budget(
     tmp_path: Path,
 ) -> None:

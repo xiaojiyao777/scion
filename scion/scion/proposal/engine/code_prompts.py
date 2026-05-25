@@ -192,6 +192,10 @@ def _split_code_context(
         prior_failure_section = _prior_failure_prompt_section(
             str(D["prior_code_failure"])
         )
+    if D["branch_hygiene_guidance"]:
+        prior_failure_section += (
+            f"## Branch Code Status\n{D['branch_hygiene_guidance']}\n\n"
+        )
     previous_patch_section = _previous_patch_prompt_section(D["previous_patch"])
     agentic_context = _agentic_research_context_block(D, code_phase=True)
     cacheable_agentic_context = ""

@@ -72,6 +72,9 @@ class FakeCreative:
         self.hypothesis_calls = 0
         self.code_calls = 0
         self.fix_calls = 0
+        self.hypothesis_context = None
+        self.code_context = None
+        self.fix_context = None
         self.hypothesis = HypothesisProposal(
             hypothesis_text="Bounded route-pair search.",
             change_locus="local_search",
@@ -107,16 +110,19 @@ class FakeCreative:
 
     def generate_hypothesis(self, context):
         self.hypothesis_calls += 1
+        self.hypothesis_context = context
         return self.hypothesis
 
     def generate_code(self, context):
         self.code_calls += 1
+        self.code_context = context
         if self.code_error is not None:
             raise self.code_error
         return self.patch
 
     def fix_code(self, context):
         self.fix_calls += 1
+        self.fix_context = context
         if self.fix_error is not None:
             raise self.fix_error
         return self.fix

@@ -108,6 +108,8 @@ class ProposalToolContext:
     forced_target_file: str | None = None
     active_problem_boundary_surfaces: tuple[str, ...] = ()
     branch_workspace: str | None = None
+    branch_hygiene: Mapping[str, Any] = field(default_factory=dict)
+    branch_hygiene_guidance: str = ""
 
     @property
     def branch_id(self) -> str | None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from scion.core.branch_hygiene import branch_hygiene_context
 from scion.proposal.context_manager import (
     _build_objective_policy_guidance,
     _build_problem_summary,
@@ -195,6 +196,7 @@ class ContextReadBranchStateTool(_BaseReadOnlyTool):
             "direction": _attr(branch, "direction"),
             "weight_revision": _attr(branch, "weight_revision"),
         }
+        payload.update(branch_hygiene_context(branch))
         return self._observation(
             context,
             observation_type="branch_state",

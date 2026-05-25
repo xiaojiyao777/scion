@@ -4,6 +4,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Mapping
 
+from scion.core.branch_hygiene import (
+    branch_hygiene_context,
+    branch_hygiene_guidance,
+    branch_workspace_for_proposal,
+)
 from scion.core.models import Branch, ChampionState, HypothesisProposal
 from scion.proposal.agentic_session import (
     AgenticProposalRequest,
@@ -73,13 +78,19 @@ class AgenticRequestMixin:
                     "agentic code context hypothesis does not match the "
                     "approved hypothesis"
                 )
-            return self.problem_runtime.build_code_context(
+            code_context = self.problem_runtime.build_code_context(
                 branch=branch,
                 hypothesis=hypothesis,
                 champion=champion,
                 prior_failure=prior_failure,
-                branch_workspace=self.branch_workspaces.get(branch.branch_id),
+                branch_workspace=branch_workspace_for_proposal(
+                    branch,
+                    self.branch_workspaces,
+                ),
             )
+            code_context["branch_hygiene"] = branch_hygiene_context(branch)
+            code_context["branch_hygiene_guidance"] = branch_hygiene_guidance(branch)
+            return code_context
 
         return AgenticProposalRequest(
             campaign_id=self.campaign_id,
@@ -159,5 +170,10 @@ class AgenticRequestMixin:
                 if forced_surface
                 else tuple(active_boundary)
             ),
-            branch_workspace=self.branch_workspaces.get(branch.branch_id),
+            branch_workspace=branch_workspace_for_proposal(
+                branch,
+                self.branch_workspaces,
+            ),
+            branch_hygiene=branch_hygiene_context(branch),
+            branch_hygiene_guidance=branch_hygiene_guidance(branch),
         )

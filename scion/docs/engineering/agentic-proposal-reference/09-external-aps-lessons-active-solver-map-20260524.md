@@ -252,6 +252,22 @@ Recommended policy:
 This preserves v3 control: the adapter decides which research-object code is
 visible, core only enforces budgets and provenance.
 
+### APS Source Selection Sources
+
+`required_context_preface` is the deterministic base preface. For
+`solver_design` it may collect the surface list, problem summary,
+algorithm-file manifest, active solver design, solver call graph, active solver
+map, and a forced target-file read when the target is already known. It is not
+the source for registry or slice map consumption.
+
+`planner_map_followup_required` is the deterministic active-map consumer. After
+`context.read_active_solver_map` succeeds, APS must issue the relevant
+`context.read_operator_registry` and `context.read_algorithm_slice` reads under
+this source when ids are available. This path is framework-required and does not
+depend on the model planner choosing those tools. The model may still make
+additional `planner_selected` registry, slice, symbol, or full-file reads within
+the normal bounded tool policy.
+
 ## Screening Feedback Tier Design
 
 ### Pair-Level And Case-Level Exposure

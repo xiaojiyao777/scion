@@ -254,6 +254,7 @@ class AgenticSessionToolCallMixin:
                 args=args,
                 proposal_phase=phase.value,
                 prompt_visible_chars=prompt_payload_chars,
+                selection_source=selection_source,
             )
             state.note(
                 phase,

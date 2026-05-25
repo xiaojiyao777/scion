@@ -59,6 +59,74 @@ def test_agentic_approved_continuation_can_build_code_context_and_patch() -> Non
     assert failures == []
 
 
+def test_agentic_repair_continuation_hides_suspect_workspace_and_includes_status() -> None:
+    creative = FakeCreative()
+    events: list[str] = []
+
+    class RepairContinuationSession:
+        def run(self, request: AgenticProposalRequest) -> AgenticProposalOutput:
+            assert request.tool_context.branch_workspace is None
+            assert request.tool_context.branch_hygiene["repair_focus_required"] is True
+            assert "wiring_suspect_requires_repair" in (
+                request.tool_context.branch_hygiene_guidance
+            )
+            if request.approved_hypothesis is None:
+                return AgenticProposalOutput(
+                    status=AgenticProposalStatus.PARTIAL_HYPOTHESIS_ONLY,
+                    session_id="session-hyp",
+                    campaign_id=request.campaign_id,
+                    branch_id=request.branch.branch_id,
+                    champion_version=(
+                        request.champion.version if request.champion else None
+                    ),
+                    problem_id=request.problem_id,
+                    problem_spec_hash=request.problem_spec_hash,
+                    hypothesis=creative.hypothesis,
+                    termination_reason=(
+                        AgenticTerminationReason.HYPOTHESIS_AWAITING_APPROVAL
+                    ),
+                )
+
+            code_context = request.build_code_context(request.approved_hypothesis)
+            events.append("code_context")
+            assert code_context["branch_hygiene"]["branch_code_status"] == (
+                "telemetry_wiring_suspect"
+            )
+            assert "wiring_suspect_requires_repair" in (
+                code_context["branch_hygiene_guidance"]
+            )
+            return AgenticProposalOutput(
+                status=AgenticProposalStatus.COMPLETED,
+                session_id="session-code",
+                campaign_id=request.campaign_id,
+                branch_id=request.branch.branch_id,
+                champion_version=request.champion.version if request.champion else None,
+                problem_id=request.problem_id,
+                problem_spec_hash=request.problem_spec_hash,
+                hypothesis=request.approved_hypothesis,
+                patch=creative.patch,
+                termination_reason=AgenticTerminationReason.COMPLETED,
+            )
+
+    pipeline, branch, runtime, _, _, _ = _pipeline(
+        creative=creative,
+        agentic_session=RepairContinuationSession(),
+    )
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.last_screening_feedback_tier = "inactive"
+    branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+    patch = pipeline.generate_code(branch, hypothesis)
+
+    assert record is not None
+    assert patch == creative.patch
+    assert events == ["code_context"]
+    assert runtime.code_kwargs["branch_workspace"] is None
+
+
 def test_agentic_completed_output_failed_self_check_rejected_before_patch_use() -> None:
     creative = FakeCreative()
     output = AgenticProposalOutput(

@@ -258,12 +258,22 @@ def test_forced_solver_design_target_is_grounded_before_first_hypothesis(
     assert any(
         receipt.get("tool_name") == "context.read_algorithm_slice"
         and receipt.get("slice_id")
+        and receipt.get("selection_source") == "planner_map_followup_required"
         for receipt in output.observation_ledger["read_receipts"]
     )
     assert any(
         receipt.get("tool_name") == "context.read_operator_registry"
         and receipt.get("registry_id")
+        and receipt.get("selection_source") == "planner_map_followup_required"
         for receipt in output.observation_ledger["read_receipts"]
+    )
+    assert "SECRET_VALIDATION" not in json.dumps(
+        output.observation_ledger,
+        sort_keys=True,
+    )
+    assert "SECRET_FROZEN" not in json.dumps(
+        output.observation_ledger,
+        sort_keys=True,
     )
 
 

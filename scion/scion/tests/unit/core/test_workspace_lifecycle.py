@@ -97,6 +97,27 @@ def test_setup_workspace_force_champion_discards_existing_workspace(tmp_path: Pa
     assert workspaces[branch.branch_id] == workspace
 
 
+def test_setup_workspace_discards_suspect_workspace_even_when_hashes_match(
+    tmp_path: Path,
+) -> None:
+    service, branch, ctrl, materializer, workspaces, _ = _service(tmp_path)
+    existing = tmp_path / "existing"
+    existing.mkdir()
+    workspaces[branch.branch_id] = str(existing)
+    ctrl.record_candidate_code(branch.branch_id, "candidate-hash")
+    ctrl.record_verification_pass(branch.branch_id, "candidate-hash")
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+
+    workspace = service.setup_workspace(branch)
+
+    assert workspace is not None
+    assert workspace != str(existing)
+    assert materializer.cleaned == [str(existing)]
+    assert materializer.created == [(branch.branch_id, "/tmp/champion")]
+    assert workspaces[branch.branch_id] == workspace
+
+
 def test_apply_patch_records_candidate_hash_without_clean_hash(tmp_path: Path) -> None:
     service, branch, ctrl, materializer, _, patches = _service(tmp_path)
     workspace = tmp_path / "workspace"

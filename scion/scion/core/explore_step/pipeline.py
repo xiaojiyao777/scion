@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
+from scion.core.branch_hygiene import branch_hygiene_context
 from scion.core.models import (
     Branch,
     BranchState,
@@ -721,6 +722,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             "step_started_at": datetime.now().isoformat(),
             "complete": False,
         }
+        payload.update(branch_hygiene_context(branch))
         if prior_failure:
             payload["retry_prior_failure"] = prior_failure
         if hypothesis is not None:

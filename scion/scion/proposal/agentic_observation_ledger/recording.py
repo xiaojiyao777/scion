@@ -62,6 +62,7 @@ def record_agentic_ledger_observation(
     args: Mapping[str, Any],
     proposal_phase: str,
     prompt_visible_chars: int | None = None,
+    selection_source: str | None = None,
 ) -> None:
     """Record one compact observation ledger entry on session state."""
 
@@ -74,6 +75,7 @@ def record_agentic_ledger_observation(
         logical_phase=logical_phase(state),
         proposal_phase=proposal_phase,
         prompt_visible_chars=prompt_visible_chars,
+        selection_source=selection_source,
     )
     if entry:
         state.observation_ledger.append(entry)
@@ -87,6 +89,7 @@ def build_agentic_ledger_observation(
     logical_phase: str,
     proposal_phase: str,
     prompt_visible_chars: int | None = None,
+    selection_source: str | None = None,
 ) -> dict[str, Any]:
     payload = (
         observation.structured_payload
@@ -133,6 +136,7 @@ def build_agentic_ledger_observation(
             "evidence_ref": observation.observation_id,
             "phase": logical_phase,
             "proposal_phase": proposal_phase,
+            "selection_source": selection_source,
             "reusable_by_phases": reusable_by_phases(
                 observation,
                 phase=logical_phase,

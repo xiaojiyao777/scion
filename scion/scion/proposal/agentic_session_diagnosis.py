@@ -162,6 +162,17 @@ class AgenticSessionDiagnosisMixin:
             )
             if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
                 return observations
+            observations.extend(
+                self._run_active_solver_map_followup_tools(
+                    context,
+                    state,
+                    observations,
+                    selection_source="planner_map_followup_required",
+                    target_file=context.forced_target_file,
+                )
+            )
+            if state.loop_stop_reason in {"session_timeout", "repeated_tool_call"}:
+                return observations
             if self._supports_tool_selection():
                 observations = self._run_bounded_planner_tools(
                     context,
@@ -188,7 +199,7 @@ class AgenticSessionDiagnosisMixin:
                     context,
                     state,
                     observations,
-                    selection_source="required_context_preface",
+                    selection_source="planner_map_followup_required",
                     target_file=context.forced_target_file,
                 )
             )
@@ -315,6 +326,12 @@ class AgenticSessionDiagnosisMixin:
                         name,
                         args,
                         selection_source=selection_source,
+                        preserve_observation_chars=(
+                            self._self_check_observation_reserve_chars()
+                            + self._minimum_budgeted_observation_chars()
+                            if selection_source == "planner_map_followup_required"
+                            else 0
+                        ),
                     )
                 )
             if followup_observations:

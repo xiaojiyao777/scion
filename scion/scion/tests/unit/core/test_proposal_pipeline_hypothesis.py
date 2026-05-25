@@ -23,6 +23,52 @@ def test_generate_hypothesis_builds_context_and_record() -> None:
     assert pipeline.agentic_outputs == {}
 
 
+def test_generate_hypothesis_marks_suspect_branch_as_repair_focused() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_code_status = "telemetry_wiring_suspect"
+    branch.last_screening_feedback_tier = "inactive"
+    branch.last_telemetry_outcome = "activation_missing_or_wiring_suspect"
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert runtime.hypothesis_kwargs["branch_workspace"] is None
+    hygiene = creative.hypothesis_context["branch_hygiene"]
+    assert hygiene["branch_code_status"] == "telemetry_wiring_suspect"
+    assert hygiene["repair_focus_required"] is True
+    assert hygiene["repair_focus_reason"] == "wiring_suspect_requires_repair"
+    assert "wiring_suspect_requires_repair" in (
+        creative.hypothesis_context["branch_hygiene_guidance"]
+    )
+
+
+def test_generate_hypothesis_allows_active_no_effect_branch_with_marker() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _, _, _ = _pipeline(creative=creative)
+    branch.current_code_hash = "candidate-hash"
+    branch.last_clean_code_hash = "candidate-hash"
+    branch.branch_code_status = "active_no_effect"
+    branch.last_screening_feedback_tier = "no_effect"
+    branch.last_telemetry_outcome = "no_objective_effect"
+
+    hypothesis, record = pipeline.generate_hypothesis(branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert runtime.hypothesis_kwargs["branch_workspace"] == "/tmp/branch"
+    hygiene = creative.hypothesis_context["branch_hygiene"]
+    assert hygiene["branch_code_status"] == "active_no_effect"
+    assert hygiene["repair_focus_required"] is False
+    assert hygiene["baseline_policy"] == "branch_workspace_allowed_with_marker"
+    assert "active_no_effect" in creative.hypothesis_context[
+        "branch_hygiene_guidance"
+    ]
+
+
 def test_generate_hypothesis_threads_diagnostic_forced_surface_controls() -> None:
     creative = FakeCreative()
     creative.hypothesis = HypothesisProposal(
