@@ -105,6 +105,7 @@ def test_active_no_effect_context_exposes_same_mechanism_followup_policy() -> No
     payload = branch_hygiene_context(branch)
 
     assert payload["repair_focus_required"] is False
+    assert payload["hypothesis_generation_mode"] == "same_mechanism_only"
     assert payload["branch_followup_policy"] == "same_mechanism_followup_only"
     assert payload["clean_fork_policy"] == "clean_fork_required_for_new_mechanism"
     assert payload["branch_mechanism_ids"] == ["bounded_probe"]

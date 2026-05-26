@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from scion.core.models import HypothesisProposal
@@ -36,7 +37,7 @@ from scion.proposal.tools.surface import (
     _surface_target_files,
     _target_declared,
 )
-from scion.proposal.tools.utils import _normalize_rel_path
+from scion.proposal.tools.utils import _attr, _normalize_rel_path
 
 class TargetPermissionPreviewTool(_BaseReadOnlyTool):
     name = "proposal.target_permission_preview"
@@ -81,6 +82,16 @@ class TargetPermissionPreviewTool(_BaseReadOnlyTool):
                 issues.append(
                     f"target_file '{args.target_file}' is not declared for surface "
                     f"'{args.change_locus}'"
+                )
+            elif args.action == "create_new" and _target_file_exists(
+                context,
+                args.target_file,
+            ):
+                passed = False
+                issues.append(
+                    "existing_file_create_new_rejected: existing file requires "
+                    "modify exact_replace with source_digest; create_new is "
+                    "only for new files"
                 )
         forced_violation = _forced_action_target_violation(
             context,
@@ -360,6 +371,31 @@ def _forced_action_target_violation(
                 f"{forced_target!r}, got {actual_target!r}"
             )
     return None
+
+
+def _target_file_exists(
+    context: ProposalToolContext,
+    target_file: str | None,
+) -> bool:
+    if not target_file:
+        return False
+    normalized = _normalize_rel_path(target_file)
+    if not normalized:
+        return False
+    for root in (
+        getattr(context, "branch_workspace", None),
+        _attr(context.champion, "code_snapshot_path"),
+    ):
+        root_text = str(root or "").strip()
+        if not root_text:
+            continue
+        candidate = Path(root_text).expanduser() / normalized
+        try:
+            if candidate.is_file() and not candidate.is_symlink():
+                return True
+        except OSError:
+            continue
+    return False
 
 
 __all__ = [

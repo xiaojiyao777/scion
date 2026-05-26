@@ -24,6 +24,7 @@ from scion.problem.providers import (
 from scion.proposal.edit_protocol import (
     PatchEditProtocolError,
     normalize_patch_typed_edits,
+    source_digest_for_content,
 )
 from scion.proposal.schemas import (
     HypothesisProposalInput,
@@ -528,9 +529,12 @@ def _hypothesis_schema_preview(
     )
     problem_telemetry_preview = _problem_expected_telemetry_preview(context, hypothesis)
     novelty_guidance = _semantic_signature_preview_guidance(context, hypothesis)
+    target_action_guard = _hypothesis_target_action_guard(context, hypothesis)
     passed = bool(c1_checks and all(check.passed for check in c1_checks))
     forced_violation = _forced_hypothesis_violation(context, hypothesis)
     if forced_violation is not None:
+        passed = False
+    if not target_action_guard.get("passed", True):
         passed = False
     if (
         isinstance(problem_telemetry_preview, Mapping)
@@ -548,6 +552,8 @@ def _hypothesis_schema_preview(
     )
     if forced_violation is not None:
         failure_reason = forced_violation
+    elif not target_action_guard.get("passed", True):
+        failure_reason = str(target_action_guard.get("reason") or "")
     elif problem_telemetry_failed:
         failure_reason = str(problem_telemetry_preview.get("reason") or "")
     elif (
@@ -575,7 +581,35 @@ def _hypothesis_schema_preview(
         "problem_expected_telemetry_preview": problem_telemetry_preview,
         "mechanism_binding": _mechanism_binding_preview(hypothesis, c12_check),
         "forced_surface_constraint": _forced_surface_constraint_payload(context),
+        "target_action_guard": target_action_guard,
         "novelty_signature_guidance": novelty_guidance,
+    }
+
+def _hypothesis_target_action_guard(
+    context: ProposalToolContext,
+    hypothesis: HypothesisProposal,
+) -> dict[str, Any]:
+    if hypothesis.action != "create_new" or not hypothesis.target_file:
+        return {"passed": True}
+    content = _read_preview_source_file(context, hypothesis.target_file)
+    if content is None:
+        return {"passed": True}
+    return {
+        "passed": False,
+        "reason": "existing_file_create_new_rejected",
+        "target_file": hypothesis.target_file,
+        "source_digest": source_digest_for_content(content),
+        "detail": (
+            "existing file requires modify exact_replace with source_digest; "
+            "create_new is only for new files."
+        ),
+        "repair_hint": (
+            "Change the hypothesis action to modify for this target file, or "
+            "choose a genuinely new file path for create_new. If adding a new "
+            "module also requires existing integration edits, keep the new "
+            "module as create_new and use typed exact_replace for existing "
+            "integration files."
+        ),
     }
 
 def _problem_expected_telemetry_preview(

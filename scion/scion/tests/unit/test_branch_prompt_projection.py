@@ -83,6 +83,7 @@ def test_sibling_prompt_projection_marks_clean_and_no_effect_status() -> None:
     assert "last_telemetry_outcome=no_objective_effect" in no_effect_line
     assert "repair_focus_required=false" in no_effect_line
     assert "branch_followup_policy=same_mechanism_followup_only" in no_effect_line
+    assert "hypothesis_generation_mode=same_mechanism_only" in no_effect_line
     assert "clean_fork_policy=clean_fork_required_for_new_mechanism" in no_effect_line
     assert "branch_mechanism_ids=bounded_probe" in no_effect_line
     assert "baseline_policy=branch_workspace_same_mechanism_followup_only" in no_effect_line
@@ -142,6 +143,7 @@ def test_non_clean_branch_prompt_forces_same_mechanism_followup() -> None:
 
     assert "## Branch Code Status" in rendered
     assert "same_mechanism_followup_only" in rendered
+    assert "hypothesis_generation_mode=same_mechanism_only" in rendered
     assert "bounded_probe" in rendered
     assert "tune, integrate, or repair the same mechanism" in rendered
     assert "clean branch or clean fork before generation" in rendered

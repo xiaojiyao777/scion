@@ -125,6 +125,7 @@ def test_generate_hypothesis_allows_active_no_effect_same_mechanism_followup() -
     hygiene = creative.hypothesis_context["branch_hygiene"]
     assert hygiene["branch_code_status"] == "active_no_effect"
     assert hygiene["repair_focus_required"] is False
+    assert hygiene["hypothesis_generation_mode"] == "same_mechanism_only"
     assert hygiene["branch_followup_policy"] == "same_mechanism_followup_only"
     assert hygiene["clean_fork_policy"] == "clean_fork_required_for_new_mechanism"
     assert hygiene["branch_mechanism_ids"] == ["bounded_probe"]

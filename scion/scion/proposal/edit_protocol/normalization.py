@@ -164,6 +164,12 @@ def _normalize_change(
     original_before = (
         original_source_files.get(file_path) if original_source_files else None
     )
+    _validate_existing_file_create_action(
+        file_path=file_path,
+        action=action,
+        before=before,
+        change_pointer=change_pointer,
+    )
     if edit_intent == "exact_replace":
         content_after = _apply_exact_replace(
             change,
@@ -382,7 +388,10 @@ def _validate_same_file_action_sequence(
             prior_change_pointers=tuple(prior.json_pointers),
             detail="delete mixed with create/modify cannot be safely composed",
         )
-    if "create" in actions and len(actions) > 1:
+    if (
+        actions.intersection({"create", "create_new", "full_file"})
+        and len(actions) > 1
+    ):
         _raise_duplicate_file_error(
             reason="mixed_create_modify",
             file_path=file_path,
@@ -574,6 +583,8 @@ def _validate_existing_file_full_file_modify(
         "content_field": content_field,
         "detail": detail,
         "guidance": (
+            "Existing file requires modify exact_replace with source_digest; "
+            "create is only for new files. "
             "Rewrite this change as edit_intent='exact_replace': set "
             "source_digest to the host-provided sha256 digest, omit "
             "content_after/code_content, provide a non-empty "
@@ -584,6 +595,44 @@ def _validate_existing_file_full_file_modify(
     }
     if before is not None:
         payload["source_digest"] = source_digest_for_content(before)
+    raise PatchEditProtocolError(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+
+
+def _validate_existing_file_create_action(
+    *,
+    file_path: str,
+    action: str,
+    before: str | None,
+    change_pointer: str,
+) -> None:
+    if before is None or action not in {"create", "create_new", "full_file"}:
+        return
+    payload = {
+        "error": "patch_edit_protocol",
+        "reason": "existing_file_create_rejected",
+        "file_path": file_path,
+        "json_pointer": change_pointer,
+        "action": action,
+        "source_digest": source_digest_for_content(before),
+        "detail": (
+            "existing file requires modify exact_replace with source_digest; "
+            "create is only for new files."
+        ),
+        "guidance": (
+            "Rewrite this existing-file change with action='modify' and "
+            "edit_intent='exact_replace': set source_digest to the "
+            "host-provided sha256 digest, provide a non-empty old_string "
+            "copied exactly from the current file, and provide new_string "
+            "with only the replacement text. Use action='create' and "
+            "edit_intent='full_file' only when the file does not exist."
+        ),
+    }
     raise PatchEditProtocolError(
         json.dumps(
             payload,

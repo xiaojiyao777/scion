@@ -213,6 +213,70 @@ def test_generic_v2_surface_prompt_has_no_cvrp_or_warehouse_core_terms(
     assert "problem-defined scalar values" in code_ctx["operator_interface_spec"]
 
 
+def test_create_new_existing_target_code_context_exposes_current_source(
+    tmp_path: Path,
+) -> None:
+    payload = _problem_payload(str(tmp_path))
+    payload["search_space"]["editable"] = ["policies/*.py"]
+    payload["research_surfaces"] = [
+        {
+            "name": "dispatch_policy",
+            "kind": "policy",
+            "description": "Dispatch timing policy.",
+            "targets": {
+                "files": ["policies/*.py"],
+                "create_new_allowed": True,
+                "modify_allowed": True,
+                "remove_allowed": False,
+            },
+            "interface": {
+                "required_functions": ["select_limit"],
+                "function_signatures": {
+                    "select_limit": ["instance", "time_limit_sec"]
+                },
+                "return_contract": "integer limit",
+            },
+        }
+    ]
+    legacy = legacy_problem_spec_from_v1(ProblemSpecV1(**payload))
+    (tmp_path / "policies").mkdir()
+    (tmp_path / "policies" / "dispatch_policy.py").write_text(
+        "def select_limit(instance, time_limit_sec):\n    return 1\n",
+        encoding="utf-8",
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="h",
+        code_snapshot_path=str(tmp_path),
+        code_snapshot_hash="h",
+    )
+    branch = Branch(
+        branch_id="b1",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="h",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Mistakenly create an existing dispatch policy.",
+        change_locus="dispatch_policy",
+        action="create_new",
+        target_file="policies/dispatch_policy.py",
+    )
+
+    code_ctx = ContextManager().build_code_context(
+        branch=branch,
+        hypothesis=hypothesis,
+        champion=champion,
+        problem_spec=legacy,
+    )
+
+    assert code_ctx["target_file_exists"] is True
+    assert "will be created" not in code_ctx["target_file_code"]
+    assert "File: policies/dispatch_policy.py" in code_ctx["target_file_code"]
+    assert "def select_limit" in code_ctx["target_file_code"]
+
+
 def test_forced_singleton_config_surface_context_derives_modify_target(
     tmp_path: Path,
 ) -> None:

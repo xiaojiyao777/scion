@@ -83,6 +83,17 @@ from .io import (
 from .rendering import _format_hypothesis, _hypothesis_implementation_brief
 from .runtime import _build_runtime_feedback, _build_runtime_failure_guidance
 
+
+def _target_file_exists_in_root(root: str, target_file: Optional[str]) -> bool:
+    if not root or not target_file:
+        return False
+    normalized = str(target_file).replace("\\", "/").lstrip("/")
+    if not normalized:
+        return False
+    candidate = os.path.join(root, normalized)
+    return os.path.isfile(candidate)
+
+
 class ContextManager:
     """Constructs context dicts for CreativeLayer calls.
 
@@ -462,7 +473,11 @@ class ContextManager:
             if branch_workspace and os.path.isdir(branch_workspace)
             else champion.code_snapshot_path
         )
-        if hypothesis.action == "create_new":
+        target_file_exists = _target_file_exists_in_root(
+            source_root,
+            hypothesis.target_file,
+        )
+        if hypothesis.action == "create_new" and not target_file_exists:
             target_file_code = "(new file — will be created)"
         else:
             target_file_code = _read_target_file_from_root(
@@ -501,6 +516,7 @@ class ContextManager:
             ),
             "target_file": hypothesis.target_file,
             "target_file_code": target_file_code,
+            "target_file_exists": target_file_exists,
             "champion_operators_code": champion_operators_code,
             "reference_operators": reference_operators,
             "operator_interface_spec": operator_interface_spec,

@@ -200,6 +200,10 @@ def _branch_hygiene_status_projection(branch: Branch) -> str:
         parts.append(f"repair_policy={context['repair_policy']}")
     if context.get("branch_followup_policy"):
         parts.append(f"branch_followup_policy={context['branch_followup_policy']}")
+    if context.get("hypothesis_generation_mode"):
+        parts.append(
+            f"hypothesis_generation_mode={context['hypothesis_generation_mode']}"
+        )
     if context.get("clean_fork_policy"):
         parts.append(f"clean_fork_policy={context['clean_fork_policy']}")
     if context.get("branch_mechanism_ids"):

@@ -120,9 +120,15 @@ class Scheduler:
                 _established_branch(branch) for branch in eligible_research
             ):
                 return SchedulerAction(action="create_new", branch=None)
+            clean_research = [
+                branch
+                for branch in eligible_research
+                if not branch_requires_same_mechanism_followup(branch)
+            ]
+            selection_pool = clean_research or eligible_research
             return SchedulerAction(
                 action="run_existing",
-                branch=_select_fair(eligible_research),
+                branch=_select_fair(selection_pool),
             )
 
         # No actionable branch: only create new if below capacity (§4.6 / §11.5)

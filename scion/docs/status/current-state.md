@@ -40,6 +40,20 @@ activation/budget telemetry from effect telemetry and blocks contradictions
 where an incumbent-preserving/no-objective-changing mechanism claims positive
 effect fields.
 
+The later 2026-05-26 P1 typed-edit/branch-steering repair closes the
+existing-file create/full-file loophole observed after commit `09aa479`.
+Hypothesis/target previews now reject `create_new` when the target already
+exists, code context exposes the existing target source instead of a new-file
+placeholder, and patch normalization rejects `action=create`, `create_new`, or
+`full_file` against host-visible existing files with retry guidance that the
+file must use `modify` + typed `exact_replace` + `source_digest`. New helper
+files can still be full-file creates, but any existing integration file in
+`additional_changes` must be a typed edit. Branch steering also now exposes an
+explicit `hypothesis_generation_mode=same_mechanism_only` for non-clean
+follow-up branches, prefers clean research candidates when at capacity, and
+continues to create a clean branch/fork when all active research branches are
+same-mechanism follow-up only and proposal capacity exists.
+
 The 2026-05-25 repair pass closed the main blockers from the local
 `gpt-5.5` 8-attempt diagnostic run and the full v0.4 audit. Suspect telemetry
 branches now use a generic repair-first lifecycle: a branch marked

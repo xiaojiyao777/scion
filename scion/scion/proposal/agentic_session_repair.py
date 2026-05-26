@@ -254,7 +254,12 @@ def _is_code_edit_protocol_retryable(exc: BaseException) -> bool:
     if not isinstance(exc, ProposalValidationError):
         return False
     feedback = _code_edit_protocol_feedback(exc)
-    return feedback.get("reason") == "old_string_not_unique"
+    return feedback.get("reason") in {
+        "old_string_not_unique",
+        "existing_file_create_rejected",
+        "existing_file_full_file_modify_rejected",
+        "existing_file_full_file_modify_source_required",
+    }
 
 
 def _code_edit_protocol_retry_context(
@@ -271,30 +276,55 @@ def _code_edit_protocol_retry_context(
     ]
     match_count = feedback.get("match_count")
     target_file = feedback.get("file_path") or hypothesis.target_file
-    retry_context["prior_code_failure"] = (
-        "Typed exact_replace edit failed: old_string_not_unique"
-        + (f" ({match_count} matches)" if match_count else "")
-        + f" in {target_file!r}. Regenerate a unique old_string by copying "
-        "stable surrounding context from one candidate snippet. Keep "
-        "replace_all=false unless this is intentionally a global replacement. "
-        f"Preserve target_file={hypothesis.target_file!r}, "
-        f"action={hypothesis.action!r}, and mechanism_changes ids={protected_ids!r}."
-    )
+    reason = str(feedback.get("reason") or "")
+    if reason == "old_string_not_unique":
+        retry_context["prior_code_failure"] = (
+            "Typed exact_replace edit failed: old_string_not_unique"
+            + (f" ({match_count} matches)" if match_count else "")
+            + f" in {target_file!r}. Regenerate a unique old_string by copying "
+            "stable surrounding context from one candidate snippet. Keep "
+            "replace_all=false unless this is intentionally a global replacement. "
+            f"Preserve target_file={hypothesis.target_file!r}, "
+            f"action={hypothesis.action!r}, and mechanism_changes ids={protected_ids!r}."
+        )
+        final_task = (
+            "Return the same patch intent using exact_replace with an "
+            "old_string that matches exactly one intended location. Include "
+            "nearby unchanged context from one candidate's "
+            "unique_old_string_hint."
+        )
+    else:
+        retry_context["prior_code_failure"] = (
+            "Typed edit target/action failed: existing file requires modify "
+            "exact_replace with source_digest; create is only for new files. "
+            f"Rejected action={feedback.get('action')!r} for {target_file!r}. "
+            f"Preserve target_file={hypothesis.target_file!r} and "
+            f"mechanism_changes ids={protected_ids!r}; repair the patch by "
+            "using action='modify', edit_intent='exact_replace', source_digest, "
+            "old_string, and new_string for any existing file. If adding a "
+            "new helper module, keep only that new file as action='create' "
+            "full_file and put existing integration files in typed "
+            "additional_changes."
+        )
+        final_task = (
+            "Existing file requires modify exact_replace with source_digest; "
+            "create is only for new files. Return action='modify' with "
+            "edit_intent='exact_replace' for existing files. Use full_file "
+            "only for genuinely new file creates or deletes."
+        )
     retry_context["agentic_code_edit_retry_feedback"] = _drop_empty_dict(
         {
             "failure_code": "code_edit_protocol_retry",
-            "reason": feedback.get("reason"),
+            "reason": reason,
             "file_path": target_file,
             "json_pointer": feedback.get("json_pointer"),
+            "action": feedback.get("action"),
             "match_count": feedback.get("match_count"),
             "candidate_matches": feedback.get("candidate_matches"),
             "source_digest": feedback.get("source_digest"),
-            "final_task": (
-                "Return the same patch intent using exact_replace with an "
-                "old_string that matches exactly one intended location. Include "
-                "nearby unchanged context from one candidate's "
-                "unique_old_string_hint."
-            ),
+            "detail": feedback.get("detail"),
+            "guidance": feedback.get("guidance"),
+            "final_task": final_task,
             "replace_all_rule": (
                 "Use replace_all=true only when the intended edit is global "
                 "across every candidate match."

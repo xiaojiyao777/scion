@@ -85,7 +85,7 @@ HYPOTHESIS_PROPOSAL_SCHEMA: Dict[str, Any] = {
         "action": {
             "type": "string",
             "enum": ["modify", "create_new", "remove"],
-            "description": "modify: improve existing operator. create_new: add a new one. remove: drop a weak one.",
+            "description": "modify: improve an existing file. create_new: add a genuinely new file. remove: drop a weak one.",
         },
         "target_file": {
             "type": ["string", "null"],
@@ -201,7 +201,7 @@ To avoid redundancy, these directions are already being explored:
 ## Task
 Propose ONE hypothesis for improving a declared research surface.
 - Set `change_locus` to one of: {operator_categories}
-- Set `action` to: "modify" (change existing surface file), "create_new" (new operator where allowed), or "remove" (delete operator where allowed)
+- Set `action` to: "modify" (change existing surface file), "create_new" (new file only, where allowed), or "remove" (delete operator where allowed)
 - If action is "modify" or "remove", set `target_file` to the relative path (e.g. "operators/local_move.py" or "policies/search_policy.py")
 - Write a detailed `hypothesis_text` explaining the idea, the expected mechanism, and why it should improve results
 - Set `target_weakness` to describe what current behaviour you are targeting

@@ -16,6 +16,8 @@ REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK = (
     "repair_first_same_mechanism_or_clean_fork"
 )
 SAME_MECHANISM_FOLLOWUP_ONLY = "same_mechanism_followup_only"
+SAME_MECHANISM_ONLY_MODE = "same_mechanism_only"
+OPEN_EXPLORATION_MODE = "open_exploration"
 CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM = (
     "clean_fork_required_for_new_mechanism"
 )
@@ -247,6 +249,11 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         if same_mechanism_followup_required
         else OPEN_EXPLORATION_ALLOWED
     )
+    generation_mode = (
+        SAME_MECHANISM_ONLY_MODE
+        if same_mechanism_followup_required
+        else OPEN_EXPLORATION_MODE
+    )
     clean_fork_policy = (
         CLEAN_FORK_REQUIRED_FOR_NEW_MECHANISM
         if same_mechanism_followup_required
@@ -267,6 +274,7 @@ def branch_hygiene_context(branch: Branch | None) -> dict[str, Any]:
         "last_telemetry_outcome": last_telemetry_outcome,
         "repair_focus_required": repair_focus_required,
         "same_mechanism_followup_required": same_mechanism_followup_required,
+        "hypothesis_generation_mode": generation_mode,
         "repair_focus_reason": repair_focus_reason,
         "repair_policy": (
             REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK
@@ -307,6 +315,7 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"screening_tier={tier}; "
             f"repair_focus={context['repair_focus_reason']}; "
             f"repair_policy={context['repair_policy']}; "
+            f"hypothesis_generation_mode={context['hypothesis_generation_mode']}; "
             f"branch_followup_policy={context['branch_followup_policy']}; "
             f"clean_fork_policy={context['clean_fork_policy']}; "
             "do not treat the existing branch workspace as a clean baseline. "
@@ -325,7 +334,8 @@ def branch_hygiene_guidance(branch: Branch | None) -> str:
             f"screening_tier={tier}; baseline_policy="
             f"{context['baseline_policy']}; branch_followup_policy="
             f"{context['branch_followup_policy']}; clean_fork_policy="
-            f"{context['clean_fork_policy']}. This is an active branch outcome; "
+            f"{context['clean_fork_policy']}; hypothesis_generation_mode="
+            f"{context['hypothesis_generation_mode']}. This is an active branch outcome; "
             "reuse the branch workspace only for the same declared mechanism "
             f"ids: {protected}. The next hypothesis on this branch must keep "
             "those protected mechanism ids and may only tune, integrate, or "
@@ -383,7 +393,9 @@ __all__ = [
     "FOLLOWUP_ONLY_BRANCH_CODE_STATUSES",
     "OPEN_EXPLORATION_ALLOWED",
     "REPAIR_FIRST_SAME_MECHANISM_OR_CLEAN_FORK",
+    "OPEN_EXPLORATION_MODE",
     "SAME_MECHANISM_FOLLOWUP_ONLY",
+    "SAME_MECHANISM_ONLY_MODE",
     "SUSPECT_BRANCH_CODE_STATUSES",
     "TELEMETRY_INVALID",
     "TELEMETRY_WIRING_SUSPECT",

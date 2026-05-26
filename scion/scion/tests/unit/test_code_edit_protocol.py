@@ -15,7 +15,10 @@ from scion.proposal.edit_protocol import (
     normalize_patch_typed_edits,
     source_digest_for_content,
 )
-from scion.proposal.agentic_session_repair import _code_edit_protocol_retry_context
+from scion.proposal.agentic_session_repair import (
+    _code_edit_protocol_retry_context,
+    _is_code_edit_protocol_retryable,
+)
 from scion.proposal.engine import ProposalValidationError, _parse_patch
 from scion.proposal.engine.code_prompts import _split_code_context
 from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA
@@ -297,6 +300,7 @@ def test_existing_modify_full_file_content_after_is_rejected_with_guidance(
     assert "new_string" in message
     assert source_digest_for_content(before) in message
     assert "full_file_reason is not an authorization" in message
+    assert _is_code_edit_protocol_retryable(excinfo.value)
 
 
 def test_existing_modify_whole_file_exact_replace_is_rejected_with_guidance() -> None:
@@ -417,6 +421,137 @@ def test_create_new_file_full_file_content_after_remains_allowed() -> None:
     assert patch.file_path == "policies/new_helper.py"
     assert patch.action == "create"
     assert patch.code_content == "VALUE = 2\n"
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["create", "create_new", "full_file"],
+)
+def test_existing_file_create_actions_are_rejected_with_typed_edit_guidance(
+    action: str,
+) -> None:
+    before = "VALUE = 1\n"
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            {
+                "file_path": "policies/example.py",
+                "action": action,
+                "edit_intent": "full_file",
+                "source_digest": None,
+                "content_after": "VALUE = 2\n",
+                "full_file_reason": "replace existing file",
+            },
+            context={
+                "target_file": "policies/example.py",
+                "target_file_code": before,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "existing_file_create_rejected" in message
+    assert "existing file requires modify exact_replace with source_digest" in message
+    assert "create is only for new files" in message
+    assert source_digest_for_content(before) in message
+    assert _is_code_edit_protocol_retryable(excinfo.value)
+
+    retry_context = _code_edit_protocol_retry_context(
+        {
+            "problem_summary": "Test problem",
+            "research_surface_name": "local",
+            "research_surface_kind": "operator",
+            "target_file": "policies/example.py",
+            "target_file_code": before,
+        },
+        HypothesisProposal(
+            hypothesis_text="Modify existing file.",
+            change_locus="local",
+            action="create_new",
+            target_file="policies/example.py",
+            mechanism_changes=(
+                MechanismChange(id="bounded_probe", change_type="add"),
+            ),
+        ),
+        excinfo.value,
+    )
+    _, user_prompt = _split_code_context(retry_context)
+    assert "Typed Edit Retry Feedback" in user_prompt
+    assert "existing_file_create_rejected" in user_prompt
+    assert "existing file requires modify exact_replace with source_digest" in user_prompt
+    assert "create is only for new files" in user_prompt
+
+
+def test_additional_changes_reject_existing_file_create() -> None:
+    target_before = "def solve():\n    return helper()\n"
+    integration_before = "ENABLED = False\n"
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(
+            {
+                "file_path": "policies/new_helper.py",
+                "action": "create",
+                "edit_intent": "full_file",
+                "source_digest": None,
+                "content_after": "def helper():\n    return 1\n",
+                "full_file_reason": "new helper module",
+                "additional_changes": [
+                    {
+                        "file_path": "policies/integration.py",
+                        "action": "create",
+                        "edit_intent": "full_file",
+                        "source_digest": None,
+                        "content_after": "ENABLED = True\n",
+                        "full_file_reason": "wire helper",
+                    }
+                ],
+            },
+            context={
+                "patch_source_files": {
+                    "policies/main.py": target_before,
+                    "policies/integration.py": integration_before,
+                },
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "existing_file_create_rejected" in message
+    assert "/additional_changes/0" in message
+    assert "policies/integration.py" in message
+    assert "exact_replace" in message
+
+
+def test_new_module_create_with_existing_integration_exact_replace_is_allowed() -> None:
+    integration_before = "HELPERS = []\n"
+    patch = _parse_patch(
+        {
+            "file_path": "policies/new_helper.py",
+            "action": "create",
+            "edit_intent": "full_file",
+            "source_digest": None,
+            "content_after": "def helper():\n    return 1\n",
+            "full_file_reason": "new helper module",
+            "additional_changes": [
+                {
+                    "file_path": "policies/integration.py",
+                    "action": "modify",
+                    "edit_intent": "exact_replace",
+                    "source_digest": source_digest_for_content(integration_before),
+                    "old_string": "HELPERS = []",
+                    "new_string": "HELPERS = ['new_helper']",
+                }
+            ],
+        },
+        context={
+            "patch_source_files": {
+                "policies/integration.py": integration_before,
+            },
+        },
+    )
+
+    assert patch.action == "create"
+    assert patch.code_content == "def helper():\n    return 1\n"
+    assert patch.additional_changes[0].action == "modify"
+    assert patch.additional_changes[0].code_content == "HELPERS = ['new_helper']\n"
 
 
 def test_additional_changes_accept_typed_exact_replace() -> None:

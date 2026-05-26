@@ -158,7 +158,8 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "Default to exact_replace for action=modify on an existing "
                 "file. Use full_file only for creates or deletes; "
                 "host-visible existing-file modifies with full_file/content_after "
-                "are rejected by default."
+                "are rejected by default. Existing files must not use create "
+                "or create_new/full_file as a modification path."
             ),
         },
         "source_digest": {
@@ -315,6 +316,7 @@ Produce a typed edit set that implements the hypothesis.
 - For policy surfaces, implement the required module-level functions and keep return values inside the documented bounds
 - For existing `action="modify"` files, default to `edit_intent="exact_replace"`. Provide `source_digest`, exact `old_string`, `new_string`, `replace_all`, and `evidence_refs`.
 - Use `edit_intent="full_file"` with `content_after` only for creates or deletes. Host-visible existing-file modifies that emit `full_file`/`content_after` are rejected by default; `full_file_reason` is not authorization.
+- Existing files must never be changed through `action="create"`, `create_new`, or `full_file`; existing file requires `action="modify"` with `edit_intent="exact_replace"` and `source_digest`. Create/full content is only for genuinely new files.
 - Legacy `code_content` full-file output is rejected for model-facing existing-file modifies; it is only accepted for creates/deletes or host-internal compatibility.
 - Do not emit unified diffs; Scion derives audit diffs from host before/after content.
 - If action is "delete", use `edit_intent="full_file"` and set `content_after` to an empty string ""

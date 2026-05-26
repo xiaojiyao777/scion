@@ -241,6 +241,54 @@ def test_schema_preview_rejects_existing_full_file_modify_with_exact_replace_gui
     assert "full_file_reason is not an authorization" in rendered_errors
 
 
+def test_schema_preview_rejects_create_new_for_existing_target_file(
+    tmp_path: Path,
+) -> None:
+    registry = ProposalToolRegistry.default_read_only()
+    context = _context(tmp_path, policy=_tool_enabled_policy())
+    raw_source = (
+        tmp_path / "champion" / "policies" / "search_policy.py"
+    ).read_text(encoding="utf-8")
+
+    observation = registry.call(
+        "proposal.schema_preview",
+        {
+            "hypothesis": _valid_hypothesis_payload(
+                action="create_new",
+                target_file="policies/search_policy.py",
+            )
+        },
+        context,
+    )
+    hypothesis = observation.structured_payload["hypothesis"]
+
+    assert observation.is_error is False
+    assert observation.structured_payload["passed"] is False
+    assert hypothesis["passed"] is False
+    guard = hypothesis["target_action_guard"]
+    assert guard["reason"] == "existing_file_create_new_rejected"
+    assert guard["target_file"] == "policies/search_policy.py"
+    assert guard["source_digest"] == source_digest_for_content(raw_source)
+    assert "existing file requires modify exact_replace with source_digest" in (
+        guard["detail"]
+    )
+    assert "create_new is only for new files" in guard["detail"]
+
+    target_preview = registry.call(
+        "proposal.target_permission_preview",
+        {
+            "change_locus": "search_policy",
+            "action": "create_new",
+            "target_file": "policies/search_policy.py",
+        },
+        context,
+    )
+    assert target_preview.structured_payload["passed"] is False
+    assert "existing_file_create_new_rejected" in json.dumps(
+        target_preview.structured_payload["issues"]
+    )
+
+
 def test_contract_preview_patch_payload_is_compact_without_code_content(
     tmp_path: Path,
 ) -> None:

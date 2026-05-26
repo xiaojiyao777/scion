@@ -180,6 +180,44 @@ def test_non_clean_followup_branch_under_capacity_prefers_clean_fork():
     assert action.reason == "clean_fork_required_for_new_mechanism"
 
 
+def test_all_same_mechanism_followup_branches_under_capacity_create_clean_branch():
+    branches = []
+    for offset, status in enumerate(
+        ("active_no_effect", "active_runtime_regression"),
+        start=1,
+    ):
+        branch = _branch(BranchState.EXPLORE, created_offset_s=offset)
+        branch.branch_code_status = status
+        branch.branch_mechanism_ids = (f"bounded_probe_{offset}",)
+        branches.append(branch)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "clean_fork_required_for_new_mechanism"
+
+
+def test_at_capacity_prefers_clean_research_candidate_over_non_clean_followup():
+    clean = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=20,
+        updated_offset_s=20,
+    )
+    followup = _branch(
+        BranchState.EXPLORE,
+        created_offset_s=0,
+        updated_offset_s=0,
+    )
+    followup.branch_code_status = "active_no_effect"
+    followup.branch_mechanism_ids = ("bounded_probe",)
+
+    action = Scheduler(max_active_branches=2).select_next([followup, clean])
+
+    assert action.action == "run_existing"
+    assert action.branch is clean
+
+
 def test_at_capacity_multiple_explore_branches_selects_oldest_updated_at():
     b_recent = _branch(
         BranchState.EXPLORE,
