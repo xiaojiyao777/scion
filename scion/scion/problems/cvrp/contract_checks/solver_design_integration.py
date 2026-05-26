@@ -59,6 +59,55 @@ class CvrpContractCheckProvider:
             ),
         }
 
+    def active_subject_taxonomy(
+        self,
+        context=None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> dict[str, object] | None:
+        del context, subject_id
+        selected = str(surface or "").strip()
+        if selected not in {"", "solver_design", "solver_algorithm"}:
+            return None
+        return {
+            "surface": "solver_design",
+            "subject_id": "cvrp.solver_design.active_baseline",
+            "mechanism_broad_family_ids": (
+                "solver_design",
+                "local_search",
+                "destroy_repair",
+            ),
+            "telemetry_identity_allowlist": (
+                "search",
+                "solver_algorithm",
+                "construction",
+                "destroy",
+                "repair",
+                "acceptance",
+                "local_search",
+            ),
+            "telemetry_activation_refs": (
+                "search",
+                "solver",
+                "construction",
+                "destroy",
+                "repair",
+                "acceptance",
+                "local_search",
+                "phase",
+                "runtime",
+                "elapsed",
+                "iterations",
+            ),
+            "target_module_examples": (
+                "construction.py",
+                "destroy_repair.py",
+                "local_search.py",
+                "acceptance.py",
+            ),
+        }
+
     def check_solver_design_integration(
         self,
         request,

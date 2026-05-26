@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-05-26*
 
 This file is the short operational snapshot for onboarding and day-to-day
 handoff. Historical repair and experiment notes were moved to
@@ -9,8 +9,9 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
-v0.4 is not ready for long CVRP solver-quality validation. Current priority is
-P0 architecture-debt cleanup before more experiments. Scion must remain the v3
+v0.4 is not ready for long unattended CVRP solver-quality validation. Current
+priority is closing remaining P1 architecture debt before more experiments.
+Scion must remain the v3
 framework: generic layers own boundary control, protocol, lineage, audit, and
 deterministic decisions; CVRP objective/solver/ALNS/VNS semantics must enter
 through the problem package and adapter/provider hooks, not by hard-coding
@@ -56,6 +57,18 @@ the remaining research branches are only new-mechanism-ineligible follow-ups.
 Same-mechanism follow-up policy remains allowed on non-clean branches; policy
 blocks still do not consume ordinary proposal attempts or effective screened
 rounds and are not counted as LLM circuit-breaker failures.
+
+The same-day P1 post-reroute repair fixed two launch-blocking validation
+explainability issues without changing the research-object algorithm. Default
+proposal attempts again include bounded headroom
+(`rounds + max(6, 2*rounds)`) unless `--proposal-attempt-limit` or
+`SCION_PROPOSAL_ATTEMPT_LIMIT` is set explicitly; `--rounds` remains the
+requested effective screened-round target, not the proposal-attempt target.
+Generic proposal/runtime identity paths no longer hard-code CVRP solver phase,
+module, or counter names for telemetry identity, retry activation refs,
+mechanism-family broadness, plateau target examples, or runtime audit
+classification. Those names are declared by the active CVRP provider/subject
+taxonomy and consumed as provider facts by generic Scion.
 
 The 2026-05-24 LLM transport repair enables local Codex subscription-backed
 experiments through `codex-proxy` without changing Scion's proposal/session
@@ -301,9 +314,8 @@ The immediate typed-edit validation run
 after it reached the configured short-run boundary. It confirmed the P0 C6
 wrapper failure was gone and all observed code responses used typed
 `exact_replace` rather than model-emitted full files. The run exposed three
-follow-up framework issues now repaired generically: `--rounds N` now acts as a
-hard user-visible proposal-attempt cap unless `--proposal-attempt-limit` or
-`SCION_PROPOSAL_ATTEMPT_LIMIT` explicitly expands it; solver-design
+follow-up framework issues now repaired generically: proposal attempts and
+effective screened rounds are separately bounded and reported; solver-design
 `context.read_algorithm_file` budgeting is active-object/target/role aware
 instead of a fixed file-count cutoff, so scheduler/state/config and manifest
 files are not blocked before the agent understands the algorithm object; and

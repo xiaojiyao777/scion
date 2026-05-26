@@ -628,7 +628,7 @@ def _prior_failure_prompt_section(prior_failure: str) -> str:
             "The previous code generation attempt timed out before "
             "returning a patch. Keep the implementation compact and "
             "bounded. Implement one coherent solver body with at most "
-            "a small set of helpers, prefer one construction path plus "
+            "a small set of helpers, prefer one initialization path plus "
             "one bounded improvement loop, and avoid large helper forests "
             "unless absolutely necessary.\n\n"
         )

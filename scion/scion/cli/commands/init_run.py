@@ -112,7 +112,8 @@ def register_init_run_commands(app: typer.Typer) -> None:
             "--proposal-attempt-limit",
             help=(
                 "Maximum user-visible LLM proposal attempts before stopping; "
-                "defaults to --rounds, or SCION_PROPOSAL_ATTEMPT_LIMIT"
+                "defaults to rounds + max(6, rounds * 2), or "
+                "SCION_PROPOSAL_ATTEMPT_LIMIT"
             ),
         ),
         campaign_dir: str = typer.Option(

@@ -3,12 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from scion.core.campaign_loop import CampaignLoop
+from scion.core.campaign_loop import CampaignLoop, _proposal_attempt_limit
 from scion.core.models import Decision
 from scion.core.step_result import StepResult
 
 
-def test_campaign_loop_default_proposal_attempt_limit_matches_requested_rounds() -> None:
+def test_campaign_loop_default_proposal_attempt_limit_includes_repair_headroom() -> None:
     statuses: list[dict[str, Any]] = []
 
     loop = CampaignLoop(
@@ -40,8 +40,12 @@ def test_campaign_loop_default_proposal_attempt_limit_matches_requested_rounds()
     first_loop_status = next(
         item["loop_status"] for item in statuses if "loop_status" in item
     )
-    assert first_loop_status["proposal_attempt_limit"] == 4
+    assert first_loop_status["proposal_attempt_limit"] == 12
     assert first_loop_status["requested_rounds"] == 4
+
+
+def test_proposal_attempt_limit_prefers_explicit_config_over_default() -> None:
+    assert _proposal_attempt_limit(8, configured=9) == 9
 
 
 def test_campaign_loop_does_not_count_retry_attempt_against_max_rounds() -> None:
@@ -402,7 +406,7 @@ def test_campaign_loop_explicit_attempt_limit_allows_bounded_quality_overflow() 
     assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 5
 
 
-def test_campaign_loop_default_attempt_limit_caps_quality_blocks_at_rounds() -> None:
+def test_campaign_loop_default_attempt_limit_allows_quality_block_headroom() -> None:
     results = [
         StepResult(
             action="explore",
@@ -454,13 +458,14 @@ def test_campaign_loop_default_attempt_limit_caps_quality_blocks_at_rounds() -> 
 
     loop.run(max_rounds=3)
 
-    assert calls == 3
-    assert last_results[-1].stopped is False
-    assert "proposal_attempt_limit_exhausted" in stopped_reasons
-    assert loop_statuses[-1]["attempt_limit"] == 3
+    assert calls == 9
+    assert last_results[-1].stopped is True
+    assert "proposal_quality_loop" in stopped_reasons
+    assert "proposal_attempt_limit_exhausted" not in stopped_reasons
+    assert loop_statuses[-1]["attempt_limit"] == 9
     assert loop_statuses[-1]["proposal_quality_limit"] == 9
-    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 3
-    assert loop_statuses[-1]["quality_blocks"] == 3
+    assert loop_statuses[-1]["proposal_quality_blocks_consumed"] == 9
+    assert loop_statuses[-1]["quality_blocks"] == 9
 
 
 def test_campaign_loop_schema_quality_block_does_not_consume_proposal_attempt() -> None:

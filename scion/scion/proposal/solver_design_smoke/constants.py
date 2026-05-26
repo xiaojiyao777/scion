@@ -14,7 +14,6 @@ _ALGORITHM_SMOKE_LOW_EFFORT_STOP_REASONS = frozenset(
     {
         "no_improvement",
         "early_exit",
-        "construction_only",
         "no_search",
     }
 )

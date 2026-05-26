@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -134,5 +135,59 @@ def test_generic_preview_tools_do_not_hardcode_solver_algorithm_fields() -> None
         "Generic proposal preview tools must consume declared telemetry fields "
         "from problem/surface providers instead of hardcoding CVRP-shaped "
         "solver_algorithm_* names.\n"
+        + "\n".join(violations)
+    )
+
+
+TAXONOMY_BOUNDARY_FILES = (
+    "proposal/mechanism_novelty.py",
+    "proposal/agentic_session_patch_flow.py",
+    "proposal/agentic_session_hypothesis.py",
+    "proposal/context_manager/guidance.py",
+    "proposal/engine/solver_design_prompts.py",
+    "proposal/agentic_code_context.py",
+    "proposal/solver_design_smoke/constants.py",
+    "runtime/audit.py",
+)
+FORBIDDEN_TAXONOMY_LITERALS = {
+    "local_search",
+    "destroy_repair",
+    "construction",
+    "acceptance",
+    "construction_errors",
+    "portfolio_errors",
+    "policy_errors",
+}
+FORBIDDEN_TAXONOMY_SUBSTRINGS = (
+    "construction.py",
+    "destroy_repair.py",
+    "local_search.py",
+    "acceptance.py",
+    "record_phase('construction'",
+    'record_phase("construction"',
+)
+
+
+def test_generic_identity_paths_use_provider_declared_taxonomy() -> None:
+    violations: list[str] = []
+    for relative in TAXONOMY_BOUNDARY_FILES:
+        path = PACKAGE_ROOT / relative
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            value = node.value
+            stripped = value.strip()
+            if stripped in FORBIDDEN_TAXONOMY_LITERALS or any(
+                token in value for token in FORBIDDEN_TAXONOMY_SUBSTRINGS
+            ):
+                violations.append(
+                    f"{relative}:{node.lineno}: {stripped[:120]}"
+                )
+
+    assert not violations, (
+        "Generic identity/runtime paths must consume problem/provider-declared "
+        "taxonomy instead of hardcoding CVRP solver phase, module, or counter "
+        "names.\n"
         + "\n".join(violations)
     )

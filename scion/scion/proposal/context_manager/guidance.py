@@ -341,6 +341,7 @@ def _build_search_control_guidance(
     adapter_spec: Any,
     *,
     forced_surface: Optional[str] = None,
+    solver_design_prompt_provider: Any | None = None,
 ) -> str:
     """Render generic exploration/exploitation guidance from campaign evidence."""
     recent_screening = [
@@ -408,17 +409,23 @@ def _build_search_control_guidance(
             "any helper-module changes."
         )
         if target_counts:
-            common_targets = ", ".join(
-                f"{target} x{count}"
-                for target, count in target_counts.most_common(3)
+            provider_guidance = _solver_design_plateau_target_guidance(
+                solver_design_prompt_provider,
+                target_counts.most_common(3),
             )
-            lines.append(
-                "- Solver-design target diversity: recent winless target files "
-                f"were {common_targets}. If the failed pattern is scheduler-only, "
-                "target a concrete mechanism module such as construction.py, "
-                "destroy_repair.py, local_search.py, or acceptance.py, and use "
-                "scheduler/entrypoint edits only as integration wiring."
-            )
+            if provider_guidance:
+                lines.append(provider_guidance)
+            else:
+                common_targets = ", ".join(
+                    f"{target} x{count}"
+                    for target, count in target_counts.most_common(3)
+                )
+                lines.append(
+                    "- Solver-design target diversity: recent winless target files "
+                    f"were {common_targets}. If prior failures only changed "
+                    "orchestration, target a provider-declared mechanism owner "
+                    "and keep entrypoint edits to integration wiring."
+                )
     if forced_surface:
         lines.append(
             "- Forced-surface diagnostic: keep exploration on "
@@ -442,6 +449,20 @@ def _build_search_control_guidance(
             "lower-priority gains with explicit higher-priority protection."
         )
     return "\n".join(lines)
+
+
+def _solver_design_plateau_target_guidance(
+    provider: Any | None,
+    target_counts: list[tuple[str, int]],
+) -> str:
+    method = getattr(provider, "solver_design_plateau_target_guidance", None)
+    if not callable(method):
+        return ""
+    try:
+        rendered = method(tuple(target_counts))
+    except TypeError:
+        rendered = method()
+    return str(rendered or "").strip()
 
 def _median(values: List[float]) -> float:
     if not values:
@@ -661,4 +682,3 @@ def _build_solver_design_boundary_guidance(
             )
         )
     return "\n".join(lines)
-

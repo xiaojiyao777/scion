@@ -118,6 +118,19 @@ class ActiveSubjectPolicyProvider(Protocol):
         """Return active subject paths, support globs, and call restrictions."""
 
 
+class ActiveSubjectTaxonomyProvider(Protocol):
+    """Optional problem-owned active subject taxonomy and telemetry policy."""
+
+    def active_subject_taxonomy(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        """Return active subject mechanism and telemetry taxonomy."""
+
+
 def resolve_active_solver_map_provider(
     *,
     problem_spec: Any = None,
@@ -182,6 +195,50 @@ def active_subject_policy_payload(
     if not isinstance(raw, Mapping):
         return {}
     return _normalize_active_subject_policy(raw)
+
+
+def active_subject_taxonomy_payload(
+    *,
+    context: Any = None,
+    problem_spec: Any = None,
+    adapter: Any = None,
+    surface: str | None = None,
+    subject_id: str | None = None,
+) -> dict[str, Any]:
+    """Return provider-declared active subject taxonomy, or ``{}``.
+
+    Generic proposal/runtime code consumes these declarations without knowing
+    concrete research-object phase or module names.
+    """
+
+    try:
+        provider = resolve_active_subject_policy_provider(
+            problem_spec=problem_spec,
+            adapter=adapter,
+        )
+    except ProblemProviderError:
+        return {}
+    if provider is None:
+        return {}
+    method = getattr(provider, "active_subject_taxonomy", None)
+    if callable(method):
+        try:
+            raw = method(context, surface=surface, subject_id=subject_id)
+        except TypeError:
+            raw = method(surface=surface, subject_id=subject_id)
+        if isinstance(raw, Mapping):
+            normalized = _normalize_active_subject_taxonomy(raw)
+            if normalized:
+                return normalized
+    policy_method = getattr(provider, "active_subject_policy", None)
+    if callable(policy_method):
+        try:
+            raw_policy = policy_method(context, surface=surface, subject_id=subject_id)
+        except TypeError:
+            raw_policy = policy_method(surface=surface, subject_id=subject_id)
+        if isinstance(raw_policy, Mapping):
+            return _normalize_active_subject_taxonomy(raw_policy)
+    return {}
 
 
 def active_subject_policy_matches_path(
@@ -317,6 +374,38 @@ def _normalize_active_subject_policy(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in normalized.items() if value not in ("", ())}
 
 
+def _normalize_active_subject_taxonomy(raw: Mapping[str, Any]) -> dict[str, Any]:
+    aliases = {
+        "broad_mechanism_families": "mechanism_broad_family_ids",
+        "broad_family_ids": "mechanism_broad_family_ids",
+        "generic_mechanism_families": "mechanism_broad_family_ids",
+        "structural_telemetry_phases": "telemetry_identity_allowlist",
+        "allowed_telemetry_phases": "telemetry_identity_allowlist",
+        "telemetry_structural_refs": "telemetry_activation_refs",
+        "structural_telemetry_refs": "telemetry_activation_refs",
+        "generic_telemetry_activation_refs": "telemetry_activation_refs",
+    }
+    policy = dict(raw)
+    for source, target in aliases.items():
+        if target not in policy and source in policy:
+            policy[target] = policy[source]
+    normalized = {
+        "mechanism_broad_family_ids": _string_tuple(
+            policy.get("mechanism_broad_family_ids")
+        ),
+        "telemetry_identity_allowlist": _string_tuple(
+            policy.get("telemetry_identity_allowlist")
+        ),
+        "telemetry_activation_refs": _string_tuple(
+            policy.get("telemetry_activation_refs")
+        ),
+        "target_module_examples": _string_tuple(
+            policy.get("target_module_examples")
+        ),
+    }
+    return {key: value for key, value in normalized.items() if value}
+
+
 def _string_tuple(value: Any) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -387,12 +476,14 @@ def _instantiate_adapter(import_path: str, problem_spec: Any) -> Any:
 __all__ = [
     "ActiveSolverMapProvider",
     "ActiveSubjectPolicyProvider",
+    "ActiveSubjectTaxonomyProvider",
     "ActiveSolverDesignProvider",
     "ProblemProviderError",
     "SolverDesignPromptProvider",
     "SolverDesignSmokeProvider",
     "active_subject_policy_matches_path",
     "active_subject_policy_payload",
+    "active_subject_taxonomy_payload",
     "resolve_active_solver_map_provider",
     "resolve_active_subject_policy_provider",
     "resolve_active_solver_design_provider",

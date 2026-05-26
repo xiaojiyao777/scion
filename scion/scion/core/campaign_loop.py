@@ -337,9 +337,10 @@ def _proposal_attempt_limit(
 ) -> int:
     """Return the user-visible LLM proposal attempt cap.
 
-    ``--rounds`` is a controlled-run proposal attempt ceiling by default.  The
-    explicit CLI/env override remains available for deliberately wider repair
-    sweeps, but a short diagnostic run must not launch proposal round N+1.
+    ``--rounds`` is the requested effective screened-round target, not the
+    proposal-attempt ceiling.  By default the proposal cap includes bounded
+    headroom for pre-screen repair/quality loops while still preventing
+    unbounded proposal cycling.
     """
     if configured is not None:
         return max(1, int(configured))
@@ -352,7 +353,8 @@ def _proposal_attempt_limit(
                 "Ignoring invalid SCION_PROPOSAL_ATTEMPT_LIMIT=%r",
                 raw,
             )
-    return max(1, int(requested_rounds))
+    rounds = max(1, int(requested_rounds))
+    return rounds + max(6, rounds * 2)
 
 
 def _telemetry_repair_attempt_limit(

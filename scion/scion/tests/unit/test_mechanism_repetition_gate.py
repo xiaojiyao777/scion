@@ -73,12 +73,13 @@ def _step(hypothesis: HypothesisProposal) -> StepRecord:
     )
 
 
-def _context(*steps: StepRecord) -> ProposalToolContext:
+def _context(*steps: StepRecord, adapter=None) -> ProposalToolContext:
     return ProposalToolContext(
         session_id="session",
         campaign_id="campaign",
         branch=Branch("branch-1", BranchState.EXPLORE, 1, "champ"),
         step_history=steps,
+        adapter=adapter,
     )
 
 
@@ -207,3 +208,33 @@ def test_registry_wiring_id_does_not_block_distinct_primary_mechanism() -> None:
     )
 
     assert result is None
+
+
+def test_broad_algorithm_family_is_provider_declared_not_generic_default() -> None:
+    class Provider:
+        def active_subject_taxonomy(self, context=None, *, surface=None, subject_id=None):
+            return {"mechanism_broad_family_ids": ("local_search",)}
+
+    class Adapter:
+        def active_subject_policy_provider(self):
+            return Provider()
+
+    previous = _hypothesis("first")
+    candidate = _hypothesis("second")
+    previous.mechanism_changes = ()
+    candidate.mechanism_changes = ()
+    previous.novelty_signature = {"algorithm_family": "local_search"}
+    candidate.novelty_signature = {"algorithm_family": "local_search"}
+
+    without_provider = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous)),
+    )
+    with_provider = MechanismNoveltyGate().evaluate(
+        candidate,
+        context=_context(_step(previous), adapter=Adapter()),
+    )
+
+    assert without_provider is not None
+    assert without_provider.failure_category == "repeated_mechanism"
+    assert with_provider is None

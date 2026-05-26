@@ -108,19 +108,23 @@ def runtime_audit_failure_from_runtime(
         selected_surface=selected_surface,
         surface=surface,
     )
-    construction_errors = _as_int(runtime.get("construction_errors"))
-    portfolio_errors = _as_int(runtime.get("portfolio_errors"))
-    policy_errors = _as_int(runtime.get("policy_errors"))
-    operator_errors = _as_int(runtime.get("operator_errors"))
-    operator_invalid_outputs = _as_int(runtime.get("operator_invalid_outputs"))
+    runtime_error_counts = _runtime_error_counts(
+        runtime,
+        problem_spec=problem_spec,
+        surface=surface,
+    )
+    surface_contract_issue = None
+    if baseline_issue is None and surface_error_issue is None:
+        surface_contract_issue = _surface_runtime_contract_failure(
+            runtime,
+            problem_spec=problem_spec,
+            selected_surface=selected_surface,
+            require_declared_surface=require_declared_surface,
+        )
     if (
         baseline_issue is None
         and surface_error_issue is None
-        and construction_errors <= 0
-        and portfolio_errors <= 0
-        and policy_errors <= 0
-        and operator_errors <= 0
-        and operator_invalid_outputs <= 0
+        and not runtime_error_counts
     ):
         telemetry_issue = (
             _declared_telemetry_consistency_failure(
@@ -132,122 +136,28 @@ def runtime_audit_failure_from_runtime(
         )
         if telemetry_issue is not None:
             return telemetry_issue
-        surface_issue = _surface_runtime_contract_failure(
-            runtime,
-            problem_spec=problem_spec,
-            selected_surface=selected_surface,
-            require_declared_surface=require_declared_surface,
-        )
-        if surface_issue is not None:
-            return surface_issue
+        if surface_contract_issue is not None:
+            return surface_contract_issue
         return None
 
-    events = runtime.get("operator_events")
-    if not isinstance(events, list):
-        events = []
-    policy_events = runtime.get("policy_events")
-    if not isinstance(policy_events, list):
-        policy_events = []
-    construction_events = runtime.get("construction_events")
-    if not isinstance(construction_events, list):
-        construction_events = []
-    portfolio_events = runtime.get("portfolio_events")
-    if not isinstance(portfolio_events, list):
-        portfolio_events = []
-
     if baseline_issue is not None:
-        return {
+        issue: dict[str, Any] = {
             "error_category": "baseline_runtime_error",
             "baseline_mode": runtime.get("baseline_mode"),
             "baseline_required": bool(runtime.get("baseline_required")),
             "baseline_error": runtime.get("baseline_error"),
-            "construction_errors": construction_errors,
-            "portfolio_errors": portfolio_errors,
-            "operator_errors": operator_errors,
-            "operator_invalid_outputs": operator_invalid_outputs,
-            "operator_loaded": _as_int(runtime.get("operator_loaded")),
-            "operator_attempts": _as_int(runtime.get("operator_attempts")),
-            "operator_accepted": _as_int(runtime.get("operator_accepted")),
-            "operator_events": events[:5],
+            "runtime_error_counts": runtime_error_counts,
             "detail": baseline_issue,
         }
+        issue.update(runtime_error_counts)
+        return issue
 
     if surface_error_issue is not None:
         return surface_error_issue
+    if surface_contract_issue is not None:
+        return surface_contract_issue
 
-    if construction_errors > 0:
-        return {
-            "error_category": "construction_runtime_error",
-            "construction_errors": construction_errors,
-            "construction_policy_path": runtime.get("construction_policy_path"),
-            "construction_surface_loaded": bool(
-                runtime.get("construction_surface_loaded")
-            ),
-            "construction_mode": runtime.get("construction_mode"),
-            "construction_bias": runtime.get("construction_bias"),
-            "construction_feasible": runtime.get("construction_feasible"),
-            "construction_events": construction_events[:5],
-            "policy_errors": policy_errors,
-            "portfolio_errors": portfolio_errors,
-            "operator_errors": operator_errors,
-            "operator_invalid_outputs": operator_invalid_outputs,
-            "detail": (
-                "solver runtime audit reported "
-                f"construction_errors={construction_errors}"
-            ),
-        }
-
-    if portfolio_errors > 0:
-        return {
-            "error_category": "portfolio_runtime_error",
-            "portfolio_errors": portfolio_errors,
-            "portfolio_policy_path": runtime.get("portfolio_policy_path"),
-            "portfolio_surface_loaded": bool(
-                runtime.get("portfolio_surface_loaded")
-            ),
-            "enabled_components": runtime.get("enabled_components"),
-            "component_weights": runtime.get("component_weights"),
-            "candidate_limits": runtime.get("candidate_limits"),
-            "portfolio_events": portfolio_events[:5],
-            "policy_errors": policy_errors,
-            "operator_errors": operator_errors,
-            "operator_invalid_outputs": operator_invalid_outputs,
-            "detail": f"solver runtime audit reported portfolio_errors={portfolio_errors}",
-        }
-
-    if policy_errors > 0:
-        return {
-            "error_category": "policy_runtime_error",
-            "policy_errors": policy_errors,
-            "policy_path": runtime.get("policy_path"),
-            "policy_loaded": bool(runtime.get("policy_loaded")),
-            "baseline_time_fraction": runtime.get("baseline_time_fraction"),
-            "operator_round_limit": runtime.get("operator_round_limit"),
-            "post_baseline_operators_enabled": runtime.get(
-                "post_baseline_operators_enabled"
-            ),
-            "policy_events": policy_events[:5],
-            "operator_errors": operator_errors,
-            "operator_invalid_outputs": operator_invalid_outputs,
-            "detail": f"solver runtime audit reported policy_errors={policy_errors}",
-        }
-
-    detail_parts = []
-    if operator_errors > 0:
-        detail_parts.append(f"operator_errors={operator_errors}")
-    if operator_invalid_outputs > 0:
-        detail_parts.append(f"operator_invalid_outputs={operator_invalid_outputs}")
-
-    return {
-        "error_category": "operator_runtime_error",
-        "operator_errors": operator_errors,
-        "operator_invalid_outputs": operator_invalid_outputs,
-        "operator_loaded": _as_int(runtime.get("operator_loaded")),
-        "operator_attempts": _as_int(runtime.get("operator_attempts")),
-        "operator_accepted": _as_int(runtime.get("operator_accepted")),
-        "operator_events": events[:5],
-        "detail": "solver runtime audit reported " + ", ".join(detail_parts),
-    }
+    return _runtime_error_issue(runtime, runtime_error_counts)
 
 
 def _declared_surface_runtime_error_failure(
@@ -347,6 +257,61 @@ def _declared_telemetry_consistency_failure(
     return None
 
 
+def _runtime_error_counts(
+    runtime: Mapping[str, Any],
+    *,
+    problem_spec: Any | None,
+    surface: Any | None,
+) -> dict[str, int]:
+    fields = list(declared_error_runtime_fields(surface, problem_spec=problem_spec))
+    fields.extend(
+        str(key)
+        for key in runtime
+        if _is_runtime_error_counter_field(str(key))
+    )
+    counts: dict[str, int] = {}
+    for field in dict.fromkeys(fields):
+        count = _as_int(runtime_path_value(runtime, field))
+        if count > 0:
+            counts[field] = count
+    return counts
+
+
+def _runtime_error_issue(
+    runtime: Mapping[str, Any],
+    counts: Mapping[str, int],
+) -> dict[str, Any]:
+    if not counts:
+        return {
+            "error_category": "surface_runtime_error",
+            "detail": "solver runtime audit reported runtime error",
+        }
+    first_field, first_count = next(iter(counts.items()))
+    component = component_from_runtime_field(first_field)
+    event_fields = declared_event_fields_for(runtime, first_field)
+    events = _first_list_runtime_value(runtime, event_fields)
+    issue: dict[str, Any] = {
+        "error_category": _runtime_error_category(component),
+        "runtime_error_field": first_field,
+        "runtime_error_count": first_count,
+        "runtime_error_counts": dict(counts),
+        "runtime_event_fields": event_fields,
+        "runtime_events": events[:5],
+        first_field: first_count,
+        "detail": f"solver runtime audit reported {first_field}={first_count}",
+    }
+    for field, count in counts.items():
+        issue[field] = count
+    for suffix in ("path", "loaded", "active", "stop_reason"):
+        sibling = declared_sibling_field(runtime, first_field, suffix)
+        if sibling is not None:
+            issue[f"runtime_{suffix}_field"] = sibling
+            issue[sibling] = runtime_path_value(runtime, sibling)
+    for event_field in event_fields:
+        issue[event_field] = runtime_path_value(runtime, event_field)
+    return issue
+
+
 def _best_elapsed_reference(
     runtime: Mapping[str, Any],
     elapsed_fields: list[str],
@@ -381,6 +346,18 @@ def _runtime_telemetry_error_category(component: str) -> str:
     return "surface_runtime_telemetry_error"
 
 
+def _is_runtime_error_counter_field(field_name: str) -> bool:
+    text = str(field_name or "").strip()
+    return (
+        text.endswith("_errors")
+        or text.endswith(".errors")
+        or text.endswith("_error_count")
+        or text.endswith(".error_count")
+        or text.endswith("_invalid_outputs")
+        or text.endswith(".invalid_outputs")
+    )
+
+
 def _identifier(value: str) -> str:
     text = str(value or "").strip().replace(".", "_").strip("_")
     return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in text).strip("_")
@@ -403,43 +380,31 @@ def declared_surface_required_runtime_fields(
 
 def format_runtime_audit_failure(issue: Mapping[str, Any]) -> str:
     detail = str(issue.get("detail") or "solver runtime audit failed")
-    construction_events = issue.get("construction_events")
-    if isinstance(construction_events, list) and construction_events:
-        first_construction = construction_events[0]
-        if isinstance(first_construction, Mapping):
-            event_detail = first_construction.get("detail")
-            if event_detail:
-                return f"{detail}: first_construction_event detail={event_detail}"
-    portfolio_events = issue.get("portfolio_events")
-    if isinstance(portfolio_events, list) and portfolio_events:
-        first_portfolio = portfolio_events[0]
-        if isinstance(first_portfolio, Mapping):
-            event_detail = first_portfolio.get("detail")
-            if event_detail:
-                return f"{detail}: first_portfolio_event detail={event_detail}"
-    policy_events = issue.get("policy_events")
-    if isinstance(policy_events, list) and policy_events:
-        first_policy = policy_events[0]
-        if isinstance(first_policy, Mapping):
-            event_detail = first_policy.get("detail")
-            if event_detail:
-                return f"{detail}: first_policy_event detail={event_detail}"
-    runtime_events = issue.get("runtime_events")
-    if isinstance(runtime_events, list) and runtime_events:
-        first_runtime_event = runtime_events[0]
-        if isinstance(first_runtime_event, Mapping):
-            event_detail = first_runtime_event.get("detail")
-            if event_detail:
-                return f"{detail}: first_runtime_event detail={event_detail}"
-    events = issue.get("operator_events")
-    if isinstance(events, list) and events:
+    for event_field in _runtime_event_fields(issue):
+        events = issue.get(event_field)
+        if not isinstance(events, list) or not events:
+            continue
         first = events[0]
-        if isinstance(first, Mapping):
-            op = first.get("operator")
-            event_detail = first.get("detail")
-            if op or event_detail:
-                return f"{detail}: first_event operator={op} detail={event_detail}"
+        if not isinstance(first, Mapping):
+            continue
+        event_detail = first.get("detail")
+        if event_detail:
+            return f"{detail}: first_event field={event_field} detail={event_detail}"
+        event_subject = first.get("operator") or first.get("component")
+        if event_subject:
+            return f"{detail}: first_event field={event_field} subject={event_subject}"
     return detail
+
+
+def _runtime_event_fields(issue: Mapping[str, Any]) -> tuple[str, ...]:
+    fields: list[str] = []
+    declared = issue.get("runtime_event_fields")
+    if isinstance(declared, (list, tuple)):
+        fields.extend(str(field) for field in declared if str(field or "").strip())
+    for key, value in issue.items():
+        if isinstance(value, list) and str(key).replace(".", "_").endswith("events"):
+            fields.append(str(key))
+    return tuple(dict.fromkeys(field for field in fields if field))
 
 
 def _baseline_audit_failure(runtime: Mapping[str, Any]) -> str | None:

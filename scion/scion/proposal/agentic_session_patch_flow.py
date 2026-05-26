@@ -18,19 +18,6 @@ _SOURCE_FILE_RE = re.compile(
     r"(?P<terminal_newline>\n)```",
     re.DOTALL | re.MULTILINE,
 )
-_GENERIC_TELEMETRY_PHASES = frozenset(
-    {
-        "search",
-        "local_search",
-        "solver_algorithm",
-        "construction",
-        "destroy",
-        "repair",
-        "acceptance",
-    }
-)
-
-
 class AgenticSessionPatchFlowMixin:
     def _build_initial_patch_or_output(
         self,
@@ -835,8 +822,9 @@ def _code_stage_identity_issue(
         patch,
         code_context=code_context,
     )
+    telemetry_identity_allowlist = _telemetry_identity_allowlist(code_context)
     unexpected_telemetry_ids = sorted(
-        telemetry_ids - expected_ids - _GENERIC_TELEMETRY_PHASES
+        telemetry_ids - expected_ids - telemetry_identity_allowlist
     )
     if expected_ids and unexpected_telemetry_ids:
         return (
@@ -846,6 +834,21 @@ def _code_stage_identity_issue(
             f"{sorted(expected_ids)!r} or remove unrelated telemetry."
         )
     return None
+
+
+def _telemetry_identity_allowlist(
+    code_context: Mapping[str, Any] | None,
+) -> set[str]:
+    if not isinstance(code_context, Mapping):
+        return set()
+    taxonomy = code_context.get("active_subject_taxonomy")
+    if not isinstance(taxonomy, Mapping):
+        return set()
+    return {
+        str(item or "").strip()
+        for item in taxonomy.get("telemetry_identity_allowlist", ()) or ()
+        if str(item or "").strip()
+    }
 
 
 def _mechanism_id_set(proposal: HypothesisProposal | PatchProposal) -> set[str]:

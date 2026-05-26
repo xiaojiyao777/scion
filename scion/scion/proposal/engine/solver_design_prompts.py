@@ -25,18 +25,6 @@ _SOLVER_DESIGN_COMPACT_RETRY_INTERFACE_CHARS = 6000
 _SOLVER_DESIGN_COMPACT_RETRY_HYPOTHESIS_CHARS = 6000
 _SOLVER_DESIGN_COMPACT_RETRY_API_MANIFEST_CHARS = 8000
 _SOLVER_DESIGN_COMPACT_RETRY_INTEGRATION_FILES_CHARS = 30000
-_SOLVER_DESIGN_BROAD_SCOPE_TERMS = (
-    "hybrid",
-    "population",
-    "portfolio",
-    "ensemble",
-    "multi-operator",
-    "multi operator",
-    "restart",
-    "perturb",
-)
-
-
 def _solver_design_hypothesis_guidance(context: Mapping[str, Any]) -> list[str]:
     provider = _solver_design_prompt_provider(context)
     lines = _provider_prompt_lines(
@@ -227,8 +215,7 @@ def _solver_design_broad_terms(context: Mapping[str, Any]) -> list[str]:
             "runtime_budget_strategy",
         )
     ).lower()
-    terms = (*_SOLVER_DESIGN_BROAD_SCOPE_TERMS, *provider_terms)
-    return [term for term in dict.fromkeys(terms) if term in text]
+    return [term for term in dict.fromkeys(provider_terms) if term in text]
 
 
 def _solver_design_prompt_provider(context: Mapping[str, Any]) -> Any | None:

@@ -17,6 +17,8 @@ def test_run_help_exposes_agentic_proposal_options() -> None:
     assert "--agentic-artifact-dir" in result.output
     assert "--agentic-session-timeout-sec" in result.output
     assert "--proposal-attempt-limit" in result.output
+    assert "defaults to rounds +" in result.output
+    assert "max(6, rounds * 2)" in result.output
 
 
 def test_run_help_exposes_force_surface_options() -> None:

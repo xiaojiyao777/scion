@@ -152,6 +152,27 @@ class CvrpSolverDesignProvider:
             ),
         )
 
+    def solver_design_plateau_target_guidance(
+        self,
+        target_counts: Sequence[tuple[str, int]] = (),
+    ) -> str:
+        common_targets = ", ".join(
+            f"{target} x{count}"
+            for target, count in target_counts
+            if str(target or "").strip()
+        )
+        prefix = "- Solver-design target diversity"
+        if common_targets:
+            prefix += f": recent winless target files were {common_targets}."
+        else:
+            prefix += "."
+        return (
+            f"{prefix} If the failed pattern is scheduler-only, target a "
+            "concrete mechanism module such as construction.py, "
+            "destroy_repair.py, local_search.py, or acceptance.py, and use "
+            "scheduler/entrypoint edits only as integration wiring."
+        )
+
     def solver_design_expected_telemetry_preview(
         self,
         hypothesis: HypothesisProposal,

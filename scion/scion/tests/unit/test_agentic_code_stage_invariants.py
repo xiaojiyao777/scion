@@ -149,6 +149,35 @@ def test_code_stage_identity_rejects_new_off_brief_telemetry_id() -> None:
     assert "vns_initial" not in issue
 
 
+def test_code_stage_identity_uses_provider_declared_structural_telemetry() -> None:
+    patch = _patch(
+        mechanism_id="nblist_or_opt1",
+        code=(
+            "def apply(context):\n"
+            "    context.record_phase('construction', 1)\n"
+        ),
+    )
+
+    without_provider_taxonomy = _code_stage_identity_issue(
+        _hypothesis("nblist_or_opt1"),
+        patch,
+        code_context={},
+    )
+    with_provider_taxonomy = _code_stage_identity_issue(
+        _hypothesis("nblist_or_opt1"),
+        patch,
+        code_context={
+            "active_subject_taxonomy": {
+                "telemetry_identity_allowlist": ("construction",),
+            },
+        },
+    )
+
+    assert without_provider_taxonomy is not None
+    assert "code_stage_telemetry_identity_mismatch" in without_provider_taxonomy
+    assert with_provider_taxonomy is None
+
+
 def test_code_integration_visibility_requires_full_visible_additional_file() -> None:
     patch = _patch(
         additional_changes=(

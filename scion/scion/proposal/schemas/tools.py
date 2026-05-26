@@ -87,7 +87,7 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
         "declare activity or activation telemetry instead.\n"
         "- If the selected surface declares novelty.strategy=semantic_signature, provide every declared novelty.signature_fields entry in novelty_signature; free-text rationale is not novelty identity, and scalar string values must be <=120 characters.\n"
         "- Consider the problem-specific solver execution model provided in context; "
-        "do not assume a fixed invocation count, pool size, or acceptance rule.\n"
+        "do not assume a fixed invocation count, pool size, or selection rule.\n"
         "- Prefer surface changes that provide a capability the current solver currently lacks.\n\n"
         "Common mistakes to avoid:\n"
         "- Proposing random moves without a concrete objective mechanism.\n"

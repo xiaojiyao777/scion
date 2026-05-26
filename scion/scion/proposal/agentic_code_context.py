@@ -38,13 +38,6 @@ _CODE_PROMPT_ALGORITHM_TOOLS = frozenset(
     }
 )
 _SOLVER_DESIGN_SURFACE_NAMES = frozenset({"solver_design", "solver_algorithm"})
-_SOLVER_DESIGN_BROAD_TERMS = (
-    "hybrid", "lns", "destroy", "repair",
-    "recombination", "population",
-    "portfolio", "ensemble", "multi-operator", "multi operator",
-    "restart", "perturb",
-)
-
 def _observation_prompt_payload(observation: ProposalObservation) -> dict[str, Any]:
     structured_payload = _sanitize_agentic_value(observation.structured_payload)
     digest_payload = {
@@ -527,8 +520,7 @@ def _solver_design_broad_terms(
         hypothesis.runtime_budget_strategy,
     )
     text = "\n".join(str(field or "") for field in fields).lower()
-    terms = (*_SOLVER_DESIGN_BROAD_TERMS, *provider_terms)
-    return [term for term in dict.fromkeys(terms) if term in text]
+    return [term for term in dict.fromkeys(provider_terms) if term in text]
 
 
 def _code_prompt_observations(

@@ -9,6 +9,7 @@ from inspect import signature
 from typing import Any, Mapping, Protocol, Sequence
 
 from scion.core.models import HypothesisProposal
+from scion.problem.providers import active_subject_taxonomy_payload
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.proposal.mechanism_labels import (
     DEFAULT_MECHANISM_LABEL,
@@ -160,7 +161,7 @@ def _recent_repeated_mechanism_result(
         return None
 
     candidate_ids = _mechanism_ids(hypothesis, primary_only=True)
-    candidate_signature = _novelty_signature_key(hypothesis)
+    candidate_signature = _novelty_signature_key(hypothesis, context=context)
     candidate_family = _mechanism_family(hypothesis, context=context)
     candidate_target = str(hypothesis.target_file or "").strip()
 
@@ -190,7 +191,7 @@ def _recent_repeated_mechanism_result(
                 evidence=(_step_evidence(step),),
             )
 
-        step_signature = _novelty_signature_key(step_hypothesis)
+        step_signature = _novelty_signature_key(step_hypothesis, context=context)
         if candidate_signature and candidate_signature == step_signature:
             mechanism = _mechanism_family(hypothesis, context=context)
             return MechanismNoveltyResult(
@@ -262,7 +263,8 @@ def _mechanism_ids(
                 text = _normalize_token(value)
                 if (
                     text
-                    and text not in {"preserve_existing_acceptance", "preserve"}
+                    and text != "preserve"
+                    and not text.startswith("preserve_existing")
                     and (
                         not primary_only
                         or not _is_secondary_integration_mechanism_id(text)
@@ -285,14 +287,28 @@ def _is_secondary_integration_mechanism_id(value: str) -> bool:
     )
 
 
-def _novelty_signature_key(hypothesis: HypothesisProposal) -> str:
+def _novelty_signature_key(
+    hypothesis: HypothesisProposal,
+    *,
+    context: ProposalToolContext | None = None,
+) -> str:
     signature = getattr(hypothesis, "novelty_signature", None)
     if not isinstance(signature, Mapping) or not signature:
         return ""
+    normalized_signature = dict(signature)
+    broad_families = _active_subject_broad_family_ids(
+        context,
+        surface=getattr(hypothesis, "change_locus", None),
+    )
+    family = _normalize_token(normalized_signature.get("algorithm_family"))
+    if family and family in broad_families:
+        normalized_signature.pop("algorithm_family", None)
+    if not normalized_signature:
+        return ""
     try:
-        return json.dumps(signature, sort_keys=True, default=str)
+        return json.dumps(normalized_signature, sort_keys=True, default=str)
     except TypeError:
-        return str(sorted(signature.items()))
+        return str(sorted(normalized_signature.items()))
 
 
 def _mechanism_family(
@@ -307,11 +323,11 @@ def _mechanism_family(
             if value and not value.startswith("preserve_existing"):
                 return _normalize_token(value)
         family = _normalize_token(signature.get("algorithm_family"))
-        if family and family not in {
-            "solver_design",
-            "local_search",
-            "destroy_repair",
-        }:
+        broad_families = _active_subject_broad_family_ids(
+            context,
+            surface=getattr(hypothesis, "change_locus", None),
+        )
+        if family and family not in broad_families:
             return family
     taxonomy = getattr(getattr(context, "search_memory", None), "family_taxonomy", None)
     return extract_mechanism_label(
@@ -319,6 +335,26 @@ def _mechanism_family(
         taxonomy=taxonomy,
         preferred_label=hypothesis.change_locus,
     )
+
+
+def _active_subject_broad_family_ids(
+    context: ProposalToolContext | None,
+    *,
+    surface: str | None,
+) -> set[str]:
+    if context is None:
+        return set()
+    taxonomy = active_subject_taxonomy_payload(
+        context=context,
+        problem_spec=getattr(context, "problem_spec", None),
+        adapter=getattr(context, "adapter", None),
+        surface=surface,
+    )
+    return {
+        _normalize_token(item)
+        for item in taxonomy.get("mechanism_broad_family_ids", ()) or ()
+        if _normalize_token(item)
+    }
 
 
 def _step_is_failed_or_no_effect(step: Any) -> bool:

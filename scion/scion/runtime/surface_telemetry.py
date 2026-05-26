@@ -263,7 +263,14 @@ def declared_sibling_field(
 
 def component_from_runtime_field(field: str) -> str:
     text = str(field or "").strip()
-    for suffix in ("_errors", ".errors"):
+    for suffix in (
+        "_errors",
+        ".errors",
+        "_error_count",
+        ".error_count",
+        "_invalid_outputs",
+        ".invalid_outputs",
+    ):
         if text.endswith(suffix):
             return text[: -len(suffix)]
     for suffix in (

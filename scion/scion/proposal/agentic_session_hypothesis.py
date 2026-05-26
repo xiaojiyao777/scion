@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from typing import Mapping
 
+from scion.problem.providers import active_subject_taxonomy_payload
 from scion.proposal.agentic_session_common import *
 from scion.proposal.negative_facts import render_negative_fact_block
 from scion.runtime.telemetry_guard import expected_telemetry_template
@@ -225,6 +226,7 @@ class AgenticSessionHypothesisMixin:
                         request=request,
                         session_id=session_id,
                         state=state,
+                        tool_context=tool_context,
                         hypothesis=hypothesis,
                         evidence=evidence,
                         preview_rejections=preview_rejections,
@@ -296,15 +298,21 @@ class AgenticSessionHypothesisMixin:
             request: AgenticProposalRequest,
             session_id: str,
             state: AgenticProposalSessionState,
+            tool_context: ProposalToolContext | None,
             hypothesis: HypothesisProposal,
             evidence: list[AgenticEvidenceRef],
             preview_rejections: list[Mapping[str, Any]],
             attempt: int,
         ) -> AgenticProposalOutput | None:
+            structural_activation_refs = _active_subject_telemetry_activation_refs(
+                tool_context,
+                surface=getattr(hypothesis, "change_locus", None),
+            )
             drift = _schema_retry_preservation_drift(
                 hypothesis,
                 preview_rejections,
                 attempt=attempt,
+                structural_activation_refs=structural_activation_refs,
             )
             if drift is None:
                 return None
@@ -312,6 +320,7 @@ class AgenticSessionHypothesisMixin:
                 drift,
                 hypothesis,
                 attempt=attempt,
+                structural_activation_refs=structural_activation_refs,
             )
             if not _schema_retry_corrective_retry_already_used(preview_rejections):
                 preview_rejections.append(feedback)
@@ -1182,6 +1191,7 @@ def _schema_retry_preservation_drift(
     preview_rejections: list[Mapping[str, Any]],
     *,
     attempt: int,
+    structural_activation_refs: set[str] | None = None,
 ) -> dict[str, Any] | None:
     rejection = _latest_schema_preservation_rejection(
         preview_rejections,
@@ -1206,6 +1216,7 @@ def _schema_retry_preservation_drift(
     activation_drift = _schema_retry_activation_identity_drift(
         expected,
         hypothesis,
+        structural_activation_refs=structural_activation_refs,
     )
     if activation_drift:
         drift_fields.append("expected_telemetry.activation")
@@ -1284,6 +1295,7 @@ def _schema_retry_drift_feedback(
     hypothesis: HypothesisProposal,
     *,
     attempt: int,
+    structural_activation_refs: set[str] | None = None,
 ) -> dict[str, Any]:
     return _drop_empty_dict(
         {
@@ -1295,7 +1307,10 @@ def _schema_retry_drift_feedback(
             "reason": _schema_retry_drift_failure_detail(drift),
             "corrective_retry": True,
             "drift_fields": list(drift.get("drift_fields") or ()),
-            "observed_identity": _schema_retry_observed_identity(hypothesis),
+            "observed_identity": _schema_retry_observed_identity(
+                hypothesis,
+                structural_activation_refs=structural_activation_refs,
+            ),
             "preserve_hypothesis": drift.get("preserve_hypothesis"),
             "protected_identity": drift.get("protected_identity")
             or _schema_retry_protected_identity(
@@ -1349,6 +1364,8 @@ def _schema_retry_protected_identity(anchor: Mapping[str, Any]) -> dict[str, Any
 
 def _schema_retry_observed_identity(
     hypothesis: HypothesisProposal,
+    *,
+    structural_activation_refs: set[str] | None = None,
 ) -> dict[str, Any]:
     anchor = _hypothesis_retry_anchor(hypothesis)
     return _drop_empty_dict(
@@ -1358,7 +1375,8 @@ def _schema_retry_observed_identity(
             "mechanism_changes": anchor.get("mechanism_changes"),
             "activation_refs": sorted(
                 _telemetry_activation_mechanism_refs(
-                    getattr(hypothesis, "expected_telemetry", {}) or {}
+                    getattr(hypothesis, "expected_telemetry", {}) or {},
+                    structural_activation_refs=structural_activation_refs,
                 )
             ),
         }
@@ -1382,12 +1400,15 @@ def _canonical_retry_identity_value(value: Any) -> Any:
 def _schema_retry_activation_identity_drift(
     expected_anchor: Mapping[str, Any],
     hypothesis: HypothesisProposal,
+    *,
+    structural_activation_refs: set[str] | None = None,
 ) -> dict[str, Any]:
     protected_ids = _protected_mechanism_ids(expected_anchor)
     if not protected_ids:
         return {}
     observed_refs = _telemetry_activation_mechanism_refs(
-        getattr(hypothesis, "expected_telemetry", {}) or {}
+        getattr(hypothesis, "expected_telemetry", {}) or {},
+        structural_activation_refs=structural_activation_refs,
     )
     observed_refs = {
         ref
@@ -1421,7 +1442,11 @@ def _protected_mechanism_ids(anchor: Mapping[str, Any]) -> set[str]:
     return ids
 
 
-def _telemetry_activation_mechanism_refs(expected_telemetry: Any) -> set[str]:
+def _telemetry_activation_mechanism_refs(
+    expected_telemetry: Any,
+    *,
+    structural_activation_refs: set[str] | None = None,
+) -> set[str]:
     if not isinstance(expected_telemetry, Mapping):
         return set()
     activation = expected_telemetry.get("activation")
@@ -1429,7 +1454,8 @@ def _telemetry_activation_mechanism_refs(expected_telemetry: Any) -> set[str]:
     refs: set[str] = set()
     for item in text_items:
         refs.update(_mechanism_refs_from_telemetry_path(item))
-    return {ref for ref in refs if ref not in _GENERIC_TELEMETRY_ACTIVATION_REFS}
+    structural_refs = structural_activation_refs or set()
+    return {ref for ref in refs if ref not in structural_refs}
 
 
 def _flatten_telemetry_activation_items(value: Any) -> list[str]:
@@ -1447,21 +1473,6 @@ def _flatten_telemetry_activation_items(value: Any) -> list[str]:
             items.extend(_flatten_telemetry_activation_items(child))
         return items
     return []
-
-
-_GENERIC_TELEMETRY_ACTIVATION_REFS = {
-    "search",
-    "solver",
-    "construction",
-    "destroy",
-    "repair",
-    "acceptance",
-    "local_search",
-    "phase",
-    "runtime",
-    "elapsed",
-    "iterations",
-}
 
 
 def _is_structural_activation_ref(ref: str, protected_ids: set[str]) -> bool:
@@ -1485,6 +1496,26 @@ def _mechanism_refs_from_telemetry_path(path: Any) -> set[str]:
         if token:
             refs.add(token)
     return refs
+
+
+def _active_subject_telemetry_activation_refs(
+    context: ProposalToolContext | None,
+    *,
+    surface: str | None,
+) -> set[str]:
+    if context is None:
+        return set()
+    taxonomy = active_subject_taxonomy_payload(
+        context=context,
+        problem_spec=getattr(context, "problem_spec", None),
+        adapter=getattr(context, "adapter", None),
+        surface=surface,
+    )
+    return {
+        _mechanism_ref_token(item)
+        for item in taxonomy.get("telemetry_activation_refs", ()) or ()
+        if _mechanism_ref_token(item)
+    }
 
 
 def _mechanism_ref_token(value: Any) -> str:

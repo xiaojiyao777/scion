@@ -15,7 +15,10 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
-from scion.problem.providers import resolve_solver_design_prompt_provider
+from scion.problem.providers import (
+    active_subject_taxonomy_payload,
+    resolve_solver_design_prompt_provider,
+)
 from scion.proposal.context.feedback import (
     _build_agent_quality_feedback,
     _build_champion_baselines,
@@ -338,11 +341,18 @@ class ContextManager:
         objective_guidance = _build_objective_guidance(
             saturation_signals, objective_feedback=objective_feedback
         )
+        solver_design_prompt_provider = None
+        if declared_problem_boundary_surfaces:
+            solver_design_prompt_provider = resolve_solver_design_prompt_provider(
+                problem_spec=problem_spec,
+                adapter=self._adapter,
+            )
         search_control_guidance = _build_search_control_guidance(
             families,
             safe_hypothesis_steps,
             adapter_spec,
             forced_surface=forced_surface_name,
+            solver_design_prompt_provider=solver_design_prompt_provider,
         )
         runtime_feedback = _build_runtime_feedback(
             safe_hypothesis_steps,
@@ -499,6 +509,13 @@ class ContextManager:
             "editable_patterns": ", ".join(problem_spec.search_space.editable),
             "frozen_patterns": ", ".join(problem_spec.search_space.frozen),
         }
+        active_subject_taxonomy = active_subject_taxonomy_payload(
+            problem_spec=problem_spec,
+            adapter=self._adapter,
+            surface=hypothesis.change_locus,
+        )
+        if active_subject_taxonomy:
+            ctx["active_subject_taxonomy"] = active_subject_taxonomy
         if _is_solver_design_context_surface(hypothesis.change_locus, surface):
             solver_design_prompt_provider = resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,

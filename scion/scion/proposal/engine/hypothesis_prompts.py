@@ -42,7 +42,7 @@ def _split_hypothesis_context(
             "The exact operator execution model is problem-specific. Use the problem summary, "
             "operator interface, current champion code, and runtime feedback as the source of truth.\n\n"
             "Design implications for new research-surface changes:\n"
-            "- Do not assume a fixed invocation count, pool size, neighborhood structure, or acceptance rule.\n"
+            "- Do not assume a fixed invocation count, pool size, neighborhood structure, or selection rule.\n"
             "- Operator surfaces MUST preserve feasibility and the problem-specific solution contract.\n"
             "- State the capability gap it fills, the objective it targets, and the no-op condition that protects other objectives.\n"
             "- Runtime is part of the evidence: describe explicit bounds, filters, sampling, or early exits."
