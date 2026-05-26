@@ -1,6 +1,7 @@
 """Focused tests split from test_evidence_recorder.py."""
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
+from scion.core.run_validity import RUN_VALIDITY_INVALID_INFRA_ONLY
 from scion.core.step_result import StepResult
 
 def test_record_step_and_summary_preserve_current_fields(tmp_path: Path) -> None:
@@ -341,6 +342,87 @@ def test_status_reports_balance_stop_consistently(tmp_path: Path) -> None:
     assert status["stop_category"] == "provider_error"
     assert status["provider_error"]["category"] == "balance_exhausted"
     assert on_disk["stopped_reason"] == "api_balance_exhausted"
+
+
+def test_status_reports_infra_only_run_validity(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-infra",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-infra",
+            "n_experiments": 0,
+            "screened_experiments": 0,
+        },
+    )
+
+    status = recorder.write_status(
+        stopped_reason="proposal_attempt_limit_exhausted",
+        loop_status={
+            "requested_rounds": 4,
+            "total_rounds": 12,
+            "proposal_attempts": 12,
+            "proposal_attempts_consumed": 12,
+            "effective_rounds_completed": 0,
+            "failure_categories": {"infra": 12},
+        },
+    )
+
+    assert status["run_validity"]["status"] == "invalid"
+    assert status["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+    assert status["run_validity"]["infra_failure_attempts"] == 12
+    assert status["run_validity_status"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+
+
+def test_campaign_summary_reports_infra_only_run_validity(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-infra",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-infra",
+            "n_experiments": 0,
+            "screened_experiments": 0,
+        },
+    )
+    recorder.write_status(
+        loop_status={
+            "requested_rounds": 4,
+            "total_rounds": 12,
+            "proposal_attempts": 12,
+            "proposal_attempts_consumed": 12,
+            "effective_rounds_completed": 0,
+            "failure_categories": {"infra": 12},
+        },
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=_hypothesis("Provider failed before hypothesis generation."),
+        patch=None,
+        contract_passed=False,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal",
+        failure_detail=(
+            "agentic_proposal:hypothesis_generation_failed: Tool call failed "
+            "after 3 transient API attempt(s). Last error: HTTP 503 "
+            "no_available_accounts"
+        ),
+        counts_toward_max_rounds=False,
+        attempt_kind="proposal_block",
+    )
+
+    summary = recorder.write_campaign_summary(
+        step_history=[step],
+        round_num=12,
+        champion=_champion(),
+        stopped_reason="proposal_attempt_limit_exhausted",
+    )
+
+    assert summary["run_validity"]["status"] == "invalid"
+    assert summary["run_validity"]["reason"] == RUN_VALIDITY_INVALID_INFRA_ONLY
+    assert summary["failure_categories"] == {"infra": 12}
+    assert summary["stopped_reason"] == "proposal_attempt_limit_exhausted"
 
 
 def test_status_reports_non_counting_last_result(tmp_path: Path) -> None:

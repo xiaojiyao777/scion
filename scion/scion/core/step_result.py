@@ -39,3 +39,6 @@ class StepResult:
     ] = "screening"
     repair_mechanism_ids: Tuple[str, ...] = ()
     repair_policy_reason: str = ""
+    failure_stage: Optional[str] = None
+    failure_detail: Optional[str] = None
+    failure_category: Optional[str] = None

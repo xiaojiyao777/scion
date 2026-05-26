@@ -1,6 +1,7 @@
 """Focused tests split from test_campaign.py."""
 
 from .campaign_test_support import *  # noqa: F401,F403
+from scion.proposal.llm_client import LLMTransientProviderError
 
 class TestCampaignBasics:
     def test_initial_state(self, tmp_path):
@@ -76,6 +77,43 @@ class TestCampaignBasics:
             "status": FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
             "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
         }
+
+    def test_infra_only_attempt_exhaustion_is_marked_invalid(self, tmp_path):
+        class NoAvailableAccountsLLM:
+            def call(self, prompt, response_schema, model=None, system_blocks=None):
+                raise LLMTransientProviderError(
+                    "Transient provider error: HTTP 503 no_available_accounts"
+                )
+
+            def call_with_tool(self, prompt, tool, model=None, system_blocks=None):
+                return self.call(
+                    prompt,
+                    tool.get("input_schema", {}),
+                    model=model,
+                    system_blocks=system_blocks,
+                )
+
+        cm = _campaign(
+            tmp_path,
+            llm_client=NoAvailableAccountsLLM(),
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+
+        cm.run(max_rounds=4)
+
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        summary = json.loads((tmp_path / "campaign" / "campaign_summary.json").read_text())
+        assert cm._last_stop_reason == "proposal_attempt_limit_exhausted"
+        assert status["stopped_reason"] == "proposal_attempt_limit_exhausted"
+        assert status["effective_rounds_completed"] == 0
+        assert status["n_experiments"] == 0
+        assert status["run_validity"]["status"] == "invalid"
+        assert status["run_validity"]["reason"] == "invalid_infra_only"
+        assert status["campaign_loop"]["failure_categories"] == {"infra": 12}
+        assert summary["run_validity"]["reason"] == "invalid_infra_only"
+        assert summary["failure_categories"] == {"infra": 12}
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)

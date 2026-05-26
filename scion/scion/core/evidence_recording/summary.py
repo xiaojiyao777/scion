@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.models import ChampionState, StepRecord
 from scion.core.public_refs import public_artifact_ref, public_case_ref, redact_public_refs
+from scion.core.run_validity import build_run_validity, step_failure_categories
 from scion.core.status_reporter import (
     API_BALANCE_EXHAUSTED_STOP_REASON,
     PROVIDER_ERROR_CATEGORY_BALANCE_EXHAUSTED,
@@ -187,6 +188,18 @@ class CampaignSummaryMixin:
             )
             if loop_effective_rounds is not None:
                 effective_rounds_completed = int(loop_effective_rounds)
+        failure_categories = step_failure_categories(steps)
+        if isinstance(loop_status, Mapping):
+            loop_failure_categories = loop_status.get("failure_categories")
+            if isinstance(loop_failure_categories, Mapping):
+                for key, value in loop_failure_categories.items():
+                    try:
+                        failure_categories[str(key)] = max(
+                            failure_categories.get(str(key), 0),
+                            int(value),
+                        )
+                    except (TypeError, ValueError):
+                        continue
 
         summary: Dict[str, Any] = {
             "campaign_id": self.campaign_id,
@@ -280,6 +293,32 @@ class CampaignSummaryMixin:
             "diagnostics": diagnostics if diagnostics is not None else [],
             "steps": [],
         }
+        state_n_experiments: Any | None = None
+        if self.state_provider is not None:
+            try:
+                state_for_validity = dict(self.state_provider())
+                state_n_experiments = state_for_validity.get("n_experiments")
+            except Exception as exc:  # pragma: no cover - summary is best-effort
+                logger.debug("state snapshot for run validity failed: %s", exc)
+        summary["failure_categories"] = failure_categories
+        summary["run_validity"] = build_run_validity(
+            requested_rounds=(
+                self.campaign_loop_status.get("requested_rounds")
+                if isinstance(self.campaign_loop_status, Mapping)
+                else None
+            ),
+            effective_rounds_completed=effective_rounds_completed,
+            n_experiments=(
+                state_n_experiments
+                if state_n_experiments is not None
+                else screened_experiments
+            ),
+            proposal_attempts=summary["proposal_attempts_consumed"],
+            stopped_reason=effective_stopped_reason,
+            failure_categories=failure_categories,
+            stopped=True,
+        )
+        summary["run_validity_status"] = summary["run_validity"]["reason"]
         if effective_stopped_reason == API_BALANCE_EXHAUSTED_STOP_REASON:
             summary["stop_category"] = "provider_error"
             summary["provider_error"] = {

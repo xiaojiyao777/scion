@@ -743,6 +743,14 @@ def test_403_insufficient_balance_classifies_before_transient_provider() -> None
     assert "balance exhausted" in str(exc_info.value)
 
 
+def test_no_available_accounts_is_transient_provider_error() -> None:
+    exc = Exception(
+        "codex-proxy returned 503 service error: no_available_accounts"
+    )
+
+    assert is_llm_transient_api_error(exc)
+
+
 def test_creative_trace_records_llm_request_policy(tmp_path):
     class PolicyClient:
         def resolve_request_policy(self, *, request_kind=None, tool=None):

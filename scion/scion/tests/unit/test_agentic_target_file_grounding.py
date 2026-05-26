@@ -146,8 +146,8 @@ def test_solver_design_existing_target_file_is_read_then_redrafted(
     ]
     assert retry_items
     assert retry_items[0]["included_in_prompt_for_call"] is True
-    assert retry_items[0]["full_content_included_in_prompt"] is False
-    assert retry_items[0]["full_content_visible_in_rendered_prompt"] is False
+    assert retry_items[0]["full_content_included_in_prompt"] is True
+    assert retry_items[0]["full_content_visible_in_rendered_prompt"] is True
     assert retry_items[0]["full_content_visible_in_dedicated_source_section"] is True
     assert retry_items[0]["full_content_visible_anywhere_in_rendered_prompt"] is True
     full_read_status = retry_manifest["section_statuses"][
@@ -398,12 +398,123 @@ def test_full_algorithm_reads_project_outside_generic_observation_cap() -> None:
     assert cacheability["cache_control_block_count"] >= 1
     assert cacheability["estimated_cacheable_chars"] >= full_read_status["char_count"]
     included = manifest["included_observations"][0]
-    assert included["full_content_included_in_prompt"] is False
-    assert included["full_content_visible_in_rendered_prompt"] is False
+    assert included["content_preview_visible_in_rendered_prompt"] is True
+    assert included["full_content_included_in_prompt"] is True
+    assert included["full_content_visible_in_rendered_prompt"] is True
     assert included["full_content_visible_in_dedicated_source_section"] is True
     assert included["full_content_visible_anywhere_in_rendered_prompt"] is True
     assert included["prompt_visibility_status"] == (
         "full_content_visible_in_dedicated_source_section"
+    )
+
+
+def test_prompt_manifest_marks_read_surface_nested_preview_visible() -> None:
+    target_preview = "def visible_surface_target():\n    return 7\n"
+    support_preview = "class VisibleSurfaceSupport:\n    pass\n"
+    observation = _algorithm_read_observation(
+        "context.read_surface",
+        {
+            "surface": {"name": "solver_design", "kind": "solver_design"},
+            "target_file": "policies/baseline_modules/local_search.py",
+            "current_artifact": {
+                "file_path": "policies/baseline_modules/local_search.py",
+                "content_preview": target_preview,
+                "readable": True,
+                "size_chars": len(target_preview),
+                "max_chars": len(target_preview),
+                "truncated": False,
+            },
+            "support_artifacts": [
+                {
+                    "file_path": "policies/baseline_modules/support.py",
+                    "content_preview": support_preview,
+                    "readable": True,
+                    "size_chars": len(support_preview),
+                    "max_chars": len(support_preview),
+                    "truncated": False,
+                }
+            ],
+        },
+    )
+    system_blocks = [
+        {
+            "text": (
+                "## Solver-Design Full Algorithm File Reads\n"
+                f"```python\n{target_preview}```\n"
+                f"```python\n{support_preview}```\n"
+            )
+        }
+    ]
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="surface-visible",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[observation],
+        call_index=1,
+        system_blocks=system_blocks,
+        user_prompt="## Agentic Proposal Tool Observations\n[]",
+    )
+
+    included = manifest["included_observations"][0]
+    assert included["read_receipt_only"] is False
+    assert included["content_preview_visible_in_rendered_prompt"] is True
+    assert included["content_preview_visible_anywhere_in_rendered_prompt"] is True
+    assert included["content_projection_count"] == 2
+    assert included["visible_content_projection_count"] == 2
+    assert included["prompt_visibility_status"] == (
+        "full_content_visible_in_dedicated_source_section"
+    )
+
+
+def test_prompt_manifest_marks_algorithm_slice_content_visible() -> None:
+    slice_content = "def bounded_algorithm_slice():\n    return 11\n"
+    observation = _algorithm_read_observation(
+        "context.read_algorithm_slice",
+        {
+            "available": True,
+            "slice_id": "slice.local_search.bounded",
+            "file_path": "policies/baseline_modules/local_search.py",
+            "symbols": ["bounded_algorithm_slice"],
+            "content": slice_content,
+            "content_digest": "slice-digest",
+            "truncated": False,
+            "max_chars": len(slice_content),
+        },
+    )
+    user_prompt = (
+        "## Agentic Proposal Tool Observations\n"
+        + json.dumps(
+            {
+                "slice_reads": [
+                    {
+                        "slice_id": "slice.local_search.bounded",
+                        "content_preview": slice_content,
+                    }
+                ]
+            }
+        )
+    )
+
+    manifest = build_api_visible_prompt_manifest(
+        session_id="slice-visible",
+        phase="draft_hypothesis",
+        call_kind="hypothesis",
+        prompt_context={},
+        observations=[observation],
+        call_index=1,
+        system_blocks=[],
+        user_prompt=user_prompt,
+    )
+
+    included = manifest["included_observations"][0]
+    assert included["read_receipt_only"] is False
+    assert included["slice_id"] == "slice.local_search.bounded"
+    assert included["content_preview_visible_in_rendered_prompt"] is True
+    assert included["content_projections"][0]["label"] == "algorithm_slice_content"
+    assert included["prompt_visibility_status"] == (
+        "full_content_visible_in_rendered_prompt"
     )
 
 

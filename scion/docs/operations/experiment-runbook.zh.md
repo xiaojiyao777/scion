@@ -1,6 +1,6 @@
 # Scion v0.4 本地实验运行、回溯与复现手册
 
-*Last updated: 2026-05-21*
+*Last updated: 2026-05-26*
 
 本文档面向需要自己在本地启动、监控、收尾、逐轮回溯、分析和复现
 Scion v0.4 实验的人。目标是让你能回答三个问题：怎么跑、每一轮输入输出
@@ -364,6 +364,8 @@ tail -n 80 "$RUN_ROOT/run.log"
 ```bash
 jq '{
   n_experiments,
+  effective_rounds_completed,
+  run_validity,
   champion_version,
   n_active_branches,
   protocol_progress,
@@ -868,12 +870,24 @@ test -f "$CAMPAIGN_DIR/campaign_summary.json"
 EXIT_CODE:0
 ```
 
+注意：`EXIT_CODE:0` 只说明 wrapper/CLI 完成了收尾和 artifact 写入，不等于实验
+具有科学有效性。尤其是本地 proxy / provider 失败时，Scion 可能正常写完
+`status.json`、`campaign_summary.json` 和 `exit.txt`，但没有任何 effective round。
+必须继续检查 `run_validity`、`effective_rounds_completed` 和 `n_experiments`。
+如果 `run_validity.reason` 是 `invalid_infra_only`、
+`invalid_no_effective_rounds` 或 `invalid_no_experiments`，不要把该 run 当作
+算法证据；先修 provider/proxy/account，再重跑。
+
 读取 campaign 顶层摘要：
 
 ```bash
 SUMMARY="$CAMPAIGN_DIR/campaign_summary.json"
 jq '{
   total_rounds,
+  proposal_attempts_consumed,
+  effective_rounds_completed,
+  n_experiments,
+  run_validity,
   champion_version,
   champion_weight_revision,
   n_active_branches,

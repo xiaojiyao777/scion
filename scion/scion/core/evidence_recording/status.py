@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, Mapping
 
 from scion.core.public_refs import redact_public_refs
+from scion.core.run_validity import build_run_validity
 from scion.core.status_reporter import normalize_status_payload, normalize_stopped_reason
 
 from .artifact_refs import _in_flight_protocol_snapshot, _read_partial_metrics_snapshot
@@ -92,6 +93,8 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         "non_counted_lifecycle_steps": "non_counted_lifecycle_steps",
         "quality_blocks": "quality_blocks",
         "blocked_attempts": "blocked_attempts",
+        "infra_failure_attempts": "infra_failure_attempts",
+        "noninfra_failure_attempts": "noninfra_failure_attempts",
     }
     for top_key, loop_key in aliases.items():
         value = loop.get(loop_key)
@@ -107,6 +110,8 @@ def _merge_campaign_loop_observability(payload: Dict[str, Any]) -> None:
         value = payload.get("quality_blocks")
         if value is not None:
             payload["blocked_attempts"] = value
+    if isinstance(loop.get("failure_categories"), Mapping):
+        payload["failure_categories"] = dict(loop["failure_categories"])
 
 
 class StatusWriterMixin:
@@ -152,6 +157,15 @@ class StatusWriterMixin:
                     "",
                 ),
             }
+            failure_stage = getattr(last_result, "failure_stage", None)
+            failure_category = getattr(last_result, "failure_category", None)
+            failure_detail = getattr(last_result, "failure_detail", None)
+            if failure_stage:
+                self.last_status_result["failure_stage"] = failure_stage
+            if failure_category:
+                self.last_status_result["failure_category"] = failure_category
+            if failure_detail:
+                self.last_status_result["failure_detail"] = str(failure_detail)[:1000]
         if self.last_status_result is not None:
             payload["last_result"] = self.last_status_result
         if stopped_reason is not None:
@@ -167,6 +181,34 @@ class StatusWriterMixin:
             if self.last_status_result is not None:
                 payload["last_completed_result"] = self.last_status_result
         payload = normalize_status_payload(payload)
+        if payload.get("stopped_reason") is not None or payload.get("stopped") is True:
+            loop = payload.get("campaign_loop")
+            loop_mapping = loop if isinstance(loop, Mapping) else {}
+            failure_categories = payload.get("failure_categories")
+            if not isinstance(failure_categories, Mapping):
+                failure_categories = loop_mapping.get("failure_categories")
+            payload["run_validity"] = build_run_validity(
+                requested_rounds=payload.get(
+                    "requested_rounds",
+                    loop_mapping.get("requested_rounds"),
+                ),
+                effective_rounds_completed=payload.get(
+                    "effective_rounds_completed",
+                    loop_mapping.get("effective_rounds_completed"),
+                ),
+                n_experiments=payload.get(
+                    "n_experiments",
+                    payload.get("screened_experiments"),
+                ),
+                proposal_attempts=payload.get(
+                    "proposal_attempts_consumed",
+                    payload.get("proposal_attempts"),
+                ),
+                stopped_reason=payload.get("stopped_reason"),
+                failure_categories=failure_categories,
+                stopped=True,
+            )
+            payload["run_validity_status"] = payload["run_validity"]["reason"]
         public_payload = redact_public_refs(payload, base_dir=self.campaign_dir)
         try:
             self.status_reporter.write(public_payload)

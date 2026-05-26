@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from scion.core.branch_repair_policy import repair_attempt_key_label
+from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ class CampaignLoop:
         validation_repair_required_attempts = 0
         telemetry_repair_attempts = 0
         telemetry_repair_attempt_counts: dict[str, int] = {}
+        failure_category_counts: dict[str, int] = {}
+        last_failure_category = ""
         same_family_retry_attempts = 0
         branch_lifecycle_policy_blocks = 0
         reconcile_lifecycle_steps = 0
@@ -116,7 +119,7 @@ class CampaignLoop:
                 logger.debug("Failed to read proposal attempt count: %s", exc)
                 return max(0, int(loop_steps))
 
-        def loop_status() -> dict[str, int]:
+        def loop_status() -> dict[str, Any]:
             return _campaign_loop_status(
                 requested_rounds=requested_rounds,
                 attempt_limit=attempt_limit,
@@ -140,6 +143,8 @@ class CampaignLoop:
                 proposal_quality_loop_limit=proposal_quality_loop_limit,
                 proposal_quality_blocked_attempts=proposal_quality_blocked_attempts,
                 legacy_total_rounds=legacy_external_attempts(),
+                failure_categories=failure_category_counts,
+                last_failure_category=last_failure_category,
             )
 
         self.write_status(loop_status=loop_status())
@@ -187,6 +192,12 @@ class CampaignLoop:
 
             self.write_status(loop_status=loop_status())
             result = self.run_one_step()
+            result_failure_category = _result_failure_category(result)
+            if result_failure_category:
+                last_failure_category = result_failure_category
+                failure_category_counts[result_failure_category] = (
+                    failure_category_counts.get(result_failure_category, 0) + 1
+                )
             kind = _attempt_kind(result)
             if getattr(result, "counts_toward_max_rounds", True):
                 counted_rounds += 1
@@ -320,6 +331,20 @@ def _attempt_kind(result: StepResult) -> str:
     return "proposal_block"
 
 
+def _result_failure_category(result: StepResult) -> str:
+    if not getattr(result, "failure_stage", None) and not getattr(
+        result,
+        "failure_detail",
+        None,
+    ):
+        return ""
+    return failure_category_for_run_validity(
+        getattr(result, "failure_detail", None),
+        category=getattr(result, "failure_category", None),
+        failure_stage=getattr(result, "failure_stage", None),
+    )
+
+
 def _proposal_quality_loop_limit(
     requested_rounds: int,
     *,
@@ -421,7 +446,9 @@ def _campaign_loop_status(
     proposal_quality_loop_limit: int,
     proposal_quality_blocked_attempts: int,
     legacy_total_rounds: int,
-) -> dict[str, int]:
+    failure_categories: dict[str, int],
+    last_failure_category: str,
+) -> dict[str, Any]:
     attempts_value = max(0, int(attempts))
     effective_rounds = max(0, int(counted_rounds))
     telemetry_diagnostic_attempts = max(
@@ -481,4 +508,16 @@ def _campaign_loop_status(
             int(proposal_quality_loop_limit)
             - int(proposal_quality_blocked_attempts),
         ),
+        "failure_categories": dict(failure_categories),
+        "infra_failure_attempts": sum(
+            count
+            for category, count in failure_categories.items()
+            if category == "infra"
+        ),
+        "noninfra_failure_attempts": sum(
+            count
+            for category, count in failure_categories.items()
+            if category != "infra"
+        ),
+        "last_failure_category": last_failure_category,
     }

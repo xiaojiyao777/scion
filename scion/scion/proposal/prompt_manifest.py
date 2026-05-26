@@ -488,56 +488,76 @@ def _observation_prompt_inclusion_fields(
 ) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         return {}
-    content_preview = payload.get("content_preview")
+    content_projections = _payload_content_projections(payload)
+    content_preview = (
+        content_projections[0]["content"] if content_projections else None
+    )
     content_preview_chars = (
         len(str(content_preview)) if content_preview is not None else 0
     )
-    content_preview_visible_anywhere = _rendered_contains_text(
-        provider_prompt_text,
-        content_preview,
+    projection_records = [
+        _content_projection_record(
+            projection,
+            provider_prompt_text=provider_prompt_text,
+            observation_prompt_text=observation_prompt_text,
+            dedicated_source_prompt_text=dedicated_source_prompt_text,
+        )
+        for projection in content_projections
+    ]
+    content_preview_visible_anywhere = any(
+        record["visible_anywhere_in_rendered_prompt"]
+        for record in projection_records
     )
-    content_preview_visible_in_observation = _rendered_contains_text(
-        observation_prompt_text,
-        content_preview,
+    content_preview_visible_in_observation = any(
+        record["visible_in_observation_section"]
+        for record in projection_records
     )
-    content_preview_visible_in_dedicated_source = _rendered_contains_text(
-        dedicated_source_prompt_text,
-        content_preview,
+    content_preview_visible_in_dedicated_source = any(
+        record["visible_in_dedicated_source_section"]
+        for record in projection_records
+    )
+    full_content_included = any(
+        record["full_content_included"] for record in projection_records
+    )
+    full_content_visible_anywhere = any(
+        record["full_content_visible_anywhere_in_rendered_prompt"]
+        for record in projection_records
+    )
+    full_content_visible_in_observation = any(
+        record["full_content_visible_in_observation_section"]
+        for record in projection_records
+    )
+    full_content_visible_in_dedicated_source = any(
+        record["full_content_visible_in_dedicated_source_section"]
+        for record in projection_records
     )
     size_chars = _coerce_int(payload.get("size_chars"))
     max_chars = _coerce_int(payload.get("max_chars"))
-    truncated = bool(payload.get("truncated"))
-    full_content_included = False
-    if payload.get("readable") is True and content_preview is not None and not truncated:
-        if (
-            size_chars is not None
-            and max_chars is not None
-            and max_chars >= size_chars
-        ):
-            full_content_included = True
-        elif size_chars is not None:
-            full_content_included = content_preview_chars >= size_chars
-        elif max_chars is not None:
-            full_content_included = content_preview_chars >= max_chars
-        else:
-            full_content_included = not bool(payload.get("already_observed"))
+    read_receipt_only = (
+        not content_projections
+        or (
+            bool(payload.get("already_observed"))
+            and not content_preview_visible_anywhere
+        )
+    )
     return {
         "file_path": payload.get("file_path"),
         "target_file": payload.get("target_file"),
         "symbol": payload.get("symbol"),
+        "slice_id": payload.get("slice_id"),
         "readable": payload.get("readable"),
         "truncated": payload.get("truncated"),
         "size_chars": size_chars,
         "max_chars": max_chars,
         "content_preview_chars": content_preview_chars,
-        "content_preview_included": content_preview is not None,
+        "content_preview_included": bool(content_projections),
         "content_preview_hash": (
             _text_digest(str(content_preview), length=16)
             if content_preview is not None
             else ""
         ),
         "content_preview_visible_in_rendered_prompt": (
-            content_preview_visible_in_observation
+            content_preview_visible_anywhere
         ),
         "content_preview_visible_anywhere_in_rendered_prompt": (
             content_preview_visible_anywhere
@@ -545,28 +565,156 @@ def _observation_prompt_inclusion_fields(
         "content_preview_visible_in_dedicated_source_section": (
             content_preview_visible_in_dedicated_source
         ),
-        "read_receipt_only": bool(payload.get("already_observed"))
-        or content_preview is None,
+        "content_projection_count": len(content_projections),
+        "visible_content_projection_count": sum(
+            1
+            for record in projection_records
+            if record["visible_anywhere_in_rendered_prompt"]
+        ),
+        "content_projections": projection_records,
+        "read_receipt_only": read_receipt_only,
         "full_content_included_in_prompt": bool(
-            full_content_included and content_preview_visible_in_observation
+            full_content_included and full_content_visible_anywhere
         ),
         "full_content_visible_in_rendered_prompt": bool(
-            full_content_included and content_preview_visible_in_observation
+            full_content_visible_anywhere
         ),
         "full_content_visible_anywhere_in_rendered_prompt": bool(
-            full_content_included and content_preview_visible_anywhere
+            full_content_visible_anywhere
         ),
         "full_content_visible_in_dedicated_source_section": bool(
-            full_content_included and content_preview_visible_in_dedicated_source
+            full_content_visible_in_dedicated_source
         ),
         "prompt_visibility_status": _observation_prompt_visibility_status(
             full_content_included=full_content_included,
-            content_preview_visible=content_preview_visible_in_observation,
+            content_preview_visible_anywhere=content_preview_visible_anywhere,
+            content_preview_visible_in_observation=(
+                content_preview_visible_in_observation
+            ),
             dedicated_source_visible=content_preview_visible_in_dedicated_source,
-            read_receipt_only=bool(payload.get("already_observed"))
-            or content_preview is None,
+            read_receipt_only=read_receipt_only,
         ),
     }
+
+
+def _payload_content_projections(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    projections: list[dict[str, Any]] = []
+
+    def add_projection(
+        *,
+        label: str,
+        content: Any,
+        source: Mapping[str, Any],
+        file_path: Any = None,
+    ) -> None:
+        if content is None:
+            return
+        text = str(content)
+        if not text:
+            return
+        projections.append(
+            {
+                "label": label,
+                "content": text,
+                "file_path": file_path or source.get("file_path"),
+                "target_file": source.get("target_file"),
+                "symbol": source.get("symbol"),
+                "slice_id": source.get("slice_id"),
+                "readable": source.get("readable"),
+                "truncated": source.get("truncated"),
+                "size_chars": _coerce_int(source.get("size_chars")),
+                "max_chars": _coerce_int(source.get("max_chars")),
+                "already_observed": bool(source.get("already_observed")),
+            }
+        )
+
+    add_projection(
+        label="content_preview",
+        content=payload.get("content_preview"),
+        source=payload,
+    )
+    add_projection(
+        label="algorithm_slice_content",
+        content=payload.get("content"),
+        source=payload,
+    )
+    for key in ("current_artifact", "target_artifact"):
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            add_projection(
+                label=f"{key}.content_preview",
+                content=value.get("content_preview"),
+                source=value,
+                file_path=value.get("file_path") or payload.get("target_file"),
+            )
+    support_artifacts = payload.get("support_artifacts")
+    if isinstance(support_artifacts, list):
+        for index, artifact in enumerate(support_artifacts):
+            if not isinstance(artifact, Mapping):
+                continue
+            add_projection(
+                label=f"support_artifacts[{index}].content_preview",
+                content=artifact.get("content_preview"),
+                source=artifact,
+            )
+    return projections
+
+
+def _content_projection_record(
+    projection: Mapping[str, Any],
+    *,
+    provider_prompt_text: str,
+    observation_prompt_text: str,
+    dedicated_source_prompt_text: str,
+) -> dict[str, Any]:
+    content = str(projection.get("content") or "")
+    visible_anywhere = _rendered_contains_text(provider_prompt_text, content)
+    visible_observation = _rendered_contains_text(observation_prompt_text, content)
+    visible_dedicated = _rendered_contains_text(
+        dedicated_source_prompt_text,
+        content,
+    )
+    full_content_included = _projection_full_content_included(projection, content)
+    return {
+        "label": projection.get("label"),
+        "file_path": projection.get("file_path"),
+        "target_file": projection.get("target_file"),
+        "symbol": projection.get("symbol"),
+        "slice_id": projection.get("slice_id"),
+        "content_chars": len(content),
+        "content_hash": _text_digest(content, length=16),
+        "visible_anywhere_in_rendered_prompt": visible_anywhere,
+        "visible_in_observation_section": visible_observation,
+        "visible_in_dedicated_source_section": visible_dedicated,
+        "full_content_included": full_content_included,
+        "full_content_visible_anywhere_in_rendered_prompt": bool(
+            full_content_included and visible_anywhere
+        ),
+        "full_content_visible_in_observation_section": bool(
+            full_content_included and visible_observation
+        ),
+        "full_content_visible_in_dedicated_source_section": bool(
+            full_content_included and visible_dedicated
+        ),
+    }
+
+
+def _projection_full_content_included(
+    projection: Mapping[str, Any],
+    content: str,
+) -> bool:
+    if projection.get("truncated") is True:
+        return False
+    size_chars = _coerce_int(projection.get("size_chars"))
+    max_chars = _coerce_int(projection.get("max_chars"))
+    content_chars = len(content)
+    if size_chars is not None:
+        return content_chars >= max(0, size_chars - 1)
+    if max_chars is not None:
+        return content_chars >= max(0, max_chars - 1)
+    if projection.get("label") == "algorithm_slice_content":
+        return True
+    return bool(projection.get("readable") is True and not projection.get("already_observed"))
 
 
 def _provider_prompt_text(
@@ -634,19 +782,22 @@ def _rendered_contains_text(rendered_prompt: str, value: Any) -> bool:
 def _observation_prompt_visibility_status(
     *,
     full_content_included: bool,
-    content_preview_visible: bool,
+    content_preview_visible_anywhere: bool,
+    content_preview_visible_in_observation: bool,
     dedicated_source_visible: bool,
     read_receipt_only: bool,
 ) -> str:
     if read_receipt_only:
         return "read_receipt_only_or_no_content"
-    if full_content_included and content_preview_visible:
+    if full_content_included and content_preview_visible_in_observation:
         return "full_content_visible_in_rendered_prompt"
     if full_content_included and dedicated_source_visible:
         return "full_content_visible_in_dedicated_source_section"
+    if full_content_included and content_preview_visible_anywhere:
+        return "full_content_visible_in_rendered_prompt"
     if full_content_included:
         return "full_content_payload_not_visible_in_rendered_prompt"
-    if content_preview_visible:
+    if content_preview_visible_anywhere:
         return "partial_content_visible_in_rendered_prompt"
     return "content_not_visible_in_rendered_prompt"
 

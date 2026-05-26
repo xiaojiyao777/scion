@@ -11,6 +11,7 @@ def _is_transient_provider_error(err_str: str) -> bool:
     transient_markers = (
         "aihubmix_api_error",
         "new request failed",
+        "no_available_accounts",
         "bad gateway",
         "502 bad gateway",
         "service unavailable",
@@ -188,4 +189,3 @@ def _parse_retry_after(exc: Exception) -> float:
     except Exception:
         pass
     return 60.0
-

@@ -32,6 +32,7 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.run_validity import failure_category_for_run_validity
 from scion.core.step_result import StepResult
 from scion.core.verification_call import run_verification_gate
 
@@ -226,6 +227,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail,
                     "proposal",
                 )
+                failure_category = failure_category_for_run_validity(
+                    failure_detail,
+                    failure_stage=failure_stage,
+                    session_ref=session_ref,
+                )
                 if failure_stage == _AGENT_QUALITY_BLOCKED:
                     self._record_agent_quality_branch_signal(
                         branch,
@@ -272,6 +278,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                         attempt_kind=attempt_kind,  # type: ignore[arg-type]
                         repair_mechanism_ids=repair_ids,
                         repair_policy_reason=repair_policy_reason or "",
+                        failure_stage=failure_stage,
+                        failure_detail=failure_detail,
+                        failure_category=failure_category,
                     ),
                 )
             if h_record is None:
@@ -439,6 +448,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 failure_detail,
                 "code_generation",
             )
+            failure_category = failure_category_for_run_validity(
+                failure_detail,
+                failure_stage=failure_stage,
+                session_ref=session_ref,
+            )
             if failure_stage == _AGENT_QUALITY_BLOCKED:
                 self._record_agent_quality_branch_signal(
                     branch,
@@ -480,6 +494,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     attempt_kind=attempt_kind,  # type: ignore[arg-type]
                     repair_mechanism_ids=repair_ids,
                     repair_policy_reason=repair_policy_reason or "",
+                    failure_stage=failure_stage,
+                    failure_detail=failure_detail,
+                    failure_category=failure_category,
                 ),
             )
 
@@ -829,6 +846,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         branch: Branch,
         failure_detail: str | None,
     ) -> tuple[str, tuple[str, ...], str | None]:
+        if (
+            failure_category_for_run_validity(
+                failure_detail,
+                failure_stage="proposal",
+            )
+            == "infra"
+        ):
+            return "proposal_retry", (), str(failure_detail or "")
         if _is_schema_quality_block_detail(failure_detail):
             return "schema_quality_block", (), str(failure_detail or "")
         if is_branch_lifecycle_policy_block_detail(failure_detail):

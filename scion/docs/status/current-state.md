@@ -9,6 +9,20 @@ handoff. Historical repair and experiment notes were moved to
 
 ## Status
 
+The 2026-05-26 P0 validity/manifest repair closes an infra-only false-success
+gap found in a local `gpt-5.5` 4-round codex-proxy diagnostic. Campaign
+`status.json` and `campaign_summary.json` now publish `run_validity` and
+`run_validity_status`, distinguishing valid runs from
+`invalid_infra_only`, `invalid_no_effective_rounds`, and
+`invalid_no_experiments`. Proposal-attempt exhaustion caused only by
+provider/proxy/transient API failures such as `no_available_accounts` is no
+longer reported as normal scientific completion, even when the outer wrapper
+exits cleanly after writing artifacts. API-visible prompt manifests also audit
+the rendered provider prompt rather than only generic observation receipts:
+dedicated full-file projections, `context.read_surface` nested previews, and
+bounded algorithm-slice content are marked visible when their content actually
+appears in the rendered prompt.
+
 v0.4 has no known open P0 blocker after the 2026-05-26 local `gpt-5.5`
 12-round reconcile/accounting validation. The run confirmed
 accounting/headroom/lifecycle core behavior, but exposed P1 research-validity
